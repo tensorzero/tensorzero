@@ -44,6 +44,7 @@ pub enum VariantConfig {
     BestOfNSampling(best_of_n_sampling::BestOfNSamplingConfig),
     Dicl(dicl::DiclConfig),
     MixtureOfN(mixture_of_n::MixtureOfNConfig),
+    ChainOfThought(chain_of_thought::ChainOfThoughtConfig),
 }
 
 /// This type is used to determine how to enforce JSON mode for a given variant.
@@ -180,6 +181,7 @@ impl VariantConfig {
             VariantConfig::BestOfNSampling(params) => params.weight,
             VariantConfig::Dicl(params) => params.weight,
             VariantConfig::MixtureOfN(params) => params.weight,
+            VariantConfig::ChainOfThought(params) => params.inner.weight,
         }
     }
 }
@@ -248,6 +250,18 @@ impl Variant for VariantConfig {
                     )
                     .await
             }
+            VariantConfig::ChainOfThought(params) => {
+                params
+                    .infer(
+                        input,
+                        models,
+                        function,
+                        inference_config,
+                        clients,
+                        inference_params,
+                    )
+                    .await
+            }
         }
     }
 
@@ -302,6 +316,18 @@ impl Variant for VariantConfig {
                     .await
             }
             VariantConfig::MixtureOfN(params) => {
+                params
+                    .infer_stream(
+                        input,
+                        models,
+                        function,
+                        inference_config,
+                        clients,
+                        inference_params,
+                    )
+                    .await
+            }
+            VariantConfig::ChainOfThought(params) => {
                 params
                     .infer_stream(
                         input,
@@ -388,6 +414,14 @@ impl Variant for VariantConfig {
                 function_name,
                 variant_name,
             ),
+            VariantConfig::ChainOfThought(params) => params.validate(
+                function,
+                models,
+                embedding_models,
+                templates,
+                function_name,
+                variant_name,
+            ),
         }
     }
 
@@ -397,6 +431,7 @@ impl Variant for VariantConfig {
             VariantConfig::BestOfNSampling(params) => params.get_all_template_paths(),
             VariantConfig::Dicl(params) => params.get_all_template_paths(),
             VariantConfig::MixtureOfN(params) => params.get_all_template_paths(),
+            VariantConfig::ChainOfThought(params) => params.get_all_template_paths(),
         }
     }
 }

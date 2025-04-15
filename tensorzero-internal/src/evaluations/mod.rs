@@ -20,6 +20,7 @@ use crate::{
     tool::create_implicit_tool_call_config,
     variant::{
         best_of_n_sampling::{BestOfNSamplingConfig, EvaluatorConfig as OnlineEvaluatorConfig},
+        chain_of_thought::ChainOfThoughtConfig,
         chat_completion::ChatCompletionConfig,
         dicl::DiclConfig,
         mixture_of_n::{FuserConfig, MixtureOfNConfig},
@@ -355,6 +356,9 @@ impl UninitializedEvaluatorConfig {
                         VariantConfig::Dicl(variant) => {
                             variant.weight = Some(1.0);
                         }
+                        VariantConfig::ChainOfThought(variant) => {
+                            variant.inner.weight = Some(1.0);
+                        }
                     };
                 }
                 let user_schema_value: Option<serde_json::Value> = match params.input_format {
@@ -421,6 +425,8 @@ enum UninitializedLLMJudgeVariantConfig {
     MixtureOfNSampling(UninitializedLLMJudgeMixtureOfNVariantConfig),
     #[serde(rename = "experimental_dynamic_in_context_learning")]
     Dicl(UninitializedLLMJudgeDiclVariantConfig),
+    #[serde(rename = "experimental_chain_of_thought")]
+    ChainOfThought(UninitializedLLMJudgeChainOfThoughtVariantConfig),
 }
 
 #[derive(Debug, Deserialize)]
@@ -443,6 +449,54 @@ struct UninitializedLLMJudgeChatCompletionVariantConfig {
     extra_body: Option<ExtraBodyConfig>,
     #[serde(default)]
     extra_headers: Option<ExtraHeadersConfig>,
+}
+
+fn convert_chat_completion_judge_to_variant<P: AsRef<Path>>(
+    base_path: &P,
+    evaluation_name: &str,
+    evaluator_name: &str,
+    variant_name: &str,
+    input_format: &LLMJudgeInputFormat,
+    params: UninitializedLLMJudgeChatCompletionVariantConfig,
+) -> Result<ChatCompletionConfig, Error> {
+    let system_instructions = read_system_instructions(params.system_instructions, base_path)?;
+    let templated_system_instructions = format!(
+        include_str!("llm_judge_system_instructions.txt"),
+        system_instructions = system_instructions,
+    );
+    let system_template_path =
+        get_template_path(evaluation_name, evaluator_name, variant_name, "system");
+    let system_template = PathWithContents {
+        // Not a real path but this is used as the handle everywhere as the content is already provided below
+        path: system_template_path.clone(),
+        contents: templated_system_instructions,
+    };
+    let user_template_path =
+        get_template_path(evaluation_name, evaluator_name, variant_name, "user");
+    let user_template = match input_format {
+        LLMJudgeInputFormat::Serialized => Some(PathWithContents {
+            path: user_template_path.clone(),
+            contents: include_str!("llm_judge_user_template.minijinja").to_string(),
+        }),
+        LLMJudgeInputFormat::Messages => None,
+    };
+    Ok(ChatCompletionConfig {
+        weight: get_weight(params.active),
+        model: params.model,
+        system_template: Some(system_template),
+        user_template,
+        assistant_template: None,
+        temperature: params.temperature,
+        top_p: params.top_p,
+        max_tokens: params.max_tokens,
+        presence_penalty: params.presence_penalty,
+        frequency_penalty: params.frequency_penalty,
+        seed: params.seed,
+        json_mode: Some(params.json_mode),
+        retries: params.retries,
+        extra_body: params.extra_body,
+        extra_headers: params.extra_headers,
+    })
 }
 
 fn default_timeout() -> f64 {
@@ -494,6 +548,12 @@ struct UninitializedLLMJudgeDiclVariantConfig {
     extra_headers: Option<ExtraHeadersConfig>,
 }
 
+#[derive(Debug, Deserialize)]
+struct UninitializedLLMJudgeChainOfThoughtVariantConfig {
+    #[serde(flatten)]
+    inner: UninitializedLLMJudgeChatCompletionVariantConfig,
+}
+
 fn get_template_path(
     evaluation_name: &str,
     evaluator_name: &str,
@@ -528,47 +588,16 @@ impl UninitializedLLMJudgeVariantConfig {
         variant_name: &str,
     ) -> Result<VariantConfig, Error> {
         match self {
-            UninitializedLLMJudgeVariantConfig::ChatCompletion(params) => {
-                let system_instructions =
-                    read_system_instructions(params.system_instructions, base_path)?;
-                let templated_system_instructions = format!(
-                    include_str!("llm_judge_system_instructions.txt"),
-                    system_instructions = system_instructions,
-                );
-                let system_template_path =
-                    get_template_path(evaluation_name, evaluator_name, variant_name, "system");
-                let system_template = PathWithContents {
-                    // Not a real path but this is used as the handle everywhere as the content is already provided below
-                    path: system_template_path.clone(),
-                    contents: templated_system_instructions,
-                };
-                let user_template_path =
-                    get_template_path(evaluation_name, evaluator_name, variant_name, "user");
-                let user_template = match input_format {
-                    LLMJudgeInputFormat::Serialized => Some(PathWithContents {
-                        path: user_template_path.clone(),
-                        contents: include_str!("llm_judge_user_template.minijinja").to_string(),
-                    }),
-                    LLMJudgeInputFormat::Messages => None,
-                };
-                Ok(VariantConfig::ChatCompletion(ChatCompletionConfig {
-                    weight: get_weight(params.active),
-                    model: params.model,
-                    system_template: Some(system_template),
-                    user_template,
-                    assistant_template: None,
-                    temperature: params.temperature,
-                    top_p: params.top_p,
-                    max_tokens: params.max_tokens,
-                    presence_penalty: params.presence_penalty,
-                    frequency_penalty: params.frequency_penalty,
-                    seed: params.seed,
-                    json_mode: Some(params.json_mode),
-                    retries: params.retries,
-                    extra_body: params.extra_body,
-                    extra_headers: params.extra_headers,
-                }))
-            }
+            UninitializedLLMJudgeVariantConfig::ChatCompletion(params) => Ok(
+                VariantConfig::ChatCompletion(convert_chat_completion_judge_to_variant(
+                    base_path,
+                    evaluation_name,
+                    evaluator_name,
+                    variant_name,
+                    input_format,
+                    params,
+                )?),
+            ),
             UninitializedLLMJudgeVariantConfig::BestOfNSampling(params) => {
                 let evaluator_system_instructions =
                     read_system_instructions(params.evaluator.system_instructions, base_path)?;
@@ -705,6 +734,18 @@ impl UninitializedLLMJudgeVariantConfig {
                     retries: params.retries,
                 }))
             }
+            UninitializedLLMJudgeVariantConfig::ChainOfThought(params) => {
+                Ok(VariantConfig::ChainOfThought(ChainOfThoughtConfig {
+                    inner: convert_chat_completion_judge_to_variant(
+                        base_path,
+                        evaluation_name,
+                        evaluator_name,
+                        variant_name,
+                        input_format,
+                        params.inner,
+                    )?,
+                }))
+            }
         }
     }
 }
@@ -826,6 +867,27 @@ fn check_convert_variant_to_llm_judge_variant(
                 retries: variant.retries,
             },
         )),
+        VariantConfig::ChainOfThought(variant) => {
+            Ok(UninitializedLLMJudgeVariantConfig::ChainOfThought(
+                UninitializedLLMJudgeChainOfThoughtVariantConfig {
+                    inner: UninitializedLLMJudgeChatCompletionVariantConfig {
+                        active: Some(false),
+                        model: variant.inner.model,
+                        system_instructions: PathBuf::from(""),
+                        temperature: variant.inner.temperature,
+                        top_p: variant.inner.top_p,
+                        max_tokens: variant.inner.max_tokens,
+                        presence_penalty: variant.inner.presence_penalty,
+                        frequency_penalty: variant.inner.frequency_penalty,
+                        seed: variant.inner.seed,
+                        json_mode: JsonMode::Off,
+                        retries: variant.inner.retries,
+                        extra_body: variant.inner.extra_body,
+                        extra_headers: variant.inner.extra_headers,
+                    },
+                },
+            ))
+        }
     }
 }
 

@@ -116,6 +116,7 @@ lazy_static! {
 }
 pub static DUMMY_JSON_RESPONSE_RAW: &str = r#"{"answer":"Hello"}"#;
 pub static DUMMY_JSON_GOODBYE_RESPONSE_RAW: &str = r#"{"answer":"Goodbye"}"#;
+pub static DUMMY_JSON_COT_RESPONSE_RAW: &str = r#"{"thinking":"hmmm", "answer":"howdy!"}"#;
 pub static DUMMY_INFER_USAGE: Usage = Usage {
     input_tokens: 10,
     output_tokens: 10,
@@ -258,6 +259,7 @@ impl InferenceProvider for DummyProvider {
             })],
             "json" => vec![DUMMY_JSON_RESPONSE_RAW.to_string().into()],
             "json_goodbye" => vec![DUMMY_JSON_GOODBYE_RESPONSE_RAW.to_string().into()],
+            "json_cot" => vec![DUMMY_JSON_COT_RESPONSE_RAW.to_string().into()],
             "json_beatles_1" => vec![r#"{"names":["John", "George"]}"#.to_string().into()],
             "json_beatles_2" => vec![r#"{"names":["Paul", "Ringo"]}"#.to_string().into()],
             "best_of_n_0" => {
@@ -331,10 +333,9 @@ impl InferenceProvider for DummyProvider {
         let raw_response = match self.model_name.as_str() {
             #[allow(clippy::unwrap_used)]
             "tool" => serde_json::to_string(&*DUMMY_TOOL_RESPONSE).unwrap(),
-            #[allow(clippy::unwrap_used)]
             "json" => DUMMY_JSON_RESPONSE_RAW.to_string(),
-            #[allow(clippy::unwrap_used)]
             "json_goodbye" => DUMMY_JSON_GOODBYE_RESPONSE_RAW.to_string(),
+            "json_cot" => DUMMY_JSON_COT_RESPONSE_RAW.to_string(),
             #[allow(clippy::unwrap_used)]
             "bad_tool" => serde_json::to_string(&*DUMMY_BAD_TOOL_RESPONSE).unwrap(),
             "best_of_n_0" => r#"{"thinking": "hmmm", "answer_choice": 0}"#.to_string(),

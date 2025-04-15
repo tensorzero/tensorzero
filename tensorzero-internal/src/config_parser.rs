@@ -20,6 +20,7 @@ use crate::model::{ModelConfig, ModelTable};
 use crate::model_table::{CowNoClone, ShorthandModelConfig};
 use crate::tool::{create_implicit_tool_call_config, StaticToolConfig, ToolChoice};
 use crate::variant::best_of_n_sampling::UninitializedBestOfNSamplingConfig;
+use crate::variant::chain_of_thought::UninitializedChainOfThoughtConfig;
 use crate::variant::chat_completion::UninitializedChatCompletionConfig;
 use crate::variant::dicl::UninitializedDiclConfig;
 use crate::variant::mixture_of_n::UninitializedMixtureOfNConfig;
@@ -777,6 +778,11 @@ impl UninitializedFunctionConfig {
                                 warn_variant = Some(name.clone());
                             }
                         }
+                        VariantConfig::ChainOfThought(chain_of_thought_config) => {
+                            if chain_of_thought_config.inner.json_mode.is_none() {
+                                warn_variant = Some(name.clone());
+                            }
+                        }
                     }
                     if let Some(warn_variant) = warn_variant {
                         tracing::warn!("Deprecation Warning: `json_mode` is not specified for `[functions.{function_name}.variants.{warn_variant}]` (parent function `{function_name}` is a JSON function), defaulting to `strict`. This field will become required in a future release - see https://github.com/tensorzero/tensorzero/issues/1043 on GitHub for details.");
@@ -808,6 +814,8 @@ pub enum UninitializedVariantConfig {
     Dicl(UninitializedDiclConfig),
     #[serde(rename = "experimental_mixture_of_n")]
     MixtureOfN(UninitializedMixtureOfNConfig),
+    #[serde(rename = "experimental_chain_of_thought")]
+    ChainOfThought(UninitializedChainOfThoughtConfig),
 }
 
 impl UninitializedVariantConfig {
@@ -824,6 +832,9 @@ impl UninitializedVariantConfig {
             }
             UninitializedVariantConfig::MixtureOfN(params) => {
                 Ok(VariantConfig::MixtureOfN(params.load(base_path)?))
+            }
+            UninitializedVariantConfig::ChainOfThought(params) => {
+                Ok(VariantConfig::ChainOfThought(params.load(base_path)?))
             }
         }
     }
