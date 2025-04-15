@@ -99,7 +99,7 @@ test("should be able to add float feedback via the inference page", async ({
   page,
 }) => {
   await page.goto(
-    "/observability/inferences/0195f845-a261-72d2-8686-774b967d938e",
+    "/observability/inferences/019639c3-ed91-7e20-9254-c5854dd43dfa",
   );
   // Click on the Add feedback button
   await page.getByText("Add feedback").click();
@@ -148,7 +148,7 @@ test("should be able to add boolean feedback via the inference page", async ({
   page,
 }) => {
   await page.goto(
-    "/observability/inferences/0195f845-a261-72d2-8686-774b967d938e",
+    "/observability/inferences/019639c3-f221-75c1-bb90-408bbb997e6d",
   );
   // Click on the Add feedback button
   await page.getByText("Add feedback").click();
