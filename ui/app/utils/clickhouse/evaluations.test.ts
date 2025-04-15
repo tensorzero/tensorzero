@@ -82,7 +82,12 @@ describe("searchEvaluationRuns", () => {
     );
     expect(runIds).toMatchObject([
       {
+        evaluation_run_id: "0196374c-2b06-7f50-b187-80c15cec5a1f",
+        variant_name: "gpt4o_mini_initial_prompt",
+      },
+      {
         evaluation_run_id: "0196368f-19bd-7082-a677-1c0bf346ff24",
+        variant_name: "gpt4o_mini_initial_prompt",
       },
       {
         evaluation_run_id: "0196368e-53a8-7e82-a88d-db7086926d81",
@@ -222,8 +227,8 @@ describe("getEvaluationResults", () => {
   });
 
   test("should return correct results for ragged haiku evaluation", async () => {
-    const evaluation_run_id1 = "01963691-9d3c-7793-a8be-3937ebb849c1";
-    const evaluation_run_id2 = "01963690-dff2-7cd3-b724-62fb705772a1";
+    const evaluation_run_id1 = "0196374b-04a3-7013-9049-e59ed5fe3f74";
+    const evaluation_run_id2 = "01963691-9d3c-7793-a8be-3937ebb849c1";
     const results = await getEvaluationResults(
       "write_haiku",
       "chat",
@@ -296,14 +301,14 @@ describe("getEvaluationStatistics", () => {
     expect(statistics[0].metric_name).toBe(
       "tensorzero::evaluation_name::haiku::evaluator_name::topic_starts_with_f",
     );
-    expect(statistics[0].datapoint_count).toBe(78);
+    expect(statistics[0].datapoint_count).toBe(77);
     expect(statistics[0].mean_metric).toBeCloseTo(0.064);
     expect(statistics[0].stderr_metric).toBeCloseTo(0.028);
     expect(statistics[1].evaluation_run_id).toBe(evaluation_run_id);
     expect(statistics[1].metric_name).toBe(
       "tensorzero::evaluation_name::haiku::evaluator_name::exact_match",
     );
-    expect(statistics[1].datapoint_count).toBe(78);
+    expect(statistics[1].datapoint_count).toBe(77);
     expect(statistics[1].mean_metric).toBeCloseTo(0);
     expect(statistics[1].stderr_metric).toBeCloseTo(0);
   });
@@ -341,16 +346,16 @@ describe("getEvaluationStatistics", () => {
     expect(statistics[2].metric_name).toBe(
       "tensorzero::evaluation_name::entity_extraction::evaluator_name::exact_match",
     );
-    expect(statistics[2].datapoint_count).toBe(42);
-    expect(statistics[2].mean_metric).toBeCloseTo(0.52);
+    expect(statistics[2].datapoint_count).toBe(41);
+    expect(statistics[2].mean_metric).toBeCloseTo(0.5122);
     expect(statistics[2].stderr_metric).toBeCloseTo(0.08);
 
     expect(statistics[3].evaluation_run_id).toBe(evaluation_run_id2);
     expect(statistics[3].metric_name).toBe(
       "tensorzero::evaluation_name::entity_extraction::evaluator_name::count_sports",
     );
-    expect(statistics[3].datapoint_count).toBe(42);
-    expect(statistics[3].mean_metric).toBeCloseTo(0.762);
+    expect(statistics[3].datapoint_count).toBe(41);
+    expect(statistics[3].mean_metric).toBeCloseTo(0.7805);
     expect(statistics[3].stderr_metric).toBeCloseTo(0.0665);
   });
 });
@@ -379,7 +384,7 @@ describe("countDatapointsForEvaluation", () => {
 describe("countTotalEvaluationRuns", () => {
   test("should return correct number of evaluation runs", async () => {
     const runs = await countTotalEvaluationRuns();
-    expect(runs).toBe(7);
+    expect(runs).toBe(9);
   });
 });
 
@@ -388,23 +393,23 @@ describe("getEvaluationRunInfo", () => {
     const runs = await getEvaluationRunInfo();
 
     // Check the total number of runs
-    expect(runs.length).toBe(7);
+    expect(runs.length).toBe(9);
 
     // Check structure and content of the first row
     expect(runs[0]).toMatchObject({
-      evaluation_run_id: "01963691-9d3c-7793-a8be-3937ebb849c1",
-      evaluation_name: "haiku",
-      function_name: "write_haiku",
-      variant_name: "better_prompt_haiku_3_5",
-      last_inference_timestamp: "2025-04-14T23:10:40Z",
       dataset_name: "foo",
+      evaluation_name: "entity_extraction",
+      evaluation_run_id: "0196374c-2b06-7f50-b187-80c15cec5a1f",
+      function_name: "extract_entities",
+      last_inference_timestamp: "2025-04-15T02:34:21Z",
+      variant_name: "gpt4o_mini_initial_prompt",
     });
     // Check structure and content of another row
     expect(runs[3]).toMatchObject({
-      evaluation_run_id: "0196368e-53a8-7e82-a88d-db7086926d81",
-      evaluation_name: "entity_extraction",
-      function_name: "extract_entities",
-      variant_name: "gpt4o_initial_prompt",
+      evaluation_name: "haiku",
+      evaluation_run_id: "01963690-dff2-7cd3-b724-62fb705772a1",
+      function_name: "write_haiku",
+      variant_name: "initial_prompt_gpt4o_mini",
     });
 
     // Verify that all items have the expected properties
@@ -438,10 +443,10 @@ describe("getEvaluationRunInfo", () => {
     expect(functionNames).toContain("write_haiku");
     // Check the last run in the result
     expect(runs[6]).toMatchObject({
-      evaluation_run_id: "0196367a-702c-75f3-b676-d6ffcc7370a1",
-      evaluation_name: "haiku",
-      function_name: "write_haiku",
-      variant_name: "initial_prompt_gpt4o_mini",
+      evaluation_name: "entity_extraction",
+      evaluation_run_id: "0196367b-c0bb-7f90-b651-f90eb9fba8f3",
+      function_name: "extract_entities",
+      variant_name: "gpt4o_mini_initial_prompt",
     });
   });
 });
@@ -457,8 +462,8 @@ describe("getEvaluationsForDatapoint", () => {
   });
 
   test("should return correct array for chat datapoint", async () => {
-    const datapoint_id = "01963691-7489-74b3-837f-e386de14c5f9";
-    const evaluation_run_id = "01963691-9d3c-7793-a8be-3937ebb849c1";
+    const datapoint_id = "0196374a-d03f-7420-9da5-1561cba71ddb";
+    const evaluation_run_id = "0196374b-04a3-7013-9049-e59ed5fe3f74";
     const evaluations = await getEvaluationsForDatapoint(
       "haiku",
       datapoint_id,
@@ -490,7 +495,7 @@ describe("getEvaluationsForDatapoint", () => {
     expect(second_evaluation.metric_name).toBe(
       "tensorzero::evaluation_name::haiku::evaluator_name::exact_match",
     );
-    expect(second_evaluation.metric_value).toBe("false");
+    expect(second_evaluation.metric_value).toBe("true");
     expect(second_evaluation.input.messages).toHaveLength(1);
     const second_evaluation_input = second_evaluation.input;
     if (second_evaluation_input.messages[0].content[0].type === "text") {
@@ -514,7 +519,6 @@ describe("getEvaluationsForDatapoint", () => {
     );
     expect(evaluations.length).toBe(2);
 
-    console.log(evaluations);
     // Sort evaluations by metric name to ensure consistent order
     const sortedEvaluations = [...evaluations].sort((a, b) =>
       a.metric_name.localeCompare(b.metric_name),
@@ -568,7 +572,6 @@ describe("getEvaluationRunInfosForDatapoint", () => {
       "01963691-7489-74b3-837f-e386de14c5f9",
       "write_haiku",
     );
-    console.log(evaluationRunInfos);
 
     const expected = {
       evaluation_run_id: "01963691-9d3c-7793-a8be-3937ebb849c1",
