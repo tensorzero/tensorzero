@@ -238,6 +238,7 @@ async fn run_evaluations_json() {
     }
     assert_eq!(parsed_output.len(), 6);
     assert_eq!(total_sports, 3);
+    sleep(Duration::from_millis(1000)).await;
 
     // Check that the human feedback affects the next eval run results
     // Run the evaluation again but now it should read the human feedback that was sent
@@ -552,7 +553,7 @@ async fn run_llm_judge_evaluation_chat() {
     }
     assert_eq!(parsed_output.len(), 10);
     assert_eq!(total_topic_fs, 3);
-    sleep(Duration::from_millis(500)).await;
+    sleep(Duration::from_millis(1000)).await;
     // Run the evaluation again but now it should read the human feedback that was sent
     let mut output = Vec::new();
     run_evaluation(args(), evaluation_run_id, &mut output)

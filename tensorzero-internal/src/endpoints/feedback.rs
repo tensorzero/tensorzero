@@ -1,13 +1,10 @@
 use std::cmp::max;
 use std::collections::HashMap;
-use std::future::Future;
-use std::pin::Pin;
 use std::sync::OnceLock;
 use std::time::Duration;
 
 use axum::extract::State;
 use axum::{debug_handler, Json};
-use futures::future::try_join_all;
 use metrics::counter;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -40,14 +37,6 @@ const FEEDBACK_COOLDOWN_PERIOD: Duration = Duration::from_secs(5);
 /// (the ID is generated at the start of the inference), we wait a minimum amount of time
 /// before we decide that the target was actually not written because we can't find it in the database.
 const FEEDBACK_MINIMUM_WAIT_TIME: Duration = Duration::from_millis(1200);
-
-/// Everywhere in the UI we take human feedback, we add this tag.
-/// If this tag is present and a datapoint ID is present, we will also write human feedback to a separate table.
-const HUMAN_FEEDBACK_TAG_KEY: &str = "tensorzero::human_feedback";
-
-/// The tag key that gives the datapoint ID for the feedback.
-/// If this tag is present and a human feedback tag is present, we will also write human feedback to a separate table.
-const DATAPOINT_TAG_KEY: &str = "tensorzero::datapoint_id";
 
 /// The expected payload is a JSON object with the following fields:
 #[derive(Debug, Serialize, Deserialize)]
@@ -144,7 +133,6 @@ pub async fn feedback(
         FeedbackType::Comment => {
             write_comment(
                 clickhouse_connection_info,
-                &config,
                 &params,
                 feedback_metadata.target_id,
                 feedback_metadata.level,
@@ -257,7 +245,6 @@ fn get_feedback_metadata<'a>(
 
 async fn write_comment(
     connection_info: ClickHouseConnectionInfo,
-    config: &Config<'_>,
     params: &Params,
     target_id: Uuid,
     level: &MetricConfigLevel,
@@ -266,7 +253,7 @@ async fn write_comment(
 ) -> Result<(), Error> {
     let Params { value, tags, .. } = params;
     // Verify that the function name exists.
-    let target_info = throttled_get_target_info(&connection_info, level, &target_id).await?;
+    let _ = throttled_get_function_name(&connection_info, level, &target_id).await?;
     let value = value.as_str().ok_or_else(|| ErrorDetails::InvalidRequest {
         message: "Feedback value for a comment must be a string".to_string(),
     })?;
@@ -277,17 +264,11 @@ async fn write_comment(
         "id": feedback_id,
         "tags": tags
     });
-    write_feedback_concurrently(WriteFeedbackParams {
-        connection_info: &connection_info,
-        feedback_id,
-        config,
-        params,
-        target_info: &target_info,
-        dryrun,
-        feedback_value: payload,
-        feedback_table_name: "CommentFeedback",
-    })
-    .await?;
+    if !dryrun {
+        tokio::spawn(async move {
+            let _ = connection_info.write(&[payload], "CommentFeedback").await;
+        });
+    }
     Ok(())
 }
 
@@ -300,24 +281,17 @@ async fn write_demonstration(
     dryrun: bool,
 ) -> Result<(), Error> {
     let Params { value, tags, .. } = params;
-    let target_info = throttled_get_target_info(
+    let function_name = throttled_get_function_name(
         &connection_info,
         &MetricConfigLevel::Inference,
         &inference_id,
     )
     .await?;
-    let function_name = target_info.get_function_name().ok_or_else(|| {
-        Error::new(ErrorDetails::InvalidRequest {
-            message:
-                "Demonstration feedback is only supported for inference targets. This is a bug."
-                    .to_string(),
-        })
-    })?;
-    let function_config = config.get_function(function_name)?;
+    let function_config = config.get_function(&function_name)?;
     let dynamic_demonstration_info = get_dynamic_demonstration_info(
         &connection_info,
         inference_id,
-        function_name,
+        &function_name,
         function_config,
     )
     .await?;
@@ -329,17 +303,13 @@ async fn write_demonstration(
         })
     })?;
     let payload = json!({"inference_id": inference_id, "value": string_value, "id": feedback_id, "tags": tags});
-    write_feedback_concurrently(WriteFeedbackParams {
-        connection_info: &connection_info,
-        feedback_id,
-        config,
-        params,
-        target_info: &target_info,
-        dryrun,
-        feedback_value: payload,
-        feedback_table_name: "DemonstrationFeedback",
-    })
-    .await?;
+    if !dryrun {
+        tokio::spawn(async move {
+            let _ = connection_info
+                .write(&[payload], "DemonstrationFeedback")
+                .await;
+        });
+    }
     Ok(())
 }
 
@@ -360,8 +330,7 @@ async fn write_float(
     let metric_config: &crate::config_parser::MetricConfig =
         config.get_metric_or_err(metric_name)?;
     // Verify that the function name exists.
-    let target_info =
-        throttled_get_target_info(&connection_info, &metric_config.level, &target_id).await?;
+    let _ = throttled_get_function_name(&connection_info, &metric_config.level, &target_id).await?;
 
     let value = value.as_f64().ok_or_else(|| {
         Error::new(ErrorDetails::InvalidRequest {
@@ -369,17 +338,13 @@ async fn write_float(
         })
     })?;
     let payload = json!({"target_id": target_id, "value": value, "metric_name": metric_name, "id": feedback_id, "tags": tags});
-    write_feedback_concurrently(WriteFeedbackParams {
-        connection_info: &connection_info,
-        feedback_id,
-        config,
-        params,
-        target_info: &target_info,
-        dryrun,
-        feedback_value: payload,
-        feedback_table_name: "FloatMetricFeedback",
-    })
-    .await?;
+    if !dryrun {
+        tokio::spawn(async move {
+            let _ = connection_info
+                .write(&[payload], "FloatMetricFeedback")
+                .await;
+        });
+    }
     Ok(())
 }
 
@@ -399,80 +364,19 @@ async fn write_boolean(
     } = params;
     let metric_config = config.get_metric_or_err(metric_name)?;
     // Verify that the function name exists.
-    let target_info =
-        throttled_get_target_info(&connection_info, &metric_config.level, &target_id).await?;
+    let _ = throttled_get_function_name(&connection_info, &metric_config.level, &target_id).await?;
     let value = value.as_bool().ok_or_else(|| {
         Error::new(ErrorDetails::InvalidRequest {
             message: format!("Feedback value for metric `{metric_name}` must be a boolean"),
         })
     })?;
     let payload = json!({"target_id": target_id, "value": value, "metric_name": metric_name, "id": feedback_id, "tags": tags});
-    write_feedback_concurrently(WriteFeedbackParams {
-        connection_info: &connection_info,
-        feedback_id,
-        config,
-        params,
-        target_info: &target_info,
-        dryrun,
-        feedback_value: payload,
-        feedback_table_name: "BooleanMetricFeedback",
-    })
-    .await?;
-    Ok(())
-}
-
-struct WriteFeedbackParams<'a> {
-    connection_info: &'a ClickHouseConnectionInfo,
-    feedback_id: Uuid,
-    config: &'a Config<'a>,
-    params: &'a Params,
-    target_info: &'a TargetInfo,
-    dryrun: bool,
-    feedback_value: Value,
-    feedback_table_name: &'static str,
-}
-
-/// Represents a future that resolves to writing a piece of feedback data.
-type FeedbackWriteTask<'a> = Pin<Box<dyn Future<Output = Result<(), Error>> + Send + 'a>>;
-
-/// Concurrently writes the feedback to ClickHouse as well as human feedback if needed.
-async fn write_feedback_concurrently(params: WriteFeedbackParams<'_>) -> Result<(), Error> {
-    let WriteFeedbackParams {
-        connection_info,
-        feedback_id,
-        config,
-        params,
-        target_info,
-        dryrun,
-        feedback_value,
-        feedback_table_name,
-    } = params;
     if !dryrun {
-        let mut tasks: Vec<FeedbackWriteTask<'_>> = Vec::new();
-
-        // If human feedback tag is present, add the task to write it.
-        if params.tags.contains_key(HUMAN_FEEDBACK_TAG_KEY)
-            && params.tags.contains_key(DATAPOINT_TAG_KEY)
-        {
-            tasks.push(Box::pin(write_human_static_evaluation_feedback(
-                connection_info,
-                config,
-                target_info,
-                params,
-                feedback_id,
-            )));
-        }
-
-        // Add the task to write the main feedback payload.
-        let connection_info_clone = connection_info.clone();
-        tasks.push(Box::pin(async move {
-            connection_info_clone
-                .write(&[feedback_value], feedback_table_name)
-                .await
-        }));
-
-        // Run tasks concurrently and propagate errors.
-        try_join_all(tasks).await?;
+        tokio::spawn(async move {
+            let _ = connection_info
+                .write(&[payload], "BooleanMetricFeedback")
+                .await;
+        });
     }
     Ok(())
 }
@@ -484,11 +388,11 @@ async fn write_feedback_concurrently(params: WriteFeedbackParams<'_>) -> Result<
 /// We compute an amount of time to wait by max(FEEDBACK_COOLDOWN_PERIOD - elapsed_from_target_id, FEEDBACK_MINIMUM_WAIT_TIME)
 /// We then poll every 500ms until that time has passed.
 /// If the time has passed and the id is still not found, we return an error.
-async fn throttled_get_target_info(
+async fn throttled_get_function_name(
     connection_info: &ClickHouseConnectionInfo,
     metric_config_level: &MetricConfigLevel,
     target_id: &Uuid,
-) -> Result<TargetInfo, Error> {
+) -> Result<String, Error> {
     // Compute how long ago the target_id was created.
     let elapsed = uuid_elapsed(target_id)?;
 
@@ -501,8 +405,8 @@ async fn throttled_get_target_info(
 
     // Poll every 500ms until the deadline is reached.
     loop {
-        match get_target_info(connection_info, metric_config_level, target_id).await {
-            Ok(target_info) => return Ok(target_info),
+        match get_function_name(connection_info, metric_config_level, target_id).await {
+            Ok(identifier) => return Ok(identifier),
             Err(err) => {
                 if Instant::now() >= deadline {
                     // We log here since this means we were not able to find the target_id in the database
@@ -511,37 +415,12 @@ async fn throttled_get_target_info(
                     return Err(err);
                 } else {
                     tracing::info!(
-                        "Failed to find target info for target_id: {target_id}. Retrying..."
+                        "Failed to find function name for target_id: {target_id}. Retrying..."
                     );
                 }
             }
         }
         tokio::time::sleep(Duration::from_millis(500)).await;
-    }
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(untagged)]
-enum TargetInfo {
-    Inference {
-        function_name: String,
-        variant_name: String,
-        inference_id: Uuid,
-        episode_id: Uuid,
-    },
-    Episode {
-        // We will likely need the episode_id at some point for generalizations of feedback handling.
-        #[allow(dead_code)]
-        episode_id: Uuid,
-    },
-}
-
-impl TargetInfo {
-    pub fn get_function_name(&self) -> Option<&str> {
-        match self {
-            TargetInfo::Inference { function_name, .. } => Some(function_name),
-            _ => None,
-        }
     }
 }
 
@@ -556,63 +435,42 @@ impl TargetInfo {
 /// # Returns
 ///
 /// * On success:
-///   - Returns a `TargetInfo` struct containing the `function_name`, `variant_name`, `inference_id`, and `episode_id`.
+///   - Returns the `function_name` associated with the `target_id`.
 /// * On failure:
 ///   - Returns an `Error` if the `target_id` is invalid or does not exist.
-async fn get_target_info(
+async fn get_function_name(
     connection_info: &ClickHouseConnectionInfo,
     metric_config_level: &MetricConfigLevel,
     target_id: &Uuid,
-) -> Result<TargetInfo, Error> {
-    let (query, identifier_type) = match metric_config_level {
-        MetricConfigLevel::Inference => (
-            r#"
-        SELECT
-            function_name,
-            variant_name,
-            uint_to_uuid(id_uint) as inference_id,
-            episode_id
-        FROM InferenceById FINAL
-        WHERE id_uint = toUInt128(toUUID({target_id:String}))
-        FORMAT JSONEachRow
-        "#,
-            "Inference",
-        ),
-        MetricConfigLevel::Episode => (
-            r#"
-        SELECT
-            uint_to_uuid(id_uint) as inference_id,
-            uint_to_uuid(episode_id_uint) as episode_id
-        FROM InferenceByEpisodeId FINAL
-        WHERE episode_id_uint = toUInt128(toUUID({target_id:String}))
-        LIMIT 1
-        FORMAT JSONEachRow
-        "#,
-            "Episode",
-        ),
+) -> Result<String, Error> {
+    let table_name = match metric_config_level {
+        MetricConfigLevel::Inference => "InferenceById",
+        MetricConfigLevel::Episode => "InferenceByEpisodeId",
     };
-    let result = connection_info
-        .run_query_synchronous(
-            query.to_string(),
-            Some(&HashMap::from([(
-                "target_id",
-                target_id.to_string().as_str(),
-            )])),
-        )
-        .await?;
-    let result = result.trim();
-    if result.is_empty() {
+    let identifier_type = match metric_config_level {
+        MetricConfigLevel::Inference => "Inference",
+        MetricConfigLevel::Episode => "Episode",
+    };
+    let identifier_key = match metric_config_level {
+        MetricConfigLevel::Inference => "id_uint",
+        MetricConfigLevel::Episode => "episode_id_uint",
+    };
+    let query = format!(
+        "SELECT function_name FROM {} FINAL WHERE {} = toUInt128(toUUID('{}'))",
+        table_name, identifier_key, target_id
+    );
+    let function_name = connection_info
+        .run_query_synchronous(query, None)
+        .await?
+        .trim()
+        .to_string();
+    if function_name.is_empty() {
         // We don't want to log here since this can happen if we send feedback immediately after the target is created.
         return Err(Error::new_without_logging(ErrorDetails::InvalidRequest {
             message: format!("{identifier_type} ID: {target_id} does not exist"),
         }));
     };
-    let target_info = serde_json::from_str::<TargetInfo>(result).map_err(|e| {
-        Error::new(ErrorDetails::ClickHouseQuery {
-            message: format!("Failed to parse target info: {}", e),
-        })
-    })?;
-    Ok(target_info)
+    Ok(function_name)
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
@@ -844,95 +702,6 @@ async fn get_dynamic_demonstration_info(
             Ok(DynamicDemonstrationInfo::Json(output_schema))
         }
     }
-}
-
-/// Writes human evaluation feedback to the database.
-/// Should only be called if the params contain both the human feedback tag
-/// and a datapoint id tag.
-async fn write_human_static_evaluation_feedback(
-    clickhouse: &ClickHouseConnectionInfo,
-    config: &Config<'_>,
-    target_info: &TargetInfo,
-    params: &Params,
-    feedback_id: Uuid,
-) -> Result<(), Error> {
-    let datapoint_id =
-        params
-            .tags
-            .get(DATAPOINT_TAG_KEY)
-            .ok_or(Error::new(ErrorDetails::InvalidRequest {
-                message: "Datapoint ID is required for writing human evaluation feedback. This is a bug and should not happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.".to_string(),
-            }))?
-            .parse::<Uuid>()
-            .map_err(|e| {
-                Error::new(ErrorDetails::InvalidRequest {
-                    message: format!("Invalid datapoint ID: {}", e),
-                })
-            })?;
-    let TargetInfo::Inference {
-        function_name,
-        variant_name,
-        episode_id,
-        inference_id,
-        ..
-    } = target_info
-    else {
-        return Err(Error::new(ErrorDetails::InvalidRequest {
-            message: "Human feedback is only supported for inference targets. This is a bug."
-                .to_string(),
-        }));
-    };
-    let function_config = config.get_function(function_name)?;
-    let table_name = match &**function_config {
-        FunctionConfig::Chat(..) => "ChatInference",
-        FunctionConfig::Json(..) => "JsonInference",
-    };
-    let query = r#"
-        INSERT INTO StaticEvaluationHumanFeedback (
-            metric_name,
-            datapoint_id,
-            output,
-            value,
-            feedback_id
-        ) VALUES (
-            {metric_name:String},
-            {datapoint_id:UUID},
-            (
-                SELECT output
-                FROM {table_name:Identifier}
-                WHERE function_name = {function_name:String}
-                AND variant_name = {variant_name:String}
-                AND episode_id = {episode_id:String}
-                AND id = {inference_id:String}
-            ),
-            {value:String},
-            {feedback_id:UUID}
-        )
-    "#;
-    let value = serde_json::to_string(&params.value).map_err(|e| {
-        Error::new(ErrorDetails::InvalidRequest {
-            message: format!("Failed to serialize value: {}", e),
-        })
-    })?;
-    let datapoint_id_str = datapoint_id.to_string();
-    let feedback_id_str = feedback_id.to_string();
-    let episode_id_str = episode_id.to_string();
-    let inference_id_str = inference_id.to_string();
-    let parameters = HashMap::from([
-        ("metric_name", params.metric_name.as_str()),
-        ("datapoint_id", datapoint_id_str.as_str()),
-        ("value", value.as_str()),
-        ("feedback_id", feedback_id_str.as_str()),
-        ("table_name", table_name),
-        ("function_name", function_name),
-        ("variant_name", variant_name),
-        ("episode_id", episode_id_str.as_str()),
-        ("inference_id", inference_id_str.as_str()),
-    ]);
-    clickhouse
-        .run_query_synchronous(query.to_string(), Some(&parameters))
-        .await?;
-    Ok(())
 }
 
 static OLD_LLM_JUDGE_OUTPUT_SCHEMA_FLOAT: OnceLock<Value> = OnceLock::new();
