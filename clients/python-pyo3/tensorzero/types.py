@@ -4,7 +4,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
 from json import JSONEncoder
-from typing import Any, Dict, List, Literal, Optional, TypedDict, Union
+from typing import Any, Dict, List, Literal, Optional, Union
+from typing_extensions import TypedDict
 from uuid import UUID
 
 import httpx

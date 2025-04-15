@@ -4,7 +4,8 @@ import os
 import typing as t
 import warnings
 from abc import abstractmethod
-from typing import Any, Dict, List, Literal, Optional, TypedDict, Union
+from typing import Any, Dict, List, Literal, Optional, Union
+from typing_extensions import TypedDict
 
 from minijinja import Environment, TemplateError
 from openai import AsyncOpenAI

@@ -1,6 +1,7 @@
 import random
 import typing as t
-from typing import Any, List, Tuple, TypedDict
+from typing import Any, List, Tuple
+from typing_extensions import TypedDict
 
 from pydantic import BaseModel, Field
 
