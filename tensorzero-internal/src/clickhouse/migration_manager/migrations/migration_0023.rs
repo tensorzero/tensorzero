@@ -34,7 +34,7 @@ impl Migration for Migration0023<'_> {
                     output String,
                     value String,  -- JSON encoded value of the feedback
                     feedback_id UUID,
-                    timestamp DateTime MATERIALIZED UUIDv7ToDateTime(feedback_id),
+                    timestamp DateTime MATERIALIZED UUIDv7ToDateTime(feedback_id)
                 ) ENGINE = MergeTree()
                 ORDER BY (metric_name, datapoint_id, output)
                 SETTINGS index_granularity = 256 -- We use a small index granularity to improve lookup performance
