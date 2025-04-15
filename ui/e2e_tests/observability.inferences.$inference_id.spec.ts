@@ -48,7 +48,7 @@ test("should display inferences with image content", async ({ page }) => {
 
 test("tag navigation works by evaluation_name", async ({ page }) => {
   await page.goto(
-    "/observability/inferences/0195f845-949b-76c0-b9d4-68b3fd799b50",
+    "/observability/inferences/019639d0-ad4b-7f61-9d1c-de84172e03cf",
   );
 
   // Wait for page to load
@@ -73,7 +73,7 @@ test("tag navigation works by evaluation_name", async ({ page }) => {
 
 test("tag navigation works by datapoint_id", async ({ page }) => {
   await page.goto(
-    "/observability/inferences/0195f845-949b-76c0-b9d4-68b3fd799b50",
+    "/observability/inferences/019639d0-ad4b-7f61-9d1c-dea57bfaf50d",
   );
 
   // Wait for page to load completely
@@ -91,7 +91,7 @@ test("tag navigation works by datapoint_id", async ({ page }) => {
 
   // Assert the URL
   await expect(page).toHaveURL(
-    "/datasets/foo/datapoint/019368c7-d150-7ba0-819a-88a2cec33663",
+    "/datasets/foo/datapoint/01939885-f868-7f62-8168-30258afebfeb",
   );
 });
 

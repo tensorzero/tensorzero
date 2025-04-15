@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { v7 } from "uuid";
 
 test("should show the datapoint detail page", async ({ page }) => {
   await page.goto(
@@ -12,7 +13,7 @@ test("should show the datapoint detail page", async ({ page }) => {
 
 test("should be able to edit and save a datapoint", async ({ page }) => {
   await page.goto(
-    "/datasets/foo/datapoint/0195c49a-e011-7f60-a3a9-8c7f8fba2730",
+    "/datasets/foo/datapoint/019639b3-4e9a-776e-8d1a-1de153d766d7",
   );
   await expect(page.getByText("Input")).toBeVisible();
 
@@ -20,7 +21,10 @@ test("should be able to edit and save a datapoint", async ({ page }) => {
   await page.locator("button svg.lucide-pencil").click();
 
   // Edit the input
-  await page.locator("textarea.font-mono").first().fill('{"topic":"foo"}');
+  const topic = v7();
+  const input = `{"topic":"${topic}"}`;
+
+  await page.locator("textarea.font-mono").first().fill(input);
 
   // Save the datapoint
   await page.locator("button svg.lucide-save").click();
@@ -29,5 +33,5 @@ test("should be able to edit and save a datapoint", async ({ page }) => {
   await expect(page.getByText("error", { exact: false })).not.toBeVisible();
 
   // Assert that the input is updated
-  await expect(page.getByText('{"topic":"foo"}')).toBeVisible();
+  await expect(page.getByText(input)).toBeVisible();
 });

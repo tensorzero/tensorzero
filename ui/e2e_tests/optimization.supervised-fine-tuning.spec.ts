@@ -8,7 +8,7 @@ test("should show the supervised fine-tuning page", async ({ page }) => {
   await expect(page.getByText("error", { exact: false })).not.toBeVisible();
 });
 
-test("should fine-tune with a mocked OpenAI server", async ({ page }) => {
+test("@slow should fine-tune with a mocked OpenAI server", async ({ page }) => {
   await page.goto("/optimization/supervised-fine-tuning");
   await page
     .getByRole("combobox")
