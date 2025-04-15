@@ -647,6 +647,8 @@ pub struct JsonInferenceDatabaseInsert {
     #[serde(deserialize_with = "deserialize_json_string")]
     pub output: JsonInferenceOutput,
     #[serde(deserialize_with = "deserialize_json_string")]
+    pub auxiliary_content: Vec<ContentBlockOutput>,
+    #[serde(deserialize_with = "deserialize_json_string")]
     pub inference_params: InferenceParams,
     pub processing_time_ms: Option<u32>,
     pub output_schema: Value,
@@ -1124,6 +1126,7 @@ impl JsonInferenceDatabaseInsert {
             parsed,
             auxiliary_content,
         } = json_result.output;
+        let output = JsonInferenceOutput { raw, parsed };
 
         Self {
             id: json_result.inference_id,
@@ -1131,8 +1134,9 @@ impl JsonInferenceDatabaseInsert {
             variant_name: metadata.variant_name,
             episode_id: metadata.episode_id,
             input,
+            auxiliary_content,
             inference_params,
-            output: json_result.output,
+            output,
             processing_time_ms,
             output_schema: json_result.output_schema,
             tags: metadata.tags,

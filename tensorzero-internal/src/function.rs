@@ -552,6 +552,8 @@ mod tests {
     use crate::inference::types::FinishReason;
     use crate::inference::types::InputMessage;
     use crate::inference::types::Latency;
+    use crate::inference::types::Text;
+    use crate::inference::types::Thought;
     use crate::jsonschema_util::DynamicJSONSchema;
     use crate::minijinja_util::TemplateConfig;
     use crate::tool::ToolCall;
@@ -2229,7 +2231,9 @@ mod tests {
     fn test_get_json_output_from_content_blocks() {
         // Case 1: Text followed by ToolCall
         let content_blocks = vec![
-            ContentBlockOutput::Text("Hello".to_string().into()),
+            ContentBlockOutput::Text(Text {
+                text: "Hello".to_string(),
+            }),
             ContentBlockOutput::ToolCall(ToolCall {
                 id: "tool_call_id".to_string(),
                 name: "tool_call_name".to_string(),
@@ -2267,7 +2271,9 @@ mod tests {
                 text: "first thought".to_string(),
                 signature: None,
             }),
-            ContentBlockOutput::Text("Some text".to_string().into()),
+            ContentBlockOutput::Text(Text {
+                text: "Some text".to_string(),
+            }),
             ContentBlockOutput::Thought(Thought {
                 text: "second thought".to_string(),
                 signature: Some("sig2".to_string()),
@@ -2296,8 +2302,12 @@ mod tests {
 
         // Case 4: Only Text blocks
         let content_blocks = vec![
-            ContentBlockOutput::Text("A".to_string().into()),
-            ContentBlockOutput::Text("B".to_string().into()),
+            ContentBlockOutput::Text(Text {
+                text: "A".to_string(),
+            }),
+            ContentBlockOutput::Text(Text {
+                text: "B".to_string(),
+            }),
         ];
         let (raw_output, auxiliary_content) =
             get_json_output_from_content_blocks(content_blocks.clone());
@@ -2310,7 +2320,9 @@ mod tests {
 
         // Case 5: Thought block at the end
         let content_blocks = vec![
-            ContentBlockOutput::Text("A".to_string().into()),
+            ContentBlockOutput::Text(Text {
+                text: "A".to_string(),
+            }),
             ContentBlockOutput::Thought(Thought {
                 text: "final thought".to_string(),
                 signature: None,

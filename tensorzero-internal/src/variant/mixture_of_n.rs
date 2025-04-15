@@ -575,8 +575,8 @@ mod tests {
         inference::{
             providers::dummy::DummyProvider,
             types::{
-                ChatInferenceResult, FinishReason, JsonInferenceOutput, JsonInferenceResult,
-                Latency, ModelInferenceResponseWithMetadata,
+                ChatInferenceResult, FinishReason, InternalJsonInferenceOutput,
+                JsonInferenceResult, Latency, ModelInferenceResponseWithMetadata,
             },
         },
         jsonschema_util::StaticJSONSchema,
@@ -858,6 +858,7 @@ mod tests {
             Uuid::now_v7(),
             Some("{\"response\": \"Valid JSON response\"}".to_string()),
             Some(json!({"response": "Valid JSON response"})),
+            vec![],
             Usage {
                 input_tokens: 10,
                 output_tokens: 20,
@@ -895,6 +896,7 @@ mod tests {
             Uuid::now_v7(),
             Some("{\"oops: \"Malformed JSON response\"".to_string()),
             None, // malformed
+            vec![],
             Usage {
                 input_tokens: 15,
                 output_tokens: 25,
@@ -1088,9 +1090,10 @@ mod tests {
             input_tokens: 35,
             output_tokens: 55,
         };
-        let expected_content = JsonInferenceOutput {
+        let expected_content = InternalJsonInferenceOutput {
             raw: Some("{\"answer\":\"Hello\"}".to_string()),
             parsed: Some(json!({"answer": "Hello"})),
+            auxiliary_content: vec![],
         };
         match fused {
             InferenceResult::Json(fused) => {
