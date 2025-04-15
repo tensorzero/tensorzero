@@ -9,7 +9,7 @@ use super::check_table_exists;
 /// This is technically an auxiliary table as the primary store is still the various feedback tables.
 /// We also create two materialized views that automatically write to StaticEvaluationHumanFeedback when
 /// FloatMetricFeedback and BooleanMetricFeedback are updated with new feedback that contains both
-/// tensorzero::datapoint_id and tensorzero::human_feedback tags.s
+/// tensorzero::datapoint_id and tensorzero::human_feedback tags.
 pub struct Migration0023<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
 }
