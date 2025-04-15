@@ -601,6 +601,7 @@ dependencies = [
     { name = "openai" },
     { name = "pydantic" },
     { name = "tensorzero" },
+    { name = "typing-extensions" },
 ]
 
 [package.dev-dependencies]
@@ -620,6 +621,7 @@ requires-dist = [
     { name = "openai" },
     { name = "pydantic" },
     { name = "tensorzero", editable = "../clients/python-pyo3" },
+    { name = "typing-extensions", specifier = ">=4.13.1" },
 ]
 
 [package.metadata.requires-dev]
@@ -983,12 +985,14 @@ name = "tensorzero"
 source = { editable = "../clients/python-pyo3" }
 dependencies = [
     { name = "httpx" },
+    { name = "typing-extensions" },
     { name = "uuid-utils" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "httpx", specifier = ">=0.27.0" },
+    { name = "typing-extensions", specifier = ">=4.12.2" },
     { name = "uuid-utils", specifier = ">=0.9.0" },
 ]
 

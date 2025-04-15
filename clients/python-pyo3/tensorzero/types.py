@@ -5,10 +5,10 @@ from dataclasses import dataclass
 from enum import Enum
 from json import JSONEncoder
 from typing import Any, Dict, List, Literal, Optional, Union
-from typing_extensions import TypedDict
 from uuid import UUID
 
 import httpx
+from typing_extensions import TypedDict
 
 
 # Helper used to serialize Python objects to JSON, which may contain dataclasses like `Text`

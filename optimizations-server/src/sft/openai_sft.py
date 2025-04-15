@@ -5,12 +5,12 @@ import typing as t
 import warnings
 from abc import abstractmethod
 from typing import Any, Dict, List, Literal, Optional, Union
-from typing_extensions import TypedDict
 
 from minijinja import Environment, TemplateError
 from openai import AsyncOpenAI
 from openai.types.fine_tuning import FineTuningJob
 from tensorzero.tensorzero import AsyncTensorZeroGateway
+from typing_extensions import TypedDict
 
 from ..rendering import get_template_env
 from .common import FineTuningRequest, split_validation_data
