@@ -33,6 +33,7 @@ use crate::tool::{create_dynamic_implicit_tool_config, ToolCallConfig};
 use crate::{inference::types::InferenceResult, model::ModelConfig};
 
 pub mod best_of_n_sampling;
+pub mod chain_of_thought;
 pub mod chat_completion;
 pub mod dicl;
 pub mod mixture_of_n;
