@@ -102,8 +102,16 @@ test("should be able to add boolean feedback from the evaluation result page", a
   // Click on the "True" button
   await page.getByRole("radio", { name: "True" }).click();
 
+  // Wait for a little bit
+  await page.waitForTimeout(500);
+
   // Click on the "Save" button
   await page.locator('button[type="submit"]').click();
+
+  // Wait for the modal to disappear
+  await page.locator('div[role="dialog"]').waitFor({
+    state: "hidden",
+  });
 
   // Assert that the bool value is displayed
   await expect(page.getByText("True")).toBeVisible();
