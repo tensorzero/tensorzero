@@ -10337,7 +10337,7 @@ pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETes
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
-        "function_name": "json_success",
+        "function_name": "json_with_json_mode_off",
         "variant_name": provider.variant_name,
         "episode_id": episode_id,
         "input":
@@ -10369,20 +10369,13 @@ pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETes
     assert_eq!(response.status(), StatusCode::OK);
     let response_json = response.json::<Value>().await.unwrap();
 
-    println!("API response: {response_json:#?}");
-
-    // Check basic response structure
+    // Assert the output isn't JSON
     let output = response_json.get("output").unwrap().as_object().unwrap();
-    let parsed = output.get("parsed").unwrap().as_object().unwrap();
-    let answer = parsed.get("answer").unwrap().as_str().unwrap();
-
-    // Assert that Tokyo is the answer
-    assert_eq!(answer, "Tokyo");
     let raw = output.get("raw").unwrap().as_str().unwrap();
-    assert_eq!(raw, "{\n    \"answer\": \"Tokyo\"\n}");
-
-    // The result shouldn't be valid JSON when json_mode is off
     assert!(serde_json::from_str::<Value>(raw).is_err());
+
+    // Assert that the answer is correct
+    assert_eq!(raw, "The capital city of Japan is Tokyo.");
 
     // Check that inference_id is here
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
@@ -10419,11 +10412,8 @@ pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETes
     // Check that correctly parsed output is present
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Value = serde_json::from_str(output).unwrap();
-    let parsed = output.get("parsed").unwrap().as_object().unwrap();
-    let answer = parsed.get("answer").unwrap().as_str().unwrap();
-    assert_eq!(answer, "Tokyo");
     let raw = output.get("raw").unwrap().as_str().unwrap();
-    assert_eq!(raw, "{\n    \"answer\": \"Tokyo\"\n}");
+    assert_eq!(raw, "The capital city of Japan is Tokyo.");
 
     // Check that episode_id is here and correct
     let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
