@@ -10,8 +10,8 @@ use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::function::FunctionConfig;
 use crate::inference::types::batch::StartBatchModelInferenceWithMetadata;
 use crate::inference::types::{
-    ContentBlock, ContentBlockOutput, InferenceResult, InferenceResultStream,
-    InternalJsonInferenceOutput, JsonInferenceOutput, JsonInferenceResult, ResolvedInput, Thought,
+    ContentBlockOutput, InferenceResult, InferenceResultStream, InternalJsonInferenceOutput,
+    JsonInferenceResult, ResolvedInput, Thought,
 };
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::minijinja_util::TemplateConfig;
@@ -192,7 +192,7 @@ fn parse_thinking_output(
 ) -> Result<InternalJsonInferenceOutput, Error> {
     match &mut output.parsed {
         // If the output failed to parse, don't handle it here.
-        None => Ok((output)),
+        None => Ok(output),
         Some(parsed) => {
             let Some(thinking) = parsed
                 .get_mut("thinking")
