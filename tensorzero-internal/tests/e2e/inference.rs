@@ -3128,6 +3128,46 @@ async fn test_json_cot_inference_request() {
     .await;
 }
 
+#[tokio::test]
+async fn test_json_cot_inference_request_implicit_tool() {
+    let episode_id = Uuid::now_v7();
+
+    let payload = json!({
+        "function_name": "json_success",
+        "variant_name": "chain_of_thought_implicit_tool",
+        "episode_id": episode_id,
+        "input":
+            {
+               "system": {"assistant_name": "Dr. Mehta"},
+               "messages": [
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "arguments": {"country": "Japan"}}]
+                }
+            ]},
+        "stream": false,
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    // Check that the API response is ok
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+
+    check_json_cot_inference_response(
+        response_json,
+        episode_id,
+        "chain_of_thought_implicit_tool",
+        "openai::gpt-4.1-nano-2025-04-14",
+        "openai",
+    )
+    .await;
+}
+
 async fn check_json_cot_inference_response(
     response_json: Value,
     episode_id: Uuid,
@@ -3256,12 +3296,10 @@ async fn check_json_cot_inference_response(
     assert_eq!(model_provider_name, expected_model_provider_name);
 
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
-    assert_eq!(raw_request, "raw request"); // Dummy provider
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.to_lowercase().contains("tokyo"));
     assert!(raw_response.to_lowercase().contains("thinking"));
-    assert!(raw_response.to_lowercase().contains("hmm"));
     assert!(serde_json::from_str::<Value>(raw_response).is_ok());
 
     let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
@@ -3307,7 +3345,8 @@ async fn check_json_cot_inference_response(
             // Handles implicit tool calls
             assert_eq!(tool_call.name, "respond");
             let arguments: Value = serde_json::from_str(&tool_call.arguments).unwrap();
-            let answer = arguments.get("answer").unwrap().as_str().unwrap();
+            let response = arguments.get("response").unwrap().as_object().unwrap();
+            let answer = response.get("answer").unwrap().as_str().unwrap();
             assert!(answer.to_lowercase().contains("tokyo"));
         }
         _ => {

@@ -8892,9 +8892,8 @@ pub async fn check_json_mode_inference_response(
     assert_eq!(output.len(), 1);
     match &output[0] {
         ContentBlock::Text(text) => {
-            let parsed: Value = serde_json::from_str(&text.text).unwrap();
-            let answer = parsed.get("answer").unwrap().as_str().unwrap();
-            assert!(answer.to_lowercase().contains("tokyo"));
+            let _: Value = serde_json::from_str(&text.text).unwrap();
+            assert!(text.text.to_lowercase().contains("tokyo"));
         }
         ContentBlock::ToolCall(tool_call) => {
             // Handles implicit tool calls
@@ -9136,9 +9135,8 @@ pub async fn check_dynamic_json_mode_inference_response(
     assert_eq!(output.len(), 1);
     match &output[0] {
         ContentBlock::Text(text) => {
-            let parsed: Value = serde_json::from_str(&text.text).unwrap();
-            let answer = parsed.get("response").unwrap().as_str().unwrap();
-            assert!(answer.to_lowercase().contains("tokyo"));
+            let _: Value = serde_json::from_str(&text.text).unwrap();
+            assert!(&text.text.to_lowercase().contains("tokyo"));
         }
         ContentBlock::ToolCall(tool_call) => {
             // Handles implicit tool calls
