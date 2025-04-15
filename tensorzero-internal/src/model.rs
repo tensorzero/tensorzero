@@ -32,7 +32,8 @@ use crate::inference::types::batch::{
     BatchRequestRow, PollBatchInferenceResponse, StartBatchModelInferenceResponse,
     StartBatchProviderInferenceResponse,
 };
-use crate::inference::types::extra_body::{ExtraBodyConfig, ExtraHeadersConfig};
+use crate::inference::types::extra_body::ExtraBodyConfig;
+use crate::inference::types::extra_headers::ExtraHeadersConfig;
 use crate::inference::types::{
     current_timestamp, ContentBlock, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, RequestMessage, Usage,

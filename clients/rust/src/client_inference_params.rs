@@ -8,7 +8,8 @@ use tensorzero_internal::{
     endpoints::inference::{InferenceParams, Params},
     error::Error,
     inference::types::{
-        extra_body::UnfilteredInferenceExtraBody, Input, InputMessage, InputMessageContent,
+        extra_body::UnfilteredInferenceExtraBody, extra_headers::UnfilteredInferenceExtraHeaders,
+        Input, InputMessage, InputMessageContent,
     },
     tool::DynamicToolParams,
 };
@@ -68,6 +69,8 @@ pub struct ClientInferenceParams {
     pub include_original_response: bool,
     #[serde(default)]
     pub extra_body: UnfilteredInferenceExtraBody,
+    #[serde(default)]
+    pub extra_headers: UnfilteredInferenceExtraHeaders,
 }
 
 impl TryFrom<ClientInferenceParams> for Params {
@@ -109,6 +112,7 @@ impl TryFrom<ClientInferenceParams> for Params {
             cache_options: this.cache_options,
             include_original_response: this.include_original_response,
             extra_body: this.extra_body,
+            extra_headers: this.extra_headers,
         })
     }
 }
@@ -135,6 +139,7 @@ fn assert_params_match(client_params: ClientInferenceParams) {
         cache_options,
         include_original_response,
         extra_body,
+        extra_headers,
     } = client_params;
     let _ = Params {
         function_name,
@@ -153,6 +158,7 @@ fn assert_params_match(client_params: ClientInferenceParams) {
         cache_options,
         include_original_response,
         extra_body,
+        extra_headers,
     };
 }
 

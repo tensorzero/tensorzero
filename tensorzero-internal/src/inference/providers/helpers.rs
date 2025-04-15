@@ -7,7 +7,8 @@ use serde_json::{map::Entry, Map, Value};
 use crate::{
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
     inference::types::{
-        extra_body::{ExtraHeader, FullExtraBodyConfig, InferenceExtraBody},
+        extra_body::{FullExtraBodyConfig, InferenceExtraBody},
+        extra_headers::ExtraHeader,
         ProviderInferenceResponseChunk,
     },
     model::{fully_qualified_name, ModelProviderRequestInfo},

@@ -1,17 +1,6 @@
+use super::extra_headers::{ExtraHeader, ExtraHeadersConfig};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
-#[serde(transparent)]
-pub struct ExtraHeadersConfig {
-    pub data: Vec<ExtraHeader>,
-}
-
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
-pub struct ExtraHeader {
-    pub name: String,
-    pub value: String,
-}
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(transparent)]

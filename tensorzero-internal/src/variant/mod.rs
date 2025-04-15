@@ -1,3 +1,4 @@
+use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use backon::ExponentialBuilder;
 use backon::Retryable;
 use futures::StreamExt;
@@ -68,6 +69,7 @@ pub struct InferenceConfig<'a, 'request> {
     pub variant_name: Option<&'request str>,
     pub ids: InferenceIds,
     pub extra_body: UnfilteredInferenceExtraBody,
+    pub extra_headers: UnfilteredInferenceExtraHeaders,
     /// Optional arbitrary data, only used when constructing the cache key.
     /// This is used by best_of_n/mixture_of_n to force different sub-variants
     /// to have different cache keys.
@@ -109,6 +111,7 @@ impl<'a> BatchInferenceConfig<'a> {
                 },
                 // Not yet supported for batch inference requests
                 extra_body: Default::default(),
+                extra_headers: Default::default(),
                 extra_cache_key: None,
             },
         )
@@ -658,6 +661,7 @@ mod tests {
                 episode_id: Uuid::now_v7(),
             },
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
 
@@ -792,6 +796,7 @@ mod tests {
             variant_name: Some("test_variant"),
             dynamic_output_schema: Some(&dynamic_output_schema),
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
         let json_mode = JsonMode::ImplicitTool;
@@ -883,6 +888,7 @@ mod tests {
                 episode_id: Uuid::now_v7(),
             },
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
 
@@ -1158,6 +1164,7 @@ mod tests {
                 episode_id: Uuid::now_v7(),
             },
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
 

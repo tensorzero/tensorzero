@@ -40,6 +40,7 @@ use crate::{jsonschema_util::DynamicJSONSchema, tool::ToolCallConfigDatabaseInse
 
 pub mod batch;
 pub mod extra_body;
+pub mod extra_headers;
 pub mod image;
 pub mod resolved_input;
 pub mod storage;
@@ -1524,6 +1525,7 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
         templates,
         dynamic_output_schema: dynamic_output_schema.as_ref(),
         extra_body,
+        extra_headers,
         extra_cache_key: None,
     };
     function

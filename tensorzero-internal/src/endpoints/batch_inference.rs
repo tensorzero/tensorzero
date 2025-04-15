@@ -865,6 +865,7 @@ pub async fn write_completed_batch_inference<'a>(
             },
             // Not currently supported as a batch inference parameter
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
         let inference_result = function
@@ -893,6 +894,7 @@ pub async fn write_completed_batch_inference<'a>(
             tags: HashMap::new(),
             // Not currently supported as a batch inference parameter
             extra_body: Default::default(),
+            extra_headers: Default::default(),
         };
         model_inference_rows_to_write.extend(inference_result.get_serialized_model_inferences());
         match inference_result {
