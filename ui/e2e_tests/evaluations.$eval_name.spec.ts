@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 
 test("should show the evaluation result page", async ({ page }) => {
   await page.goto(
-    "/evaluations/entity_extraction?evaluation_run_ids=019639b8-2da5-7431-8fd0-c6b32c062c68%2C0196367b-1739-7483-b3f4-f3b0a4bda063",
+    "/evaluations/entity_extraction?evaluation_run_ids=0196367b-1739-7483-b3f4-f3b0a4bda063%2C0196367b-c0bb-7f90-b651-f90eb9fba8f3",
   );
   await expect(page.getByText("Input")).toBeVisible();
   await expect(page.getByText("llama_8b_initial_prompt")).toBeVisible();

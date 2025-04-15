@@ -13,8 +13,10 @@ test("should show the datapoint detail page", async ({ page }) => {
 
 test("should be able to edit and save a datapoint", async ({ page }) => {
   await page.goto(
-    "/datasets/foo/datapoint/019639b3-4e9a-776e-8d1a-1de153d766d7",
+    "/datasets/foo/datapoint/0193514c-ec40-7911-ad63-460bb9c861e1",
   );
+  // Wait for the page to load
+  await page.waitForLoadState("networkidle");
   await expect(page.getByText("Input")).toBeVisible();
 
   // Click the edit button
@@ -34,4 +36,5 @@ test("should be able to edit and save a datapoint", async ({ page }) => {
 
   // Assert that the input is updated
   await expect(page.getByText(input)).toBeVisible();
+  // NOTE: there will now be a new datapoint ID for this datapoint as its input has been edited
 });
