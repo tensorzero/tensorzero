@@ -88,7 +88,7 @@ async fn e2e_test_comment_human_feedback() {
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, feedback_id);
 
-    // Check that no data was written to HumanStaticEvaluationFeedback
+    // Check that no data was written to StaticEvaluationHumanFeedback
     let result = select_human_static_evaluation_feedback_clickhouse(
         &clickhouse,
         "comment",
@@ -143,7 +143,7 @@ async fn e2e_test_comment_human_feedback() {
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, feedback_id);
 
-    // Check that data was written to HumanStaticEvaluationFeedback
+    // Check that data was written to StaticEvaluationHumanFeedback
     let human_feedback = select_human_static_evaluation_feedback_clickhouse(
         &clickhouse,
         "comment",
@@ -239,7 +239,7 @@ async fn e2e_test_demonstration_human_feedback() {
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, feedback_id);
 
-    // Check that data was written to HumanStaticEvaluationFeedback
+    // Check that data was written to StaticEvaluationHumanFeedback
     let human_feedback = select_human_static_evaluation_feedback_clickhouse(
         &clickhouse,
         "demonstration",
@@ -325,7 +325,7 @@ async fn e2e_test_demonstration_human_feedback_json() {
     };
     assert_eq!(retrieved_value, expected_value);
 
-    // Check that data was written to HumanStaticEvaluationFeedback
+    // Check that data was written to StaticEvaluationHumanFeedback
     let human_feedback = select_human_static_evaluation_feedback_clickhouse(
         &clickhouse,
         "demonstration",
@@ -421,7 +421,7 @@ async fn e2e_test_float_human_feedback() {
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, feedback_id);
 
-    // Check that data was written to HumanStaticEvaluationFeedback
+    // Check that data was written to StaticEvaluationHumanFeedback
     let human_feedback = select_human_static_evaluation_feedback_clickhouse(
         &clickhouse,
         "brevity_score",
@@ -496,7 +496,7 @@ async fn e2e_test_boolean_human_feedback() {
     let metric_name = result.get("metric_name").unwrap().as_str().unwrap();
     assert_eq!(metric_name, "task_success");
 
-    // Check that data was written to HumanStaticEvaluationFeedback
+    // Check that data was written to StaticEvaluationHumanFeedback
     let human_feedback = select_human_static_evaluation_feedback_clickhouse(
         &clickhouse,
         "task_success",

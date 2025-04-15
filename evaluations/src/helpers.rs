@@ -87,7 +87,7 @@ pub async fn check_static_eval_human_feedback(
 ) -> Result<Option<Value>> {
     let serialized_output = inference_output.get_serialized_output()?;
     let query = r#"
-        SELECT value FROM HumanStaticEvaluationFeedback
+        SELECT value FROM StaticEvaluationHumanFeedback
         WHERE
             metric_name = {metric_name:String}
         AND datapoint_id = {datapoint_id:UUID}

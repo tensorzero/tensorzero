@@ -413,7 +413,7 @@ pub async fn select_feedback_tags_clickhouse(
 }
 
 #[derive(Debug, Deserialize)]
-pub struct HumanStaticEvaluationFeedback {
+pub struct StaticEvaluationHumanFeedback {
     pub metric_name: String,
     pub datapoint_id: Uuid,
     pub output: String,
@@ -427,7 +427,7 @@ pub async fn select_human_static_evaluation_feedback_clickhouse(
     metric_name: &str,
     datapoint_id: Uuid,
     output: &str,
-) -> Option<HumanStaticEvaluationFeedback> {
+) -> Option<StaticEvaluationHumanFeedback> {
     let datapoint_id_str = datapoint_id.to_string();
     let escaped_output = escape_string_for_clickhouse_comparison(output);
     let params = HashMap::from([
@@ -436,7 +436,7 @@ pub async fn select_human_static_evaluation_feedback_clickhouse(
         ("output", &escaped_output),
     ]);
     let query = r#"
-        SELECT * FROM HumanStaticEvaluationFeedback
+        SELECT * FROM StaticEvaluationHumanFeedback
         WHERE
             metric_name = {metric_name:String}
             AND datapoint_id = {datapoint_id:UUID}
@@ -452,7 +452,7 @@ pub async fn select_human_static_evaluation_feedback_clickhouse(
         None
     } else {
         // Panic if the query fails to parse or multiple rows are returned
-        let json: HumanStaticEvaluationFeedback = serde_json::from_str(&text).unwrap();
+        let json: StaticEvaluationHumanFeedback = serde_json::from_str(&text).unwrap();
         Some(json)
     }
 }

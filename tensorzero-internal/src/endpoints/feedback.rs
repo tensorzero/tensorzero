@@ -888,7 +888,7 @@ async fn write_human_static_evaluation_feedback(
         FunctionConfig::Json(..) => "JsonInference",
     };
     let query = r#"
-        INSERT INTO HumanStaticEvaluationFeedback (
+        INSERT INTO StaticEvaluationHumanFeedback (
             metric_name,
             datapoint_id,
             output,
