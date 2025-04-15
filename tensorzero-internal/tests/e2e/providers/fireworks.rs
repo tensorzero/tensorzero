@@ -67,6 +67,13 @@ async fn get_providers() -> E2ETestProviders {
         },
     ];
 
+    let json_mode_off_providers = vec![E2ETestProvider {
+        variant_name: "fireworks".to_string(),
+        model_name: "llama3.3-70b-instruct-fireworks".into(),
+        model_provider_name: "fireworks".into(),
+        credentials: HashMap::new(),
+    }];
+
     let shorthand_providers = vec![E2ETestProvider {
         variant_name: "fireworks-shorthand".to_string(),
         model_name: "fireworks::accounts/fireworks/models/llama-v3p1-8b-instruct".into(),
@@ -93,6 +100,7 @@ async fn get_providers() -> E2ETestProviders {
         dynamic_tool_use_inference: tool_providers.clone(),
         parallel_tool_use_inference: vec![],
         json_mode_inference: json_providers,
+        json_mode_off_inference: json_mode_off_providers.clone(),
         image_inference: vec![],
 
         shorthand_inference: shorthand_providers,

@@ -47,6 +47,13 @@ async fn get_providers() -> E2ETestProviders {
         },
     ];
 
+    let json_mode_off_providers = vec![E2ETestProvider {
+        variant_name: "mistral".to_string(),
+        model_name: "open-mistral-nemo-2407".into(),
+        model_provider_name: "mistral".into(),
+        credentials: HashMap::new(),
+    }];
+
     let inference_params_dynamic_providers = vec![E2ETestProvider {
         variant_name: "mistral-dynamic".to_string(),
         model_name: "open-mistral-nemo-2407-dynamic".into(),
@@ -73,6 +80,7 @@ async fn get_providers() -> E2ETestProviders {
         dynamic_tool_use_inference: providers.clone(),
         parallel_tool_use_inference: vec![],
         json_mode_inference: json_providers.clone(),
+        json_mode_off_inference: json_mode_off_providers.clone(),
         image_inference: vec![],
 
         shorthand_inference: shorthand_providers.clone(),
