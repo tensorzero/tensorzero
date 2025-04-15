@@ -19,8 +19,10 @@ use crate::error::Error;
 use crate::error::ErrorDetails;
 use crate::function::FunctionConfig;
 use crate::inference::types::batch::StartBatchModelInferenceWithMetadata;
-use crate::inference::types::extra_body::FullExtraBodyConfig;
-use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
+use crate::inference::types::extra_body::{FullExtraBodyConfig, UnfilteredInferenceExtraBody};
+use crate::inference::types::extra_headers::{
+    FullExtraHeadersConfig, UnfilteredInferenceExtraHeaders,
+};
 use crate::inference::types::ResolvedInput;
 use crate::inference::types::{
     FunctionType, InferenceResultChunk, InferenceResultStream, ModelInferenceRequest,
@@ -413,6 +415,7 @@ fn prepare_model_inference_request<'a, 'request>(
     inference_params: &InferenceParams,
     base_json_mode: Option<JsonMode>,
     extra_body: FullExtraBodyConfig,
+    extra_headers: FullExtraHeadersConfig,
 ) -> Result<ModelInferenceRequest<'request>, Error>
 where
     'a: 'request,

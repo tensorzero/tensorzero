@@ -10,6 +10,7 @@ use crate::config_parser::PathWithContents;
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels};
 use crate::inference::types::extra_body::FullExtraBodyConfig;
+use crate::inference::types::extra_headers::FullExtraHeadersConfig;
 use crate::inference::types::ResolvedInput;
 use crate::inference::types::{
     batch::StartBatchModelInferenceWithMetadata, ModelInferenceRequest, RequestMessage, Role, Usage,
@@ -545,6 +546,9 @@ impl FuserConfig {
             extra_body: self.inner.extra_body.clone(),
             inference_extra_body: Default::default(),
         };
+        let extra_headers = FullExtraHeadersConfig {
+            variant_extra_headers: self.inner.extra_headers.clone(),
+        };
         let model_inference_request = prepare_model_inference_request(
             messages,
             system,
@@ -554,6 +558,7 @@ impl FuserConfig {
             inference_params,
             self.inner.json_mode,
             extra_body,
+            extra_headers,
         )?;
         Ok((model_inference_request, included_indices))
     }
@@ -1068,6 +1073,7 @@ mod tests {
             function_name: "",
             variant_name: Some(""),
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
 

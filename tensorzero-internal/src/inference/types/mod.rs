@@ -1,8 +1,8 @@
 use crate::inference::types::batch::deserialize_json_string;
 use crate::inference::types::batch::deserialize_optional_json_string;
 use derive_builder::Builder;
-use extra_body::FullExtraBodyConfig;
-use extra_body::UnfilteredInferenceExtraBody;
+use extra_body::{FullExtraBodyConfig, UnfilteredInferenceExtraBody};
+use extra_headers::FullExtraHeadersConfig;
 use futures::stream::Peekable;
 use futures::Stream;
 use image::sanitize_raw_request;
@@ -384,6 +384,7 @@ pub struct ModelInferenceRequest<'a> {
     pub function_type: FunctionType,
     pub output_schema: Option<&'a Value>,
     pub extra_body: FullExtraBodyConfig,
+    pub extra_headers: FullExtraHeadersConfig,
     /// Optional arbitrary data, only used when constructing the cache key.
     /// This is used by best_of_n/mixture_of_n to force different sub-variants
     /// to have different cache keys.

@@ -523,6 +523,9 @@ impl DiclConfig {
             extra_body: self.extra_body.clone(),
             inference_extra_body: Default::default(),
         };
+        let extra_headers = FullExtraHeadersConfig {
+            variant_extra_headers: self.extra_headers.clone(),
+        };
         prepare_model_inference_request(
             messages,
             system,
@@ -532,6 +535,7 @@ impl DiclConfig {
             inference_params,
             self.json_mode,
             extra_body,
+            extra_headers,
         )
     }
 }
