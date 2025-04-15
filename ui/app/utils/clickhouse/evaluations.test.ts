@@ -605,16 +605,16 @@ describe("getEvaluationRunInfosForDatapoint", () => {
 
   test("should return correct evaluation run info for ragged haiku datapoint", async () => {
     const evaluationRunInfos = await getEvaluationRunInfosForDatapoint(
-      "0195c497-03c2-7523-aa83-9caf73dd47d5",
+      "01963691-7489-74b3-837f-e386de14c5f9",
       "write_haiku",
     );
 
     const expected = {
-      evaluation_run_id: "0195c498-1cbe-7ac0-b5b2-5856741f5890",
+      evaluation_run_id: "01963691-9d3c-7793-a8be-3937ebb849c1",
       variant_name: "better_prompt_haiku_3_5",
       most_recent_inference_date: "2025-03-23T20:01:25Z",
     };
-    expect(evaluationRunInfos).toHaveLength(1); // Ensure exactly one item
+    expect(evaluationRunInfos).toHaveLength(3); // Ensure exactly one item
     expect(evaluationRunInfos).toEqual(expect.arrayContaining([expected]));
   });
 });
