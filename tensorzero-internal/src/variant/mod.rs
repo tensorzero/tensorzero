@@ -625,7 +625,7 @@ mod tests {
     use crate::inference::types::{
         ContentBlockChunk, ModelInferenceRequestJsonMode, RequestMessage, Role,
     };
-    use crate::jsonschema_util::JSONSchemaFromPath;
+    use crate::jsonschema_util::StaticJSONSchema;
     use crate::minijinja_util::tests::get_test_template_config;
     use crate::model::{ModelProvider, ProviderConfig};
     use crate::tool::{ToolCallConfig, ToolChoice};
@@ -735,7 +735,7 @@ mod tests {
             },
             "required": ["answer"],
         });
-        let output_schema = JSONSchemaFromPath::from_value(&output_schema_value).unwrap();
+        let output_schema = StaticJSONSchema::from_value(&output_schema_value).unwrap();
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema_value);
 
         let function_config_json = FunctionConfig::Json(FunctionConfigJson {
@@ -989,7 +989,7 @@ mod tests {
             system_schema: None,
             user_schema: None,
             assistant_schema: None,
-            output_schema: JSONSchemaFromPath::from_value(&json!({
+            output_schema: StaticJSONSchema::from_value(&json!({
                 "type": "object",
                 "properties": {
                     "answer": { "type": "string" }

@@ -19,7 +19,7 @@ use crate::inference::types::{
     ModelInferenceResponseWithMetadata, RequestMessage, Role, Usage,
 };
 use crate::inference::types::{ContentBlockOutput, ResolvedInput};
-use crate::jsonschema_util::JSONSchemaFromPath;
+use crate::jsonschema_util::StaticJSONSchema;
 use crate::model::ModelTable;
 use crate::tool::{ImplicitToolConfig, ToolCallConfig, ToolChoice, ToolConfig};
 use crate::{
@@ -83,9 +83,9 @@ impl LoadableConfig<BestOfNSamplingConfig> for UninitializedBestOfNSamplingConfi
 }
 
 lazy_static! {
-    static ref EVALUATOR_OUTPUT_SCHEMA: JSONSchemaFromPath = {
+    static ref EVALUATOR_OUTPUT_SCHEMA: StaticJSONSchema = {
         #[allow(clippy::expect_used)]
-        JSONSchemaFromPath::from_value(&json!({
+        StaticJSONSchema::from_value(&json!({
             "type": "object",
             "properties": {
                 "thinking": { "type": "string" },

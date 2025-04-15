@@ -13,7 +13,7 @@ use crate::inference::types::{
     ChatInferenceResult, ContentBlockOutput, InferenceResult, Input, InputMessageContent,
     JsonInferenceResult, ModelInferenceResponseWithMetadata, Role, TextKind, Usage,
 };
-use crate::jsonschema_util::{JSONSchemaFromPath, JsonSchemaRef};
+use crate::jsonschema_util::{JsonSchemaRef, StaticJSONSchema};
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
 use crate::tool::{DynamicToolParams, StaticToolConfig, ToolCallConfig, ToolChoice};
@@ -43,9 +43,9 @@ impl FunctionConfig {
 #[derive(Debug, Default)]
 pub struct FunctionConfigChat {
     pub variants: HashMap<String, VariantConfig>, // variant name => variant config
-    pub system_schema: Option<JSONSchemaFromPath>,
-    pub user_schema: Option<JSONSchemaFromPath>,
-    pub assistant_schema: Option<JSONSchemaFromPath>,
+    pub system_schema: Option<StaticJSONSchema>,
+    pub user_schema: Option<StaticJSONSchema>,
+    pub assistant_schema: Option<StaticJSONSchema>,
     pub tools: Vec<String>, // tool names
     pub tool_choice: ToolChoice,
     pub parallel_tool_calls: Option<bool>,
@@ -55,10 +55,10 @@ pub struct FunctionConfigChat {
 #[derive(Debug, Default)]
 pub struct FunctionConfigJson {
     pub variants: HashMap<String, VariantConfig>, // variant name => variant config
-    pub system_schema: Option<JSONSchemaFromPath>,
-    pub user_schema: Option<JSONSchemaFromPath>,
-    pub assistant_schema: Option<JSONSchemaFromPath>,
-    pub output_schema: JSONSchemaFromPath, // schema is mandatory for JSON functions
+    pub system_schema: Option<StaticJSONSchema>,
+    pub user_schema: Option<StaticJSONSchema>,
+    pub assistant_schema: Option<StaticJSONSchema>,
+    pub output_schema: StaticJSONSchema, // schema is mandatory for JSON functions
     pub implicit_tool_call_config: ToolCallConfig,
     pub description: Option<String>,
 }
@@ -248,21 +248,21 @@ impl FunctionConfig {
         }
     }
 
-    pub fn system_schema(&self) -> Option<&JSONSchemaFromPath> {
+    pub fn system_schema(&self) -> Option<&StaticJSONSchema> {
         match self {
             FunctionConfig::Chat(params) => params.system_schema.as_ref(),
             FunctionConfig::Json(params) => params.system_schema.as_ref(),
         }
     }
 
-    pub fn user_schema(&self) -> Option<&JSONSchemaFromPath> {
+    pub fn user_schema(&self) -> Option<&StaticJSONSchema> {
         match self {
             FunctionConfig::Chat(params) => params.user_schema.as_ref(),
             FunctionConfig::Json(params) => params.user_schema.as_ref(),
         }
     }
 
-    pub fn assistant_schema(&self) -> Option<&JSONSchemaFromPath> {
+    pub fn assistant_schema(&self) -> Option<&StaticJSONSchema> {
         match self {
             FunctionConfig::Chat(params) => params.assistant_schema.as_ref(),
             FunctionConfig::Json(params) => params.assistant_schema.as_ref(),
@@ -324,9 +324,9 @@ impl FunctionConfig {
 /// Next we validate all messages containing text blocks.
 /// If there are multiple text or raw text blocks in a message we reject.
 fn validate_all_text_input(
-    system_schema: Option<&JSONSchemaFromPath>,
-    user_schema: Option<&JSONSchemaFromPath>,
-    assistant_schema: Option<&JSONSchemaFromPath>,
+    system_schema: Option<&StaticJSONSchema>,
+    user_schema: Option<&StaticJSONSchema>,
+    assistant_schema: Option<&StaticJSONSchema>,
     input: &Input,
 ) -> Result<(), Error> {
     match (input.system.as_ref(), system_schema) {
@@ -398,7 +398,7 @@ fn validate_all_text_input(
 /// Otherwise, the message must contain JSON content that matches the schema
 fn validate_single_message(
     content: &Value,
-    schema: Option<&JSONSchemaFromPath>,
+    schema: Option<&StaticJSONSchema>,
     index_role: Option<(usize, &Role)>,
 ) -> Result<(), Error> {
     match schema {
@@ -537,7 +537,7 @@ mod tests {
     use tempfile::NamedTempFile;
     use tracing_test::traced_test;
 
-    fn create_test_schema() -> JSONSchemaFromPath {
+    fn create_test_schema() -> StaticJSONSchema {
         let schema = r#"
         {
             "type": "object",
@@ -552,7 +552,7 @@ mod tests {
         let mut temp_file = NamedTempFile::new().expect("Failed to create temporary file");
         write!(temp_file, "{}", schema).expect("Failed to write schema to temporary file");
 
-        JSONSchemaFromPath::new(temp_file.path().to_owned(), PathBuf::new())
+        StaticJSONSchema::from_path(temp_file.path().to_owned(), PathBuf::new())
             .expect("Failed to create schema")
     }
 
@@ -1033,7 +1033,7 @@ mod tests {
             system_schema: None,
             user_schema: None,
             assistant_schema: None,
-            output_schema: JSONSchemaFromPath::from_value(&json!({})).unwrap(),
+            output_schema: StaticJSONSchema::from_value(&json!({})).unwrap(),
             implicit_tool_call_config,
             description: None,
         };
@@ -1106,7 +1106,7 @@ mod tests {
             system_schema: Some(system_schema),
             user_schema: None,
             assistant_schema: None,
-            output_schema: JSONSchemaFromPath::from_value(&output_schema).unwrap(),
+            output_schema: StaticJSONSchema::from_value(&output_schema).unwrap(),
             implicit_tool_call_config,
             description: None,
         };
@@ -1169,7 +1169,7 @@ mod tests {
             system_schema: None,
             user_schema: Some(user_schema),
             assistant_schema: None,
-            output_schema: JSONSchemaFromPath::from_value(&output_schema).unwrap(),
+            output_schema: StaticJSONSchema::from_value(&output_schema).unwrap(),
             implicit_tool_call_config,
             description: None,
         };
@@ -1233,7 +1233,7 @@ mod tests {
             system_schema: None,
             user_schema: None,
             assistant_schema: Some(assistant_schema),
-            output_schema: JSONSchemaFromPath::from_value(&output_schema).unwrap(),
+            output_schema: StaticJSONSchema::from_value(&output_schema).unwrap(),
             implicit_tool_call_config,
             description: None,
         };
@@ -1301,7 +1301,7 @@ mod tests {
             system_schema: Some(system_schema),
             user_schema: Some(user_schema),
             assistant_schema: Some(assistant_schema),
-            output_schema: JSONSchemaFromPath::from_value(&output_schema).unwrap(),
+            output_schema: StaticJSONSchema::from_value(&output_schema).unwrap(),
             implicit_tool_call_config,
             description: None,
         };
@@ -1511,7 +1511,7 @@ mod tests {
         );
 
         // Test for JSON function with description
-        let output_schema = JSONSchemaFromPath::from_value(&json!({})).unwrap();
+        let output_schema = StaticJSONSchema::from_value(&json!({})).unwrap();
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&json!({}));
         let json_config = FunctionConfigJson {
             variants: HashMap::new(),
@@ -1564,7 +1564,7 @@ mod tests {
           "additionalProperties": false
         });
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
-        let output_schema = JSONSchemaFromPath::from_value(&output_schema).unwrap();
+        let output_schema = StaticJSONSchema::from_value(&output_schema).unwrap();
         let function_config = FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             system_schema: None,
@@ -2138,7 +2138,7 @@ mod tests {
         // Test with an empty output schema
         let output_schema = json!({});
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
-        let output_schema = JSONSchemaFromPath::from_value(&output_schema).unwrap();
+        let output_schema = StaticJSONSchema::from_value(&output_schema).unwrap();
         let function_config = FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             system_schema: None,

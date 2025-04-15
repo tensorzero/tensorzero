@@ -16,7 +16,7 @@ use crate::{
     error::{Error, ErrorDetails},
     function::{FunctionConfig, FunctionConfigJson},
     inference::types::extra_body::{ExtraBodyConfig, ExtraHeadersConfig},
-    jsonschema_util::JSONSchemaFromPath,
+    jsonschema_util::StaticJSONSchema,
     tool::create_implicit_tool_call_config,
     variant::{
         best_of_n_sampling::{BestOfNSamplingConfig, EvaluatorConfig as OnlineEvaluatorConfig},
@@ -376,14 +376,14 @@ impl UninitializedEvaluatorConfig {
                             message: format!("Failed to parse LLM judge output schema: {e}. This should never happen, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports."),
                         })
                     })?;
-                let output_schema = JSONSchemaFromPath::from_value(&output_schema_value)?;
+                let output_schema = StaticJSONSchema::from_value(&output_schema_value)?;
                 let implicit_tool_call_config =
                     create_implicit_tool_call_config(output_schema.clone());
                 let function_config = FunctionConfig::Json(FunctionConfigJson {
                     variants,
                     system_schema: None,
                     user_schema: user_schema_value
-                        .map(|v| JSONSchemaFromPath::from_value(&v))
+                        .map(|v| StaticJSONSchema::from_value(&v))
                         .transpose()?,
                     assistant_schema: None,
                     output_schema,
@@ -1524,7 +1524,7 @@ mod tests {
     }
 
     // Helper functions for tests
-    fn create_test_schema() -> JSONSchemaFromPath {
+    fn create_test_schema() -> StaticJSONSchema {
         let schema_value = serde_json::json!({
             "type": "object",
             "properties": {
@@ -1534,6 +1534,6 @@ mod tests {
             },
             "required": ["result"]
         });
-        JSONSchemaFromPath::from_value(&schema_value).unwrap()
+        StaticJSONSchema::from_value(&schema_value).unwrap()
     }
 }

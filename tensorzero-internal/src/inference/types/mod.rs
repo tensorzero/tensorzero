@@ -523,8 +523,7 @@ pub struct ChatInferenceResult {
 #[derive(Clone, Debug)]
 pub struct JsonInferenceResult {
     pub inference_id: Uuid,
-    #[allow(dead_code)]
-    created: u64,
+    pub created: u64,
     pub output: JsonInferenceOutput,
     pub usage: Usage,
     pub model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
@@ -1665,7 +1664,7 @@ mod tests {
     use super::*;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::inference::providers::test_helpers::get_temperature_tool_config;
-    use crate::jsonschema_util::JSONSchemaFromPath;
+    use crate::jsonschema_util::StaticJSONSchema;
     use crate::minijinja_util::TemplateConfig;
     use crate::tool::ToolConfig;
     use crate::tool::{DynamicToolConfig, ToolChoice};
@@ -2433,7 +2432,7 @@ mod tests {
             "required": ["name", "age"]
         });
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
-        let output_schema = JSONSchemaFromPath::from_value(&output_schema).unwrap();
+        let output_schema = StaticJSONSchema::from_value(&output_schema).unwrap();
         let json_function_config = Arc::new(FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             system_schema: None,
@@ -2694,7 +2693,7 @@ mod tests {
             "required": ["name", "age"]
         });
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
-        let output_schema = JSONSchemaFromPath::from_value(&output_schema).unwrap();
+        let output_schema = StaticJSONSchema::from_value(&output_schema).unwrap();
         let json_function_config = Arc::new(FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             system_schema: None,
@@ -2792,7 +2791,7 @@ mod tests {
             "required": ["name"]
         });
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&static_output_schema);
-        let output_schema = JSONSchemaFromPath::from_value(&static_output_schema).unwrap();
+        let output_schema = StaticJSONSchema::from_value(&static_output_schema).unwrap();
         let json_function_config = Arc::new(FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             system_schema: None,

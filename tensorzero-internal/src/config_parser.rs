@@ -14,7 +14,7 @@ use crate::error::{Error, ErrorDetails};
 use crate::evaluations::{EvaluationConfig, UninitializedEvaluationConfig};
 use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
 use crate::inference::types::storage::StorageKind;
-use crate::jsonschema_util::JSONSchemaFromPath;
+use crate::jsonschema_util::StaticJSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::{ModelConfig, ModelTable};
 use crate::model_table::{CowNoClone, ShorthandModelConfig};
@@ -691,15 +691,15 @@ impl UninitializedFunctionConfig {
             UninitializedFunctionConfig::Chat(params) => {
                 let system_schema = params
                     .system_schema
-                    .map(|path| JSONSchemaFromPath::new(path, base_path.as_ref()))
+                    .map(|path| StaticJSONSchema::from_path(path, base_path.as_ref()))
                     .transpose()?;
                 let user_schema = params
                     .user_schema
-                    .map(|path| JSONSchemaFromPath::new(path, base_path.as_ref()))
+                    .map(|path| StaticJSONSchema::from_path(path, base_path.as_ref()))
                     .transpose()?;
                 let assistant_schema = params
                     .assistant_schema
-                    .map(|path| JSONSchemaFromPath::new(path, base_path.as_ref()))
+                    .map(|path| StaticJSONSchema::from_path(path, base_path.as_ref()))
                     .transpose()?;
                 let variants = params
                     .variants
@@ -732,19 +732,19 @@ impl UninitializedFunctionConfig {
             UninitializedFunctionConfig::Json(params) => {
                 let system_schema = params
                     .system_schema
-                    .map(|path| JSONSchemaFromPath::new(path, base_path.as_ref()))
+                    .map(|path| StaticJSONSchema::from_path(path, base_path.as_ref()))
                     .transpose()?;
                 let user_schema = params
                     .user_schema
-                    .map(|path| JSONSchemaFromPath::new(path, base_path.as_ref()))
+                    .map(|path| StaticJSONSchema::from_path(path, base_path.as_ref()))
                     .transpose()?;
                 let assistant_schema = params
                     .assistant_schema
-                    .map(|path| JSONSchemaFromPath::new(path, base_path.as_ref()))
+                    .map(|path| StaticJSONSchema::from_path(path, base_path.as_ref()))
                     .transpose()?;
                 let output_schema = match params.output_schema {
-                    Some(path) => JSONSchemaFromPath::new(path, base_path.as_ref())?,
-                    None => JSONSchemaFromPath::default(),
+                    Some(path) => StaticJSONSchema::from_path(path, base_path.as_ref())?,
+                    None => StaticJSONSchema::default(),
                 };
                 let implicit_tool_call_config =
                     create_implicit_tool_call_config(output_schema.clone());
@@ -843,7 +843,7 @@ impl UninitializedToolConfig {
         base_path: P,
         name: String,
     ) -> Result<StaticToolConfig, Error> {
-        let parameters = JSONSchemaFromPath::new(self.parameters, base_path.as_ref())?;
+        let parameters = StaticJSONSchema::from_path(self.parameters, base_path.as_ref())?;
         Ok(StaticToolConfig {
             name,
             description: self.description,
@@ -1412,7 +1412,7 @@ mod tests {
             FunctionConfig::Json(json_config) => &json_config.output_schema,
             _ => panic!("Expected a JSON function"),
         };
-        assert_eq!(output_schema, &JSONSchemaFromPath::default());
+        assert_eq!(output_schema, &StaticJSONSchema::default());
         assert_eq!(output_schema.value, &serde_json::json!({}));
     }
 
