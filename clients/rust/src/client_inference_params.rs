@@ -7,10 +7,9 @@ use tensorzero_internal::{
     cache::CacheParamsOptions,
     endpoints::inference::{InferenceParams, Params},
     error::Error,
-    inference::types::{
-        extra_body::UnfilteredInferenceExtraBody, extra_headers::UnfilteredInferenceExtraHeaders,
-        Input, InputMessage, InputMessageContent,
-    },
+    inference::types::extra_body::UnfilteredInferenceExtraBody,
+    inference::types::extra_headers::UnfilteredInferenceExtraHeaders,
+    inference::types::{Input, InputMessage, InputMessageContent},
     tool::DynamicToolParams,
 };
 use uuid::Uuid;
