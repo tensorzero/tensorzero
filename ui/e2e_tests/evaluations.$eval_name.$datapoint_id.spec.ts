@@ -12,7 +12,7 @@ test("should show the evaluation result page", async ({ page }) => {
   await expect(page.getByText("error", { exact: false })).not.toBeVisible();
 });
 
-test("should be able to add float feedback from the evaluation result page", async ({
+test("should be able to add float feedback from the evaluation datapoint result page", async ({
   page,
 }) => {
   await page.goto(
@@ -48,7 +48,7 @@ test("should be able to add float feedback from the evaluation result page", asy
   expect(url.searchParams.get("newJudgeDemonstrationId")).toBeDefined();
 });
 
-test("should be able to add bool feedback from the evaluation result page", async ({
+test("should be able to add bool feedback from the evaluation datapoint result page", async ({
   page,
 }) => {
   await page.goto(

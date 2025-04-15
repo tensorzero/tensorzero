@@ -32,3 +32,84 @@ test("Navigate through ragged evaluation results", async ({ page }) => {
   // Assert that "error" is not in the page
   await expect(page.getByText("error", { exact: false })).not.toBeVisible();
 });
+
+test("should be able to add float feedback from the evaluation result page", async ({
+  page,
+}) => {
+  await page.goto(
+    "/evaluations/entity_extraction?evaluation_run_ids=0196367b-1739-7483-b3f4-f3b0a4bda063",
+  );
+
+  // Wait for the page to load
+  await page.waitForLoadState("networkidle");
+
+  // Find the first table row and hover over the rightmost cell (last td)
+  const firstRow = page.locator("tbody tr").first();
+  const rightmostCell = firstRow.locator("td").last();
+  await rightmostCell.hover();
+
+  // Click on the "pencil" icon
+  await page.locator("svg.lucide-pencil").first().click();
+
+  // Wait for the modal to appear
+  await page.locator('div[role="dialog"]').waitFor({
+    state: "visible",
+  });
+
+  // Generate a random float between 0 and 1 with 3 decimal places
+  const randomFloat = Math.floor(Math.random() * 1000) / 1000;
+
+  // Fill in the float value
+  await page
+    .getByRole("spinbutton", { name: "Value" })
+    .fill(randomFloat.toString());
+
+  // Click on the "Save" button
+  await page.locator('button[type="submit"]').click();
+
+  // Assert that the float value is displayed
+  await expect(page.getByText(randomFloat.toString())).toBeVisible();
+
+  // Check that the new URL has search params `newFeedbackId` and `newJudgeDemonstrationId`
+  const url = new URL(page.url());
+  expect(url.searchParams.get("newFeedbackId")).toBeDefined();
+  expect(url.searchParams.get("newJudgeDemonstrationId")).toBeDefined();
+});
+
+test("should be able to add boolean feedback from the evaluation result page", async ({
+  page,
+}) => {
+  await page.goto(
+    "/evaluations/haiku?evaluation_run_ids=0196367a-702c-75f3-b676-d6ffcc7370a1",
+  );
+
+  // Wait for the page to load
+  await page.waitForLoadState("networkidle");
+
+  // Find the first table row and hover over the rightmost cell (last td)
+  const firstRow = page.locator("tbody tr").first();
+  const rightmostCell = firstRow.locator("td").last();
+  await rightmostCell.hover();
+
+  // Click on the "pencil" icon
+  await page.locator("svg.lucide-pencil").first().click();
+
+  // Wait for the modal to appear
+  await page.locator('div[role="dialog"]').waitFor({
+    state: "visible",
+  });
+
+  // Click on the "True" button
+  await page.getByRole("radio", { name: "True" }).click();
+
+  // Click on the "Save" button
+  await page.locator('button[type="submit"]').click();
+
+  // Assert that the bool value is displayed
+  await expect(page.getByText("True")).toBeVisible();
+
+  // Check that the new URL has search params `newFeedbackId` and `newJudgeDemonstrationId`
+  const url = new URL(page.url());
+  expect(url.searchParams.get("newFeedbackId")).toBeDefined();
+  expect(url.searchParams.get("newJudgeDemonstrationId")).toBeDefined();
+});

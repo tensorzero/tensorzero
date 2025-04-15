@@ -168,6 +168,9 @@ test("should be able to add boolean feedback via the inference page", async ({
   // Click on the metric in the command list
   await metricItemLocator.click();
 
+  // Wait for the radio button to be visible
+  await page.getByRole("radio", { name: "true" }).waitFor({ state: "visible" });
+
   // Click the radio button for "true"
   await page.getByRole("radio", { name: "true" }).click();
 
