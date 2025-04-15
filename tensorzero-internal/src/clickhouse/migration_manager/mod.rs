@@ -3,6 +3,7 @@ pub mod migrations;
 
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::error::{Error, ErrorDetails};
+use async_trait::async_trait;
 use migration_trait::Migration;
 use migrations::migration_0000::Migration0000;
 use migrations::migration_0002::Migration0002;
@@ -21,8 +22,7 @@ use migrations::migration_0019::Migration0019;
 use migrations::migration_0020::Migration0020;
 use migrations::migration_0021::Migration0021;
 use migrations::migration_0022::Migration0022;
-
-use async_trait::async_trait;
+use migrations::migration_0024::Migration0024;
 
 pub async fn run(clickhouse: &ClickHouseConnectionInfo) -> Result<(), Error> {
     clickhouse.health().await?;
@@ -86,6 +86,7 @@ pub async fn run(clickhouse: &ClickHouseConnectionInfo) -> Result<(), Error> {
     })
     .await?;
     run_migration(&Migration0022 { clickhouse }).await?;
+    run_migration(&Migration0024 { clickhouse }).await?;
     // NOTE:
     // When we add more migrations, we need to add a test that applies them in a cumulative (N^2) way.
     //
