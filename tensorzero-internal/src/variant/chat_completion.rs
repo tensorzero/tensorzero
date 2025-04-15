@@ -214,7 +214,6 @@ impl ChatCompletionConfig {
             );
 
         let extra_body = FullExtraBodyConfig {
-            variant_extra_headers: self.extra_headers.clone(),
             extra_body: self.extra_body.clone(),
             inference_extra_body: inference_config
                 .extra_body

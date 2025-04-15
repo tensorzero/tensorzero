@@ -8,7 +8,7 @@ use crate::{
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
     inference::types::{
         extra_body::{FullExtraBodyConfig, InferenceExtraBody},
-        extra_headers::ExtraHeader,
+        extra_headers::{ExtraHeader, FullExtraHeadersConfig},
         ProviderInferenceResponseChunk,
     },
     model::{fully_qualified_name, ModelProviderRequestInfo},
@@ -380,7 +380,6 @@ mod tests {
         let mut body = serde_json::json!({});
         inject_extra_request_data(
             &FullExtraBodyConfig {
-                variant_extra_headers: None,
                 extra_body: Some(ExtraBodyConfig { data: vec![] }),
                 inference_extra_body: FilteredInferenceExtraBody {
                     data: vec![InferenceExtraBody::Provider {
@@ -425,7 +424,7 @@ mod tests {
     #[test]
     fn test_inject_headers() {
         let headers = inject_extra_request_data(
-            &FullExtraBodyConfig {
+            &FullExtraHeadersConfig {
                 variant_extra_headers: Some(ExtraHeadersConfig {
                     data: vec![
                         ExtraHeader {
@@ -438,8 +437,6 @@ mod tests {
                         },
                     ],
                 }),
-                extra_body: None,
-                inference_extra_body: FilteredInferenceExtraBody { data: vec![] },
             },
             ModelProviderRequestInfo {
                 provider_name: "dummy_provider".into(),
@@ -482,7 +479,6 @@ mod tests {
         });
         inject_extra_request_data(
             &FullExtraBodyConfig {
-                variant_extra_headers: None,
                 extra_body: Some(ExtraBodyConfig {
                     data: vec![
                         ExtraBodyReplacement {
@@ -543,7 +539,6 @@ mod tests {
         });
         inject_extra_request_data(
             &FullExtraBodyConfig {
-                variant_extra_headers: None,
                 extra_body: Some(ExtraBodyConfig {
                     data: vec![
                         ExtraBodyReplacement {

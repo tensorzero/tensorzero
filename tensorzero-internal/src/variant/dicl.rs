@@ -521,7 +521,6 @@ impl DiclConfig {
         }
         let extra_body = FullExtraBodyConfig {
             extra_body: self.extra_body.clone(),
-            variant_extra_headers: self.extra_headers.clone(),
             inference_extra_body: Default::default(),
         };
         prepare_model_inference_request(
