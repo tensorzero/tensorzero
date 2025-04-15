@@ -10338,7 +10338,8 @@ pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETes
 
     let payload = json!({
         "function_name": "json_with_json_mode_off",
-        "variant_name": provider.variant_name,
+        // We just need a single variant per provider
+        "variant_name": provider.model_provider_name,
         "episode_id": episode_id,
         "input":
             {
