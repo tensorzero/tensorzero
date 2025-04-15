@@ -10470,7 +10470,7 @@ pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETes
         raw_request_val
             .get("response_format")
             .and_then(|rf| rf.get("type"))
-            .is_some_and(|t| t == "text");
+            .is_some_and(|t| t == "text")
     } else if provider.model_provider_name == "anthropic" {
         raw_request_val.get("response_format").is_none()
     } else if provider.model_provider_name == "google_ai_studio_gemini"
