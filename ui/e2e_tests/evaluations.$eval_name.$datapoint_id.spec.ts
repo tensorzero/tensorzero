@@ -41,6 +41,11 @@ test("should be able to add float feedback from the evaluation result page", asy
 
   // Assert that the float value is displayed
   await expect(page.getByText(randomFloat.toString())).toBeVisible();
+
+  // Check that the new URL has search params `newFeedbackId` and `newJudgeDemonstrationId`
+  const url = new URL(page.url());
+  expect(url.searchParams.get("newFeedbackId")).toBeDefined();
+  expect(url.searchParams.get("newJudgeDemonstrationId")).toBeDefined();
 });
 
 test("should be able to add bool feedback from the evaluation result page", async ({
@@ -69,4 +74,9 @@ test("should be able to add bool feedback from the evaluation result page", asyn
 
   // Assert that the bool value is displayed
   await expect(page.getByText("True")).toBeVisible();
+
+  // Check that the new URL has search params `newFeedbackId` and `newJudgeDemonstrationId`
+  const url = new URL(page.url());
+  expect(url.searchParams.get("newFeedbackId")).toBeDefined();
+  expect(url.searchParams.get("newJudgeDemonstrationId")).toBeDefined();
 });
