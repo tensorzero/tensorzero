@@ -80,6 +80,7 @@ pub struct E2ETestProviders {
     pub dynamic_tool_use_inference: Vec<E2ETestProvider>,
     pub parallel_tool_use_inference: Vec<E2ETestProvider>,
     pub json_mode_inference: Vec<E2ETestProvider>,
+    pub json_mode_off_inference: Vec<E2ETestProvider>,
 
     pub image_inference: Vec<E2ETestProvider>,
 
@@ -558,7 +559,7 @@ macro_rules! generate_provider_tests {
 
         #[tokio::test]
         async fn test_json_mode_off_inference_request() {
-            let providers = $func().await.json_mode_inference;
+            let providers = $func().await.json_mode_off_inference;
             for provider in providers {
                 test_json_mode_off_inference_request_with_provider(provider).await;
             }
