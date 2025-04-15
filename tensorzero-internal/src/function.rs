@@ -1613,6 +1613,7 @@ mod tests {
             templates: &templates,
             dynamic_output_schema: None,
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
         let response = function_config
@@ -1929,6 +1930,7 @@ mod tests {
             templates: &templates,
             dynamic_output_schema: Some(&dynamic_output_schema),
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
         // Test with a correct content block
