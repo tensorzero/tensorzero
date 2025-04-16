@@ -463,10 +463,11 @@ jobs:
       - name: Start services for ui e2e tests
         working-directory: ui
         run: |
-          echo "OPENAI_BASE_URL=http://mock-inference-provider:3030/openai" >> fixtures/.env
+          echo "OPENAI_BASE_URL=http://mock-inference-provider:3030/openai/" >> fixtures/.env
+          echo "FIREWORKS_BASE_URL=http://mock-inference-provider:3030/fireworks/" >> fixtures/.env
           echo "OPENAI_API_KEY=not_used" >> fixtures/.env
           echo "FIREWORKS_API_KEY=not_used" >> fixtures/.env
-          echo "FIREWORKS_ACCOUNT_ID=not_used" >> fixtures/.env
+          echo "FIREWORKS_ACCOUNT_ID=fake_fireworks_account" >> fixtures/.env
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures" >> fixtures/.env
           echo "TENSORZERO_GATEWAY_URL=http://gateway:3000" >> fixtures/.env
           echo "AWS_REGION=us-east-1" >> fixtures/.env
