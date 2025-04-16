@@ -16,7 +16,10 @@ use tensorzero_internal::{
             DUMMY_JSON_RESPONSE_RAW, DUMMY_RAW_REQUEST, DUMMY_STREAMING_RESPONSE,
             DUMMY_STREAMING_TOOL_RESPONSE, DUMMY_TOOL_RESPONSE,
         },
-        types::{ContentBlock, Image, ImageKind, RequestMessage, Role, Text, TextKind},
+        types::{
+            ContentBlock, ContentBlockOutput, Image, ImageKind, RequestMessage, Role, Text,
+            TextKind,
+        },
     },
     tool::{ToolCall, ToolCallInput},
 };
@@ -3088,6 +3091,7 @@ async fn test_json_function_null_response() {
     assert!(response_json["output"]["parsed"].is_null());
 }
 
+/// Test that a json inference with chain of thought variant works as expected.
 #[tokio::test]
 async fn test_json_cot_inference_request() {
     let episode_id = Uuid::now_v7();
@@ -3128,6 +3132,7 @@ async fn test_json_cot_inference_request() {
     .await;
 }
 
+/// Test that a json inference with chain of thought variant and implicit tool call works as expected.
 #[tokio::test]
 async fn test_json_cot_inference_request_implicit_tool() {
     let episode_id = Uuid::now_v7();
@@ -3277,6 +3282,15 @@ async fn check_json_cot_inference_response(
       }
     );
     assert_eq!(retrieved_output_schema, expected_output_schema);
+
+    // Check that the auxiliary content is correct
+    let auxiliary_content: Vec<ContentBlockOutput> =
+        serde_json::from_str(result.get("auxiliary_content").unwrap().as_str().unwrap()).unwrap();
+    assert_eq!(auxiliary_content.len(), 1);
+    assert!(matches!(
+        auxiliary_content[0],
+        ContentBlockOutput::Thought(_)
+    ));
 
     // Check the ModelInference Table
     let result = select_model_inference_clickhouse(&clickhouse, inference_id)
