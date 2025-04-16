@@ -25,6 +25,7 @@ pub struct DynamicEvaluationRunInfo {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DynamicEvaluationRunParams {
     pub variants: HashMap<String, String>,
+    #[serde(default)]
     pub tags: HashMap<String, String>,
     #[serde(default)]
     pub project_name: Option<String>,
@@ -78,7 +79,7 @@ pub struct DynamicEvaluationRunEpisodeParams {
     pub tags: HashMap<String, String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct DynamicEvaluationRunEpisodeResponse {
     pub episode_id: Uuid,
 }

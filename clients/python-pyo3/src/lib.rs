@@ -21,9 +21,9 @@ use pyo3::{
     IntoPyObjectExt,
 };
 use python_helpers::{
-    deserialize_from_pyobj, parse_dynamic_evaluation_run_response, parse_feedback_response,
-    parse_inference_chunk, parse_inference_response, parse_tool, python_uuid_to_uuid,
-    serialize_to_dict,
+    deserialize_from_pyobj, parse_dynamic_evaluation_run_episode_response,
+    parse_dynamic_evaluation_run_response, parse_feedback_response, parse_inference_chunk,
+    parse_inference_response, parse_tool, python_uuid_to_uuid, serialize_to_dict,
 };
 use tensorzero_internal::{
     endpoints::dynamic_evaluation_run::DynamicEvaluationRunEpisodeParams,
@@ -309,8 +309,12 @@ impl BaseTensorZeroGateway {
         Ok(FeedbackParams {
             metric_name,
             value: deserialize_from_pyobj(py, &value)?,
-            episode_id: python_uuid_to_uuid("episode_id", episode_id)?,
-            inference_id: python_uuid_to_uuid("inference_id", inference_id)?,
+            episode_id: episode_id
+                .map(|id| python_uuid_to_uuid("episode_id", id))
+                .transpose()?,
+            inference_id: inference_id
+                .map(|id| python_uuid_to_uuid("inference_id", id))
+                .transpose()?,
             dryrun,
             tags: tags.unwrap_or_default(),
             internal,
@@ -339,7 +343,10 @@ impl BaseTensorZeroGateway {
         cache_options: Option<&Bound<'_, PyDict>>,
         extra_body: Option<&Bound<'_, PyList>>,
     ) -> PyResult<ClientInferenceParams> {
-        let episode_id = python_uuid_to_uuid("episode_id", episode_id)?;
+        // let episode_id = python_uuid_to_uuid("episode_id", episode_id)?;
+        let episode_id = episode_id
+            .map(|id| python_uuid_to_uuid("episode_id", id))
+            .transpose()?;
 
         let params: Option<InferenceParams> = if let Some(params) = params {
             deserialize_from_pyobj(py, params)?
@@ -728,19 +735,32 @@ impl TensorZeroGateway {
         }
     }
 
+    /// Make a request to the /dynamic_evaluation_run_episode endpoint.
+    ///
+    /// :param run_id: The run ID to use for the dynamic evaluation run.
+    /// :param datapoint_name: The name of the datapoint to use for the dynamic evaluation run.
+    /// :param tags: A dictionary of tags to add to the dynamic evaluation run.
+    /// :return: A `DynamicEvaluationRunEpisodeResponse` object.
+    #[pyo3(signature = (*, run_id, datapoint_name=None, tags=None))]
     fn dynamic_evaluation_run_episode(
         this: PyRef<'_, Self>,
         run_id: Bound<'_, PyAny>,
         datapoint_name: Option<String>,
-        tags: HashMap<String, String>,
+        tags: Option<HashMap<String, String>>,
     ) -> PyResult<Py<PyAny>> {
         let run_id = python_uuid_to_uuid("run_id", run_id)?;
         let client = this.as_super().client.clone();
         let params = DynamicEvaluationRunEpisodeParams {
             run_id,
             datapoint_name,
-            tags,
+            tags: tags.unwrap_or_default(),
         };
+        let fut = client.dynamic_evaluation_run_episode(params);
+        let resp = tokio_block_on_without_gil(this.py(), fut);
+        match resp {
+            Ok(resp) => parse_dynamic_evaluation_run_episode_response(this.py(), resp),
+            Err(e) => Err(convert_error(this.py(), e)),
+        }
     }
 }
 

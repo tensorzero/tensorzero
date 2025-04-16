@@ -30,7 +30,7 @@ async fn test_dynamic_evaluation() {
     println!("Run ID: {run_id}");
     // Run an inference with the episode_id given
     let inference_params = ClientInferenceParams {
-        episode_id: Some(episode_id),
+        episode_id: Some(run_id),
         function_name: Some("basic_test".to_string()),
         input: ClientInput {
             system: Some(json!({

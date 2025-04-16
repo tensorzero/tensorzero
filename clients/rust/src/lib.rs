@@ -8,6 +8,9 @@ use serde_json::Value;
 use std::fmt::Debug;
 use tensorzero_internal::{
     config_parser::Config,
+    endpoints::dynamic_evaluation_run::{
+        DynamicEvaluationRunEpisodeParams, DynamicEvaluationRunEpisodeResponse,
+    },
     error::{Error, ErrorDetails},
     gateway_util::{setup_clickhouse, setup_http_client, AppStateData},
 };
@@ -521,6 +524,35 @@ impl Client {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
                     tensorzero_internal::endpoints::dynamic_evaluation_run::dynamic_evaluation_run(
+                        gateway.state.clone(),
+                        params,
+                    )
+                    .await
+                    .map_err(err_to_http)
+                })
+                .await?)
+            }
+        }
+    }
+
+    pub async fn dynamic_evaluation_run_episode(
+        &self,
+        params: DynamicEvaluationRunEpisodeParams,
+    ) -> Result<DynamicEvaluationRunEpisodeResponse, TensorZeroError> {
+        match &self.mode {
+            ClientMode::HTTPGateway(client) => {
+                let url = client.base_url.join("dynamic_evaluation_run_episode").map_err(|e| TensorZeroError::Other {
+                    source: tensorzero_internal::error::Error::new(ErrorDetails::InvalidBaseUrl {
+                        message: format!("Failed to join base URL with /dynamic_evaluation_run_episode endpoint: {}", e),
+                    })
+                    .into(),
+                })?;
+                let builder = client.http_client.post(url).json(&params);
+                self.parse_http_response(builder.send().await).await
+            }
+            ClientMode::EmbeddedGateway { gateway, timeout } => {
+                Ok(with_embedded_timeout(*timeout, async {
+                    tensorzero_internal::endpoints::dynamic_evaluation_run::dynamic_evaluation_run_episode(
                         gateway.state.clone(),
                         params,
                     )

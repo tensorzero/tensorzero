@@ -383,10 +383,21 @@ class TensorZeroError(BaseTensorZeroError):
 
 @dataclass
 class DynamicEvaluationRunResponse:
-    episode_id: UUID
+    run_id: UUID
 
 
 def parse_dynamic_evaluation_run_response(
     data: Dict[str, Any],
 ) -> DynamicEvaluationRunResponse:
-    return DynamicEvaluationRunResponse(episode_id=UUID(data["episode_id"]))
+    return DynamicEvaluationRunResponse(run_id=UUID(data["run_id"]))
+
+
+@dataclass
+class DynamicEvaluationRunEpisodeResponse:
+    episode_id: UUID
+
+
+def parse_dynamic_evaluation_run_episode_response(
+    data: Dict[str, Any],
+) -> DynamicEvaluationRunEpisodeResponse:
+    return DynamicEvaluationRunEpisodeResponse(episode_id=UUID(data["episode_id"]))
