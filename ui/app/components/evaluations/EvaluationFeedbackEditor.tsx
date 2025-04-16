@@ -24,6 +24,7 @@ interface EvaluationFeedbackEditorProps {
   evaluatorInferenceId: string | null;
 }
 
+// Allow users to edit the feedback provided by an LLM Judge.
 export default function EvaluationFeedbackEditor({
   inferenceId,
   datapointId,
