@@ -77,7 +77,7 @@ def try_template_system(
             }
 
         except TemplateError as e:
-            if "template not found" in str(e):
+            if e.kind == "TemplateNotFound":
                 if not isinstance(system, str):
                     raise ValidationError(
                         "System message must be a string when not using templates"
