@@ -22,10 +22,12 @@ async fn test_dynamic_evaluation() {
     let params = DynamicEvaluationRunParams {
         variants: HashMap::from([("basic_test".to_string(), "test2".to_string())]),
         tags: HashMap::from([("foo".to_string(), "bar".to_string())]),
+        project_name: Some("test_project".to_string()),
+        display_name: Some("test_display_name".to_string()),
     };
     let result = client.dynamic_evaluation_run(params).await.unwrap();
-    let episode_id = result.episode_id;
-    println!("Episode ID: {episode_id}");
+    let run_id = result.run_id;
+    println!("Run ID: {run_id}");
     // Run an inference with the episode_id given
     let inference_params = ClientInferenceParams {
         episode_id: Some(episode_id),

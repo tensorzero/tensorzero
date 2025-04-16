@@ -26,6 +26,7 @@ use python_helpers::{
     serialize_to_dict,
 };
 use tensorzero_internal::{
+    endpoints::dynamic_evaluation_run::DynamicEvaluationRunEpisodeParams,
     gateway_util::ShutdownHandle, inference::types::extra_body::UnfilteredInferenceExtraBody,
 };
 use tensorzero_rust::{
@@ -726,6 +727,21 @@ impl TensorZeroGateway {
             Err(e) => Err(convert_error(this.py(), e)),
         }
     }
+
+    fn dynamic_evaluation_run_episode(
+        this: PyRef<'_, Self>,
+        run_id: Bound<'_, PyAny>,
+        datapoint_name: Option<String>,
+        tags: HashMap<String, String>,
+    ) -> PyResult<Py<PyAny>> {
+        let run_id = python_uuid_to_uuid("run_id", run_id)?;
+        let client = this.as_super().client.clone();
+        let params = DynamicEvaluationRunEpisodeParams {
+            run_id,
+            datapoint_name,
+            tags,
+        };
+    }
 }
 
 #[pyclass(extends=BaseTensorZeroGateway)]
@@ -1086,7 +1102,6 @@ impl AsyncTensorZeroGateway {
             })
         })
     }
-
     /// For internal use only - do not call.
     // This is a helper function used by `optimizations-server` to get the template config
     // when applying a new prompt template during fine-tuning
