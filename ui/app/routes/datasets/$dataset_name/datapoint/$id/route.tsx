@@ -209,8 +209,17 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
     setInput({ ...input, messages });
   };
 
-  const handleOutputChange = (newOutput: typeof datapoint.output) => {
-    setOutput(newOutput);
+  const handleOutputChange = (newOutput: typeof datapoint.output | null) => {
+    if (newOutput === null) {
+      setCanSave(false);
+    } else {
+      const hasOutputChanged =
+        JSON.stringify(newOutput) !== JSON.stringify(originalOutput);
+      const hasInputChanged =
+        JSON.stringify(input) !== JSON.stringify(originalInput);
+      setOutput(newOutput);
+      setCanSave(isEditing && (hasOutputChanged || hasInputChanged));
+    }
   };
 
   const fetcher = useFetcher();

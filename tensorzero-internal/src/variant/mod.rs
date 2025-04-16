@@ -696,6 +696,7 @@ mod tests {
             tools: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
+            description: None,
         });
         let json_mode = JsonMode::Off;
 
@@ -743,6 +744,7 @@ mod tests {
             user_schema: None,
             output_schema: output_schema.clone(),
             implicit_tool_call_config: implicit_tool_call_config.clone(),
+            description: None,
         });
 
         let json_mode = JsonMode::On;
@@ -894,6 +896,7 @@ mod tests {
             tools: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
+            description: None,
         });
 
         let request_messages = vec![RequestMessage {
@@ -998,6 +1001,7 @@ mod tests {
                 tool_choice: ToolChoice::Auto,
                 parallel_tool_calls: None,
             },
+            description: None,
         });
         let output_schema = json!({
             "type": "object",
@@ -1167,6 +1171,7 @@ mod tests {
             tools: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
+            description: None,
         });
 
         let request_messages = vec![RequestMessage {
@@ -1297,6 +1302,7 @@ mod tests {
             tools: vec![],
             tool_choice: crate::tool::ToolChoice::Auto,
             parallel_tool_calls: None,
+            description: None,
         });
 
         // Create an input message
@@ -1440,6 +1446,7 @@ mod tests {
             tools: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
+            description: None,
         })));
 
         let request_messages = vec![RequestMessage {

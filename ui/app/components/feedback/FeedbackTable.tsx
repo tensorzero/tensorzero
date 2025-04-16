@@ -10,7 +10,8 @@ import {
 import FeedbackValue from "~/components/feedback/FeedbackValue";
 import { getMetricName } from "~/utils/clickhouse/helpers";
 import type { FeedbackRow } from "~/utils/clickhouse/feedback";
-import { MetricBadges } from "~/components/metric/MetricBadges";
+import { formatDate } from "~/utils/date";
+import MetricBadges from "~/components/metric/MetricBadges";
 import { useConfig } from "~/context/config";
 import { TableItemShortUuid, TableItemTime } from "~/components/ui/TableItems";
 export default function FeedbackTable({

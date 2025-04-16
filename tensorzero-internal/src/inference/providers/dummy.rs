@@ -311,14 +311,10 @@ impl InferenceProvider for DummyProvider {
                     })?,
                 })]
             }
-            "llm_judge::true" => vec![r#"{"thinking": "hmmm", "score": true}"#.to_string().into()],
-            "llm_judge::false" => {
-                vec![r#"{"thinking": "hmmm", "score": false}"#.to_string().into()]
-            }
-            "llm_judge::zero" => vec![r#"{"thinking": "hmmm", "score": 0}"#.to_string().into()],
-            "llm_judge::one" => {
-                vec![r#"{"thinking": "hmmm", "score": 1}"#.to_string().into()]
-            }
+            "llm_judge::true" => vec![r#"{"score": true}"#.to_string().into()],
+            "llm_judge::false" => vec![r#"{"score": false}"#.to_string().into()],
+            "llm_judge::zero" => vec![r#"{"score": 0}"#.to_string().into()],
+            "llm_judge::one" => vec![r#"{"score": 1}"#.to_string().into()],
             "llm_judge::error" => {
                 return Err(ErrorDetails::InferenceClient {
                     message: "Dummy error in inference".to_string(),
