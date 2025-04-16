@@ -5,11 +5,11 @@ use crate::clickhouse::migration_manager::migration_trait::Migration;
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::error::Error;
 
-/// This migration adds the `DynamicEvaluationRun` and `DynamicEvaluationRunTrial` tables.
+/// This migration adds the `DynamicEvaluationRun` and `DynamicEvaluationRunEpisode` tables.
 /// These support TensorZero's dynamic evaluations.
-/// A `DynamicEvaluationRun` is a related set of `DynamicEvaluationRunTrials` with a common
+/// A `DynamicEvaluationRun` is a related set of `DynamicEvaluationRunEpisode`s with a common
 /// set of variant pins and experiment tags.
-/// A `DynamicEvaluationRunTrial` is a single evaluation of a model variant under a given set of
+/// A `DynamicEvaluationRunEpisode` is a single evaluation of a model variant under a given set of
 /// variant pins and experiment tags.
 pub struct Migration0025<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
@@ -33,7 +33,7 @@ impl Migration for Migration0025<'_> {
         let query = r#"
             CREATE TABLE IF NOT EXISTS DynamicEvaluationRun
                 (
-                    run_id UInt128, -- UUID encoded as a UInt128
+                    run_id_uint UInt128, -- UUID encoded as a UInt128
                     variant_pins Map(String, String),
                     tags Map(String, String),
                     project_name Nullable(String),
@@ -41,7 +41,7 @@ impl Migration for Migration0025<'_> {
                     is_deleted Bool DEFAULT false,
                     updated_at DateTime64(6, 'UTC') DEFAULT now()
                 ) ENGINE = ReplacingMergeTree(updated_at, is_deleted)
-                ORDER BY run_id;
+                ORDER BY run_id_uint;
         "#;
         let _ = self
             .clickhouse
@@ -49,16 +49,17 @@ impl Migration for Migration0025<'_> {
             .await?;
 
         let query = r#"
-            CREATE TABLE IF NOT EXISTS DynamicEvaluationRunTrial
+            CREATE TABLE IF NOT EXISTS DynamicEvaluationRunEpisode
             (
-                run_id UInt128, -- UUID encoded as a UInt128
-                episode_id UInt128, -- UUID encoded as a UInt128
+                run_id UUID,
+                episode_id_uint UInt128, -- UUID encoded as a UInt128
                 variant_pins Map(String, String),
+                datapoint_name Nullable(String),
                 tags Map(String, String),
                 is_deleted Bool DEFAULT false,
                 updated_at DateTime64(6, 'UTC') DEFAULT now()
             ) ENGINE = ReplacingMergeTree(updated_at, is_deleted)
-                ORDER BY episode_id;
+                ORDER BY episode_id_uint;
         "#;
         let _ = self
             .clickhouse
@@ -69,7 +70,7 @@ impl Migration for Migration0025<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        "DROP TABLE IF EXISTS DynamicEvaluationRun\nDROP TABLE IF EXISTS DynamicEvaluationRunTrials"
+        "DROP TABLE IF EXISTS DynamicEvaluationRun\nDROP TABLE IF EXISTS DynamicEvaluationRunEpisode"
             .to_string()
     }
 

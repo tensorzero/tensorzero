@@ -700,15 +700,24 @@ impl TensorZeroGateway {
     ///
     /// :param variants: A dictionary mapping function names to pinned variant names.
     /// :param tags: A dictionary containing tags that should be applied to every inference in the dynamic evaluation run.
+    /// :param project_name: (Optional) The name of the project to associate with the dynamic evaluation run.
+    /// :param run_display_name: (Optional) The display name of the dynamic evaluation run.
     /// :return: A `DynamicEvaluationRunResponse` object.
-    #[pyo3(signature = (*, variants, tags))]
+    #[pyo3(signature = (*, variants, tags, project_name=None, display_name=None))]
     fn dynamic_evaluation_run(
         this: PyRef<'_, Self>,
         variants: HashMap<String, String>,
         tags: HashMap<String, String>,
+        project_name: Option<String>,
+        display_name: Option<String>,
     ) -> PyResult<Py<PyAny>> {
         let client = this.as_super().client.clone();
-        let params = DynamicEvaluationRunParams { variants, tags };
+        let params = DynamicEvaluationRunParams {
+            variants,
+            tags,
+            project_name,
+            display_name,
+        };
         let fut = client.dynamic_evaluation_run(params);
 
         let resp = tokio_block_on_without_gil(this.py(), fut);
@@ -1050,15 +1059,24 @@ impl AsyncTensorZeroGateway {
     ///
     /// :param variants: A dictionary mapping function names to pinned variant names.
     /// :param tags: A dictionary containing tags that should be applied to every inference in the dynamic evaluation run.
+    /// :param project_name: (Optional) The name of the project to associate with the dynamic evaluation run.
+    /// :param run_display_name: (Optional) The display name of the dynamic evaluation run.
     /// :return: A `DynamicEvaluationRunResponse` object.
-    #[pyo3(signature = (*, variants, tags))]
+    #[pyo3(signature = (*, variants, tags, project_name=None, display_name=None))]
     fn dynamic_evaluation_run(
         this: PyRef<'_, Self>,
         variants: HashMap<String, String>,
         tags: HashMap<String, String>,
+        project_name: Option<String>,
+        display_name: Option<String>,
     ) -> PyResult<Bound<'_, PyAny>> {
         let client = this.as_super().client.clone();
-        let params = DynamicEvaluationRunParams { variants, tags };
+        let params = DynamicEvaluationRunParams {
+            variants,
+            tags,
+            project_name,
+            display_name,
+        };
 
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             let res = client.dynamic_evaluation_run(params).await;

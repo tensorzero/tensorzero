@@ -19,47 +19,91 @@ use crate::{
 #[derive(Debug, Deserialize, Serialize)]
 pub struct DynamicEvaluationRunInfo {
     pub variant_pins: HashMap<String, String>,
-    pub experiment_tags: HashMap<String, String>,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct Params {
-    pub variants: HashMap<String, String>,
     pub tags: HashMap<String, String>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DynamicEvaluationRunParams {
+    pub variants: HashMap<String, String>,
+    pub tags: HashMap<String, String>,
+    #[serde(default)]
+    pub project_name: Option<String>,
+    #[serde(default)]
+    pub display_name: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct DynamicEvaluationRunResponse {
-    pub episode_id: Uuid,
+    pub run_id: Uuid,
 }
 
 #[debug_handler(state = AppStateData)]
 pub async fn dynamic_evaluation_run_handler(
     State(app_state): AppState,
-    StructuredJson(params): StructuredJson<Params>,
+    StructuredJson(params): StructuredJson<DynamicEvaluationRunParams>,
 ) -> Result<Json<DynamicEvaluationRunResponse>, Error> {
     dynamic_evaluation_run(app_state, params).await.map(Json)
 }
 
+/// Creates a new dynamic evaluation run.
 pub async fn dynamic_evaluation_run(
     AppStateData {
         config,
         clickhouse_connection_info,
         ..
     }: AppStateData,
-    params: Params,
+    params: DynamicEvaluationRunParams,
 ) -> Result<DynamicEvaluationRunResponse, Error> {
     validate_tags(&params.tags, false)?;
     validate_variant_pins(&params.variants, &config)?;
-    let episode_id = generate_dynamic_evaluation_run_episode_id();
+    let run_id = Uuid::now_v7();
     write_dynamic_evaluation_run(
         clickhouse_connection_info,
-        episode_id,
+        run_id,
         params.variants,
         params.tags,
+        params.project_name,
+        params.display_name,
     )
     .await?;
-    Ok(DynamicEvaluationRunResponse { episode_id })
+    Ok(DynamicEvaluationRunResponse { run_id })
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct DynamicEvaluationRunEpisodeParams {
+    pub run_id: Uuid,
+    #[serde(default)]
+    pub datapoint_name: Option<String>,
+    #[serde(default)]
+    pub tags: HashMap<String, String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct DynamicEvaluationRunEpisodeResponse {
+    pub episode_id: Uuid,
+}
+
+#[debug_handler(state = AppStateData)]
+pub async fn dynamic_evaluation_run_episode_handler(
+    State(app_state): AppState,
+    StructuredJson(params): StructuredJson<DynamicEvaluationRunEpisodeParams>,
+) -> Result<Json<DynamicEvaluationRunEpisodeResponse>, Error> {
+    dynamic_evaluation_run_episode(app_state, params)
+        .await
+        .map(Json)
+}
+
+pub async fn dynamic_evaluation_run_episode(
+    AppStateData {
+        clickhouse_connection_info,
+        ..
+    }: AppStateData,
+    params: DynamicEvaluationRunEpisodeParams,
+) -> Result<DynamicEvaluationRunEpisodeResponse, Error> {
+    validate_tags(&params.tags, false)?;
+    let episode_id = generate_dynamic_evaluation_run_episode_id();
+    write_dynamic_evaluation_run_episode(&clickhouse_connection_info, params, episode_id).await?;
+    Ok(DynamicEvaluationRunEpisodeResponse { episode_id })
 }
 
 fn validate_variant_pins(
@@ -68,20 +112,23 @@ fn validate_variant_pins(
 ) -> Result<(), Error> {
     for (function_name, variant_name) in variant_pins.iter() {
         let function_config = config.get_function(function_name)?;
-        let variant_config = function_config.variants().get(variant_name);
-        if variant_config.is_none() {
-            return Err(Error::new(ErrorDetails::InvalidRequest {
-                message: format!(
-                    "Variant {} for function {} not found.",
-                    variant_name, function_name
-                ),
-            }));
-        }
+        function_config
+            .variants()
+            .get(variant_name)
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::InvalidRequest {
+                    message: format!(
+                        "Variant {} for function {} not found.",
+                        variant_name, function_name
+                    ),
+                })
+            })?;
     }
     Ok(())
 }
 
 fn to_map_literal(map: &HashMap<String, String>) -> String {
+    // TODO before merging (Viraj): escape the keys and values here.
     let items: Vec<String> = map
         .iter()
         .map(|(k, v)| format!("'{}':'{}'", k, v))
@@ -91,28 +138,82 @@ fn to_map_literal(map: &HashMap<String, String>) -> String {
 
 async fn write_dynamic_evaluation_run(
     clickhouse: ClickHouseConnectionInfo,
-    episode_id: Uuid,
+    run_id: Uuid,
     variant_pins: HashMap<String, String>,
     tags: HashMap<String, String>,
+    project_name: Option<String>,
+    run_display_name: Option<String>,
 ) -> Result<(), Error> {
-    // The short key is the least significant 64 bits of the episode ID.
-    // These are randomly generated, so we can use them as a unique identifier for the dynamic evaluation run.
-    let short_key = episode_id.as_u64_pair().1;
     let query = r#"
-    INSERT INTO DynamicEvaluationRun (short_key, episode_id, variant_pins, experiment_tags)
-    VALUES ({short_key:UInt64}, {episode_id:UUID}, {variant_pins:Map(String, String)}, {experiment_tags:Map(String, String)})
+    INSERT INTO DynamicEvaluationRun (
+        run_id_uint,
+        variant_pins,
+        tags,
+        project_name,
+        run_display_name
+    )
+    VALUES (
+        toUInt128({run_id:UUID}),
+        {variant_pins:Map(String, String)},
+        {tags:Map(String, String)},
+        {project_name:Nullable(String)},
+        {run_display_name:Nullable(String)}
+    )
     "#;
     let mut params = HashMap::new();
     let variant_pins_str = to_map_literal(&variant_pins);
     let tags_str = to_map_literal(&tags);
-    let short_key_str = short_key.to_string();
-    let episode_id_str = episode_id.to_string();
-    params.insert("short_key", short_key_str.as_str());
-    params.insert("episode_id", episode_id_str.as_str());
+    let run_id_str = run_id.to_string();
+    params.insert("run_id", run_id_str.as_str());
     params.insert("variant_pins", variant_pins_str.as_str());
-    params.insert("experiment_tags", tags_str.as_str());
+    params.insert("tags", tags_str.as_str());
+    if let Some(project_name) = project_name.as_deref() {
+        params.insert("project_name", project_name);
+    }
+    if let Some(run_display_name) = run_display_name.as_deref() {
+        params.insert("run_display_name", run_display_name);
+    }
     clickhouse
         .run_query_synchronous(query.to_string(), Some(&params))
+        .await?;
+    Ok(())
+}
+
+async fn write_dynamic_evaluation_run_episode(
+    clickhouse: &ClickHouseConnectionInfo,
+    params: DynamicEvaluationRunEpisodeParams,
+    episode_id: Uuid,
+) -> Result<(), Error> {
+    let query = r#"
+    INSERT INTO DynamicEvaluationRunEpisode
+    (
+        run_id,
+        episode_id_uint,
+        variant_pins,
+        datapoint_name,
+        tags
+    )
+    SELECT
+        {run_id:UUID} as run_id,
+        toUInt128({episode_id:UUID}) as episode_id_uint,
+        variant_pins,
+        {datapoint_name:Nullable(String)} as datapoint_name,
+        mapUpdate(tags, {tags:Map(String, String)}) as tags -- merge the tags in the params on top of tags in the dynamic evaluation run
+    FROM DynamicEvaluationRun
+    WHERE run_id_uint = toUInt128({run_id:UUID})
+    "#;
+    let mut query_params = HashMap::new();
+    let run_id_str = params.run_id.to_string();
+    let episode_id_str = episode_id.to_string();
+    query_params.insert("run_id", run_id_str.as_str());
+    query_params.insert("episode_id", episode_id_str.as_str());
+    if let Some(datapoint_name) = params.datapoint_name.as_deref() {
+        query_params.insert("datapoint_name", datapoint_name);
+    }
+    let tags_str = to_map_literal(&params.tags);
+    query_params.insert("tags", tags_str.as_str());
+    clickhouse
+        .run_query_synchronous(query.to_string(), Some(&query_params))
         .await?;
     Ok(())
 }
@@ -164,7 +265,7 @@ pub async fn validate_inference_episode_id_and_apply_dynamic_evaluation_run(
     }
 
     // Apply experiment tags from the dynamic evaluation run if they don't already exist in the inference tags
-    for (key, value) in dynamic_evaluation_run.experiment_tags {
+    for (key, value) in dynamic_evaluation_run.tags {
         // Only insert if the key doesn't already exist in the tags
         // This ensures inference-level tags have higher priority
         tags.entry(key).or_insert(value);
@@ -178,13 +279,10 @@ async fn lookup_dynamic_evaluation_run(
     episode_id: Uuid,
 ) -> Result<Option<DynamicEvaluationRunInfo>, Error> {
     let query = r#"
-    SELECT variant_pins, experiment_tags FROM DynamicEvaluationRun WHERE short_key = {short_key:UInt64} AND episode_id = {episode_id:UUID} FORMAT JSONEachRow
+    SELECT variant_pins, tags FROM DynamicEvaluationRunEpisode WHERE episode_id_uint = toUInt128({episode_id:UUID}) FORMAT JSONEachRow
     "#;
-    let mut params = HashMap::new();
-    let short_key_str = episode_id.as_u64_pair().1.to_string();
     let episode_id_str = episode_id.to_string();
-    params.insert("short_key", short_key_str.as_str());
-    params.insert("episode_id", episode_id_str.as_str());
+    let params = HashMap::from([("episode_id", episode_id_str.as_str())]);
     let result = clickhouse
         .run_query_synchronous(query.to_string(), Some(&params))
         .await?;

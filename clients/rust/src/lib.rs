@@ -25,7 +25,7 @@ pub use client_input::{ClientInput, ClientInputMessage, ClientInputMessageConten
 
 pub use tensorzero_internal::cache::CacheParamsOptions;
 pub use tensorzero_internal::endpoints::dynamic_evaluation_run::{
-    DynamicEvaluationRunResponse, Params as DynamicEvaluationRunParams,
+    DynamicEvaluationRunParams, DynamicEvaluationRunResponse,
 };
 pub use tensorzero_internal::endpoints::feedback::FeedbackResponse;
 pub use tensorzero_internal::endpoints::feedback::Params as FeedbackParams;
