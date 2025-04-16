@@ -197,6 +197,9 @@ async fn run_evaluations_json() {
             feedback["tags"]["tensorzero::evaluation_name"],
             "entity_extraction"
         );
+        assert!(feedback["tags"]
+            .get("tensorzero::derived_from_human_feedback")
+            .is_none());
         let evaluator_inference_id = Uuid::parse_str(
             feedback["tags"]["tensorzero::evaluator_inference_id"]
                 .as_str()
@@ -259,12 +262,26 @@ async fn run_evaluations_json() {
                 panic!("evaluation error: {}", evaluation_error.message);
             }
         };
+        let inference_id = parsed.response.inference_id();
         // We only check the total_topic_fs for the second run
         total_sports += parsed.evaluations["count_sports"]
             .as_ref()
             .unwrap()
             .as_f64()
             .unwrap() as u32;
+        // Grab the feedback from ClickHouse for the second run and make sure it has the human feedback tag
+        let clickhouse_feedback = select_feedback_by_target_id_clickhouse(
+            &clickhouse,
+            "FloatMetricFeedback",
+            inference_id,
+            None,
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            clickhouse_feedback["tags"]["tensorzero::derived_from_human_feedback"],
+            "true"
+        );
     }
     assert_eq!(total_sports, 0);
 }
@@ -517,6 +534,9 @@ async fn run_llm_judge_evaluation_chat() {
             clickhouse_feedback["tags"]["tensorzero::evaluator_name"],
             "topic_starts_with_f"
         );
+        assert!(clickhouse_feedback["tags"]
+            .get("tensorzero::derived_from_human_feedback")
+            .is_none());
         let evaluator_inference_id = Uuid::parse_str(
             clickhouse_feedback["tags"]["tensorzero::evaluator_inference_id"]
                 .as_str()
@@ -572,12 +592,26 @@ async fn run_llm_judge_evaluation_chat() {
                 panic!("evaluation error: {}", evaluation_error.message);
             }
         };
+        let inference_id = parsed.response.inference_id();
         // We only check the total_topic_fs for the second run
         total_topic_fs += parsed.evaluations["topic_starts_with_f"]
             .as_ref()
             .unwrap()
             .as_bool()
             .unwrap() as u32;
+        // Grab the feedback from ClickHouse for the second run and make sure it has the human feedback tag
+        let clickhouse_feedback = select_feedback_by_target_id_clickhouse(
+            &clickhouse,
+            "BooleanMetricFeedback",
+            inference_id,
+            None,
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            clickhouse_feedback["tags"]["tensorzero::derived_from_human_feedback"],
+            "true"
+        );
     }
     assert_eq!(total_topic_fs, 0);
 }

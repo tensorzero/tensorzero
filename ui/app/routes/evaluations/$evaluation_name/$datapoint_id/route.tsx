@@ -326,14 +326,16 @@ const MetricRow = ({
         className="text-sm"
       />
       {inferenceId !== null && evaluationType === "llm_judge" && (
-        <EvaluationFeedbackEditor
-          inferenceId={inferenceId}
-          datapointId={datapointId}
-          metricName={metric_name}
-          originalValue={metricValue}
-          evalRunId={evalRunId}
-          evaluatorInferenceId={evaluatorInferenceId}
-        />
+        <div className="opacity-0 transition-opacity duration-200 hover:opacity-100">
+          <EvaluationFeedbackEditor
+            inferenceId={inferenceId}
+            datapointId={datapointId}
+            metricName={metric_name}
+            originalValue={metricValue}
+            evalRunId={evalRunId}
+            evaluatorInferenceId={evaluatorInferenceId}
+          />
+        </div>
       )}
     </div>
   );

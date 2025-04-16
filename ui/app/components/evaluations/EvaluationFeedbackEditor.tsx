@@ -81,7 +81,7 @@ export default function EvaluationFeedbackEditor({
                 onChange={(value) => setFeedback(value)}
               />
             )}
-            <Button type="submit" className="mt-2" disabled={!feedback}>
+            <Button type="submit" className="mt-4" disabled={!feedback}>
               Submit Feedback
             </Button>
           </Form>

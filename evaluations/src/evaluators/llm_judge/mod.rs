@@ -20,9 +20,24 @@ use uuid::Uuid;
 use crate::helpers::{check_static_eval_human_feedback, get_cache_options};
 use crate::Clients;
 
+#[derive(Debug)]
 pub struct LLMJudgeEvaluationResult {
     pub inference_id: Uuid,
     pub value: Value,
+    pub human_feedback: bool,
+}
+
+impl LLMJudgeEvaluationResult {
+    pub fn tags(&self) -> HashMap<String, String> {
+        if self.human_feedback {
+            HashMap::from([(
+                "tensorzero::derived_from_human_feedback".to_string(),
+                "true".to_string(),
+            )])
+        } else {
+            HashMap::new()
+        }
+    }
 }
 
 pub struct RunLLMJudgeEvaluatorParams<'a> {
@@ -63,6 +78,7 @@ pub async fn run_llm_judge_evaluator(
         return Ok(Some(LLMJudgeEvaluationResult {
             inference_id: inference_response.inference_id(),
             value: human_feedback,
+            human_feedback: true,
         }));
     }
     let judge_input =
@@ -127,6 +143,7 @@ pub async fn run_llm_judge_evaluator(
         Some(value) => Ok(Some(LLMJudgeEvaluationResult {
             inference_id,
             value,
+            human_feedback: false,
         })),
         None => Ok(None),
     }

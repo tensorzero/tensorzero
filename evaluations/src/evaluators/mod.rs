@@ -105,6 +105,7 @@ pub(crate) async fn evaluate_inference(
                                     inference_id.to_string(),
                                 );
                             }
+                            tags.extend(result.tags());
                             match clients
                                 .tensorzero_client
                                 .feedback(FeedbackParams {
@@ -223,6 +224,14 @@ impl<'a> EvaluatorResult {
         match self {
             EvaluatorResult::ExactMatch(value) => value,
             EvaluatorResult::LLMJudge(value) => value.map(|v| v.value),
+        }
+    }
+    pub fn tags(&'a self) -> HashMap<String, String> {
+        match self {
+            EvaluatorResult::ExactMatch(_) => HashMap::new(),
+            EvaluatorResult::LLMJudge(value) => {
+                value.as_ref().map(|v| v.tags()).unwrap_or_default()
+            }
         }
     }
 }
