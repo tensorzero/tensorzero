@@ -10372,6 +10372,8 @@ pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETes
 
     // Assert the output isn't JSON
     let output = response_json.get("output").unwrap().as_object().unwrap();
+    let parsed = output.get("parsed").unwrap().as_object();
+    assert_eq!(parsed, None);
     let raw = output.get("raw").unwrap().as_str().unwrap();
     assert!(serde_json::from_str::<Value>(raw).is_err());
 
