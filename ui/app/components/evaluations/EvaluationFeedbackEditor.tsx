@@ -48,7 +48,12 @@ export default function EvaluationFeedbackEditor({
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
         <DialogContent className="max-h-[90vh] sm:max-w-[1200px]">
           <DialogHeader>
-            <DialogTitle>Edit Feedback for {metricName}</DialogTitle>
+            <DialogTitle>
+              Edit Feedback for{" "}
+              <span className="text-md font-mono font-semibold">
+                {metricName}
+              </span>
+            </DialogTitle>
             <div style={{ width: "fit-content" }}>
               <EvaluationRunBadge
                 runInfo={{
