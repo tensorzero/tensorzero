@@ -69,8 +69,14 @@ test("should be able to add bool feedback from the evaluation datapoint result p
   // Click on the "True" button
   await page.getByRole("radio", { name: /True/i }).click();
 
+  // Sleep for 100ms
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
   // Click on the "Save" button
   await page.locator('button[type="submit"]').click();
+
+  // Wait for the page to load
+  await new Promise((resolve) => setTimeout(resolve, 500));
 
   // Assert that the bool value is displayed
   await expect(page.getByText("True")).toBeVisible();

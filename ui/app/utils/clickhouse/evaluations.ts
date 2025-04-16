@@ -54,6 +54,7 @@ export const JsonEvaluationResultSchema = z.object({
   dataset_name: z.string(),
   metric_name: z.string(),
   metric_value: z.string(),
+  feedback_id: z.string().uuid(),
 });
 
 export type JsonEvaluationResult = z.infer<typeof JsonEvaluationResultSchema>;
@@ -69,6 +70,7 @@ export const ChatEvaluationResultSchema = z.object({
   dataset_name: z.string(),
   metric_name: z.string(),
   metric_value: z.string(),
+  feedback_id: z.string().uuid(),
 });
 
 export type ChatEvaluationResult = z.infer<typeof ChatEvaluationResultSchema>;

@@ -198,7 +198,8 @@ export async function getEvaluationResults(
     if(length(feedback.evaluator_inference_id) > 0, feedback.evaluator_inference_id, null) as evaluator_inference_id,
     ci.id as inference_id,
     feedback.metric_name as metric_name,
-    feedback.value as metric_value
+    feedback.value as metric_value,
+    feedback.feedback_id as feedback_id
   FROM (
     ${getEvaluationResultDatapointIdsQuery}
     LIMIT {limit:UInt32}
@@ -219,7 +220,8 @@ export async function getEvaluationResults(
     SELECT target_id,
            metric_name,
            argMax(toString(value), timestamp) as value,
-           argMax(tags['tensorzero::evaluator_inference_id'], timestamp) as evaluator_inference_id
+           argMax(tags['tensorzero::evaluator_inference_id'], timestamp) as evaluator_inference_id,
+           argMax(id, timestamp) as feedback_id
     FROM BooleanMetricFeedback
     WHERE metric_name IN ({metric_names:Array(String)})
     GROUP BY target_id, metric_name -- for the argMax
@@ -227,7 +229,8 @@ export async function getEvaluationResults(
     SELECT target_id,
            metric_name,
            argMax(toString(value), timestamp) as value,
-           argMax(tags['tensorzero::evaluator_inference_id'], timestamp) as evaluator_inference_id
+           argMax(tags['tensorzero::evaluator_inference_id'], timestamp) as evaluator_inference_id,
+           argMax(id, timestamp) as feedback_id
     FROM FloatMetricFeedback
     WHERE metric_name IN ({metric_names:Array(String)})
     GROUP BY target_id, metric_name -- for the argMax
@@ -493,7 +496,8 @@ export async function getEvaluationsForDatapoint(
     inference.tags['tensorzero::dataset_name'] as dataset_name,
     if(length(feedback.evaluator_inference_id) > 0, feedback.evaluator_inference_id, null) as evaluator_inference_id,
     feedback.metric_name as metric_name,
-    feedback.value as metric_value
+    feedback.value as metric_value,
+    feedback.feedback_id as feedback_id
   FROM TagInference datapoint_tag FINAL
   JOIN {inference_table_name:Identifier} inference
     ON datapoint_tag.inference_id = inference.id
@@ -508,7 +512,8 @@ export async function getEvaluationsForDatapoint(
     SELECT target_id,
            metric_name,
            argMax(toString(value), timestamp) as value,
-           argMax(tags['tensorzero::evaluator_inference_id'], timestamp) as evaluator_inference_id
+           argMax(tags['tensorzero::evaluator_inference_id'], timestamp) as evaluator_inference_id,
+           argMax(id, timestamp) as feedback_id
     FROM BooleanMetricFeedback
     WHERE metric_name IN ({metric_names:Array(String)})
     GROUP BY target_id, metric_name -- for the argMax
@@ -516,7 +521,8 @@ export async function getEvaluationsForDatapoint(
     SELECT target_id,
            metric_name,
            argMax(toString(value), timestamp) as value,
-           argMax(tags['tensorzero::evaluator_inference_id'], timestamp) as evaluator_inference_id
+           argMax(tags['tensorzero::evaluator_inference_id'], timestamp) as evaluator_inference_id,
+           argMax(id, timestamp) as feedback_id
     FROM FloatMetricFeedback
     WHERE metric_name IN ({metric_names:Array(String)})
     GROUP BY target_id, metric_name -- for the argMax
@@ -544,4 +550,114 @@ export async function getEvaluationsForDatapoint(
     rows.map((row) => parseEvaluationResultWithVariant(row)),
   );
   return parsed_rows;
+}
+/**
+ * Polls for evaluations until a specific feedback item is found.
+ * @param evaluation_name The name of the evaluation function.
+ * @param datapoint_id The ID of the datapoint.
+ * @param evaluation_run_ids Array of evaluation run IDs to query.
+ * @param new_feedback_id The ID of the feedback item to find.
+ * @param max_retries Maximum number of polling attempts.
+ * @param retry_delay Delay between retries in milliseconds.
+ * @returns An array of parsed evaluation results.
+ */
+export async function pollForEvaluations(
+  evaluation_name: string,
+  datapoint_id: string,
+  evaluation_run_ids: string[],
+  new_feedback_id: string,
+  max_retries: number = 10,
+  retry_delay: number = 200,
+): Promise<ParsedEvaluationResultWithVariant[]> {
+  let evaluations: ParsedEvaluationResultWithVariant[] = [];
+  let found = false;
+
+  for (let i = 0; i < max_retries; i++) {
+    evaluations = await getEvaluationsForDatapoint(
+      evaluation_name,
+      datapoint_id,
+      evaluation_run_ids,
+    );
+
+    if (
+      evaluations.some(
+        (evaluation) => evaluation.feedback_id === new_feedback_id,
+      )
+    ) {
+      found = true;
+      break;
+    }
+
+    if (i < max_retries - 1) {
+      // Don't sleep after the last attempt
+      await new Promise((resolve) => setTimeout(resolve, retry_delay));
+    }
+  }
+
+  if (!found) {
+    console.warn(
+      `Evaluation with feedback ${new_feedback_id} for datapoint ${datapoint_id} not found after ${max_retries} retries.`,
+    );
+  }
+
+  return evaluations;
+}
+
+/**
+ * Polls for evaluation results until they are available or max retries is reached.
+ * This is useful when waiting for newly created evaluations to be available in ClickHouse.
+ *
+ * @param function_name The name of the function.
+ * @param function_type The type of function (chat or json).
+ * @param metric_names Array of metric names to query.
+ * @param evaluation_run_ids Array of evaluation run IDs to query.
+ * @param new_feedback_id The ID of the feedback item to find.
+ * @param limit Maximum number of results to return.
+ * @param offset Offset for pagination.
+ * @param max_retries Maximum number of polling attempts.
+ * @param retry_delay Delay between retries in milliseconds.
+ * @returns An array of parsed evaluation results.
+ */
+export async function pollForEvaluationResults(
+  function_name: string,
+  function_type: "chat" | "json",
+  metric_names: string[],
+  evaluation_run_ids: string[],
+  new_feedback_id: string,
+  limit: number = 100,
+  offset: number = 0,
+  max_retries: number = 10,
+  retry_delay: number = 200,
+): Promise<ParsedEvaluationResult[]> {
+  let results: ParsedEvaluationResult[] = [];
+  let found = false;
+
+  for (let i = 0; i < max_retries; i++) {
+    results = await getEvaluationResults(
+      function_name,
+      function_type,
+      metric_names,
+      evaluation_run_ids,
+      limit,
+      offset,
+    );
+
+    if (results.some((result) => result.feedback_id === new_feedback_id)) {
+      found = true;
+      break;
+    }
+
+    if (i < max_retries - 1) {
+      // Don't sleep after the last attempt
+      await new Promise((resolve) => setTimeout(resolve, retry_delay));
+    }
+  }
+
+  if (!found) {
+    console.warn(
+      `Evaluation result with feedback ${new_feedback_id} not found after ${max_retries} retries.`,
+    );
+  }
+
+  return results;
 }

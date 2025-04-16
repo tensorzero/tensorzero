@@ -2,6 +2,7 @@ import {
   getEvaluationRunInfos,
   getEvaluationRunInfosForDatapoint,
   getEvaluationsForDatapoint,
+  pollForEvaluations,
 } from "~/utils/clickhouse/evaluations.server";
 import type { Route } from "./+types/route";
 import {
@@ -66,15 +67,40 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   if (selectedRunIds.length === 0) {
     return redirect(`/evaluations/${evaluation_name}`);
   }
+
+  // Define all promises
+  const selectedEvaluationRunInfosPromise = getEvaluationRunInfos(
+    selectedRunIds,
+    function_name,
+  );
+  const allowedEvaluationRunInfosPromise = getEvaluationRunInfosForDatapoint(
+    datapoint_id,
+    function_name,
+  );
+
+  // If there is a freshly inserted feedback, ClickHouse may take some time to
+  // update the evaluation results as it is eventually consistent.
+  // In this case, we poll for the evaluation results until the feedback is found.
+  const evaluationResultsPromise = newFeedbackId
+    ? pollForEvaluations(
+        evaluation_name,
+        datapoint_id,
+        selectedRunIds,
+        newFeedbackId,
+      )
+    : getEvaluationsForDatapoint(evaluation_name, datapoint_id, selectedRunIds);
+
+  // Execute all promises concurrently
   const [
     selected_evaluation_run_infos,
     allowedEvaluationRunInfos,
     evaluationResults,
   ] = await Promise.all([
-    getEvaluationRunInfos(selectedRunIds, function_name),
-    getEvaluationRunInfosForDatapoint(datapoint_id, function_name),
-    getEvaluationsForDatapoint(evaluation_name, datapoint_id, selectedRunIds),
+    selectedEvaluationRunInfosPromise,
+    allowedEvaluationRunInfosPromise,
+    evaluationResultsPromise,
   ]);
+
   const consolidatedEvaluationResults =
     consolidate_evaluation_results(evaluationResults);
   if (consolidatedEvaluationResults.length !== selectedRunIds.length) {
