@@ -66,7 +66,7 @@ export function CodeMessage({
             <div className="w-0 grow overflow-auto">
               <pre className="w-full px-4 py-5">
                 <code className="text-fg-primary block font-mono text-sm leading-6 whitespace-pre">
-                  {content || " "}
+                  {content || ""}
                 </code>
               </pre>
             </div>
@@ -100,7 +100,7 @@ export function TextMessage({
       <div className="bg-bg-primary w-full overflow-hidden rounded-lg">
         <div className="p-5">
           <div className="text-fg-primary text-sm break-words whitespace-pre-wrap">
-            {content}
+            {content || ""}
           </div>
         </div>
       </div>

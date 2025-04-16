@@ -892,3 +892,44 @@ export async function queryMetricsWithFeedback(params: {
     throw data("Error fetching metrics with feedback", { status: 500 });
   }
 }
+
+/**
+ * Polls for a specific feedback item on the first page.
+ * @param targetId The ID of the target (e.g., inference_id).
+ * @param feedbackId The ID of the feedback item to find.
+ * @param pageSize The number of items per page to fetch.
+ * @param maxRetries Maximum number of polling attempts.
+ * @param retryDelay Delay between retries in milliseconds.
+ * @returns An object containing the fetched feedback list and a boolean indicating if the specific item was found.
+ */
+export async function pollForFeedbackItem(
+  targetId: string,
+  feedbackId: string,
+  pageSize: number,
+  maxRetries: number = 10,
+  retryDelay: number = 200,
+): Promise<FeedbackRow[]> {
+  let feedback: FeedbackRow[] = [];
+  let found = false;
+  for (let i = 0; i < maxRetries; i++) {
+    feedback = await queryFeedbackByTargetId({
+      target_id: targetId,
+      page_size: pageSize,
+      // Only fetch the first page
+    });
+    if (feedback.some((f) => f.id === feedbackId)) {
+      found = true;
+      break;
+    }
+    if (i < maxRetries - 1) {
+      // Don't sleep after the last attempt
+      await new Promise((resolve) => setTimeout(resolve, retryDelay));
+    }
+  }
+  if (!found) {
+    console.warn(
+      `Feedback ${feedbackId} for target ${targetId} not found after ${maxRetries} retries.`,
+    );
+  }
+  return feedback;
+}

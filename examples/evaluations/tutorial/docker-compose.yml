@@ -50,7 +50,7 @@ services:
         condition: service_healthy
 
   evaluations:
-    profiles: [evaluations]
+    profiles: [evaluations] # this service won't run by default with `docker compose up`
     image: tensorzero/evaluations
     volumes:
       - ./config:/app/config:ro

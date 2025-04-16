@@ -1006,7 +1006,7 @@ async fn test_dicl_json_request() {
         }],
     };
     let output = JsonInferenceOutput {
-        raw: "{\"answer\": \"Ottawa\"}".to_string(),
+        raw: Some("{\"answer\": \"Ottawa\"}".to_string()),
         parsed: Some(json!({"answer": "Ottawa"})),
     };
     let output_string = serde_json::to_string(&output).unwrap();
@@ -1029,7 +1029,7 @@ async fn test_dicl_json_request() {
         }],
     };
     let output = JsonInferenceOutput {
-        raw: "{\"answer\": \"Ahmedabad (nose grows 3 inches)\"}".to_string(),
+        raw: Some("{\"answer\": \"Ahmedabad (nose grows 3 inches)\"}".to_string()),
         parsed: Some(json!({"answer": "Ahmedabad (nose grows 3 inches)"})),
     };
     let output_string = serde_json::to_string(&output).unwrap();
@@ -1052,7 +1052,7 @@ async fn test_dicl_json_request() {
         }],
     };
     let output = JsonInferenceOutput {
-        raw: "{\"answer\": \"New York City (nose grows 4 inches)\"}".to_string(),
+        raw: Some("{\"answer\": \"New York City (nose grows 4 inches)\"}".to_string()),
         parsed: Some(json!({"answer": "New York City (nose grows 4 inches)"})),
     };
     let output_string = serde_json::to_string(&output).unwrap();
@@ -1074,7 +1074,7 @@ async fn test_dicl_json_request() {
         }],
     };
     let output = JsonInferenceOutput {
-        raw: "{\"answer\": \"Liverpool (nose grows 5 inches)\"}".to_string(),
+        raw: Some("{\"answer\": \"Liverpool (nose grows 5 inches)\"}".to_string()),
         parsed: Some(json!({"answer": "Liverpool (nose grows 5 inches)"})),
     };
     let output_string = serde_json::to_string(&output).unwrap();

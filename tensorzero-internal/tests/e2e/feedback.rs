@@ -49,7 +49,7 @@ async fn e2e_test_comment_feedback() {
         "function_name": "json_success",
         "input": {
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": {"country": "Japan"}}]
+            "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "Japan"}}]}]
         },
         "stream": false,
     });
@@ -123,7 +123,7 @@ async fn e2e_test_comment_feedback() {
         "function_name": "json_success",
         "input": {
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": {"country": "Japan"}}]
+            "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "Japan"}}]}]
         },
         "stream": false,
     });
@@ -320,7 +320,7 @@ async fn e2e_test_demonstration_feedback_json() {
         "function_name": "json_success",
         "input": {
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": {"country": "Japan"}}]
+            "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "Japan"}}]}]
         },
         "stream": false,
     });
@@ -372,7 +372,7 @@ async fn e2e_test_demonstration_feedback_json() {
     let retrieved_value = serde_json::from_str::<JsonInferenceOutput>(retrieved_value).unwrap();
     let expected_value = JsonInferenceOutput {
         parsed: Some(json!({"answer": "Tokyo"})),
-        raw: "{\"answer\":\"Tokyo\"}".to_string(),
+        raw: Some("{\"answer\":\"Tokyo\"}".to_string()),
     };
     assert_eq!(retrieved_value, expected_value);
 
@@ -445,7 +445,7 @@ async fn e2e_test_demonstration_feedback_dynamic_json() {
         "function_name": "json_success",
         "input": {
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": {"country": "Japan"}}]
+            "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "Japan"}}]}]
         },
         "stream": false,
         "output_schema": new_output_schema,
@@ -498,7 +498,7 @@ async fn e2e_test_demonstration_feedback_dynamic_json() {
     let retrieved_value = serde_json::from_str::<JsonInferenceOutput>(retrieved_value).unwrap();
     let expected_value = JsonInferenceOutput {
         parsed: Some(json!({"answer": "Tokyo", "comment": "This is a comment"})),
-        raw: "{\"answer\":\"Tokyo\",\"comment\":\"This is a comment\"}".to_string(),
+        raw: Some("{\"answer\":\"Tokyo\",\"comment\":\"This is a comment\"}".to_string()),
     };
     assert_eq!(retrieved_value, expected_value);
 
@@ -886,7 +886,7 @@ async fn e2e_test_float_feedback() {
         "function_name": "json_success",
         "input": {
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": {"country": "Japan"}}]
+            "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "Japan"}}]}]
         },
         "stream": false,
     });
@@ -992,7 +992,7 @@ async fn e2e_test_float_feedback() {
         "function_name": "json_success",
         "input": {
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": {"country": "Japan"}}]
+            "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "Japan"}}]}]
         },
         "stream": false,
     });
@@ -1066,7 +1066,7 @@ async fn e2e_test_boolean_feedback() {
         "function_name": "json_success",
         "input": {
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": {"country": "Japan"}}]
+            "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "Japan"}}]}]
         },
         "stream": false,
     });
@@ -1179,7 +1179,7 @@ async fn e2e_test_boolean_feedback() {
         "function_name": "json_success",
         "input": {
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": {"country": "Japan"}}]
+            "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "Japan"}}]}]
         },
         "stream": false,
     });

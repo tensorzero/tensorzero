@@ -1,0 +1,26 @@
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                  GENERAL                                   │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[gateway]
+observability.enabled = false
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                 FUNCTIONS                                  │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[functions.chatbot]
+type = "chat"
+tools = ["temperature_api"]
+
+[functions.chatbot.variants.baseline]
+type = "chat_completion"
+model = "openai::gpt-4o-mini"
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                  TOOLS                                     │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[tools.temperature_api]
+description = "Get the current temperature for a given location."
+parameters = "tools/temperature_api.json"

@@ -95,3 +95,252 @@ test("tag navigation works by datapoint_id", async ({ page }) => {
     "/datasets/foo/datapoint/019368c7-d150-7ba0-819a-88a2cec33663",
   );
 });
+
+test("should be able to add float feedback via the inference page", async ({
+  page,
+}) => {
+  await page.goto(
+    "/observability/inferences/0195f845-a261-72d2-8686-774b967d938e",
+  );
+  // Click on the Add feedback button
+  await page.getByText("Add feedback").click();
+
+  // Click "Select a metric"
+  await page.getByText("Select a metric").click();
+
+  // Explicitly wait for the item to be visible before clicking
+  const metricItemLocator = page
+    .locator('div[role="dialog"]')
+    .locator('div[cmdk-item=""]')
+    .filter({
+      hasText:
+        "tensorzero::evaluation_name::entity_extraction::evaluator_name::count_sports",
+    });
+  await metricItemLocator.waitFor({ state: "visible" });
+  // Click on the metric in the command list
+  await metricItemLocator.click();
+
+  await page.locator("body").click();
+
+  // Fill in the value using the correct role and label
+  // generate a random float between 0 and 1
+  const randomFloat = Math.random();
+  // Assert that the feedback value is visible in its table cell
+  // Truncate the float to 3 decimal places
+  const truncatedFloat = Math.floor(randomFloat * 1000) / 1000;
+  await page
+    .getByRole("spinbutton", { name: "Value" })
+    .fill(truncatedFloat.toString());
+  // Click the submit button
+  await page.getByText("Submit Feedback").click();
+
+  // Wait for the page to load
+  await page.waitForLoadState("networkidle");
+
+  // sleep for 500ms
+  await page.waitForTimeout(500);
+
+  await expect(
+    page.getByRole("cell", { name: truncatedFloat.toString() }),
+  ).toBeVisible();
+});
+
+test("should be able to add boolean feedback via the inference page", async ({
+  page,
+}) => {
+  await page.goto(
+    "/observability/inferences/0195f845-a261-72d2-8686-774b967d938e",
+  );
+  // Click on the Add feedback button
+  await page.getByText("Add feedback").click();
+
+  // Click "Select a metric"
+  await page.getByText("Select a metric").click();
+
+  // Explicitly wait for the item to be visible before clicking
+  const metricItemLocator = page
+    .locator('div[role="dialog"]')
+    .locator('div[cmdk-item=""]')
+    .filter({
+      hasText:
+        "tensorzero::evaluation_name::entity_extraction::evaluator_name::exact_match",
+    });
+  await metricItemLocator.waitFor({ state: "visible" });
+  // Click on the metric in the command list
+  await metricItemLocator.click();
+
+  // Click the radio button for "true"
+  await page.getByRole("radio", { name: "true" }).click();
+
+  // Click the submit button
+  await page.getByText("Submit Feedback").click();
+
+  // Wait for the page to load
+  await page.waitForLoadState("networkidle");
+
+  // sleep for 500ms
+  await page.waitForTimeout(500);
+
+  // Get the search param `newFeedbackId` from the url
+  const newFeedbackId = new URL(page.url()).searchParams.get("newFeedbackId");
+  if (!newFeedbackId) {
+    throw new Error("newFeedbackId is not present in the url");
+  }
+  // Assert that the feedback value is visible in its table cell
+  await expect(page.getByRole("cell", { name: newFeedbackId })).toBeVisible();
+});
+
+test("should be able to add json demonstration feedback via the inference page", async ({
+  page,
+}) => {
+  await page.goto(
+    "/observability/inferences/0195f845-a261-72d2-8686-774b967d938e",
+  );
+  // Click on the Add feedback button
+  await page.getByText("Add feedback").click();
+
+  // Click "Select a metric"
+  await page.getByText("Select a metric").click();
+
+  // Explicitly wait for the item to be visible before clicking
+  const metricItemLocator = page
+    .locator('div[role="dialog"]')
+    .locator('div[cmdk-item=""]')
+    .filter({
+      hasText: "demonstration",
+    });
+  await metricItemLocator.waitFor({ state: "visible" });
+  // Click on the metric in the command list
+  await metricItemLocator.click();
+
+  // Generate a random float between 0 and 1 with 3 decimal places
+  const randomFloat = Math.floor(Math.random() * 1000) / 1000;
+  // fill in
+  // Locate the dialog first
+  const dialog = page.locator('div[role="dialog"]');
+  // Locate the textbox within the dialog and fill it
+  await dialog.getByRole("textbox").waitFor({ state: "visible" });
+  const json = `{"thinking": "hmm", "score": ${randomFloat}}`;
+  await dialog.getByRole("textbox").fill(json);
+
+  // Click the submit button
+  await page.getByText("Submit Feedback").click();
+
+  // Wait for the page to load
+  await page.waitForLoadState("networkidle");
+
+  // sleep for 1 second
+  await page.waitForTimeout(1000);
+
+  // Get the search param `newFeedbackId` from the url
+  const newFeedbackId = new URL(page.url()).searchParams.get("newFeedbackId");
+  if (!newFeedbackId) {
+    throw new Error("newFeedbackId is not present in the url");
+  }
+  // Assert that the feedback value is visible in its table cell
+  await expect(page.getByRole("cell", { name: newFeedbackId })).toBeVisible();
+});
+
+test("should be able to add chat demonstration feedback via the inference page", async ({
+  page,
+}) => {
+  await page.goto(
+    "/observability/inferences/0195c498-70e3-71f3-bbd9-a2db26b8d349",
+  );
+  // Click on the Add feedback button
+  await page.getByText("Add feedback").click();
+
+  // Click "Select a metric"
+  await page.getByText("Select a metric").click();
+
+  // Explicitly wait for the item to be visible before clicking
+  const metricItemLocator = page
+    .locator('div[role="dialog"]')
+    .locator('div[cmdk-item=""]')
+    .filter({
+      hasText: "demonstration",
+    });
+  await metricItemLocator.waitFor({ state: "visible" });
+  // Click on the metric in the command list
+  await metricItemLocator.click();
+
+  // Generate a random float between 0 and 1 with 3 decimal places
+  const randomFloat = Math.floor(Math.random() * 1000) / 1000;
+  // Locate the dialog first
+  const dialog = page.locator('div[role="dialog"]');
+  // Locate the textbox within the dialog and fill it
+  await dialog.getByRole("textbox").waitFor({ state: "visible" });
+  // This doesn't have to be a JSON, it can be any string
+  const json = `{"thinking": "hmm", "score": ${randomFloat}}`;
+  await dialog.getByRole("textbox").fill(json);
+
+  // Click the submit button
+  await page.getByText("Submit Feedback").click();
+
+  // Wait for the page to load
+  await page.waitForLoadState("networkidle");
+
+  // sleep for 1 second
+  await page.waitForTimeout(1000);
+
+  // Get the search param `newFeedbackId` from the url
+  const newFeedbackId = new URL(page.url()).searchParams.get("newFeedbackId");
+  if (!newFeedbackId) {
+    throw new Error("newFeedbackId is not present in the url");
+  }
+  // Assert that the feedback value is visible in its table cell
+  await expect(page.getByRole("cell", { name: newFeedbackId })).toBeVisible();
+});
+
+test("should be able to add comment feedback via the episode page", async ({
+  page,
+}) => {
+  await page.goto(
+    "/observability/episodes/0195f845-a261-72d2-8686-775bc929a221",
+  );
+  // Click on the Add feedback button
+  await page.getByText("Add feedback").click();
+
+  // Click "Select a metric"
+  await page.getByText("Select a metric").click();
+
+  // Explicitly wait for the item to be visible before clicking
+  const metricItemLocator = page
+    .locator('div[role="dialog"]')
+    .locator('div[cmdk-item=""]')
+    .filter({
+      hasText: "comment",
+    });
+  await metricItemLocator.waitFor({ state: "visible" });
+  // Click on the metric in the command list
+  await metricItemLocator.click();
+
+  // Generate a random float between 0 and 1 with 3 decimal places
+  const randomFloat = Math.floor(Math.random() * 1000) / 1000;
+  // Locate the dialog first
+  const dialog = page.locator('div[role="dialog"]');
+  // Locate the textbox within the dialog and fill it
+  await dialog.getByRole("textbox").waitFor({ state: "visible" });
+  // This doesn't have to be a JSON, it can be any string
+  const json = `{"thinking": "hmm", "score": ${randomFloat}}`;
+  await dialog.getByRole("textbox").fill(json);
+
+  // Click the submit button
+  await page.getByText("Submit Feedback").click();
+
+  // Wait for the page to load
+  await page.waitForLoadState("networkidle");
+
+  // sleep for 1 second
+  await page.waitForTimeout(1000);
+
+  // Get the search param `newFeedbackId` from the url
+  const newFeedbackId = new URL(page.url()).searchParams.get("newFeedbackId");
+  if (!newFeedbackId) {
+    throw new Error("newFeedbackId is not present in the url");
+  }
+  // Assert that the feedback value is visible in its table cell
+  await expect(page.getByRole("cell", { name: newFeedbackId })).toBeVisible();
+  // Assert that the comment is visible in the comment section
+  await expect(page.getByText(json)).toBeVisible();
+});

@@ -67,6 +67,11 @@ COPY --from=development-dependencies-env /app/node_modules /app/node_modules
 
 WORKDIR /app
 
+# Declare the build argument with a default value (e.g., 0)
+ARG VITE_TENSORZERO_UI_FF_ENABLE_FEEDBACK=0
+# Set the environment variable using the build argument
+ENV VITE_TENSORZERO_UI_FF_ENABLE_FEEDBACK=${VITE_TENSORZERO_UI_FF_ENABLE_FEEDBACK}
+
 ENV VITE_TENSORZERO_UI_FF_ENABLE_DATASETS=1
 
 RUN pnpm run build

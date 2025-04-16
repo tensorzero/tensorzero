@@ -20,7 +20,9 @@ interface DefaultOutputProps extends BaseOutputProps {
 // For when isEditing is explicitly provided
 interface EditableOutputProps extends BaseOutputProps {
   isEditing: boolean;
-  onOutputChange: (output: JsonInferenceOutput | ContentBlockOutput[]) => void;
+  onOutputChange: (
+    output: JsonInferenceOutput | ContentBlockOutput[] | null,
+  ) => void;
 }
 
 type OutputProps = DefaultOutputProps | EditableOutputProps;
@@ -201,7 +203,7 @@ function OutputToolCallBlock({
 interface JsonOutputProps {
   output: JsonInferenceOutput;
   isEditing?: boolean;
-  onOutputChange?: (output: JsonInferenceOutput) => void;
+  onOutputChange?: (output: JsonInferenceOutput | null) => void; // null is used if the output is not valid JSON
 }
 
 function JsonOutput({ output, isEditing, onOutputChange }: JsonOutputProps) {
@@ -229,7 +231,7 @@ function JsonOutput({ output, isEditing, onOutputChange }: JsonOutputProps) {
         });
       } catch {
         setJsonError("Invalid JSON format");
-        // We won't even attempt to update the raw value if it's invalid
+        onOutputChange(null);
       }
     }
   };
@@ -317,7 +319,9 @@ export function OutputContent({
   isEditing,
   onOutputChange,
 }: OutputProps) {
-  const handleJsonOutputChange = (updatedOutput: JsonInferenceOutput) => {
+  const handleJsonOutputChange = (
+    updatedOutput: JsonInferenceOutput | null,
+  ) => {
     if (onOutputChange) {
       onOutputChange(updatedOutput);
     }
