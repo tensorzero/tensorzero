@@ -3,12 +3,6 @@
 
 use std::{borrow::Cow, collections::HashMap};
 
-<<<<<<< HEAD
-use pyo3::{exceptions::PyValueError, intern, prelude::*, sync::GILOnceCell, types::PyDict};
-use tensorzero_rust::{
-    DynamicEvaluationRunResponse, FeedbackResponse, InferenceResponse, InferenceResponseChunk, Tool,
-};
-=======
 use pyo3::{
     exceptions::{PyRuntimeError, PyValueError},
     intern,
@@ -16,8 +10,9 @@ use pyo3::{
     sync::GILOnceCell,
     types::PyDict,
 };
-use tensorzero_rust::{FeedbackResponse, InferenceResponse, InferenceResponseChunk, Tool};
->>>>>>> e51cacb4dc2c41dbb24fc0a9292d606299fc58ab
+use tensorzero_rust::{
+    DynamicEvaluationRunResponse, FeedbackResponse, InferenceResponse, InferenceResponseChunk, Tool,
+};
 use uuid::Uuid;
 
 use crate::{tensorzero_internal_error, JSON_DUMPS, JSON_LOADS};

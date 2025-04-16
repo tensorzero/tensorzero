@@ -112,7 +112,7 @@ async fn write_dynamic_evaluation_run(
     params.insert("variant_pins", variant_pins_str.as_str());
     params.insert("experiment_tags", tags_str.as_str());
     clickhouse
-        .run_query(query.to_string(), Some(&params))
+        .run_query_synchronous(query.to_string(), Some(&params))
         .await?;
     Ok(())
 }
@@ -186,7 +186,7 @@ async fn lookup_dynamic_evaluation_run(
     params.insert("short_key", short_key_str.as_str());
     params.insert("episode_id", episode_id_str.as_str());
     let result = clickhouse
-        .run_query(query.to_string(), Some(&params))
+        .run_query_synchronous(query.to_string(), Some(&params))
         .await?;
     if result.is_empty() {
         return Ok(None);

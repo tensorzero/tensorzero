@@ -30,14 +30,9 @@ use tensorzero_internal::{
 };
 use tensorzero_rust::{
     err_to_http, observability::LogFormat, CacheParamsOptions, Client, ClientBuilder,
-<<<<<<< HEAD
-    ClientBuilderMode, ClientInferenceParams, ClientSecretString, DynamicEvaluationRunParams,
-    DynamicToolParams, FeedbackParams, InferenceOutput, InferenceParams, InferenceStream, Input,
-    TensorZeroError, Tool,
-=======
-    ClientBuilderMode, ClientInferenceParams, ClientInput, ClientSecretString, DynamicToolParams,
-    FeedbackParams, InferenceOutput, InferenceParams, InferenceStream, TensorZeroError, Tool,
->>>>>>> e51cacb4dc2c41dbb24fc0a9292d606299fc58ab
+    ClientBuilderMode, ClientInferenceParams, ClientInput, ClientSecretString,
+    DynamicEvaluationRunParams, DynamicToolParams, FeedbackParams, InferenceOutput,
+    InferenceParams, InferenceStream, TensorZeroError, Tool,
 };
 use tokio::sync::Mutex;
 use url::Url;
@@ -1051,7 +1046,6 @@ impl AsyncTensorZeroGateway {
         })
     }
 
-<<<<<<< HEAD
     /// Make a request to the /dynamic_evaluation_run endpoint.
     ///
     /// :param variants: A dictionary mapping function names to pinned variant names.
@@ -1073,7 +1067,8 @@ impl AsyncTensorZeroGateway {
                 Err(e) => Err(convert_error(py, e)),
             })
         })
-=======
+    }
+
     /// For internal use only - do not call.
     // This is a helper function used by `optimizations-server` to get the template config
     // when applying a new prompt template during fine-tuning
@@ -1131,7 +1126,6 @@ impl AsyncTensorZeroGateway {
             })?
             .unbind(),
         )
->>>>>>> e51cacb4dc2c41dbb24fc0a9292d606299fc58ab
     }
 }
 

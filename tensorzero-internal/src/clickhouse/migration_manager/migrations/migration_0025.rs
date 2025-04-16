@@ -43,14 +43,38 @@ impl Migration for Migration0025<'_> {
                 ) ENGINE = ReplacingMergeTree(updated_at, is_deleted)
                 ORDER BY run_id;
         "#;
-        let _ = self.clickhouse.run_query_synchronous(query.to_string(), None).await?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous(query.to_string(), None)
+            .await?;
 
         let query = r#"
             CREATE TABLE IF NOT EXISTS DynamicEvaluationRunTrial
             (
                 run_id UInt128, -- UUID encoded as a UInt128
                 episode_id UInt128, -- UUID encoded as a UInt128
-                
-        "
+                variant_pins Map(String, String),
+                tags Map(String, String),
+                is_deleted Bool DEFAULT false,
+                updated_at DateTime64(6, 'UTC') DEFAULT now()
+            ) ENGINE = ReplacingMergeTree(updated_at, is_deleted)
+                ORDER BY episode_id;
+        "#;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous(query.to_string(), None)
+            .await?;
+
+        Ok(())
+    }
+
+    fn rollback_instructions(&self) -> String {
+        "DROP TABLE IF EXISTS DynamicEvaluationRun\nDROP TABLE IF EXISTS DynamicEvaluationRunTrials"
+            .to_string()
+    }
+
+    async fn has_succeeded(&self) -> Result<bool, Error> {
+        let should_apply = self.should_apply().await?;
+        Ok(!should_apply)
     }
 }

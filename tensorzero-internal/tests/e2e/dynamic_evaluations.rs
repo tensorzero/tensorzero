@@ -7,8 +7,8 @@ use std::{
 use crate::providers::common::{make_embedded_gateway, make_http_gateway};
 use serde_json::json;
 use tensorzero::{
-    ClientInferenceParams, DynamicEvaluationRunParams, InferenceOutput, Input, InputMessage,
-    InputMessageContent, Role,
+    ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
+    DynamicEvaluationRunParams, InferenceOutput, Role,
 };
 use tensorzero_internal::{
     clickhouse::test_helpers::{get_clickhouse, select_chat_inference_clickhouse},
@@ -30,13 +30,13 @@ async fn test_dynamic_evaluation() {
     let inference_params = ClientInferenceParams {
         episode_id: Some(episode_id),
         function_name: Some("basic_test".to_string()),
-        input: Input {
+        input: ClientInput {
             system: Some(json!({
                 "assistant_name": "AskJeeves",
             })),
-            messages: vec![InputMessage {
+            messages: vec![ClientInputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Text(TextKind::Text {
+                content: vec![ClientInputMessageContent::Text(TextKind::Text {
                     text: "Please write me a sentence about Megumin making an explosion.".into(),
                 })],
             }],
@@ -95,13 +95,13 @@ async fn test_dynamic_evaluation_other_function() {
     let inference_params = ClientInferenceParams {
         episode_id: Some(episode_id),
         function_name: Some("basic_test".to_string()),
-        input: Input {
+        input: ClientInput {
             system: Some(json!({
                 "assistant_name": "AskJeeves",
             })),
-            messages: vec![InputMessage {
+            messages: vec![ClientInputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Text(TextKind::Text {
+                content: vec![ClientInputMessageContent::Text(TextKind::Text {
                     text: "Please write me a sentence about Megumin making an explosion.".into(),
                 })],
             }],
@@ -145,13 +145,13 @@ async fn test_dynamic_evaluation_override_variant_tags() {
     let inference_params = ClientInferenceParams {
         episode_id: Some(episode_id),
         function_name: Some("basic_test".to_string()),
-        input: Input {
+        input: ClientInput {
             system: Some(json!({
                 "assistant_name": "AskJeeves",
             })),
-            messages: vec![InputMessage {
+            messages: vec![ClientInputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Text(TextKind::Text {
+                content: vec![ClientInputMessageContent::Text(TextKind::Text {
                     text: "Please write me a sentence about Megumin making an explosion.".into(),
                 })],
             }],
@@ -200,13 +200,13 @@ async fn test_bad_dynamic_evaluation_run() {
     let inference_params = ClientInferenceParams {
         episode_id: Some(episode_id),
         function_name: Some("basic_test".to_string()),
-        input: Input {
+        input: ClientInput {
             system: Some(json!({
                 "assistant_name": "AskJeeves",
             })),
-            messages: vec![InputMessage {
+            messages: vec![ClientInputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Text(TextKind::Text {
+                content: vec![ClientInputMessageContent::Text(TextKind::Text {
                     text: "Please write me a sentence about Megumin making an explosion.".into(),
                 })],
             }],
