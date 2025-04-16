@@ -1,0 +1,18 @@
+[object_storage]
+type = "filesystem"
+path = "object_storage"
+
+[functions.classify_document]
+type = "json"
+output_schema = "functions/classify_document/output_schema.json"
+
+[functions.classify_document.variants.baseline]
+type = "chat_completion"
+model = "openai::gpt-4o-mini"
+json_mode = "strict"
+retries = { num_retries = 2, max_delay_s = 10 }
+
+[metrics.correct_classification]
+type = "boolean"
+level = "inference"
+optimize = "max"
