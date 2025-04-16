@@ -215,6 +215,7 @@ const MetricsDisplay = ({
   datapointId,
   inferenceId,
   evalRunId,
+  variantName,
 }: {
   metrics: ConsolidatedMetric[];
   evaluation_name: string;
@@ -222,6 +223,7 @@ const MetricsDisplay = ({
   datapointId: string;
   inferenceId: string | null;
   evalRunId: string;
+  variantName: string;
 }) => {
   return (
     <div className="mt-3 border-t border-gray-200 pt-2">
@@ -241,6 +243,7 @@ const MetricsDisplay = ({
               inferenceId={inferenceId}
               evaluatorInferenceId={metricObj.evaluator_inference_id}
               evalRunId={evalRunId}
+              variantName={variantName}
             />
           );
         })}
@@ -259,6 +262,7 @@ const MetricRow = ({
   inferenceId,
   evalRunId,
   evaluatorInferenceId,
+  variantName,
 }: {
   evaluatorName: string;
   evaluation_name: string;
@@ -268,6 +272,7 @@ const MetricRow = ({
   inferenceId: string | null;
   evaluatorInferenceId: string | null;
   evalRunId: string;
+  variantName: string;
 }) => {
   const config = useConfig();
   const metric_name = getEvaluatorMetricName(evaluation_name, evaluatorName);
@@ -334,6 +339,7 @@ const MetricRow = ({
             originalValue={metricValue}
             evalRunId={evalRunId}
             evaluatorInferenceId={evaluatorInferenceId}
+            variantName={variantName}
           />
         </div>
       )}
@@ -432,6 +438,7 @@ function OutputsSection({
                   datapointId={datapointId}
                   inferenceId={result.inferenceId}
                   evalRunId={result.id}
+                  variantName={result.variant_name}
                 />
               )}
           </div>

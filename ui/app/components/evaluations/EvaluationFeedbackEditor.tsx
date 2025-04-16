@@ -20,6 +20,7 @@ interface EvaluationFeedbackEditorProps {
   metricName: string;
   originalValue: string;
   evalRunId: string;
+  variantName: string;
   evaluatorInferenceId: string | null;
 }
 
@@ -29,6 +30,7 @@ export default function EvaluationFeedbackEditor({
   metricName,
   originalValue,
   evalRunId,
+  variantName,
   evaluatorInferenceId,
 }: EvaluationFeedbackEditorProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -51,7 +53,7 @@ export default function EvaluationFeedbackEditor({
               <EvaluationRunBadge
                 runInfo={{
                   evaluation_run_id: evalRunId,
-                  variant_name: "Reference",
+                  variant_name: variantName,
                 }}
                 getColor={getColor}
               />

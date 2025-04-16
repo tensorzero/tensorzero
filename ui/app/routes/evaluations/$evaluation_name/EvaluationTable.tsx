@@ -535,6 +535,10 @@ export function EvaluationTable({
                                               evaluatorInferenceId={
                                                 metricValue.evaluator_inference_id
                                               }
+                                              variantName={
+                                                runIdToVariant.get(runId) ||
+                                                "Unknown"
+                                              }
                                             />
                                           </div>
                                         )}
