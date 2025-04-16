@@ -8,19 +8,17 @@ import {
   CommentItem,
   DemonstrationItem,
   type FeedbackStatus,
-} from "./FeedbackTableItem";
+} from "./FeedbackValueItem";
 import { CommentModal, DemonstrationModal } from "./FeedbackTableModal";
 
 interface FeedbackValueProps {
   feedback: FeedbackRow;
   metric?: MetricConfig;
-  truncate?: boolean;
 }
 
 export default function FeedbackValue({
   feedback,
   metric,
-  truncate = true,
 }: FeedbackValueProps) {
   const [isSheetOpen, setIsSheetOpen] = useState(false);
 
@@ -60,46 +58,30 @@ export default function FeedbackValue({
 
   // Handle comments
   if (feedback.type === "comment" && typeof feedback.value === "string") {
-    if (truncate) {
-      return (
-        <>
-          <CommentItem
-            value={feedback.value}
-            truncate={true}
-            onClick={handleClick}
-          />
-          <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
-            <SheetContent className="bg-bg-secondary overflow-y-auto p-0 sm:max-w-xl md:max-w-2xl lg:max-w-3xl">
-              <CommentModal feedback={feedback} />
-            </SheetContent>
-          </Sheet>
-        </>
-      );
-    }
-
-    return <CommentItem value={feedback.value} truncate={false} />;
+    return (
+      <>
+        <CommentItem value={feedback.value} onClick={handleClick} />
+        <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
+          <SheetContent className="bg-bg-secondary overflow-y-auto p-0 sm:max-w-xl md:max-w-2xl lg:max-w-3xl">
+            <CommentModal feedback={feedback} />
+          </SheetContent>
+        </Sheet>
+      </>
+    );
   }
 
   // Handle demonstrations
   if (feedback.type === "demonstration" && typeof feedback.value === "string") {
-    if (truncate) {
-      return (
-        <>
-          <DemonstrationItem
-            value={feedback.value}
-            truncate={true}
-            onClick={handleClick}
-          />
-          <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
-            <SheetContent className="bg-bg-secondary w-full overflow-y-auto p-0 sm:max-w-xl md:max-w-2xl lg:max-w-3xl">
-              <DemonstrationModal feedback={feedback} />
-            </SheetContent>
-          </Sheet>
-        </>
-      );
-    }
-
-    return <DemonstrationItem value={feedback.value} truncate={false} />;
+    return (
+      <>
+        <DemonstrationItem value={feedback.value} onClick={handleClick} />
+        <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
+          <SheetContent className="bg-bg-secondary w-full overflow-y-auto p-0 sm:max-w-xl md:max-w-2xl lg:max-w-3xl">
+            <DemonstrationModal feedback={feedback} />
+          </SheetContent>
+        </Sheet>
+      </>
+    );
   }
 
   // Fallback for unexpected types
