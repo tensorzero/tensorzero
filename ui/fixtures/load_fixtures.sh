@@ -11,6 +11,11 @@ clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --
 clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database tensorzero_ui_fixtures --query "INSERT INTO JsonInferenceDatapoint FORMAT JSONEachRow" < json_inference_datapoint_examples.jsonl
 clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database tensorzero_ui_fixtures --query "INSERT INTO JsonInferenceDatapoint FORMAT JSONEachRow" < json_inference_many_datasets_examples.jsonl
 clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database tensorzero_ui_fixtures --query "INSERT INTO ModelInferenceCache FORMAT JSONEachRow" < model_inference_cache_examples.jsonl
+
+# Give ClickHouse some time to make the writes visible
+sleep 1
 # Create the marker file to signal completion for the healthcheck
-touch /fixtures/load_complete.marker
+# Write it to an ephemeral location to make sure that we don't see a marker file
+# from a previous container run.
+touch /tmp/load_complete.marker
 echo "Fixtures loaded; this script will now exit with status 0"
