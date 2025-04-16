@@ -21,13 +21,14 @@ use std::time::Duration;
 use tokio::time::Instant;
 use url::Url;
 
-use super::helpers::inject_extra_body;
+use super::helpers::inject_extra_request_data;
 use super::openai::{
     convert_stream_error, get_chat_url, prepare_openai_messages, prepare_openai_tools,
     OpenAIRequestMessage, OpenAITool, OpenAIToolChoice, OpenAIToolType, StreamOptions,
 };
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
+use crate::error::DisplayOrDebugGateway;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::{
@@ -87,7 +88,6 @@ impl TryFrom<Credential> for TGICredentials {
             Credential::Static(key) => Ok(TGICredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(TGICredentials::Dynamic(key_name)),
             Credential::None => Ok(TGICredentials::None),
-            #[cfg(any(test, feature = "e2e_tests"))]
             Credential::Missing => Ok(TGICredentials::None),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for TGI provider".to_string(),
@@ -133,10 +133,13 @@ impl InferenceProvider for TGIProvider {
         let mut request_body = serde_json::to_value(TGIRequest::new(PROVIDER_TYPE, request)?)
             .map_err(|e| {
                 Error::new(ErrorDetails::Serialization {
-                    message: format!("Error serializing TGI request: {e}"),
+                    message: format!(
+                        "Error serializing TGI request: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                 })
             })?;
-        inject_extra_body(
+        let headers = inject_extra_request_data(
             &request.extra_body,
             model_provider,
             model_name,
@@ -156,12 +159,16 @@ impl InferenceProvider for TGIProvider {
 
         let res = request_builder
             .json(&request_body)
+            .headers(headers)
             .send()
             .await
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
-                    message: format!("Error sending request to TGI: {e}"),
                     status_code: e.status(),
+                    message: format!(
+                        "Error sending request to TGI: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: serde_json::to_string(&request_body).ok(),
                     raw_response: None,
@@ -171,7 +178,10 @@ impl InferenceProvider for TGIProvider {
         if res.status().is_success() {
             let raw_response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing text response: {e}"),
+                    message: format!(
+                        "Error parsing text response: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: serde_json::to_string(&request_body).ok(),
                     raw_response: None,
@@ -180,7 +190,10 @@ impl InferenceProvider for TGIProvider {
 
             let response = serde_json::from_str(&raw_response).map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing JSON response: {e}"),
+                    message: format!(
+                        "Error parsing JSON response: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: serde_json::to_string(&request_body).ok(),
                     raw_response: Some(raw_response.clone()),
@@ -203,7 +216,10 @@ impl InferenceProvider for TGIProvider {
                 res.status(),
                 &res.text().await.map_err(|e| {
                     Error::new(ErrorDetails::InferenceServer {
-                        message: format!("Error parsing error response: {e}"),
+                        message: format!(
+                            "Error parsing error response: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
                         provider_type: PROVIDER_TYPE.to_string(),
                         raw_request: serde_json::to_string(&request_body).ok(),
                         raw_response: None,
@@ -227,10 +243,13 @@ impl InferenceProvider for TGIProvider {
         let mut request_body = serde_json::to_value(TGIRequest::new(PROVIDER_NAME, request)?)
             .map_err(|e| {
                 Error::new(ErrorDetails::Serialization {
-                    message: format!("Error serializing TGI request: {e}"),
+                    message: format!(
+                        "Error serializing TGI request: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                 })
             })?;
-        inject_extra_body(
+        let headers = inject_extra_request_data(
             &request.extra_body,
             model_provider,
             model_name,
@@ -245,7 +264,10 @@ impl InferenceProvider for TGIProvider {
         }
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
-                message: format!("Error serializing request: {e}"),
+                message: format!(
+                    "Error serializing request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
             })
         })?;
         let request_url = get_chat_url(&self.api_base)?;
@@ -259,10 +281,14 @@ impl InferenceProvider for TGIProvider {
         }
         let event_source = request_builder
             .json(&request_body)
+            .headers(headers)
             .eventsource()
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
-                    message: format!("Error sending request to OpenAI: {e}"),
+                    message: format!(
+                        "Error sending request to OpenAI: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     status_code: None,
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(raw_request.clone()),
@@ -482,7 +508,10 @@ impl<'a> TryFrom<TGIResponseWithMetadata<'a>> for ProviderInferenceResponse {
         }
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
-                message: format!("Error serializing request body as JSON: {e}"),
+                message: format!(
+                    "Error serializing request body as JSON: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
             })
         })?;
         let system = generic_request.system.clone();
@@ -662,7 +691,10 @@ fn tgi_to_tensorzero_chunk(
 ) -> Result<ProviderInferenceResponseChunk, Error> {
     let raw_message = serde_json::to_string(&chunk).map_err(|e| {
         Error::new(ErrorDetails::InferenceServer {
-            message: format!("Error parsing response from OpenAI: {e}"),
+            message: format!(
+                "Error parsing response from OpenAI: {}",
+                DisplayOrDebugGateway::new(e)
+            ),
             raw_request: None,
             raw_response: Some(serde_json::to_string(&chunk).unwrap_or_default()),
             provider_type: PROVIDER_TYPE.to_string(),

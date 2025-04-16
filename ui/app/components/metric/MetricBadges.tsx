@@ -1,4 +1,5 @@
 import { Badge } from "~/components/ui/badge";
+import type { FeedbackRow } from "~/utils/clickhouse/feedback";
 import type { MetricConfig } from "~/utils/config/metric";
 
 // Move the getBadgeStyle function from MetricSelector
@@ -22,13 +23,13 @@ const getBadgeStyle = (
     case "optimize":
       if (!value) return "";
       return value === "max"
-        ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300"
-        : "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300";
+        ? "bg-fuchsia-100 text-fuchsia-800 dark:bg-fuchsia-900 dark:text-fuchsia-300"
+        : "bg-sky-100 text-sky-800 dark:bg-sky-900 dark:text-sky-300";
 
     case "level":
       return value === "episode"
         ? "bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-300"
-        : "bg-rose-100 text-rose-800 dark:bg-rose-900 dark:text-rose-300";
+        : "bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-300";
 
     default:
       return "";
@@ -37,16 +38,24 @@ const getBadgeStyle = (
 
 type MetricBadgesProps = {
   metric: MetricConfig;
+  row?: FeedbackRow;
+  showLevel?: boolean;
 };
 
-export function MetricBadges({ metric }: MetricBadgesProps) {
+export default function MetricBadges({
+  metric,
+  row,
+  showLevel = true,
+}: MetricBadgesProps) {
   if (!metric) return null;
   return (
     <div className="flex gap-1.5">
       {/* Type badge */}
-      <Badge className={getBadgeStyle("type", metric.type)}>
-        {metric.type}
-      </Badge>
+      {metric.type !== "comment" && metric.type !== "demonstration" && (
+        <Badge className={getBadgeStyle("type", metric.type)}>
+          {metric.type}
+        </Badge>
+      )}
 
       {/* Only show optimize badge if it's defined */}
       {"optimize" in metric && metric.optimize && (
@@ -56,7 +65,16 @@ export function MetricBadges({ metric }: MetricBadgesProps) {
       )}
 
       {/* Level badge */}
-      {metric.type !== "comment" && (
+      {/* If the metric is a comment take the level from the row if available */}
+      {showLevel &&
+        metric.type === "comment" &&
+        row?.type === "comment" &&
+        row?.target_type && (
+          <Badge className={getBadgeStyle("level", row.target_type)}>
+            {row.target_type}
+          </Badge>
+        )}
+      {showLevel && metric.type !== "comment" && (
         <Badge className={getBadgeStyle("level", metric.level)}>
           {metric.level}
         </Badge>

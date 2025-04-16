@@ -69,7 +69,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const metricsWithFeedbackPromise = queryMetricsWithFeedback({
     function_name,
     inference_table: getInferenceTableName(function_config),
-    metrics: config.metrics,
   });
   const variantCountsPromise = getVariantCounts({
     function_name,
@@ -203,11 +202,6 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
 
       <SectionsGroup>
         <SectionLayout>
-          <SectionHeader heading="Schema" />
-          <FunctionSchema functionConfig={function_config} />
-        </SectionLayout>
-
-        <SectionLayout>
           <SectionHeader heading="Variants" />
           <FunctionVariantTable
             variant_counts={variant_counts}
@@ -216,7 +210,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
         </SectionLayout>
 
         <SectionLayout>
-          <SectionHeader heading="Metric" />
+          <SectionHeader heading="Metrics" />
           <MetricSelector
             metricsWithFeedback={metricsWithFeedback}
             selectedMetric={metric_name || ""}
@@ -230,6 +224,11 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
               onTimeGranularityChange={handleTimeGranularityChange}
             />
           )}
+        </SectionLayout>
+
+        <SectionLayout>
+          <SectionHeader heading="Schemas" />
+          <FunctionSchema functionConfig={function_config} />
         </SectionLayout>
 
         <SectionLayout>

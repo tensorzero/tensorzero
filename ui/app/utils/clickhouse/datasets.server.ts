@@ -19,6 +19,7 @@ import {
   jsonInferenceOutputSchema,
 } from "./common";
 import { getConfig } from "../config/index.server";
+import { resolveInput } from "../resolve.server";
 
 /**
  * Constructs a SELECT query for either the Chat or JSON dataset table.
@@ -255,7 +256,10 @@ Get name and count for all datasets.
 This function should sum the counts of chat and json inferences for each dataset.
 The groups should be ordered by last_updated in descending order.
 */
-export async function getDatasetCounts(): Promise<DatasetCountInfo[]> {
+export async function getDatasetCounts(
+  page_size?: number,
+  offset: number = 0,
+): Promise<DatasetCountInfo[]> {
   const resultSet = await clickhouseClient.query({
     query: `
       SELECT
@@ -283,11 +287,38 @@ export async function getDatasetCounts(): Promise<DatasetCountInfo[]> {
       )
       GROUP BY dataset_name
       ORDER BY last_updated DESC
+      ${page_size ? "LIMIT {page_size:UInt32}" : ""}
+      ${offset ? "OFFSET {offset:UInt32}" : ""}
     `,
     format: "JSONEachRow",
+    query_params: {
+      page_size,
+      offset,
+    },
   });
   const rows = await resultSet.json<DatasetCountInfo[]>();
   return z.array(DatasetCountInfoSchema).parse(rows);
+}
+
+export async function getNumberOfDatasets(): Promise<number> {
+  const resultSet = await clickhouseClient.query({
+    query: `
+      SELECT
+        toUInt32(uniqExact(dataset_name)) as count
+      FROM (
+        SELECT dataset_name
+        FROM ChatInferenceDatapoint FINAL
+        WHERE staled_at IS NULL
+        UNION ALL
+        SELECT dataset_name
+        FROM JsonInferenceDatapoint FINAL
+        WHERE staled_at IS NULL
+      )
+    `,
+    format: "JSONEachRow",
+  });
+  const rows = await resultSet.json<{ count: number }>();
+  return rows[0].count;
 }
 /**
  * Executes an INSERT INTO ... SELECT ... query to insert rows into the dataset table.
@@ -300,11 +331,12 @@ export async function getDatasetCounts(): Promise<DatasetCountInfo[]> {
  * to prepend a constant `dataset_name` column.
  *
  * @param params - The dataset query parameters.
- * @returns A promise that resolves when the insert query completes.
+ * @returns The number of rows inserted.
  */
 export async function insertRowsForDataset(
   params: DatasetQueryParams,
-): Promise<void> {
+): Promise<number> {
+  // Validate input parameters
   const validatedParams = DatasetQueryParamsSchema.safeParse(params);
   if (!validatedParams.success) {
     throw new Error(
@@ -316,6 +348,7 @@ export async function insertRowsForDataset(
   }
   validateDatasetName(validatedParams.data.dataset_name);
 
+  // Determine the destination table based on the inference type
   const destinationTable =
     validatedParams.data.inferenceType === "chat"
       ? "ChatInferenceDatapoint"
@@ -323,33 +356,49 @@ export async function insertRowsForDataset(
 
   // Build the SELECT query from the source table
   const { query: sourceQuery, query_params } = buildDatasetSelectQuery(params);
+  query_params.datapoint_table = destinationTable;
+  query_params.dataset_name = validatedParams.data.dataset_name;
 
   // Wrap the select query to include all required columns with their defaults
   const wrappedQuery = `
-    INSERT INTO ${destinationTable}
+    INSERT INTO {datapoint_table:Identifier}
     SELECT
-      '${validatedParams.data.dataset_name}' as dataset_name,
-      function_name,
+      {dataset_name:String} as dataset_name,
+      subquery.function_name as function_name,
       generateUUIDv7() as id,
-      episode_id,
-      input,
-      output,
-      ${validatedParams.data.inferenceType === "chat" ? "tool_params" : "output_schema"},
-      tags,
-      auxiliary,
+      subquery.episode_id as episode_id,
+      subquery.input as input,
+      subquery.output as output,
+      ${validatedParams.data.inferenceType === "chat" ? "subquery.tool_params" : "subquery.output_schema"},
+      subquery.tags as tags,
+      subquery.auxiliary as auxiliary,
       false as is_deleted,
       now64() as updated_at,
-      null as staled_at
+      null as staled_at,
+      subquery.id as source_inference_id
     FROM (
       ${sourceQuery}
-    ) AS t
-  `;
+    ) AS subquery
+    LEFT JOIN {datapoint_table:Identifier} as existing FINAL
+      ON {dataset_name:String} = existing.dataset_name
+         AND subquery.function_name = existing.function_name
+         AND subquery.id = existing.source_inference_id
+         AND existing.staled_at IS NULL
+      WHERE existing.source_inference_id IS NULL
+    `;
 
   // Execute the INSERT query
-  await clickhouseClient.query({
+  const resultSet = await clickhouseClient.query({
     query: wrappedQuery,
     query_params,
   });
+  const responseHeaders = resultSet.response_headers;
+  const summary = responseHeaders["x-clickhouse-summary"] as string;
+  const parsedSummary = JSON.parse(summary);
+  // NOTE: it seems like recent versions of clickhouse (later than 24.12)
+  // don't return the written_rows if it is 0 so we handle that case here
+  const writtenRows = Number(parsedSummary.written_rows) || 0;
+  return writtenRows;
 }
 
 export async function getDatasetRows(
@@ -417,6 +466,7 @@ export async function getDatapoint(
       tool_params,
       tags,
       auxiliary,
+      source_inference_id,
       formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at,
       formatDateTime(staled_at, '%Y-%m-%dT%H:%i:%SZ') as staled_at
     FROM ChatInferenceDatapoint FINAL
@@ -438,6 +488,7 @@ export async function getDatapoint(
       output_schema,
       tags,
       auxiliary,
+      source_inference_id,
       formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at,
       formatDateTime(staled_at, '%Y-%m-%dT%H:%i:%SZ') AS staled_at
     FROM JsonInferenceDatapoint FINAL
@@ -476,17 +527,19 @@ export async function getDatapoint(
     );
   }
   const row = DatapointRowSchema.parse(allResults[0]);
-  const parsedRow = parseDatapointRow(row);
+  const parsedRow = await parseDatapointRow(row);
 
   return parsedRow;
 }
 
-function parseDatapointRow(row: DatapointRow): ParsedDatasetRow {
+async function parseDatapointRow(row: DatapointRow): Promise<ParsedDatasetRow> {
+  const parsedInput = inputSchema.parse(JSON.parse(row.input));
+  const resolvedInput = await resolveInput(parsedInput);
   if ("tool_params" in row) {
     // Chat inference row
     return {
       ...row,
-      input: inputSchema.parse(JSON.parse(row.input)),
+      input: resolvedInput,
       output: row.output
         ? z.array(contentBlockOutputSchema).parse(JSON.parse(row.output))
         : undefined,
@@ -502,7 +555,7 @@ function parseDatapointRow(row: DatapointRow): ParsedDatasetRow {
     // JSON inference row
     return {
       ...row,
-      input: inputSchema.parse(JSON.parse(row.input)),
+      input: resolvedInput,
       output: row.output
         ? jsonInferenceOutputSchema.parse(JSON.parse(row.output))
         : undefined,
@@ -518,28 +571,60 @@ export async function staleDatapoint(
   datapoint_id: string,
   function_type: "chat" | "json",
 ): Promise<void> {
+  // Use the function type to determine which table to update
   const table =
     function_type === "chat"
       ? "ChatInferenceDatapoint"
       : "JsonInferenceDatapoint";
+
   const query = `
     INSERT INTO {table:Identifier}
+    (
+      dataset_name,
+      function_name,
+      id,
+      episode_id,
+      input,
+      output,
+      ${function_type === "chat" ? "tool_params" : "output_schema"},
+      tags,
+      auxiliary,
+      is_deleted,
+      source_inference_id,
+      staled_at,
+      updated_at
+    )
     SELECT
-      * EXCEPT (staled_at, updated_at),
+      dataset_name,
+      function_name,
+      id,
+      episode_id,
+      input,
+      output,
+      ${function_type === "chat" ? "tool_params" : "output_schema"},
+      tags,
+      auxiliary,
+      is_deleted,
+      source_inference_id,
       now64() as staled_at,
       now64() as updated_at
     FROM {table:Identifier} FINAL
-    WHERE dataset_name = {dataset_name:String}
-      AND id = {datapoint_id:String}
+    WHERE dataset_name = {dataset_name:String} AND id = {datapoint_id:String}
   `;
-  clickhouseClient.query({
-    query,
-    query_params: {
-      table,
-      dataset_name,
-      datapoint_id,
-    },
-  });
+
+  try {
+    await clickhouseClient.query({
+      query,
+      query_params: {
+        table,
+        dataset_name,
+        datapoint_id,
+      },
+    });
+  } catch (error) {
+    console.error(`Error staling datapoint ${datapoint_id}:`, error);
+    throw error;
+  }
 }
 
 export async function insertDatapoint(
@@ -568,6 +653,7 @@ export async function insertDatapoint(
       ...("output_schema" in datapoint
         ? { output_schema: datapoint.output_schema }
         : {}),
+      source_inference_id: datapoint.source_inference_id,
     },
   ];
 

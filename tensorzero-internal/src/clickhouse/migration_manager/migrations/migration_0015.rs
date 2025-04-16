@@ -41,14 +41,20 @@ impl Migration for Migration0015<'_> {
             ALTER TABLE ModelInference
             MODIFY COLUMN input_tokens Nullable(UInt32)
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous(query.to_string(), None)
+            .await?;
 
         // Alter the `output_tokens` column of `ModelInference` to be a nullable column
         let query = r#"
             ALTER TABLE ModelInference
             MODIFY COLUMN output_tokens Nullable(UInt32)
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous(query.to_string(), None)
+            .await?;
 
         Ok(())
     }

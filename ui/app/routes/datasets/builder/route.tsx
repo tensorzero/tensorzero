@@ -1,8 +1,7 @@
 import { data, redirect } from "react-router";
-import { useLoaderData } from "react-router";
 import { DatasetBuilderForm } from "./DatasetBuilderForm";
-import type { DatasetCountInfo } from "~/utils/clickhouse/datasets";
 import {
+  countRowsForDataset,
   getDatasetCounts,
   insertRowsForDataset,
 } from "~/utils/clickhouse/datasets.server";
@@ -13,6 +12,7 @@ import {
   PageLayout,
   SectionLayout,
 } from "~/components/layout/PageLayout";
+import type { Route } from "./+types/route";
 
 export const meta = () => {
   return [
@@ -40,19 +40,23 @@ export async function action({ request }: ActionFunctionArgs) {
   try {
     const queryParams = serializedFormDataToDatasetQueryParams(jsonData);
 
-    await insertRowsForDataset(queryParams);
+    const [writtenRows, totalRows] = await Promise.all([
+      insertRowsForDataset(queryParams),
+      countRowsForDataset(queryParams),
+    ]);
+    const skippedRows = totalRows - writtenRows;
 
-    return redirect(`/datasets/${queryParams.dataset_name}`);
+    return redirect(
+      `/datasets/${queryParams.dataset_name}?rowsAdded=${writtenRows}&rowsSkipped=${skippedRows}`,
+    );
   } catch (error) {
     console.error("Error creating dataset:", error);
     return data({ errors: { message: `${error}` } }, { status: 500 });
   }
 }
 
-export default function DatasetBuilder() {
-  const { dataset_counts } = useLoaderData() as {
-    dataset_counts: DatasetCountInfo[];
-  };
+export default function DatasetBuilder({ loaderData }: Route.ComponentProps) {
+  const { dataset_counts } = loaderData;
 
   return (
     <PageLayout>

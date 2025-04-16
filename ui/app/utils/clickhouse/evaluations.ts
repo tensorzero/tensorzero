@@ -1,20 +1,34 @@
 import { z } from "zod";
-import { contentBlockOutputSchema, jsonInferenceOutputSchema } from "./common";
-import { inputSchema } from "./common";
+import {
+  contentBlockOutputSchema,
+  jsonInferenceOutputSchema,
+  resolvedInputSchema,
+} from "./common";
 
 export const EvaluationRunInfoSchema = z.object({
-  eval_run_id: z.string(),
+  evaluation_run_id: z.string(),
   variant_name: z.string(),
+  most_recent_inference_date: z.string().datetime(),
 });
 
 export type EvaluationRunInfo = z.infer<typeof EvaluationRunInfoSchema>;
 
+export const EvaluationRunSearchResultSchema = z.object({
+  evaluation_run_id: z.string(),
+  variant_name: z.string(),
+});
+
+export type EvaluationRunSearchResult = z.infer<
+  typeof EvaluationRunSearchResultSchema
+>;
+
 export const EvaluationResultSchema = z.object({
   datapoint_id: z.string().uuid(),
-  eval_run_id: z.string().uuid(),
+  evaluation_run_id: z.string().uuid(),
   input: z.string(),
   generated_output: z.string(),
   reference_output: z.string(),
+  dataset_name: z.string(),
   metric_name: z.string(),
   metric_value: z.string(),
 });
@@ -31,10 +45,11 @@ export type EvaluationResultWithVariant = z.infer<
 
 export const JsonEvaluationResultSchema = z.object({
   datapoint_id: z.string().uuid(),
-  eval_run_id: z.string().uuid(),
-  input: inputSchema,
+  evaluation_run_id: z.string().uuid(),
+  input: resolvedInputSchema,
   generated_output: jsonInferenceOutputSchema,
   reference_output: jsonInferenceOutputSchema,
+  dataset_name: z.string(),
   metric_name: z.string(),
   metric_value: z.string(),
 });
@@ -43,10 +58,11 @@ export type JsonEvaluationResult = z.infer<typeof JsonEvaluationResultSchema>;
 
 export const ChatEvaluationResultSchema = z.object({
   datapoint_id: z.string().uuid(),
-  eval_run_id: z.string().uuid(),
-  input: inputSchema,
+  evaluation_run_id: z.string().uuid(),
+  input: resolvedInputSchema,
   generated_output: z.array(contentBlockOutputSchema),
   reference_output: z.array(contentBlockOutputSchema),
+  dataset_name: z.string(),
   metric_name: z.string(),
   metric_value: z.string(),
 });
@@ -89,77 +105,8 @@ export type ParsedEvaluationResultWithVariant = z.infer<
   typeof ParsedEvaluationResultWithVariantSchema
 >;
 
-export function parseEvaluationResult(
-  result: EvaluationResult,
-): ParsedEvaluationResult {
-  try {
-    // Parse the input field
-    const parsedInput = inputSchema.parse(JSON.parse(result.input));
-
-    // Parse the outputs
-    const generatedOutput = JSON.parse(result.generated_output);
-    const referenceOutput = JSON.parse(result.reference_output);
-
-    // Determine if this is a chat result by checking if generated_output is an array
-    if (Array.isArray(generatedOutput)) {
-      // This is likely a chat evaluation result
-      return ChatEvaluationResultSchema.parse({
-        ...result,
-        input: parsedInput,
-        generated_output: generatedOutput,
-        reference_output: referenceOutput,
-      });
-    } else {
-      // This is likely a JSON evaluation result
-      return JsonEvaluationResultSchema.parse({
-        ...result,
-        input: parsedInput,
-        generated_output: generatedOutput,
-        reference_output: referenceOutput,
-      });
-    }
-  } catch (error) {
-    console.warn(
-      "Failed to parse evaluation result using structure-based detection:",
-      error,
-    );
-    // If structure-based detection fails, try the original parsing as fallback
-    return ParsedEvaluationResultSchema.parse(result);
-  }
-}
-
-export function parseEvaluationResultWithVariant(
-  result: EvaluationResultWithVariant,
-): ParsedEvaluationResultWithVariant {
-  try {
-    // Parse using the same logic as parseEvaluationResult
-    const parsedResult = parseEvaluationResult(result);
-
-    // Add the variant_name to the parsed result
-    const parsedResultWithVariant = {
-      ...parsedResult,
-      variant_name: result.variant_name,
-    };
-    return ParsedEvaluationResultWithVariantSchema.parse(
-      parsedResultWithVariant,
-    );
-  } catch (error) {
-    console.warn(
-      "Failed to parse evaluation result with variant using structure-based detection:",
-      error,
-    );
-    // Fallback to direct parsing if needed
-    return ParsedEvaluationResultWithVariantSchema.parse({
-      ...result,
-      input: result.input,
-      generated_output: result.generated_output,
-      reference_output: result.reference_output,
-    });
-  }
-}
-
 export const EvaluationStatisticsSchema = z.object({
-  eval_run_id: z.string(),
+  evaluation_run_id: z.string(),
   metric_name: z.string(),
   datapoint_count: z.number(),
   mean_metric: z.number(),
@@ -169,10 +116,10 @@ export const EvaluationStatisticsSchema = z.object({
 export type EvaluationStatistics = z.infer<typeof EvaluationStatisticsSchema>;
 
 export function getEvaluatorMetricName(
-  evalName: string,
+  evaluationName: string,
   evaluatorName: string,
 ): string {
-  return `tensorzero::eval_name::${evalName}::evaluator_name::${evaluatorName}`;
+  return `tensorzero::evaluation_name::${evaluationName}::evaluator_name::${evaluatorName}`;
 }
 
 function getEvaluatorNameFromMetricName(metricName: string): string {
@@ -180,26 +127,16 @@ function getEvaluatorNameFromMetricName(metricName: string): string {
   return parts[parts.length - 1];
 }
 
-export const evalInfoResultSchema = z.object({
-  eval_run_id: z.string().uuid(),
-  eval_name: z.string(),
+export const evaluationInfoResultSchema = z.object({
+  evaluation_run_id: z.string().uuid(),
+  evaluation_name: z.string(),
+  dataset_name: z.string(),
   function_name: z.string(),
   variant_name: z.string(),
   last_inference_timestamp: z.string().datetime(),
 });
 
-export type EvalInfoResult = z.infer<typeof evalInfoResultSchema>;
-
-export const EvalRunInfoSchema = z.object({
-  eval_run_id: z.string().uuid(),
-  eval_name: z.string(),
-  function_name: z.string(),
-  variant_name: z.string(),
-  last_inference_timestamp: z.string().datetime(),
-  dataset: z.string(),
-});
-
-export type EvalRunInfo = z.infer<typeof EvalRunInfoSchema>;
+export type EvaluationInfoResult = z.infer<typeof evaluationInfoResultSchema>;
 
 // Define a type for consolidated metrics
 export type ConsolidatedMetric = {
@@ -216,15 +153,15 @@ export type ConsolidatedEvaluationResult = Omit<
   metrics: ConsolidatedMetric[];
 };
 
-export const consolidate_eval_results = (
-  eval_results: ParsedEvaluationResultWithVariant[],
+export const consolidate_evaluation_results = (
+  evaluation_results: ParsedEvaluationResultWithVariant[],
 ): ConsolidatedEvaluationResult[] => {
-  // Create a map to store results by datapoint_id and eval_run_id
+  // Create a map to store results by datapoint_id and evaluation_run_id
   const resultMap = new Map<string, ConsolidatedEvaluationResult>();
 
   // Process each evaluation result
-  for (const result of eval_results) {
-    const key = `${result.datapoint_id}:${result.eval_run_id}:${result.variant_name}`;
+  for (const result of evaluation_results) {
+    const key = `${result.datapoint_id}:${result.evaluation_run_id}:${result.variant_name}`;
 
     if (!resultMap.has(key)) {
       // Create a new consolidated result without metric_name and metric_value

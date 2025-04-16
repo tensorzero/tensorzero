@@ -12,7 +12,7 @@ use tokio::time::Instant;
 
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
-use crate::error::{Error, ErrorDetails};
+use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
@@ -34,7 +34,7 @@ use super::anthropic::{
     prefill_json_chunk_response, prefill_json_response, AnthropicMessageDelta, AnthropicStopReason,
 };
 use super::gcp_vertex_gemini::{default_api_key_location, GCPVertexCredentials};
-use super::helpers::{inject_extra_body, peek_first_chunk};
+use super::helpers::{inject_extra_request_data, peek_first_chunk};
 use super::openai::convert_stream_error;
 
 /// Implements a subset of the GCP Vertex Gemini API as documented [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/generateContent) for non-streaming
@@ -98,10 +98,13 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
         let mut request_body = serde_json::to_value(GCPVertexAnthropicRequestBody::new(request)?)
             .map_err(|e| {
             Error::new(ErrorDetails::Serialization {
-                message: format!("Error serializing GCP Vertex Anthropic request: {e}"),
+                message: format!(
+                    "Error serializing GCP Vertex Anthropic request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
             })
         })?;
-        inject_extra_body(
+        let headers = inject_extra_request_data(
             &request.extra_body,
             model_provider,
             model_name,
@@ -115,12 +118,13 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
             .post(&self.request_url)
             .bearer_auth(api_key.expose_secret())
             .json(&request_body)
+            .headers(headers)
             .send()
             .await
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
-                    message: format!("Error sending request: {e}"),
                     status_code: e.status(),
+                    message: format!("Error sending request: {}", DisplayOrDebugGateway::new(e)),
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                     raw_response: None,
@@ -132,7 +136,10 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
         if res.status().is_success() {
             let raw_response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing text response: {e}"),
+                    message: format!(
+                        "Error parsing text response: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                     raw_response: None,
@@ -187,10 +194,13 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
         let mut request_body = serde_json::to_value(GCPVertexAnthropicRequestBody::new(request)?)
             .map_err(|e| {
             Error::new(ErrorDetails::Serialization {
-                message: format!("Error serializing GCP Vertex Anthropic request: {e}"),
+                message: format!(
+                    "Error serializing GCP Vertex Anthropic request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
             })
         })?;
-        inject_extra_body(
+        let headers = inject_extra_request_data(
             &request.extra_body,
             model_provider,
             model_name,
@@ -198,7 +208,10 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
         )?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
-                message: format!("Error serializing request body as JSON: {e}"),
+                message: format!(
+                    "Error serializing request body as JSON: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
             })
         })?;
         let api_key = self
@@ -209,11 +222,12 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
             .post(&self.streaming_request_url)
             .bearer_auth(api_key.expose_secret())
             .header("content-type", "application/json")
+            .headers(headers)
             .json(&request_body)
             .eventsource()
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
-                    message: format!("Error sending request: {e}"),
+                    message: format!("Error sending request: {}", DisplayOrDebugGateway::new(e)),
                     status_code: None,
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
@@ -413,7 +427,10 @@ impl<'a> TryFrom<&'a ContentBlock>
                 let input: Value = serde_json::from_str(&tool_call.arguments).map_err(|e| {
                     Error::new(ErrorDetails::InferenceClient {
                         status_code: Some(StatusCode::BAD_REQUEST),
-                        message: format!("Error parsing tool call arguments as JSON Value: {e}"),
+                        message: format!(
+                            "Error parsing tool call arguments as JSON Value: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
                         provider_type: PROVIDER_TYPE.to_string(),
                         raw_request: None,
                         raw_response: Some(tool_call.arguments.clone()),
@@ -691,7 +708,10 @@ impl TryFrom<GCPVertexAnthropicContentBlock> for ContentBlockOutput {
                     name,
                     arguments: serde_json::to_string(&input).map_err(|e| {
                         Error::new(ErrorDetails::Serialization {
-                            message: format!("Error parsing input for tool call: {e}"),
+                            message: format!(
+                                "Error parsing input for tool call: {}",
+                                DisplayOrDebugGateway::new(e)
+                            ),
                         })
                     })?,
                 }))
@@ -760,7 +780,10 @@ impl<'a> TryFrom<GCPVertexAnthropicResponseWithMetadata<'a>> for ProviderInferen
             .collect::<Result<Vec<_>, _>>()?;
         let raw_request = serde_json::to_string(&request).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
-                message: format!("Error serializing request to GCP Vertex Anthropic: {e}"),
+                message: format!(
+                    "Error serializing request to GCP Vertex Anthropic: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
             })
         })?;
 
@@ -881,7 +904,10 @@ fn anthropic_to_tensorzero_stream_message(
 ) -> Result<Option<ProviderInferenceResponseChunk>, Error> {
     let raw_message = serde_json::to_string(&message).map_err(|e| {
         Error::new(ErrorDetails::Serialization {
-            message: format!("Error parsing response from Anthropic: {e}"),
+            message: format!(
+                "Error parsing response from Anthropic: {}",
+                DisplayOrDebugGateway::new(e)
+            ),
         })
     })?;
     match message {

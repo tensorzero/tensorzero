@@ -1,0 +1,298 @@
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                   MODELS                                   │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[models."gpt-4o-mini-2024-07-18"]
+routing = ["openai"]
+
+[models."gpt-4o-mini-2024-07-18".providers.openai]
+type = "openai"
+model_name = "gpt-4o-mini-2024-07-18"
+
+[models."llama-3.1-8b-instruct"]
+routing = ["fireworks"]
+
+[models."llama-3.1-8b-instruct".providers.fireworks]
+type = "fireworks"
+model_name = "accounts/fireworks/models/llama-v3p1-8b-instruct"
+
+[embedding_models.text-embedding-3-small]
+routing = ["openai"]
+
+[embedding_models.text-embedding-3-small.providers.openai]
+type = "openai"
+model_name = "text-embedding-3-small"
+
+[models."ft:gpt-4o-mini-2024-07-18:tensorzero::ALHEaw1j"]
+routing = ["openai"]
+
+[models."ft:gpt-4o-mini-2024-07-18:tensorzero::ALHEaw1j".providers.openai]
+type = "openai"
+model_name = "ft:gpt-4o-mini-2024-07-18:tensorzero::ALHEaw1j"
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                 FUNCTIONS                                  │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[functions.extract_entities]
+type = "json"
+output_schema = "functions/extract_entities/output_schema.json"
+
+[functions.extract_entities.variants.gpt4o_mini_initial_prompt]
+type = "chat_completion"
+model = "gpt-4o-mini-2024-07-18"
+system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
+
+[functions.extract_entities.variants.gpt4o_initial_prompt]
+type = "chat_completion"
+model = "openai::gpt-4o"
+system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
+
+[functions.extract_entities.variants.llama_8b_initial_prompt]
+type = "chat_completion"
+model = "llama-3.1-8b-instruct"
+system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
+
+[functions.extract_entities.variants.baseline]
+type = "chat_completion"
+model = "gpt-4o-mini-2024-07-18"
+system_template = "functions/extract_entities/baseline/system_template.minijinja"
+json_mode = "strict"
+
+[functions.extract_entities.variants.dicl]
+type = "experimental_dynamic_in_context_learning"
+embedding_model = "text-embedding-3-small"
+model = "gpt-4o-mini-2024-07-18"
+k = 10
+system_instructions = "functions/extract_entities/baseline/system_template.minijinja"
+json_mode = "strict"
+weight = 1
+
+[functions.extract_entities.variants.turbo]
+type = "chat_completion"
+model = "ft:gpt-4o-mini-2024-07-18:tensorzero::ALHEaw1j"
+system_template = "functions/extract_entities/baseline/system_template.minijinja"
+
+[functions.write_haiku]
+type = "chat"
+user_schema = "functions/write_haiku/user_schema.json"
+
+[functions.write_haiku.variants.initial_prompt_gpt4o_mini]
+type = "chat_completion"
+model = "gpt-4o-mini-2024-07-18"
+system_template = "functions/write_haiku/initial_prompt/system_template.minijinja"
+user_template = "functions/write_haiku/initial_prompt/user_template.minijinja"
+
+[functions.write_haiku.variants.initial_prompt_haiku_3_5]
+type = "chat_completion"
+model = "anthropic::claude-3-5-haiku-20241022"
+system_template = "functions/write_haiku/initial_prompt/system_template.minijinja"
+user_template = "functions/write_haiku/initial_prompt/user_template.minijinja"
+
+[functions.write_haiku.variants.better_prompt_haiku_3_5]
+type = "chat_completion"
+model = "anthropic::claude-3-5-haiku-20241022"
+system_template = "functions/write_haiku/better_prompt/system_template.minijinja"
+user_template = "functions/write_haiku/better_prompt/user_template.minijinja"
+
+[functions.generate_secret]
+type = "json"
+output_schema = "functions/generate_secret/output_schema.json"
+
+[functions.generate_secret.variants.baseline]
+weight = 1
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"
+system_template = "functions/generate_secret/baseline/system_template.minijinja"
+json_mode = "strict"
+# for creativity
+temperature = 1.5
+
+[functions.ask_question]
+type = "json"
+output_schema = "functions/ask_question/output_schema.json"
+system_schema = "functions/ask_question/system_schema.json"
+
+[functions.ask_question.variants.baseline]
+type = "chat_completion"
+weight = 1
+model = "openai::gpt-4o-mini-2024-07-18"
+system_template = "functions/ask_question/baseline/system_template.minijinja"
+
+[functions.answer_question]
+type = "chat"
+system_schema = "functions/answer_question/system_schema.json"
+
+[functions.answer_question.variants.baseline]
+type = "chat_completion"
+weight = 1
+model = "openai::gpt-4o-mini-2024-07-18"
+system_template = "functions/answer_question/baseline/system_template.minijinja"
+# for honesty
+temperature = 0.5
+
+[functions.unleash_kraken]
+type = "chat"
+
+[functions.unleash_kraken.variants.baseline]
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"
+
+[functions.image_judger]
+type = "chat"
+
+[functions.image_judger.variants.honest_answer]
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                  METRICS                                   │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[metrics.exact_match]
+type = "boolean"
+level = "inference"
+optimize = "max"
+
+[metrics.exact_match_episode]
+type = "boolean"
+level = "episode"
+optimize = "max"
+
+[metrics.jaccard_similarity]
+type = "float"
+level = "inference"
+optimize = "max"
+
+[metrics.jaccard_similarity_episode]
+type = "float"
+level = "episode"
+optimize = "max"
+
+[metrics.haiku_score]
+type = "boolean"
+level = "inference"
+optimize = "max"
+
+[metrics.haiku_score_episode]
+type = "boolean"
+level = "episode"
+optimize = "max"
+
+[metrics.haiku_rating]
+type = "float"
+level = "inference"
+optimize = "max"
+
+[metrics.haiku_rating_episode]
+type = "float"
+level = "episode"
+optimize = "max"
+
+[metrics.solved]
+type = "boolean"
+level = "episode"
+optimize = "max"
+
+[metrics.num_questions]
+type = "float"
+level = "episode"
+optimize = "min"
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                  EVALUATIONS                               │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[evaluations.entity_extraction]
+type = "static"
+function_name = "extract_entities"
+dataset_name = "foo"
+
+[evaluations.entity_extraction.evaluators.exact_match]
+type = "exact_match"
+cutoff = 0.6
+
+[evaluations.entity_extraction.evaluators.count_sports]
+type = "llm_judge"
+output_type = "float"
+optimize = "min"
+include = { reference_output = false }
+cutoff = 0.5
+
+[evaluations.entity_extraction.evaluators.count_sports.variants.mini]
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"
+active = true
+system_instructions = "evaluations/entity_extraction/count_sports/system_instructions.txt"
+json_mode = "strict"
+temperature = 0.1
+
+[evaluations.haiku]
+type = "static"
+function_name = "write_haiku"
+dataset_name = "foo"
+
+[evaluations.haiku.evaluators.exact_match]
+type = "exact_match"
+
+[evaluations.haiku.evaluators.topic_starts_with_f]
+type = "llm_judge"
+output_type = "boolean"
+optimize = "min"
+include = { reference_output = false }
+cutoff = 0.5
+
+[evaluations.haiku.evaluators.topic_starts_with_f.variants.mini]
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"
+active = true
+system_instructions = "evaluations/haiku/topic_starts_with_f/system_instructions.txt"
+json_mode = "strict"
+temperature = 0
+
+[evaluations.images]
+type = "static"
+function_name = "image_judger"
+
+[evaluations.images.evaluators.exact_match]
+type = "exact_match"
+
+[evaluations.images.evaluators.honest_answer]
+type = "llm_judge"
+input_format = "messages"
+output_type = "boolean"
+optimize = "max"
+include = { reference_output = false }
+cutoff = 0.2
+
+[evaluations.images.evaluators.honest_answer.variants.mini]
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"
+system_instructions = "evaluations/images/honest_answer/system_instructions.txt"
+temperature = 0
+json_mode = "strict"
+
+[evaluations.images.evaluators.matches_reference]
+type = "llm_judge"
+input_format = "messages"
+output_type = "boolean"
+optimize = "max"
+include = { reference_output = true }
+cutoff = 0.5
+
+[evaluations.images.evaluators.matches_reference.variants.mini]
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"
+system_instructions = "evaluations/images/matches_reference/system_instructions.txt"
+temperature = 0
+json_mode = "strict"
+
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                               OBJECT_STORAGE                               │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[object_storage]
+type = "s3_compatible"
+bucket_name = "tensorzero-e2e-test-images"
+region = "us-east-1"

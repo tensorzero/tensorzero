@@ -1,17 +1,40 @@
+// This project is used only for testing, so it's fine if it panics
+#![allow(clippy::unwrap_used, clippy::panic, clippy::expect_used)]
+
 use async_stream::try_stream;
 use axum::{
     body::Body,
-    extract::Json,
-    response::sse::{Event, Sse},
-    response::{IntoResponse, Response},
+    extract::{Json, Multipart, Path},
+    response::{
+        sse::{Event, Sse},
+        IntoResponse, Response,
+    },
 };
 use futures::Stream;
 use mimalloc::MiMalloc;
+use rand::distr::{Alphanumeric, SampleString};
+use serde::Deserialize;
 use serde_json::json;
-use std::net::SocketAddr;
+use std::{
+    collections::HashMap,
+    net::SocketAddr,
+    sync::{Mutex, OnceLock},
+    time::Duration,
+};
+use tokio::signal;
+use tower_http::trace::TraceLayer;
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
+
+#[derive(Clone)]
+struct FineTuningJob {
+    num_polls: usize,
+    val: serde_json::Value,
+    finish_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+static OPENAI_FINE_TUNING_JOBS: OnceLock<Mutex<HashMap<String, FineTuningJob>>> = OnceLock::new();
 
 /// Get the socket address for the mock inference provider from the CLI arguments.
 /// Defaults to 0.0.0.0:3030 if no address is provided.
@@ -24,14 +47,56 @@ fn get_listener_address() -> SocketAddr {
     }
 }
 
+pub async fn shutdown_signal() {
+    let ctrl_c = async {
+        signal::ctrl_c()
+            .await
+            .expect("Failed to install Ctrl+C handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        signal::unix::signal(signal::unix::SignalKind::terminate())
+            .expect("Failed to install SIGTERM handler")
+            .recv()
+            .await;
+    };
+
+    #[cfg(unix)]
+    let hangup = async {
+        signal::unix::signal(signal::unix::SignalKind::hangup())
+            .expect("Failed to install SIGHUP handler")
+            .recv()
+            .await;
+    };
+
+    tokio::select! {
+        _ = ctrl_c => {
+            tracing::info!("Received Ctrl+C signal");
+        }
+        _ = terminate => {
+            tracing::info!("Received SIGTERM signal");
+        }
+        _ = hangup => {
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            tracing::info!("Received SIGHUP signal");
+        }
+    };
+}
+
 #[tokio::main]
 async fn main() {
+    tracing_subscriber::fmt::init();
     let listener_address = get_listener_address();
     let listener = tokio::net::TcpListener::bind(listener_address)
         .await
         .unwrap_or_else(|e| panic!("Failed to bind to {listener_address}: {e}"));
+    tracing::info!("Listening on on {}", listener.local_addr().unwrap());
 
-    axum::serve(listener, make_router()).await.unwrap();
+    axum::serve(listener, make_router())
+        .with_graceful_shutdown(shutdown_signal())
+        .await
+        .unwrap();
 }
 
 fn make_router() -> axum::Router {
@@ -41,10 +106,127 @@ fn make_router() -> axum::Router {
             axum::routing::post(completions_handler),
         )
         .route(
+            "/openai/fine_tuning/jobs",
+            axum::routing::post(create_openai_fine_tuning_job),
+        )
+        .route(
+            "/openai/fine_tuning/jobs/{job_id}",
+            axum::routing::get(get_openai_fine_tuning_job),
+        )
+        .route("/openai/files", axum::routing::post(create_openai_file))
+        .route(
             "/azure/openai/deployments/{deployment}/chat/completions",
             axum::routing::post(completions_handler),
         )
         .route("/status", axum::routing::get(status_handler))
+        .layer(TraceLayer::new_for_http())
+}
+
+#[derive(Deserialize)]
+struct FineTuningGetParams {
+    job_id: String,
+}
+
+const SHOW_PROGRESS_AT: usize = 1;
+
+async fn get_openai_fine_tuning_job(
+    Path(params): Path<FineTuningGetParams>,
+) -> Json<serde_json::Value> {
+    let job_id = params.job_id.clone();
+    let mut fine_tuning_jobs = OPENAI_FINE_TUNING_JOBS
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap();
+    let job = fine_tuning_jobs.get_mut(&job_id);
+    if let Some(job) = job {
+        job.num_polls += 1;
+        if job.num_polls == SHOW_PROGRESS_AT {
+            let finish_at = chrono::Utc::now() + chrono::Duration::seconds(5);
+            job.finish_at = Some(finish_at);
+            job.val["estimated_finish"] = finish_at.timestamp().into();
+        }
+        if let Some(finish_at) = job.finish_at {
+            if chrono::Utc::now() >= finish_at {
+                job.val["status"] = "succeeded".into();
+                job.val["fine_tuned_model"] = "mock-inference-finetune-1234".into();
+            }
+        }
+        Json(serde_json::to_value(&job.val).unwrap())
+    } else {
+        Json(json!({
+            "error": {
+                "message": format!("Could not find fine tune: {job_id}"),
+                "type": "invalid_request_error",
+                "param": "fine_tune_id",
+                "code": "fine_tune_not_found"
+            }
+        }))
+    }
+}
+
+async fn create_openai_fine_tuning_job(
+    Json(params): Json<serde_json::Value>,
+) -> Json<serde_json::Value> {
+    let mut fine_tuning_jobs = OPENAI_FINE_TUNING_JOBS
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap();
+
+    let job_id =
+        "mock-inference-finetune-".to_string() + &Alphanumeric.sample_string(&mut rand::rng(), 10);
+    let job = FineTuningJob {
+        num_polls: 0,
+        finish_at: None,
+        val: serde_json::json!({
+            "object": "fine_tuning.job",
+            "id": job_id,
+            "model": params["model"],
+            "created_at": chrono::Utc::now().timestamp(),
+            "fine_tuned_model": null,
+            "organization_id": "my-fake-org",
+            "result_files": [],
+            "status": "queued",
+            "validation_file": params.get("validation_file").unwrap_or(&serde_json::Value::Null),
+            "training_file": params.get("training_file"),
+            "method": {
+                "type": "supervised",
+                "hyperparameters": {
+                    "batch_size": "auto",
+                    "learning_rate_multiplier": "auto",
+                    "n_epochs": "auto",
+                  }
+            }
+        }),
+    };
+    fine_tuning_jobs.insert(job_id.clone(), job.clone());
+    Json(job.val.clone())
+}
+
+async fn create_openai_file(mut form: Multipart) -> Json<serde_json::Value> {
+    let file_id =
+        "mock-inference-file-".to_string() + &Alphanumeric.sample_string(&mut rand::rng(), 10);
+
+    let mut file_len = None;
+    let mut filename = None;
+    let mut purpose = None;
+    while let Some(field) = form.next_field().await.unwrap() {
+        if field.name() == Some("file") {
+            file_len = Some(field.bytes().await.unwrap().len());
+        } else if field.name() == Some("filename") {
+            filename = Some(field.text().await.unwrap());
+        } else if field.name() == Some("purpose") {
+            purpose = Some(field.text().await.unwrap());
+        }
+    }
+
+    Json(json!({
+        "id": file_id,
+        "object": "file",
+        "bytes": file_len,
+        "created_at": chrono::Utc::now().timestamp(),
+        "filename": filename,
+        "purpose": purpose,
+    }))
 }
 
 async fn completions_handler(Json(params): Json<serde_json::Value>) -> Response<Body> {

@@ -9,6 +9,7 @@ use crate::config_parser::LoadableConfig;
 use crate::config_parser::PathWithContents;
 use crate::embeddings::{EmbeddingModelTable, EmbeddingResponseWithMetadata};
 use crate::endpoints::inference::InferenceModels;
+use crate::inference::types::extra_body::ExtraHeadersConfig;
 use crate::inference::types::extra_body::{ExtraBodyConfig, FullExtraBodyConfig};
 use crate::inference::types::ContentBlock;
 use crate::inference::types::ResolvedInput;
@@ -53,6 +54,7 @@ pub struct DiclConfig {
     pub seed: Option<u32>,
     pub json_mode: Option<JsonMode>,
     pub extra_body: Option<ExtraBodyConfig>,
+    pub extra_headers: Option<ExtraHeadersConfig>,
     pub retries: RetryConfig,
 }
 
@@ -76,6 +78,8 @@ pub struct UninitializedDiclConfig {
     pub extra_body: Option<ExtraBodyConfig>,
     #[serde(default)]
     pub retries: RetryConfig,
+    #[serde(default)]
+    pub extra_headers: Option<ExtraHeadersConfig>,
 }
 
 impl Variant for DiclConfig {
@@ -360,7 +364,7 @@ impl DiclConfig {
         // Run the query on the ClickHouse database to find nearest neighbors
         let result = clients
             .clickhouse_connection_info
-            .run_query(query, None)
+            .run_query_synchronous(query, None)
             .await?;
 
         // Parse each line into RawExample (since we will have some serialized JSON strings inside it)
@@ -423,7 +427,9 @@ impl DiclConfig {
                 .into_iter()
                 .map(|x| x.into())
                 .collect(),
-            Example::Json(json_example) => vec![json_example.output.raw.clone().into()],
+            Example::Json(json_example) => {
+                vec![json_example.output.raw.clone().unwrap_or_default().into()]
+            }
         };
 
         // Push the output as an assistant message
@@ -515,6 +521,7 @@ impl DiclConfig {
         }
         let extra_body = FullExtraBodyConfig {
             extra_body: self.extra_body.clone(),
+            variant_extra_headers: self.extra_headers.clone(),
             inference_extra_body: Default::default(),
         };
         prepare_model_inference_request(
@@ -590,6 +597,10 @@ fn parse_raw_examples(
     Ok(examples)
 }
 
+pub fn default_system_instructions() -> String {
+    "You are tasked with learning by induction and then solving a problem below. You will be shown several examples of inputs followed by outputs. Then, in the same format you will be given one last set of inputs. Your job is to use the provided examples to inform your response to the last set of inputs.".to_string()
+}
+
 impl LoadableConfig<DiclConfig> for UninitializedDiclConfig {
     /// Since the system instructions are optional and may be a path to a file,
     /// we need to load them here so that we can use the base_path to resolve
@@ -604,7 +615,7 @@ impl LoadableConfig<DiclConfig> for UninitializedDiclConfig {
                     })
                 })?
             }
-            None => "You are tasked with learning by induction and then solving a problem below. You will be shown several examples of inputs followed by outputs. Then, in the same format you will be given one last set of inputs. Your job is to use the provided examples to inform your response to the last set of inputs.".to_string(),
+            None => default_system_instructions(),
         };
 
         Ok(DiclConfig {
@@ -622,6 +633,7 @@ impl LoadableConfig<DiclConfig> for UninitializedDiclConfig {
             json_mode: self.json_mode,
             retries: self.retries,
             extra_body: self.extra_body,
+            extra_headers: self.extra_headers,
         })
     }
 }
@@ -710,7 +722,7 @@ mod tests {
 
         // Mock Output data for JsonExample
         let json_output = JsonInferenceOutput {
-            raw: "{\"result\": \"success\"}".to_string(),
+            raw: Some("{\"result\": \"success\"}".to_string()),
             parsed: Some(json!({"result": "success"})),
         };
 
@@ -735,7 +747,7 @@ mod tests {
 
         // Second message should be from Assistant with raw JSON output as text
         let expected_content = vec![ContentBlock::Text(Text {
-            text: json_output.raw.clone(),
+            text: json_output.raw.unwrap().clone(),
         })];
 
         assert_eq!(json_messages[1].role, Role::Assistant);
@@ -925,7 +937,7 @@ mod tests {
                 })
                 .unwrap(),
                 output: serde_json::to_string(&JsonInferenceOutput {
-                    raw: "{\"status\": \"success\", \"data\": {\"id\": 1}}".to_string(),
+                    raw: Some("{\"status\": \"success\", \"data\": {\"id\": 1}}".to_string()),
                     parsed: Some(json!({
                         "status": "success",
                         "data": {
@@ -947,7 +959,7 @@ mod tests {
                 })
                 .unwrap(),
                 output: serde_json::to_string(&JsonInferenceOutput {
-                    raw: "{\"result\": [1, 2, 3], \"status\": \"ok\"}".to_string(),
+                    raw: Some("{\"result\": [1, 2, 3], \"status\": \"ok\"}".to_string()),
                     parsed: Some(json!({
                         "result": [1, 2, 3],
                         "status": "ok"

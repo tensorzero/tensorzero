@@ -25,10 +25,10 @@ export function FirstExample({ messages }: FirstExampleProps) {
           <div className="space-y-2">
             {messages.map((message, index) => (
               <div key={index} className="space-y-1">
-                <div className="text-sm text-muted-foreground">
+                <div className="text-muted-foreground text-sm">
                   {message.role}:
                 </div>
-                <code className="block whitespace-pre-wrap rounded-lg bg-muted p-3 text-sm">
+                <code className="bg-muted block rounded-lg p-3 text-sm whitespace-pre-wrap">
                   {message.content}
                 </code>
               </div>

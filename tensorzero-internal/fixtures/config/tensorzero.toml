@@ -171,36 +171,82 @@ description = "Get the weather for a given location"
 parameters = "fixtures/config/tools/get_temperature.json"
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
-# │                                   EVALS                                    │
+# │                                EVALUATIONS                                 │
 # └────────────────────────────────────────────────────────────────────────────┘
-[evals.eval1]
+[evaluations.evaluation1]
+type = "static"
 dataset_name = "dataset1"
 function_name = "generate_draft"
 
-[evals.eval1.evaluators.em_evaluator]
+[evaluations.evaluation1.evaluators.em_evaluator]
 type = "exact_match"
 
-[evals.eval1.evaluators.llm_judge_bool]
+[evaluations.evaluation1.evaluators.llm_judge_bool]
 type = "llm_judge"
 output_type = "boolean"
 optimize = "min"
 
-[evals.eval1.evaluators.llm_judge_bool.variants.anthropic_promptA]
+[evaluations.evaluation1.evaluators.llm_judge_bool.variants.anthropic_promptA]
 type = "chat_completion"
 active = true
 model = "anthropic::claude-3.5-sonnet"
-system_instructions = "fixtures/config/evals/eval1/llm_judge_bool/system_instructions.txt"
+system_instructions = "fixtures/config/evaluations/evaluation1/llm_judge_bool/system_instructions.txt"
 json_mode = "implicit_tool"
 
-[evals.eval1.evaluators.llm_judge_float]
+[evaluations.evaluation1.evaluators.llm_judge_bool.variants.openai_promptA]
+type = "chat_completion"
+model = "openai::gpt-4o-mini"
+system_instructions = "fixtures/config/evaluations/evaluation1/llm_judge_bool/system_instructions.txt"
+json_mode = "strict"
+
+[evaluations.evaluation1.evaluators.llm_judge_bool.variants.llama_promptA]
+type = "chat_completion"
+model = "fireworks::accounts/fireworks/models/llama4-maverick-instruct-basic"
+system_instructions = "fixtures/config/evaluations/evaluation1/llm_judge_bool/system_instructions.txt"
+json_mode = "strict"
+
+[evaluations.evaluation1.evaluators.llm_judge_bool.variants.best_of_3]
+type = "experimental_best_of_n_sampling"
+candidates = ["anthropic_promptA", "openai_promptA", "llama_promptA"]
+
+[evaluations.evaluation1.evaluators.llm_judge_bool.variants.best_of_3.evaluator]
+model = "openai::gpt-4o-mini"
+system_instructions = "fixtures/config/evaluations/evaluation1/llm_judge_bool/system_instructions.txt"
+json_mode = "strict"
+temperature = 0.3
+
+[evaluations.evaluation1.evaluators.llm_judge_bool.variants.mixture_of_3]
+type = "experimental_mixture_of_n"
+candidates = ["anthropic_promptA", "openai_promptA", "llama_promptA"]
+
+[evaluations.evaluation1.evaluators.llm_judge_bool.variants.mixture_of_3.fuser]
+model = "openai::gpt-4o-mini"
+system_instructions = "fixtures/config/evaluations/evaluation1/llm_judge_bool/system_instructions.txt"
+json_mode = "strict"
+temperature = 0.3
+
+[evaluations.evaluation1.evaluators.llm_judge_bool.variants.dicl]
+type = "experimental_dynamic_in_context_learning"
+embedding_model = "text-embedding-3-small"
+k = 3
+model = "openai::gpt-4o-mini"
+
+[evaluations.evaluation1.evaluators.llm_judge_bool.variants.dicl_custom_system]
+system_instructions = "fixtures/config/evaluations/evaluation1/llm_judge_bool/system_instructions.txt"
+type = "experimental_dynamic_in_context_learning"
+embedding_model = "text-embedding-3-small"
+k = 3
+model = "openai::gpt-4o-mini"
+
+[evaluations.evaluation1.evaluators.llm_judge_float]
 type = "llm_judge"
 output_type = "float"
 optimize = "min"
 include = { reference_output = true }
 
-[evals.eval1.evaluators.llm_judge_float.variants.anthropic_promptA]
+[evaluations.evaluation1.evaluators.llm_judge_float.variants.anthropic_promptA]
 type = "chat_completion"
 active = true
 json_mode = "off"
 model = "anthropic::claude-3.5-sonnet"
-system_instructions = "fixtures/config/evals/eval1/llm_judge_float/system_instructions.txt"
+system_instructions = "fixtures/config/evaluations/evaluation1/llm_judge_float/system_instructions.txt"

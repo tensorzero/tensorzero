@@ -1,16 +1,19 @@
 import { Card, CardContent } from "~/components/ui/card";
 import type {
   Input,
-  InputMessage,
   InputMessageContent,
+  ResolvedInput,
+  ResolvedInputMessage,
+  ResolvedInputMessageContent,
 } from "~/utils/clickhouse/common";
-import { SkeletonImage } from "./SkeletonImage";
 import { SystemContent } from "./SystemContent";
 import { useEffect, useState } from "react";
+import { SkeletonImage } from "./SkeletonImage";
+import ImageBlock from "./ImageBlock";
 
 // Base interface with just the common required properties
 interface BaseInputProps {
-  input: Input;
+  input: ResolvedInput;
 }
 
 // For when isEditing is not provided (default behavior)
@@ -24,7 +27,7 @@ interface DefaultInputProps extends BaseInputProps {
 interface EditableInputProps extends BaseInputProps {
   isEditing: boolean;
   onSystemChange: (system: string | object) => void;
-  onMessagesChange: (messages: InputMessage[]) => void;
+  onMessagesChange: (messages: ResolvedInputMessage[]) => void;
 }
 
 type InputProps = DefaultInputProps | EditableInputProps;
@@ -35,7 +38,10 @@ export default function Input({
   onSystemChange,
   onMessagesChange,
 }: InputProps) {
-  const handleMessageChange = (index: number, updatedMessage: InputMessage) => {
+  const handleMessageChange = (
+    index: number,
+    updatedMessage: ResolvedInputMessage,
+  ) => {
     const updatedMessages = [...input.messages];
     updatedMessages[index] = updatedMessage;
     onMessagesChange?.(updatedMessages);
@@ -75,7 +81,7 @@ export default function Input({
 }
 
 interface BaseMessageProps {
-  message: InputMessage;
+  message: ResolvedInputMessage;
 }
 
 interface DefaultMessageProps extends BaseMessageProps {
@@ -85,19 +91,21 @@ interface DefaultMessageProps extends BaseMessageProps {
 
 interface EditableMessageProps extends BaseMessageProps {
   isEditing: boolean;
-  onMessageChange: (message: InputMessage) => void;
+  onMessageChange: (message: ResolvedInputMessage) => void;
 }
 
 type MessageProps = DefaultMessageProps | EditableMessageProps;
 
 function Message({ message, isEditing, onMessageChange }: MessageProps) {
-  const handleContentChange = (updatedContent: InputMessage["content"]) => {
+  const handleContentChange = (
+    updatedContent: ResolvedInputMessage["content"],
+  ) => {
     onMessageChange?.({ ...message, content: updatedContent });
   };
 
   return (
     <div className="space-y-1">
-      <div className="text-md font-medium capitalize text-slate-600 dark:text-slate-400">
+      <div className="text-md font-medium text-slate-600 capitalize dark:text-slate-400">
         {message.role}
       </div>
       <MessageContent
@@ -110,7 +118,7 @@ function Message({ message, isEditing, onMessageChange }: MessageProps) {
 }
 
 interface BaseMessageContentProps {
-  content: InputMessage["content"];
+  content: ResolvedInputMessage["content"];
 }
 
 interface DefaultMessageContentProps extends BaseMessageContentProps {
@@ -120,7 +128,7 @@ interface DefaultMessageContentProps extends BaseMessageContentProps {
 
 interface EditableMessageContentProps extends BaseMessageContentProps {
   isEditing: boolean;
-  onContentChange: (content: InputMessage["content"]) => void;
+  onContentChange: (content: ResolvedInputMessage["content"]) => void;
 }
 
 type MessageContentProps =
@@ -134,7 +142,7 @@ function MessageContent({
 }: MessageContentProps) {
   const handleBlockChange = (
     index: number,
-    updatedBlock: InputMessageContent,
+    updatedBlock: ResolvedInputMessageContent,
   ) => {
     const updatedContent = [...content];
     updatedContent[index] = updatedBlock;
@@ -178,7 +186,13 @@ function MessageContent({
               />
             );
           case "image":
-            return <ImageBlock />;
+            return <ImageBlock key={index} image={block} />;
+          case "image_error":
+            return (
+              <div key={index}>
+                <SkeletonImage error={true} />
+              </div>
+            );
           default:
             return null;
         }
@@ -375,8 +389,4 @@ function ToolResultBlock({
       <pre className="mt-1 text-sm">{block.result}</pre>
     </div>
   );
-}
-
-function ImageBlock() {
-  return <SkeletonImage />;
 }

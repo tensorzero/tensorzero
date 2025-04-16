@@ -11,6 +11,7 @@ use tokio::time::Instant;
 use url::Url;
 
 use crate::cache::ModelProviderRequest;
+use crate::error::DisplayOrDebugGateway;
 use crate::inference::types::{
     FinishReason, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
@@ -29,7 +30,8 @@ use crate::{
     tool::{ToolCall, ToolCallChunk},
 };
 
-use super::helpers::inject_extra_body;
+use super::helpers::inject_extra_request_data;
+use super::helpers_thinking_block::{process_think_blocks, ThinkingState};
 use super::{
     openai::{
         get_chat_url, handle_openai_error, prepare_openai_tools, tensorzero_to_openai_messages,
@@ -90,7 +92,6 @@ fn default_api_key_location() -> CredentialLocation {
 pub enum TogetherCredentials {
     Static(SecretString),
     Dynamic(String),
-    #[cfg(any(test, feature = "e2e_tests"))]
     None,
 }
 
@@ -101,7 +102,6 @@ impl TryFrom<Credential> for TogetherCredentials {
         match credentials {
             Credential::Static(key) => Ok(TogetherCredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(TogetherCredentials::Dynamic(key_name)),
-            #[cfg(any(test, feature = "e2e_tests"))]
             Credential::Missing => Ok(TogetherCredentials::None),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for Together provider".to_string(),
@@ -124,7 +124,6 @@ impl TogetherCredentials {
                     },
                 )?))
             }
-            #[cfg(any(test, feature = "e2e_tests"))]
             TogetherCredentials::None => Err(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
             })?,
@@ -148,11 +147,14 @@ impl InferenceProvider for TogetherProvider {
             serde_json::to_value(TogetherRequest::new(&self.model_name, request)?).map_err(
                 |e| {
                     Error::new(ErrorDetails::Serialization {
-                        message: format!("Error serializing Together request: {e}"),
+                        message: format!(
+                            "Error serializing Together request: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
                     })
                 },
             )?;
-        inject_extra_body(
+        let headers = inject_extra_request_data(
             &request.extra_body,
             model_provider,
             model_name,
@@ -166,12 +168,13 @@ impl InferenceProvider for TogetherProvider {
             .header("Content-Type", "application/json")
             .bearer_auth(api_key.expose_secret())
             .json(&request_body)
+            .headers(headers)
             .send()
             .await
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
-                    message: format!("{e}"),
                     status_code: Some(e.status().unwrap_or(StatusCode::INTERNAL_SERVER_ERROR)),
+                    message: format!("{}", DisplayOrDebugGateway::new(e)),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
@@ -180,7 +183,10 @@ impl InferenceProvider for TogetherProvider {
         if res.status().is_success() {
             let raw_response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing text response: {e}"),
+                    message: format!(
+                        "Error parsing text response: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
@@ -189,7 +195,10 @@ impl InferenceProvider for TogetherProvider {
 
             let response = serde_json::from_str(&raw_response).map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing JSON response: {e}"),
+                    message: format!(
+                        "Error parsing JSON response: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                     raw_response: Some(raw_response.clone()),
                     provider_type: PROVIDER_TYPE.to_string(),
@@ -211,7 +220,10 @@ impl InferenceProvider for TogetherProvider {
             let status = res.status();
             let raw_response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing error response: {e}"),
+                    message: format!(
+                        "Error parsing error response: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
@@ -236,11 +248,14 @@ impl InferenceProvider for TogetherProvider {
             serde_json::to_value(TogetherRequest::new(&self.model_name, request)?).map_err(
                 |e| {
                     Error::new(ErrorDetails::Serialization {
-                        message: format!("Error serializing request: {e}"),
+                        message: format!(
+                            "Error serializing request: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
                     })
                 },
             )?;
-        inject_extra_body(
+        let headers = inject_extra_request_data(
             &request.extra_body,
             model_provider,
             model_name,
@@ -248,7 +263,10 @@ impl InferenceProvider for TogetherProvider {
         )?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
-                message: format!("Error serializing request: {e}"),
+                message: format!(
+                    "Error serializing request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
             })
         })?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
@@ -259,10 +277,14 @@ impl InferenceProvider for TogetherProvider {
             .header("Content-Type", "application/json")
             .bearer_auth(api_key.expose_secret())
             .json(&request_body)
+            .headers(headers)
             .eventsource()
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
-                    message: format!("Error sending request to Together: {e}"),
+                    message: format!(
+                        "Error sending request to Together: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     status_code: None,
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
@@ -438,52 +460,7 @@ struct TogetherResponseMessage {
     tool_calls: Option<Vec<TogetherResponseToolCall>>,
 }
 
-const THINK_TAG: &str = "<think>";
-const THINK_TAG_LEN: usize = THINK_TAG.len();
-const END_THINK_TAG: &str = "</think>";
-const END_THINK_TAG_LEN: usize = END_THINK_TAG.len();
-
-/// Processes the thinking blocks from a span of text.
-/// If parsing is disabled, the text is returned as is.
-/// If parsing is enabled, the text is checked for a single thinking block.
-/// If there is one, the text is cleaned of the thinking block and the reasoning is returned.
-/// If there is no thinking block, the text is returned as is and the reasoning is None.
-/// If there is more than one thinking block, an error is returned.
-///
-/// The function also validates that tags are properly matched - an error is returned
-/// if there are mismatched opening/closing tags.
-///
-/// Returns a tuple of (cleaned_text, optional_reasoning).
-/// The reasoning, if present, will have leading/trailing whitespace trimmed.
-fn process_think_blocks(text: &str, parse: bool) -> Result<(String, Option<String>), Error> {
-    if !parse {
-        return Ok((text.to_string(), None));
-    }
-    let think_count = text.matches(THINK_TAG).count();
-    if think_count > 1 {
-        return Err(Error::new(ErrorDetails::InferenceServer {
-            message: "Multiple thinking blocks found".to_string(),
-            raw_request: None,
-            raw_response: None,
-            provider_type: PROVIDER_TYPE.to_string(),
-        }));
-    }
-
-    if think_count != text.matches(END_THINK_TAG).count() {
-        Err(Error::new(ErrorDetails::InferenceServer {
-            message: "Mismatched thinking tags".to_string(),
-            raw_request: None,
-            raw_response: None,
-            provider_type: PROVIDER_TYPE.to_string(),
-        }))
-    } else if let (Some(start), Some(end)) = (text.find(THINK_TAG), text.find(END_THINK_TAG)) {
-        let reasoning = text[start + THINK_TAG_LEN..end].to_string();
-        let cleaned = format!("{}{}", &text[..start], &text[end + END_THINK_TAG_LEN..]);
-        Ok((cleaned, Some(reasoning)))
-    } else {
-        Ok((text.to_string(), None))
-    }
-}
+// The thinking block processing has been moved to helpers_thinking_block.rs
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
@@ -574,7 +551,7 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
         let mut content: Vec<ContentBlockOutput> = Vec::new();
         if let Some(raw_text) = message.content {
             let (clean_text, extracted_reasoning) =
-                process_think_blocks(&raw_text, parse_think_blocks)?;
+                process_think_blocks(&raw_text, parse_think_blocks, PROVIDER_TYPE)?;
             if let Some(reasoning) = extracted_reasoning {
                 content.push(ContentBlockOutput::Thought(Thought {
                     text: reasoning,
@@ -592,7 +569,10 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
         }
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
-                message: format!("Error serializing request body as JSON: {e}"),
+                message: format!(
+                    "Error serializing request body as JSON: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
             })
         })?;
         let system = generic_request.system.clone();
@@ -612,60 +592,7 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
     }
 }
 
-enum ThinkingState {
-    Normal,
-    Thinking,
-    Finished,
-}
-
-impl ThinkingState {
-    fn get_id(&self) -> String {
-        match self {
-            ThinkingState::Normal => "0".to_string(),
-            ThinkingState::Thinking => "1".to_string(),
-            ThinkingState::Finished => "2".to_string(),
-        }
-    }
-
-    // Returns true if an update was made to the thinking state
-    // Returns false if the text is not a thinking block
-    // Returns an error if the thinking state is invalid
-    fn update(&mut self, text: &str) -> Result<bool, Error> {
-        match (&mut *self, text) {
-            (ThinkingState::Normal, "<think>") => {
-                *self = ThinkingState::Thinking;
-                Ok(true)
-            }
-            (ThinkingState::Normal, "</think>") => Err(Error::new(ErrorDetails::InferenceServer {
-                message: "Found </think> while not thinking".to_string(),
-                raw_request: None,
-                raw_response: None,
-                provider_type: PROVIDER_TYPE.to_string(),
-            })),
-            (ThinkingState::Thinking, "</think>") => {
-                *self = ThinkingState::Finished;
-                Ok(true)
-            }
-            (ThinkingState::Thinking, "<think>") => {
-                Err(Error::new(ErrorDetails::InferenceServer {
-                    message: "Found <think> while already thinking".to_string(),
-                    raw_request: None,
-                    raw_response: None,
-                    provider_type: PROVIDER_TYPE.to_string(),
-                }))
-            }
-            (ThinkingState::Finished, "<think>") | (ThinkingState::Finished, "</think>") => {
-                Err(Error::new(ErrorDetails::InferenceServer {
-                    message: "Found thinking tags after thinking finished".to_string(),
-                    raw_request: None,
-                    raw_response: None,
-                    provider_type: PROVIDER_TYPE.to_string(),
-                }))
-            }
-            _ => Ok(false),
-        }
-    }
-}
+// ThinkingState has been moved to helpers_thinking_block.rs
 
 fn stream_together(
     mut event_source: EventSource,
@@ -734,7 +661,10 @@ fn together_to_tensorzero_chunk(
 ) -> Result<ProviderInferenceResponseChunk, Error> {
     let raw_message = serde_json::to_string(&chunk).map_err(|e| {
         Error::new(ErrorDetails::InferenceServer {
-            message: format!("Error parsing response from Together: {e}"),
+            message: format!(
+                "Error parsing response from Together: {}",
+                DisplayOrDebugGateway::new(e)
+            ),
             raw_request: None,
             raw_response: Some(serde_json::to_string(&chunk).unwrap_or_default()),
             provider_type: PROVIDER_TYPE.to_string(),
@@ -758,7 +688,7 @@ fn together_to_tensorzero_chunk(
         }
         if let Some(text) = choice.delta.content {
             if parse_think_blocks {
-                if !thinking_state.update(&text)? {
+                if !thinking_state.update(&text, PROVIDER_TYPE)? {
                     match thinking_state {
                         ThinkingState::Normal | ThinkingState::Finished => {
                             content.push(ContentBlockChunk::Text(TextChunk {
@@ -962,13 +892,10 @@ mod tests {
         let creds = TogetherCredentials::try_from(generic).unwrap();
         assert!(matches!(creds, TogetherCredentials::Dynamic(_)));
 
-        // Test Missing credential (test mode)
-        #[cfg(any(test, feature = "e2e_tests"))]
-        {
-            let generic = Credential::Missing;
-            let creds = TogetherCredentials::try_from(generic).unwrap();
-            assert!(matches!(creds, TogetherCredentials::None));
-        }
+        // Test Missing credential
+        let generic = Credential::Missing;
+        let creds = TogetherCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, TogetherCredentials::None));
 
         // Test invalid type
         let generic = Credential::FileContents(SecretString::from("test"));
@@ -1141,131 +1068,240 @@ mod tests {
     }
 
     #[test]
-    fn test_single_thinking() {
-        let text = "Hello <think>this is thinking</think> world";
-        let (cleaned_text, reasoning) = process_think_blocks(text, true).unwrap();
-        assert_eq!(cleaned_text, "Hello  world");
-        assert_eq!(reasoning, Some("this is thinking".to_string()));
+    fn test_together_think_block_parsing_in_response() {
+        // Test how TogetherAI integration works with think blocks in response parsing
+        let response_with_thinking = TogetherResponse {
+            choices: vec![TogetherResponseChoice {
+                index: 0,
+                message: TogetherResponseMessage {
+                    content: Some(
+                        "<think>This is the reasoning process</think>This is the answer"
+                            .to_string(),
+                    ),
+                    tool_calls: None,
+                },
+                finish_reason: None,
+            }],
+            usage: OpenAIUsage {
+                prompt_tokens: 10,
+                completion_tokens: 20,
+                total_tokens: 30,
+            },
+        };
 
-        let (cleaned_text, reasoning) = process_think_blocks(text, false).unwrap();
-        assert_eq!(cleaned_text, text);
-        assert_eq!(reasoning, None);
+        let generic_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["test_user".to_string().into()],
+            }],
+            system: None,
+            temperature: Some(0.5),
+            max_tokens: Some(100),
+            stream: false,
+            seed: Some(69),
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            tool_config: None,
+            function_type: FunctionType::Chat,
+            output_schema: None,
+            extra_body: Default::default(),
+            ..Default::default()
+        };
+
+        // With parsing enabled
+        let metadata = TogetherResponseWithMetadata {
+            response: response_with_thinking.clone(),
+            raw_response: "test_response".to_string(),
+            latency: Latency::NonStreaming {
+                response_time: Duration::from_secs(0),
+            },
+            request: serde_json::to_value(
+                TogetherRequest::new("test-model", &generic_request).unwrap(),
+            )
+            .unwrap(),
+            generic_request: &generic_request,
+            parse_think_blocks: true,
+        };
+
+        let inference_response: ProviderInferenceResponse = metadata.try_into().unwrap();
+
+        // We should have two content blocks - one thought and one text
+        assert_eq!(inference_response.output.len(), 2);
+
+        // First block should be the thought
+        assert!(matches!(
+            inference_response.output[0],
+            ContentBlockOutput::Thought(_)
+        ));
+        if let ContentBlockOutput::Thought(thought) = &inference_response.output[0] {
+            assert_eq!(thought.text, "This is the reasoning process");
+            assert_eq!(thought.signature, None);
+        }
+
+        // Second block should be the text
+        assert!(matches!(
+            inference_response.output[1],
+            ContentBlockOutput::Text(_)
+        ));
+        if let ContentBlockOutput::Text(text) = &inference_response.output[1] {
+            assert_eq!(text.text, "This is the answer");
+        }
+
+        // With parsing disabled
+        let metadata = TogetherResponseWithMetadata {
+            response: response_with_thinking,
+            raw_response: "test_response".to_string(),
+            latency: Latency::NonStreaming {
+                response_time: Duration::from_secs(0),
+            },
+            request: serde_json::to_value(
+                TogetherRequest::new("test-model", &generic_request).unwrap(),
+            )
+            .unwrap(),
+            generic_request: &generic_request,
+            parse_think_blocks: false,
+        };
+
+        let inference_response: ProviderInferenceResponse = metadata.try_into().unwrap();
+
+        // We should have one content block with the raw text
+        assert_eq!(inference_response.output.len(), 1);
+        assert!(matches!(
+            inference_response.output[0],
+            ContentBlockOutput::Text(_)
+        ));
+        if let ContentBlockOutput::Text(text) = &inference_response.output[0] {
+            assert_eq!(
+                text.text,
+                "<think>This is the reasoning process</think>This is the answer"
+            );
+        }
     }
 
     #[test]
-    fn test_multiple_thinking_blocks() {
-        let text = "Hello <think>thinking 1</think> middle <think>thinking 2</think>";
-        let result = process_think_blocks(text, true);
-        assert!(result.is_err());
-        if let Err(err) = result {
-            if let ErrorDetails::InferenceServer { message, .. } = err.get_owned_details() {
-                assert_eq!(message, "Multiple thinking blocks found");
-            }
+    fn test_together_to_tensorzero_chunk_thinking() {
+        // Test that the streaming function correctly handles thinking blocks
+        let chunk = TogetherChatChunk {
+            choices: vec![TogetherChatChunkChoice {
+                delta: TogetherDelta {
+                    content: Some("<think>".to_string()),
+                    tool_calls: None,
+                },
+                finish_reason: None,
+            }],
+            usage: None,
+        };
+
+        let mut tool_call_ids = Vec::new();
+        let mut tool_call_names = Vec::new();
+        let mut thinking_state = ThinkingState::Normal;
+
+        // With parsing enabled
+        let result = together_to_tensorzero_chunk(
+            chunk.clone(),
+            Duration::from_millis(100),
+            &mut tool_call_ids,
+            &mut tool_call_names,
+            &mut thinking_state,
+            true,
+        )
+        .unwrap();
+
+        // Should transition to Thinking state
+        assert!(matches!(thinking_state, ThinkingState::Thinking));
+        // No content should be added for the opening tag
+        assert!(result.content.is_empty());
+
+        // Now process some thinking content
+        let chunk = TogetherChatChunk {
+            choices: vec![TogetherChatChunkChoice {
+                delta: TogetherDelta {
+                    content: Some("reasoning".to_string()),
+                    tool_calls: None,
+                },
+                finish_reason: None,
+            }],
+            usage: None,
+        };
+
+        let result = together_to_tensorzero_chunk(
+            chunk,
+            Duration::from_millis(100),
+            &mut tool_call_ids,
+            &mut tool_call_names,
+            &mut thinking_state,
+            true,
+        )
+        .unwrap();
+
+        // Should still be in Thinking state
+        assert!(matches!(thinking_state, ThinkingState::Thinking));
+        // Content should be added as thought
+        assert_eq!(result.content.len(), 1);
+        assert!(matches!(result.content[0], ContentBlockChunk::Thought(_)));
+        if let ContentBlockChunk::Thought(thought) = &result.content[0] {
+            assert_eq!(thought.text, Some("reasoning".to_string()));
+            assert_eq!(thought.id, "1");
         }
 
-        let (cleaned_text, reasoning) = process_think_blocks(text, false).unwrap();
-        assert_eq!(cleaned_text, text);
-        assert_eq!(reasoning, None);
-    }
+        // Close the thinking block
+        let chunk = TogetherChatChunk {
+            choices: vec![TogetherChatChunkChoice {
+                delta: TogetherDelta {
+                    content: Some("</think>".to_string()),
+                    tool_calls: None,
+                },
+                finish_reason: None,
+            }],
+            usage: None,
+        };
 
-    #[test]
-    fn test_extra_closing_tag() {
-        let text = "Hello <think>Extra closing tag</think></think> world";
-        let result = process_think_blocks(text, true);
-        assert!(result.is_err());
-        if let Err(err) = result {
-            if let ErrorDetails::InferenceServer { message, .. } = err.get_owned_details() {
-                assert_eq!(message, "Mismatched thinking tags");
-            }
+        let result = together_to_tensorzero_chunk(
+            chunk,
+            Duration::from_millis(100),
+            &mut tool_call_ids,
+            &mut tool_call_names,
+            &mut thinking_state,
+            true,
+        )
+        .unwrap();
+
+        // Should transition to Finished state
+        assert!(matches!(thinking_state, ThinkingState::Finished));
+        // No content should be added for the closing tag
+        assert!(result.content.is_empty());
+
+        // After closing, regular text should be treated as text content
+        let chunk = TogetherChatChunk {
+            choices: vec![TogetherChatChunkChoice {
+                delta: TogetherDelta {
+                    content: Some("Final answer".to_string()),
+                    tool_calls: None,
+                },
+                finish_reason: None,
+            }],
+            usage: None,
+        };
+
+        let result = together_to_tensorzero_chunk(
+            chunk,
+            Duration::from_millis(100),
+            &mut tool_call_ids,
+            &mut tool_call_names,
+            &mut thinking_state,
+            true,
+        )
+        .unwrap();
+
+        // Should remain in Finished state
+        assert!(matches!(thinking_state, ThinkingState::Finished));
+        // Content should be added as text
+        assert_eq!(result.content.len(), 1);
+        assert!(matches!(result.content[0], ContentBlockChunk::Text(_)));
+        if let ContentBlockChunk::Text(text) = &result.content[0] {
+            assert_eq!(text.text, "Final answer");
+            assert_eq!(text.id, "2");
         }
-
-        let (cleaned_text, reasoning) = process_think_blocks(text, false).unwrap();
-        assert_eq!(cleaned_text, text);
-        assert_eq!(reasoning, None);
-    }
-
-    #[test]
-    fn test_mismatched_tags() {
-        let text = "Hello <think>thinking without end tag";
-        let result = process_think_blocks(text, true);
-        assert!(result.is_err());
-        if let Err(err) = result {
-            if let ErrorDetails::InferenceServer { message, .. } = err.get_owned_details() {
-                assert_eq!(message, "Mismatched thinking tags");
-            }
-        }
-
-        let (cleaned_text, reasoning) = process_think_blocks(text, false).unwrap();
-        assert_eq!(cleaned_text, text);
-        assert_eq!(reasoning, None);
-    }
-
-    #[test]
-    fn test_thinking_state() {
-        // Test initial state and ID
-        let mut state = ThinkingState::Normal;
-        assert_eq!(state.get_id(), "0");
-
-        // Test normal state transitions and IDs
-        assert!(state.update("<think>").is_ok());
-        assert!(matches!(state, ThinkingState::Thinking));
-        assert_eq!(state.get_id(), "1");
-
-        assert!(state.update("</think>").is_ok());
-        assert!(matches!(state, ThinkingState::Finished));
-        assert_eq!(state.get_id(), "2");
-
-        // Test invalid transitions from Normal state
-        let mut state = ThinkingState::Normal;
-        let err = state.update("</think>").unwrap_err();
-        assert!(matches!(
-            err.get_details(),
-            ErrorDetails::InferenceServer { .. }
-        ));
-        if let ErrorDetails::InferenceServer { message, .. } = err.get_owned_details() {
-            assert_eq!(message, "Found </think> while not thinking");
-        }
-
-        // Test invalid transitions from Thinking state
-        let mut state = ThinkingState::Thinking;
-        let err = state.update("<think>").unwrap_err();
-        assert!(matches!(
-            err.get_details(),
-            ErrorDetails::InferenceServer { .. }
-        ));
-        if let ErrorDetails::InferenceServer { message, .. } = err.get_owned_details() {
-            assert_eq!(message, "Found <think> while already thinking");
-        }
-
-        // Test invalid transitions from Finished state
-        let mut state = ThinkingState::Finished;
-        let err = state.update("<think>").unwrap_err();
-        assert!(matches!(
-            err.get_details(),
-            ErrorDetails::InferenceServer { .. }
-        ));
-        if let ErrorDetails::InferenceServer { message, .. } = err.get_owned_details() {
-            assert_eq!(message, "Found thinking tags after thinking finished");
-        }
-
-        let err = state.update("</think>").unwrap_err();
-        assert!(matches!(
-            err.get_details(),
-            ErrorDetails::InferenceServer { .. }
-        ));
-        if let ErrorDetails::InferenceServer { message, .. } = err.get_owned_details() {
-            assert_eq!(message, "Found thinking tags after thinking finished");
-        }
-
-        // Test that random text is allowed in any state
-        let mut state = ThinkingState::Normal;
-        assert!(state.update("random text").is_ok());
-
-        state = ThinkingState::Thinking;
-        assert!(state.update("random text").is_ok());
-
-        state = ThinkingState::Finished;
-        assert!(state.update("random text").is_ok());
     }
 
     #[test]

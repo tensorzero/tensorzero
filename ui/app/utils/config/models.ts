@@ -19,6 +19,17 @@ export type AWSBedrockProviderConfig = z.infer<
   typeof AWSBedrockProviderConfigSchema
 >;
 
+export const AWSSagemakerProviderConfigSchema = z.object({
+  type: z.literal("aws_sagemaker"),
+  endpoint_name: z.string(),
+  model_name: z.string(),
+  hosted_provider: z.string(),
+  region: z.string().optional(),
+});
+export type AWSSagemakerProviderConfig = z.infer<
+  typeof AWSSagemakerProviderConfigSchema
+>;
+
 export const AzureProviderConfigSchema = z.object({
   type: z.literal("azure"),
   deployment_id: z.string(),
@@ -135,6 +146,7 @@ export type XAIProviderConfig = z.infer<typeof XAIProviderConfigSchema>;
 export const ProviderConfigSchema = z.discriminatedUnion("type", [
   AnthropicProviderConfigSchema,
   AWSBedrockProviderConfigSchema,
+  AWSSagemakerProviderConfigSchema,
   AzureProviderConfigSchema,
   DeepSeekProviderConfigSchema,
   DummyProviderConfigSchema,

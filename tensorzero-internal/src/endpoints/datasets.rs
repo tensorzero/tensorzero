@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    clickhouse::ClickHouseConnectionInfo,
+    clickhouse::{ClickHouseConnectionInfo, ExternalDataInfo},
     config_parser::Config,
     error::{Error, ErrorDetails},
     function::{FunctionConfig, FunctionConfigChat},
@@ -53,7 +53,7 @@ async fn query_demonstration(
     page_size: u32,
 ) -> Result<Demonstration, Error> {
     let result = clickhouse
-        .run_query(
+        .run_query_synchronous(
             r#"
         SELECT
           id,
@@ -100,7 +100,7 @@ async fn query_inference_for_datapoint(
     inference_id: Uuid,
 ) -> Result<TaggedInferenceDatabaseInsert, Error> {
     let result: String = clickhouse
-        .run_query(
+        .run_query_synchronous(
             r#"
             SELECT
   uint_to_uuid(i.id_uint) AS id,
@@ -198,10 +198,15 @@ async fn insert_from_existing(
                 tags: Some(inference.tags),
                 auxiliary: "{}".to_string(),
                 is_deleted: false,
+                source_inference_id: Some(existing.inference_id),
+                staled_at: None,
             };
-            clickhouse
-                .write(&[datapoint], "JsonInferenceDatapoint")
-                .await?;
+            let rows_written = put_deduped_json_datapoint(clickhouse, &datapoint).await?;
+            if rows_written == 0 {
+                return Err(Error::new(ErrorDetails::InvalidRequest {
+                    message: "Datapoint with this source_inference_id already exists".to_string(),
+                }));
+            }
         }
         TaggedInferenceDatabaseInsert::Chat(inference) => {
             let output = match existing.output {
@@ -231,10 +236,15 @@ async fn insert_from_existing(
                 tags: Some(inference.tags),
                 auxiliary: "{}".to_string(),
                 is_deleted: false,
+                source_inference_id: Some(existing.inference_id),
+                staled_at: None,
             };
-            clickhouse
-                .write(&[datapoint], "ChatInferenceDatapoint")
-                .await?;
+            let rows_written = put_deduped_chat_datapoint(clickhouse, &datapoint).await?;
+            if rows_written == 0 {
+                return Err(Error::new(ErrorDetails::InvalidRequest {
+                    message: "Datapoint with this source_inference_id already exists".to_string(),
+                }));
+            }
         }
     }
     Ok(datapoint_id)
@@ -347,11 +357,17 @@ pub async fn update_datapoint_handler(
                 tags: chat.tags,
                 auxiliary: chat.auxiliary,
                 is_deleted: false,
+                source_inference_id: chat.source_inference_id,
+                staled_at: None,
             };
-            app_state
-                .clickhouse_connection_info
-                .write(&[datapoint], "ChatInferenceDatapoint")
-                .await?;
+            let rows_written =
+                put_deduped_chat_datapoint(&app_state.clickhouse_connection_info, &datapoint)
+                    .await?;
+            if rows_written == 0 {
+                return Err(Error::new(ErrorDetails::InvalidRequest {
+                    message: "Datapoint with this source_inference_id already exists".to_string(),
+                }));
+            }
         }
         FunctionConfig::Json(_) => {
             let json: SyntheticJsonInferenceDatapoint =
@@ -400,63 +416,25 @@ pub async fn update_datapoint_handler(
                 episode_id: None,
                 input: resolved_input,
                 output,
-                // We currently don't support creating synthetic datapoints with 'output_schema'
-                output_schema: serde_json::Value::Object(Default::default()),
+                output_schema: json.output_schema,
                 tags: json.tags,
                 auxiliary: json.auxiliary,
                 is_deleted: false,
+                source_inference_id: json.source_inference_id,
+                staled_at: None,
             };
-            app_state
-                .clickhouse_connection_info
-                .write(&[datapoint], "JsonInferenceDatapoint")
-                .await?;
+            let rows_written =
+                put_deduped_json_datapoint(&app_state.clickhouse_connection_info, &datapoint)
+                    .await?;
+            if rows_written == 0 {
+                return Err(Error::new(ErrorDetails::InvalidRequest {
+                    message: "Datapoint with this source_inference_id already exists".to_string(),
+                }));
+            }
         }
     }
     Ok(Json(CreateDatapointResponse { id: path_params.id }))
 }
-
-#[instrument(name = "delete_datapoint", skip(app_state))]
-pub async fn delete_datapoint_handler(
-    State(app_state): AppState,
-    Path(path_params): Path<DeletePathParams>,
-) -> Result<Json<DeleteDatapointResponse>, Error> {
-    let datapoint = app_state.clickhouse_connection_info.run_query(
-        "SELECT * FROM {table_name:Identifier} WHERE dataset_name={dataset_name:String} AND function_name={function_name:String} AND id = {id:String} ORDER BY updated_at DESC LIMIT 1 FORMAT JSONEachRow;".to_string(),
-        Some(&HashMap::from([
-            ("table_name", path_params.kind.table_name()),
-            ("function_name", path_params.function.as_str()),
-            ("dataset_name", path_params.dataset.as_str()),
-            ("id", path_params.id.to_string().as_str())
-        ]))).await?;
-
-    if datapoint.is_empty() {
-        return Err(Error::new(ErrorDetails::InvalidRequest {
-            message: format!("Datapoint not found with params {path_params:?}",),
-        }));
-    }
-
-    let mut datapoint_json: serde_json::Value = serde_json::from_str(&datapoint).map_err(|e| {
-        Error::new(ErrorDetails::Serialization {
-            message: format!("Failed to deserialize datapoint: {}", e),
-        })
-    })?;
-
-    // We delete datapoints by writing a new row (which ClickHouse will merge)
-    // with the 'is_deleted' and 'updated_at' fields modified.
-    datapoint_json["is_deleted"] = serde_json::Value::Bool(true);
-    datapoint_json["updated_at"] =
-        format!("{}", chrono::Utc::now().format(CLICKHOUSE_DATETIME_FORMAT)).into();
-
-    app_state
-        .clickhouse_connection_info
-        .write(&[datapoint_json], path_params.kind.table_name())
-        .await?;
-
-    Ok(Json(DeleteDatapointResponse {}))
-}
-
-#[derive(Debug, Serialize)]
-pub struct DeleteDatapointResponse {}
 
 #[derive(Debug, Deserialize)]
 pub struct CreatePathParams {
@@ -491,7 +469,7 @@ pub enum DatapointKind {
 }
 
 impl DatapointKind {
-    fn table_name(&self) -> &'static str {
+    pub fn table_name(&self) -> &'static str {
         match self {
             DatapointKind::Chat => "ChatInferenceDatapoint",
             DatapointKind::Json => "JsonInferenceDatapoint",
@@ -563,6 +541,10 @@ pub struct ChatInferenceDatapoint {
     pub tags: Option<HashMap<String, String>>,
     pub auxiliary: String,
     pub is_deleted: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_inference_id: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub staled_at: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -579,6 +561,10 @@ pub struct JsonInferenceDatapoint {
     pub tags: Option<HashMap<String, String>>,
     pub auxiliary: String,
     pub is_deleted: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_inference_id: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub staled_at: Option<String>,
 }
 
 /// We need to be able to deserialize Datapoints from both ClickHouse and
@@ -609,6 +595,8 @@ pub struct ClickHouseChatInferenceDatapoint {
     tags: Option<HashMap<String, String>>,
     auxiliary: String,
     is_deleted: bool,
+    source_inference_id: Option<Uuid>,
+    staled_at: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -626,6 +614,8 @@ pub struct ClickHouseJsonInferenceDatapoint {
     tags: Option<HashMap<String, String>>,
     auxiliary: String,
     is_deleted: bool,
+    source_inference_id: Option<Uuid>,
+    staled_at: Option<String>,
 }
 
 impl From<ClickHouseDatapoint> for Datapoint {
@@ -643,6 +633,8 @@ impl From<ClickHouseDatapoint> for Datapoint {
                     tags: datapoint.tags,
                     auxiliary: datapoint.auxiliary,
                     is_deleted: datapoint.is_deleted,
+                    source_inference_id: datapoint.source_inference_id,
+                    staled_at: datapoint.staled_at,
                 })
             }
             ClickHouseDatapoint::Json(datapoint) => {
@@ -657,6 +649,8 @@ impl From<ClickHouseDatapoint> for Datapoint {
                     tags: datapoint.tags,
                     auxiliary: datapoint.auxiliary,
                     is_deleted: datapoint.is_deleted,
+                    source_inference_id: datapoint.source_inference_id,
+                    staled_at: datapoint.staled_at,
                 })
             }
         }
@@ -696,6 +690,8 @@ pub struct SyntheticChatInferenceDatapoint {
     pub tags: Option<HashMap<String, String>>,
     #[serde(default)]
     pub auxiliary: String,
+    #[serde(default)]
+    pub source_inference_id: Option<Uuid>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -711,6 +707,8 @@ pub struct SyntheticJsonInferenceDatapoint {
     pub tags: Option<HashMap<String, String>>,
     #[serde(default)]
     pub auxiliary: String,
+    #[serde(default)]
+    pub source_inference_id: Option<Uuid>,
 }
 
 fn get_possibly_default_function(
@@ -726,6 +724,7 @@ fn get_possibly_default_function(
             tools: vec![],
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
+            description: None,
         })))
     } else {
         config.get_function(function_name).cloned()
@@ -740,6 +739,127 @@ fn validate_dataset_name(dataset_name: &str) -> Result<(), Error> {
     } else {
         Ok(())
     }
+}
+
+/// Puts a chat datapoint into ClickHouse but only
+/// if it doesn't have a source_inference_id that already exists for this dataset.
+/// Returns the number of rows written to ClickHouse
+async fn put_deduped_chat_datapoint(
+    clickhouse: &ClickHouseConnectionInfo,
+    datapoint: &ChatInferenceDatapoint,
+) -> Result<u64, Error> {
+    let serialized_datapoint = serde_json::to_string(datapoint).map_err(|e| {
+        Error::new(ErrorDetails::Serialization {
+            message: format!("Failed to serialize datapoint: {}", e),
+        })
+    })?;
+
+    let query = r#"
+    INSERT INTO ChatInferenceDatapoint
+        (
+            dataset_name,
+            function_name,
+            id,
+            episode_id,
+            input,
+            output,
+            tool_params,
+            tags,
+            auxiliary,
+            is_deleted,
+            source_inference_id
+        )
+        SELECT
+            new_data.dataset_name,
+            new_data.function_name,
+            new_data.id,
+            new_data.episode_id,
+            new_data.input,
+            new_data.output,
+            new_data.tool_params,
+            new_data.tags,
+            new_data.auxiliary,
+            new_data.is_deleted,
+            new_data.source_inference_id,
+        FROM new_data
+        LEFT JOIN ChatInferenceDatapoint AS existing FINAL
+          ON new_data.dataset_name = existing.dataset_name
+             AND new_data.function_name = existing.function_name
+             AND new_data.source_inference_id = existing.source_inference_id
+             AND new_data.id != existing.id -- this is to allow us to update the datapoint and keep the same source_inference_id
+             AND existing.staled_at IS NULL
+        WHERE existing.source_inference_id IS NULL
+        "#;
+
+    let external_data = ExternalDataInfo {
+        external_data_name: "new_data".to_string(),
+        structure: "dataset_name LowCardinality(String), function_name LowCardinality(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), tool_params String, tags Map(String, String), auxiliary String, is_deleted Bool, source_inference_id Nullable(UUID)".to_string(),
+        format: "JSONEachRow".to_string(),
+        data: serialized_datapoint,
+    };
+    let result = clickhouse
+        .run_query_with_external_data(external_data, query.to_string())
+        .await?;
+    Ok(result.metadata.written_rows)
+}
+
+async fn put_deduped_json_datapoint(
+    clickhouse: &ClickHouseConnectionInfo,
+    datapoint: &JsonInferenceDatapoint,
+) -> Result<u64, Error> {
+    let serialized_datapoint = serde_json::to_string(datapoint).map_err(|e| {
+        Error::new(ErrorDetails::Serialization {
+            message: format!("Failed to serialize datapoint: {}", e),
+        })
+    })?;
+
+    let query = r#"
+        INSERT INTO JsonInferenceDatapoint
+        (
+            dataset_name,
+            function_name,
+            id,
+            episode_id,
+            input,
+            output,
+            output_schema,
+            tags,
+            auxiliary,
+            is_deleted,
+            source_inference_id
+        )
+        SELECT
+            new_data.dataset_name,
+            new_data.function_name,
+            new_data.id,
+            new_data.episode_id,
+            new_data.input,
+            new_data.output,
+            new_data.output_schema,
+            new_data.tags,
+            new_data.auxiliary,
+            new_data.is_deleted,
+            new_data.source_inference_id
+        FROM new_data
+        LEFT JOIN JsonInferenceDatapoint AS existing FINAL
+          ON new_data.dataset_name = existing.dataset_name
+             AND new_data.function_name = existing.function_name
+             AND new_data.source_inference_id = existing.source_inference_id
+             AND new_data.id != existing.id -- this is to allow us to update the datapoint and keep the same source_inference_id
+             AND existing.staled_at IS NULL
+        WHERE existing.source_inference_id IS NULL
+        "#;
+
+    let external_data = ExternalDataInfo {
+        external_data_name: "new_data".to_string(),
+        structure: "dataset_name LowCardinality(String), function_name LowCardinality(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), output_schema Nullable(String), tags Map(String, String), auxiliary String, is_deleted Bool, source_inference_id Nullable(UUID)".to_string(),
+        format: "JSONEachRow".to_string(),
+        data: serialized_datapoint,
+    };
+    let result = clickhouse
+        .run_query_with_external_data(external_data, query.to_string())
+        .await?;
+    Ok(result.metadata.written_rows)
 }
 
 #[cfg(test)]

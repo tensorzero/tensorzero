@@ -3,7 +3,10 @@ TensorZero Client (for internal use only for now)
 */
 
 import { z } from "zod";
-import { contentBlockOutputSchema } from "./clickhouse/common";
+import {
+  contentBlockOutputSchema,
+  type StoragePath,
+} from "./clickhouse/common";
 
 /**
  * JSON types.
@@ -53,12 +56,9 @@ export const ToolResultSchema = z.object({
 });
 export type ToolResult = z.infer<typeof ToolResultSchema>;
 
-/**
- * An input message's content may be structured.
- */
 export const TextContentSchema = z.object({
   type: z.literal("text"),
-  value: JSONValueSchema,
+  text: z.string(),
 });
 
 export const TextArgumentsContentSchema = z.object({
@@ -81,12 +81,30 @@ export const ToolResultContentSchema = z.object({
   ...ToolResultSchema.shape,
 });
 
+export const ImageContentSchema = z
+  .object({
+    type: z.literal("image"),
+  })
+  .and(
+    z.union([
+      z.object({
+        url: z.string(),
+      }),
+      z.object({
+        mime_type: z.string(),
+        data: z.string(),
+      }),
+    ]),
+  );
+export type ImageContent = z.infer<typeof ImageContentSchema>;
+
 export const InputMessageContentSchema = z.union([
   TextContentSchema,
   TextArgumentsContentSchema,
   RawTextContentSchema,
   ToolCallContentSchema,
   ToolResultContentSchema,
+  ImageContentSchema,
 ]);
 
 export type InputMessageContent = z.infer<typeof InputMessageContentSchema>;
@@ -213,11 +231,12 @@ export type InferenceResponse = z.infer<typeof InferenceResponseSchema>;
  */
 export const FeedbackRequestSchema = z.object({
   dryrun: z.boolean().optional(),
-  episode_id: z.string().optional(),
-  inference_id: z.string().optional(),
+  episode_id: z.string().nullable(),
+  inference_id: z.string().nullable(),
   metric_name: z.string(),
   tags: z.record(z.string()).optional(),
   value: JSONValueSchema,
+  internal: z.boolean().optional(),
 });
 export type FeedbackRequest = z.infer<typeof FeedbackRequestSchema>;
 
@@ -241,6 +260,7 @@ const BaseDatapointSchema = z.object({
   output: JSONValueSchema,
   tags: z.record(z.string()).optional(),
   auxiliary: z.string().optional(),
+  source_inference_id: z.string().uuid().nullable(),
 });
 
 /**
@@ -281,6 +301,15 @@ export const DatapointResponseSchema = z.object({
 export type DatapointResponse = z.infer<typeof DatapointResponseSchema>;
 
 /**
+ * Schema for status response
+ */
+export const StatusResponseSchema = z.object({
+  status: z.string(),
+  version: z.string(),
+});
+export type StatusResponse = z.infer<typeof StatusResponseSchema>;
+
+/**
  * A client for calling the TensorZero Gateway inference and feedback endpoints.
  */
 export class TensorZeroClient {
@@ -317,8 +346,10 @@ export class TensorZeroClient {
         body: JSON.stringify(request),
       });
       if (!response.ok) {
+        const errorText = await response.text();
+        const errorContents = JSON.parse(errorText).error;
         throw new Error(
-          `Inference request failed with status ${response.status}`,
+          `Inference request failed with status ${response.status}: ${errorContents}`,
         );
       }
       return (await response.json()) as InferenceResponse;
@@ -390,7 +421,11 @@ export class TensorZeroClient {
       body: JSON.stringify(request),
     });
     if (!response.ok) {
-      throw new Error(`Feedback request failed with status ${response.status}`);
+      const errorText = await response.text();
+      const errorContents = JSON.parse(errorText).error;
+      throw new Error(
+        `Feedback request failed with status ${response.status}: ${errorContents}`,
+      );
     }
     return (await response.json()) as FeedbackResponse;
   }
@@ -416,7 +451,7 @@ export class TensorZeroClient {
       throw new Error("Inference ID must be a non-empty string");
     }
 
-    const url = `${this.baseUrl}/datasets/${encodeURIComponent(datasetName)}/datapoints`;
+    const url = `${this.baseUrl}/internal/datasets/${encodeURIComponent(datasetName)}/datapoints`;
 
     const request = {
       inference_id: inferenceId,
@@ -451,7 +486,14 @@ export class TensorZeroClient {
     datasetName: string,
     datapointId: string,
     datapoint: Datapoint,
+    inputChanged: boolean,
   ): Promise<DatapointResponse> {
+    // If the input changed, we should remove the source_inference_id
+    // because it will no longer be valid
+    datapoint.source_inference_id = inputChanged
+      ? null
+      : datapoint.source_inference_id;
+
     if (!datasetName || typeof datasetName !== "string") {
       throw new Error("Dataset name must be a non-empty string");
     }
@@ -466,7 +508,7 @@ export class TensorZeroClient {
       throw new Error(`Invalid datapoint: ${validationResult.error.message}`);
     }
 
-    const url = `${this.baseUrl}/datasets/${encodeURIComponent(datasetName)}/datapoints/${encodeURIComponent(datapointId)}`;
+    const url = `${this.baseUrl}/internal/datasets/${encodeURIComponent(datasetName)}/datapoints/${encodeURIComponent(datapointId)}`;
 
     const response = await fetch(url, {
       method: "PUT",
@@ -483,5 +525,22 @@ export class TensorZeroClient {
 
     const body = await response.json();
     return DatapointResponseSchema.parse(body);
+  }
+  async getObject(storagePath: StoragePath): Promise<string> {
+    const url = `${this.baseUrl}/internal/object_storage?storage_path=${encodeURIComponent(JSON.stringify(storagePath))}`;
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to get object: ${response.statusText}`);
+    }
+    return response.text();
+  }
+
+  async status(): Promise<StatusResponse> {
+    const url = `${this.baseUrl}/status`;
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to get status: ${response.statusText}`);
+    }
+    return StatusResponseSchema.parse(await response.json());
   }
 }

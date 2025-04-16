@@ -455,8 +455,10 @@ impl FuserConfig {
                     included_indices.push(i);
                 }
                 InferenceResult::Json(json_result) => {
-                    if json_result.output.parsed.is_some() {
-                        candidate_outputs.push(json_result.output.raw.clone());
+                    if let (Some(raw), Some(_)) =
+                        (&json_result.output.raw, &json_result.output.parsed)
+                    {
+                        candidate_outputs.push(raw.clone());
                         included_indices.push(i);
                     }
                 }
@@ -541,6 +543,7 @@ impl FuserConfig {
         }
         let extra_body = FullExtraBodyConfig {
             extra_body: self.inner.extra_body.clone(),
+            variant_extra_headers: self.inner.extra_headers.clone(),
             inference_extra_body: Default::default(),
         };
         let model_inference_request = prepare_model_inference_request(
@@ -853,7 +856,7 @@ mod tests {
 
         let candidate1 = InferenceResult::Json(JsonInferenceResult::new(
             Uuid::now_v7(),
-            "{\"response\": \"Valid JSON response\"}".to_string(),
+            Some("{\"response\": \"Valid JSON response\"}".to_string()),
             Some(json!({"response": "Valid JSON response"})),
             Usage {
                 input_tokens: 10,
@@ -890,7 +893,7 @@ mod tests {
 
         let candidate2 = InferenceResult::Json(JsonInferenceResult::new(
             Uuid::now_v7(),
-            "{\"oops: \"Malformed JSON response\"".to_string(),
+            Some("{\"oops: \"Malformed JSON response\"".to_string()),
             None, // malformed
             Usage {
                 input_tokens: 15,
@@ -943,6 +946,7 @@ mod tests {
             assistant_schema: None,
             output_schema: JSONSchemaFromPath::from_value(&json!({})).unwrap(),
             implicit_tool_call_config: ToolCallConfig::default(),
+            description: None,
         });
         // Prepare some candidate InferenceResults
         let model_inference_response0 = ModelInferenceResponseWithMetadata {
@@ -1032,6 +1036,7 @@ mod tests {
                             ..Default::default()
                         }),
                         extra_body: Default::default(),
+                        extra_headers: Default::default(),
                     },
                 )]),
             },
@@ -1084,7 +1089,7 @@ mod tests {
             output_tokens: 55,
         };
         let expected_content = JsonInferenceOutput {
-            raw: "{\"answer\":\"Hello\"}".to_string(),
+            raw: Some("{\"answer\":\"Hello\"}".to_string()),
             parsed: Some(json!({"answer": "Hello"})),
         };
         match fused {
@@ -1126,6 +1131,7 @@ mod tests {
                                 ..Default::default()
                             }),
                             extra_body: Default::default(),
+                            extra_headers: Default::default(),
                         },
                     )]),
                 },
@@ -1190,6 +1196,7 @@ mod tests {
                                 ..Default::default()
                             }),
                             extra_body: Default::default(),
+                            extra_headers: Default::default(),
                         },
                     )]),
                 },
@@ -1208,6 +1215,7 @@ mod tests {
             tools: vec![],
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
+            description: None,
         });
 
         let result = mixture_of_n_variant

@@ -10,7 +10,7 @@ use url::Url;
 
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
-use crate::error::{Error, ErrorDetails};
+use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::{
@@ -27,7 +27,7 @@ use crate::inference::types::{
 use crate::model::{Credential, CredentialLocation, ModelProvider};
 use crate::tool::ToolCallChunk;
 
-use super::helpers::inject_extra_body;
+use super::helpers::inject_extra_request_data;
 use super::openai::{
     convert_stream_error, get_chat_url, handle_openai_error, prepare_openai_tools,
     tensorzero_to_openai_messages, tensorzero_to_openai_system_message,
@@ -55,7 +55,6 @@ const PROVIDER_TYPE: &str = "deepseek";
 pub enum DeepSeekCredentials {
     Static(SecretString),
     Dynamic(String),
-    #[cfg(any(test, feature = "e2e_tests"))]
     None,
 }
 
@@ -66,7 +65,6 @@ impl TryFrom<Credential> for DeepSeekCredentials {
         match credentials {
             Credential::Static(key) => Ok(DeepSeekCredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(DeepSeekCredentials::Dynamic(key_name)),
-            #[cfg(any(test, feature = "e2e_tests"))]
             Credential::Missing => Ok(DeepSeekCredentials::None),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for DeepSeek provider".to_string(),
@@ -90,7 +88,6 @@ impl DeepSeekCredentials {
                     .into()
                 })
             }
-            #[cfg(any(test, feature = "e2e_tests"))]
             DeepSeekCredentials::None => Err(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
             }
@@ -137,11 +134,14 @@ impl InferenceProvider for DeepSeekProvider {
             serde_json::to_value(DeepSeekRequest::new(&self.model_name, request)?).map_err(
                 |e| {
                     Error::new(ErrorDetails::Serialization {
-                        message: format!("Error serializing DeepSeek request: {e}"),
+                        message: format!(
+                            "Error serializing DeepSeek request: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
                     })
                 },
             )?;
-        inject_extra_body(
+        let headers = inject_extra_request_data(
             &request.extra_body,
             model_provider,
             model_name,
@@ -153,7 +153,8 @@ impl InferenceProvider for DeepSeekProvider {
         let request_builder = http_client
             .post(request_url)
             .header("Content-Type", "application/json")
-            .bearer_auth(api_key.expose_secret());
+            .bearer_auth(api_key.expose_secret())
+            .headers(headers);
 
         let res = request_builder
             .json(&request_body)
@@ -161,8 +162,11 @@ impl InferenceProvider for DeepSeekProvider {
             .await
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
-                    message: format!("Error sending request to DeepSeek: {e}"),
                     status_code: e.status(),
+                    message: format!(
+                        "Error sending request to DeepSeek: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
@@ -172,7 +176,10 @@ impl InferenceProvider for DeepSeekProvider {
         if res.status().is_success() {
             let raw_response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing text response: {e}"),
+                    message: format!(
+                        "Error parsing text response: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
@@ -181,7 +188,10 @@ impl InferenceProvider for DeepSeekProvider {
 
             let response = serde_json::from_str(&raw_response).map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing JSON response: {e}"),
+                    message: format!(
+                        "Error parsing JSON response: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                     raw_response: Some(raw_response.clone()),
                     provider_type: PROVIDER_TYPE.to_string(),
@@ -204,7 +214,10 @@ impl InferenceProvider for DeepSeekProvider {
 
             let response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing error response: {e}"),
+                    message: format!(
+                        "Error parsing error response: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
@@ -229,11 +242,14 @@ impl InferenceProvider for DeepSeekProvider {
             serde_json::to_value(DeepSeekRequest::new(&self.model_name, request)?).map_err(
                 |e| {
                     Error::new(ErrorDetails::Serialization {
-                        message: format!("Error serializing DeepSeek request: {e}"),
+                        message: format!(
+                            "Error serializing DeepSeek request: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
                     })
                 },
             )?;
-        inject_extra_body(
+        let headers = inject_extra_request_data(
             &request.extra_body,
             model_provider,
             model_name,
@@ -241,7 +257,10 @@ impl InferenceProvider for DeepSeekProvider {
         )?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
-                message: format!("Error serializing request: {e}"),
+                message: format!(
+                    "Error serializing request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
                 raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                 raw_response: None,
                 provider_type: PROVIDER_TYPE.to_string(),
@@ -254,11 +273,12 @@ impl InferenceProvider for DeepSeekProvider {
             .post(request_url)
             .header("Content-Type", "application/json")
             .bearer_auth(api_key.expose_secret())
+            .headers(headers)
             .json(&request_body)
             .eventsource()
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
-                    message: format!("Error sending request: {e}"),
+                    message: format!("Error sending request: {}", DisplayOrDebugGateway::new(e)),
                     status_code: None,
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                     raw_response: None,
@@ -491,7 +511,10 @@ fn deepseek_to_tensorzero_chunk(
 ) -> Result<ProviderInferenceResponseChunk, Error> {
     let raw_message = serde_json::to_string(&chunk).map_err(|e| {
         Error::new(ErrorDetails::InferenceServer {
-            message: format!("Error parsing response from DeepSeek: {e}"),
+            message: format!(
+                "Error parsing response from DeepSeek: {}",
+                DisplayOrDebugGateway::new(e)
+            ),
             raw_request: None,
             raw_response: Some(serde_json::to_string(&chunk).unwrap_or_default()),
             provider_type: PROVIDER_TYPE.to_string(),
@@ -700,7 +723,10 @@ impl<'a> TryFrom<DeepSeekResponseWithMetadata<'a>> for ProviderInferenceResponse
         }
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
-                message: format!("Error serializing request body as JSON: {e}"),
+                message: format!(
+                    "Error serializing request body as JSON: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
             })
         })?;
         let system = generic_request.system.clone();
@@ -925,13 +951,10 @@ mod tests {
         let creds = DeepSeekCredentials::try_from(generic).unwrap();
         assert!(matches!(creds, DeepSeekCredentials::Dynamic(_)));
 
-        // Test Missing credential (test mode)
-        #[cfg(any(test, feature = "e2e_tests"))]
-        {
-            let generic = Credential::Missing;
-            let creds = DeepSeekCredentials::try_from(generic).unwrap();
-            assert!(matches!(creds, DeepSeekCredentials::None));
-        }
+        // Test Missing credential
+        let generic = Credential::Missing;
+        let creds = DeepSeekCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, DeepSeekCredentials::None));
 
         // Test invalid type
         let generic = Credential::FileContents(SecretString::from("test"));

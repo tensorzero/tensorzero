@@ -3,10 +3,21 @@
 
 use std::{borrow::Cow, collections::HashMap};
 
+<<<<<<< HEAD
 use pyo3::{exceptions::PyValueError, intern, prelude::*, sync::GILOnceCell, types::PyDict};
 use tensorzero_rust::{
     DynamicEvaluationRunResponse, FeedbackResponse, InferenceResponse, InferenceResponseChunk, Tool,
 };
+=======
+use pyo3::{
+    exceptions::{PyRuntimeError, PyValueError},
+    intern,
+    prelude::*,
+    sync::GILOnceCell,
+    types::PyDict,
+};
+use tensorzero_rust::{FeedbackResponse, InferenceResponse, InferenceResponseChunk, Tool};
+>>>>>>> e51cacb4dc2c41dbb24fc0a9292d606299fc58ab
 use uuid::Uuid;
 
 use crate::{tensorzero_internal_error, JSON_DUMPS, JSON_LOADS};
@@ -85,7 +96,11 @@ pub fn serialize_to_dict<T: serde::ser::Serialize>(py: Python<'_>, val: T) -> Py
         .map_err(|e| PyValueError::new_err(format!("Failed to serialize to JSON: {e:?}")))?;
     JSON_LOADS
         .get(py)
-        .expect("JSON_LOADS was not initialized")
+        .ok_or_else(|| {
+            PyRuntimeError::new_err(
+                "TensorZero: JSON_LOADS was not initialized. This should never happen",
+            )
+        })?
         .call1(py, (json_str.into_pyobject(py)?,))
 }
 
@@ -102,7 +117,11 @@ pub fn deserialize_from_pyobj<'a, T: serde::de::DeserializeOwned>(
 
     let json_str_obj = JSON_DUMPS
         .get(py)
-        .expect("JSON_DUMPS was not initialized")
+        .ok_or_else(|| {
+            PyRuntimeError::new_err(
+                "TensorZero: JSON_DUMPS was not initialized. This should never happen",
+            )
+        })?
         .call(py, (obj,), Some(&kwargs))?;
     let json_str: Cow<'_, str> = json_str_obj.extract(py)?;
     let val = serde_json::from_str::<T>(json_str.as_ref());

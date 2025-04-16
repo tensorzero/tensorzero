@@ -696,6 +696,7 @@ mod tests {
             tools: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
+            description: None,
         });
         let json_mode = JsonMode::Off;
 
@@ -743,6 +744,7 @@ mod tests {
             user_schema: None,
             output_schema: output_schema.clone(),
             implicit_tool_call_config: implicit_tool_call_config.clone(),
+            description: None,
         });
 
         let json_mode = JsonMode::On;
@@ -894,6 +896,7 @@ mod tests {
             tools: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
+            description: None,
         });
 
         let request_messages = vec![RequestMessage {
@@ -935,6 +938,7 @@ mod tests {
                     name: model_name.into(),
                     config: dummy_provider_config,
                     extra_body: Default::default(),
+                    extra_headers: Default::default(),
                 },
             )]),
         };
@@ -997,6 +1001,7 @@ mod tests {
                 tool_choice: ToolChoice::Auto,
                 parallel_tool_calls: None,
             },
+            description: None,
         });
         let output_schema = json!({
             "type": "object",
@@ -1039,6 +1044,7 @@ mod tests {
                     name: model_name_json.into(),
                     config: dummy_provider_config_json,
                     extra_body: Default::default(),
+                    extra_headers: Default::default(),
                 },
             )]),
         };
@@ -1061,8 +1067,10 @@ mod tests {
         let inference_result = result.unwrap();
         match inference_result {
             InferenceResult::Json(json_result) => {
-                let expected_raw_output = DUMMY_JSON_RESPONSE_RAW.to_string();
-                assert_eq!(json_result.output.raw, expected_raw_output);
+                assert_eq!(
+                    json_result.output.raw,
+                    Some(DUMMY_JSON_RESPONSE_RAW.to_string())
+                );
                 assert_eq!(json_result.output.parsed, Some(json!({"answer": "Hello"})));
                 assert_eq!(json_result.usage, DUMMY_INFER_USAGE.clone());
                 assert_eq!(json_result.model_inference_results.len(), 1);
@@ -1072,7 +1080,7 @@ mod tests {
                 );
                 assert_eq!(
                     json_result.model_inference_results[0].output,
-                    vec![expected_raw_output.into()]
+                    vec![DUMMY_JSON_RESPONSE_RAW.to_string().into()]
                 );
             }
             _ => panic!("Expected Json inference result"),
@@ -1093,6 +1101,7 @@ mod tests {
                     name: error_model_name.into(),
                     config: error_provider_config,
                     extra_body: Default::default(),
+                    extra_headers: Default::default(),
                 },
             )]),
         };
@@ -1162,6 +1171,7 @@ mod tests {
             tools: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
+            description: None,
         });
 
         let request_messages = vec![RequestMessage {
@@ -1210,6 +1220,7 @@ mod tests {
                         name: error_model_name.into(),
                         config: error_provider_config,
                         extra_body: Default::default(),
+                        extra_headers: Default::default(),
                     },
                 ),
                 (
@@ -1218,6 +1229,7 @@ mod tests {
                         name: model_name.into(),
                         config: dummy_provider_config,
                         extra_body: Default::default(),
+                        extra_headers: Default::default(),
                     },
                 ),
             ]),
@@ -1290,6 +1302,7 @@ mod tests {
             tools: vec![],
             tool_choice: crate::tool::ToolChoice::Auto,
             parallel_tool_calls: None,
+            description: None,
         });
 
         // Create an input message
@@ -1313,6 +1326,7 @@ mod tests {
                     name: "good_provider".into(),
                     config: dummy_provider_config,
                     extra_body: Default::default(),
+                    extra_headers: Default::default(),
                 },
             )]),
         }));
@@ -1432,6 +1446,7 @@ mod tests {
             tools: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
+            description: None,
         })));
 
         let request_messages = vec![RequestMessage {
@@ -1480,6 +1495,7 @@ mod tests {
                         name: error_model_name.into(),
                         config: error_provider_config,
                         extra_body: Default::default(),
+                        extra_headers: Default::default(),
                     },
                 ),
                 (
@@ -1488,6 +1504,7 @@ mod tests {
                         name: model_name.into(),
                         config: dummy_provider_config,
                         extra_body: Default::default(),
+                        extra_headers: Default::default(),
                     },
                 ),
             ]),

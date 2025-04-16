@@ -1,6 +1,6 @@
 [package]
 name = "gateway"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 
 [dependencies]
@@ -13,9 +13,13 @@ tracing-subscriber = { version = "0.3.18", features = [
     "json",
 ] }
 tokio = { workspace = true }
-mimalloc = "0.1.44"
+mimalloc = "0.1.45"
 clap = { workspace = true }
 serde = { workspace = true }
 
 [lints]
 workspace = true
+
+[features]
+e2e_tests = ["tensorzero-internal/e2e_tests"]
+default = []

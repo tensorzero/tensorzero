@@ -25,6 +25,13 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
+    let bad_auth_extra_headers = vec![E2ETestProvider {
+        variant_name: "fireworks-extra-headers".to_string(),
+        model_name: "qwen2p5-72b-instruct".into(),
+        model_provider_name: "fireworks".into(),
+        credentials: HashMap::new(),
+    }];
+
     let inference_params_dynamic_providers = vec![E2ETestProvider {
         variant_name: "fireworks-dynamic".to_string(),
         model_name: "llama3.3-70b-instruct-fireworks-dynamic".into(),
@@ -67,10 +74,18 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
+    let thinking_block_providers = vec![E2ETestProvider {
+        variant_name: "fireworks-deepseek".to_string(),
+        model_name: "deepseek-r1".into(),
+        model_provider_name: "fireworks".into(),
+        credentials: HashMap::new(),
+    }];
+
     E2ETestProviders {
         simple_inference: providers.clone(),
         extra_body_inference: extra_body_providers,
-        reasoning_inference: vec![],
+        bad_auth_extra_headers,
+        reasoning_inference: thinking_block_providers.clone(),
         inference_params_inference: providers.clone(),
         inference_params_dynamic_credentials: inference_params_dynamic_providers,
         tool_use_inference: tool_providers.clone(),

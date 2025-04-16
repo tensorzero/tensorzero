@@ -25,6 +25,13 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
+    let bad_auth_extra_headers = vec![E2ETestProvider {
+        variant_name: "hyperbolic-extra-headers".to_string(),
+        model_name: "meta-llama/Meta-Llama-3-70B-Instruct".into(),
+        model_provider_name: "hyperbolic".into(),
+        credentials: HashMap::new(),
+    }];
+
     let inference_params_dynamic_providers = vec![E2ETestProvider {
         variant_name: "hyperbolic-dynamic".to_string(),
         model_name: "meta-llama/Meta-Llama-3-70B-Instruct-dynamic".into(),
@@ -41,6 +48,7 @@ async fn get_providers() -> E2ETestProviders {
 
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
+        bad_auth_extra_headers,
         reasoning_inference: vec![],
         extra_body_inference: extra_body_providers,
         inference_params_inference: standard_providers,

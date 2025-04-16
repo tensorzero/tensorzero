@@ -1,10 +1,13 @@
 [package]
 name = "minijinja-bindings"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
+
+[lints]
+workspace = true
 
 [features]
 default = []
@@ -14,7 +17,7 @@ default = []
 
 [dependencies]
 wasm-bindgen = "0.2.62"
-minijinja = { version = "2.8.0", features = ["loader"] }
+minijinja = { version = "2.9.0", features = ["loader"] }
 
 # The `console_error_panic_hook` crate provides better debugging of panics by
 # logging them with `console.error`. This is great for development, but requires

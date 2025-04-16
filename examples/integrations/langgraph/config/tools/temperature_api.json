@@ -1,0 +1,13 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "description": "Get the current temperature for a given location.",
+  "properties": {
+    "location": {
+      "type": "string",
+      "description": "The location to get the temperature for (e.g. \"New York\")"
+    }
+  },
+  "required": ["location"],
+  "additionalProperties": false
+}

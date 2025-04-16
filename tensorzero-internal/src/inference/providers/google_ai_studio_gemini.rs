@@ -14,7 +14,7 @@ use uuid::Uuid;
 
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
-use crate::error::{Error, ErrorDetails};
+use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::resolved_input::ImageWithPath;
@@ -32,7 +32,7 @@ use crate::model::{build_creds_caching_default, Credential, CredentialLocation, 
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use super::gcp_vertex_gemini::process_output_schema;
-use super::helpers::inject_extra_body;
+use super::helpers::inject_extra_request_data;
 use super::openai::convert_stream_error;
 
 const PROVIDER_NAME: &str = "Google AI Studio Gemini";
@@ -92,7 +92,6 @@ fn default_api_key_location() -> CredentialLocation {
 pub enum GoogleAIStudioCredentials {
     Static(SecretString),
     Dynamic(String),
-    #[cfg(any(test, feature = "e2e_tests"))]
     None,
 }
 
@@ -103,7 +102,6 @@ impl TryFrom<Credential> for GoogleAIStudioCredentials {
         match credentials {
             Credential::Static(key) => Ok(GoogleAIStudioCredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(GoogleAIStudioCredentials::Dynamic(key_name)),
-            #[cfg(any(test, feature = "e2e_tests"))]
             Credential::Missing => Ok(GoogleAIStudioCredentials::None),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for Google AI Studio Gemini provider"
@@ -128,7 +126,6 @@ impl GoogleAIStudioCredentials {
                     .into()
                 })
             }
-            #[cfg(any(test, feature = "e2e_tests"))]
             GoogleAIStudioCredentials::None => Err(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
             })?,
@@ -151,10 +148,13 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
     ) -> Result<ProviderInferenceResponse, Error> {
         let mut request_body = serde_json::to_value(GeminiRequest::new(request)?).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
-                message: format!("Error serializing Gemini request: {e}"),
+                message: format!(
+                    "Error serializing Gemini request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
             })
         })?;
-        inject_extra_body(
+        let headers = inject_extra_request_data(
             &request.extra_body,
             model_provider,
             model_name,
@@ -168,12 +168,13 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
         let res = http_client
             .post(url)
             .json(&request_body)
+            .headers(headers)
             .send()
             .await
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
-                    message: format!("Error sending request: {e}"),
                     status_code: e.status(),
+                    message: format!("Error sending request: {}", DisplayOrDebugGateway::new(e)),
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                     raw_response: None,
@@ -185,7 +186,10 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
         if res.status().is_success() {
             let raw_response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing text response: {e}"),
+                    message: format!(
+                        "Error parsing text response: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                     raw_response: None,
@@ -194,7 +198,10 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
 
             let response = serde_json::from_str(&raw_response).map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing JSON response: {e}"),
+                    message: format!(
+                        "Error parsing JSON response: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                     raw_response: Some(raw_response.clone()),
@@ -212,7 +219,10 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
             let response_code = res.status();
             let error_body = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing text response: {e}"),
+                    message: format!(
+                        "Error parsing text response: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                     raw_response: None,
@@ -236,10 +246,13 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let mut request_body = serde_json::to_value(GeminiRequest::new(request)?).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
-                message: format!("Error serializing Gemini request: {e}"),
+                message: format!(
+                    "Error serializing Gemini request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
             })
         })?;
-        inject_extra_body(
+        let headers = inject_extra_request_data(
             &request.extra_body,
             model_provider,
             model_name,
@@ -247,7 +260,10 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
         )?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
-                message: format!("Error serializing request: {e}"),
+                message: format!(
+                    "Error serializing request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
             })
         })?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
@@ -258,10 +274,14 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
         let event_source = http_client
             .post(url)
             .json(&request_body)
+            .headers(headers)
             .eventsource()
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
-                    message: format!("Error sending request to Google AI Studio Gemini: {e}"),
+                    message: format!(
+                        "Error sending request to Google AI Studio Gemini: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     status_code: None,
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
@@ -315,7 +335,7 @@ fn stream_google_ai_studio_gemini(
                     Event::Message(message) => {
                         let data: Result<GeminiResponse, Error> = serde_json::from_str(&message.data).map_err(|e| {
                             Error::new(ErrorDetails::InferenceServer {
-                                message: format!("Error parsing streaming JSON response: {e}"),
+                                message: format!("Error parsing streaming JSON response: {}", DisplayOrDebugGateway::new(e)),
                                 provider_type: PROVIDER_TYPE.to_string(),
                                 raw_request: None,
                                 raw_response: Some(message.data.clone()),
@@ -408,7 +428,10 @@ impl<'a> TryFrom<&'a ContentBlock> for Option<FlattenUnknown<'a, GeminiPart<'a>>
                 let response: Value = serde_json::from_str(&tool_result.result).map_err(|e| {
                     Error::new(ErrorDetails::InferenceClient {
                         status_code: Some(StatusCode::BAD_REQUEST),
-                        message: format!("Error parsing tool result as JSON Value: {e}"),
+                        message: format!(
+                            "Error parsing tool result as JSON Value: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
                         provider_type: PROVIDER_TYPE.to_string(),
                         raw_request: None,
                         raw_response: Some(tool_result.result.clone()),
@@ -433,7 +456,10 @@ impl<'a> TryFrom<&'a ContentBlock> for Option<FlattenUnknown<'a, GeminiPart<'a>>
                 let args: Value = serde_json::from_str(&tool_call.arguments).map_err(|e| {
                     Error::new(ErrorDetails::InferenceClient {
                         status_code: Some(StatusCode::BAD_REQUEST),
-                        message: format!("Error parsing tool call arguments as JSON Value: {e}"),
+                        message: format!(
+                            "Error parsing tool call arguments as JSON Value: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
                         provider_type: PROVIDER_TYPE.to_string(),
                         raw_request: None,
                         raw_response: Some(tool_call.arguments.clone()),
@@ -901,7 +927,10 @@ impl<'a> TryFrom<GeminiResponseWithMetadata<'a>> for ProviderInferenceResponse {
             .into();
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
-                message: format!("Error serializing request: {e}"),
+                message: format!(
+                    "Error serializing request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
             })
         })?;
         let system = generic_request.system.clone();
@@ -1831,13 +1860,10 @@ mod tests {
         let creds = GoogleAIStudioCredentials::try_from(generic).unwrap();
         assert!(matches!(creds, GoogleAIStudioCredentials::Dynamic(_)));
 
-        // Test Missing credential (test mode)
-        #[cfg(any(test, feature = "e2e_tests"))]
-        {
-            let generic = Credential::Missing;
-            let creds = GoogleAIStudioCredentials::try_from(generic).unwrap();
-            assert!(matches!(creds, GoogleAIStudioCredentials::None));
-        }
+        // Test Missing credential
+        let generic = Credential::Missing;
+        let creds = GoogleAIStudioCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, GoogleAIStudioCredentials::None));
 
         // Test invalid type
         let generic = Credential::FileContents(SecretString::from("test"));

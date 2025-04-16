@@ -1,6 +1,6 @@
 use std::sync::OnceLock;
 
-use futures::StreamExt;
+use futures::{StreamExt, TryStreamExt};
 use reqwest_eventsource::RequestBuilderExt;
 use secrecy::{ExposeSecret, SecretString};
 use serde::Serialize;
@@ -10,7 +10,7 @@ use url::Url;
 
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
-use crate::error::{Error, ErrorDetails};
+use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::ContentBlockOutput;
@@ -21,12 +21,13 @@ use crate::inference::types::{
 };
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
 
-use super::helpers::inject_extra_body;
+use super::helpers::inject_extra_request_data;
 use super::openai::{
     get_chat_url, handle_openai_error, prepare_openai_messages, prepare_openai_tools,
     stream_openai, OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, OpenAITool,
     OpenAIToolChoice, StreamOptions,
 };
+use super::provider_trait::TensorZeroEventError;
 
 fn default_api_key_location() -> CredentialLocation {
     CredentialLocation::Env("SGLANG_API_KEY".to_string())
@@ -79,7 +80,6 @@ impl TryFrom<Credential> for SGLangCredentials {
             Credential::Static(key) => Ok(SGLangCredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(SGLangCredentials::Dynamic(key_name)),
             Credential::None => Ok(SGLangCredentials::None),
-            #[cfg(any(test, feature = "e2e_tests"))]
             Credential::Missing => Ok(SGLangCredentials::None),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for SGLang provider".to_string(),
@@ -124,10 +124,13 @@ impl InferenceProvider for SGLangProvider {
         let mut request_body = serde_json::to_value(SGLangRequest::new(&self.model_name, request)?)
             .map_err(|e| {
                 Error::new(ErrorDetails::Serialization {
-                    message: format!("Error serializing SGLang request: {e}"),
+                    message: format!(
+                        "Error serializing SGLang request: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                 })
             })?;
-        inject_extra_body(
+        let headers = inject_extra_request_data(
             &request.extra_body,
             model_provider,
             model_name,
@@ -144,12 +147,16 @@ impl InferenceProvider for SGLangProvider {
         }
         let res = request_builder
             .json(&request_body)
+            .headers(headers)
             .send()
             .await
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
-                    message: format!("Error sending request to SGLang: {e}"),
                     status_code: e.status(),
+                    message: format!(
+                        "Error sending request to SGLang: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                     raw_response: None,
@@ -158,7 +165,10 @@ impl InferenceProvider for SGLangProvider {
         if res.status().is_success() {
             let raw_response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing text response: {e}"),
+                    message: format!(
+                        "Error parsing text response: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
@@ -167,7 +177,10 @@ impl InferenceProvider for SGLangProvider {
 
             let response = serde_json::from_str(&raw_response).map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing JSON response: {e}"),
+                    message: format!(
+                        "Error parsing JSON response: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                     raw_response: Some(raw_response.clone()),
                     provider_type: PROVIDER_TYPE.to_string(),
@@ -190,7 +203,10 @@ impl InferenceProvider for SGLangProvider {
                 res.status(),
                 &res.text().await.map_err(|e| {
                     Error::new(ErrorDetails::InferenceServer {
-                        message: format!("Error parsing error response: {e}"),
+                        message: format!(
+                            "Error parsing error response: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
                         raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                         raw_response: None,
                         provider_type: PROVIDER_TYPE.to_string(),
@@ -215,10 +231,13 @@ impl InferenceProvider for SGLangProvider {
         let mut request_body = serde_json::to_value(SGLangRequest::new(&self.model_name, request)?)
             .map_err(|e| {
                 Error::new(ErrorDetails::Serialization {
-                    message: format!("Error serializing SGLang request: {e}"),
+                    message: format!(
+                        "Error serializing SGLang request: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                 })
             })?;
-        inject_extra_body(
+        let headers = inject_extra_request_data(
             &request.extra_body,
             model_provider,
             model_name,
@@ -226,7 +245,10 @@ impl InferenceProvider for SGLangProvider {
         )?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
-                message: format!("Error serializing request: {e}"),
+                message: format!(
+                    "Error serializing request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
             })
         })?;
         let request_url = get_chat_url(&self.api_base)?;
@@ -240,10 +262,14 @@ impl InferenceProvider for SGLangProvider {
         }
         let event_source = request_builder
             .json(&request_body)
+            .headers(headers)
             .eventsource()
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
-                    message: format!("Error sending request to SGLang: {e}"),
+                    message: format!(
+                        "Error sending request to SGLang: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     status_code: None,
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
@@ -251,7 +277,12 @@ impl InferenceProvider for SGLangProvider {
                 })
             })?;
 
-        let stream = stream_openai(event_source, start_time).peekable();
+        let stream = stream_openai(
+            PROVIDER_TYPE.to_string(),
+            event_source.map_err(TensorZeroEventError::EventSource),
+            start_time,
+        )
+        .peekable();
         Ok((stream, raw_request))
     }
 
@@ -442,7 +473,10 @@ impl<'a> TryFrom<SGLangResponseWithMetadata<'a>> for ProviderInferenceResponse {
         }
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
-                message: format!("Error serializing request body as JSON: {e}"),
+                message: format!(
+                    "Error serializing request body as JSON: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
             })
         })?;
         let system = generic_request.system.clone();

@@ -2,7 +2,6 @@ import {
   data,
   isRouteErrorResponse,
   redirect,
-  useLoaderData,
   useNavigate,
   useSearchParams,
 } from "react-router";
@@ -77,7 +76,6 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   const metricsWithFeedbackPromise = queryMetricsWithFeedback({
     function_name,
     inference_table: getInferenceTableName(function_config),
-    metrics: config.metrics,
     variant_name,
   });
 
@@ -119,7 +117,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   };
 }
 
-export default function VariantDetails() {
+export default function VariantDetails({ loaderData }: Route.ComponentProps) {
   const {
     function_name,
     variant_name,
@@ -128,7 +126,7 @@ export default function VariantDetails() {
     inference_bounds,
     variant_performances,
     metricsWithFeedback,
-  } = useLoaderData<typeof loader>();
+  } = loaderData;
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const config = useConfig();
@@ -212,12 +210,7 @@ export default function VariantDetails() {
         </SectionLayout>
 
         <SectionLayout>
-          <SectionHeader heading="Template" />
-          <VariantTemplate variantConfig={variant_config} />
-        </SectionLayout>
-
-        <SectionLayout>
-          <SectionHeader heading="Metric" />
+          <SectionHeader heading="Metrics" />
           <MetricSelector
             metricsWithFeedback={metricsWithFeedback}
             selectedMetric={metric_name || ""}
@@ -231,6 +224,11 @@ export default function VariantDetails() {
               onTimeGranularityChange={handleTimeGranularityChange}
             />
           )}
+        </SectionLayout>
+
+        <SectionLayout>
+          <SectionHeader heading="Templates" />
+          <VariantTemplate variantConfig={variant_config} />
         </SectionLayout>
 
         <SectionLayout>

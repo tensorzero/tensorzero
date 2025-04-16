@@ -3,6 +3,7 @@ import {
   queryModelInferencesByInferenceId,
 } from "~/utils/clickhouse/inference";
 import {
+  pollForFeedbackItem,
   queryDemonstrationFeedbackByInferenceId,
   queryFeedbackBoundsByTargetId,
   queryFeedbackByTargetId,
@@ -18,15 +19,15 @@ import {
 import PageButtons from "~/components/utils/PageButtons";
 import BasicInfo from "./InferenceBasicInfo";
 import Input from "~/components/inference/Input";
-import Output from "~/components/inference/Output";
+import Output from "~/components/inference/NewOutput";
 import FeedbackTable from "~/components/feedback/FeedbackTable";
-import { tensorZeroClient } from "~/utils/tensorzero.server";
+import { addHumanFeedback, tensorZeroClient } from "~/utils/tensorzero.server";
 import { ParameterCard } from "./InferenceParameters";
 import { TagsTable } from "~/components/utils/TagsTable";
-import { ModelInferencesAccordion } from "./ModelInferencesAccordion";
-import { useState } from "react";
+import { ModelInferencesTable } from "./ModelInferencesTable";
+import { useEffect, useState } from "react";
 import { useConfig } from "~/context/config";
-import { VariantResponseModal } from "./VariantResponseModal";
+import { VariantResponseModal } from "~/components/inference/VariantResponseModal";
 import { getTotalInferenceUsage } from "~/utils/clickhouse/helpers";
 import {
   PageHeader,
@@ -37,40 +38,67 @@ import {
 } from "~/components/layout/PageLayout";
 import { InferenceActions } from "./InferenceActions";
 import { getDatasetCounts } from "~/utils/clickhouse/datasets.server";
+import { Toaster } from "~/components/ui/toaster";
+import { useToast } from "~/hooks/use-toast";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { inference_id } = params;
   const url = new URL(request.url);
+  const newFeedbackId = url.searchParams.get("newFeedbackId");
   const beforeFeedback = url.searchParams.get("beforeFeedback");
   const afterFeedback = url.searchParams.get("afterFeedback");
   const pageSize = Number(url.searchParams.get("pageSize")) || 10;
+
   if (pageSize > 100) {
     throw data("Page size cannot exceed 100", { status: 400 });
   }
 
+  // --- Define all promises, conditionally choosing the feedback promise ---
+
+  const inferencePromise = queryInferenceById(inference_id);
+  const modelInferencesPromise =
+    queryModelInferencesByInferenceId(inference_id);
+  const datasetCountsPromise = getDatasetCounts();
+  const demonstrationFeedbackPromise = queryDemonstrationFeedbackByInferenceId({
+    inference_id,
+    page_size: 1, // Only need to know if *any* exist
+  });
+  const feedbackBoundsPromise = queryFeedbackBoundsByTargetId({
+    target_id: inference_id,
+  });
+
+  // If there is a freshly inserted feedback, ClickHouse may take some time to
+  // update the feedback table as it is eventually consistent.
+  // In this case, we poll for the feedback item until it is found but time out and log a warning.
+  const feedbackDataPromise = newFeedbackId
+    ? pollForFeedbackItem(inference_id, newFeedbackId, pageSize)
+    : queryFeedbackByTargetId({
+        target_id: inference_id,
+        before: beforeFeedback || undefined,
+        after: afterFeedback || undefined,
+        page_size: pageSize,
+      });
+
+  // --- Execute all promises concurrently ---
+
   const [
     inference,
     model_inferences,
-    feedback,
-    feedback_bounds,
     dataset_counts,
     demonstration_feedback,
+    feedback_bounds,
+    feedback,
   ] = await Promise.all([
-    queryInferenceById(inference_id),
-    queryModelInferencesByInferenceId(inference_id),
-    queryFeedbackByTargetId({
-      target_id: inference_id,
-      before: beforeFeedback || undefined,
-      after: afterFeedback || undefined,
-      page_size: pageSize,
-    }),
-    queryFeedbackBoundsByTargetId({ target_id: inference_id }),
-    getDatasetCounts(),
-    queryDemonstrationFeedbackByInferenceId({
-      inference_id,
-      page_size: 1,
-    }),
+    inferencePromise,
+    modelInferencesPromise,
+    datasetCountsPromise,
+    demonstrationFeedbackPromise,
+    feedbackBoundsPromise,
+    feedbackDataPromise,
   ]);
+
+  // --- Process results ---
+
   if (!inference) {
     throw data(`No inference found for id ${inference_id}.`, {
       status: 404,
@@ -84,23 +112,53 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     feedback_bounds,
     dataset_counts,
     hasDemonstration: demonstration_feedback.length > 0,
+    newFeedbackId,
   };
 }
 
 export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
+  const _action = formData.get("_action");
+  switch (_action) {
+    case "addToDataset":
+      return addToDataset(formData);
+    case "addFeedback": {
+      const response = await addHumanFeedback(formData);
+      const url = new URL(request.url);
+      url.searchParams.delete("beforeFeedback");
+      url.searchParams.delete("afterFeedback");
+      url.searchParams.set("newFeedbackId", response.feedback_id);
+      return redirect(url.toString());
+    }
+    default:
+      console.error(`Unknown action: ${_action}`);
+      return null;
+  }
+}
+
+async function addToDataset(formData: FormData) {
   const dataset = formData.get("dataset");
   const output = formData.get("output");
   const inference_id = formData.get("inference_id");
   if (!dataset || !output || !inference_id) {
     throw data("Missing required fields", { status: 400 });
   }
-  const datapoint = await tensorZeroClient.createDatapoint(
-    dataset.toString(),
-    inference_id.toString(),
-    output.toString() as "inherit" | "demonstration" | "none",
-  );
-  return redirect(`/datasets/${dataset.toString()}/datapoint/${datapoint.id}`);
+  try {
+    const datapoint = await tensorZeroClient.createDatapoint(
+      dataset.toString(),
+      inference_id.toString(),
+      output.toString() as "inherit" | "demonstration" | "none",
+    );
+    return redirect(
+      `/datasets/${dataset.toString()}/datapoint/${datapoint.id}`,
+    );
+  } catch (error) {
+    console.error(error);
+    return data(
+      "Failed to create datapoint as a datapoint exists with the same `source_inference_id`",
+      { status: 400 },
+    );
+  }
 }
 
 export default function InferencePage({ loaderData }: Route.ComponentProps) {
@@ -111,6 +169,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
     feedback_bounds,
     dataset_counts,
     hasDemonstration,
+    newFeedbackId,
   } = loaderData;
   const navigate = useNavigate();
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -167,6 +226,10 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
     config.functions[inference.function_name]?.variants || {},
   );
   const addToDatasetFetcher = useFetcher();
+  const actionError =
+    addToDatasetFetcher.state === "idle" && addToDatasetFetcher.data
+      ? addToDatasetFetcher.data
+      : null;
 
   const handleAddToDataset = (
     dataset: string,
@@ -176,8 +239,19 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
     formData.append("dataset", dataset);
     formData.append("output", output);
     formData.append("inference_id", inference.id);
+    formData.append("_action", "addToDataset");
     addToDatasetFetcher.submit(formData, { method: "post", action: "." });
   };
+  const { toast } = useToast();
+
+  useEffect(() => {
+    if (newFeedbackId) {
+      toast({
+        title: "Feedback Added",
+        description: `${newFeedbackId}`,
+      });
+    }
+  }, [newFeedbackId, toast]);
 
   return (
     <PageLayout>
@@ -187,6 +261,14 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
           inferenceUsage={getTotalInferenceUsage(model_inferences)}
         />
 
+        {actionError && (
+          <div className="mt-2 inline-block rounded-md bg-red-50 p-2 text-sm text-red-500">
+            {typeof actionError === "string"
+              ? actionError
+              : "An unknown error occurred."}
+          </div>
+        )}
+
         <InferenceActions
           variants={variants}
           onVariantSelect={onVariantSelect}
@@ -194,6 +276,8 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
           dataset_counts={dataset_counts}
           onDatasetSelect={handleAddToDataset}
           hasDemonstration={hasDemonstration}
+          inferenceOutput={inference.output}
+          inferenceId={inference.id}
         />
       </PageHeader>
 
@@ -205,7 +289,14 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
 
         <SectionLayout>
           <SectionHeader heading="Output" />
-          <Output output={inference.output} />
+          <Output
+            output={inference.output}
+            outputSchema={
+              inference.function_type === "json"
+                ? inference.output_schema
+                : undefined
+            }
+          />
         </SectionLayout>
 
         <SectionLayout>
@@ -239,13 +330,6 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
           </SectionLayout>
         )}
 
-        {inference.function_type === "json" && (
-          <SectionLayout>
-            <SectionHeader heading="Output Schema" />
-            <ParameterCard parameters={inference.output_schema} />
-          </SectionLayout>
-        )}
-
         {Object.keys(inference.tags).length > 0 && (
           <SectionLayout>
             <SectionHeader heading="Tags" />
@@ -255,7 +339,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
 
         <SectionLayout>
           <SectionHeader heading="Model Inferences" />
-          <ModelInferencesAccordion modelInferences={model_inferences} />
+          <ModelInferencesTable modelInferences={model_inferences} />
         </SectionLayout>
       </SectionsGroup>
 
@@ -265,11 +349,13 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
           isLoading={variantInferenceIsLoading}
           setIsLoading={setVariantInferenceIsLoading}
           onClose={handleModalClose}
-          inference={inference}
+          item={inference}
           inferenceUsage={getTotalInferenceUsage(model_inferences)}
           selectedVariant={selectedVariant}
+          source="inference"
         />
       )}
+      <Toaster />
     </PageLayout>
   );
 }

@@ -1,0 +1,46 @@
+[package]
+name = "evaluations"
+version.workspace = true
+edition = "2021"
+
+[[test]]
+name = "e2e"
+path = "tests/tests.rs"
+required-features = ["e2e_tests"]
+
+[dependencies]
+tensorzero = { path = "../clients/rust" }
+tensorzero-internal = { path = "../tensorzero-internal" }
+clap = { workspace = true }
+url = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+futures = { workspace = true }
+indicatif = "0.17.11"
+
+[dev-dependencies]
+tensorzero = { path = "../clients/rust" }
+
+[lints.rust]
+unsafe_code = "forbid"
+[lints.clippy]
+panic = "deny"
+print_stderr = "deny"
+print_stdout = "deny"
+todo = "deny"
+unimplemented = "deny"
+unreachable = "deny"
+unwrap_used = "deny"
+dbg_macro = "deny"
+
+
+[features]
+default = []
+# Forward this feature to 'evaluations', so that our
+# tests can recognize things like the `dummy` provider
+e2e_tests = ["tensorzero/e2e_tests"]

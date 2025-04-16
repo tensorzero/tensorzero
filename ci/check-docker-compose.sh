@@ -8,5 +8,5 @@ if [ $status -ne 0 ]; then
   echo "Docker Compose failed for $1 with status $status"
   docker compose -f $1 logs
 fi
-docker compose -f $1 down
+docker compose -f $1 down --timeout 0
 exit $status
