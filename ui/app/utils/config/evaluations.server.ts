@@ -9,6 +9,7 @@ import {
   ChatCompletionConfigSchema,
   BestOfNSamplingConfigSchema,
   MixtureOfNConfigSchema,
+  DiclConfigSchema,
 } from "./variant";
 import {
   LLMJudgeIncludeConfigSchema,
@@ -42,13 +43,9 @@ const llm_judge_user_template = `# Input
 const llm_judge_float_output_schema = {
   $schema: "http://json-schema.org/draft-07/schema#",
   type: "object",
-  required: ["thinking", "score"],
+  required: ["score"],
   additionalProperties: false,
   properties: {
-    thinking: {
-      type: "string",
-      description: "The reasoning or thought process behind the judgment",
-    },
     score: {
       type: "number",
       description: "The score assigned as a number",
@@ -62,13 +59,9 @@ const llm_judge_float_output_schema = {
 const llm_judge_boolean_output_schema = {
   $schema: "http://json-schema.org/draft-07/schema#",
   type: "object",
-  required: ["thinking", "score"],
+  required: ["score"],
   additionalProperties: false,
   properties: {
-    thinking: {
-      type: "string",
-      description: "The reasoning or thought process behind the judgment",
-    },
     score: {
       type: "boolean",
       description: "The LLM judge's score as a boolean",
@@ -127,7 +120,7 @@ const defaultTimeout = () => 300.0;
 
 // Schema for BestOfN variant
 export const UninitializedLLMJudgeBestOfNVariantConfigSchema = z.object({
-  active: z.boolean().optional(), // Make optional
+  active: z.boolean().optional(),
   timeout_s: z.number().default(defaultTimeout()),
   candidates: z.array(z.string()).default([]),
   evaluator: UninitializedLLMJudgeChatCompletionVariantConfigSchema,
@@ -135,10 +128,29 @@ export const UninitializedLLMJudgeBestOfNVariantConfigSchema = z.object({
 
 // Schema for MixtureOfN variant
 export const UninitializedLLMJudgeMixtureOfNVariantConfigSchema = z.object({
-  active: z.boolean().optional(), // Make optional
+  active: z.boolean().optional(),
   timeout_s: z.number().default(defaultTimeout()),
   candidates: z.array(z.string()).default([]),
   fuser: UninitializedLLMJudgeChatCompletionVariantConfigSchema,
+});
+
+// Schema for DICL variant
+export const UninitializedLLMJudgeDiclVariantConfigSchema = z.object({
+  active: z.boolean().optional(),
+  embedding_model: z.string(),
+  k: z.number().int(),
+  model: z.string(),
+  system_instructions: z.string().optional(),
+  temperature: z.number().optional(),
+  top_p: z.number().optional(),
+  presence_penalty: z.number().optional(),
+  frequency_penalty: z.number().optional(),
+  max_tokens: z.number().int().optional(),
+  seed: z.number().int().optional(),
+  json_mode: jsonModeSchema.optional(),
+  retries: RetryConfigSchema.optional(),
+  extra_body: z.record(z.string(), z.any()).optional(),
+  extra_headers: z.record(z.string(), z.string()).optional(),
 });
 
 export const UnintializedLLMJudgeVariantConfigSchema = z.discriminatedUnion(
@@ -155,6 +167,10 @@ export const UnintializedLLMJudgeVariantConfigSchema = z.discriminatedUnion(
     z.object({
       type: z.literal("experimental_mixture_of_n"),
       ...UninitializedLLMJudgeMixtureOfNVariantConfigSchema.shape,
+    }),
+    z.object({
+      type: z.literal("experimental_dynamic_in_context_learning"),
+      ...UninitializedLLMJudgeDiclVariantConfigSchema.shape,
     }),
   ],
 );
@@ -370,6 +386,27 @@ async function loadLLMJudgeVariant(
         timeout_s: variantConfig.timeout_s,
         candidates: variantConfig.candidates,
         fuser: fuser,
+      });
+    }
+
+    case "experimental_dynamic_in_context_learning": {
+      return DiclConfigSchema.parse({
+        type: "experimental_dynamic_in_context_learning" as const,
+        weight: weight,
+        embedding_model: variantConfig.embedding_model,
+        k: variantConfig.k,
+        model: variantConfig.model,
+        system_instructions: variantConfig.system_instructions,
+        temperature: variantConfig.temperature,
+        top_p: variantConfig.top_p,
+        presence_penalty: variantConfig.presence_penalty,
+        frequency_penalty: variantConfig.frequency_penalty,
+        max_tokens: variantConfig.max_tokens,
+        seed: variantConfig.seed,
+        json_mode: variantConfig.json_mode,
+        retries: variantConfig.retries,
+        extra_body: variantConfig.extra_body,
+        extra_headers: variantConfig.extra_headers,
       });
     }
   }

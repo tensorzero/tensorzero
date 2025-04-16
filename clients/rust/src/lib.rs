@@ -106,35 +106,35 @@ pub struct ClientBuilder {
 #[derive(Error, Debug)]
 #[non_exhaustive]
 pub enum TensorZeroError {
-    #[error("HTTP error: {status_code} {text:?}")]
+    #[error("HTTP Error (status code {status_code}): {text:?}")]
     Http {
         status_code: u16,
         text: Option<String>,
         #[source]
         source: TensorZeroInternalError,
     },
-    #[error("Internal error: {source}")]
+    #[error("{source}")] // the `source` has already been formatted (below)
     Other {
         #[source]
         source: TensorZeroInternalError,
     },
-    #[error("HTTP request timed out")]
+    #[error("HTTP Error: request timed out")]
     RequestTimeout,
 }
 
 #[derive(Debug, Error)]
-#[error("Internal TensorZero error: {0}")]
+#[error("Internal TensorZero Error: {0}")]
 pub struct TensorZeroInternalError(#[from] tensorzero_internal::error::Error);
 
 #[derive(Error, Debug)]
 #[non_exhaustive]
 pub enum ClientBuilderError {
     #[error(
-        "Missing config - you must call `with_config_file` before calling `build` in EmbeddedGateway mode"
+        "Missing configuration: you must call `with_config_file` before calling `build` in EmbeddedGateway mode"
     )]
     MissingConfig,
     #[error(
-        "Missing gateway URL - you must call `with_gateway_url` before calling `build` in HTTPGateway mode"
+        "Missing gateway URL: you must call `with_gateway_url` before calling `build` in HTTPGateway mode"
     )]
     MissingGatewayUrl,
     #[error("Called ClientBuilder.build_http() when not in HTTPGateway mode")]
@@ -317,6 +317,14 @@ impl Client {
                 .health()
                 .await
                 .map_err(|e| TensorZeroError::Other { source: e.into() }),
+        }
+    }
+
+    #[cfg(feature = "pyo3")]
+    pub fn get_config(&self) -> Option<Arc<Config>> {
+        match &self.mode {
+            ClientMode::EmbeddedGateway { gateway, .. } => Some(gateway.state.config.clone()),
+            _ => None,
         }
     }
 
@@ -540,7 +548,7 @@ impl Client {
         resp.json().await.map_err(|e| TensorZeroError::Other {
             source: tensorzero_internal::error::Error::new(ErrorDetails::Serialization {
                 message: format!(
-                    "Error deserializing inference response: {}",
+                    "Error deserializing response: {}",
                     DisplayOrDebug {
                         val: e,
                         debug: self.verbose_errors,
@@ -645,7 +653,7 @@ impl Client {
         }))
     }
 
-    #[cfg(feature = "e2e_tests")]
+    #[cfg(any(feature = "e2e_tests", feature = "pyo3"))]
     pub fn get_app_state_data(&self) -> Option<&AppStateData> {
         match &self.mode {
             ClientMode::EmbeddedGateway { gateway, .. } => Some(&gateway.state),

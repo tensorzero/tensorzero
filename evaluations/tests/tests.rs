@@ -4,21 +4,24 @@
 )]
 mod common;
 use clap::Parser;
-use evaluations::evaluators::llm_judge::run_llm_judge_evaluator;
+use evaluations::dataset::query_dataset;
+use evaluations::evaluators::llm_judge::{run_llm_judge_evaluator, RunLLMJudgeEvaluatorParams};
 use evaluations::ThrottledTensorZeroClient;
 use serde_json::json;
 use tensorzero::input_handling::resolved_input_to_client_input;
+use tensorzero_internal::cache::CacheEnabledMode;
 use tensorzero_internal::clickhouse::test_helpers::select_model_inferences_clickhouse;
 use tensorzero_internal::endpoints::datasets::Datapoint;
 use tensorzero_internal::evaluations::{LLMJudgeConfig, LLMJudgeInputFormat, LLMJudgeOutputType};
+use tensorzero_internal::function::{FunctionConfig, FunctionConfigJson};
 use tensorzero_internal::inference::types::{
     ResolvedInputMessage, ResolvedInputMessageContent, Text,
 };
 use tokio::time::sleep;
 use url::Url;
 
-use crate::common::write_json_fixture_to_dataset;
-use common::write_chat_fixture_to_dataset;
+pub use crate::common::write_chat_fixture_to_dataset;
+pub use crate::common::write_json_fixture_to_dataset;
 use evaluations::{run_evaluation, stats::EvaluationUpdate, Args, OutputFormat};
 use std::time::Duration;
 use std::{path::PathBuf, sync::Arc};
@@ -62,6 +65,7 @@ async fn run_evaluations_json() {
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
+        inference_cache: CacheEnabledMode::On,
     };
 
     let mut output = Vec::new();
@@ -229,6 +233,7 @@ async fn run_exact_match_evaluation_chat() {
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
+        inference_cache: CacheEnabledMode::On,
     };
 
     let mut output = Vec::new();
@@ -344,6 +349,7 @@ async fn run_llm_judge_evaluation_chat() {
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
+        inference_cache: CacheEnabledMode::On,
     };
 
     let mut output = Vec::new();
@@ -489,6 +495,7 @@ async fn run_image_evaluation() {
         variant_name: "honest_answer".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
+        inference_cache: CacheEnabledMode::WriteOnly,
     };
 
     let mut output = Vec::new();
@@ -697,6 +704,7 @@ async fn check_invalid_image_evaluation() {
         variant_name: "honest_answer".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
+        inference_cache: CacheEnabledMode::On,
     };
 
     let mut output = Vec::new();
@@ -791,6 +799,7 @@ async fn run_llm_judge_evaluation_chat_human_readable() {
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::HumanReadable,
+        inference_cache: CacheEnabledMode::On,
     };
 
     let mut output = Vec::new();
@@ -827,6 +836,7 @@ async fn run_llm_judge_evaluation_json_human_readable() {
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::HumanReadable,
+        inference_cache: CacheEnabledMode::On,
     };
 
     let mut output = Vec::new();
@@ -878,6 +888,7 @@ async fn test_parse_args() {
     assert_eq!(args.concurrency, 1);
     assert_eq!(args.gateway_url, None);
     assert_eq!(args.format, OutputFormat::HumanReadable);
+    assert_eq!(args.inference_cache, CacheEnabledMode::On);
 
     // Test all arguments
     let args = Args::try_parse_from([
@@ -896,6 +907,8 @@ async fn test_parse_args() {
         "10",
         "--format",
         "jsonl",
+        "--inference-cache",
+        "write_only",
     ])
     .unwrap();
     assert_eq!(args.evaluation_name, "my-evaluation");
@@ -908,7 +921,7 @@ async fn test_parse_args() {
     );
     assert_eq!(args.concurrency, 10);
     assert_eq!(args.format, OutputFormat::Jsonl);
-
+    assert_eq!(args.inference_cache, CacheEnabledMode::WriteOnly);
     // Test invalid URL
     let args = Args::try_parse_from([
         "test",
@@ -973,6 +986,7 @@ async fn run_evaluations_errors() {
         variant_name: "dummy_error".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
+        inference_cache: CacheEnabledMode::On,
     };
 
     let mut output = Vec::new();
@@ -1051,6 +1065,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         tags: None,
         tool_params: None,
         source_inference_id: None,
+        staled_at: None,
     });
     let llm_judge_config = LLMJudgeConfig {
         input_format: LLMJudgeInputFormat::Serialized,
@@ -1065,61 +1080,65 @@ async fn test_run_llm_judge_evaluator_chat() {
         resolved_input_to_client_input(datapoint.input().clone(), &tensorzero_client.client)
             .await
             .unwrap();
-    let result = run_llm_judge_evaluator(
-        &inference_response,
-        &datapoint,
-        &tensorzero_client,
-        &llm_judge_config,
-        "test_evaluation",
-        "happy_bool",
-        Uuid::now_v7(),
-        &input,
-    )
+    let result = run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
+        inference_response: &inference_response,
+        datapoint: &datapoint,
+        tensorzero_client: &tensorzero_client,
+        llm_judge_config: &llm_judge_config,
+        evaluation_name: "test_evaluation",
+        evaluator_name: "happy_bool",
+        evaluation_run_id: Uuid::now_v7(),
+        input: &input,
+        inference_cache: CacheEnabledMode::On,
+    })
     .await
     .unwrap()
     .unwrap();
     assert_eq!(result.value, json!(true));
 
-    let result = run_llm_judge_evaluator(
-        &inference_response,
-        &datapoint,
-        &tensorzero_client,
-        &llm_judge_config,
-        "test_evaluation",
-        "sad_bool",
-        Uuid::now_v7(),
-        &input,
-    )
+    let result = run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
+        inference_response: &inference_response,
+        datapoint: &datapoint,
+        tensorzero_client: &tensorzero_client,
+        llm_judge_config: &llm_judge_config,
+        evaluation_name: "test_evaluation",
+        evaluator_name: "sad_bool",
+        evaluation_run_id: Uuid::now_v7(),
+        input: &input,
+        inference_cache: CacheEnabledMode::On,
+    })
     .await
     .unwrap()
     .unwrap();
     assert_eq!(result.value, json!(false));
 
-    let result = run_llm_judge_evaluator(
-        &inference_response,
-        &datapoint,
-        &tensorzero_client,
-        &llm_judge_config,
-        "test_evaluation",
-        "zero",
-        Uuid::now_v7(),
-        &input,
-    )
+    let result = run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
+        inference_response: &inference_response,
+        datapoint: &datapoint,
+        tensorzero_client: &tensorzero_client,
+        llm_judge_config: &llm_judge_config,
+        evaluation_name: "test_evaluation",
+        evaluator_name: "zero",
+        evaluation_run_id: Uuid::now_v7(),
+        input: &input,
+        inference_cache: CacheEnabledMode::On,
+    })
     .await
     .unwrap()
     .unwrap();
     assert_eq!(result.value, json!(0));
 
-    let result = run_llm_judge_evaluator(
-        &inference_response,
-        &datapoint,
-        &tensorzero_client,
-        &llm_judge_config,
-        "test_evaluation",
-        "one",
-        Uuid::now_v7(),
-        &input,
-    )
+    let result = run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
+        inference_response: &inference_response,
+        datapoint: &datapoint,
+        tensorzero_client: &tensorzero_client,
+        llm_judge_config: &llm_judge_config,
+        evaluation_name: "test_evaluation",
+        evaluator_name: "one",
+        evaluation_run_id: Uuid::now_v7(),
+        input: &input,
+        inference_cache: CacheEnabledMode::On,
+    })
     .await
     .unwrap()
     .unwrap();
@@ -1146,18 +1165,20 @@ async fn test_run_llm_judge_evaluator_chat() {
         tags: None,
         tool_params: None,
         source_inference_id: None,
+        staled_at: None,
     });
 
-    let result = run_llm_judge_evaluator(
-        &inference_response,
-        &datapoint,
-        &tensorzero_client,
-        &llm_judge_config,
-        "test_evaluation",
-        "happy_bool",
-        Uuid::now_v7(),
-        &input,
-    )
+    let result = run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
+        inference_response: &inference_response,
+        datapoint: &datapoint,
+        tensorzero_client: &tensorzero_client,
+        llm_judge_config: &llm_judge_config,
+        evaluation_name: "test_evaluation",
+        evaluator_name: "happy_bool",
+        evaluation_run_id: Uuid::now_v7(),
+        input: &input,
+        inference_cache: CacheEnabledMode::On,
+    })
     .await
     .unwrap();
     assert!(result.is_none());
@@ -1183,7 +1204,7 @@ async fn test_run_llm_judge_evaluator_json() {
     let inference_response = InferenceResponse::Json(JsonInferenceResponse {
         output: JsonInferenceOutput {
             parsed: Some(json!({"answer": "LeBron James"})),
-            raw: "{\"answer\": \"LeBron James\"}".to_string(),
+            raw: Some("{\"answer\": \"LeBron James\"}".to_string()),
         },
         original_response: None,
         finish_reason: None,
@@ -1213,11 +1234,12 @@ async fn test_run_llm_judge_evaluator_json() {
         function_name: "test_function".to_string(),
         output: Some(JsonInferenceOutput {
             parsed: Some(json!({"answer": "LeBron James"})),
-            raw: "{\"answer\": \"LeBron James\"}".to_string(),
+            raw: Some("{\"answer\": \"LeBron James\"}".to_string()),
         }),
         output_schema: json!({"answer": "string"}),
         tags: None,
         source_inference_id: None,
+        staled_at: None,
     });
     let llm_judge_config = LLMJudgeConfig {
         input_format: LLMJudgeInputFormat::Serialized,
@@ -1232,61 +1254,65 @@ async fn test_run_llm_judge_evaluator_json() {
         resolved_input_to_client_input(datapoint.input().clone(), &tensorzero_client.client)
             .await
             .unwrap();
-    let result = run_llm_judge_evaluator(
-        &inference_response,
-        &datapoint,
-        &tensorzero_client,
-        &llm_judge_config,
-        "test_evaluation",
-        "happy_bool",
-        Uuid::now_v7(),
-        &input,
-    )
+    let result = run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
+        inference_response: &inference_response,
+        datapoint: &datapoint,
+        tensorzero_client: &tensorzero_client,
+        llm_judge_config: &llm_judge_config,
+        evaluation_name: "test_evaluation",
+        evaluator_name: "happy_bool",
+        evaluation_run_id: Uuid::now_v7(),
+        input: &input,
+        inference_cache: CacheEnabledMode::On,
+    })
     .await
     .unwrap()
     .unwrap();
     assert_eq!(result.value, json!(true));
 
-    let result = run_llm_judge_evaluator(
-        &inference_response,
-        &datapoint,
-        &tensorzero_client,
-        &llm_judge_config,
-        "test_evaluation",
-        "sad_bool",
-        Uuid::now_v7(),
-        &input,
-    )
+    let result = run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
+        inference_response: &inference_response,
+        datapoint: &datapoint,
+        tensorzero_client: &tensorzero_client,
+        llm_judge_config: &llm_judge_config,
+        evaluation_name: "test_evaluation",
+        evaluator_name: "sad_bool",
+        evaluation_run_id: Uuid::now_v7(),
+        input: &input,
+        inference_cache: CacheEnabledMode::On,
+    })
     .await
     .unwrap()
     .unwrap();
     assert_eq!(result.value, json!(false));
 
-    let result = run_llm_judge_evaluator(
-        &inference_response,
-        &datapoint,
-        &tensorzero_client,
-        &llm_judge_config,
-        "test_evaluation",
-        "zero",
-        Uuid::now_v7(),
-        &input,
-    )
+    let result = run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
+        inference_response: &inference_response,
+        datapoint: &datapoint,
+        tensorzero_client: &tensorzero_client,
+        llm_judge_config: &llm_judge_config,
+        evaluation_name: "test_evaluation",
+        evaluator_name: "zero",
+        evaluation_run_id: Uuid::now_v7(),
+        input: &input,
+        inference_cache: CacheEnabledMode::On,
+    })
     .await
     .unwrap()
     .unwrap();
     assert_eq!(result.value, json!(0));
 
-    let result = run_llm_judge_evaluator(
-        &inference_response,
-        &datapoint,
-        &tensorzero_client,
-        &llm_judge_config,
-        "test_evaluation",
-        "one",
-        Uuid::now_v7(),
-        &input,
-    )
+    let result = run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
+        inference_response: &inference_response,
+        datapoint: &datapoint,
+        tensorzero_client: &tensorzero_client,
+        llm_judge_config: &llm_judge_config,
+        evaluation_name: "test_evaluation",
+        evaluator_name: "one",
+        evaluation_run_id: Uuid::now_v7(),
+        input: &input,
+        inference_cache: CacheEnabledMode::On,
+    })
     .await
     .unwrap()
     .unwrap();
@@ -1313,18 +1339,20 @@ async fn test_run_llm_judge_evaluator_json() {
         tags: None,
         tool_params: None,
         source_inference_id: None,
+        staled_at: None,
     });
 
-    let result = run_llm_judge_evaluator(
-        &inference_response,
-        &datapoint,
-        &tensorzero_client,
-        &llm_judge_config,
-        "test_evaluation",
-        "happy_bool",
-        Uuid::now_v7(),
-        &input,
-    )
+    let result = run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
+        inference_response: &inference_response,
+        datapoint: &datapoint,
+        tensorzero_client: &tensorzero_client,
+        llm_judge_config: &llm_judge_config,
+        evaluation_name: "test_evaluation",
+        evaluator_name: "happy_bool",
+        evaluation_run_id: Uuid::now_v7(),
+        input: &input,
+        inference_cache: CacheEnabledMode::On,
+    })
     .await
     .unwrap();
     assert!(result.is_none());
@@ -1351,6 +1379,7 @@ async fn run_evaluations_best_of_3() {
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
+        inference_cache: CacheEnabledMode::On,
     };
 
     let mut output = Vec::new();
@@ -1531,6 +1560,7 @@ async fn run_evaluations_mixture_of_3() {
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
+        inference_cache: CacheEnabledMode::On,
     };
 
     let mut output = Vec::new();
@@ -1691,4 +1721,215 @@ async fn run_evaluations_mixture_of_3() {
         assert_eq!(model_inferences.len(), 4);
     }
     assert_eq!(parsed_output.len(), 6);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn run_evaluations_dicl() {
+    let clickhouse = get_clickhouse().await;
+    write_json_fixture_to_dataset(&PathBuf::from(&format!(
+        "{}/../tensorzero-internal/fixtures/datasets/json_datapoint_fixture.jsonl",
+        std::env::var("CARGO_MANIFEST_DIR").unwrap()
+    )))
+    .await;
+    let config_path = PathBuf::from(&format!(
+        "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
+        std::env::var("CARGO_MANIFEST_DIR").unwrap()
+    ));
+    let evaluation_run_id = Uuid::now_v7();
+    let args = Args {
+        config_file: config_path,
+        gateway_url: None,
+        evaluation_name: "dicl".to_string(),
+        dataset_name: "extract_entities_0.8".to_string(),
+        variant_name: "gpt_4o_mini".to_string(),
+        concurrency: 10,
+        format: OutputFormat::Jsonl,
+        inference_cache: CacheEnabledMode::On,
+    };
+
+    let mut output = Vec::new();
+    run_evaluation(args, evaluation_run_id, &mut output)
+        .await
+        .unwrap();
+    clickhouse_flush_async_insert(&clickhouse).await;
+    let output_str = String::from_utf8(output).unwrap();
+    let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
+    let mut parsed_output = Vec::new();
+    for line in output_lines {
+        let parsed: EvaluationUpdate =
+            serde_json::from_str(line).expect("Each line should be valid JSON");
+        let parsed = match parsed {
+            EvaluationUpdate::Success(evaluation_info) => evaluation_info,
+            EvaluationUpdate::Error(evaluation_error) => {
+                panic!("evaluation error: {}", evaluation_error.message);
+            }
+        };
+        assert!(parsed.evaluator_errors.is_empty());
+        let inference_id = parsed.response.inference_id();
+        let clickhouse_inference = select_json_inference_clickhouse(&clickhouse, inference_id)
+            .await
+            .unwrap();
+        let parsed_response = match parsed.response.clone() {
+            InferenceResponse::Json(json_response) => json_response,
+            InferenceResponse::Chat(..) => panic!("Chat response not supported"),
+        };
+        let clickhouse_input: ResolvedInput =
+            serde_json::from_str(clickhouse_inference["input"].as_str().unwrap()).unwrap();
+        // Check the input to the inference is the same as the input to the datapoint
+        assert_eq!(&clickhouse_input, parsed.datapoint.input());
+        let clickhouse_output: JsonInferenceOutput =
+            serde_json::from_str(clickhouse_inference["output"].as_str().unwrap()).unwrap();
+        // Check the output to the inference is the same as the output in the response
+        assert_eq!(clickhouse_output, parsed_response.output);
+        // Check the inference is properly tagged
+        assert_eq!(
+            clickhouse_inference["tags"]["tensorzero::evaluation_run_id"],
+            evaluation_run_id.to_string()
+        );
+        assert_eq!(
+            clickhouse_inference["tags"]["tensorzero::datapoint_id"],
+            parsed.datapoint.id().to_string()
+        );
+        assert_eq!(
+            clickhouse_inference["tags"]["tensorzero::evaluation_name"],
+            "dicl"
+        );
+        assert_eq!(
+            clickhouse_inference["tags"]["tensorzero::dataset_name"],
+            "extract_entities_0.8"
+        );
+        // Check boolean feedback was recorded
+        let feedback = select_feedback_by_target_id_clickhouse(
+            &clickhouse,
+            "BooleanMetricFeedback",
+            inference_id,
+            None,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            feedback["metric_name"].as_str().unwrap(),
+            "tensorzero::evaluation_name::dicl::evaluator_name::llm_judge_bool"
+        );
+        assert_eq!(
+            feedback["value"],
+            parsed.evaluations["llm_judge_bool"]
+                .as_ref()
+                .unwrap()
+                .as_bool()
+                .unwrap()
+        );
+        assert_eq!(
+            feedback["tags"]["tensorzero::evaluation_run_id"],
+            evaluation_run_id.to_string()
+        );
+        assert_eq!(
+            feedback["tags"]["tensorzero::datapoint_id"],
+            parsed.datapoint.id().to_string()
+        );
+
+        // Check bool feedback was recorded
+        let feedback = select_feedback_by_target_id_clickhouse(
+            &clickhouse,
+            "BooleanMetricFeedback",
+            inference_id,
+            None,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            feedback["metric_name"].as_str().unwrap(),
+            "tensorzero::evaluation_name::dicl::evaluator_name::llm_judge_bool"
+        );
+        assert_eq!(
+            feedback["value"],
+            parsed.evaluations["llm_judge_bool"]
+                .as_ref()
+                .unwrap()
+                .as_bool()
+                .unwrap()
+        );
+        assert_eq!(
+            feedback["tags"]["tensorzero::evaluation_run_id"],
+            evaluation_run_id.to_string()
+        );
+        assert_eq!(
+            feedback["tags"]["tensorzero::datapoint_id"],
+            parsed.datapoint.id().to_string()
+        );
+        assert_eq!(
+            feedback["tags"]["tensorzero::evaluator_name"],
+            "llm_judge_bool"
+        );
+        assert_eq!(feedback["tags"]["tensorzero::evaluation_name"], "dicl");
+        let evaluator_inference_id = Uuid::parse_str(
+            feedback["tags"]["tensorzero::evaluator_inference_id"]
+                .as_str()
+                .unwrap(),
+        )
+        .unwrap();
+        let evaluator_inference =
+            select_json_inference_clickhouse(&clickhouse, evaluator_inference_id)
+                .await
+                .unwrap();
+        assert_eq!(
+            evaluator_inference["tags"]["tensorzero::evaluation_name"],
+            "dicl"
+        );
+        parsed_output.push(parsed);
+
+        // Select Model inferences for the evaluator inference id
+        let model_inferences =
+            select_model_inferences_clickhouse(&clickhouse, evaluator_inference_id)
+                .await
+                .unwrap();
+        for model_inference in &model_inferences {
+            match model_inference["model_name"].as_str().unwrap() {
+                "openai::gpt-4o-mini" => {
+                    let system = model_inference["system"].as_str().unwrap();
+                    assert!(system.starts_with("You are tasked with learning by induction"));
+                }
+                "text-embedding-3-small" => {
+                    assert!(model_inference["system"].is_null());
+                    let messages = model_inference["input_messages"].as_str().unwrap();
+                    // messages should be a json array of objects
+                    assert!(messages.starts_with("[{"));
+                }
+                _ => {
+                    panic!(
+                        "Unknown model name: {}",
+                        model_inference["model_name"].as_str().unwrap()
+                    );
+                }
+            }
+        }
+        assert_eq!(model_inferences.len(), 2);
+    }
+    assert_eq!(parsed_output.len(), 6);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_query_skips_staled_datapoints() {
+    let clickhouse = get_clickhouse().await;
+    write_json_fixture_to_dataset(&PathBuf::from(&format!(
+        "{}/../tensorzero-internal/fixtures/datasets/json_datapoint_fixture.jsonl",
+        std::env::var("CARGO_MANIFEST_DIR").unwrap()
+    )))
+    .await;
+
+    let dataset = query_dataset(
+        &clickhouse,
+        "exact_matches_empty",
+        "extract_entities",
+        &FunctionConfig::Json(FunctionConfigJson::default()),
+    )
+    .await
+    .unwrap();
+    // This ID should not be returned
+    let staled_id = Uuid::parse_str("01957bbb-44a8-7490-bfe7-32f8ed2fc797").unwrap();
+    let staled_datapoint = dataset.iter().find(|dp| dp.id() == staled_id);
+    assert!(staled_datapoint.is_none());
+    assert_eq!(dataset.len(), 21);
 }

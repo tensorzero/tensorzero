@@ -20,7 +20,7 @@ use super::aws_common::{self, build_interceptor, InterceptorAndRawBody};
 use super::helpers::peek_first_chunk;
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
-use crate::error::{Error, ErrorDetails};
+use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
@@ -128,7 +128,10 @@ impl InferenceProvider for AWSBedrockProvider {
                             raw_request: None,
                             raw_response: None,
                             status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
-                            message: format!("Error configuring AWS Bedrock tool config: {e}"),
+                            message: format!(
+                                "Error configuring AWS Bedrock tool config: {}",
+                                DisplayOrDebugGateway::new(e)
+                            ),
                             provider_type: PROVIDER_TYPE.to_string(),
                         })
                     })?;
@@ -249,7 +252,10 @@ impl InferenceProvider for AWSBedrockProvider {
                             raw_request: None,
                             raw_response: None,
                             status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
-                            message: format!("Error configuring AWS Bedrock tool config: {e}"),
+                            message: format!(
+                                "Error configuring AWS Bedrock tool config: {}",
+                                DisplayOrDebugGateway::new(e)
+                            ),
                             provider_type: PROVIDER_TYPE.to_string(),
                         })
                     })?;
@@ -531,7 +537,10 @@ impl TryFrom<&ContentBlock> for Option<BedrockContentBlock> {
                         raw_request: None,
                         raw_response: Some(tool_call.arguments.clone()),
                         status_code: Some(StatusCode::BAD_REQUEST),
-                        message: format!("Error parsing tool call arguments as JSON Value: {e}"),
+                        message: format!(
+                            "Error parsing tool call arguments as JSON Value: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
                         provider_type: PROVIDER_TYPE.to_string(),
                     })
                 })?;
@@ -615,7 +624,10 @@ impl TryFrom<BedrockContentBlock> for ContentBlockOutput {
                     Error::new(ErrorDetails::InferenceServer {
                         raw_request: None,
                         raw_response: None,
-                        message: format!("Error parsing tool call arguments from AWS Bedrock: {e}"),
+                        message: format!(
+                            "Error parsing tool call arguments from AWS Bedrock: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
                         provider_type: PROVIDER_TYPE.to_string(),
                     })
                 })?;
@@ -782,7 +794,10 @@ fn serialize_aws_bedrock_struct<T: std::fmt::Debug>(output: &T) -> Result<String
         Error::new(ErrorDetails::InferenceServer {
             raw_request: None,
             raw_response: Some(format!("{:?}", output)),
-            message: format!("Error parsing response from AWS Bedrock: {e}"),
+            message: format!(
+                "Error parsing response from AWS Bedrock: {}",
+                DisplayOrDebugGateway::new(e)
+            ),
             provider_type: PROVIDER_TYPE.to_string(),
         })
     })
@@ -798,7 +813,10 @@ impl TryFrom<&ToolConfig> for Tool {
                     raw_request: None,
                     raw_response: Some(format!("{:?}", tool_config.parameters())),
                     status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
-                    message: format!("Error parsing tool input schema: {e}"),
+                    message: format!(
+                        "Error parsing tool input schema: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?,

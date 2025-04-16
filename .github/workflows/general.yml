@@ -10,7 +10,6 @@ env:
   TENSORZERO_CLICKHOUSE_URL: "http://chuser:chpassword@localhost:8123/tensorzero"
 
 jobs:
-
   clickhouse-tests-cloud:
     if: github.event_name == 'merge_group'
     runs-on: ubuntu-latest
@@ -25,6 +24,8 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
+        with:
+          save-if: ${{ github.event_name == 'merge_group' }}
       - name: Install cargo-nextest
         uses: taiki-e/install-action@37bdc826eaedac215f638a96472df572feab0f9b
         with:
@@ -70,11 +71,27 @@ jobs:
         run: cat e2e_logs.txt
 
   check-docker-compose:
+    permissions:
+      # Permission to checkout the repository
+      contents: read
+      # Permission to fetch GitHub OIDC token authentication
+      id-token: write
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      # We allow the namespace builder setup to fail on Dependabot PRs and PRs from forks
+      # (where the oidc token is not available)
+
+      - name: Install Namespace CLI
+        uses: namespacelabs/nscloud-setup@d1c625762f7c926a54bd39252efff0705fd11c64
+        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
+
+      - name: Configure Namespace-powered Buildx
+        uses: namespacelabs/nscloud-setup-buildx-action@84ca8c58fdf372d6a4750476cd09b7b96ee778ca
+        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
       - name: Check all docker-compose.yml files
         run: ./ci/check-all-docker-compose.sh
@@ -97,6 +114,7 @@ jobs:
             target: aarch64
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
       - name: "TensorZero PyO3 Client: Build"
         uses: PyO3/maturin-action@b3709a81b3e175ce3ede866725776fee42465311
         with:
@@ -111,11 +129,16 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
+      # We allow the namespace builder setup to fail on Dependabot PRs and PRs from forks
+      # (where the oidc token is not available)
+
       - name: Install Namespace CLI
         uses: namespacelabs/nscloud-setup@d1c625762f7c926a54bd39252efff0705fd11c64
+        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
       - name: Configure Namespace-powered Buildx
         uses: namespacelabs/nscloud-setup-buildx-action@84ca8c58fdf372d6a4750476cd09b7b96ee778ca
+        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
       - name: Print Rust version
         run: rustc --version
@@ -337,11 +360,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # We allow the namespace builder setup to fail on Dependabot PRs and PRs from forks
+      # (where the oidc token is not available)
+
       - name: Install and configure Namespace CLI
         uses: namespacelabs/nscloud-setup@v0
+        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
       - name: Configure Namespace powered Buildx
         uses: namespacelabs/nscloud-setup-buildx-action@v0
+        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -384,19 +412,35 @@ jobs:
 
   ui-tests-e2e:
     runs-on: ubuntu-latest
+    # We currently only run this job when we have secrets available, since we need to use an S3 object_store
+    # In the future, we might want to fix this so that it can run in PR CI for external (forked) PRs
+    # For now, it just runs in the merge queue and on prs from the main repo
+    if: ${{ (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') || github.event_name == 'merge_group' }}
     permissions:
       # Permission to checkout the repository
       contents: read
       # Permission to fetch GitHub OIDC token authentication
       id-token: write
+    strategy:
+      matrix:
+        feature_flag:
+          - behavior: node-optimizations-server
+            enable_python: 0
+          - behavior: python-optimizations-server
+            enable_python: 1
     steps:
       - uses: actions/checkout@v4
 
+      # We allow the namespace builder setup to fail on Dependabot PRs and PRs from forks
+      # (where the oidc token is not available)
+
       - name: Install and configure Namespace CLI
         uses: namespacelabs/nscloud-setup@v0
+        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
       - name: Configure Namespace powered Buildx
         uses: namespacelabs/nscloud-setup-buildx-action@v0
+        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -413,7 +457,8 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build ui container
-        run: docker build -f ui/Dockerfile . -t tensorzero/ui
+        # Enable feedback in the UI for this job so the playwright tests can use it
+        run: docker buildx build --build-arg VITE_TENSORZERO_UI_FF_ENABLE_FEEDBACK=1 -f ui/Dockerfile . -t tensorzero/ui
 
       - name: Start services for ui e2e tests
         working-directory: ui
@@ -427,6 +472,7 @@ jobs:
           echo "AWS_REGION=us-east-1" >> fixtures/.env
           echo "S3_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" >> fixtures/.env
           echo "S3_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> fixtures/.env
+          echo "TENSORZERO_UI_FF_ENABLE_PYTHON=${{ matrix.feature_flag.enable_python }}" >> fixtures/.env
           docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml up --wait --build --force-recreate
 
       - name: Install playwright dependencies
@@ -437,7 +483,7 @@ jobs:
         working-directory: ui
         env:
           TENSORZERO_CI: 1
-        run: pnpm test-e2e
+        run: TENSORZERO_UI_FF_ENABLE_PYTHON=${{ matrix.feature_flag.enable_python }} pnpm test-e2e
         continue-on-error: true
         id: e2e_tests
 
@@ -467,7 +513,16 @@ jobs:
   # See 'ci/README.md' at the repository root for more details.
   check-all-general-jobs-passed:
     if: always()
-    needs: [clickhouse-tests-cloud, check-docker-compose, check-pyo3-build, validate, clickhouse-tests, ui-tests, ui-tests-e2e]
+    needs:
+      [
+        clickhouse-tests-cloud,
+        check-docker-compose,
+        check-pyo3-build,
+        validate,
+        clickhouse-tests,
+        ui-tests,
+        ui-tests-e2e,
+      ]
     runs-on: ubuntu-latest
     steps:
       - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}

@@ -5,7 +5,7 @@ use futures::{stream::Peekable, Stream};
 use serde_json::{map::Entry, Map, Value};
 
 use crate::{
-    error::{Error, ErrorDetails},
+    error::{DisplayOrDebugGateway, Error, ErrorDetails},
     inference::types::{
         extra_body::{ExtraHeader, FullExtraBodyConfig, InferenceExtraBody},
         ProviderInferenceResponseChunk,
@@ -80,12 +80,18 @@ pub fn inject_extra_request_data(
             headers.insert(
                 http::header::HeaderName::from_bytes(name.as_bytes()).map_err(|e| {
                     Error::new(ErrorDetails::Serialization {
-                        message: format!("Invalid header name `{name}`: {e}"),
+                        message: format!(
+                            "Invalid header name `{name}`: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
                     })
                 })?,
                 http::header::HeaderValue::from_bytes(value.as_bytes()).map_err(|e| {
                     Error::new(ErrorDetails::Serialization {
-                        message: format!("Invalid header value `{value}`: {e}"),
+                        message: format!(
+                            "Invalid header value `{value}`: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
                     })
                 })?,
             );

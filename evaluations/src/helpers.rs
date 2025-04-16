@@ -1,6 +1,8 @@
 use anyhow::{anyhow, Result};
-use tensorzero::DynamicToolParams;
-use tensorzero_internal::{function::FunctionConfig, tool::ToolCallConfigDatabaseInsert};
+use tensorzero::{CacheParamsOptions, DynamicToolParams};
+use tensorzero_internal::{
+    cache::CacheEnabledMode, function::FunctionConfig, tool::ToolCallConfigDatabaseInsert,
+};
 
 use crate::{Args, OutputFormat};
 
@@ -56,6 +58,13 @@ pub fn setup_logging(args: &Args) -> Result<()> {
     }
 }
 
+pub fn get_cache_options(inference_cache: CacheEnabledMode) -> CacheParamsOptions {
+    CacheParamsOptions {
+        enabled: inference_cache,
+        max_age_s: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
@@ -87,6 +96,7 @@ mod tests {
             tools: vec![],
             tool_choice: ToolChoice::Specific("tool_1".to_string()),
             parallel_tool_calls: None,
+            description: None,
         });
         let tool_params_args = get_tool_params_args(&tool_database_insert, &function_config).await;
         assert_eq!(
@@ -123,6 +133,7 @@ mod tests {
             tools: vec!["tool_1".to_string()],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
+            description: None,
         });
         let tool_params_args = get_tool_params_args(&tool_database_insert, &function_config).await;
         assert_eq!(

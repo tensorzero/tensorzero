@@ -1,3 +1,6 @@
+// This project is used only for testing, so it's fine if it panics
+#![allow(clippy::unwrap_used, clippy::panic, clippy::expect_used)]
+
 use async_stream::try_stream;
 use axum::{
     body::Body,

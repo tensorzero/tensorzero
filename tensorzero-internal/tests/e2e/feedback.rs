@@ -10,6 +10,7 @@ use tensorzero_internal::{
     inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Role, Text, TextKind},
 };
 use tokio::time::{sleep, Duration};
+use tracing_test::traced_test;
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
@@ -48,7 +49,7 @@ async fn e2e_test_comment_feedback() {
         "function_name": "json_success",
         "input": {
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": {"country": "Japan"}}]
+            "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "Japan"}}]}]
         },
         "stream": false,
     });
@@ -122,7 +123,7 @@ async fn e2e_test_comment_feedback() {
         "function_name": "json_success",
         "input": {
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": {"country": "Japan"}}]
+            "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "Japan"}}]}]
         },
         "stream": false,
     });
@@ -319,7 +320,7 @@ async fn e2e_test_demonstration_feedback_json() {
         "function_name": "json_success",
         "input": {
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": {"country": "Japan"}}]
+            "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "Japan"}}]}]
         },
         "stream": false,
     });
@@ -371,7 +372,7 @@ async fn e2e_test_demonstration_feedback_json() {
     let retrieved_value = serde_json::from_str::<JsonInferenceOutput>(retrieved_value).unwrap();
     let expected_value = JsonInferenceOutput {
         parsed: Some(json!({"answer": "Tokyo"})),
-        raw: "{\"answer\":\"Tokyo\"}".to_string(),
+        raw: Some("{\"answer\":\"Tokyo\"}".to_string()),
     };
     assert_eq!(retrieved_value, expected_value);
 
@@ -444,7 +445,7 @@ async fn e2e_test_demonstration_feedback_dynamic_json() {
         "function_name": "json_success",
         "input": {
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": {"country": "Japan"}}]
+            "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "Japan"}}]}]
         },
         "stream": false,
         "output_schema": new_output_schema,
@@ -497,7 +498,7 @@ async fn e2e_test_demonstration_feedback_dynamic_json() {
     let retrieved_value = serde_json::from_str::<JsonInferenceOutput>(retrieved_value).unwrap();
     let expected_value = JsonInferenceOutput {
         parsed: Some(json!({"answer": "Tokyo", "comment": "This is a comment"})),
-        raw: "{\"answer\":\"Tokyo\",\"comment\":\"This is a comment\"}".to_string(),
+        raw: Some("{\"answer\":\"Tokyo\",\"comment\":\"This is a comment\"}".to_string()),
     };
     assert_eq!(retrieved_value, expected_value);
 
@@ -885,7 +886,7 @@ async fn e2e_test_float_feedback() {
         "function_name": "json_success",
         "input": {
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": {"country": "Japan"}}]
+            "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "Japan"}}]}]
         },
         "stream": false,
     });
@@ -991,7 +992,7 @@ async fn e2e_test_float_feedback() {
         "function_name": "json_success",
         "input": {
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": {"country": "Japan"}}]
+            "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "Japan"}}]}]
         },
         "stream": false,
     });
@@ -1065,7 +1066,7 @@ async fn e2e_test_boolean_feedback() {
         "function_name": "json_success",
         "input": {
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": {"country": "Japan"}}]
+            "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "Japan"}}]}]
         },
         "stream": false,
     });
@@ -1178,7 +1179,7 @@ async fn e2e_test_boolean_feedback() {
         "function_name": "json_success",
         "input": {
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": {"country": "Japan"}}]
+            "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "Japan"}}]}]
         },
         "stream": false,
     });
@@ -1247,6 +1248,7 @@ async fn select_feedback_tags_clickhouse(
 }
 
 #[tokio::test(flavor = "multi_thread")]
+#[traced_test]
 async fn test_fast_inference_then_feedback() {
     use serde_json::json;
     use std::collections::HashMap;
@@ -1311,4 +1313,5 @@ async fn test_fast_inference_then_feedback() {
 
     // Wait for all tasks to finish.
     futures::future::join_all(tasks).await;
+    assert!(!logs_contain("does not exist"));
 }

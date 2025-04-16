@@ -21,21 +21,21 @@ async fn get_providers() -> E2ETestProviders {
     let standard_providers = vec![E2ETestProvider {
         variant_name: "aws-bedrock".to_string(),
         model_name: "claude-3-haiku-20240307-aws-bedrock".into(),
-        model_provider_name: "aws-bedrock".into(),
+        model_provider_name: "aws_bedrock".into(),
         credentials: HashMap::new(),
     }];
 
     let extra_body_providers = vec![E2ETestProvider {
         variant_name: "aws-bedrock-extra-body".to_string(),
         model_name: "claude-3-haiku-20240307-aws-bedrock".into(),
-        model_provider_name: "aws-bedrock".into(),
+        model_provider_name: "aws_bedrock".into(),
         credentials: HashMap::new(),
     }];
 
     let bad_auth_extra_headers = vec![E2ETestProvider {
         variant_name: "aws-bedrock-extra-headers".to_string(),
         model_name: "claude-3-haiku-20240307-aws-bedrock".into(),
-        model_provider_name: "aws-bedrock".into(),
+        model_provider_name: "aws_bedrock".into(),
         credentials: HashMap::new(),
     }];
 
@@ -43,19 +43,19 @@ async fn get_providers() -> E2ETestProviders {
         E2ETestProvider {
             variant_name: "aws-bedrock".to_string(),
             model_name: "claude-3-haiku-20240307-aws-bedrock".into(),
-            model_provider_name: "aws-bedrock".into(),
+            model_provider_name: "aws_bedrock".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
             variant_name: "aws-bedrock-implicit".to_string(),
             model_name: "claude-3-haiku-20240307-aws-bedrock".into(),
-            model_provider_name: "aws-bedrock".into(),
+            model_provider_name: "aws_bedrock".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
             variant_name: "aws-bedrock-default".to_string(),
             model_name: "claude-3-haiku-20240307-aws-bedrock".into(),
-            model_provider_name: "aws-bedrock".into(),
+            model_provider_name: "aws_bedrock".into(),
             credentials: HashMap::new(),
         },
     ];
