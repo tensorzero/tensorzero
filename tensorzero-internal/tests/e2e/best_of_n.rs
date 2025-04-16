@@ -79,7 +79,7 @@ async fn e2e_test_best_of_n_dummy_candidates_dummy_judge_inner(
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": format!("Please write me a sentence about Megumin making an explosion: {random_input}")},
+                        {"type": "text", "value": format!("Please write me a sentence about Megumin making an explosion: {random_input}")},
                     ]
                 }
             ]
@@ -417,7 +417,7 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
                             model_provider_name: Some(
                                 "tensorzero::model_name::json::provider_name::json".into()
                             ),
-                            data: serde_json::json!({"type": "text", "text": "My extra json-model input", "my": {"other": "keys"}})
+                            data: serde_json::json!({"type": "text", "value": "My extra json-model input", "my": {"other": "keys"}})
                         }
                     ],
                 }
@@ -980,7 +980,7 @@ async fn e2e_test_best_of_n_json_real_judge_implicit_tool() {
                         "content": [
                             {
                                 "type": "text",
-                                "text": "What's the first word in the typical output of one's first program. Answer as a json object with a single field 'answer' containing the string."
+                                "value": "What's the first word in the typical output of one's first program. Answer as a json object with a single field 'answer' containing the string."
                             }
                         ]
                     },
@@ -989,7 +989,7 @@ async fn e2e_test_best_of_n_json_real_judge_implicit_tool() {
                         "content": [
                             {
                                 "type": "text",
-                                "text": "Here are the candidate answers (with the index and a row of ------ separating):\n0: {\"answer\":\"Hello\"}\n------\n1: {\"answer\":\"Goodbye\"}\n------\nPlease evaluate these candidates and provide the index of the best one."
+                                "value": "Here are the candidate answers (with the index and a row of ------ separating):\n0: {\"answer\":\"Hello\"}\n------\n1: {\"answer\":\"Goodbye\"}\n------\nPlease evaluate these candidates and provide the index of the best one."
                             }
                         ]
                     }
