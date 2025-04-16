@@ -65,7 +65,7 @@ impl Variant for ChainOfThoughtConfig {
         };
         let original_output_schema = match inference_config.dynamic_output_schema {
             Some(schema) => &schema.value,
-            None => &json_config.output_schema.value,
+            None => json_config.output_schema.value,
         };
         let augmented_output_schema = prepare_thinking_output_schema(original_output_schema);
         let augmented_inference_config = InferenceConfig {
@@ -113,12 +113,12 @@ impl Variant for ChainOfThoughtConfig {
 
     async fn infer_stream<'request>(
         &self,
-        input: &ResolvedInput,
-        models: &'request InferenceModels<'_>,
-        function: &FunctionConfig,
-        inference_config: &'request InferenceConfig<'static, 'request>,
-        clients: &'request InferenceClients<'request>,
-        inference_params: InferenceParams,
+        _input: &ResolvedInput,
+        _models: &'request InferenceModels<'_>,
+        _function: &FunctionConfig,
+        _inference_config: &'request InferenceConfig<'static, 'request>,
+        _clients: &'request InferenceClients<'request>,
+        _inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
         todo!()
     }
@@ -262,22 +262,23 @@ mod tests {
 
     #[test]
     fn test_parse_thinking_output() {
-        use crate::inference::types::JsonInferenceOutput;
         use serde_json::json;
 
         // Case 1: parsed is None (should return output unchanged)
-        let output = JsonInferenceOutput {
+        let output = InternalJsonInferenceOutput {
             raw: Some("raw string".to_string()),
             parsed: None,
+            auxiliary_content: vec![],
         };
         let result = parse_thinking_output(output.clone());
         assert!(result.is_ok());
         assert_eq!(result.unwrap().raw, Some("raw string".to_string()));
 
         // Case 2: parsed is Some, but no 'response' field (should warn and return output unchanged)
-        let output = JsonInferenceOutput {
+        let output = InternalJsonInferenceOutput {
             raw: Some("raw string".to_string()),
             parsed: Some(json!({"not_response": 123})),
+            auxiliary_content: vec![],
         };
         let result = parse_thinking_output(output.clone());
         assert!(result.is_ok());
@@ -287,12 +288,13 @@ mod tests {
         assert_eq!(out.raw, Some("raw string".to_string()));
 
         // Case 3: parsed is Some, 'response' field is present and serializable
-        let output = JsonInferenceOutput {
+        let output = InternalJsonInferenceOutput {
             raw: None,
             parsed: Some(json!({
                 "thinking": "step by step",
                 "response": {"answer": "42"}
             })),
+            auxiliary_content: vec![],
         };
         let result = parse_thinking_output(output);
         assert!(result.is_ok());
@@ -301,5 +303,56 @@ mod tests {
         assert_eq!(out.parsed, Some(json!({"answer": "42"})));
         // The raw should be the serialized response
         assert_eq!(out.raw, Some("{\"answer\":\"42\"}".to_string()));
+        // The auxiliary content should now contain the thinking
+        assert_eq!(out.auxiliary_content.len(), 1);
+        assert_eq!(
+            out.auxiliary_content[0],
+            ContentBlockOutput::Thought(Thought {
+                text: "step by step".to_string(),
+                signature: None,
+            })
+        );
+
+        // Case 4: There is already existing thinking in auxiliary_content and a well-formed output with thinking field
+        let output = InternalJsonInferenceOutput {
+            raw: None,
+            parsed: Some(json!({
+                "thinking": "new thinking process",
+                "response": {"answer": "the ultimate answer is 42"}
+            })),
+            auxiliary_content: vec![ContentBlockOutput::Thought(Thought {
+                text: "existing thinking".to_string(),
+                signature: None,
+            })],
+        };
+        let result = parse_thinking_output(output);
+        assert!(result.is_ok());
+        let out = result.unwrap();
+        // The parsed should now be just the response object
+        assert_eq!(
+            out.parsed,
+            Some(json!({"answer": "the ultimate answer is 42"}))
+        );
+        // The raw should be the serialized response
+        assert_eq!(
+            out.raw,
+            Some("{\"answer\":\"the ultimate answer is 42\"}".to_string())
+        );
+        // The auxiliary content should now contain both the existing and new thinking
+        assert_eq!(out.auxiliary_content.len(), 2);
+        assert_eq!(
+            out.auxiliary_content[0],
+            ContentBlockOutput::Thought(Thought {
+                text: "existing thinking".to_string(),
+                signature: None,
+            })
+        );
+        assert_eq!(
+            out.auxiliary_content[1],
+            ContentBlockOutput::Thought(Thought {
+                text: "new thinking process".to_string(),
+                signature: None,
+            })
+        );
     }
 }
