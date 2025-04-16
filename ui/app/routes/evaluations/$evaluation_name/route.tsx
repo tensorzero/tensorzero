@@ -236,13 +236,8 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
   const { toast } = useToast();
   useEffect(() => {
     if (newFeedbackId) {
-      let message = `ID: ${newFeedbackId}`;
-      if (newJudgeDemonstrationId) {
-        message += `\nJudge Demonstration ID: ${newJudgeDemonstrationId}`;
-      }
       toast({
         title: "Feedback Added",
-        description: message,
       });
     }
   }, [newFeedbackId, newJudgeDemonstrationId, toast]);
