@@ -1,4 +1,12 @@
-import { TypeChat, TypeJson, Check, Cross } from "~/components/icons/Icons";
+import {
+  TypeChat,
+  TypeJson,
+  Check,
+  Cross,
+  QuestionMark,
+  Text,
+  Float,
+} from "~/components/icons/Icons";
 import type { ReactNode } from "react";
 
 export type IconConfig = {
@@ -28,14 +36,22 @@ export function getFunctionTypeIcon(functionType: string): IconConfig {
 }
 
 /**
- * Get icon configuration for feedback status
- * @param status The status ("success", "failure", or "neutral")
+ * Get icon configuration for feedback status or feedback type
+ * @param type The feedback type or status
  * @returns IconConfig with icon component and background class
  */
 export function getFeedbackIcon(
-  status: "success" | "failure" | "neutral",
+  type:
+    | "success"
+    | "failure"
+    | "default"
+    | "unknown"
+    | "float"
+    | "comment"
+    | "demonstration",
 ): IconConfig {
-  switch (status) {
+  switch (type) {
+    // Status-based icons
     case "success":
       return {
         icon: <Check className="text-green-800" size={16} />,
@@ -46,7 +62,27 @@ export function getFeedbackIcon(
         icon: <Cross className="text-red-800" size={16} />,
         iconBg: "bg-red-200",
       };
-    case "neutral":
+
+    // Value type-based icons (all neutral status)
+    case "unknown":
+      return {
+        icon: <QuestionMark className="text-amber-800" size={16} />,
+        iconBg: "bg-amber-100",
+      };
+    case "float":
+      return {
+        icon: <Float className="text-neutral-400" size={16} />,
+        iconBg: "bg-gray-100",
+      };
+    case "comment":
+    case "demonstration":
+      return {
+        icon: <Text className="text-neutral-400" size={16} />,
+        iconBg: "bg-gray-100",
+      };
+
+    // Default icon (no icon)
+    case "default":
     default:
       return {
         icon: null,

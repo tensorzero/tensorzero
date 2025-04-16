@@ -7,7 +7,6 @@ import {
   FloatItem,
   CommentItem,
   DemonstrationItem,
-  type FeedbackStatus,
 } from "./FeedbackValueItem";
 import { CommentModal, DemonstrationModal } from "./FeedbackTableModal";
 
@@ -40,7 +39,7 @@ export default function FeedbackValue({
       (feedback.value === true && optimize === "min") ||
       (feedback.value === false && optimize === "max");
 
-    let status: FeedbackStatus = "neutral";
+    let status: "success" | "failure" | "default" = "default";
 
     if (success) {
       status = "success";

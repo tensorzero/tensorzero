@@ -1,16 +1,21 @@
 import type { ReactNode } from "react";
 import { getFeedbackIcon } from "~/utils/icon";
 
-export type FeedbackStatus = "success" | "failure" | "neutral";
-
 interface ValueItemProps {
-  status: FeedbackStatus;
+  iconType:
+    | "success"
+    | "failure"
+    | "default"
+    | "unknown"
+    | "float"
+    | "comment"
+    | "demonstration";
   children: ReactNode;
   onClick?: (event: React.MouseEvent) => void;
 }
 
-function ValueItem({ status, children, onClick }: ValueItemProps) {
-  const { icon, iconBg } = getFeedbackIcon(status);
+function ValueItem({ iconType, children, onClick }: ValueItemProps) {
+  const { icon, iconBg } = getFeedbackIcon(iconType);
 
   return (
     <div
@@ -36,10 +41,10 @@ function BooleanItem({
   status,
 }: {
   value: boolean;
-  status: FeedbackStatus;
+  status: "success" | "failure" | "default";
 }) {
   return (
-    <ValueItem status={status}>
+    <ValueItem iconType={status === "default" ? "unknown" : status}>
       <span>{value ? "True" : "False"}</span>
     </ValueItem>
   );
@@ -47,7 +52,7 @@ function BooleanItem({
 
 function FloatItem({ value }: { value: number }) {
   return (
-    <ValueItem status="neutral">
+    <ValueItem iconType="float">
       <span>{value.toFixed(3)}</span>
     </ValueItem>
   );
@@ -61,7 +66,7 @@ function CommentItem({
   onClick?: (event: React.MouseEvent) => void;
 }) {
   return (
-    <ValueItem status="neutral" onClick={onClick}>
+    <ValueItem iconType="comment" onClick={onClick}>
       <span className="overflow-hidden text-ellipsis whitespace-nowrap">
         {value}
       </span>
@@ -77,7 +82,7 @@ function DemonstrationItem({
   onClick?: (event: React.MouseEvent) => void;
 }) {
   return (
-    <ValueItem status="neutral" onClick={onClick}>
+    <ValueItem iconType="demonstration" onClick={onClick}>
       <span className="overflow-hidden font-mono text-ellipsis whitespace-nowrap">
         {value}
       </span>

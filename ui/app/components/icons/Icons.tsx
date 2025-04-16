@@ -354,6 +354,39 @@ export const Cross: React.FC<IconProps> = (props) => (
   </IconWrapper>
 );
 
+export const Text: React.FC<IconProps> = (props) => (
+  <IconWrapper {...props}>
+    <path
+      fillRule="evenodd"
+      clipRule="evenodd"
+      d="M12.75 5C12.75 5.41421 12.4142 5.75 12 5.75H4C3.58579 5.75 3.25 5.41421 3.25 5C3.25 4.58579 3.58579 4.25 4 4.25H12C12.4142 4.25 12.75 4.58579 12.75 5ZM12.75 8C12.75 8.41421 12.4142 8.75 12 8.75H4C3.58579 8.75 3.25 8.41421 3.25 8C3.25 7.58579 3.58579 7.25 4 7.25H12C12.4142 7.25 12.75 7.58579 12.75 8ZM8 11.75C8.41421 11.75 8.75 11.4142 8.75 11C8.75 10.5858 8.41421 10.25 8 10.25H4C3.58579 10.25 3.25 10.5858 3.25 11C3.25 11.4142 3.58579 11.75 4 11.75H8Z"
+      fill="currentColor"
+    />
+  </IconWrapper>
+);
+
+export const Float: React.FC<IconProps> = (props) => (
+  <IconWrapper {...props}>
+    <path
+      fillRule="evenodd"
+      clipRule="evenodd"
+      d="M8 5C8.55228 5 9 4.55228 9 4C9 3.44772 8.55228 3 8 3C7.44772 3 7 3.44772 7 4C7 4.55228 7.44772 5 8 5ZM12.75 8C12.75 8.41421 12.4142 8.75 12 8.75H4C3.58579 8.75 3.25 8.41421 3.25 8C3.25 7.58579 3.58579 7.25 4 7.25H12C12.4142 7.25 12.75 7.58579 12.75 8ZM9 12C9 12.5523 8.55228 13 8 13C7.44772 13 7 12.5523 7 12C7 11.4477 7.44772 11 8 11C8.55228 11 9 11.4477 9 12Z"
+      fill="currentColor"
+    />
+  </IconWrapper>
+);
+
+export const QuestionMark: React.FC<IconProps> = (props) => (
+  <IconWrapper {...props}>
+    <path
+      fillRule="evenodd"
+      clipRule="evenodd"
+      d="M6.25 6C6.25 5.51851 6.80158 4.75 8 4.75C8.39727 4.75 8.87516 4.85329 9.2275 5.0735C9.5471 5.27325 9.75 5.55135 9.75 6C9.75 7.0687 9.0739 7.85146 7.76283 8.28849C7.36987 8.41947 7.1575 8.84421 7.28849 9.23717C7.41947 9.63013 7.84421 9.8425 8.23717 9.71151C9.9261 9.14854 11.25 7.9313 11.25 6C11.25 4.94865 10.7029 4.22675 10.0225 3.8015C9.37484 3.39671 8.60273 3.25 8 3.25C6.19842 3.25 4.75 4.48149 4.75 6C4.75 6.41421 5.08579 6.75 5.5 6.75C5.91421 6.75 6.25 6.41421 6.25 6ZM8 13C8.55228 13 9 12.5523 9 12C9 11.4477 8.55228 11 8 11C7.44772 11 7 11.4477 7 12C7 12.5523 7.44772 13 8 13Z"
+      fill="currentColor"
+    />
+  </IconWrapper>
+);
+
 export const Evaluation: React.FC<IconProps> = (props) => (
   <IconWrapper {...props}>
     <path
@@ -406,4 +439,7 @@ export const iconComponents: Record<string, React.FC<IconProps>> = {
   ArrowBottomRight,
   Check,
   Cross,
+  Text,
+  Float,
+  QuestionMark,
 };
