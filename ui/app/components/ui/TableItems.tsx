@@ -14,8 +14,11 @@ interface TableItemShortUuidProps {
 
 function TableItemShortUuid({ id, link }: TableItemShortUuidProps) {
   const content = (
-    <span className="font-mono whitespace-nowrap">
-      {id.length > 8 ? `…${id.slice(-8)}` : id}
+    <span
+      className="inline-block max-w-[80px] overflow-hidden align-middle font-mono whitespace-nowrap"
+      style={{ direction: "rtl", textOverflow: "ellipsis" }}
+    >
+      {id}
     </span>
   );
 
