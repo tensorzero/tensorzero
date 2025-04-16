@@ -49,6 +49,7 @@ pub struct FunctionConfigChat {
     pub tools: Vec<String>, // tool names
     pub tool_choice: ToolChoice,
     pub parallel_tool_calls: Option<bool>,
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Default)]
@@ -59,6 +60,7 @@ pub struct FunctionConfigJson {
     pub assistant_schema: Option<JSONSchemaFromPath>,
     pub output_schema: JSONSchemaFromPath, // schema is mandatory for JSON functions
     pub implicit_tool_call_config: ToolCallConfig,
+    pub description: Option<String>,
 }
 
 impl FunctionConfig {
@@ -68,9 +70,7 @@ impl FunctionConfig {
             FunctionConfig::Json(params) => &params.variants,
         }
     }
-}
 
-impl FunctionConfig {
     pub fn validate_inference_params(
         &self,
         params: &crate::endpoints::inference::Params,
@@ -190,31 +190,37 @@ impl FunctionConfig {
                 // Parse the content blocks into a JSON object
                 // We assume here that the last content block that's text or a tool call is the JSON object.
                 // (this is because we could have used an implicit tool call and there is no other reason for a tool call in a JSON function).
-                let raw = content_blocks
-                    .iter()
-                    .rev()
-                    .find_map(|content_block| match content_block {
-                        ContentBlockOutput::Text(text) => Some(&text.text),
-                        ContentBlockOutput::ToolCall(tool_call) => Some(&tool_call.arguments),
-                        _ => None,
-                    })
-                    .ok_or_else(|| {
-                        Error::new(ErrorDetails::Inference {
-                            message: "No valid content blocks found in JSON function response"
-                                .to_string(),
+                //
+                // Sometimes models will return no content blocks (e.g. when instructed to not return anything), so `raw_output` will be `None` then.
+                let raw_output: Option<String> =
+                    content_blocks
+                        .iter()
+                        .rev()
+                        .find_map(|content_block| match content_block {
+                            ContentBlockOutput::Text(text) => Some(text.text.to_string()),
+                            ContentBlockOutput::ToolCall(tool_call) => {
+                                Some(tool_call.arguments.to_string())
+                            }
+                            _ => None,
+                        });
+
+                // Try to parse the raw output as JSON.
+                //
+                // If the raw output is None, parsed output is also None.
+                // If the raw output is not a valid JSON string, log an error and set parsed output to None.
+                let parsed_output: Option<Value> = raw_output.as_ref().and_then(|raw_output| {
+                    serde_json::from_str::<Value>(raw_output)
+                        .map_err(|e| {
+                            Error::new(ErrorDetails::OutputParsing {
+                                message: format!(
+                                    "Failed to parse output from JSON function response {e}",
+                                ),
+                                raw_output: raw_output.to_string(),
+                            })
                         })
-                    })?;
-                let parsed_output = serde_json::from_str::<Value>(raw)
-                    .map_err(|e| {
-                        Error::new(ErrorDetails::OutputParsing {
-                            message: format!(
-                                "Failed to parse output from JSON function response {}",
-                                e
-                            ),
-                            raw_output: raw.to_string(),
-                        })
-                    })
-                    .ok();
+                        .ok()
+                });
+
                 let output_schema = match &inference_config.dynamic_output_schema {
                     Some(schema) => JsonSchemaRef::Dynamic(schema),
                     None => JsonSchemaRef::Static(&params.output_schema),
@@ -230,7 +236,7 @@ impl FunctionConfig {
                 };
                 Ok(InferenceResult::Json(JsonInferenceResult::new(
                     inference_id,
-                    raw.to_string(),
+                    raw_output,
                     parsed_output,
                     usage,
                     model_inference_results,
@@ -260,6 +266,13 @@ impl FunctionConfig {
         match self {
             FunctionConfig::Chat(params) => params.assistant_schema.as_ref(),
             FunctionConfig::Json(params) => params.assistant_schema.as_ref(),
+        }
+    }
+
+    pub fn description(&self) -> Option<&String> {
+        match self {
+            FunctionConfig::Chat(params) => params.description.as_ref(),
+            FunctionConfig::Json(params) => params.description.as_ref(),
         }
     }
 
@@ -1022,6 +1035,7 @@ mod tests {
             assistant_schema: None,
             output_schema: JSONSchemaFromPath::from_value(&json!({})).unwrap(),
             implicit_tool_call_config,
+            description: None,
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -1094,6 +1108,7 @@ mod tests {
             assistant_schema: None,
             output_schema: JSONSchemaFromPath::from_value(&output_schema).unwrap(),
             implicit_tool_call_config,
+            description: None,
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -1156,6 +1171,7 @@ mod tests {
             assistant_schema: None,
             output_schema: JSONSchemaFromPath::from_value(&output_schema).unwrap(),
             implicit_tool_call_config,
+            description: None,
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -1219,6 +1235,7 @@ mod tests {
             assistant_schema: Some(assistant_schema),
             output_schema: JSONSchemaFromPath::from_value(&output_schema).unwrap(),
             implicit_tool_call_config,
+            description: None,
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -1286,6 +1303,7 @@ mod tests {
             assistant_schema: Some(assistant_schema),
             output_schema: JSONSchemaFromPath::from_value(&output_schema).unwrap(),
             implicit_tool_call_config,
+            description: None,
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -1473,6 +1491,58 @@ mod tests {
         assert!((0.0..1.0).contains(&value4));
     }
 
+    #[test]
+    fn test_description_getter() {
+        // Test for Chat function with description
+        let chat_config = FunctionConfigChat {
+            variants: HashMap::new(),
+            system_schema: None,
+            user_schema: None,
+            assistant_schema: None,
+            tools: vec![],
+            tool_choice: ToolChoice::None,
+            parallel_tool_calls: None,
+            description: Some("A chat function description".to_string()),
+        };
+        let function_config = FunctionConfig::Chat(chat_config);
+        assert_eq!(
+            function_config.description(),
+            Some(&"A chat function description".to_string())
+        );
+
+        // Test for JSON function with description
+        let output_schema = JSONSchemaFromPath::from_value(&json!({})).unwrap();
+        let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&json!({}));
+        let json_config = FunctionConfigJson {
+            variants: HashMap::new(),
+            system_schema: None,
+            user_schema: None,
+            assistant_schema: None,
+            output_schema,
+            implicit_tool_call_config,
+            description: Some("A JSON function description".to_string()),
+        };
+        let function_config = FunctionConfig::Json(json_config);
+        assert_eq!(
+            function_config.description(),
+            Some(&"A JSON function description".to_string())
+        );
+
+        // Test for None description
+        let chat_config = FunctionConfigChat {
+            variants: HashMap::new(),
+            system_schema: None,
+            user_schema: None,
+            assistant_schema: None,
+            tools: vec![],
+            tool_choice: ToolChoice::None,
+            parallel_tool_calls: None,
+            description: None,
+        };
+        let function_config = FunctionConfig::Chat(chat_config);
+        assert_eq!(function_config.description(), None);
+    }
+
     #[tokio::test]
     #[traced_test]
     async fn test_prepare_response_json() {
@@ -1502,6 +1572,7 @@ mod tests {
             assistant_schema: None,
             output_schema,
             implicit_tool_call_config,
+            description: None,
         });
         let raw_request = "raw_request".to_string();
 
@@ -1563,7 +1634,7 @@ mod tests {
             InferenceResult::Json(result) => {
                 assert_eq!(result.inference_id, inference_id);
                 assert!(result.output.parsed.is_none());
-                assert_eq!(result.output.raw, "Hello, world!");
+                assert_eq!(result.output.raw, Some("Hello, world!".to_string()));
                 assert_eq!(result.usage, usage);
                 assert_eq!(result.finish_reason, Some(FinishReason::Stop));
                 assert_eq!(result.model_inference_results, vec![model_response]);
@@ -1615,7 +1686,10 @@ mod tests {
                     result.output.parsed.unwrap(),
                     json!({"name": "Jerry", "age": 30}),
                 );
-                assert_eq!(result.output.raw, r#"{"name": "Jerry", "age": 30}"#);
+                assert_eq!(
+                    result.output.raw,
+                    Some("{\"name\": \"Jerry\", \"age\": 30}".to_string())
+                );
                 assert_eq!(result.usage, usage);
                 assert_eq!(result.model_inference_results, vec![model_response]);
             }
@@ -1663,7 +1737,10 @@ mod tests {
             InferenceResult::Json(result) => {
                 assert_eq!(result.inference_id, inference_id);
                 assert!(result.output.parsed.is_none());
-                assert_eq!(result.output.raw, r#"{"name": "Jerry", "age": "thirty"}"#);
+                assert_eq!(
+                    result.output.raw,
+                    Some("{\"name\": \"Jerry\", \"age\": \"thirty\"}".to_string())
+                );
                 assert_eq!(result.usage, usage);
                 assert_eq!(result.model_inference_results, vec![model_response]);
                 assert_eq!(result.finish_reason, Some(FinishReason::ToolCall));
@@ -1717,7 +1794,7 @@ mod tests {
             InferenceResult::Json(result) => {
                 assert_eq!(result.inference_id, inference_id);
                 assert!(result.output.parsed.is_none());
-                assert_eq!(result.output.raw, "tool_call_arguments");
+                assert_eq!(result.output.raw, Some("tool_call_arguments".to_string()));
                 assert_eq!(result.usage, usage);
                 assert_eq!(result.model_inference_results, vec![model_response]);
                 assert_eq!(result.finish_reason, Some(FinishReason::ToolCall));
@@ -1773,7 +1850,10 @@ mod tests {
                     result.output.parsed.unwrap(),
                     json!({"name": "Jerry", "age": 30}),
                 );
-                assert_eq!(result.output.raw, r#"{"name": "Jerry", "age": 30}"#);
+                assert_eq!(
+                    result.output.raw,
+                    Some(r#"{"name": "Jerry", "age": 30}"#.to_string())
+                );
                 assert_eq!(result.usage, usage);
                 assert_eq!(result.model_inference_results, vec![model_response]);
                 assert_eq!(result.finish_reason, Some(FinishReason::ContentFilter));
@@ -1786,7 +1866,7 @@ mod tests {
         let content_blocks = Vec::new();
         let usage = Usage {
             input_tokens: 10,
-            output_tokens: 10,
+            output_tokens: 0,
         };
         let model_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
@@ -1799,13 +1879,13 @@ mod tests {
             usage: usage.clone(),
             model_provider_name: "model_provider_name".into(),
             model_name: "model_name".into(),
-            finish_reason: None,
+            finish_reason: Some(FinishReason::Stop),
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
             },
             cached: false,
         };
-        let error = function_config
+        let response = function_config
             .prepare_response(
                 inference_id,
                 content_blocks,
@@ -1816,14 +1896,18 @@ mod tests {
                 None,
             )
             .await
-            .unwrap_err();
-        assert_eq!(
-            error,
-            ErrorDetails::Inference {
-                message: "No valid content blocks found in JSON function response".to_string()
+            .unwrap();
+        match response {
+            InferenceResult::Json(result) => {
+                assert_eq!(result.inference_id, inference_id);
+                assert!(result.output.parsed.is_none());
+                assert!(result.output.raw.is_none());
+                assert_eq!(result.usage, usage);
+                assert_eq!(result.finish_reason, model_response.finish_reason);
+                assert_eq!(result.model_inference_results, vec![model_response]);
             }
-            .into()
-        );
+            _ => panic!("Expected a JSON inference result"),
+        }
 
         let dynamic_output_schema = DynamicJSONSchema::new(serde_json::json!({
             "type": "object",
@@ -1888,7 +1972,7 @@ mod tests {
             InferenceResult::Json(result) => {
                 assert_eq!(result.inference_id, inference_id);
                 assert_eq!(result.output.parsed.unwrap(), json!({"answer": "42"}),);
-                assert_eq!(result.output.raw, r#"{"answer": "42"}"#);
+                assert_eq!(result.output.raw, Some(r#"{"answer": "42"}"#.to_string()));
                 assert_eq!(result.usage, usage);
                 assert_eq!(result.model_inference_results, vec![model_response]);
             }
@@ -1936,7 +2020,10 @@ mod tests {
             InferenceResult::Json(result) => {
                 assert_eq!(result.inference_id, inference_id);
                 assert!(result.output.parsed.is_none());
-                assert_eq!(result.output.raw, r#"{"response": "forty-two"}"#);
+                assert_eq!(
+                    result.output.raw,
+                    Some(r#"{"response": "forty-two"}"#.to_string())
+                );
                 assert_eq!(result.usage, usage);
                 assert_eq!(result.model_inference_results, vec![model_response]);
             }
@@ -1989,7 +2076,7 @@ mod tests {
             InferenceResult::Json(result) => {
                 assert_eq!(result.inference_id, inference_id);
                 assert!(result.output.parsed.is_none());
-                assert_eq!(result.output.raw, "tool_call_arguments");
+                assert_eq!(result.output.raw, Some("tool_call_arguments".to_string()));
                 assert_eq!(result.usage, usage);
                 assert_eq!(result.model_inference_results, vec![model_response]);
             }
@@ -2041,7 +2128,7 @@ mod tests {
             InferenceResult::Json(result) => {
                 assert_eq!(result.inference_id, inference_id);
                 assert_eq!(result.output.parsed.unwrap(), json!({"answer": "42"}),);
-                assert_eq!(result.output.raw, r#"{"answer": "42"}"#);
+                assert_eq!(result.output.raw, Some(r#"{"answer": "42"}"#.to_string()));
                 assert_eq!(result.usage, usage);
                 assert_eq!(result.model_inference_results, vec![model_response]);
             }
@@ -2059,6 +2146,7 @@ mod tests {
             assistant_schema: None,
             output_schema,
             implicit_tool_call_config,
+            description: None,
         });
         let inference_id = Uuid::now_v7();
         let content_blocks = vec![r#"{"answer": "42"}"#.to_string().into()];
@@ -2100,7 +2188,7 @@ mod tests {
             InferenceResult::Json(result) => {
                 assert_eq!(result.inference_id, inference_id);
                 assert_eq!(result.output.parsed.unwrap(), json!({"answer": "42"}),);
-                assert_eq!(result.output.raw, r#"{"answer": "42"}"#);
+                assert_eq!(result.output.raw, Some(r#"{"answer": "42"}"#.to_string()));
                 assert_eq!(result.usage, usage);
                 assert_eq!(result.model_inference_results, vec![model_response]);
                 assert_eq!(result.finish_reason, Some(FinishReason::Stop));

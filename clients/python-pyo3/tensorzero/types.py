@@ -145,7 +145,7 @@ class FinishReason(str, Enum):
 
 @dataclass
 class JsonInferenceOutput:
-    raw: str
+    raw: Optional[str]
     parsed: Optional[Dict[str, Any]]
 
 
@@ -359,7 +359,7 @@ class TensorZeroInternalError(BaseTensorZeroError):
         self.msg = msg
 
     def __str__(self) -> str:
-        return f"TensorZeroInternalError: {self.msg}"
+        return self.msg
 
 
 class TensorZeroError(BaseTensorZeroError):

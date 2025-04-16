@@ -536,7 +536,7 @@ pub struct JsonInferenceResult {
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub struct JsonInferenceOutput {
-    pub raw: String,
+    pub raw: Option<String>,
     pub parsed: Option<Value>,
 }
 
@@ -969,7 +969,7 @@ impl JsonInferenceResult {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         inference_id: Uuid,
-        raw: String,
+        raw: Option<String>,
         parsed: Option<Value>,
         usage: Usage,
         model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
@@ -2441,6 +2441,7 @@ mod tests {
             assistant_schema: None,
             implicit_tool_call_config,
             output_schema,
+            description: None,
         }));
         let usage1 = Usage {
             input_tokens: 10,
@@ -2499,7 +2500,7 @@ mod tests {
                 );
                 assert_eq!(
                     json_result.output.raw,
-                    "{\"name\":\"John\",\"age\":30}".to_string()
+                    Some("{\"name\":\"John\",\"age\":30}".to_string())
                 );
                 assert_eq!(
                     json_result.usage,
@@ -2575,7 +2576,10 @@ mod tests {
                 assert_eq!(json_result.created, created);
                 assert_eq!(json_result.usage, usage);
                 assert_eq!(json_result.output.parsed, None);
-                assert_eq!(json_result.output.raw, "{\"name\":\"John\"}".to_string());
+                assert_eq!(
+                    json_result.output.raw,
+                    Some("{\"name\":\"John\"}".to_string())
+                );
                 assert_eq!(json_result.model_inference_results.len(), 1);
                 let model_inference_result = json_result.model_inference_results.first().unwrap();
                 assert_eq!(&*model_inference_result.model_name, model_name);
@@ -2698,6 +2702,7 @@ mod tests {
             assistant_schema: None,
             implicit_tool_call_config,
             output_schema,
+            description: None,
         }));
         let usage1 = Usage {
             input_tokens: 10,
@@ -2756,7 +2761,7 @@ mod tests {
                 );
                 assert_eq!(
                     json_result.output.raw,
-                    "{\"name\":\"John\",\"age\":30}".to_string()
+                    Some("{\"name\":\"John\",\"age\":30}".to_string())
                 );
                 assert_eq!(
                     json_result.usage,
@@ -2795,6 +2800,7 @@ mod tests {
             assistant_schema: None,
             implicit_tool_call_config,
             output_schema,
+            description: None,
         }));
         let usage1 = Usage {
             input_tokens: 10,
@@ -2862,7 +2868,7 @@ mod tests {
                 );
                 assert_eq!(
                     json_result.output.raw,
-                    "{\"name\":\"John\",\"age\":30}".to_string()
+                    Some("{\"name\":\"John\",\"age\":30}".to_string())
                 );
                 assert_eq!(
                     json_result.usage,

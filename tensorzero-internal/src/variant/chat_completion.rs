@@ -854,6 +854,7 @@ mod tests {
             tools: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
+            description: None,
         });
         let good_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "good".into(),
@@ -1277,6 +1278,7 @@ mod tests {
             user_schema: None,
             output_schema,
             implicit_tool_call_config,
+            description: None,
         });
         let inference_config = InferenceConfig {
             templates: &templates,
@@ -1308,7 +1310,7 @@ mod tests {
                 assert!(json_result.output.parsed.is_none());
                 assert_eq!(
                     json_result.output.raw,
-                    r#"{"location":"Brooklyn","units":"celsius"}"#.to_string()
+                    Some(r#"{"location":"Brooklyn","units":"celsius"}"#.to_string())
                 );
                 assert_eq!(
                     json_result.usage,
@@ -1380,7 +1382,10 @@ mod tests {
         match result {
             InferenceResult::Json(json_result) => {
                 assert_eq!(json_result.output.parsed, Some(json!({"answer": "Hello"})));
-                assert_eq!(json_result.output.raw, DUMMY_JSON_RESPONSE_RAW.to_string());
+                assert_eq!(
+                    json_result.output.raw,
+                    Some(DUMMY_JSON_RESPONSE_RAW.to_string())
+                );
                 assert_eq!(
                     json_result.usage,
                     Usage {
@@ -1423,6 +1428,7 @@ mod tests {
             user_schema: None,
             output_schema: hardcoded_output_schema,
             implicit_tool_call_config,
+            description: None,
         });
         let inference_params = InferenceParams {
             chat_completion: ChatCompletionInferenceParams {
@@ -1485,7 +1491,10 @@ mod tests {
         match result {
             InferenceResult::Json(json_result) => {
                 assert_eq!(json_result.output.parsed, Some(json!({"answer": "Hello"})));
-                assert_eq!(json_result.output.raw, DUMMY_JSON_RESPONSE_RAW.to_string());
+                assert_eq!(
+                    json_result.output.raw,
+                    Some(DUMMY_JSON_RESPONSE_RAW.to_string())
+                );
                 assert_eq!(
                     json_result.usage,
                     Usage {
@@ -1528,6 +1537,7 @@ mod tests {
             user_schema: None,
             output_schema: hardcoded_output_schema,
             implicit_tool_call_config,
+            description: None,
         });
         let inference_params = InferenceParams::default();
         // Will dynamically set "response" instead of "answer"
@@ -1586,7 +1596,10 @@ mod tests {
         match result {
             InferenceResult::Json(json_result) => {
                 assert_eq!(json_result.output.parsed, None);
-                assert_eq!(json_result.output.raw, DUMMY_JSON_RESPONSE_RAW.to_string());
+                assert_eq!(
+                    json_result.output.raw,
+                    Some(DUMMY_JSON_RESPONSE_RAW.to_string())
+                );
                 assert_eq!(
                     json_result.usage,
                     Usage {
@@ -1643,7 +1656,9 @@ mod tests {
             tools: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
+            description: None,
         })));
+
         let system_template_name = "system";
         let user_template_name = "greeting_with_age";
         let good_provider_config = ProviderConfig::Dummy(DummyProvider {
@@ -1874,6 +1889,7 @@ mod tests {
             tools: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
+            description: None,
         });
         let mut inference_params = InferenceParams::default();
         let inference_config = InferenceConfig {
@@ -1980,6 +1996,7 @@ mod tests {
                 tool_choice: ToolChoice::Auto,
                 parallel_tool_calls: None,
             },
+            description: None,
         });
         let inference_config = InferenceConfig {
             ids: InferenceIds {

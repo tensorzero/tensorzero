@@ -10,7 +10,6 @@ env:
   TENSORZERO_CLICKHOUSE_URL: "http://chuser:chpassword@localhost:8123/tensorzero"
 
 jobs:
-
   clickhouse-tests-cloud:
     if: github.event_name == 'merge_group'
     runs-on: ubuntu-latest
@@ -25,6 +24,8 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
+        with:
+          save-if: ${{ github.event_name == 'merge_group' }}
       - name: Install cargo-nextest
         uses: taiki-e/install-action@37bdc826eaedac215f638a96472df572feab0f9b
         with:
@@ -92,7 +93,6 @@ jobs:
         uses: namespacelabs/nscloud-setup-buildx-action@84ca8c58fdf372d6a4750476cd09b7b96ee778ca
         continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
-
       - name: Check all docker-compose.yml files
         run: ./ci/check-all-docker-compose.sh
 
@@ -114,6 +114,7 @@ jobs:
             target: aarch64
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
       - name: "TensorZero PyO3 Client: Build"
         uses: PyO3/maturin-action@b3709a81b3e175ce3ede866725776fee42465311
         with:
@@ -362,7 +363,6 @@ jobs:
       # We allow the namespace builder setup to fail on Dependabot PRs and PRs from forks
       # (where the oidc token is not available)
 
-
       - name: Install and configure Namespace CLI
         uses: namespacelabs/nscloud-setup@v0
         continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
@@ -457,7 +457,8 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build ui container
-        run: docker buildx build -f ui/Dockerfile . -t tensorzero/ui
+        # Enable feedback in the UI for this job so the playwright tests can use it
+        run: docker buildx build --build-arg VITE_TENSORZERO_UI_FF_ENABLE_FEEDBACK=1 -f ui/Dockerfile . -t tensorzero/ui
 
       - name: Start services for ui e2e tests
         working-directory: ui
@@ -513,7 +514,16 @@ jobs:
   # See 'ci/README.md' at the repository root for more details.
   check-all-general-jobs-passed:
     if: always()
-    needs: [clickhouse-tests-cloud, check-docker-compose, check-pyo3-build, validate, clickhouse-tests, ui-tests, ui-tests-e2e]
+    needs:
+      [
+        clickhouse-tests-cloud,
+        check-docker-compose,
+        check-pyo3-build,
+        validate,
+        clickhouse-tests,
+        ui-tests,
+        ui-tests-e2e,
+      ]
     runs-on: ubuntu-latest
     steps:
       - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}

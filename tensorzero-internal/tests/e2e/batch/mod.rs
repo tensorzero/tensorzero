@@ -593,7 +593,7 @@ async fn test_write_read_completed_batch_inference_json() {
             assert_eq!(json_inference_response.inference_id, inference_id1);
             assert_eq!(
                 json_inference_response.output.raw,
-                "{\"answer\": \"hello world\"}"
+                Some("{\"answer\": \"hello world\"}".to_string())
             );
             assert_eq!(
                 json_inference_response.output.parsed.as_ref().unwrap()["answer"],
@@ -613,7 +613,7 @@ async fn test_write_read_completed_batch_inference_json() {
             assert_eq!(json_inference_response.inference_id, inference_id2);
             assert_eq!(
                 json_inference_response.output.raw,
-                "{\"response\": \"goodbye world\"}"
+                Some("{\"response\": \"goodbye world\"}".to_string())
             );
             assert!(json_inference_response.output.parsed.is_none());
             assert_eq!(
@@ -641,7 +641,10 @@ async fn test_write_read_completed_batch_inference_json() {
         retrieved_output_1_json.parsed.unwrap()["answer"],
         "hello world"
     );
-    assert_eq!(retrieved_output_1_json.raw, "{\"answer\": \"hello world\"}");
+    assert_eq!(
+        retrieved_output_1_json.raw,
+        Some("{\"answer\": \"hello world\"}".to_string())
+    );
     let json_inference_2 = select_json_inference_clickhouse(&clickhouse, inference_id2)
         .await
         .unwrap();
@@ -653,7 +656,7 @@ async fn test_write_read_completed_batch_inference_json() {
     assert!(retrieved_output_2_json.parsed.is_none());
     assert_eq!(
         retrieved_output_2_json.raw,
-        "{\"response\": \"goodbye world\"}"
+        Some("{\"response\": \"goodbye world\"}".to_string())
     );
     let model_inferences = select_model_inferences_clickhouse(&clickhouse, inference_id1)
         .await

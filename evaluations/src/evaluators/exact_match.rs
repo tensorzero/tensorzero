@@ -77,6 +77,7 @@ mod tests {
             auxiliary: "".to_string(),
             is_deleted: false,
             source_inference_id: None,
+            staled_at: None,
         });
         let inference_response = InferenceResponse::Chat(ChatInferenceResponse {
             inference_id: Uuid::now_v7(),
@@ -134,6 +135,7 @@ mod tests {
             auxiliary: "".to_string(),
             is_deleted: false,
             source_inference_id: None,
+            staled_at: None,
         });
         let result = run_exact_match_evaluator(&inference_response, &datapoint).unwrap();
         assert_eq!(result, None);
@@ -166,12 +168,13 @@ mod tests {
             episode_id: Some(Uuid::now_v7()),
             output: Some(JsonInferenceOutput {
                 parsed: Some(json!({"foo": "bar"})),
-                raw: r#"{"foo": "bar"}"#.to_string(),
+                raw: Some(r#"{"foo": "bar"}"#.to_string()),
             }),
             tags: None,
             auxiliary: "".to_string(),
             is_deleted: false,
             source_inference_id: None,
+            staled_at: None,
         });
         let inference_response = InferenceResponse::Json(JsonInferenceResponse {
             inference_id: Uuid::now_v7(),
@@ -179,7 +182,7 @@ mod tests {
             variant_name: "test".to_string(),
             output: JsonInferenceOutput {
                 parsed: Some(json!({"foo": "bar"})),
-                raw: r#"{"foo": "bar"}"#.to_string(),
+                raw: Some(r#"{"foo": "bar"}"#.to_string()),
             },
             usage: Usage {
                 input_tokens: 10,
@@ -198,7 +201,7 @@ mod tests {
             variant_name: "test".to_string(),
             output: JsonInferenceOutput {
                 parsed: Some(json!({"foo": "baz"})),
-                raw: r#"{"foo": "baz"}"#.to_string(),
+                raw: Some(r#"{"foo": "baz"}"#.to_string()),
             },
             usage: Usage {
                 input_tokens: 10,
@@ -238,6 +241,7 @@ mod tests {
             auxiliary: "".to_string(),
             is_deleted: false,
             source_inference_id: None,
+            staled_at: None,
         });
         let result = run_exact_match_evaluator(&inference_response, &datapoint).unwrap();
         assert_eq!(result, None);
@@ -259,7 +263,7 @@ mod tests {
             episode_id: Some(Uuid::now_v7()),
             output: Some(JsonInferenceOutput {
                 parsed: None,
-                raw: r#"{"foo": "bar"}"#.to_string(),
+                raw: Some(r#"{"foo": "bar"}"#.to_string()),
             }),
             output_schema: json!({
                 "type": "object",
@@ -273,6 +277,7 @@ mod tests {
             auxiliary: "".to_string(),
             is_deleted: false,
             source_inference_id: None,
+            staled_at: None,
         });
         let result = run_exact_match_evaluator(&inference_response, &datapoint).unwrap();
         assert_eq!(result, None);
