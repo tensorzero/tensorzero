@@ -490,7 +490,7 @@ jobs:
       - name: Print ui tests logs
         if: always()
         working-directory: ui
-        run: docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml logs
+        run: docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml logs -t
 
       - name: Upload Playwright artifacts
         if: steps.e2e_tests.outcome == 'failure'
