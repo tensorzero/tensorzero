@@ -36,7 +36,7 @@ pub mod stats;
 pub enum OutputFormat {
     Jsonl,
     #[default]
-    HumanReadable,
+    Pretty,
 }
 
 #[derive(Parser, Debug)]
@@ -66,7 +66,7 @@ pub struct Args {
     #[arg(short, long, default_value = "1")]
     pub concurrency: usize,
 
-    #[arg(short, long, default_value = "human_readable")]
+    #[arg(short, long, default_value = "pretty")]
     pub format: OutputFormat,
 
     #[arg(long, default_value = "on")]
@@ -227,7 +227,7 @@ pub async fn run_evaluation(
         progress_bar.finish_with_message("Done");
     }
 
-    if evaluation_stats.output_format == OutputFormat::HumanReadable {
+    if evaluation_stats.output_format == OutputFormat::Pretty {
         let stats = evaluation_stats.compute_stats(&static_evaluation_config.evaluators);
 
         // Print all stats
@@ -399,7 +399,7 @@ fn write_run_info(
         OutputFormat::Jsonl => {
             writeln!(writer, "{}", serde_json::to_string(run_info)?)?;
         }
-        OutputFormat::HumanReadable => {
+        OutputFormat::Pretty => {
             writeln!(writer, "Run ID: {}", run_info.evaluation_run_id)?;
             writeln!(writer, "Number of datapoints: {}", run_info.num_datapoints)?;
         }

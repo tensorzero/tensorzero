@@ -780,7 +780,7 @@ async fn check_invalid_image_evaluation() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn run_llm_judge_evaluation_chat_human_readable() {
+async fn run_llm_judge_evaluation_chat_pretty() {
     write_chat_fixture_to_dataset(&PathBuf::from(&format!(
         "{}/../tensorzero-internal/fixtures/datasets/chat_datapoint_fixture.jsonl",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
@@ -798,7 +798,7 @@ async fn run_llm_judge_evaluation_chat_human_readable() {
         dataset_name: "good-haikus-no-output".to_string(),
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
-        format: OutputFormat::HumanReadable,
+        format: OutputFormat::Pretty,
         inference_cache: CacheEnabledMode::On,
     };
 
@@ -817,7 +817,7 @@ async fn run_llm_judge_evaluation_chat_human_readable() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn run_llm_judge_evaluation_json_human_readable() {
+async fn run_llm_judge_evaluation_json_pretty() {
     write_json_fixture_to_dataset(&PathBuf::from(&format!(
         "{}/../tensorzero-internal/fixtures/datasets/json_datapoint_fixture.jsonl",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
@@ -835,7 +835,7 @@ async fn run_llm_judge_evaluation_json_human_readable() {
         dataset_name: "extract_entities_0.8".to_string(),
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
-        format: OutputFormat::HumanReadable,
+        format: OutputFormat::Pretty,
         inference_cache: CacheEnabledMode::On,
     };
 
@@ -887,7 +887,7 @@ async fn test_parse_args() {
     assert_eq!(args.config_file, PathBuf::from("./config/tensorzero.toml"));
     assert_eq!(args.concurrency, 1);
     assert_eq!(args.gateway_url, None);
-    assert_eq!(args.format, OutputFormat::HumanReadable);
+    assert_eq!(args.format, OutputFormat::Pretty);
     assert_eq!(args.inference_cache, CacheEnabledMode::On);
 
     // Test all arguments
