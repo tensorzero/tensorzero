@@ -103,12 +103,12 @@ async fn e2e_test_comment_human_feedback() {
     )
     .await
     .unwrap();
-    // Sleep for 200ms to ensure that the HumanStaticEvaluationFeedback is written
+    // Sleep for 200ms to ensure that the StaticEvaluationHumanFeedback is written
     sleep(Duration::from_millis(200)).await;
     let id = result.get("feedback_id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, feedback_id);
-    // Check ClickHouse HumanStaticEvaluationFeedback
+    // Check ClickHouse StaticEvaluationHumanFeedback
     // Currently this fails because the output is being escaped as it is passed into the query to compare against the values
     // in the table.
     // We need to figure out how do effectively compare strings in ClickHouse without manually escaping them.
@@ -125,11 +125,11 @@ async fn e2e_test_comment_human_feedback() {
     assert_eq!(result.output, serialized_inference_output);
     assert_eq!(
         result.value,
-        serde_json::to_string(&json!("good job!")).unwrap() // All feedback values are JSON encoded in the HumanStaticEvaluationFeedback table
+        serde_json::to_string(&json!("good job!")).unwrap() // All feedback values are JSON encoded in the StaticEvaluationHumanFeedback table
     );
 
     // Running without datapoint_id.
-    // We generate a new datapoint_id so these don't trample. We'll only use it to check that there is no HumanStaticEvaluationFeedback
+    // We generate a new datapoint_id so these don't trample. We'll only use it to check that there is no StaticEvaluationHumanFeedback
     let new_datapoint_id = Uuid::now_v7();
     let payload = json!({"episode_id": episode_id, "metric_name": "comment", "value": "bad job!", "internal": true, "tags": {"tensorzero::human_feedback": "true"}});
     let response = client
@@ -157,7 +157,7 @@ async fn e2e_test_comment_human_feedback() {
     let retrieved_value = result.get("value").unwrap().as_str().unwrap();
     assert_eq!(retrieved_value, "bad job!");
 
-    // Check that there is no HumanStaticEvaluationFeedback
+    // Check that there is no StaticEvaluationHumanFeedback
     let result = select_human_static_evaluation_feedback_clickhouse(
         &clickhouse,
         "comment",

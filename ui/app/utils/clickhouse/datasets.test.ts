@@ -26,7 +26,7 @@ describe("countRowsForDataset", () => {
       output_source: "none",
     });
     const rows = await countRowsForDataset(dataset_params);
-    expect(rows).toBe(720);
+    expect(rows).toBe(804);
   });
 
   test("returns the correct number of rows for a specific variant", async () => {
@@ -37,7 +37,7 @@ describe("countRowsForDataset", () => {
       output_source: "none",
     });
     const rows = await countRowsForDataset(dataset_params);
-    expect(rows).toBe(152);
+    expect(rows).toBe(148);
   });
 
   test("throws an error if function_name is not provided but variant_name is", async () => {
@@ -263,9 +263,9 @@ describe("getDatasetCounts", () => {
       // Because other tests insert into the table, there could be additional datasets
       expect.arrayContaining([
         {
-          count: 118,
+          count: 119,
           dataset_name: "foo",
-          last_updated: "2025-03-23T20:03:59Z",
+          last_updated: "2025-04-15T02:33:58Z",
         },
         {
           count: 6,
@@ -304,7 +304,7 @@ describe("getDatasetRows", () => {
       if (rows.length !== pageSize) break;
     }
 
-    expect(allRows.length).toBe(118);
+    expect(allRows.length).toBe(119);
     expect(allRows).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -741,14 +741,14 @@ describe("datapoint operations", () => {
 describe("countDatapointsForDatasetFunction", () => {
   test("returns the correct count for a dataset and chat function", async () => {
     const count = await countDatapointsForDatasetFunction("foo", "write_haiku");
-    expect(count).toBe(77);
+    expect(count).toBe(78);
   });
   test("returns the correct count for a dataset and json function", async () => {
     const count = await countDatapointsForDatasetFunction(
       "foo",
       "extract_entities",
     );
-    expect(count).toBe(42);
+    expect(count).toBe(43);
   });
   test("returns 0 for a non-existent dataset and real function", async () => {
     const count = await countDatapointsForDatasetFunction(
