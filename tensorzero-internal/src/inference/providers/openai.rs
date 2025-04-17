@@ -2428,10 +2428,7 @@ mod tests {
         assert_eq!(openai_request.presence_penalty, Some(0.1));
         assert_eq!(openai_request.frequency_penalty, Some(0.2));
         assert!(openai_request.stream);
-        assert_eq!(
-            openai_request.response_format,
-            Some(OpenAIResponseFormat::Text)
-        );
+        assert_eq!(openai_request.response_format, None);
         assert!(openai_request.tools.is_none());
         assert_eq!(openai_request.tool_choice, None);
         assert!(openai_request.parallel_tool_calls.is_none());
@@ -2601,10 +2598,7 @@ mod tests {
         assert_eq!(openai_request.model, "o1-preview");
         assert_eq!(openai_request.messages.len(), 1);
         assert!(!openai_request.stream);
-        assert_eq!(
-            openai_request.response_format,
-            Some(OpenAIResponseFormat::Text)
-        );
+        assert_eq!(openai_request.response_format, None);
         assert_eq!(openai_request.temperature, Some(0.5));
         assert_eq!(openai_request.max_completion_tokens, Some(100));
         assert_eq!(openai_request.seed, Some(69));
@@ -2652,10 +2646,7 @@ mod tests {
 
         assert_eq!(openai_request_with_system.model, "o1-mini");
         assert!(!openai_request_with_system.stream);
-        assert_eq!(
-            openai_request_with_system.response_format,
-            Some(OpenAIResponseFormat::Text)
-        );
+        assert_eq!(openai_request_with_system.response_format, None);
         assert_eq!(openai_request_with_system.temperature, Some(0.5));
         assert_eq!(openai_request_with_system.max_completion_tokens, Some(100));
         assert_eq!(openai_request_with_system.seed, Some(69));
