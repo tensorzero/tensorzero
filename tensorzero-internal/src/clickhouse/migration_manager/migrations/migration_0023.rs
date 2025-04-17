@@ -62,7 +62,7 @@ impl Migration for Migration0023<'_> {
                     output String,
                     value String,  -- JSON encoded value of the feedback
                     feedback_id UUID,
-                    evaluator_inference_id Nullable(UUID),
+                    evaluator_inference_id UUID,
                     timestamp DateTime MATERIALIZED UUIDv7ToDateTime(feedback_id)
                 ) ENGINE = MergeTree()
                 ORDER BY (metric_name, datapoint_id, output)
@@ -87,7 +87,10 @@ impl Migration for Migration0023<'_> {
                     if(i.function_type = 'chat', ci.output, ji.output) AS output,
                     toJSONString(f.value) AS value,
                     f.id AS feedback_id,
-                    if(mapContains(f.tags, 'tensorzero::evaluator_inference_id'), toUUID(f.tags['tensorzero::evaluator_inference_id']), NULL) AS evaluator_inference_id
+                    -- we enforce in the feedback endpoint that this is present
+                    -- if the tensorzero::datapoint_id is present and the tensorzero::human_feedback
+                    -- tag is present.
+                    toUUID(f.tags['tensorzero::evaluator_inference_id']) AS evaluator_inference_id
                 FROM FloatMetricFeedback f
                 INNER JOIN InferenceById i ON
                     toUInt128(f.target_id) = i.id_uint
@@ -122,7 +125,10 @@ impl Migration for Migration0023<'_> {
                 if(i.function_type = 'chat', ci.output, ji.output) AS output,
                 toJSONString(f.value) AS value,
                 f.id AS feedback_id,
-                if(mapContains(f.tags, 'tensorzero::evaluator_inference_id'), toUUID(f.tags['tensorzero::evaluator_inference_id']), NULL) AS evaluator_inference_id
+                -- we enforce in the feedback endpoint that this is present
+                -- if the tensorzero::datapoint_id is present and the tensorzero::human_feedback
+                -- tag is present.
+                toUUID(f.tags['tensorzero::evaluator_inference_id']) AS evaluator_inference_id
             FROM BooleanMetricFeedback f
             INNER JOIN InferenceById i ON
                 toUInt128(f.target_id) = i.id_uint

@@ -77,7 +77,7 @@ pub fn get_cache_options(inference_cache: CacheEnabledMode) -> CacheParamsOption
 pub struct HumanFeedbackResult {
     #[serde(deserialize_with = "deserialize_json_string")]
     pub value: Value,
-    pub evaluator_inference_id: Option<Uuid>,
+    pub evaluator_inference_id: Uuid,
 }
 
 pub async fn check_static_eval_human_feedback(

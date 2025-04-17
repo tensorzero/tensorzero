@@ -218,9 +218,7 @@ impl<'a> EvaluatorResult {
     pub fn evaluator_inference_id(&'a self) -> Option<&'a Uuid> {
         match self {
             EvaluatorResult::ExactMatch(_) => None,
-            EvaluatorResult::LLMJudge(value) => value
-                .as_ref()
-                .and_then(|v| v.evaluator_inference_id.as_ref()),
+            EvaluatorResult::LLMJudge(value) => value.as_ref().map(|v| &v.evaluator_inference_id),
         }
     }
     pub fn value_owned(self) -> Option<Value> {
