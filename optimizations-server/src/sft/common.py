@@ -1,10 +1,11 @@
 import random
 import typing as t
 from abc import abstractmethod
-from typing import Any, List, Tuple, TypedDict
+from typing import Any, List, Tuple
 
 from minijinja import Environment, TemplateError
 from pydantic import BaseModel, Field
+from typing_extensions import TypedDict
 
 
 class Model(BaseModel):

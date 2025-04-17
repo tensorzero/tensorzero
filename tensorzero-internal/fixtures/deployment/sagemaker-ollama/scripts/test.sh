@@ -1,3 +1,5 @@
+#! /bin/bash
+
 curl "http://localhost:8080/invocations" \
     -H "Content-Type: application/json" \
     -d '{
