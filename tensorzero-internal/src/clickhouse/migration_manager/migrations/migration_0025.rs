@@ -24,9 +24,9 @@ impl Migration for Migration0025<'_> {
     async fn should_apply(&self) -> Result<bool, Error> {
         let dynamic_evaluation_run_table_exists =
             check_table_exists(self.clickhouse, "DynamicEvaluationRun", "0025").await?;
-        let dynamic_evaluation_run_trial_table_exists =
-            check_table_exists(self.clickhouse, "DynamicEvaluationRunTrial", "0025").await?;
-        Ok(!dynamic_evaluation_run_table_exists || !dynamic_evaluation_run_trial_table_exists)
+        let dynamic_evaluation_run_episode_table_exists =
+            check_table_exists(self.clickhouse, "DynamicEvaluationRunEpisode", "0025").await?;
+        Ok(!dynamic_evaluation_run_table_exists || !dynamic_evaluation_run_episode_table_exists)
     }
 
     async fn apply(&self) -> Result<(), Error> {

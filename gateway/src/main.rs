@@ -177,6 +177,10 @@ async fn main() {
             post(endpoints::dynamic_evaluation_run::dynamic_evaluation_run_handler),
         )
         .route(
+            "/dynamic_evaluation_run_episode",
+            post(endpoints::dynamic_evaluation_run::dynamic_evaluation_run_episode_handler),
+        )
+        .route(
             "/metrics",
             get(move || std::future::ready(metrics_handle.render())),
         )

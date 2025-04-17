@@ -11,7 +11,11 @@ use tensorzero::{
     DynamicEvaluationRunParams, InferenceOutput, Role,
 };
 use tensorzero_internal::{
-    clickhouse::test_helpers::{get_clickhouse, select_chat_inference_clickhouse},
+    clickhouse::test_helpers::{
+        get_clickhouse, select_chat_inference_clickhouse, select_dynamic_evaluation_run_clickhouse,
+        select_dynamic_evaluation_run_episode_clickhouse,
+    },
+    endpoints::dynamic_evaluation_run::DynamicEvaluationRunEpisodeParams,
     inference::types::TextKind,
 };
 use uuid::{Timestamp, Uuid};
@@ -21,51 +25,124 @@ async fn test_dynamic_evaluation() {
     let client = make_http_gateway().await;
     let params = DynamicEvaluationRunParams {
         variants: HashMap::from([("basic_test".to_string(), "test2".to_string())]),
-        tags: HashMap::from([("foo".to_string(), "bar".to_string())]),
+        tags: HashMap::from([
+            ("foo".to_string(), "bar".to_string()),
+            ("baz".to_string(), "bat".to_string()),
+        ]),
         project_name: Some("test_project".to_string()),
         display_name: Some("test_display_name".to_string()),
     };
-    let result = client.dynamic_evaluation_run(params).await.unwrap();
-    let run_id = result.run_id;
-    println!("Run ID: {run_id}");
-    // Run an inference with the episode_id given
-    let inference_params = ClientInferenceParams {
-        episode_id: Some(run_id),
-        function_name: Some("basic_test".to_string()),
-        input: ClientInput {
-            system: Some(json!({
-                "assistant_name": "AskJeeves",
-            })),
-            messages: vec![ClientInputMessage {
-                role: Role::User,
-                content: vec![ClientInputMessageContent::Text(TextKind::Text {
-                    text: "Please write me a sentence about Megumin making an explosion.".into(),
-                })],
-            }],
-        },
-        tags: HashMap::from([("baz".to_string(), "bat".to_string())]),
-        ..Default::default()
-    };
-    let response = if let InferenceOutput::NonStreaming(response) =
-        client.inference(inference_params).await.unwrap()
-    {
-        response
-    } else {
-        panic!("Expected a non-streaming response");
-    };
-    // We won't test the output here but will grab from ClickHouse so we can check the variant name
-    // and tags
+    let dynamic_evaluation_info = client.dynamic_evaluation_run(params).await.unwrap();
+    let run_id = dynamic_evaluation_info.run_id;
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, response.inference_id())
+    let run_row = select_dynamic_evaluation_run_clickhouse(&clickhouse, run_id)
         .await
         .unwrap();
+    assert_eq!(run_row.project_name, Some("test_project".to_string()));
+    assert_eq!(
+        run_row.run_display_name,
+        Some("test_display_name".to_string())
+    );
+    for i in 0..2 {
+        // Get the episode_id from the dynamic_evaluation_run_episode endpoint
+        let episode_id = client
+            .dynamic_evaluation_run_episode(DynamicEvaluationRunEpisodeParams {
+                run_id,
+                datapoint_name: Some(format!("test_datapoint_{i}")),
+                tags: HashMap::from([
+                    ("baz".to_string(), format!("baz_{i}")),
+                    ("zoo".to_string(), format!("zoo_{i}")),
+                ]),
+            })
+            .await
+            .unwrap()
+            .episode_id;
+        // Run an inference with the episode_id given
+        let inference_params = ClientInferenceParams {
+            episode_id: Some(episode_id),
+            function_name: Some("basic_test".to_string()),
+            input: ClientInput {
+                system: Some(json!({
+                    "assistant_name": "AskJeeves",
+                })),
+                messages: vec![ClientInputMessage {
+                    role: Role::User,
+                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                        text: "Please write me a sentence about Megumin making an explosion."
+                            .into(),
+                    })],
+                }],
+            },
+            tags: HashMap::from([
+                ("bop".to_string(), format!("bop_{i}")),
+                ("zoo".to_string(), format!("zoo_{i}")),
+            ]),
+            ..Default::default()
+        };
+        let response = if let InferenceOutput::NonStreaming(response) =
+            client.inference(inference_params).await.unwrap()
+        {
+            response
+        } else {
+            panic!("Expected a non-streaming response");
+        };
+        // We won't test the output here but will grab from ClickHouse so we can check the variant name
+        // and tags
+        let clickhouse = get_clickhouse().await;
+        let result = select_chat_inference_clickhouse(&clickhouse, response.inference_id())
+            .await
+            .unwrap();
 
-    println!("ClickHouse - ChatInference: {result:#?}");
-    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, "test2");
-    let tags = result.get("tags").unwrap().as_object().unwrap();
-    assert_eq!(tags.get("foo").unwrap().as_str().unwrap(), "bar");
-    assert_eq!(tags.get("baz").unwrap().as_str().unwrap(), "bat");
+        println!("ClickHouse - ChatInference: {result:#?}");
+        let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
+        assert_eq!(variant_name, "test2");
+        let tags = result.get("tags").unwrap().as_object().unwrap();
+        // Verify tags are correctly applied with the following precedence:
+        // 1. Tags from the inference request (highest priority)
+        // 2. Tags from the episode creation
+        // 3. Tags from the dynamic evaluation run (lowest priority)
+        // When tags have the same key, the higher priority source overwrites the lower priority one.
+        // In this case:
+        // - "foo" comes from the dynamic evaluation run
+        // - "baz" comes from the episode creation
+        // - "zoo" is in both episode creation and inference request, so inference request wins
+        // - "bop" comes from the inference request
+
+        assert_eq!(tags.get("foo").unwrap().as_str().unwrap(), "bar");
+        assert_eq!(
+            tags.get("baz").unwrap().as_str().unwrap(),
+            format!("baz_{i}")
+        );
+        assert_eq!(
+            tags.get("zoo").unwrap().as_str().unwrap(),
+            format!("zoo_{i}")
+        );
+        assert_eq!(
+            tags.get("bop").unwrap().as_str().unwrap(),
+            format!("bop_{i}")
+        );
+        let episode_row =
+            select_dynamic_evaluation_run_episode_clickhouse(&clickhouse, run_id, episode_id)
+                .await
+                .unwrap();
+        println!("ClickHouse - DynamicEvaluationRunEpisode: {episode_row:#?}");
+        assert_eq!(
+            episode_row.variant_pins,
+            HashMap::from([("basic_test".to_string(), "test2".to_string())])
+        );
+        assert_eq!(
+            episode_row.datapoint_name,
+            Some(format!("test_datapoint_{i}"))
+        );
+        assert_eq!(
+            episode_row.tags,
+            HashMap::from([
+                ("foo".to_string(), "bar".to_string()),
+                ("baz".to_string(), format!("baz_{i}")),
+                ("zoo".to_string(), format!("zoo_{i}")),
+            ])
+        );
+    }
 }
 
 #[tokio::test]
@@ -74,8 +151,11 @@ async fn test_dynamic_evaluation_nonexistent_function() {
     let params = DynamicEvaluationRunParams {
         variants: HashMap::from([("nonexistent_function".to_string(), "test2".to_string())]),
         tags: HashMap::from([("foo".to_string(), "bar".to_string())]),
+        project_name: None,
+        display_name: None,
     };
     let result = client.dynamic_evaluation_run(params).await.unwrap_err();
+    println!("Result: {result:#?}");
     assert!(result
         .to_string()
         .contains("Unknown function: nonexistent_function"));
@@ -89,10 +169,26 @@ async fn test_dynamic_evaluation_other_function() {
     let params = DynamicEvaluationRunParams {
         variants: HashMap::from([("dynamic_json".to_string(), "gcp-vertex-haiku".to_string())]),
         tags: HashMap::from([("foo".to_string(), "bar".to_string())]),
+        project_name: None,
+        display_name: None,
     };
     let result = client.dynamic_evaluation_run(params).await.unwrap();
-    let episode_id = result.episode_id;
-    println!("Episode ID: {episode_id}");
+    let run_id = result.run_id;
+    let clickhouse = get_clickhouse().await;
+    let run_row = select_dynamic_evaluation_run_clickhouse(&clickhouse, run_id)
+        .await
+        .unwrap();
+    assert_eq!(run_row.project_name, None);
+    assert_eq!(run_row.run_display_name, None);
+    let episode_id = client
+        .dynamic_evaluation_run_episode(DynamicEvaluationRunEpisodeParams {
+            run_id,
+            datapoint_name: None,
+            tags: HashMap::new(),
+        })
+        .await
+        .unwrap()
+        .episode_id;
     // Run an inference with the episode_id given
     let inference_params = ClientInferenceParams {
         episode_id: Some(episode_id),
@@ -139,11 +235,26 @@ async fn test_dynamic_evaluation_override_variant_tags() {
     let params = DynamicEvaluationRunParams {
         variants: HashMap::from([("basic_test".to_string(), "error".to_string())]),
         tags: HashMap::from([("foo".to_string(), "bar".to_string())]),
+        project_name: None,
+        display_name: None,
     };
     let result = client.dynamic_evaluation_run(params).await.unwrap();
-    let episode_id = result.episode_id;
-    println!("Episode ID: {episode_id}");
-    // Run an inference with the episode_id given
+    let run_id = result.run_id;
+    let clickhouse = get_clickhouse().await;
+    let run_row = select_dynamic_evaluation_run_clickhouse(&clickhouse, run_id)
+        .await
+        .unwrap();
+    assert_eq!(run_row.project_name, None);
+    assert_eq!(run_row.run_display_name, None);
+    let episode_id = client
+        .dynamic_evaluation_run_episode(DynamicEvaluationRunEpisodeParams {
+            run_id,
+            datapoint_name: None,
+            tags: HashMap::new(),
+        })
+        .await
+        .unwrap()
+        .episode_id;
     let inference_params = ClientInferenceParams {
         episode_id: Some(episode_id),
         function_name: Some("basic_test".to_string()),

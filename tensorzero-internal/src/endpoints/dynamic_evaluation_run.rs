@@ -70,7 +70,7 @@ pub async fn dynamic_evaluation_run(
     Ok(DynamicEvaluationRunResponse { run_id })
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
 pub struct DynamicEvaluationRunEpisodeParams {
     pub run_id: Uuid,
     #[serde(default)]
@@ -137,6 +137,15 @@ fn to_map_literal(map: &HashMap<String, String>) -> String {
     format!("{{{}}}", items.join(","))
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+pub struct DynamicEvaluationRunRow {
+    pub run_id: Uuid,
+    pub variant_pins: HashMap<String, String>,
+    pub tags: HashMap<String, String>,
+    pub project_name: Option<String>,
+    pub run_display_name: Option<String>,
+}
+
 async fn write_dynamic_evaluation_run(
     clickhouse: ClickHouseConnectionInfo,
     run_id: Uuid,
@@ -168,16 +177,24 @@ async fn write_dynamic_evaluation_run(
     params.insert("run_id", run_id_str.as_str());
     params.insert("variant_pins", variant_pins_str.as_str());
     params.insert("tags", tags_str.as_str());
-    if let Some(project_name) = project_name.as_deref() {
-        params.insert("project_name", project_name);
-    }
-    if let Some(run_display_name) = run_display_name.as_deref() {
-        params.insert("run_display_name", run_display_name);
-    }
+    params.insert("project_name", project_name.as_deref().unwrap_or("\\N")); // Use \\N to indicate NULL
+    params.insert(
+        "run_display_name",
+        run_display_name.as_deref().unwrap_or("\\N"),
+    ); // Use \\N to indicate NULL
     clickhouse
         .run_query_synchronous(query.to_string(), Some(&params))
         .await?;
     Ok(())
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct DynamicEvaluationRunEpisodeRow {
+    pub run_id: Uuid,
+    pub episode_id: Uuid,
+    pub variant_pins: HashMap<String, String>,
+    pub datapoint_name: Option<String>,
+    pub tags: HashMap<String, String>,
 }
 
 async fn write_dynamic_evaluation_run_episode(
@@ -208,9 +225,10 @@ async fn write_dynamic_evaluation_run_episode(
     let episode_id_str = episode_id.to_string();
     query_params.insert("run_id", run_id_str.as_str());
     query_params.insert("episode_id", episode_id_str.as_str());
-    if let Some(datapoint_name) = params.datapoint_name.as_deref() {
-        query_params.insert("datapoint_name", datapoint_name);
-    }
+    query_params.insert(
+        "datapoint_name",
+        params.datapoint_name.as_deref().unwrap_or("\\N"),
+    ); // Use \\N to indicate NULL
     let tags_str = to_map_literal(&params.tags);
     query_params.insert("tags", tags_str.as_str());
     clickhouse
