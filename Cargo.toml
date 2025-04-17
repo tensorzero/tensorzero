@@ -9,6 +9,7 @@ members = [
     "provider-proxy",
     "evaluations",
     "tensorzero-derive",
+    "examples/cursorzero",
 ]
 resolver = "2"
 
