@@ -965,6 +965,27 @@ impl InferenceResponseChunk {
             }
         })
     }
+
+    pub fn episode_id(&self) -> Uuid {
+        match self {
+            InferenceResponseChunk::Chat(c) => c.episode_id,
+            InferenceResponseChunk::Json(j) => j.episode_id,
+        }
+    }
+
+    pub fn inference_id(&self) -> Uuid {
+        match self {
+            InferenceResponseChunk::Chat(c) => c.inference_id,
+            InferenceResponseChunk::Json(j) => j.inference_id,
+        }
+    }
+
+    pub fn variant_name(&self) -> &str {
+        match self {
+            InferenceResponseChunk::Chat(c) => &c.variant_name,
+            InferenceResponseChunk::Json(j) => &j.variant_name,
+        }
+    }
 }
 
 // Carryall struct for clients used in inference
