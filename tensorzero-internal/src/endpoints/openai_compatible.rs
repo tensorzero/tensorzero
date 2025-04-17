@@ -1026,7 +1026,7 @@ fn prepare_serialized_openai_compatible_events(
         if stream_options.map(|s| s.include_usage).unwrap_or(false) {
             let episode_id = episode_id.ok_or_else(|| {
                 Error::new(ErrorDetails::Inference {
-                    message: "Cannot find epsiode_id - no chunks were produced by TensorZero".to_string(),
+                    message: "Cannot find episode_id - no chunks were produced by TensorZero".to_string(),
                 })
             })?;
             let inference_id = inference_id.ok_or_else(|| {
