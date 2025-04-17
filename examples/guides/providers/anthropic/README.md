@@ -9,8 +9,8 @@ See the [Getting Started with Anthropic](https://www.tensorzero.com/docs/gateway
 The TensorZero Python client can use a built-in embedded (in-memory) gateway or a standalone HTTP gateway.
 We'll use the embedded gateway for this example.
 
-1. Install the Python libraries: `pip install tensorzero`
-2. Make an inference request: `python tensorzero.py`
+1. Install the Python library: `pip install tensorzero`
+2. Make an inference request: `python main.py`
 
 ### OpenAI Python SDK
 
