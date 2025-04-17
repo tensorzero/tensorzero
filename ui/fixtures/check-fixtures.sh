@@ -64,6 +64,13 @@ done
 echo "==============================================="
 if [ $mismatch -eq 0 ]; then
     echo "All fixture table counts match!"
+    echo "Weird datapoint MIN query:"
+    echo $(clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword \
+              --database tensorzero_ui_fixtures --query "SELECT id FROM FloatMetricFeedbackByTargetId WHERE toUInt128(id) = (SELECT MIN(toUInt128(id)) FROM FloatMetricFeedbackByTargetId WHERE target_id = '0196368f-1b05-7181-b50c-e2ea0acea312')")
+    echo "Weird datapoint MAX query:"
+    echo $(clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword \
+              --database tensorzero_ui_fixtures --query "SELECT id FROM FloatMetricFeedbackByTargetId WHERE toUInt128(id) = (SELECT MAX(toUInt128(id)) FROM FloatMetricFeedbackByTargetId WHERE target_id = '0196368f-1b05-7181-b50c-e2ea0acea312')")
+    
     exit 0
 else
     echo "Some fixture table counts don't match. Please check the output above."
