@@ -16,6 +16,20 @@ export function SnippetLayout({ children }: SnippetLayoutProps) {
   );
 }
 
+// Heading component
+interface SnippetHeadingProps {
+  heading: string;
+}
+
+export function SnippetHeading({ heading }: SnippetHeadingProps) {
+  return <h3 className="px-5 pt-5 pb-2 text-lg font-medium">{heading}</h3>;
+}
+
+// Divider component
+export function SnippetDivider() {
+  return <div className="border-border h-px w-full border-t py-1" />;
+}
+
 // Content component
 interface SnippetContentProps {
   children: ReactNode;
@@ -50,7 +64,7 @@ export function SnippetContent({
           !expanded && needsExpansion ? { maxHeight: `${maxHeight}px` } : {}
         }
         className={clsx(
-          "relative space-y-4",
+          "relative space-y-2",
           !expanded && needsExpansion && "overflow-hidden",
         )}
       >
