@@ -980,7 +980,7 @@ async fn e2e_test_best_of_n_json_real_judge_implicit_tool() {
                         "content": [
                             {
                                 "type": "text",
-                                "value": "What's the first word in the typical output of one's first program. Answer as a json object with a single field 'answer' containing the string."
+                                "text": "What's the first word in the typical output of one's first program. Answer as a json object with a single field 'answer' containing the string."
                             }
                         ]
                     },
@@ -989,7 +989,7 @@ async fn e2e_test_best_of_n_json_real_judge_implicit_tool() {
                         "content": [
                             {
                                 "type": "text",
-                                "value": "Here are the candidate answers (with the index and a row of ------ separating):\n0: {\"answer\":\"Hello\"}\n------\n1: {\"answer\":\"Goodbye\"}\n------\nPlease evaluate these candidates and provide the index of the best one."
+                                "text": "Here are the candidate answers (with the index and a row of ------ separating):\n0: {\"answer\":\"Hello\"}\n------\n1: {\"answer\":\"Goodbye\"}\n------\nPlease evaluate these candidates and provide the index of the best one."
                             }
                         ]
                     }
