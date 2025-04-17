@@ -1,5 +1,6 @@
 use std::cmp::max;
 use std::collections::HashMap;
+use std::sync::OnceLock;
 use std::time::Duration;
 
 use axum::extract::State;
@@ -689,13 +690,104 @@ async fn get_dynamic_demonstration_info(
                     })
                 })?;
 
-            let output_schema = serde_json::from_str::<Value>(output_schema_str).map_err(|e| {
-                Error::new(ErrorDetails::ClickHouseQuery {
-                    message: format!("Failed to parse output schema: {}", e),
-                })
-            })?;
+            let mut output_schema =
+                serde_json::from_str::<Value>(output_schema_str).map_err(|e| {
+                    Error::new(ErrorDetails::ClickHouseQuery {
+                        message: format!("Failed to parse output schema: {}", e),
+                    })
+                })?;
+            if function_name.starts_with("tensorzero::llm_judge") {
+                output_schema = handle_llm_judge_output_schema(output_schema);
+            }
             Ok(DynamicDemonstrationInfo::Json(output_schema))
         }
+    }
+}
+
+static OLD_LLM_JUDGE_OUTPUT_SCHEMA_FLOAT: OnceLock<Value> = OnceLock::new();
+static OLD_LLM_JUDGE_OUTPUT_SCHEMA_BOOLEAN: OnceLock<Value> = OnceLock::new();
+static NEW_LLM_JUDGE_OUTPUT_SCHEMA_FLOAT: OnceLock<Value> = OnceLock::new();
+static NEW_LLM_JUDGE_OUTPUT_SCHEMA_BOOLEAN: OnceLock<Value> = OnceLock::new();
+
+/// When we first introduced LLM Judges, we used a slightly different output schema
+/// for them that explicitly included a "thinking" field.
+/// We want to be able to take demonstrations that do not include this field.
+/// This function handles the conversion of the old schema to the new schema for validation purposes.
+fn handle_llm_judge_output_schema(output_schema: Value) -> Value {
+    let old_float_schema = OLD_LLM_JUDGE_OUTPUT_SCHEMA_FLOAT.get_or_init(|| {
+        json!({
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "type": "object",
+            "required": ["thinking", "score"],
+            "additionalProperties": false,
+            "properties": {
+              "thinking": {
+                "type": "string",
+                "description": "The reasoning or thought process behind the judgment"
+              },
+              "score": {
+                "type": "number",
+                "description": "The score assigned as a number"
+              }
+            }
+        })
+    });
+
+    let old_boolean_schema = OLD_LLM_JUDGE_OUTPUT_SCHEMA_BOOLEAN.get_or_init(|| {
+        json!({
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "type": "object",
+            "required": ["thinking", "score"],
+            "additionalProperties": false,
+            "properties": {
+              "thinking": {
+                "type": "string",
+                "description": "The reasoning or thought process behind the judgment"
+              },
+              "score": {
+                "type": "boolean",
+                "description": "The LLM judge's score as a boolean"
+              }
+            }
+        })
+    });
+
+    let new_float_schema = NEW_LLM_JUDGE_OUTPUT_SCHEMA_FLOAT.get_or_init(|| {
+        json!({
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "type": "object",
+            "required": ["score"],
+            "additionalProperties": false,
+            "properties": {
+              "score": {
+                "type": "number",
+                "description": "The score assigned as a number"
+              }
+            }
+        })
+    });
+
+    let new_boolean_schema = NEW_LLM_JUDGE_OUTPUT_SCHEMA_BOOLEAN.get_or_init(|| {
+        json!({
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "type": "object",
+            "required": ["score"],
+            "additionalProperties": false,
+            "properties": {
+              "score": {
+                "type": "boolean",
+                "description": "The LLM judge's score as a boolean"
+              }
+            }
+        })
+    });
+
+    if output_schema == *old_float_schema {
+        new_float_schema.clone()
+    } else if output_schema == *old_boolean_schema {
+        new_boolean_schema.clone()
+    } else {
+        output_schema
     }
 }
 

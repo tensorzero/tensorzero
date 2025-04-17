@@ -875,6 +875,33 @@ impl InferenceResponse {
             InferenceResponse::Json(j) => j.episode_id,
         }
     }
+
+    pub fn get_serialized_output(&self) -> Result<String, Error> {
+        match self {
+            InferenceResponse::Chat(c) => c.get_serialized_output(),
+            InferenceResponse::Json(j) => j.get_serialized_output(),
+        }
+    }
+}
+
+impl ChatInferenceResponse {
+    pub fn get_serialized_output(&self) -> Result<String, Error> {
+        serde_json::to_string(&self.content).map_err(|e| {
+            Error::new(ErrorDetails::Inference {
+                message: format!("Failed to serialize chat inference response: {e:?}"),
+            })
+        })
+    }
+}
+
+impl JsonInferenceResponse {
+    pub fn get_serialized_output(&self) -> Result<String, Error> {
+        serde_json::to_string(&self.output).map_err(|e| {
+            Error::new(ErrorDetails::Inference {
+                message: format!("Failed to serialize json inference response: {e:?}"),
+            })
+        })
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

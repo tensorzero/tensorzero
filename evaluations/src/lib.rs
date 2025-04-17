@@ -6,7 +6,7 @@ use anyhow::{anyhow, bail, Result};
 use clap::Parser;
 use dataset::query_dataset;
 use evaluators::{evaluate_inference, EvaluateInferenceParams};
-use helpers::{get_cache_options, get_tool_params_args, setup_logging};
+use helpers::{get_cache_options, get_tool_params_args};
 use serde::{Deserialize, Serialize};
 use stats::{EvaluationError, EvaluationInfo, EvaluationStats, EvaluationUpdate};
 use tensorzero::ClientInput;
@@ -36,7 +36,7 @@ pub mod stats;
 pub enum OutputFormat {
     Jsonl,
     #[default]
-    HumanReadable,
+    Pretty,
 }
 
 #[derive(Parser, Debug)]
@@ -66,11 +66,16 @@ pub struct Args {
     #[arg(short, long, default_value = "1")]
     pub concurrency: usize,
 
-    #[arg(short, long, default_value = "human_readable")]
+    #[arg(short, long, default_value = "pretty")]
     pub format: OutputFormat,
 
     #[arg(long, default_value = "on")]
     pub inference_cache: CacheEnabledMode,
+}
+
+pub struct Clients {
+    pub tensorzero_client: ThrottledTensorZeroClient,
+    pub clickhouse_client: ClickHouseConnectionInfo,
 }
 
 pub async fn run_evaluation(
@@ -78,7 +83,6 @@ pub async fn run_evaluation(
     evaluation_run_id: Uuid,
     mut writer: impl Write,
 ) -> Result<()> {
-    setup_logging(&args)?;
     let semaphore = Semaphore::new(args.concurrency);
     let clickhouse_url = std::env::var("TENSORZERO_CLICKHOUSE_URL")
         .map_err(|_| anyhow!("Missing ClickHouse URL at TENSORZERO_CLICKHOUSE_URL"))?;
@@ -108,14 +112,15 @@ pub async fn run_evaluation(
     .build()
     .await
     .map_err(|e| anyhow!("Failed to build client: {}", e))?;
-    let tensorzero_client_with_semaphore =
-        Arc::new(ThrottledTensorZeroClient::new(tensorzero_client, semaphore));
+    let clients = Arc::new(Clients {
+        tensorzero_client: ThrottledTensorZeroClient::new(tensorzero_client, semaphore),
+        clickhouse_client: ClickHouseConnectionInfo::new(&clickhouse_url).await?,
+    });
 
-    let clickhouse_client = ClickHouseConnectionInfo::new(&clickhouse_url).await?;
     let mut join_set = JoinSet::new();
 
     let dataset = query_dataset(
-        &clickhouse_client,
+        &clients.clickhouse_client,
         &args.dataset_name,
         &static_evaluation_config.function_name,
         function_config,
@@ -138,7 +143,7 @@ pub async fn run_evaluation(
 
     // Spawn concurrent tasks for each datapoint
     for datapoint in dataset {
-        let client_clone = tensorzero_client_with_semaphore.clone();
+        let clients_clone = clients.clone();
         let variant_name = variant_name.clone();
         let function_config = function_config.clone();
         let evaluation_config = evaluation_config.clone();
@@ -149,10 +154,10 @@ pub async fn run_evaluation(
         let datapoint = Arc::new(datapoint);
         let datapoint_id = datapoint.id();
         let abort_handle = join_set.spawn(async move {
-            let input = Arc::new(resolved_input_to_client_input(datapoint.input().clone(), &client_clone.client).await?);
+            let input = Arc::new(resolved_input_to_client_input(datapoint.input().clone(), &clients_clone.tensorzero_client.client).await?);
             let inference_response = Arc::new(
                 infer_datapoint(InferDatapointParams {
-                    tensorzero_client: &client_clone,
+                    clients: &clients_clone,
                     function_name: &function_name,
                     variant_name: &variant_name,
                     evaluation_run_id: evaluation_run_id_clone,
@@ -173,7 +178,7 @@ pub async fn run_evaluation(
                     input,
                     evaluation_config,
                     evaluation_name,
-                    tensorzero_client: client_clone,
+                    clients: clients_clone.clone(),
                     evaluation_run_id: evaluation_run_id_clone,
                     inference_cache: args.inference_cache,
                 })
@@ -227,7 +232,7 @@ pub async fn run_evaluation(
         progress_bar.finish_with_message("Done");
     }
 
-    if evaluation_stats.output_format == OutputFormat::HumanReadable {
+    if evaluation_stats.output_format == OutputFormat::Pretty {
         let stats = evaluation_stats.compute_stats(&static_evaluation_config.evaluators);
 
         // Print all stats
@@ -302,7 +307,7 @@ pub fn format_cutoff_failures(failures: &[(String, f32, f32)]) -> String {
 }
 
 struct InferDatapointParams<'a> {
-    tensorzero_client: &'a ThrottledTensorZeroClient,
+    clients: &'a Clients,
     function_name: &'a str,
     variant_name: &'a str,
     evaluation_run_id: Uuid,
@@ -316,7 +321,7 @@ struct InferDatapointParams<'a> {
 
 async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceResponse> {
     let InferDatapointParams {
-        tensorzero_client,
+        clients,
         function_name,
         variant_name,
         evaluation_run_id,
@@ -381,7 +386,7 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
         internal: true,
         extra_body: Default::default(),
     };
-    let inference_result = tensorzero_client.inference(params).await?;
+    let inference_result = clients.tensorzero_client.inference(params).await?;
     match inference_result {
         InferenceOutput::NonStreaming(inference_response) => Ok(inference_response),
         InferenceOutput::Streaming(_inference_stream) => {
@@ -399,7 +404,7 @@ fn write_run_info(
         OutputFormat::Jsonl => {
             writeln!(writer, "{}", serde_json::to_string(run_info)?)?;
         }
-        OutputFormat::HumanReadable => {
+        OutputFormat::Pretty => {
             writeln!(writer, "Run ID: {}", run_info.evaluation_run_id)?;
             writeln!(writer, "Number of datapoints: {}", run_info.num_datapoints)?;
         }

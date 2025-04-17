@@ -44,6 +44,7 @@ import {
 import MetricValue, {
   isCutoffFailed,
 } from "~/components/evaluations/MetricValue";
+import EvaluationFeedbackEditor from "~/components/evaluations/EvaluationFeedbackEditor";
 
 // Enhanced TruncatedText component that can handle complex structures
 const TruncatedContent = ({
@@ -241,6 +242,12 @@ interface EvaluationTableProps {
   evaluation_name: string;
 }
 
+interface MetricValueInfo {
+  value: string;
+  evaluator_inference_id: string | null;
+  inference_id: string;
+}
+
 export function EvaluationTable({
   selected_evaluation_run_infos,
   evaluation_results,
@@ -282,12 +289,12 @@ export function EvaluationTable({
   // Organize results by datapoint and run ID
   const organizedResults = useMemo(() => {
     const organized = new Map<
-      string,
+      string, // datapoint id
       Map<
-        string,
+        string, // evaluation run id
         {
           generated_output: JsonInferenceOutput | ContentBlockOutput[];
-          metrics: Map<string, string>;
+          metrics: Map<string, MetricValueInfo>;
         }
       >
     >();
@@ -313,7 +320,11 @@ export function EvaluationTable({
 
       const runData = datapointMap.get(result.evaluation_run_id);
       if (runData && result.metric_name) {
-        runData.metrics.set(result.metric_name, result.metric_value);
+        runData.metrics.set(result.metric_name, {
+          value: result.metric_value,
+          evaluator_inference_id: result.evaluator_inference_id,
+          inference_id: result.inference_id,
+        });
       }
     });
 
@@ -403,7 +414,7 @@ export function EvaluationTable({
                         generated_output:
                           | JsonInferenceOutput
                           | ContentBlockOutput[];
-                        metrics: Map<string, string>;
+                        metrics: Map<string, MetricValueInfo>;
                       },
                     ][];
 
@@ -490,19 +501,48 @@ export function EvaluationTable({
                                 config.evaluations[evaluation_name].evaluators[
                                   evaluator_name
                                 ];
+                              const evaluationType = evaluatorConfig.type;
 
                               return (
                                 <TableCell
                                   key={metric_name}
                                   className="h-[52px] text-center align-middle"
                                 >
-                                  <div className="flex h-full items-center justify-center">
+                                  {/* Add group and relative positioning to the container */}
+                                  <div className="group relative flex h-full items-center justify-center">
                                     {metricValue ? (
-                                      <MetricValue
-                                        value={metricValue}
-                                        metricType={metricType}
-                                        evaluatorConfig={evaluatorConfig}
-                                      />
+                                      <>
+                                        <MetricValue
+                                          value={metricValue.value}
+                                          metricType={metricType}
+                                          evaluatorConfig={evaluatorConfig}
+                                        />
+                                        {/* Make feedback editor appear on hover */}
+                                        {evaluationType === "llm_judge" && (
+                                          <div
+                                            className="ml-2 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+                                            // Stop click event propagation so the row navigation is not triggered
+                                            onClick={(e) => e.stopPropagation()}
+                                          >
+                                            <EvaluationFeedbackEditor
+                                              inferenceId={
+                                                metricValue.inference_id
+                                              }
+                                              datapointId={datapoint.id}
+                                              metricName={metric_name}
+                                              originalValue={metricValue.value}
+                                              evalRunId={runId}
+                                              evaluatorInferenceId={
+                                                metricValue.evaluator_inference_id
+                                              }
+                                              variantName={
+                                                runIdToVariant.get(runId) ||
+                                                "Unknown"
+                                              }
+                                            />
+                                          </div>
+                                        )}
+                                      </>
                                     ) : (
                                       "-"
                                     )}
