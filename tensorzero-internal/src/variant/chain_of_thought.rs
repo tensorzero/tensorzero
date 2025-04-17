@@ -120,7 +120,11 @@ impl Variant for ChainOfThoughtConfig {
         _clients: &'request InferenceClients<'request>,
         _inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
-        todo!()
+        Err(ErrorDetails::UnsupportedVariantForStreamingInference {
+            variant_type: "chain_of_thought".to_string(),
+            issue_link: Some("https://github.com/tensorzero/tensorzero/issues/1839".to_string()),
+        }
+        .into())
     }
 
     fn validate(
