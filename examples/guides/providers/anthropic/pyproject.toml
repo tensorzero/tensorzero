@@ -1,10 +1,6 @@
 [project]
 name = "anthropic"
-version = "0.1.0"
-description = "Add your description here"
+version = "0.0.0"
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = [
-    "openai>=1.75.0",
-    "tensorzero>=2025.4.4",
-]
+dependencies = ["openai>=1.75.0", "tensorzero"]
