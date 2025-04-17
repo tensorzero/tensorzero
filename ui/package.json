@@ -11,6 +11,7 @@
     "format:check": "prettier --check \"**/*.{js,jsx,ts,tsx,css,scss,html,json,yaml,md}\" --ignore-path \"**/*.ipynb\"",
     "lint": "eslint . --fix --max-warnings=0 --config eslint.config.js --cache",
     "test": "vitest",
+    "test-e2e-fast": "playwright test --grep-invert @slow",
     "test-e2e": "playwright test",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build"

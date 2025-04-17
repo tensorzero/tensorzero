@@ -406,6 +406,14 @@ impl ClickHouseConnectionInfo {
     }
 }
 
+/// ClickHouse uses backslashes to escape quotes and all other special sequences in strings.
+/// In certain cases, we'll want to compare a raw string containing user input to strings in the database.
+/// These may contain single quotes and backslashes, for example, if the user input contains doubly-serialized JSON.
+/// This function will escape single quotes and backslashes in the input string so that the comparison will be accurate.
+pub fn escape_string_for_clickhouse_comparison(s: &str) -> String {
+    s.replace(r#"\"#, r#"\\"#).replace(r#"'"#, r#"\'"#)
+}
+
 async fn write_mock(
     rows: &[impl Serialize + Send + Sync],
     table: &str,
@@ -698,5 +706,47 @@ mod tests {
         let database_url = Url::parse("http://chuser:chpassword@localhost:8123/database/").unwrap();
         let database = validate_clickhouse_url_get_db_name(&database_url).unwrap();
         assert_eq!(database, Some("database".to_string()));
+    }
+
+    #[test]
+    fn test_escape_string_for_clickhouse_comparison() {
+        // Test basic escaping of single quotes
+        assert_eq!(
+            escape_string_for_clickhouse_comparison("test's string"),
+            r#"test\'s string"#
+        );
+
+        // Test basic escaping of backslashes
+        assert_eq!(
+            escape_string_for_clickhouse_comparison(r#"test\string"#),
+            r#"test\\string"#
+        );
+
+        // Test escaping of both single quotes and backslashes
+        assert_eq!(
+            escape_string_for_clickhouse_comparison(r#"test\'s string"#),
+            r#"test\\\'s string"#
+        );
+
+        // Test with JSON-like content that has escaped quotes
+        assert_eq!(
+            escape_string_for_clickhouse_comparison(r#"{"key":"value with a \", and a '"}"#),
+            r#"{"key":"value with a \\", and a \'"}"#
+        );
+
+        // Test with empty string
+        assert_eq!(escape_string_for_clickhouse_comparison(""), "");
+
+        // Test with multiple backslashes and quotes
+        assert_eq!(
+            escape_string_for_clickhouse_comparison(r#"\\\'test\'\\"#),
+            r#"\\\\\\\'test\\\'\\\\"#
+        );
+
+        // Test with alternating backslashes and quotes
+        assert_eq!(
+            escape_string_for_clickhouse_comparison(r#"\'\'\'"#),
+            r#"\\\'\\\'\\\'"#
+        );
     }
 }

@@ -17,7 +17,7 @@ use futures::stream::{FuturesUnordered, StreamExt};
 use llm_judge::{run_llm_judge_evaluator, LLMJudgeEvaluationResult, RunLLMJudgeEvaluatorParams};
 use uuid::Uuid;
 
-use crate::ThrottledTensorZeroClient;
+use crate::Clients;
 
 pub type EvaluationResult = HashMap<String, Result<Option<Value>>>;
 
@@ -27,7 +27,7 @@ pub struct EvaluateInferenceParams {
     pub input: Arc<ClientInput>,
     pub evaluation_config: Arc<EvaluationConfig>,
     pub evaluation_name: Arc<String>,
-    pub tensorzero_client: Arc<ThrottledTensorZeroClient>,
+    pub clients: Arc<Clients>,
     pub evaluation_run_id: Uuid,
     pub inference_cache: CacheEnabledMode,
 }
@@ -47,7 +47,7 @@ pub(crate) async fn evaluate_inference(
         input,
         evaluation_config,
         evaluation_name,
-        tensorzero_client,
+        clients,
         evaluation_run_id,
         inference_cache,
     } = params;
@@ -61,14 +61,14 @@ pub(crate) async fn evaluate_inference(
                 let datapoint = datapoint.clone();
                 let input = input.clone();
                 let evaluation_name = evaluation_name.clone();
-                let tensorzero_client = tensorzero_client.clone();
+                let clients = clients.clone();
                 let evaluator_name_clone = evaluator_name.clone();
 
                 let result = run_evaluator(RunEvaluatorParams {
                     evaluation_config: &evaluation_config,
                     evaluator_name: evaluator_name_clone,
                     inference_response: &inference_response,
-                    tensorzero_client: &tensorzero_client,
+                    clients: &clients,
                     datapoint: &datapoint,
                     evaluation_name: &evaluation_name,
                     evaluation_run_id,
@@ -105,7 +105,9 @@ pub(crate) async fn evaluate_inference(
                                     inference_id.to_string(),
                                 );
                             }
-                            match tensorzero_client
+                            tags.extend(result.tags());
+                            match clients
+                                .tensorzero_client
                                 .feedback(FeedbackParams {
                                     metric_name: get_evaluator_metric_name(
                                         &evaluation_name,
@@ -141,7 +143,7 @@ struct RunEvaluatorParams<'a> {
     evaluation_config: &'a EvaluationConfig,
     evaluator_name: String,
     inference_response: &'a InferenceResponse,
-    tensorzero_client: &'a ThrottledTensorZeroClient,
+    clients: &'a Clients,
     datapoint: &'a Datapoint,
     evaluation_name: &'a str,
     evaluation_run_id: Uuid,
@@ -164,7 +166,7 @@ async fn run_evaluator(params: RunEvaluatorParams<'_>) -> Result<EvaluatorResult
         evaluation_config,
         evaluator_name,
         inference_response,
-        tensorzero_client,
+        clients,
         datapoint,
         evaluation_name,
         evaluation_run_id,
@@ -186,7 +188,7 @@ async fn run_evaluator(params: RunEvaluatorParams<'_>) -> Result<EvaluatorResult
             run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
                 inference_response,
                 datapoint,
-                tensorzero_client,
+                clients,
                 llm_judge_config,
                 evaluation_name,
                 evaluator_name: &evaluator_name,
@@ -222,6 +224,14 @@ impl<'a> EvaluatorResult {
         match self {
             EvaluatorResult::ExactMatch(value) => value,
             EvaluatorResult::LLMJudge(value) => value.map(|v| v.value),
+        }
+    }
+    pub fn tags(&'a self) -> HashMap<String, String> {
+        match self {
+            EvaluatorResult::ExactMatch(_) => HashMap::new(),
+            EvaluatorResult::LLMJudge(value) => {
+                value.as_ref().map(|v| v.tags()).unwrap_or_default()
+            }
         }
     }
 }
