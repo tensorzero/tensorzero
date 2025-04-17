@@ -1417,20 +1417,21 @@ impl OpenAIResponseFormat {
         json_mode: &ModelInferenceRequestJsonMode,
         output_schema: Option<&Value>,
         model: &str,
-    ) -> Self {
+    ) -> Option<Self> {
         if model.contains("3.5") && *json_mode == ModelInferenceRequestJsonMode::Strict {
-            return OpenAIResponseFormat::JsonObject;
+            return Some(OpenAIResponseFormat::JsonObject);
         }
 
         match json_mode {
-            ModelInferenceRequestJsonMode::On => OpenAIResponseFormat::JsonObject,
-            ModelInferenceRequestJsonMode::Off => OpenAIResponseFormat::Text,
+            ModelInferenceRequestJsonMode::On => Some(OpenAIResponseFormat::JsonObject),
+            // For now, we never explicitly send `OpenAIResponseFormat::Text`
+            ModelInferenceRequestJsonMode::Off => None,
             ModelInferenceRequestJsonMode::Strict => match output_schema {
                 Some(schema) => {
                     let json_schema = json!({"name": "response", "strict": true, "schema": schema});
-                    OpenAIResponseFormat::JsonSchema { json_schema }
+                    Some(OpenAIResponseFormat::JsonSchema { json_schema })
                 }
-                None => OpenAIResponseFormat::JsonObject,
+                None => Some(OpenAIResponseFormat::JsonObject),
             },
         }
     }
@@ -1604,11 +1605,8 @@ impl<'a> OpenAIRequest<'a> {
         model: &'a str,
         request: &'a ModelInferenceRequest<'_>,
     ) -> Result<OpenAIRequest<'a>, Error> {
-        let response_format = Some(OpenAIResponseFormat::new(
-            &request.json_mode,
-            request.output_schema,
-            model,
-        ));
+        let response_format =
+            OpenAIResponseFormat::new(&request.json_mode, request.output_schema, model);
         let stream_options = match request.stream {
             true => Some(StreamOptions {
                 include_usage: true,
@@ -3273,17 +3271,17 @@ mod tests {
         let json_mode = ModelInferenceRequestJsonMode::On;
         let output_schema = None;
         let format = OpenAIResponseFormat::new(&json_mode, output_schema, "gpt-4o");
-        assert_eq!(format, OpenAIResponseFormat::JsonObject);
+        assert_eq!(format, Some(OpenAIResponseFormat::JsonObject));
 
         // Test JSON mode Off
         let json_mode = ModelInferenceRequestJsonMode::Off;
         let format = OpenAIResponseFormat::new(&json_mode, output_schema, "gpt-4o");
-        assert_eq!(format, OpenAIResponseFormat::Text);
+        assert_eq!(format, None);
 
         // Test JSON mode Strict with no schema
         let json_mode = ModelInferenceRequestJsonMode::Strict;
         let format = OpenAIResponseFormat::new(&json_mode, output_schema, "gpt-4o");
-        assert_eq!(format, OpenAIResponseFormat::JsonObject);
+        assert_eq!(format, Some(OpenAIResponseFormat::JsonObject));
 
         // Test JSON mode Strict with schema
         let json_mode = ModelInferenceRequestJsonMode::Strict;
@@ -3296,7 +3294,7 @@ mod tests {
         let output_schema = Some(&schema);
         let format = OpenAIResponseFormat::new(&json_mode, output_schema, "gpt-4o");
         match format {
-            OpenAIResponseFormat::JsonSchema { json_schema } => {
+            Some(OpenAIResponseFormat::JsonSchema { json_schema }) => {
                 assert_eq!(json_schema["schema"], schema);
                 assert_eq!(json_schema["name"], "response");
                 assert_eq!(json_schema["strict"], true);
@@ -3314,7 +3312,7 @@ mod tests {
         });
         let output_schema = Some(&schema);
         let format = OpenAIResponseFormat::new(&json_mode, output_schema, "gpt-3.5-turbo");
-        assert_eq!(format, OpenAIResponseFormat::JsonObject);
+        assert_eq!(format, Some(OpenAIResponseFormat::JsonObject));
     }
 
     #[test]
