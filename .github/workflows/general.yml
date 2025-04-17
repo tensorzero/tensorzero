@@ -434,13 +434,16 @@ jobs:
       # We allow the namespace builder setup to fail on Dependabot PRs and PRs from forks
       # (where the oidc token is not available)
 
-      - name: Install and configure Namespace CLI
-        uses: namespacelabs/nscloud-setup@v0
-        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
+      # TODO - turn namespace builders back on once we've solved the weird ClickHouse caching issue
+      # See https://github.com/tensorzero/tensorzero/issues/1845
 
-      - name: Configure Namespace powered Buildx
-        uses: namespacelabs/nscloud-setup-buildx-action@v0
-        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
+      # - name: Install and configure Namespace CLI
+      #   uses: namespacelabs/nscloud-setup@v0
+      #   continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
+
+      # - name: Configure Namespace powered Buildx
+      #   uses: namespacelabs/nscloud-setup-buildx-action@v0
+      #   continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
