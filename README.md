@@ -195,7 +195,7 @@ You can access any provider using the OpenAI Python client with TensorZero.
 3. Run inference:
 
 ```python
-from openai import OpenAI
+from openai import OpenAI  # or AsyncOpenAI
 from tensorzero import patch_openai_client
 
 client = OpenAI()
