@@ -1,28 +1,28 @@
-# Guide: Anthropic
+# Guide: How to use Anthropic models with TensorZero
 
-See the [Getting Started with Anthropic](https://www.tensorzero.com/docs/gateway/guides/providers/anthropic) guide for more information.
+See the [How to use Anthropic models with TensorZero](https://www.tensorzero.com/docs/gateway/guides/providers/anthropic) in the TensorZero documentation for more information.
 
 ## Examples
 
 ### Python Client
 
-The TensorZero Python client can use a built-in embedded (in-memory) gateway or a standalone HTTP gateway.
-We'll use the embedded gateway for this example.
+Our Python client can use a built-in embedded gateway or a standalone HTTP gateway.
+This example uses the embedded gateway.
 
 1. Install the Python library: `pip install tensorzero`
 2. Make an inference request: `python main.py`
 
 ### OpenAI Python SDK
 
-The OpenAI Python SDK can make inference requests to the TensorZero Gateway with the `tensorzero::model_name::` prefix. It can use a built-in embedded (in-memory) gateway or a standalone HTTP gateway.
-We'll use the embedded gateway for this example.
+The OpenAI Python SDK can use a built-in embedded gateway or a standalone HTTP gateway. It requires the `tensorzero::model_name::` prefix in the model field.
+This example uses the embedded gateway.
 
 1. Install the Python libraries: `pip install openai tensorzero`
 2. Make an inference request: `python openai_python_sdk.py`
 
 ### OpenAI Node SDK
 
-The OpenAI Node SDK can make inference requests to the TensorZero Gateway using the `tensorzero::model_name::` prefix.
+The OpenAI Node SDK requires a standalone HTTP gateway and the `tensorzero::model_name::` prefix in the model field.
 
 1. Launch a standalone TensorZero Gateway: `docker compose up`
 2. Install the OpenAI Node SDK: `npm install`
@@ -30,7 +30,7 @@ The OpenAI Node SDK can make inference requests to the TensorZero Gateway using 
 
 ### HTTP
 
-For any other language or platform, you can make inference requests to the TensorZero Gateway using its HTTP API.
+For any other language or platform, you can make inference requests to a standalone gateway using its HTTP API.
 
 1. Launch a standalone TensorZero Gateway: `docker compose up`
 2. Make an inference request:
