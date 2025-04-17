@@ -74,9 +74,10 @@ pub fn get_cache_options(inference_cache: CacheEnabledMode) -> CacheParamsOption
 }
 
 #[derive(Debug, Deserialize)]
-struct HumanFeedbackResult {
+pub struct HumanFeedbackResult {
     #[serde(deserialize_with = "deserialize_json_string")]
     pub value: Value,
+    pub evaluator_inference_id: Option<Uuid>,
 }
 
 pub async fn check_static_eval_human_feedback(
@@ -84,10 +85,10 @@ pub async fn check_static_eval_human_feedback(
     metric_name: &str,
     datapoint_id: Uuid,
     inference_output: &InferenceResponse,
-) -> Result<Option<Value>> {
+) -> Result<Option<HumanFeedbackResult>> {
     let serialized_output = inference_output.get_serialized_output()?;
     let query = r#"
-        SELECT value FROM StaticEvaluationHumanFeedback
+        SELECT value, evaluator_inference_id FROM StaticEvaluationHumanFeedback
         WHERE
             metric_name = {metric_name:String}
         AND datapoint_id = {datapoint_id:UUID}
@@ -112,7 +113,7 @@ pub async fn check_static_eval_human_feedback(
     }
     let human_feedback_result: HumanFeedbackResult = serde_json::from_str(&result)
         .map_err(|e| anyhow!("Failed to parse human feedback result: {}", e))?;
-    Ok(Some(human_feedback_result.value))
+    Ok(Some(human_feedback_result))
 }
 
 #[cfg(test)]

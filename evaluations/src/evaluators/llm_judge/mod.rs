@@ -22,7 +22,7 @@ use crate::Clients;
 
 #[derive(Debug)]
 pub struct LLMJudgeEvaluationResult {
-    pub inference_id: Uuid,
+    pub evaluator_inference_id: Option<Uuid>,
     pub value: Value,
     pub human_feedback: bool,
 }
@@ -75,9 +75,12 @@ pub async fn run_llm_judge_evaluator(
     )
     .await?
     {
+        if human_feedback.evaluator_inference_id.is_none() {
+            tracing::warn!("No evaluator inference id found for human feedback. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.");
+        }
         return Ok(Some(LLMJudgeEvaluationResult {
-            inference_id: inference_response.inference_id(),
-            value: human_feedback,
+            evaluator_inference_id: human_feedback.evaluator_inference_id,
+            value: human_feedback.value,
             human_feedback: true,
         }));
     }
@@ -121,7 +124,7 @@ pub async fn run_llm_judge_evaluator(
             bail!("Streaming not supported for LLM judge evaluations. This is a bug, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.")
         }
     };
-    let inference_id = response.inference_id();
+    let evaluator_inference_id = response.inference_id();
     let output = match response {
         InferenceResponse::Chat(..) => {
             bail!("Chat output not supported for LLM judge evaluations. This is a bug, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.")
@@ -141,7 +144,7 @@ pub async fn run_llm_judge_evaluator(
     };
     match value {
         Some(value) => Ok(Some(LLMJudgeEvaluationResult {
-            inference_id,
+            evaluator_inference_id: Some(evaluator_inference_id),
             value,
             human_feedback: false,
         })),
