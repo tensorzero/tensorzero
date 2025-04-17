@@ -1122,6 +1122,37 @@ impl AsyncTensorZeroGateway {
             })
         })
     }
+
+    /// Make a request to the /dynamic_evaluation_run_episode endpoint.
+    ///
+    /// :param run_id: The run ID to use for the dynamic evaluation run.
+    /// :param datapoint_name: The name of the datapoint to use for the dynamic evaluation run.
+    /// :param tags: A dictionary of tags to add to the dynamic evaluation run.
+    /// :return: A `DynamicEvaluationRunEpisodeResponse` object.
+    #[pyo3(signature = (*, run_id, datapoint_name=None, tags=None))]
+    fn dynamic_evaluation_run_episode<'a>(
+        this: PyRef<'a, Self>,
+        run_id: Bound<'_, PyAny>,
+        datapoint_name: Option<String>,
+        tags: Option<HashMap<String, String>>,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        let run_id = python_uuid_to_uuid("run_id", run_id)?;
+        let client = this.as_super().client.clone();
+        let params = DynamicEvaluationRunEpisodeParams {
+            run_id,
+            datapoint_name,
+            tags: tags.unwrap_or_default(),
+        };
+
+        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
+            let res = client.dynamic_evaluation_run_episode(params).await;
+            Python::with_gil(|py| match res {
+                Ok(resp) => parse_dynamic_evaluation_run_episode_response(py, resp),
+                Err(e) => Err(convert_error(py, e)),
+            })
+        })
+    }
+
     /// For internal use only - do not call.
     // This is a helper function used by `optimizations-server` to get the template config
     // when applying a new prompt template during fine-tuning

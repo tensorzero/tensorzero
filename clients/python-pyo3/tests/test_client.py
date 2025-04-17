@@ -2749,16 +2749,22 @@ def test_content_block_text_init_validation():
     assert text.arguments == arguments
 
 
-<<<<<<< HEAD
 def test_sync_dynamic_evaluation_run(sync_client: TensorZeroGateway):
     response = sync_client.dynamic_evaluation_run(
         variants={"basic_test": "test2"},
         tags={"foo": "bar"},
     )
     # assert isinstance(response, DynamicEvaluationRunResponse)
-    episode_id = response.episode_id
-    assert isinstance(episode_id, UUID)
-    assert episode_id is not None
+    run_id = response.run_id
+    assert isinstance(run_id, UUID)
+    assert run_id is not None
+
+    # Get the episode id
+    episode_id = sync_client.dynamic_evaluation_run_episode(
+        run_id=run_id,
+        datapoint_name="basic_test",
+    ).episode_id
+
     inference_response = sync_client.inference(
         function_name="basic_test",
         episode_id=episode_id,
@@ -2782,9 +2788,16 @@ async def test_async_dynamic_evaluation_run(async_client: AsyncTensorZeroGateway
         tags={"foo": "bar"},
     )
     assert isinstance(response, DynamicEvaluationRunResponse)
-    episode_id = response.episode_id
-    assert isinstance(episode_id, UUID)
-    assert episode_id is not None
+    run_id = response.run_id
+    assert isinstance(run_id, UUID)
+    assert run_id is not None
+
+    # Get the episode id
+    episode_response = await async_client.dynamic_evaluation_run_episode(
+        run_id=run_id,
+        datapoint_name="basic_test",
+    )
+    episode_id = episode_response.episode_id
     inference_response = await async_client.inference(
         function_name="basic_test",
         episode_id=episode_id,
@@ -2799,7 +2812,8 @@ async def test_async_dynamic_evaluation_run(async_client: AsyncTensorZeroGateway
     assert first_content_block.text is not None
     assert first_content_block.text.startswith("Megumin")
     assert inference_response.variant_name == "test2"
-=======
+
+
 def test_sync_chat_function_null_response(sync_client: TensorZeroGateway):
     """
     Test that an chat inference with null response (i.e. no generated content blocks) works as expected.
@@ -2837,4 +2851,3 @@ def test_sync_json_function_null_response(sync_client: TensorZeroGateway):
     assert isinstance(result, JsonInferenceResponse)
     assert result.output.raw is None
     assert result.output.parsed is None
->>>>>>> e51cacb4dc2c41dbb24fc0a9292d606299fc58ab
