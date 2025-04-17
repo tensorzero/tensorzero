@@ -451,6 +451,9 @@ struct UninitializedLLMJudgeChatCompletionVariantConfig {
     extra_headers: Option<ExtraHeadersConfig>,
 }
 
+/// Converts a chat completion judge variant config to a chat completion config.
+/// This is factored out so that both the chain of thought and chat completion judges
+/// can use the same implementation.
 fn convert_chat_completion_judge_to_variant<P: AsRef<Path>>(
     base_path: &P,
     evaluation_name: &str,
