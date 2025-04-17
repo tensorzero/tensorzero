@@ -4,6 +4,7 @@
 )]
 mod common;
 use clap::Parser;
+use evaluations::dataset::query_dataset;
 use evaluations::evaluators::llm_judge::{run_llm_judge_evaluator, RunLLMJudgeEvaluatorParams};
 use evaluations::ThrottledTensorZeroClient;
 use serde_json::json;
@@ -12,14 +13,15 @@ use tensorzero_internal::cache::CacheEnabledMode;
 use tensorzero_internal::clickhouse::test_helpers::select_model_inferences_clickhouse;
 use tensorzero_internal::endpoints::datasets::Datapoint;
 use tensorzero_internal::evaluations::{LLMJudgeConfig, LLMJudgeInputFormat, LLMJudgeOutputType};
+use tensorzero_internal::function::{FunctionConfig, FunctionConfigJson};
 use tensorzero_internal::inference::types::{
     ResolvedInputMessage, ResolvedInputMessageContent, Text,
 };
 use tokio::time::sleep;
 use url::Url;
 
-use crate::common::write_json_fixture_to_dataset;
-use common::write_chat_fixture_to_dataset;
+pub use crate::common::write_chat_fixture_to_dataset;
+pub use crate::common::write_json_fixture_to_dataset;
 use evaluations::{run_evaluation, stats::EvaluationUpdate, Args, OutputFormat};
 use std::time::Duration;
 use std::{path::PathBuf, sync::Arc};
@@ -906,7 +908,7 @@ async fn test_parse_args() {
         "--format",
         "jsonl",
         "--inference-cache",
-        "write-only",
+        "write_only",
     ])
     .unwrap();
     assert_eq!(args.evaluation_name, "my-evaluation");
@@ -1063,6 +1065,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         tags: None,
         tool_params: None,
         source_inference_id: None,
+        staled_at: None,
     });
     let llm_judge_config = LLMJudgeConfig {
         input_format: LLMJudgeInputFormat::Serialized,
@@ -1162,6 +1165,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         tags: None,
         tool_params: None,
         source_inference_id: None,
+        staled_at: None,
     });
 
     let result = run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
@@ -1200,7 +1204,7 @@ async fn test_run_llm_judge_evaluator_json() {
     let inference_response = InferenceResponse::Json(JsonInferenceResponse {
         output: JsonInferenceOutput {
             parsed: Some(json!({"answer": "LeBron James"})),
-            raw: "{\"answer\": \"LeBron James\"}".to_string(),
+            raw: Some("{\"answer\": \"LeBron James\"}".to_string()),
         },
         original_response: None,
         finish_reason: None,
@@ -1230,11 +1234,12 @@ async fn test_run_llm_judge_evaluator_json() {
         function_name: "test_function".to_string(),
         output: Some(JsonInferenceOutput {
             parsed: Some(json!({"answer": "LeBron James"})),
-            raw: "{\"answer\": \"LeBron James\"}".to_string(),
+            raw: Some("{\"answer\": \"LeBron James\"}".to_string()),
         }),
         output_schema: json!({"answer": "string"}),
         tags: None,
         source_inference_id: None,
+        staled_at: None,
     });
     let llm_judge_config = LLMJudgeConfig {
         input_format: LLMJudgeInputFormat::Serialized,
@@ -1334,6 +1339,7 @@ async fn test_run_llm_judge_evaluator_json() {
         tags: None,
         tool_params: None,
         source_inference_id: None,
+        staled_at: None,
     });
 
     let result = run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
@@ -1902,4 +1908,28 @@ async fn run_evaluations_dicl() {
         assert_eq!(model_inferences.len(), 2);
     }
     assert_eq!(parsed_output.len(), 6);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_query_skips_staled_datapoints() {
+    let clickhouse = get_clickhouse().await;
+    write_json_fixture_to_dataset(&PathBuf::from(&format!(
+        "{}/../tensorzero-internal/fixtures/datasets/json_datapoint_fixture.jsonl",
+        std::env::var("CARGO_MANIFEST_DIR").unwrap()
+    )))
+    .await;
+
+    let dataset = query_dataset(
+        &clickhouse,
+        "exact_matches_empty",
+        "extract_entities",
+        &FunctionConfig::Json(FunctionConfigJson::default()),
+    )
+    .await
+    .unwrap();
+    // This ID should not be returned
+    let staled_id = Uuid::parse_str("01957bbb-44a8-7490-bfe7-32f8ed2fc797").unwrap();
+    let staled_datapoint = dataset.iter().find(|dp| dp.id() == staled_id);
+    assert!(staled_datapoint.is_none());
+    assert_eq!(dataset.len(), 21);
 }

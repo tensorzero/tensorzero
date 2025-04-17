@@ -36,7 +36,8 @@ import type {
 import type { ParsedInferenceExample } from "../clickhouse/curation";
 
 // Base URL for the Fireworks API
-export const FIREWORKS_API_URL = "https://api.fireworks.ai";
+export const FIREWORKS_API_URL =
+  process.env.FIREWORKS_BASE_URL || "https://api.fireworks.ai";
 
 // Retrieves the API key for the Fireworks API from environment variables
 // Logs a warning if the key is not set

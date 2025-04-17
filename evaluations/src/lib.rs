@@ -32,6 +32,7 @@ pub mod helpers;
 pub mod stats;
 
 #[derive(clap::ValueEnum, Clone, Debug, Default, PartialEq)]
+#[clap(rename_all = "snake_case")]
 pub enum OutputFormat {
     Jsonl,
     #[default]
@@ -65,7 +66,7 @@ pub struct Args {
     #[arg(short, long, default_value = "1")]
     pub concurrency: usize,
 
-    #[arg(short, long, default_value = "human-readable")]
+    #[arg(short, long, default_value = "human_readable")]
     pub format: OutputFormat,
 
     #[arg(long, default_value = "on")]
