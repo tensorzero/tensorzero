@@ -190,22 +190,25 @@ impl FunctionConfig {
                 let (raw_output, auxiliary_content, json_block_index) =
                     get_json_output_from_content_blocks(content_blocks);
 
-                // Try to parse the raw output as JSON.
+                // When in json mode, try to parse the raw output as JSON.
                 //
                 // If the raw output is None, parsed output is also None.
                 // If the raw output is not a valid JSON string, log an error and set parsed output to None.
-                let parsed_output: Option<Value> = raw_output.as_ref().and_then(|raw_output| {
-                    serde_json::from_str::<Value>(raw_output)
-                        .map_err(|e| {
-                            Error::new(ErrorDetails::OutputParsing {
-                                message: format!(
-                                    "Failed to parse output from JSON function response {e}",
-                                ),
-                                raw_output: raw_output.to_string(),
+                let json_mode = &inference_params.chat_completion.json_mode.unwrap();
+                let parsed_output: Option<Value> =
+                    raw_output.as_ref().and_then(|raw_output| match json_mode {
+                        JsonMode::Off => None,
+                        _ => serde_json::from_str::<Value>(raw_output)
+                            .map_err(|e| {
+                                Error::new(ErrorDetails::OutputParsing {
+                                    message: format!(
+                                        "Failed to parse output from JSON function response {e}",
+                                    ),
+                                    raw_output: raw_output.to_string(),
+                                })
                             })
-                        })
-                        .ok()
-                });
+                            .ok(),
+                    });
 
                 let output_schema = match &inference_config.dynamic_output_schema {
                     Some(schema) => JsonSchemaRef::Dynamic(schema),
