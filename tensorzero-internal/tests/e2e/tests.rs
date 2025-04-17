@@ -10,6 +10,7 @@ mod dynamic_evaluations;
 mod fallback;
 mod feedback;
 mod health;
+mod human_static_evaluation_feedback;
 mod inference;
 mod mixture_of_n;
 mod object_storage;
