@@ -933,7 +933,7 @@ async fn check_invalid_image_evaluation() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn run_llm_judge_evaluation_chat_human_readable() {
+async fn run_llm_judge_evaluation_chat_pretty() {
     let dataset_name = format!("good-haikus-no-output-{}", Uuid::now_v7());
     write_chat_fixture_to_dataset(
         &PathBuf::from(&format!(
@@ -955,7 +955,7 @@ async fn run_llm_judge_evaluation_chat_human_readable() {
         dataset_name: dataset_name.clone(),
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
-        format: OutputFormat::HumanReadable,
+        format: OutputFormat::Pretty,
         inference_cache: CacheEnabledMode::On,
     };
 
@@ -974,7 +974,7 @@ async fn run_llm_judge_evaluation_chat_human_readable() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn run_llm_judge_evaluation_json_human_readable() {
+async fn run_llm_judge_evaluation_json_pretty() {
     let dataset_name = format!("extract_entities_0.8-{}", Uuid::now_v7());
     write_json_fixture_to_dataset(
         &PathBuf::from(&format!(
@@ -996,7 +996,7 @@ async fn run_llm_judge_evaluation_json_human_readable() {
         dataset_name: dataset_name.clone(),
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
-        format: OutputFormat::HumanReadable,
+        format: OutputFormat::Pretty,
         inference_cache: CacheEnabledMode::On,
     };
 
@@ -1048,7 +1048,7 @@ async fn test_parse_args() {
     assert_eq!(args.config_file, PathBuf::from("./config/tensorzero.toml"));
     assert_eq!(args.concurrency, 1);
     assert_eq!(args.gateway_url, None);
-    assert_eq!(args.format, OutputFormat::HumanReadable);
+    assert_eq!(args.format, OutputFormat::Pretty);
     assert_eq!(args.inference_cache, CacheEnabledMode::On);
 
     // Test all arguments
