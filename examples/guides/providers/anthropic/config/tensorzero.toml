@@ -1,13 +1,42 @@
-[models.claude_3_5_haiku_20241022]
-routing = ["anthropic"]
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                  GENERAL                                   │
+# └────────────────────────────────────────────────────────────────────────────┘
 
-[models.claude_3_5_haiku_20241022.providers.anthropic]
+# Let's disable observability to keep this example minimal.
+
+[gateway]
+observability.enabled = false
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                   MODELS                                   │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+# You can use the short-hand `anthropic::model_name` for Anthropic models in TensorZero.
+#
+# In more complex scenarios (e.g. fallbacks, custom credentials), you can define
+# a model with an `anthropic` provider in your TensorZero configuration file.
+
+[models.my_claude_3_5_haiku_model]
+routing = ["my_anthropic_provider"]
+
+[models.my_claude_3_5_haiku_model.providers.my_anthropic_provider]
 type = "anthropic"
-model_name = "claude-3-5-haiku-20241022"
+model_name = "claude-3-5-haiku-20241022" # from Anthropic
+# ... custom credentials, etc. ...
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                 FUNCTIONS                                  │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+# Your functions can use the short-hand version or the custom configuration.
 
 [functions.my_function_name]
 type = "chat"
 
-[functions.my_function_name.variants.my_variant_name]
+[functions.my_function_name.variants.my_variant_shorthand]
 type = "chat_completion"
-model = "claude_3_5_haiku_20241022"
+model = "anthropic::claude-3-5-haiku-20241022" # short-hand
+
+[functions.my_function_name.variants.my_variant_full_config]
+type = "chat_completion"
+model = "my_claude_3_5_haiku_model" # custom model and provider (defined above)
