@@ -417,7 +417,7 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
                             model_provider_name: Some(
                                 "tensorzero::model_name::json::provider_name::json".into()
                             ),
-                            data: serde_json::json!({"type": "text", "value": "My extra json-model input", "my": {"other": "keys"}})
+                            data: serde_json::json!({"type": "text", "text": "My extra json-model input", "my": {"other": "keys"}})
                         }
                     ],
                 }
