@@ -99,10 +99,10 @@ pub(crate) async fn evaluate_inference(
                                     evaluator_name.to_string(),
                                 ),
                             ]);
-                            if let Some(judge_inference_id) = result.evaluator_inference_id() {
+                            if let Some(evaluator_inference_id) = result.evaluator_inference_id() {
                                 tags.insert(
                                     "tensorzero::evaluator_inference_id".to_string(),
-                                    judge_inference_id.to_string(),
+                                    evaluator_inference_id.to_string(),
                                 );
                             }
                             tags.extend(result.tags());
@@ -201,6 +201,7 @@ async fn run_evaluator(params: RunEvaluatorParams<'_>) -> Result<EvaluatorResult
     })
 }
 
+#[derive(Debug)]
 pub enum EvaluatorResult {
     ExactMatch(Option<Value>),
     LLMJudge(Option<LLMJudgeEvaluationResult>),
