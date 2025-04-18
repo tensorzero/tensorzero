@@ -107,3 +107,6 @@ aws-sdk-s3 = { version = "1.82.0", default-features = false, features = [
 aws-credential-types = { version = "1.2.2", features = [
     "hardcoded-credentials",
 ] }
+
+[build-dependencies]
+built = { version = "0.7.7", features = ["git2"] }
