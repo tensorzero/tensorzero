@@ -187,7 +187,7 @@ impl FunctionConfig {
                 .await,
             )),
             FunctionConfig::Json(params) => {
-                let (raw_output, auxiliary_content) =
+                let (raw_output, auxiliary_content, json_block_index) =
                     get_json_output_from_content_blocks(content_blocks);
 
                 // Try to parse the raw output as JSON.
@@ -224,6 +224,7 @@ impl FunctionConfig {
                     inference_id,
                     raw_output,
                     parsed_output,
+                    json_block_index,
                     auxiliary_content,
                     usage,
                     model_inference_results,
@@ -310,9 +311,11 @@ impl FunctionConfig {
 /// (this is because we could have used an implicit tool call and there is no other reason for a tool call in a JSON function).
 ///
 /// Sometimes models will return no content blocks (e.g. when instructed to not return anything), so `raw_output` will be `None` then.
+///
+/// Returns: the raw output, the auxiliary content, and the index of the JSON block in the original content blocks.
 fn get_json_output_from_content_blocks(
     mut content_blocks: Vec<ContentBlockOutput>,
-) -> (Option<String>, Vec<ContentBlockOutput>) {
+) -> (Option<String>, Vec<ContentBlockOutput>, Option<usize>) {
     let raw_output = content_blocks
         .iter()
         .rev()
@@ -327,11 +330,15 @@ fn get_json_output_from_content_blocks(
             ContentBlockOutput::Text(_) | ContentBlockOutput::ToolCall(_)
         )
     });
-    if let Some(i) = maybe_index_from_end {
-        let index_from_start = content_blocks.len() - 1 - i;
-        content_blocks.remove(index_from_start);
-    }
-    (raw_output, content_blocks)
+    let json_block_index = match maybe_index_from_end {
+        Some(i) => {
+            let index_from_start = content_blocks.len() - 1 - i;
+            content_blocks.remove(index_from_start);
+            Some(index_from_start)
+        }
+        None => None,
+    };
+    (raw_output, content_blocks, json_block_index)
 }
 
 /// Validate all input messages that contain text (not raw_text).
@@ -2228,10 +2235,11 @@ mod tests {
                 arguments: "tool_call_arguments".to_string(),
             }),
         ];
-        let (raw_output, auxiliary_content) =
+        let (raw_output, auxiliary_content, json_block_index) =
             get_json_output_from_content_blocks(content_blocks.clone());
         assert_eq!(raw_output, Some("tool_call_arguments".to_string()));
         assert_eq!(auxiliary_content.len(), 1);
+        assert_eq!(json_block_index, Some(1));
         match &auxiliary_content[0] {
             ContentBlockOutput::Text(t) => assert_eq!(t.text, "Hello"),
             _ => panic!("Expected Text block"),
@@ -2248,10 +2256,11 @@ mod tests {
                 signature: Some("sig".to_string()),
             }),
         ];
-        let (raw_output, auxiliary_content) =
+        let (raw_output, auxiliary_content, json_block_index) =
             get_json_output_from_content_blocks(content_blocks.clone());
         assert_eq!(raw_output, None);
         assert_eq!(auxiliary_content, content_blocks);
+        assert_eq!(json_block_index, None);
 
         // Case 3: Mixed Text, Thought, ToolCall
         let content_blocks = vec![
@@ -2272,9 +2281,10 @@ mod tests {
                 arguments: "{\"foo\": 1}".to_string(),
             }),
         ];
-        let (raw_output, auxiliary_content) =
+        let (raw_output, auxiliary_content, json_block_index) =
             get_json_output_from_content_blocks(content_blocks.clone());
         assert_eq!(raw_output, Some("{\"foo\": 1}".to_string()));
+        assert_eq!(json_block_index, Some(3));
         // Should exclude the ToolCall block from auxiliary_content
         assert_eq!(auxiliary_content.len(), 3);
         assert!(auxiliary_content
@@ -2297,10 +2307,11 @@ mod tests {
                 text: "B".to_string(),
             }),
         ];
-        let (raw_output, auxiliary_content) =
+        let (raw_output, auxiliary_content, json_block_index) =
             get_json_output_from_content_blocks(content_blocks.clone());
         assert_eq!(raw_output, Some("B".to_string()));
         assert_eq!(auxiliary_content.len(), 1);
+        assert_eq!(json_block_index, Some(1));
         match &auxiliary_content[0] {
             ContentBlockOutput::Text(t) => assert_eq!(t.text, "A"),
             _ => panic!("Expected Text block"),
@@ -2316,10 +2327,11 @@ mod tests {
                 signature: None,
             }),
         ];
-        let (raw_output, auxiliary_content) =
+        let (raw_output, auxiliary_content, json_block_index) =
             get_json_output_from_content_blocks(content_blocks.clone());
         assert_eq!(raw_output, Some("A".to_string()));
         assert_eq!(auxiliary_content.len(), 1);
+        assert_eq!(json_block_index, Some(0));
         match &auxiliary_content[0] {
             ContentBlockOutput::Thought(t) => assert_eq!(t.text, "final thought"),
             _ => panic!("Expected Thought block"),

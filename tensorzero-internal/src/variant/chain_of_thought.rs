@@ -191,6 +191,7 @@ fn prepare_thinking_output_schema(previous_output_schema: &Value) -> DynamicJSON
 
 /// Parses the output of the actual function being called and serializes the `response` field.
 /// After this point, the function output should look like a normal JSON response and not include thinking.
+/// It also adds the thinking to the auxiliary content at the index the original JSON block was at.
 fn parse_thinking_output(
     mut output: InternalJsonInferenceOutput,
 ) -> Result<InternalJsonInferenceOutput, Error> {
@@ -221,12 +222,27 @@ fn parse_thinking_output(
                 })?;
             output.parsed = Some(response.take());
             output.raw = Some(serialized_response);
-            output
-                .auxiliary_content
-                .push(ContentBlockOutput::Thought(Thought {
+            // Insert the thinking at the index the original JSON block was at
+            let Some(json_block_index) = output.json_block_index else {
+                tracing::warn!(
+                    "Chain of thought variant received a parsed output that didn't contain a `json_block_index` field. {}",
+                    IMPOSSIBLE_ERROR_MESSAGE
+                );
+                output
+                    .auxiliary_content
+                    .push(ContentBlockOutput::Thought(Thought {
+                        text: thinking,
+                        signature: None,
+                    }));
+                return Ok(output);
+            };
+            output.auxiliary_content.insert(
+                json_block_index,
+                ContentBlockOutput::Thought(Thought {
                     text: thinking,
                     signature: None,
-                }));
+                }),
+            );
             Ok(output)
         }
     }
@@ -273,6 +289,7 @@ mod tests {
             raw: Some("raw string".to_string()),
             parsed: None,
             auxiliary_content: vec![],
+            json_block_index: Some(0),
         };
         let result = parse_thinking_output(output.clone());
         assert!(result.is_ok());
@@ -283,6 +300,7 @@ mod tests {
             raw: Some("raw string".to_string()),
             parsed: Some(json!({"not_response": 123})),
             auxiliary_content: vec![],
+            json_block_index: Some(0),
         };
         let result = parse_thinking_output(output.clone());
         assert!(result.is_ok());
@@ -299,6 +317,7 @@ mod tests {
                 "response": {"answer": "42"}
             })),
             auxiliary_content: vec![],
+            json_block_index: Some(0),
         };
         let result = parse_thinking_output(output);
         assert!(result.is_ok());
@@ -328,6 +347,7 @@ mod tests {
                 text: "existing thinking".to_string(),
                 signature: None,
             })],
+            json_block_index: Some(0),
         };
         let result = parse_thinking_output(output);
         assert!(result.is_ok());
@@ -344,17 +364,19 @@ mod tests {
         );
         // The auxiliary content should now contain both the existing and new thinking
         assert_eq!(out.auxiliary_content.len(), 2);
+        // The new thinking should come first since the json block index is 0
+        // (it came from the first content block that was generated so we should put it back there)
         assert_eq!(
             out.auxiliary_content[0],
             ContentBlockOutput::Thought(Thought {
-                text: "existing thinking".to_string(),
+                text: "new thinking process".to_string(),
                 signature: None,
             })
         );
         assert_eq!(
             out.auxiliary_content[1],
             ContentBlockOutput::Thought(Thought {
-                text: "new thinking process".to_string(),
+                text: "existing thinking".to_string(),
                 signature: None,
             })
         );
