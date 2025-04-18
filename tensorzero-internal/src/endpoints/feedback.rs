@@ -107,6 +107,7 @@ pub async fn feedback(
     params: Params,
 ) -> Result<Json<FeedbackResponse>, Error> {
     validate_tags(&params.tags, params.internal)?;
+    validate_feedback_specific_tags(&params.tags)?;
     // Get the metric config or return an error if it doesn't exist
     let feedback_metadata = get_feedback_metadata(
         &config,
@@ -791,6 +792,18 @@ fn handle_llm_judge_output_schema(output_schema: Value) -> Value {
     }
 }
 
+fn validate_feedback_specific_tags(tags: &HashMap<String, String>) -> Result<(), Error> {
+    if tags.contains_key("tensorzero::datapoint_id")
+        && tags.contains_key("tensorzero::human_feedback")
+        && !tags.contains_key("tensorzero::evaluator_inference_id")
+    {
+        return Err(Error::new(ErrorDetails::InvalidRequest {
+            message: "tensorzero::evaluator_inference_id is required when tensorzero::datapoint_id and tensorzero::human_feedback are provided".to_string(),
+        }));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1386,5 +1399,46 @@ mod tests {
                 message: "The DynamicDemonstrationInfo does not match the function type. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.".to_string()
             }
         );
+    }
+
+    #[test]
+    fn test_validate_feedback_specific_tags() {
+        // Case 1: Empty tags should be valid
+        let tags = HashMap::new();
+        assert!(validate_feedback_specific_tags(&tags).is_ok());
+
+        // Case 2: Tags with only datapoint_id should be valid
+        let mut tags = HashMap::new();
+        tags.insert("tensorzero::datapoint_id".to_string(), "123".to_string());
+        assert!(validate_feedback_specific_tags(&tags).is_ok());
+
+        // Case 3: Tags with only human_feedback should be valid
+        let mut tags = HashMap::new();
+        tags.insert("tensorzero::human_feedback".to_string(), "true".to_string());
+        assert!(validate_feedback_specific_tags(&tags).is_ok());
+
+        // Case 4: Tags with datapoint_id and human_feedback but without evaluator_inference_id should be invalid
+        let mut tags = HashMap::new();
+        tags.insert("tensorzero::datapoint_id".to_string(), "123".to_string());
+        tags.insert("tensorzero::human_feedback".to_string(), "true".to_string());
+        assert!(validate_feedback_specific_tags(&tags).is_err());
+        let err = validate_feedback_specific_tags(&tags).unwrap_err();
+        let details = err.get_owned_details();
+        assert_eq!(
+            details,
+            ErrorDetails::InvalidRequest {
+                message: "tensorzero::evaluator_inference_id is required when tensorzero::datapoint_id and tensorzero::human_feedback are provided".to_string(),
+            }
+        );
+
+        // Case 5: Tags with all three required keys should be valid
+        let mut tags = HashMap::new();
+        tags.insert("tensorzero::datapoint_id".to_string(), "123".to_string());
+        tags.insert("tensorzero::human_feedback".to_string(), "true".to_string());
+        tags.insert(
+            "tensorzero::evaluator_inference_id".to_string(),
+            "456".to_string(),
+        );
+        assert!(validate_feedback_specific_tags(&tags).is_ok());
     }
 }
