@@ -8,7 +8,7 @@ use crate::{
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
     inference::types::{
         extra_body::{FullExtraBodyConfig, InferenceExtraBody},
-        extra_headers::{ExtraHeader, FullExtraHeadersConfig},
+        extra_headers::{ExtraHeader, FilteredInferenceExtraHeaders, FullExtraHeadersConfig},
         ProviderInferenceResponseChunk,
     },
     model::{fully_qualified_name, ModelProviderRequestInfo},
@@ -399,6 +399,7 @@ mod tests {
                         },
                     ],
                 }),
+                inference_extra_headers: FilteredInferenceExtraHeaders { data: vec![] },
             },
             ModelProviderRequestInfo {
                 provider_name: "dummy_provider".into(),
