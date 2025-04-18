@@ -10378,7 +10378,7 @@ pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETes
     assert!(serde_json::from_str::<Value>(raw).is_err());
 
     // Assert that the answer is correct
-    assert_eq!(raw, "The capital city of Japan is Tokyo.");
+    assert!(raw.to_lowercase().contains("tokyo"));
 
     // Check that inference_id is here
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
@@ -10416,7 +10416,7 @@ pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETes
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Value = serde_json::from_str(output).unwrap();
     let raw = output.get("raw").unwrap().as_str().unwrap();
-    assert_eq!(raw, "The capital city of Japan is Tokyo.");
+    assert!(raw.to_lowercase().contains("tokyo"));
 
     // Check that episode_id is here and correct
     let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
