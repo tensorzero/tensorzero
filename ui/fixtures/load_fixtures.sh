@@ -18,59 +18,6 @@ sleep 1
 
 ./check-fixtures.sh
 
-# --------
-
-HOST="clickhouse"
-USER="chuser"
-PASSWORD="chpassword"
-DATABASE="tensorzero_ui_fixtures"
-
-echo "Fetching all materialized views in database $DATABASE..."
-
-echo "Fetching all materialized views in database $DATABASE..."
-
-# First, get all materialized view names
-VIEWS=$(clickhouse-client --host "$HOST" --user "$USER" --password "$PASSWORD" --database "$DATABASE" --query "
-SELECT name 
-FROM system.tables 
-WHERE database = '$DATABASE' AND engine = 'MaterializedView'
-FORMAT CSV" | tr -d '"')
-
-if [ -z "$VIEWS" ]; then
-  echo "No materialized views found in database $DATABASE"
-  exit 0
-fi
-
-echo "Found materialized views. Optimizing each one..."
-
-# For each view, extract the target table from its definition
-for VIEW in $VIEWS; do
-  echo "Processing view $VIEW..."
-  
-  # Get the view definition
-  DEFINITION=$(clickhouse-client --host "$HOST" --user "$USER" --password "$PASSWORD" --database "$DATABASE" --query "
-  SHOW CREATE TABLE ${VIEW}
-  FORMAT TabSeparatedRaw")
-  
-  # Extract the target table - typically follows "TO tablename" in view definition
-  TARGET_TABLE=$(echo "$DEFINITION" | grep -oP "TO\\s+\\K\\w+")
-  
-  if [ -z "$TARGET_TABLE" ]; then
-    echo "Could not determine target table for view $VIEW, skipping..."
-    continue
-  fi
-  
-  echo "Optimizing target table $TARGET_TABLE for view $VIEW..."
-  clickhouse-client --host "$HOST" --user "$USER" --password "$PASSWORD" --database "$DATABASE" --query "OPTIMIZE TABLE $TARGET_TABLE FINAL"
-  echo "Optimization of $TARGET_TABLE complete."
-done
-
-echo "All materialized views optimized successfully."
-
-# -----
-
-
-
 # Create the marker file to signal completion for the healthcheck
 # Write it to an ephemeral location to make sure that we don't see a marker file
 # from a previous container run.
