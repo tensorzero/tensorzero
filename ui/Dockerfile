@@ -50,7 +50,6 @@ ARG CARGO_BUILD_FLAGS=""
 
 RUN --mount=type=cache,id=tensorzero-evaluations-release,sharing=shared,target=/usr/local/cargo/registry \
     --mount=type=cache,id=tensorzero-evaluations-release,sharing=shared,target=/usr/local/cargo/git \
-    --mount=type=cache,id=tensorzero-evaluations-release,sharing=locked,target=/tensorzero/target \
     cargo build --release -p evaluations $CARGO_BUILD_FLAGS && \
     cp -r /tensorzero/target/release /release
 
