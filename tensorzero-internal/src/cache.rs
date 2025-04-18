@@ -10,6 +10,7 @@ use crate::inference::types::{
     ModelInferenceResponse, ProviderInferenceResponseChunk, Usage,
 };
 use crate::model::StreamResponse;
+use blake3::Hash;
 use clap::ValueEnum;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -103,6 +104,12 @@ impl CacheKey {
     }
 }
 
+impl From<Hash> for CacheKey {
+    fn from(hash: Hash) -> Self {
+        Self(hash.into())
+    }
+}
+
 impl EmbeddingModelProviderRequest<'_> {
     // Destructure EmbeddingModelProviderRequest so that we get a compiler error
     // if we add any new fields
@@ -125,7 +132,7 @@ impl EmbeddingModelProviderRequest<'_> {
             })
         })?;
         hasher.update(request_json.as_bytes());
-        Ok(CacheKey(hasher.finalize().into()))
+        Ok(hasher.finalize().into())
     }
 }
 
@@ -170,7 +177,7 @@ impl ModelProviderRequest<'_> {
         // Get the bytes of the serialized request to use in the hash
         let request_bytes = serialized_request.as_bytes();
         hasher.update(request_bytes);
-        Ok(CacheKey(hasher.finalize().into()))
+        Ok(hasher.finalize().into())
     }
 }
 

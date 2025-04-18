@@ -14,7 +14,9 @@ test.describe("Custom user agent", () => {
   // between polling mock-inference-provider
   test.use({ userAgent: "TensorZeroE2E" });
 
-  test("should fine-tune with a mocked OpenAI server", async ({ page }) => {
+  test("@slow should fine-tune with a mocked OpenAI server", async ({
+    page,
+  }) => {
     await page.goto("/optimization/supervised-fine-tuning");
     await page
       .getByRole("combobox")
@@ -83,7 +85,9 @@ model_name = "mock-inference-finetune-1234"
 `);
   });
 
-  test("should fine-tune with a mocked Fireworks server", async ({ page }) => {
+  test("@slow should fine-tune with a mocked Fireworks server", async ({
+    page,
+  }) => {
     await page.goto("/optimization/supervised-fine-tuning");
     await page
       .getByRole("combobox")
