@@ -12,7 +12,10 @@ import type { JsonInferenceOutput } from "~/utils/clickhouse/common";
 import Output from "../inference/Output";
 import { Link, Form } from "react-router";
 import { Button } from "~/components/ui/button";
-import { filterMetricsByLevel } from "~/utils/config/metric";
+import {
+  filterMetricsByLevel,
+  filterStaticEvaluationMetrics,
+} from "~/utils/config/metric";
 import BooleanFeedbackInput from "./BooleanFeedbackInput";
 import FloatFeedbackInput from "./FloatFeedbackInput";
 import CommentFeedbackInput from "./CommentFeedbackInput";
@@ -74,10 +77,11 @@ function FeedbackForm({
   const config = useConfig();
   // If there is no inference output this is likely an episode-level feedback and
   // we should filter demonstration out of the list of metrics.
-  const metrics =
+  const metrics = filterStaticEvaluationMetrics(
     inferenceOutput === undefined
       ? filterMetricsByLevel(config.metrics, "episode")
-      : filterMetricsByLevel(config.metrics, "inference");
+      : filterMetricsByLevel(config.metrics, "inference"),
+  );
   const [selectedMetricName, setSelectedMetricName] = useState<string>("");
   const selectedMetric = metrics[selectedMetricName];
   const selectedMetricType = selectedMetric?.type;

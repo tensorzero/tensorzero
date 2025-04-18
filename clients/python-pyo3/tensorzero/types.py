@@ -4,10 +4,11 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
 from json import JSONEncoder
-from typing import Any, Dict, List, Literal, Optional, TypedDict, Union
+from typing import Any, Dict, List, Literal, Optional, Union
 from uuid import UUID
 
 import httpx
+from typing_extensions import TypedDict
 
 
 # Helper used to serialize Python objects to JSON, which may contain dataclasses like `Text`

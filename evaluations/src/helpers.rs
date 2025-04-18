@@ -58,7 +58,7 @@ pub fn setup_logging(args: &Args) -> Result<()> {
             tracing::subscriber::set_global_default(subscriber)
                 .map_err(|e| anyhow!("Failed to initialize tracing: {}", e))
         }
-        OutputFormat::HumanReadable => {
+        OutputFormat::Pretty => {
             let subscriber = tracing_subscriber::FmtSubscriber::new();
             tracing::subscriber::set_global_default(subscriber)
                 .map_err(|e| anyhow!("Failed to initialize tracing: {}", e))

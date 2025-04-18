@@ -112,8 +112,7 @@ test("should be able to add float feedback via the inference page", async ({
     .locator('div[role="dialog"]')
     .locator('div[cmdk-item=""]')
     .filter({
-      hasText:
-        "tensorzero::evaluation_name::entity_extraction::evaluator_name::count_sports",
+      hasText: "jaccard_similarity",
     });
   await metricItemLocator.waitFor({ state: "visible" });
   // Click on the metric in the command list
@@ -161,8 +160,7 @@ test("should be able to add boolean feedback via the inference page", async ({
     .locator('div[role="dialog"]')
     .locator('div[cmdk-item=""]')
     .filter({
-      hasText:
-        "tensorzero::evaluation_name::entity_extraction::evaluator_name::exact_match",
+      hasText: "exact_match",
     });
   await metricItemLocator.waitFor({ state: "visible" });
   // Click on the metric in the command list
