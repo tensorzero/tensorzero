@@ -33,6 +33,7 @@ use crate::tool::{create_dynamic_implicit_tool_config, ToolCallConfig};
 use crate::{inference::types::InferenceResult, model::ModelConfig};
 
 pub mod best_of_n_sampling;
+pub mod chain_of_thought;
 pub mod chat_completion;
 pub mod dicl;
 pub mod mixture_of_n;
@@ -43,6 +44,7 @@ pub enum VariantConfig {
     BestOfNSampling(best_of_n_sampling::BestOfNSamplingConfig),
     Dicl(dicl::DiclConfig),
     MixtureOfN(mixture_of_n::MixtureOfNConfig),
+    ChainOfThought(chain_of_thought::ChainOfThoughtConfig),
 }
 
 /// This type is used to determine how to enforce JSON mode for a given variant.
@@ -179,6 +181,7 @@ impl VariantConfig {
             VariantConfig::BestOfNSampling(params) => params.weight,
             VariantConfig::Dicl(params) => params.weight,
             VariantConfig::MixtureOfN(params) => params.weight,
+            VariantConfig::ChainOfThought(params) => params.inner.weight,
         }
     }
 }
@@ -247,6 +250,18 @@ impl Variant for VariantConfig {
                     )
                     .await
             }
+            VariantConfig::ChainOfThought(params) => {
+                params
+                    .infer(
+                        input,
+                        models,
+                        function,
+                        inference_config,
+                        clients,
+                        inference_params,
+                    )
+                    .await
+            }
         }
     }
 
@@ -301,6 +316,18 @@ impl Variant for VariantConfig {
                     .await
             }
             VariantConfig::MixtureOfN(params) => {
+                params
+                    .infer_stream(
+                        input,
+                        models,
+                        function,
+                        inference_config,
+                        clients,
+                        inference_params,
+                    )
+                    .await
+            }
+            VariantConfig::ChainOfThought(params) => {
                 params
                     .infer_stream(
                         input,
@@ -387,6 +414,14 @@ impl Variant for VariantConfig {
                 function_name,
                 variant_name,
             ),
+            VariantConfig::ChainOfThought(params) => params.validate(
+                function,
+                models,
+                embedding_models,
+                templates,
+                function_name,
+                variant_name,
+            ),
         }
     }
 
@@ -396,6 +431,7 @@ impl Variant for VariantConfig {
             VariantConfig::BestOfNSampling(params) => params.get_all_template_paths(),
             VariantConfig::Dicl(params) => params.get_all_template_paths(),
             VariantConfig::MixtureOfN(params) => params.get_all_template_paths(),
+            VariantConfig::ChainOfThought(params) => params.get_all_template_paths(),
         }
     }
 }
@@ -624,7 +660,7 @@ mod tests {
     use crate::inference::types::{
         ContentBlockChunk, ModelInferenceRequestJsonMode, RequestMessage, Role,
     };
-    use crate::jsonschema_util::JSONSchemaFromPath;
+    use crate::jsonschema_util::StaticJSONSchema;
     use crate::minijinja_util::tests::get_test_template_config;
     use crate::model::{ModelProvider, ProviderConfig};
     use crate::tool::{ToolCallConfig, ToolChoice};
@@ -734,7 +770,7 @@ mod tests {
             },
             "required": ["answer"],
         });
-        let output_schema = JSONSchemaFromPath::from_value(&output_schema_value).unwrap();
+        let output_schema = StaticJSONSchema::from_value(&output_schema_value).unwrap();
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema_value);
 
         let function_config_json = FunctionConfig::Json(FunctionConfigJson {
@@ -988,7 +1024,7 @@ mod tests {
             system_schema: None,
             user_schema: None,
             assistant_schema: None,
-            output_schema: JSONSchemaFromPath::from_value(&json!({
+            output_schema: StaticJSONSchema::from_value(&json!({
                 "type": "object",
                 "properties": {
                     "answer": { "type": "string" }

@@ -13,6 +13,7 @@ use tensorzero_internal::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_inference_tags_clickhouse,
     select_json_inference_clickhouse, select_model_inference_clickhouse,
 };
+use tensorzero_internal::inference::types::ContentBlockOutput;
 use tensorzero_internal::inference::types::{ContentBlock, RequestMessage};
 use uuid::Uuid;
 
@@ -664,6 +665,14 @@ pub async fn test_reasoning_inference_request_with_provider_json_mode(provider: 
     );
     assert_eq!(retrieved_output_schema, expected_output_schema);
 
+    // Check that the auxiliary content is correct
+    let auxiliary_content: Vec<ContentBlockOutput> =
+        serde_json::from_str(result.get("auxiliary_content").unwrap().as_str().unwrap()).unwrap();
+    assert_eq!(auxiliary_content.len(), 1);
+    assert!(matches!(
+        auxiliary_content[0],
+        ContentBlockOutput::Thought(_)
+    ));
     // Check the ModelInference Table
     let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
@@ -900,6 +909,15 @@ pub async fn test_streaming_reasoning_inference_request_with_provider_json_mode(
         "additionalProperties": false
     });
     assert_eq!(retrieved_output_schema, expected_output_schema);
+
+    // Check that the auxiliary content is correct
+    let auxiliary_content: Vec<ContentBlockOutput> =
+        serde_json::from_str(result.get("auxiliary_content").unwrap().as_str().unwrap()).unwrap();
+    assert_eq!(auxiliary_content.len(), 1);
+    assert!(matches!(
+        auxiliary_content[0],
+        ContentBlockOutput::Thought(_)
+    ));
 
     // Check ClickHouse - ModelInference Table
     let result = select_model_inference_clickhouse(&clickhouse, inference_id)

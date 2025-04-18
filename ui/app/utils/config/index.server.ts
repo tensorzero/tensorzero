@@ -84,9 +84,12 @@ export async function loadConfig(config_path?: string): Promise<Config> {
   // At this point, config_path is guaranteed to point to an existing file.
   const tomlContent = await fs.readFile(config_path, "utf-8");
   const parsedConfig = parse(tomlContent);
+  console.log("parsing", parsedConfig);
   const validatedConfig = RawConfig.parse(parsedConfig);
+  console.log("validated", validatedConfig);
 
   const loadedConfig = await validatedConfig.load(config_path);
+  console.log("loaded", loadedConfig);
 
   // Add demonstration metric to the config
   loadedConfig.metrics = {

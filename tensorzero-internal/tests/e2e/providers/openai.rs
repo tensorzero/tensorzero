@@ -124,6 +124,12 @@ async fn get_providers() -> E2ETestProviders {
             model_provider_name: "openai".into(),
             credentials: HashMap::new(),
         },
+        E2ETestProvider {
+            variant_name: "openai-cot".to_string(),
+            model_name: "openai::gpt-4.1-nano-2025-04-14".into(),
+            model_provider_name: "openai".into(),
+            credentials: HashMap::new(),
+        },
     ];
 
     let shorthand_providers = vec![E2ETestProvider {
