@@ -307,7 +307,7 @@ async fn test_default_function_default_tool_choice() {
     );
 
     // Sleep for 100ms second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(10 - 0)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     // Just check 'tool_choice' in the raw request, since we already have lots of tests
     // that check the full ChatInference/ModelInference rows
