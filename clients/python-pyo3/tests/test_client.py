@@ -32,11 +32,9 @@ from uuid import UUID
 
 import pytest
 import pytest_asyncio
+import tensorzero
 from openai import AsyncOpenAI, OpenAI
 from pytest import FixtureRequest
-from uuid_utils import uuid7
-
-import tensorzero
 from tensorzero import (
     AsyncTensorZeroGateway,
     ChatInferenceResponse,
@@ -64,6 +62,7 @@ from tensorzero.types import (
     ToolCallChunk,
     VariantExtraBody,
 )
+from uuid_utils import uuid7
 
 TEST_CONFIG_FILE = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
