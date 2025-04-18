@@ -1,4 +1,3 @@
-use super::extra_headers::{ExtraHeader, ExtraHeadersConfig};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
