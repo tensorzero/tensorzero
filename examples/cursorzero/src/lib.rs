@@ -1,7 +1,7 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use anyhow::{anyhow, Result};
-use git2::{Commit, DiffOptions, Repository};
+use git2::{Commit, DiffDelta, DiffOptions, Repository};
 
 /// Gets the last commit from a repository
 pub fn get_last_commit_from_repo(repo: &Repository) -> Result<Commit> {
@@ -27,7 +27,7 @@ pub struct DiffAddition {
 pub fn get_diff_by_file(
     repo: &Repository,
     commit: &Commit,
-) -> Result<HashMap<String, Vec<DiffAddition>>, git2::Error> {
+) -> Result<HashMap<String, Vec<DiffAddition>>> {
     // Use the commit tree and its parent tree if there is one to get the diff
     let tree = commit.tree()?;
     let parent_tree = commit.parent(0).ok().map(|p| p.tree()).transpose()?;
@@ -53,7 +53,7 @@ pub fn get_diff_by_file(
     let state_chunk = Rc::clone(&state);
 
     diff.foreach(
-        Some(move |delta, _| {
+        &mut move |delta: DiffDelta, _| {
             let mut s = state_file.borrow_mut();
             // When a new file starts, flush the previous file's last chunk.
             if let (Some(file), Some(chunk)) = (s.current_file.take(), s.current_chunk.take()) {
@@ -66,33 +66,37 @@ pub fn get_diff_by_file(
 
             // `delta.new_file().path()` is *None* for pure deletions,
             // so skip those straight away.
-            current_file = delta
+            s.current_file = delta
                 .new_file()
                 .path()
                 .map(|p| p.to_string_lossy().into_owned());
             // return `true` to keep iterating
             true
-        }),
+        },
         None,
         None,
         Some(&mut |_delta, _hunk, line| {
+            let mut s = state_chunk.borrow_mut();
             if line.origin() != '+' {
                 // A non‑'+' line ends any run of additions
-                if let (Some(file), Some(chunk)) = (current_file.as_ref(), current_chunk.take()) {
-                    result.entry(file.clone()).or_default().push(DiffAddition {
-                        start_line: chunk.start,
-                        end_line: chunk.end,
-                        content: chunk.buf,
-                    });
+                if let (Some(file), Some(chunk)) = (s.current_file.as_ref(), s.current_chunk.take())
+                {
+                    s.result
+                        .entry(file.clone())
+                        .or_default()
+                        .push(DiffAddition {
+                            start_line: chunk.start,
+                            end_line: chunk.end,
+                            content: chunk.buf,
+                        });
                 }
                 return true; // keep going
             }
 
-            // origin == '+'
             let new_lineno = line.new_lineno().unwrap_or(0) as usize; // libgit2 uses 1‑based
             let content = std::str::from_utf8(line.content()).unwrap_or_default();
 
-            match &mut current_chunk {
+            match &mut s.current_chunk {
                 Some(chunk) if new_lineno == chunk.last_seen_lineno + 1 => {
                     // immediately‑following addition: extend current chunk
                     chunk.end = new_lineno;
@@ -101,15 +105,19 @@ pub fn get_diff_by_file(
                 }
                 _ => {
                     // gap → flush the old chunk (if any) and start new one
-                    if let (Some(file), Some(chunk)) = (current_file.as_ref(), current_chunk.take())
+                    if let (Some(file), Some(chunk)) =
+                        (s.current_file.as_ref(), s.current_chunk.take())
                     {
-                        result.entry(file.clone()).or_default().push(DiffAddition {
-                            start_line: chunk.start,
-                            end_line: chunk.end,
-                            content: chunk.buf,
-                        });
+                        s.result
+                            .entry(file.clone())
+                            .or_default()
+                            .push(DiffAddition {
+                                start_line: chunk.start,
+                                end_line: chunk.end,
+                                content: chunk.buf,
+                            });
                     }
-                    current_chunk = Some(Chunk {
+                    s.current_chunk = Some(Chunk {
                         start: new_lineno,
                         end: new_lineno,
                         last_seen_lineno: new_lineno,
@@ -120,7 +128,14 @@ pub fn get_diff_by_file(
             true
         }),
     )?;
-
+    let Ok(state) = Rc::try_unwrap(state) else {
+        return Err(anyhow!("Failed to unwrap state"));
+    };
+    let DiffWalkState {
+        mut result,
+        mut current_file,
+        mut current_chunk,
+    } = state.into_inner();
     // Flush the very last chunk
     if let (Some(file), Some(chunk)) = (current_file.take(), current_chunk.take()) {
         result.entry(file).or_default().push(DiffAddition {
