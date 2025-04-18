@@ -250,9 +250,8 @@ mod tests {
     use futures::{stream, StreamExt};
 
     use crate::inference::types::{
-        extra_body::{
-            ExtraBodyConfig, ExtraBodyReplacement, ExtraHeadersConfig, FilteredInferenceExtraBody,
-        },
+        extra_body::{ExtraBodyConfig, ExtraBodyReplacement, FilteredInferenceExtraBody},
+        extra_headers::ExtraHeadersConfig,
         ContentBlockChunk, TextChunk,
     };
 

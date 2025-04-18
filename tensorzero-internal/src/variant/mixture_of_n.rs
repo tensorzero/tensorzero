@@ -548,6 +548,10 @@ impl FuserConfig {
         };
         let extra_headers = FullExtraHeadersConfig {
             variant_extra_headers: self.inner.extra_headers.clone(),
+            inference_extra_headers: inference_config
+                .extra_headers
+                .clone()
+                .filter(inference_config.variant_name),
         };
         let model_inference_request = prepare_model_inference_request(
             messages,

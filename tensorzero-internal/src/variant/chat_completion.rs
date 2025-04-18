@@ -9,7 +9,7 @@ use crate::endpoints::inference::{InferenceClients, InferenceModels, InferencePa
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::inference::types::extra_body::{ExtraBodyConfig, FullExtraBodyConfig};
-use crate::inference::types::extra_headers::ExtraHeadersConfig;
+use crate::inference::types::extra_headers::{ExtraHeadersConfig, FullExtraHeadersConfig};
 use crate::inference::types::{
     batch::StartBatchModelInferenceWithMetadata, ContentBlock, InferenceResultStream,
     ModelInferenceRequest, RequestMessage, Role,
@@ -220,6 +220,15 @@ impl ChatCompletionConfig {
                 .clone()
                 .filter(inference_config.variant_name),
         };
+
+        let extra_headers = FullExtraHeadersConfig {
+            variant_extra_headers: self.extra_headers.clone(),
+            inference_extra_headers: inference_config
+                .extra_headers
+                .clone()
+                .filter(inference_config.variant_name),
+        };
+
         prepare_model_inference_request(
             messages,
             system,
@@ -229,6 +238,7 @@ impl ChatCompletionConfig {
             inference_params,
             self.json_mode,
             extra_body,
+            extra_headers,
         )
     }
 }

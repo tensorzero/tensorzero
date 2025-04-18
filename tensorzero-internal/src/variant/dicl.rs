@@ -10,7 +10,7 @@ use crate::config_parser::PathWithContents;
 use crate::embeddings::{EmbeddingModelTable, EmbeddingResponseWithMetadata};
 use crate::endpoints::inference::InferenceModels;
 use crate::inference::types::extra_body::{ExtraBodyConfig, FullExtraBodyConfig};
-use crate::inference::types::extra_headers::ExtraHeadersConfig;
+use crate::inference::types::extra_headers::{ExtraHeadersConfig, FullExtraHeadersConfig};
 use crate::inference::types::ContentBlock;
 use crate::inference::types::ResolvedInput;
 use crate::inference::types::ResolvedInputMessageContent;
@@ -525,6 +525,10 @@ impl DiclConfig {
         };
         let extra_headers = FullExtraHeadersConfig {
             variant_extra_headers: self.extra_headers.clone(),
+            inference_extra_headers: inference_config
+                .extra_headers
+                .clone()
+                .filter(inference_config.variant_name),
         };
         prepare_model_inference_request(
             messages,

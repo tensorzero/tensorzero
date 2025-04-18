@@ -607,6 +607,7 @@ fn create_stream(
                     tool_config: tool_config.as_ref(),
                     cached,
                     extra_body: extra_body.clone(),
+                    extra_headers: extra_headers.clone(),
                 };
                 let inference_response: Result<InferenceResult, Error> =
                     collect_chunks(collect_chunks_args).await;

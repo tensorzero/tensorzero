@@ -675,6 +675,7 @@ impl EvaluatorConfig {
         };
         let extra_headers = FullExtraHeadersConfig {
             variant_extra_headers: self.inner.extra_headers.clone(),
+            inference_extra_headers: Default::default(),
         };
         Ok((
             ModelInferenceRequest {

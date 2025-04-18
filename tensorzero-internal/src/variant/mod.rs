@@ -444,6 +444,7 @@ where
                 function_type: FunctionType::Chat,
                 output_schema: inference_config.dynamic_output_schema.map(|v| &v.value),
                 extra_body,
+                extra_headers,
                 extra_cache_key: inference_config.extra_cache_key.clone(),
             }
         }
@@ -479,6 +480,7 @@ where
                 function_type: FunctionType::Json,
                 output_schema,
                 extra_body,
+                extra_headers,
                 extra_cache_key: inference_config.extra_cache_key.clone(),
             }
         }
@@ -928,6 +930,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             ..Default::default()
         };
 
@@ -1035,6 +1038,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Json,
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             ..Default::default()
         };
 
@@ -1204,6 +1208,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             ..Default::default()
         };
 
@@ -1357,6 +1362,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             ..Default::default()
         };
 
@@ -1479,6 +1485,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             ..Default::default()
         };
 
