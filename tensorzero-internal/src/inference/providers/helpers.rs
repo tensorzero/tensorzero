@@ -321,6 +321,7 @@ mod tests {
         let mut body = serde_json::json!({});
         inject_extra_request_data(
             &Default::default(),
+            &Default::default(),
             ModelProviderRequestInfo {
                 provider_name: "dummy_provider".into(),
                 extra_body: Default::default(),
@@ -347,6 +348,7 @@ mod tests {
                     }],
                 },
             },
+            &Default::default(),
             ModelProviderRequestInfo {
                 extra_headers: None,
                 provider_name: "dummy_provider".into(),
@@ -362,6 +364,7 @@ mod tests {
     #[test]
     fn test_inject_to_non_map() {
         let err = inject_extra_request_data(
+            &Default::default(),
             &Default::default(),
             ModelProviderRequestInfo {
                 provider_name: "dummy_provider".into(),
@@ -382,6 +385,7 @@ mod tests {
     #[test]
     fn test_inject_headers() {
         let headers = inject_extra_request_data(
+            &Default::default(),
             &FullExtraHeadersConfig {
                 variant_extra_headers: Some(ExtraHeadersConfig {
                     data: vec![
@@ -461,6 +465,7 @@ mod tests {
                     }],
                 },
             },
+            &Default::default(),
             ModelProviderRequestInfo {
                 provider_name: "dummy_provider".into(),
                 extra_body: Default::default(),
@@ -523,6 +528,7 @@ mod tests {
                     }],
                 },
             },
+            &Default::default(),
             ModelProviderRequestInfo {
                 provider_name: "dummy_provider".into(),
                 extra_body: Some(ExtraBodyConfig {
