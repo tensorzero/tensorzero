@@ -77,6 +77,7 @@ pub fn get_diff_by_file(
         None,
         Some(&mut |_delta, _hunk, line| {
             let mut s = state_chunk.borrow_mut();
+            let s = &mut *s;
             if line.origin() != '+' {
                 // A non‑'+' line ends any run of additions
                 if let (Some(file), Some(chunk)) = (s.current_file.as_ref(), s.current_chunk.take())
