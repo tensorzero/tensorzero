@@ -50,7 +50,6 @@ ARG CARGO_BUILD_FLAGS=""
 
 RUN --mount=type=cache,id=tensorzero-evaluations-release,sharing=shared,target=/usr/local/cargo/registry \
     --mount=type=cache,id=tensorzero-evaluations-release,sharing=shared,target=/usr/local/cargo/git \
-    --mount=type=cache,id=tensorzero-evaluations-release,sharing=locked,target=/tensorzero/target \
     cargo build --release -p evaluations $CARGO_BUILD_FLAGS && \
     cp -r /tensorzero/target/release /release
 
@@ -67,10 +66,7 @@ COPY --from=development-dependencies-env /app/node_modules /app/node_modules
 
 WORKDIR /app
 
-# Declare the build argument with a default value (e.g., 0)
-ARG VITE_TENSORZERO_UI_FF_ENABLE_FEEDBACK=0
-# Set the environment variable using the build argument
-ENV VITE_TENSORZERO_UI_FF_ENABLE_FEEDBACK=${VITE_TENSORZERO_UI_FF_ENABLE_FEEDBACK}
+ENV VITE_TENSORZERO_UI_FF_ENABLE_FEEDBACK=1
 
 ENV VITE_TENSORZERO_UI_FF_ENABLE_DATASETS=1
 
