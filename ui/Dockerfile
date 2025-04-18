@@ -84,7 +84,7 @@ WORKDIR /build/optimizations-server
 # UV_PYTHON_DOWNLOADS=never
 # https://hynek.me/articles/docker-uv/
 ENV UV_COMPILE_BYTECODE=1
-RUN --mount=type=cache,target=/uv-cache CARGO_TARGET_DIR=/uv-cache/cargo-target uv --cache-dir /uv-cache --verbose sync --locked --no-dev
+RUN --mount=type=cache,sharing=locked,target=/uv-cache CARGO_TARGET_DIR=/uv-cache/cargo-target uv --cache-dir /uv-cache --verbose sync --locked --no-dev
 
 # ========== ui ==========
 
