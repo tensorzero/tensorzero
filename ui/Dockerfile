@@ -40,7 +40,9 @@ RUN wasm-pack build --features console_error_panic_hook
 
 FROM rust:latest AS evaluations-build-env
 
+RUN cargo install sccache --locked
 RUN apt-get update && apt-get install -y clang libc++-dev && rm -rf /var/lib/apt/lists/*
+ENV RUSTC_WRAPPER=sccache SCCACHE_DIR=/sccache
 
 COPY . /tensorzero
 
@@ -50,6 +52,7 @@ ARG CARGO_BUILD_FLAGS=""
 
 RUN --mount=type=cache,id=tensorzero-evaluations-release,sharing=shared,target=/usr/local/cargo/registry \
     --mount=type=cache,id=tensorzero-evaluations-release,sharing=shared,target=/usr/local/cargo/git \
+    --mount=type=cache,id=tensorzero-evaluations-release,sharing=locked,target=/sccache \
     cargo build --release -p evaluations $CARGO_BUILD_FLAGS && \
     cp -r /tensorzero/target/release /release
 
