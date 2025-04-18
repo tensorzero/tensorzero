@@ -75,3 +75,15 @@ export function filterMetricsByLevel(
 
   return Object.fromEntries(filteredEntries);
 }
+
+// Removes metrics that are part of a static evaluation
+// These will have names that start with "tensorzero::evaluation_name::"
+export function filterStaticEvaluationMetrics(
+  metrics: Record<string, MetricConfig>,
+) {
+  return Object.fromEntries(
+    Object.entries(metrics).filter(([name]) => {
+      return !name.startsWith("tensorzero::evaluation_name::");
+    }),
+  );
+}

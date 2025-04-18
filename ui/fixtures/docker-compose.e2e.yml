@@ -86,7 +86,7 @@ services:
       ["bash", "-c", "cd /fixtures && ./load_fixtures.sh && sleep infinity"]
     # Added healthcheck to wait for the marker file created by the script
     healthcheck:
-      test: ["CMD", "test", "-f", "/fixtures/load_complete.marker"]
+      test: ["CMD", "test", "-f", "/tmp/load_complete.marker"]
       interval: 5s
       timeout: 1s
       retries: 12 # Retry for up to a minute
