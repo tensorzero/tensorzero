@@ -8,5 +8,8 @@ workspace = true
 
 [dependencies]
 tokio = { workspace = true }
+clap = { workspace = true }
+anyhow = { workspace = true }
+git2 = "0.20.1"
 
 [dev-dependencies]
