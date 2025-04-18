@@ -1,5 +1,12 @@
 import { Badge } from "~/components/ui/badge";
 import { Link } from "react-router";
+import {
+  AlignLeft,
+  Terminal,
+  ArrowRight,
+  Image as ImageIcon,
+  ImageOff,
+} from "lucide-react";
 
 // Empty message component
 interface EmptyMessageProps {
@@ -111,20 +118,29 @@ export function TextMessage({
 
 // Input message component
 interface InputMessageProps {
-  role: string;
-  children: React.ReactNode;
+  role?: string;
+  children?: React.ReactNode;
+  emptyMessage?: string;
 }
 
-export function InputMessage({ role, children }: InputMessageProps) {
+export function InputMessage({
+  role,
+  children,
+  emptyMessage,
+}: InputMessageProps) {
+  if (!children) {
+    return <EmptyMessage message={emptyMessage} />;
+  }
+
   return (
     <div className="relative w-full">
       <div className="bg-bg-primary flex w-full flex-col gap-1 overflow-hidden rounded-lg px-5 py-2">
         <div className="text-sm font-medium text-purple-700 capitalize">
           {role}
         </div>
-        <div className="flex">
+        <div className="my-1 flex">
           <div className="border-border mr-4 self-stretch border-l"></div>
-          <div className="flex-1">{children}</div>
+          <div className="flex flex-1 flex-col gap-4">{children}</div>
         </div>
       </div>
     </div>
@@ -138,38 +154,115 @@ interface InputTextMessageProps {
 
 export function InputTextMessage({ content }: InputTextMessageProps) {
   return (
-    <pre className="whitespace-pre-wrap">
-      <span className="font-sans text-sm">{content}</span>
-    </pre>
+    <div className="flex max-w-200 min-w-80 flex-col gap-1">
+      <div className="flex flex-row items-center gap-1">
+        <AlignLeft className="text-fg-muted h-3 w-3" />
+        <span className="text-fg-tertiary text-xs font-medium">Text</span>
+      </div>
+      <pre className="whitespace-pre-wrap">
+        <span className="font-sans text-sm">{content}</span>
+      </pre>
+    </div>
+  );
+}
+
+// Structured Text Message component
+interface StructuredTextMessageProps {
+  content: object;
+}
+
+export function StructuredTextMessage({ content }: StructuredTextMessageProps) {
+  return (
+    <div className="flex max-w-200 min-w-80 flex-col gap-1.5">
+      <div className="flex flex-row items-center gap-1">
+        <AlignLeft className="text-fg-muted h-3 w-3" />
+        <span className="text-fg-tertiary text-xs font-medium">
+          Text (Structured)
+        </span>
+      </div>
+      <pre className="max-w-full font-mono text-sm break-words whitespace-pre-wrap">
+        {JSON.stringify(content, null, 2)}
+      </pre>
+    </div>
   );
 }
 
 // Tool Call Message component
 interface ToolCallMessageProps {
-  label: string;
-  content: string;
+  toolName: string;
+  toolArguments: string;
+  toolCallId: string;
 }
 
-export function ToolCallMessage({ label, content }: ToolCallMessageProps) {
+export function ToolCallMessage({
+  toolName,
+  toolArguments,
+  toolCallId,
+}: ToolCallMessageProps) {
   return (
-    <div className="rounded bg-slate-100 p-2 dark:bg-slate-800">
-      <span className="font-medium">{label}</span>
-      <pre className="mt-1 text-sm">{content}</pre>
+    <div className="flex max-w-200 min-w-80 flex-col gap-1 overflow-x-auto">
+      <div className="flex flex-row items-center gap-1">
+        <Terminal className="text-fg-muted h-3 w-3" />
+        <span className="text-fg-tertiary text-xs font-medium">Tool Call</span>
+      </div>
+      <div className="border-border bg-bg-tertiary flex flex-col gap-1 rounded-md border px-3 py-2">
+        <div className="flex flex-row items-center gap-1 whitespace-nowrap">
+          <span className="text-fg-secondary w-16 min-w-16 text-sm">Name:</span>
+          <span className="text-sm">{toolName}</span>
+        </div>
+        <div className="flex flex-row items-center gap-1 whitespace-nowrap">
+          <span className="text-fg-secondary w-16 min-w-16 text-sm">ID:</span>
+          <span className="font-mono text-sm">{toolCallId}</span>
+        </div>
+        <div className="flex flex-row items-start gap-1">
+          <span className="text-fg-secondary w-16 min-w-16 text-sm">Args:</span>
+          <pre className="max-w-full font-mono text-sm break-words whitespace-pre-wrap">
+            {toolArguments}
+          </pre>
+        </div>
+      </div>
     </div>
   );
 }
 
 // Tool Result Message component
 interface ToolResultMessageProps {
-  label: string;
-  content: string;
+  toolName: string;
+  toolResult: string;
+  toolResultId: string;
 }
 
-export function ToolResultMessage({ label, content }: ToolResultMessageProps) {
+export function ToolResultMessage({
+  toolName,
+  toolResult,
+  toolResultId,
+}: ToolResultMessageProps) {
   return (
-    <div className="rounded bg-slate-100 p-2 dark:bg-slate-800">
-      <span className="font-medium">{label}</span>
-      <pre className="mt-1 text-sm">{content}</pre>
+    <div className="flex max-w-200 min-w-80 flex-col gap-1 overflow-x-auto">
+      <div className="flex flex-row items-center gap-1">
+        <ArrowRight className="text-fg-muted h-3 w-3" />
+        <span className="text-fg-tertiary text-xs font-medium">
+          Tool Result
+        </span>
+      </div>
+      <div className="border-border bg-bg-tertiary flex flex-col gap-1 rounded-md border px-3 py-2">
+        <div className="flex flex-row items-start gap-1 whitespace-nowrap">
+          <span className="text-fg-secondary w-16 min-w-16 text-sm">Name:</span>
+          <span className="text-sm">{toolName}</span>
+        </div>
+        <div className="flex flex-row items-start gap-1 whitespace-nowrap">
+          <span className="text-fg-secondary w-16 min-w-16 text-sm">ID:</span>
+          <span className="font-mono text-sm">{toolResultId}</span>
+        </div>
+        <div className="flex flex-row items-start gap-1">
+          <span className="text-fg-secondary w-16 min-w-16 text-sm">
+            Result:
+          </span>
+          <pre className="max-w-full font-mono text-sm break-words whitespace-pre-wrap">
+            {toolResult}
+          </pre>
+        </div>
+      </div>
     </div>
   );
 }
@@ -182,16 +275,22 @@ interface ImageMessageProps {
 
 export function ImageMessage({ url, downloadName }: ImageMessageProps) {
   return (
-    <div className="w-60 rounded bg-slate-100 p-2 text-xs text-slate-300">
-      <div className="mb-2">Image</div>
-      <Link
-        to={url}
-        target="_blank"
-        rel="noopener noreferrer"
-        download={downloadName}
-      >
-        <img src={url} alt="Image" />
-      </Link>
+    <div className="flex flex-col gap-1.5">
+      <div className="flex flex-row items-center gap-1">
+        <ImageIcon className="text-fg-muted h-3 w-3" />
+        <span className="text-fg-tertiary text-xs font-medium">Image</span>
+      </div>
+      <div>
+        <Link
+          to={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          download={downloadName}
+          className="border-border bg-bg-tertiary text-fg-tertiary flex min-h-20 w-60 items-center justify-center rounded border p-2 text-xs"
+        >
+          <img src={url} alt="Image" />
+        </Link>
+      </div>
     </div>
   );
 }
@@ -199,12 +298,40 @@ export function ImageMessage({ url, downloadName }: ImageMessageProps) {
 // Image Error Message component
 export function ImageErrorMessage() {
   return (
-    <div className="relative aspect-square w-[150px] rounded-md bg-slate-200">
-      <div className="absolute inset-0 flex flex-col items-center justify-center p-2">
-        <span className="text-center text-sm text-balance text-red-500/40">
-          Failed to retrieve image.
+    <div className="flex flex-col gap-1.5">
+      <div className="flex flex-row items-center gap-1">
+        <ImageIcon className="text-fg-muted h-3 w-3" />
+        <span className="text-fg-tertiary text-xs font-medium">
+          Image (Error)
         </span>
       </div>
+      <div className="border-border bg-bg-tertiary relative aspect-video w-60 min-w-60 rounded-md border">
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-2">
+          <ImageOff className="text-fg-muted h-4 w-4" />
+          <span className="text-fg-tertiary text-center text-xs font-medium">
+            Failed to retrieve image
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Raw Text Message component
+interface RawTextMessageProps {
+  content: string;
+}
+
+export function RawTextMessage({ content }: RawTextMessageProps) {
+  return (
+    <div className="flex max-w-200 min-w-80 flex-col gap-1.5">
+      <div className="flex flex-row items-center gap-1">
+        <AlignLeft className="text-fg-muted h-3 w-3" />
+        <span className="text-fg-tertiary text-xs font-medium">Text (Raw)</span>
+      </div>
+      <pre className="whitespace-pre-wrap">
+        <span className="font-mono text-sm">{content}</span>
+      </pre>
     </div>
   );
 }

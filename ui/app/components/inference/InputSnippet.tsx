@@ -1,6 +1,7 @@
 import type {
   ResolvedInput,
   ResolvedInputMessageContent,
+  ResolvedInputMessage,
 } from "~/utils/clickhouse/common";
 import {
   SnippetLayout,
@@ -16,71 +17,88 @@ import {
   ToolResultMessage,
   ImageMessage,
   ImageErrorMessage,
+  StructuredTextMessage,
+  RawTextMessage,
+  TextMessage,
 } from "~/components/layout/SnippetContent";
 
 interface InputSnippetProps {
   input: ResolvedInput;
 }
 
-function renderContentBlock(
-  block: ResolvedInputMessageContent,
-  role: string,
-  index: number,
-) {
+function renderContentBlock(block: ResolvedInputMessageContent, index: number) {
   switch (block.type) {
     case "text": {
-      const displayValue =
-        typeof block.value === "object"
-          ? JSON.stringify(block.value, null, 2)
-          : block.value;
-
-      return (
-        <InputMessage key={index} role={role}>
-          <InputTextMessage content={displayValue} />
-        </InputMessage>
-      );
+      if (typeof block.value === "object") {
+        return <StructuredTextMessage key={index} content={block.value} />;
+      }
+      {
+        /*
+      // Try to parse JSON strings
+      if (typeof block.value === "string") {
+        try {
+          const parsedJson = JSON.parse(block.value);
+          if (typeof parsedJson === "object") {
+            return <StructuredTextMessage key={index} content={parsedJson} />;
+          }
+        } catch (e) {
+          // Not valid JSON, continue with regular text message
+        }
+      }
+      */
+      }
+      return <InputTextMessage key={index} content={block.value} />;
     }
+
+    case "raw_text":
+      return <RawTextMessage key={index} content={block.value} />;
 
     case "tool_call":
       return (
-        <InputMessage key={index} role={role}>
-          <ToolCallMessage
-            label={`Tool: ${block.name}`}
-            content={block.arguments}
-          />
-        </InputMessage>
+        <ToolCallMessage
+          key={index}
+          toolName={block.name}
+          toolArguments={block.arguments}
+          toolCallId={block.id}
+        />
       );
 
     case "tool_result":
       return (
-        <InputMessage key={index} role={role}>
-          <ToolResultMessage
-            label={`Result from: ${block.name}`}
-            content={block.result}
-          />
-        </InputMessage>
+        <ToolResultMessage
+          key={index}
+          toolName={block.name}
+          toolResult={block.result}
+          toolResultId={block.id}
+        />
       );
 
     case "image":
       return (
-        <InputMessage key={index} role={role}>
-          <ImageMessage
-            url={block.image.url}
-            downloadName={`tensorzero_${block.storage_path.path}`}
-          />
-        </InputMessage>
+        <ImageMessage
+          key={index}
+          url={block.image.url}
+          downloadName={`tensorzero_${block.storage_path.path}`}
+        />
       );
 
     case "image_error":
-      return (
-        <InputMessage key={index} role={role}>
-          <ImageErrorMessage />
-        </InputMessage>
-      );
+      return <ImageErrorMessage key={index} />;
 
     default:
       return null;
   }
+}
+
+function renderMessage(message: ResolvedInputMessage, messageIndex: number) {
+  return (
+    <InputMessage key={messageIndex} role={message.role}>
+      {message.content.map(
+        (block: ResolvedInputMessageContent, blockIndex: number) =>
+          renderContentBlock(block, blockIndex),
+      )}
+    </InputMessage>
+  );
 }
 
 export default function InputSnippet({ input }: InputSnippetProps) {
@@ -90,31 +108,38 @@ export default function InputSnippet({ input }: InputSnippetProps) {
         <div>
           <SnippetHeading heading="System" />
           <SnippetContent>
-            <CodeMessage
-              content={
-                typeof input.system === "object"
-                  ? JSON.stringify(input.system, null, 2)
-                  : input.system
-              }
-            />
+            {typeof input.system === "object" ? (
+              <CodeMessage
+                content={JSON.stringify(input.system, null, 2)}
+                showLineNumbers={true}
+              />
+            ) : (
+              <TextMessage content={input.system} />
+            )}
           </SnippetContent>
           <SnippetDivider />
         </div>
       )}
 
       <div>
-        <SnippetHeading heading="Messages" />
-        <SnippetContent>
-          <div className="pb-4">
-            {input.messages.map((message, messageIndex) => (
-              <div key={messageIndex}>
-                {message.content.map((block, blockIndex) =>
-                  renderContentBlock(block, message.role, blockIndex),
-                )}
+        {input.messages.length === 0 ? (
+          <SnippetContent>
+            <InputMessage emptyMessage="No input messages found" />
+          </SnippetContent>
+        ) : (
+          <>
+            <SnippetHeading heading="Messages" />
+            <SnippetContent>
+              <div className="pb-4">
+                {input.messages.map((message, messageIndex) => (
+                  <div key={messageIndex}>
+                    {renderMessage(message, messageIndex)}
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        </SnippetContent>
+            </SnippetContent>
+          </>
+        )}
       </div>
     </SnippetLayout>
   );
