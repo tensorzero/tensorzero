@@ -24,10 +24,11 @@ fn get_language_for_extension(ext: &str) -> Result<Language> {
     }
 
     let lang = match ext {
-        "rs" => tree_sitter_rust::LANGUAGE,
+        "rs" => tree_sitter_rust::LANGUAGE.into(),
+        "toml" => tree_sitter_toml_ng::LANGUAGE.into(),
         _ => return Err(anyhow::anyhow!("Unsupported file extension: {}", ext)),
     };
-    w.insert(ext.to_string(), lang.into());
+    w.insert(ext.to_string(), lang);
     if let Some(lang) = w.get(ext) {
         Ok(lang.clone())
     } else {

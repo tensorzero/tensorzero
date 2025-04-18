@@ -1,5 +1,4 @@
-use anyhow::{anyhow, Result};
-use chrono::{DateTime, TimeZone, Utc};
+use anyhow::Result;
 use clap::Parser;
 use cursorzero::{
     clickhouse::get_inferences_in_time_range,
@@ -31,13 +30,28 @@ async fn main() -> Result<()> {
         println!("File: {}", file);
         for diff in diffs {
             println!("  {}", diff.content);
-            let tree = parse_hunk(&diff.content, &file.split('.').last().unwrap())?;
-            println!("  {:?}", tree);
+            let tree = parse_hunk(&diff.content, &file.split('.').last().unwrap()).ok();
+            if let Some(tree) = tree {
+                println!("  {:?}", tree);
+            } else {
+                println!("  Failed to parse");
+            }
         }
     }
     let clickhouse_url = std::env::var("CURSORZERO_CLICKHOUSE_URL")?;
     let clickhouse = ClickHouseConnectionInfo::new(&clickhouse_url).await?;
     let inferences = get_inferences_in_time_range(&clickhouse, commit_interval).await?;
     println!("Found {} inferences", inferences.len());
+    for inference in inferences {
+        println!("Inference: {}", inference.id);
+        println!(
+            "  Input: {}",
+            serde_json::to_string_pretty(&inference.input)?
+        );
+        println!(
+            "  Output: {}",
+            serde_json::to_string_pretty(&inference.output)?
+        );
+    }
     Ok(())
 }
