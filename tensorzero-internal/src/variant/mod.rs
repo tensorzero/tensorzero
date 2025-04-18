@@ -1,4 +1,3 @@
-use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use backon::ExponentialBuilder;
 use backon::Retryable;
 use futures::StreamExt;
