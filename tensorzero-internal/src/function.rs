@@ -311,7 +311,7 @@ impl FunctionConfig {
 ///
 /// Sometimes models will return no content blocks (e.g. when instructed to not return anything), so `raw_output` will be `None` then.
 fn get_json_output_from_content_blocks(
-    content_blocks: Vec<ContentBlockOutput>,
+    mut content_blocks: Vec<ContentBlockOutput>,
 ) -> (Option<String>, Vec<ContentBlockOutput>) {
     let raw_output = content_blocks
         .iter()
@@ -327,23 +327,11 @@ fn get_json_output_from_content_blocks(
             ContentBlockOutput::Text(_) | ContentBlockOutput::ToolCall(_)
         )
     });
-    let auxiliary_content = if let Some(i) = maybe_index_from_end {
+    if let Some(i) = maybe_index_from_end {
         let index_from_start = content_blocks.len() - 1 - i;
-        content_blocks
-            .into_iter()
-            .enumerate()
-            .filter_map(|(index, content_block)| {
-                if index != index_from_start {
-                    Some(content_block)
-                } else {
-                    None
-                }
-            })
-            .collect()
-    } else {
-        content_blocks
-    };
-    (raw_output, auxiliary_content)
+        content_blocks.remove(index_from_start);
+    }
+    (raw_output, content_blocks)
 }
 
 /// Validate all input messages that contain text (not raw_text).
