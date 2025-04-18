@@ -21,6 +21,7 @@ export default function FeedbackTable({
 }) {
   const config = useConfig();
   const metrics = config.metrics;
+
   return (
     <div>
       <Table>
@@ -52,7 +53,7 @@ export default function FeedbackTable({
                     />
                   </div>
                 </TableCell>
-                <TableCell>
+                <TableCell className="max-w-[200px]">
                   <FeedbackValue
                     feedback={item}
                     metric={metrics[getMetricName(item)]}

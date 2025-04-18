@@ -58,6 +58,25 @@ async fn e2e_test_float_human_feedback() {
         .send()
         .await
         .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let evaluator_inference_id = Uuid::now_v7();
+    let payload = json!({
+        "inference_id": inference_id,
+        "metric_name": "brevity_score",
+        "value": 32.8,
+        "internal": true,
+        "tags": {
+            "tensorzero::human_feedback": "true",
+            "tensorzero::datapoint_id": datapoint_id.to_string(),
+            "tensorzero::evaluator_inference_id": evaluator_inference_id.to_string()
+        }
+    });
+    let response = client
+        .post(get_gateway_endpoint("/feedback"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
     let response_json = response.json::<Value>().await.unwrap();
     let feedback_id = response_json.get("feedback_id").unwrap();
@@ -137,10 +156,19 @@ async fn e2e_test_boolean_human_feedback() {
     let inference_id = Uuid::parse_str(inference_id).unwrap();
     let serialized_inference_output =
         serde_json::to_string(response_json.get("output").unwrap()).unwrap();
-
-    // No sleeping, we should throttle in the gateway
     let datapoint_id = Uuid::now_v7();
+    // This should fail because we don't have an evaluator_inference_id
     let payload = json!({"inference_id": inference_id, "metric_name": "task_success", "internal": true, "value": true, "tags": {"tensorzero::human_feedback": "true", "tensorzero::datapoint_id": datapoint_id.to_string()}});
+    let response = client
+        .post(get_gateway_endpoint("/feedback"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    // No sleeping, we should throttle in the gateway
+    let evaluator_inference_id = Uuid::now_v7();
+    let payload = json!({"inference_id": inference_id, "metric_name": "task_success", "internal": true, "value": true, "tags": {"tensorzero::human_feedback": "true", "tensorzero::datapoint_id": datapoint_id.to_string(), "tensorzero::evaluator_inference_id": evaluator_inference_id.to_string()}});
     let response = client
         .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
