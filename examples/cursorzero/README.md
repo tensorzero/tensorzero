@@ -1,6 +1,6 @@
 # TensorZero as a Cursor proxy layer
 
-This example demonstrates how Cursor can be used as a proxy layer for Cursor. To try it out:
+This example demonstrates how TensorZero can be used as a proxy layer for Cursor. To try it out:
 
 - put credentials for whatever LLM providers you want in `.env` as in any other TensorZero deployment. Our example uses OpenAI, Anthropic, and Google AI studio. But, you can use any LLM provider TensorZero supports.
 - Set an API key to protect your gateway endpoint. For now, this requires editing `nginx/nginx.conf` where it says `your-token-here` but we'll likely switch this for an environment variable soon.
