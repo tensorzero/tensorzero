@@ -249,6 +249,82 @@ pub async fn test_provider_config_extra_body() {
     );
 }
 
+#[tokio::test]
+async fn test_default_function_default_tool_choice() {
+    let client = Client::new();
+    let episode_id = Uuid::now_v7();
+
+    let payload = json!({
+        "model_name": "openai::gpt-4o-mini",
+        "episode_id" : episode_id,
+        "input": {
+            "messages": [{"role": "user", "content": "What is the weather in NYC?"}],
+        },
+        "additional_tools": [
+            {
+                "name": "temperature_api",
+                "description": "Get the current temperature",
+                "parameters": {
+                  "$schema": "http://json-schema.org/draft-07/schema#",
+                  "type": "object",
+                  "description": "Get the current temperature in Celsius for a given location.",
+                  "properties": {
+                    "location": {
+                      "type": "string",
+                      "description": "The location to get the temperature for (e.g. \"New York\")"
+                    }
+                  },
+                  "required": ["location"],
+                  "additionalProperties": false
+                }
+                ,
+                "strict": true
+            }
+        ],
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    // Check Response is OK, then fields in order
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+    println!("Response: {response_json}");
+
+    // Check that inference_id is here
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+
+    let content_blocks = response_json.get("content").unwrap().as_array().unwrap();
+    assert_eq!(content_blocks.len(), 1);
+
+    assert_eq!(
+        content_blocks[0].get("type").unwrap().as_str().unwrap(),
+        "tool_call"
+    );
+
+    // Sleep for 100ms second to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_millis(10 - 0)).await;
+
+    // Just check 'tool_choice' in the raw request, since we already have lots of tests
+    // that check the full ChatInference/ModelInference rows
+    let clickhouse = get_clickhouse().await;
+
+    // Check the ModelInference Table
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
+    assert_eq!(inference_id_result, inference_id);
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request_json: Value = serde_json::from_str(raw_request).unwrap();
+    assert_eq!(raw_request_json["tool_choice"], "auto");
+}
+
 // Tests using 'model_name' with a shorthand model
 
 #[tokio::test]
