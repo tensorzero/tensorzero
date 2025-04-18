@@ -1,6 +1,8 @@
 // This project is used only for testing, so it's fine if it panics
 #![allow(clippy::unwrap_used, clippy::panic, clippy::expect_used)]
 
+mod fireworks;
+
 use async_stream::try_stream;
 use axum::{
     body::Body,
@@ -118,6 +120,30 @@ fn make_router() -> axum::Router {
             "/azure/openai/deployments/{deployment}/chat/completions",
             axum::routing::post(completions_handler),
         )
+        .route(
+            "/fireworks/v1/accounts/{account_id}/datasets",
+            axum::routing::post(fireworks::create_dataset),
+        )
+        .route(
+            "/fireworks/v1/accounts/{account_id}/datasets/{dataset_id}",
+            axum::routing::post(fireworks::upload_to_dataset),
+        )
+        .route(
+            "/fireworks/v1/accounts/{account_id}/datasets/{dataset_id}",
+            axum::routing::get(fireworks::get_dataset),
+        )
+        .route(
+            "/fireworks/v1/accounts/{account_id}/fineTuningJobs",
+            axum::routing::post(fireworks::create_fine_tuning_job),
+        )
+        .route(
+            "/fireworks/v1/accounts/{account_id}/fineTuningJobs/{job_id}",
+            axum::routing::get(fireworks::get_fine_tuning_job),
+        )
+        .route(
+            "/fireworks/v1/accounts/{account_id}/deployedModels",
+            axum::routing::post(fireworks::create_deployed_model),
+        )
         .route("/status", axum::routing::get(status_handler))
         .layer(TraceLayer::new_for_http())
 }
@@ -141,7 +167,7 @@ async fn get_openai_fine_tuning_job(
     if let Some(job) = job {
         job.num_polls += 1;
         if job.num_polls == SHOW_PROGRESS_AT {
-            let finish_at = chrono::Utc::now() + chrono::Duration::seconds(5);
+            let finish_at = chrono::Utc::now() + chrono::Duration::seconds(2);
             job.finish_at = Some(finish_at);
             job.val["estimated_finish"] = finish_at.timestamp().into();
         }

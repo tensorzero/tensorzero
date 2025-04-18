@@ -1,6 +1,11 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::print_stdout)]
+#[cfg(feature = "e2e_tests")]
+use super::escape_string_for_clickhouse_comparison;
 use super::ClickHouseConnectionInfo;
+use serde::Deserialize;
 use serde_json::Value;
+#[cfg(feature = "e2e_tests")]
+use std::collections::HashMap;
 use uuid::Uuid;
 
 lazy_static::lazy_static! {
@@ -383,4 +388,72 @@ pub async fn stale_datapoint_clickhouse(
     let _ = clickhouse_connection_info
         .run_query_synchronous(query, None)
         .await;
+}
+
+#[cfg(feature = "e2e_tests")]
+pub async fn select_feedback_tags_clickhouse(
+    clickhouse_connection_info: &ClickHouseConnectionInfo,
+    metric_name: &str,
+    tag_key: &str,
+    tag_value: &str,
+) -> Option<Value> {
+    clickhouse_flush_async_insert(clickhouse_connection_info).await;
+
+    let query = format!(
+            "SELECT * FROM FeedbackTag WHERE metric_name = '{}' AND key = '{}' AND value = '{}' FORMAT JSONEachRow",
+            metric_name, tag_key, tag_value
+        );
+
+    let text = clickhouse_connection_info
+        .run_query_synchronous(query, None)
+        .await
+        .unwrap();
+    let json: Value = serde_json::from_str(&text).ok()?;
+    Some(json)
+}
+
+#[derive(Debug, Deserialize)]
+pub struct StaticEvaluationHumanFeedback {
+    pub metric_name: String,
+    pub datapoint_id: Uuid,
+    pub output: String,
+    pub value: String,
+    pub feedback_id: Uuid,
+    pub evaluator_inference_id: Option<Uuid>,
+}
+
+#[cfg(feature = "e2e_tests")]
+pub async fn select_human_static_evaluation_feedback_clickhouse(
+    clickhouse_connection_info: &ClickHouseConnectionInfo,
+    metric_name: &str,
+    datapoint_id: Uuid,
+    output: &str,
+) -> Option<StaticEvaluationHumanFeedback> {
+    let datapoint_id_str = datapoint_id.to_string();
+    let escaped_output = escape_string_for_clickhouse_comparison(output);
+    let params = HashMap::from([
+        ("metric_name", metric_name),
+        ("datapoint_id", &datapoint_id_str),
+        ("output", &escaped_output),
+    ]);
+    let query = r#"
+        SELECT * FROM StaticEvaluationHumanFeedback
+        WHERE
+            metric_name = {metric_name:String}
+            AND datapoint_id = {datapoint_id:UUID}
+            AND output = {output:String}
+        FORMAT JSONEachRow"#
+        .to_string();
+    let text = clickhouse_connection_info
+        .run_query_synchronous(query, Some(&params))
+        .await
+        .unwrap();
+    if text.is_empty() {
+        // Return None if the query returns no rows
+        None
+    } else {
+        // Panic if the query fails to parse or multiple rows are returned
+        let json: StaticEvaluationHumanFeedback = serde_json::from_str(&text).unwrap();
+        Some(json)
+    }
 }

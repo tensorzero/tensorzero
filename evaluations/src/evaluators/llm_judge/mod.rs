@@ -9,25 +9,41 @@ use tensorzero::{
 use tensorzero_internal::cache::CacheEnabledMode;
 use tensorzero_internal::endpoints::datasets::Datapoint;
 use tensorzero_internal::evaluations::{
-    get_llm_judge_function_name, LLMJudgeConfig, LLMJudgeInputFormat, LLMJudgeOutputType,
+    get_evaluator_metric_name, get_llm_judge_function_name, LLMJudgeConfig, LLMJudgeInputFormat,
+    LLMJudgeOutputType,
 };
 use tensorzero_internal::inference::types::{
     ContentBlockChatOutput, JsonInferenceOutput, TextKind,
 };
 use uuid::Uuid;
 
-use crate::helpers::get_cache_options;
-use crate::ThrottledTensorZeroClient;
+use crate::helpers::{check_static_eval_human_feedback, get_cache_options};
+use crate::Clients;
 
+#[derive(Debug)]
 pub struct LLMJudgeEvaluationResult {
-    pub inference_id: Uuid,
+    pub evaluator_inference_id: Uuid,
     pub value: Value,
+    pub human_feedback: bool,
+}
+
+impl LLMJudgeEvaluationResult {
+    pub fn tags(&self) -> HashMap<String, String> {
+        if self.human_feedback {
+            HashMap::from([(
+                "tensorzero::derived_from_human_feedback".to_string(),
+                "true".to_string(),
+            )])
+        } else {
+            HashMap::new()
+        }
+    }
 }
 
 pub struct RunLLMJudgeEvaluatorParams<'a> {
     pub inference_response: &'a InferenceResponse,
     pub datapoint: &'a Datapoint,
-    pub tensorzero_client: &'a ThrottledTensorZeroClient,
+    pub clients: &'a Clients,
     pub llm_judge_config: &'a LLMJudgeConfig,
     pub evaluation_name: &'a str,
     pub evaluator_name: &'a str,
@@ -43,7 +59,7 @@ pub async fn run_llm_judge_evaluator(
     let RunLLMJudgeEvaluatorParams {
         inference_response,
         datapoint,
-        tensorzero_client,
+        clients,
         llm_judge_config,
         evaluation_name,
         evaluator_name,
@@ -51,6 +67,20 @@ pub async fn run_llm_judge_evaluator(
         input,
         inference_cache,
     } = params;
+    if let Some(human_feedback) = check_static_eval_human_feedback(
+        &clients.clickhouse_client,
+        &get_evaluator_metric_name(evaluation_name, evaluator_name),
+        datapoint.id(),
+        inference_response,
+    )
+    .await?
+    {
+        return Ok(Some(LLMJudgeEvaluationResult {
+            evaluator_inference_id: human_feedback.evaluator_inference_id,
+            value: human_feedback.value,
+            human_feedback: true,
+        }));
+    }
     let judge_input =
         match prepare_llm_judge_input(llm_judge_config, input, inference_response, datapoint)? {
             Some(input) => input,
@@ -84,14 +114,14 @@ pub async fn run_llm_judge_evaluator(
         cache_options: get_cache_options(inference_cache),
         extra_body: Default::default(),
     };
-    let result = tensorzero_client.inference(params).await?;
+    let result = clients.tensorzero_client.inference(params).await?;
     let response = match result {
         InferenceOutput::NonStreaming(response) => response,
         InferenceOutput::Streaming(..) => {
             bail!("Streaming not supported for LLM judge evaluations. This is a bug, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.")
         }
     };
-    let inference_id = response.inference_id();
+    let evaluator_inference_id = response.inference_id();
     let output = match response {
         InferenceResponse::Chat(..) => {
             bail!("Chat output not supported for LLM judge evaluations. This is a bug, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.")
@@ -111,8 +141,9 @@ pub async fn run_llm_judge_evaluator(
     };
     match value {
         Some(value) => Ok(Some(LLMJudgeEvaluationResult {
-            inference_id,
+            evaluator_inference_id,
             value,
+            human_feedback: false,
         })),
         None => Ok(None),
     }

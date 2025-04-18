@@ -580,9 +580,9 @@ pub enum ClickHouseDatapoint {
 
 #[derive(Debug, Deserialize)]
 pub struct ClickHouseChatInferenceDatapoint {
-    dataset_name: String,
+    pub dataset_name: String,
     function_name: String,
-    id: Uuid,
+    pub id: Uuid,
     episode_id: Option<Uuid>,
     #[serde(deserialize_with = "deserialize_json_string")]
     input: ResolvedInput,
@@ -601,9 +601,9 @@ pub struct ClickHouseChatInferenceDatapoint {
 
 #[derive(Debug, Deserialize)]
 pub struct ClickHouseJsonInferenceDatapoint {
-    dataset_name: String,
+    pub dataset_name: String,
     function_name: String,
-    id: Uuid,
+    pub id: Uuid,
     episode_id: Option<Uuid>,
     #[serde(deserialize_with = "deserialize_json_string")]
     input: ResolvedInput,

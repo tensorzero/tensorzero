@@ -115,6 +115,8 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
+        with:
+          save-if: ${{ github.event_name == 'merge_group' }}
       - name: "TensorZero PyO3 Client: Build"
         uses: PyO3/maturin-action@b3709a81b3e175ce3ede866725776fee42465311
         with:
@@ -300,6 +302,8 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
+        with:
+          save-if: ${{ github.event_name == 'merge_group' }}
       - name: Install cargo-nextest
         uses: taiki-e/install-action@37bdc826eaedac215f638a96472df572feab0f9b
         with:
@@ -458,21 +462,23 @@ jobs:
 
       - name: Build ui container
         # Enable feedback in the UI for this job so the playwright tests can use it
-        run: docker buildx build --build-arg VITE_TENSORZERO_UI_FF_ENABLE_FEEDBACK=1 -f ui/Dockerfile . -t tensorzero/ui
+        run: docker buildx build -f ui/Dockerfile . -t tensorzero/ui
 
       - name: Start services for ui e2e tests
         working-directory: ui
         run: |
-          echo "OPENAI_BASE_URL=http://mock-inference-provider:3030/openai" >> fixtures/.env
+          echo "OPENAI_BASE_URL=http://mock-inference-provider:3030/openai/" >> fixtures/.env
+          echo "FIREWORKS_BASE_URL=http://mock-inference-provider:3030/fireworks/" >> fixtures/.env
           echo "OPENAI_API_KEY=not_used" >> fixtures/.env
           echo "FIREWORKS_API_KEY=not_used" >> fixtures/.env
-          echo "FIREWORKS_ACCOUNT_ID=not_used" >> fixtures/.env
+          echo "FIREWORKS_ACCOUNT_ID=fake_fireworks_account" >> fixtures/.env
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures" >> fixtures/.env
           echo "TENSORZERO_GATEWAY_URL=http://gateway:3000" >> fixtures/.env
           echo "AWS_REGION=us-east-1" >> fixtures/.env
           echo "S3_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" >> fixtures/.env
           echo "S3_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> fixtures/.env
           echo "TENSORZERO_UI_FF_ENABLE_PYTHON=${{ matrix.feature_flag.enable_python }}" >> fixtures/.env
+          docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml rm
           docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml up --wait --build --force-recreate
 
       - name: Install playwright dependencies
@@ -490,7 +496,7 @@ jobs:
       - name: Print ui tests logs
         if: always()
         working-directory: ui
-        run: docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml logs
+        run: docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml logs -t
 
       - name: Upload Playwright artifacts
         if: steps.e2e_tests.outcome == 'failure'

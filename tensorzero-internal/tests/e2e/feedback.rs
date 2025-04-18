@@ -1,12 +1,7 @@
-use std::path::PathBuf;
-
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use tensorzero_internal::{
-    clickhouse::{
-        test_helpers::{clickhouse_flush_async_insert, select_feedback_clickhouse},
-        ClickHouseConnectionInfo,
-    },
+    clickhouse::test_helpers::{select_feedback_clickhouse, select_feedback_tags_clickhouse},
     inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Role, Text, TextKind},
 };
 use tokio::time::{sleep, Duration};
@@ -14,20 +9,8 @@ use tracing_test::traced_test;
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
-use tensorzero_internal::clickhouse::test_helpers::{get_clickhouse, CLICKHOUSE_URL};
-
-async fn make_embedded_gateway() -> tensorzero::Client {
-    let mut config_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    config_path.push("tests/e2e/tensorzero.toml");
-    tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
-        config_file: Some(config_path),
-        clickhouse_url: Some(CLICKHOUSE_URL.clone()),
-        timeout: None,
-    })
-    .build()
-    .await
-    .unwrap()
-}
+use crate::providers::common::make_embedded_gateway;
+use tensorzero_internal::clickhouse::test_helpers::get_clickhouse;
 
 #[tokio::test]
 async fn e2e_test_comment_feedback() {
@@ -408,6 +391,88 @@ async fn e2e_test_demonstration_feedback_json() {
     let response_json = response.json::<Value>().await.unwrap();
     let error_message = response_json.get("error").unwrap().as_str().unwrap();
     assert!(error_message.starts_with("Demonstration does not fit function output schema:"));
+}
+
+#[tokio::test]
+async fn e2e_test_demonstration_feedback_llm_judge() {
+    let client = Client::new();
+    // Run inference (standard, no dryrun) to get an inference_id
+    let old_output_schema = json!({
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "required": ["thinking", "score"],
+        "additionalProperties": false,
+        "properties": {
+          "thinking": {
+            "type": "string",
+            "description": "The reasoning or thought process behind the judgment"
+          },
+          "score": {
+            "type": "number",
+            "description": "The score assigned as a number"
+          }
+        }
+    });
+    let inference_payload = serde_json::json!({
+        "function_name": "tensorzero::llm_judge::haiku_without_outputs::topic_starts_with_f",
+        "input": {
+            "messages": [{"role": "user", "content": [
+                {"type": "text", "arguments": {"input": "foo", "reference_output": null, "generated_output": "A poem about a cat"}},
+            ]}]
+        },
+        "stream": false,
+        "output_schema": old_output_schema,
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&inference_payload)
+        .send()
+        .await
+        .unwrap();
+    assert!(response.status().is_success());
+    let response_json = response.json::<Value>().await.unwrap();
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+
+    // No sleeping, we should throttle in the gateway
+    // Test demonstration feedback on an inference that requires the dynamic output schema
+    let payload = json!({
+        "inference_id": inference_id,
+        "metric_name": "demonstration",
+        "value": {"score": 0.5}
+    });
+    let response = client
+        .post(get_gateway_endpoint("/feedback"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+    let feedback_id = response_json.get("feedback_id").unwrap();
+    assert!(feedback_id.is_string());
+    let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
+    sleep(Duration::from_millis(200)).await;
+
+    // Check ClickHouse
+    let clickhouse = get_clickhouse().await;
+    let result = select_feedback_clickhouse(&clickhouse, "DemonstrationFeedback", feedback_id)
+        .await
+        .unwrap();
+    let id = result.get("id").unwrap().as_str().unwrap();
+    let id_uuid = Uuid::parse_str(id).unwrap();
+    assert_eq!(id_uuid, feedback_id);
+    let retrieved_inference_id = result.get("inference_id").unwrap().as_str().unwrap();
+    let retrieved_inference_id_uuid = Uuid::parse_str(retrieved_inference_id).unwrap();
+    assert_eq!(retrieved_inference_id_uuid, inference_id);
+    let retrieved_value = result.get("value").unwrap().as_str().unwrap();
+    let retrieved_value = serde_json::from_str::<JsonInferenceOutput>(retrieved_value).unwrap();
+    let expected_value = JsonInferenceOutput {
+        parsed: Some(json!({"score": 0.5})),
+        raw: Some("{\"score\":0.5}".to_string()),
+    };
+    assert_eq!(retrieved_value, expected_value);
 }
 
 #[tokio::test]
@@ -1224,27 +1289,6 @@ async fn e2e_test_boolean_feedback() {
     assert!(retrieved_value);
     let metric_name = result.get("metric_name").unwrap().as_str().unwrap();
     assert_eq!(metric_name, "goal_achieved");
-}
-
-async fn select_feedback_tags_clickhouse(
-    clickhouse_connection_info: &ClickHouseConnectionInfo,
-    metric_name: &str,
-    tag_key: &str,
-    tag_value: &str,
-) -> Option<Value> {
-    clickhouse_flush_async_insert(clickhouse_connection_info).await;
-
-    let query = format!(
-        "SELECT * FROM FeedbackTag WHERE metric_name = '{}' AND key = '{}' AND value = '{}' FORMAT JSONEachRow",
-        metric_name, tag_key, tag_value
-    );
-
-    let text = clickhouse_connection_info
-        .run_query_synchronous(query, None)
-        .await
-        .unwrap();
-    let json: Value = serde_json::from_str(&text).ok()?;
-    Some(json)
 }
 
 #[tokio::test(flavor = "multi_thread")]
