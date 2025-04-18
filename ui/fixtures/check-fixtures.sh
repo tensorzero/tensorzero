@@ -64,14 +64,40 @@ done
 echo "==============================================="
 if [ $mismatch -eq 0 ]; then
     echo "All fixture table counts match!"
-    echo "Weird datapoint MIN query:"
-    echo $(clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword \
-              --database tensorzero_ui_fixtures --query "SELECT id FROM FloatMetricFeedbackByTargetId WHERE toUInt128(id) = (SELECT MIN(toUInt128(id)) FROM FloatMetricFeedbackByTargetId WHERE target_id = '0196368f-1b05-7181-b50c-e2ea0acea312')")
-    echo "Weird datapoint MAX query:"
-    echo $(clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword \
-              --database tensorzero_ui_fixtures --query "SELECT id FROM FloatMetricFeedbackByTargetId WHERE toUInt128(id) = (SELECT MAX(toUInt128(id)) FROM FloatMetricFeedbackByTargetId WHERE target_id = '0196368f-1b05-7181-b50c-e2ea0acea312')")
-    
-    exit 0
+
+    duplicate_found=0
+    tables_to_check_duplicates=("FloatMetricFeedbackByTargetId" "BooleanMetricFeedbackByTargetId")
+
+    for table in "${tables_to_check_duplicates[@]}"; do
+        echo "Checking for duplicate ids in $table..."
+        duplicates=$(clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword \
+                      --database tensorzero_ui_fixtures --query "SELECT
+        id,
+        count() AS duplicate_count
+    FROM $table
+    GROUP BY id
+    HAVING duplicate_count > 1;" 2>/dev/null || echo "ERROR")
+
+        if [[ "$duplicates" == "ERROR" ]]; then
+            echo "  ERROR accessing ClickHouse for $table"
+            duplicate_found=1 # Treat error as a potential problem
+        elif [ -z "$duplicates" ]; then
+            echo "  OK: No duplicate ids found in $table."
+        else
+            echo "  WARNING: Duplicate ids found in $table:"
+            echo "$duplicates"
+            duplicate_found=1
+        fi
+        echo
+    done
+
+    if [ $duplicate_found -eq 0 ]; then
+        echo "No duplicate ids found in checked tables."
+        exit 0
+    else
+        echo "Duplicate ids found or error occurred during check. Please review output."
+        exit 1
+    fi
 else
     echo "Some fixture table counts don't match. Please check the output above."
     exit 1
