@@ -481,7 +481,7 @@ jobs:
           docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml rm
           docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml up --wait --build --force-recreate
 
-      - name: Sleep 10 seconds B
+      - name: Sleep 10 seconds C
         run: sleep 10
 
       - name: Install playwright dependencies
