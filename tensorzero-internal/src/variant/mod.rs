@@ -635,7 +635,6 @@ mod tests {
     use crate::minijinja_util::tests::get_test_template_config;
     use crate::model::{ModelProvider, ProviderConfig};
     use crate::tool::{ToolCallConfig, ToolChoice};
-    use reqwest::header::DNT;
     use reqwest::Client;
     use serde_json::json;
     use std::collections::HashMap;
