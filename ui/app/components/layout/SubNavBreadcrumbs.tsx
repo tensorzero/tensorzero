@@ -123,10 +123,17 @@ export function SubNavBreadcrumbs() {
         }
 
         if (prevSegment === "datasets") {
-          breadcrumbs.push({
-            label: segment,
-            href: `/datasets/${segment}`,
-          });
+          if (segment === "builder") {
+            breadcrumbs.push({
+              label: "Builder",
+              href: `/datasets/builder`,
+            });
+          } else {
+            breadcrumbs.push({
+              label: segment,
+              href: `/datasets/${segment}`,
+            });
+          }
           continue;
         }
 
