@@ -121,8 +121,9 @@ async fn query_inference_for_datapoint(
   -- Processing time
   IF(i.function_type = 'chat', c.processing_time_ms, j.processing_time_ms) AS processing_time_ms,
 
-  -- JSON-specific column
+  -- JSON-specific columns
   IF(i.function_type = 'json', j.output_schema, '') AS output_schema,
+  IF(i.function_type = 'json', j.auxiliary_content, '') AS auxiliary_content,
 
   -- Timestamps & tags
   IF(i.function_type = 'chat',
