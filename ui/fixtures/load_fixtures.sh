@@ -18,7 +18,7 @@ sleep 1
 
 ./check-fixtures.sh
 
-# -----
+# ------
 
 DATABASE="tensorzero_ui_fixtures"
 
