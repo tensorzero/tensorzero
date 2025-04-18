@@ -507,7 +507,7 @@ fn find_function(params: &Params, config: &Config) -> Result<(Arc<FunctionConfig
                     user_schema: None,
                     assistant_schema: None,
                     tools: vec![],
-                    tool_choice: ToolChoice::None,
+                    tool_choice: ToolChoice::Auto,
                     parallel_tool_calls: None,
                     description: None,
                 })),
