@@ -9152,7 +9152,7 @@ pub async fn check_dynamic_json_mode_inference_response(
 }
 
 pub async fn test_json_mode_streaming_inference_request_with_provider(provider: E2ETestProvider) {
-    if provider.variant_name.contains("tgi") {
+    if provider.variant_name.contains("tgi") || provider.variant_name.contains("cot") {
         // TGI does not support streaming in JSON mode (because it doesn't support streaming tools)
         return;
     }
