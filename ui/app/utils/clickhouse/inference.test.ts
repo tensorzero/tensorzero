@@ -662,7 +662,6 @@ test("queryModelInferencesByInferenceId", async () => {
   const modelInferences = await queryModelInferencesByInferenceId(
     "0195aef6-6cee-75e3-9097-f7bdf6e9c9af",
   );
-  console.log(modelInferences);
   expect(modelInferences.length).toBe(1);
   const firstInference = modelInferences[0];
   expect(firstInference.id).toBe("0195aef6-77a9-7ce1-8910-016c2bef9cec");
