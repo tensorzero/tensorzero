@@ -50,7 +50,7 @@ test("should display inferences with image content", async ({ page }) => {
 
 test("tag navigation works by evaluation_name", async ({ page }) => {
   await page.goto(
-    "/observability/inferences/0196368f-1b05-7181-b50c-e2ea0acea312", //x1
+    "/observability/inferences/0196368f-1b05-7181-b50c-e2ea0acea312", //x2
   );
 
   // Wait for page to load
