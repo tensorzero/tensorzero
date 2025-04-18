@@ -26,16 +26,16 @@ for table in "${!all_tables[@]}"; do
     # Get total count from database
     db_count=$(clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword \
               --database tensorzero_ui_fixtures --query "SELECT count() FROM $table" 2>/dev/null || echo "ERROR")
-    
+
     if [[ "$db_count" == "ERROR" ]]; then
         echo "  $table: ERROR accessing ClickHouse"
         mismatch=1
         continue
     fi
-    
+
     # Get the list of files for this table
     read -r -a files <<< "${all_tables[$table]}"
-    
+
     # Count total non-empty lines across all source files
     total_file_count=0
     for file in "${files[@]}"; do
@@ -48,7 +48,7 @@ for table in "${!all_tables[@]}"; do
             mismatch=1
         fi
     done
-    
+
     # Compare counts
     if [ "$db_count" -eq "$total_file_count" ]; then
         echo "  $table: OK (expected: $total_file_count, actual: $db_count rows)"
