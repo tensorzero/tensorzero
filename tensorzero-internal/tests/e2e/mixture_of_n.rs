@@ -717,9 +717,6 @@ async fn e2e_test_mixture_of_n_extra_body() {
               ],
               "model": "gpt-4o-mini-2024-07-18",
               "stream": false,
-              "response_format": {
-                "type": "text"
-              },
               "temperature": 0.123
             });
             assert_eq!(raw_request, expected_request);
@@ -740,9 +737,6 @@ async fn e2e_test_mixture_of_n_extra_body() {
               ],
               "model": "o1-2024-12-17",
               "stream": false,
-              "response_format": {
-                "type": "text"
-              }
             });
             assert_eq!(raw_request, expected_request);
         }
