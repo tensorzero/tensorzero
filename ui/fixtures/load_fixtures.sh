@@ -18,7 +18,7 @@ sleep 1
 
 ./check-fixtures.sh
 
-# Create the marker file to signal completion for the healthcheckx
+# Create the marker file to signal completion for the healthcheckxx
 # Write it to an ephemeral location to make sure that we don't see a marker file
 # from a previous container run.
 touch /tmp/load_complete.marker
