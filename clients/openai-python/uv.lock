@@ -379,12 +379,14 @@ name = "tensorzero"
 source = { directory = "../python-pyo3" }
 dependencies = [
     { name = "httpx" },
+    { name = "typing-extensions" },
     { name = "uuid-utils" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "httpx", specifier = ">=0.27.0" },
+    { name = "typing-extensions", specifier = ">=4.12.2" },
     { name = "uuid-utils", specifier = ">=0.9.0" },
 ]
 
