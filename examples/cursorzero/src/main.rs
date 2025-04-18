@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::Parser;
-use cursorzero::get_last_commit_from_repo;
+use cursorzero::git::{get_diff_by_file, get_last_commit_from_repo};
 use git2::Repository;
 #[derive(Parser, Debug)]
 struct Cli {
@@ -17,6 +17,13 @@ async fn main() -> Result<()> {
         "Found last commit with message: {}",
         commit.message().unwrap()
     );
+    let diffs = get_diff_by_file(&repo, &commit)?;
+    for (file, diffs) in diffs {
+        println!("File: {}", file);
+        for diff in diffs {
+            println!("  {}", diff.content);
+        }
+    }
 
     Ok(())
 }
