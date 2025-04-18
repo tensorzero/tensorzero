@@ -6,6 +6,7 @@ mod clickhouse;
 mod common;
 mod datasets;
 mod dicl;
+mod dynamic_evaluations;
 mod fallback;
 mod feedback;
 mod health;
