@@ -1170,11 +1170,17 @@ name = "cursorzero"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "clap",
  "git2",
+ "serde",
+ "serde_json",
+ "tensorzero",
+ "tensorzero-internal",
  "tokio",
  "tree-sitter",
  "tree-sitter-rust",
+ "uuid",
 ]
 
 [[package]]

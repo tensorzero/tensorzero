@@ -1,6 +1,7 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use anyhow::{anyhow, Result};
+use chrono::{DateTime, TimeZone, Utc};
 use git2::{Commit, DiffDelta, DiffOptions, Repository};
 
 /// Gets the last commit from a repository
@@ -155,4 +156,27 @@ struct Chunk {
     end: usize,
     buf: String,
     last_seen_lineno: usize,
+}
+
+pub struct CommitInterval {
+    pub commit_timestamp: DateTime<Utc>,
+    pub parent_timestamp: Option<DateTime<Utc>>,
+}
+
+pub fn get_commit_timestamp_and_parent_timestamp(commit: &Commit) -> Result<CommitInterval> {
+    let commit_time_unix = commit.time().seconds();
+    let commit_timestamp = Utc
+        .timestamp_opt(commit_time_unix, 0)
+        .single()
+        .ok_or_else(|| anyhow!("Failed to convert commit timestamp"))?;
+    let parent_timestamp = commit.parent(0).ok().and_then(|p| {
+        let parent_time_unix = p.time().seconds();
+        Utc.timestamp_opt(parent_time_unix, 0).single()
+    });
+    println!("Commit timestamp: {}", commit_timestamp);
+    println!("Parent timestamp: {}", parent_timestamp.unwrap_or_default());
+    Ok(CommitInterval {
+        commit_timestamp,
+        parent_timestamp,
+    })
 }
