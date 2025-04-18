@@ -39,7 +39,7 @@ source /build/optimizations-server/.venv/bin/activate
 # TODO: use 'uv run' once this issue is fixed: https://github.com/astral-sh/uv/issues/9191
 #RUST_LOG=trace uv run --verbose --frozen --no-dev fastapi run --port 7000 src/ &
 
-fastapi run --port 7000 /build/optimizations-server/src/ &
+uv run uvicorn --app-dir /build/optimizations-server --port 7000 src:app --log-level warning &
 
 # Wait for any process to exit
 wait -n
