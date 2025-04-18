@@ -3,18 +3,6 @@ use serde_json::Value;
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(transparent)]
-pub struct ExtraHeadersConfig {
-    pub data: Vec<ExtraHeader>,
-}
-
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
-pub struct ExtraHeader {
-    pub name: String,
-    pub value: String,
-}
-
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
-#[serde(transparent)]
 pub struct ExtraBodyConfig {
     pub data: Vec<ExtraBodyReplacement>,
 }
@@ -63,7 +51,6 @@ pub struct FilteredInferenceExtraBody {
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct FullExtraBodyConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub variant_extra_headers: Option<ExtraHeadersConfig>,
     pub extra_body: Option<ExtraBodyConfig>,
     pub inference_extra_body: FilteredInferenceExtraBody,
 }

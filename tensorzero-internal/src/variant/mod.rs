@@ -18,8 +18,10 @@ use crate::error::Error;
 use crate::error::ErrorDetails;
 use crate::function::FunctionConfig;
 use crate::inference::types::batch::StartBatchModelInferenceWithMetadata;
-use crate::inference::types::extra_body::FullExtraBodyConfig;
-use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
+use crate::inference::types::extra_body::{FullExtraBodyConfig, UnfilteredInferenceExtraBody};
+use crate::inference::types::extra_headers::{
+    FullExtraHeadersConfig, UnfilteredInferenceExtraHeaders,
+};
 use crate::inference::types::ResolvedInput;
 use crate::inference::types::{
     FunctionType, InferenceResultChunk, InferenceResultStream, ModelInferenceRequest,
@@ -68,6 +70,7 @@ pub struct InferenceConfig<'a, 'request> {
     pub variant_name: Option<&'request str>,
     pub ids: InferenceIds,
     pub extra_body: UnfilteredInferenceExtraBody,
+    pub extra_headers: UnfilteredInferenceExtraHeaders,
     /// Optional arbitrary data, only used when constructing the cache key.
     /// This is used by best_of_n/mixture_of_n to force different sub-variants
     /// to have different cache keys.
@@ -109,6 +112,7 @@ impl<'a> BatchInferenceConfig<'a> {
                 },
                 // Not yet supported for batch inference requests
                 extra_body: Default::default(),
+                extra_headers: Default::default(),
                 extra_cache_key: None,
             },
         )
@@ -410,6 +414,7 @@ fn prepare_model_inference_request<'a, 'request>(
     inference_params: &InferenceParams,
     base_json_mode: Option<JsonMode>,
     extra_body: FullExtraBodyConfig,
+    extra_headers: FullExtraHeadersConfig,
 ) -> Result<ModelInferenceRequest<'request>, Error>
 where
     'a: 'request,
@@ -439,6 +444,7 @@ where
                 function_type: FunctionType::Chat,
                 output_schema: inference_config.dynamic_output_schema.map(|v| &v.value),
                 extra_body,
+                extra_headers,
                 extra_cache_key: inference_config.extra_cache_key.clone(),
             }
         }
@@ -474,6 +480,7 @@ where
                 function_type: FunctionType::Json,
                 output_schema,
                 extra_body,
+                extra_headers,
                 extra_cache_key: inference_config.extra_cache_key.clone(),
             }
         }
@@ -628,6 +635,7 @@ mod tests {
     use crate::minijinja_util::tests::get_test_template_config;
     use crate::model::{ModelProvider, ProviderConfig};
     use crate::tool::{ToolCallConfig, ToolChoice};
+    use reqwest::header::DNT;
     use reqwest::Client;
     use serde_json::json;
     use std::collections::HashMap;
@@ -658,6 +666,7 @@ mod tests {
                 episode_id: Uuid::now_v7(),
             },
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
 
@@ -709,6 +718,7 @@ mod tests {
             &inference_params,
             Some(json_mode),
             Default::default(),
+            Default::default(),
         )
         .unwrap();
 
@@ -758,6 +768,7 @@ mod tests {
             &inference_params,
             Some(json_mode),
             Default::default(),
+            Default::default(),
         )
         .unwrap();
 
@@ -792,6 +803,7 @@ mod tests {
             variant_name: Some("test_variant"),
             dynamic_output_schema: Some(&dynamic_output_schema),
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
         let json_mode = JsonMode::ImplicitTool;
@@ -804,6 +816,7 @@ mod tests {
             stream,
             &inference_params,
             Some(json_mode),
+            Default::default(),
             Default::default(),
         )
         .unwrap();
@@ -828,6 +841,7 @@ mod tests {
             &inference_params,
             Some(json_mode),
             Default::default(),
+            Default::default(),
         )
         .unwrap();
 
@@ -846,6 +860,7 @@ mod tests {
             stream,
             &inference_params,
             Some(json_mode),
+            Default::default(),
             Default::default(),
         )
         .unwrap();
@@ -883,6 +898,7 @@ mod tests {
                 episode_id: Uuid::now_v7(),
             },
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
 
@@ -920,6 +936,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             ..Default::default()
         };
 
@@ -1027,6 +1044,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Json,
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             ..Default::default()
         };
 
@@ -1158,6 +1176,7 @@ mod tests {
                 episode_id: Uuid::now_v7(),
             },
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
 
@@ -1195,6 +1214,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             ..Default::default()
         };
 
@@ -1348,6 +1368,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             ..Default::default()
         };
 
@@ -1470,6 +1491,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             ..Default::default()
         };
 

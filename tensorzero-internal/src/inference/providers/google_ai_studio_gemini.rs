@@ -156,6 +156,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
         })?;
         let headers = inject_extra_request_data(
             &request.extra_body,
+            &request.extra_headers,
             model_provider,
             model_name,
             &mut request_body,
@@ -254,6 +255,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
         })?;
         let headers = inject_extra_request_data(
             &request.extra_body,
+            &request.extra_headers,
             model_provider,
             model_name,
             &mut request_body,

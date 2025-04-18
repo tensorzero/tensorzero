@@ -113,6 +113,7 @@ pub async fn run_llm_judge_evaluator(
         credentials: HashMap::new(),
         cache_options: get_cache_options(inference_cache),
         extra_body: Default::default(),
+        extra_headers: Default::default(),
     };
     let result = clients.tensorzero_client.inference(params).await?;
     let response = match result {

@@ -206,6 +206,7 @@ impl InferenceProvider for OpenAIProvider {
         let mut request_body = self.make_body(request)?;
         let headers = inject_extra_request_data(
             &request.request.extra_body,
+            &request.request.extra_headers,
             model_provider,
             request.model_name,
             &mut request_body,
@@ -323,6 +324,7 @@ impl InferenceProvider for OpenAIProvider {
             })?;
         let headers = inject_extra_request_data(
             &request.extra_body,
+            &request.extra_headers,
             model_provider,
             model_name,
             &mut request_body,

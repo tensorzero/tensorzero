@@ -1,8 +1,8 @@
 use crate::inference::types::batch::deserialize_json_string;
 use crate::inference::types::batch::deserialize_optional_json_string;
 use derive_builder::Builder;
-use extra_body::FullExtraBodyConfig;
-use extra_body::UnfilteredInferenceExtraBody;
+use extra_body::{FullExtraBodyConfig, UnfilteredInferenceExtraBody};
+use extra_headers::{FullExtraHeadersConfig, UnfilteredInferenceExtraHeaders};
 use futures::stream::Peekable;
 use futures::Stream;
 use image::sanitize_raw_request;
@@ -40,6 +40,7 @@ use crate::{jsonschema_util::DynamicJSONSchema, tool::ToolCallConfigDatabaseInse
 
 pub mod batch;
 pub mod extra_body;
+pub mod extra_headers;
 pub mod image;
 pub mod resolved_input;
 pub mod storage;
@@ -383,6 +384,7 @@ pub struct ModelInferenceRequest<'a> {
     pub function_type: FunctionType,
     pub output_schema: Option<&'a Value>,
     pub extra_body: FullExtraBodyConfig,
+    pub extra_headers: FullExtraHeadersConfig,
     /// Optional arbitrary data, only used when constructing the cache key.
     /// This is used by best_of_n/mixture_of_n to force different sub-variants
     /// to have different cache keys.
@@ -628,6 +630,7 @@ pub struct ChatInferenceDatabaseInsert {
     pub tags: HashMap<String, String>,
     #[serde(default)]
     pub extra_body: UnfilteredInferenceExtraBody,
+    pub extra_headers: UnfilteredInferenceExtraHeaders,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -647,6 +650,7 @@ pub struct JsonInferenceDatabaseInsert {
     pub tags: HashMap<String, String>,
     #[serde(default)]
     pub extra_body: UnfilteredInferenceExtraBody,
+    pub extra_headers: UnfilteredInferenceExtraHeaders,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -1093,6 +1097,7 @@ impl ChatInferenceDatabaseInsert {
             processing_time_ms,
             tags: metadata.tags,
             extra_body: metadata.extra_body,
+            extra_headers: metadata.extra_headers,
         }
     }
 }
@@ -1121,6 +1126,7 @@ impl JsonInferenceDatabaseInsert {
             output_schema: json_result.output_schema,
             tags: metadata.tags,
             extra_body: metadata.extra_body,
+            extra_headers: metadata.extra_headers,
         }
     }
 }
@@ -1284,6 +1290,7 @@ pub struct CollectChunksArgs<'a, 'b> {
     pub tool_config: Option<&'b ToolCallConfig>,
     pub cached: bool,
     pub extra_body: UnfilteredInferenceExtraBody,
+    pub extra_headers: UnfilteredInferenceExtraHeaders,
 }
 
 // Modify the collect_chunks function to accept CollectChunksArgs
@@ -1307,6 +1314,7 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
         tool_config,
         cached,
         extra_body,
+        extra_headers,
     } = args;
 
     // NOTE: We will eventually need this to be per-inference-response-type and sensitive to the type of variant and function being called.
@@ -1524,6 +1532,7 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
         templates,
         dynamic_output_schema: dynamic_output_schema.as_ref(),
         extra_body,
+        extra_headers,
         extra_cache_key: None,
     };
     function
@@ -2331,6 +2340,7 @@ mod tests {
             tool_config: None,
             cached: false,
             extra_body: Default::default(),
+            extra_headers: Default::default(),
         };
         let result = collect_chunks(collect_chunks_args).await;
         assert_eq!(
@@ -2394,6 +2404,7 @@ mod tests {
             tool_config: None,
             cached: false,
             extra_body: Default::default(),
+            extra_headers: Default::default(),
         };
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         let chat_result = match result {
@@ -2489,6 +2500,7 @@ mod tests {
             tool_config: None,
             cached: false,
             extra_body: Default::default(),
+            extra_headers: Default::default(),
         };
         let response = collect_chunks(collect_chunks_args).await.unwrap();
         match response {
@@ -2567,6 +2579,7 @@ mod tests {
             tool_config: None,
             cached: false,
             extra_body: Default::default(),
+            extra_headers: Default::default(),
         };
         let result = collect_chunks(collect_chunks_args).await;
         assert!(result.is_ok());
@@ -2647,6 +2660,7 @@ mod tests {
             tool_config: None,
             cached: false,
             extra_body: Default::default(),
+            extra_headers: Default::default(),
         };
         let result = collect_chunks(collect_chunks_args).await;
         if let Ok(InferenceResult::Chat(chat_response)) = result {
@@ -2750,6 +2764,7 @@ mod tests {
             tool_config: None,
             cached: false,
             extra_body: Default::default(),
+            extra_headers: Default::default(),
         };
         let response = collect_chunks(collect_chunks_args).await.unwrap();
         match response {
@@ -2857,6 +2872,7 @@ mod tests {
             tool_config: None,
             cached: false,
             extra_body: Default::default(),
+            extra_headers: Default::default(),
         };
         let response = collect_chunks(collect_chunks_args).await.unwrap();
         match response {

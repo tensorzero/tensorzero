@@ -7,7 +7,8 @@ use serde_json::{map::Entry, Map, Value};
 use crate::{
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
     inference::types::{
-        extra_body::{ExtraHeader, FullExtraBodyConfig, InferenceExtraBody},
+        extra_body::{FullExtraBodyConfig, InferenceExtraBody},
+        extra_headers::{ExtraHeader, FilteredInferenceExtraHeaders, FullExtraHeadersConfig},
         ProviderInferenceResponseChunk,
     },
     model::{fully_qualified_name, ModelProviderRequestInfo},
@@ -16,6 +17,7 @@ use crate::{
 #[must_use = "Extra headers must be inserted into request builder"]
 pub fn inject_extra_request_data(
     config: &FullExtraBodyConfig,
+    extra_headers_config: &FullExtraHeadersConfig,
     model_provider_data: impl Into<ModelProviderRequestInfo>,
     model_name: &str,
     body: &mut serde_json::Value,
@@ -72,9 +74,12 @@ pub fn inject_extra_request_data(
     // Write the variant extra_headers first, then the model_provider extra_headers.
     // This way, the model_provider extra_headers will overwrite keys in the
     // variant extra_headers.
-    for extra_headers in [&config.variant_extra_headers, &model_provider.extra_headers]
-        .into_iter()
-        .flatten()
+    for extra_headers in [
+        &extra_headers_config.variant_extra_headers,
+        &model_provider.extra_headers,
+    ]
+    .into_iter()
+    .flatten()
     {
         for ExtraHeader { name, value } in &extra_headers.data {
             headers.insert(
@@ -245,9 +250,8 @@ mod tests {
     use futures::{stream, StreamExt};
 
     use crate::inference::types::{
-        extra_body::{
-            ExtraBodyConfig, ExtraBodyReplacement, ExtraHeadersConfig, FilteredInferenceExtraBody,
-        },
+        extra_body::{ExtraBodyConfig, ExtraBodyReplacement, FilteredInferenceExtraBody},
+        extra_headers::ExtraHeadersConfig,
         ContentBlockChunk, TextChunk,
     };
 
@@ -317,6 +321,7 @@ mod tests {
         let mut body = serde_json::json!({});
         inject_extra_request_data(
             &Default::default(),
+            &Default::default(),
             ModelProviderRequestInfo {
                 provider_name: "dummy_provider".into(),
                 extra_body: Default::default(),
@@ -334,7 +339,6 @@ mod tests {
         let mut body = serde_json::json!({});
         inject_extra_request_data(
             &FullExtraBodyConfig {
-                variant_extra_headers: None,
                 extra_body: Some(ExtraBodyConfig { data: vec![] }),
                 inference_extra_body: FilteredInferenceExtraBody {
                     data: vec![InferenceExtraBody::Provider {
@@ -344,6 +348,7 @@ mod tests {
                     }],
                 },
             },
+            &Default::default(),
             ModelProviderRequestInfo {
                 extra_headers: None,
                 provider_name: "dummy_provider".into(),
@@ -359,6 +364,7 @@ mod tests {
     #[test]
     fn test_inject_to_non_map() {
         let err = inject_extra_request_data(
+            &Default::default(),
             &Default::default(),
             ModelProviderRequestInfo {
                 provider_name: "dummy_provider".into(),
@@ -379,7 +385,8 @@ mod tests {
     #[test]
     fn test_inject_headers() {
         let headers = inject_extra_request_data(
-            &FullExtraBodyConfig {
+            &Default::default(),
+            &FullExtraHeadersConfig {
                 variant_extra_headers: Some(ExtraHeadersConfig {
                     data: vec![
                         ExtraHeader {
@@ -392,8 +399,7 @@ mod tests {
                         },
                     ],
                 }),
-                extra_body: None,
-                inference_extra_body: FilteredInferenceExtraBody { data: vec![] },
+                inference_extra_headers: FilteredInferenceExtraHeaders { data: vec![] },
             },
             ModelProviderRequestInfo {
                 provider_name: "dummy_provider".into(),
@@ -436,7 +442,6 @@ mod tests {
         });
         inject_extra_request_data(
             &FullExtraBodyConfig {
-                variant_extra_headers: None,
                 extra_body: Some(ExtraBodyConfig {
                     data: vec![
                         ExtraBodyReplacement {
@@ -461,6 +466,7 @@ mod tests {
                     }],
                 },
             },
+            &Default::default(),
             ModelProviderRequestInfo {
                 provider_name: "dummy_provider".into(),
                 extra_body: Default::default(),
@@ -497,7 +503,6 @@ mod tests {
         });
         inject_extra_request_data(
             &FullExtraBodyConfig {
-                variant_extra_headers: None,
                 extra_body: Some(ExtraBodyConfig {
                     data: vec![
                         ExtraBodyReplacement {
@@ -524,6 +529,7 @@ mod tests {
                     }],
                 },
             },
+            &Default::default(),
             ModelProviderRequestInfo {
                 provider_name: "dummy_provider".into(),
                 extra_body: Some(ExtraBodyConfig {
