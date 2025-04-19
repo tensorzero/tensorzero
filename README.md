@@ -385,7 +385,7 @@ _More coming soon..._
   </tr>
   <tr>
     <td width="50%" align="center" valign="middle"><img src="https://github.com/user-attachments/assets/f4bf54e3-1b63-46c8-be12-2eaabf615699"></td>
-    <td width="50%" align="left" valign="middle">  
+    <td width="50%" align="left" valign="middle">
 <pre><code class="language-bash">docker compose run --rm evaluations \
   --evaluation-name extract_data \
   --dataset-name hard_test_cases \
