@@ -32,8 +32,7 @@ function renderContentBlock(block: ResolvedInputMessageContent, index: number) {
       if (typeof block.value === "object") {
         return <StructuredTextMessage key={index} content={block.value} />;
       }
-      {
-        /*
+
       // Try to parse JSON strings
       if (typeof block.value === "string") {
         try {
@@ -41,12 +40,11 @@ function renderContentBlock(block: ResolvedInputMessageContent, index: number) {
           if (typeof parsedJson === "object") {
             return <StructuredTextMessage key={index} content={parsedJson} />;
           }
-        } catch (e) {
+        } catch {
           // Not valid JSON, continue with regular text message
         }
       }
-      */
-      }
+
       return <InputTextMessage key={index} content={block.value} />;
     }
 
