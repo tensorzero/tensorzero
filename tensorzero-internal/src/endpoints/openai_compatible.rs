@@ -857,7 +857,7 @@ struct OpenAICompatibleResponseChunk {
 struct OpenAICompatibleChoiceChunk {
     index: u32,
     finish_reason: Option<OpenAICompatibleFinishReason>,
-    logprobs: Option<f32>, // This is not really the type and we always set to None for serialization
+    logprobs: Option<()>, // This is always set to None for now
     delta: OpenAICompatibleDelta,
 }
 
