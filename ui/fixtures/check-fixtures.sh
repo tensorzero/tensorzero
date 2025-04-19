@@ -9,7 +9,9 @@ echo "==============================================="
 declare -A all_tables
 all_tables["JsonInference"]="json_inference_examples.jsonl"
 all_tables["BooleanMetricFeedback"]="boolean_metric_feedback_examples.jsonl"
+all_tables["BooleanMetricFeedbackByTargetId"]="boolean_metric_feedback_examples.jsonl"
 all_tables["FloatMetricFeedback"]="float_metric_feedback_examples.jsonl"
+all_tables["FloatMetricFeedbackByTargetId"]="float_metric_feedback_examples.jsonl"
 all_tables["CommentFeedback"]="comment_feedback_examples.jsonl"
 all_tables["DemonstrationFeedback"]="demonstration_feedback_examples.jsonl"
 all_tables["ChatInference"]="chat_inference_examples.jsonl"
@@ -64,7 +66,40 @@ done
 echo "==============================================="
 if [ $mismatch -eq 0 ]; then
     echo "All fixture table counts match!"
-    exit 0
+
+    duplicate_found=0
+    tables_to_check_duplicates=("FloatMetricFeedbackByTargetId" "BooleanMetricFeedbackByTargetId")
+
+    for table in "${tables_to_check_duplicates[@]}"; do
+        echo "Checking for duplicate ids in $table..."
+        duplicates=$(clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword \
+                      --database tensorzero_ui_fixtures --query "SELECT
+        id,
+        count() AS duplicate_count
+    FROM $table
+    GROUP BY id
+    HAVING duplicate_count > 1;" 2>/dev/null || echo "ERROR")
+
+        if [[ "$duplicates" == "ERROR" ]]; then
+            echo "  ERROR accessing ClickHouse for $table"
+            duplicate_found=1 # Treat error as a potential problem
+        elif [ -z "$duplicates" ]; then
+            echo "  OK: No duplicate ids found in $table."
+        else
+            echo "  WARNING: Duplicate ids found in $table:"
+            echo "$duplicates"
+            duplicate_found=1
+        fi
+        echo
+    done
+
+    if [ $duplicate_found -eq 0 ]; then
+        echo "No duplicate ids found in checked tables."
+        exit 0
+    else
+        echo "Duplicate ids found or error occurred during check. Please review output."
+        exit 1
+    fi
 else
     echo "Some fixture table counts don't match. Please check the output above."
     exit 1
