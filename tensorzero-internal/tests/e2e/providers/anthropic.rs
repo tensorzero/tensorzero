@@ -80,6 +80,13 @@ async fn get_providers() -> E2ETestProviders {
         },
     ];
 
+    let json_mode_off_providers = vec![E2ETestProvider {
+        variant_name: "anthropic".to_string(),
+        model_name: "claude-3-haiku-20240307-anthropic".into(),
+        model_provider_name: "anthropic".into(),
+        credentials: HashMap::new(),
+    }];
+
     let shorthand_providers = vec![E2ETestProvider {
         variant_name: "anthropic-shorthand".to_string(),
         model_name: "anthropic::claude-3-haiku-20240307".into(),
@@ -99,6 +106,7 @@ async fn get_providers() -> E2ETestProviders {
         dynamic_tool_use_inference: standard_providers.clone(),
         parallel_tool_use_inference: standard_providers.clone(),
         json_mode_inference: json_providers.clone(),
+        json_mode_off_inference: json_mode_off_providers.clone(),
         image_inference: image_providers,
 
         shorthand_inference: shorthand_providers.clone(),

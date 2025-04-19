@@ -48,6 +48,13 @@ async fn get_providers() -> E2ETestProviders {
         },
     ];
 
+    let json_mode_off_providers = vec![E2ETestProvider {
+        variant_name: "gcp-vertex-haiku".to_string(),
+        model_name: "claude-3-haiku-20240307-gcp-vertex".into(),
+        model_provider_name: "gcp_vertex_anthropic".into(),
+        credentials: HashMap::new(),
+    }];
+
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
         extra_body_inference: extra_body_providers,
@@ -60,6 +67,7 @@ async fn get_providers() -> E2ETestProviders {
         dynamic_tool_use_inference: standard_providers.clone(),
         parallel_tool_use_inference: vec![],
         json_mode_inference: json_providers.clone(),
+        json_mode_off_inference: json_mode_off_providers.clone(),
         image_inference: vec![],
 
         shorthand_inference: vec![],
