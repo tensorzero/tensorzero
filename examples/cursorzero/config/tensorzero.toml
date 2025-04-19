@@ -1,0 +1,41 @@
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                 FUNCTIONS                                  │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[functions.cursorzero]
+type = "chat"
+
+[functions.cursorzero.variants."gpt-4.1"]
+weight = 1
+type = "chat_completion"
+model = "openai::gpt-4.1"
+
+[functions.cursorzero.variants."claude-3.7"]
+weight = 1
+type = "chat_completion"
+model = "anthropic::claude-3-7-sonnet-20250219"
+
+[functions.cursorzero.variants."gemini-2.5-pro"]
+weight = 1
+type = "chat_completion"
+model = "google_ai_studio_gemini::gemini-2.5-pro-preview-03-25"
+
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                  METRICS                                   │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+# [metrics.exact_match]
+# type = "boolean"
+# level = "inference"
+# optimize = "max"
+
+# [metrics.jaccard_similarity]
+# type = "float"
+# level = "inference"
+# optimize = "max"
+
+# [metrics.valid_output]
+# type = "boolean"
+# level = "inference"
+# optimize = "max"
