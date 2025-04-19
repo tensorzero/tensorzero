@@ -1,10 +1,120 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",  
-  "title": "TensorZero Configuration Toml file", 
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "TensorZero Configuration Toml file",
   "description": "The configuration for a [`tensorzero`](https://www.tensorzero.com) project.",
   "type": "object",
   "additionalProperties": false,
   "properties": {
+    "object_storage": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "The type of object storage."
+        },
+        "endpoint": {
+          "type": "string",
+          "format": "uri",
+          "description": "The endpoint for the object storage."
+        },
+        "bucket_name": {
+          "type": "string",
+          "description": "The bucket name."
+        },
+        "allow_http": {
+          "type": "boolean",
+          "description": "Allow HTTP."
+        }
+      },
+      "required": [
+        "type",
+        "endpoint",
+        "bucket_name",
+        "allow_http"
+      ]
+    },
+    "gateway": {
+      "bind_address": {
+        "type": "string"
+      }
+    },
+    "models": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "routing": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The routing for the model."
+          },
+          "providers": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "description": "The type of provider."
+                },
+                "model_name": {
+                  "type": "string",
+                  "pattern": "^[a-zA-Z0-9._:/-]+$",
+                  "description": "The model name."
+                }
+              },
+              "required": [
+                "type"
+              ]
+            }
+          }
+        },
+        "required": [
+          "routing",
+          "providers"
+        ]
+      }
+    },
+    "embedding_models": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "routing": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The routing for the embedding model."
+          },
+          "providers": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "description": "The type of provider."
+                },
+                "model_name": {
+                  "type": "string",
+                  "description": "The model name."
+                }
+              },
+              "required": [
+                "type"
+              ]
+            }
+          }
+        },
+        "required": [
+          "routing",
+          "providers"
+        ]
+      }
+    },
     "functions": {
       "type": "object",
       "additionalProperties": {
@@ -12,48 +122,164 @@
         "properties": {
           "type": {
             "type": "string",
-            "enum": ["json"],
             "description": "The type of function."
           },
           "output_schema": {
             "type": "string",
-            "format": "uri",
+            "pattern": "^[a-zA-Z0-9_/.-]+$",
             "description": "output schema path"
-          }, 
-          "variants": {
-            "type": "object", 
-            "additionalProperties": {
-              "type": "object",
-              "additionalProperties": {
-                "type": "object",
-                "properties": {
-                  "type": { "type": "string", "enum": ["chat_completion", "experimental_dynamic_in_context_learning"] },
-                  "model": { "type": "string", "pattern": "^openai::(gpt-4o|gpt-4o-mini|ft:gpt-4o-mini)-[0-9]{4}-[0-9]{2}-[0-9]{2}.*$" },
-                  "system_template": { "type": "string", "format": "uri" },
-                  "embedding_model": { "type": "string", "enum": ["openai::text-embedding-3-small"] },
-                  "k": { "type": "integer", "minimum": 1 },
-                  "system_instructions": { "type": "string", "format": "uri" }
-                },
-                "required": ["type", "model"]
-              }
+          },
+          "tools": {
+            "type": "array",
+            "items": {
+              "type": "string"
             }
           },
-          "required": ["type", "output_schema", "variants"]
-        }
+          "variants": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                      "chat_completion",
+                      "experimental_dynamic_in_context_learning",
+                      "experimental_best_of_n_sampling",
+                      "experimental_mixture_of_n",
+                      "string"
+                  ],
+                  "description": "The type of variant."
+                },
+                "model": {
+                  "type": "string",
+                  "pattern": "^[a-zA-z0-9._:/-]+$",
+                },
+                "system_template": {
+                  "type": "string",
+                  "pattern": "^[a-zA-Z0-9_/.-]+$",
+                  "description": "The system template to use."
+                },
+                "embedding_model": {
+                  "type": "string",
+                  "enum": [
+                    "openai::text-embedding-3-small"
+                  ],
+                  "description": "The embedding model to use."
+                },
+                "k": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "The number of candidates to generate."
+                },
+                "system_instructions": {
+                  "type": "string",
+                  "pattern": "^[a-zA-Z0-9_/.-]+$",
+                  "description": "The system instructions to use."
+                }
+              },
+              "required": [
+                "type"
+  
+              ],
+              "dependencies": {
+                "embedding_model": [
+                  "k",
+                  "system_instructions"
+                ]
+              }
+            }
+          }
+        },
+        "required": [
+          "type",
+          "variants"
+        ]
       }
-    }, 
+    },
     "metrics": {
       "type": "object",
       "additionalProperties": {
         "type": "object",
         "properties": {
-          "type": { "type": "string", "enum": ["boolean", "float"] },
-          "level": { "type": "string", "enum": ["inference", "episode"] },
-          "optimize": { "type": "string", "enum": ["max"] }
+          "type": {
+            "type": "string",
+            "enum": [
+              "boolean",
+              "float"
+            ],
+            "description": "The type of metric."
+          },
+          "level": {
+            "type": "string",
+            "enum": [
+              "inference",
+              "episode"
+            ],
+            "description": "Measurement level."
+          },
+          "optimize": {
+            "type": "string",
+            "enum": [
+              "max"
+            ],
+            "description": "Optimization goal."
+          }
         },
-        "required": ["type", "level", "optimize"]
+        "required": [
+          "type",
+          "level",
+          "optimize"
+        ]
+      }
+    },
+    "tools": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": "string",
+            "description": "The description of the tool."
+          },
+          "parameters": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_/.-]+$",
+            "description": "The parameters for the tool."
+          }
+        },
+        "required": [
+          "description",
+          "parameters"
+        ]
+      }
+    },
+    "evals": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "The type of eval."
+          },
+          "description": {
+            "type": "string",
+            "description": "The description of the eval."
+          },
+          "parameters": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_/.-]+$",
+            "description": "The parameters for the eval."
+          }
+        },
+        "required": [
+         
+        ]
       }
     }
   },
-  "required": ["functions", "metrics"]
+  "required": [
+    "functions"
+  ]
 }
