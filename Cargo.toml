@@ -9,12 +9,12 @@ members = [
     "provider-proxy",
     "evaluations",
     "tensorzero-derive",
-    "examples/cursorzero",
+    "examples/cursorzero"
 ]
 resolver = "2"
 
 [workspace.package]
-version = "2025.4.4"
+version = "2025.4.5"
 
 [workspace.dependencies]
 reqwest = { version = "0.12.15", features = [

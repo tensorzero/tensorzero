@@ -174,7 +174,6 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     if (newFeedbackId) {
       toast({
         title: "Feedback Added",
-        description: `${newFeedbackId}`,
       });
     }
   }, [newFeedbackId, toast]);

@@ -10,10 +10,9 @@ import {
 import FeedbackValue from "~/components/feedback/FeedbackValue";
 import { getMetricName } from "~/utils/clickhouse/helpers";
 import type { FeedbackRow } from "~/utils/clickhouse/feedback";
-import { formatDate } from "~/utils/date";
 import MetricBadges from "~/components/metric/MetricBadges";
 import { useConfig } from "~/context/config";
-
+import { TableItemShortUuid, TableItemTime } from "~/components/ui/TableItems";
 export default function FeedbackTable({
   feedback,
 }: {
@@ -21,6 +20,7 @@ export default function FeedbackTable({
 }) {
   const config = useConfig();
   const metrics = config.metrics;
+
   return (
     <div>
       <Table>
@@ -39,9 +39,7 @@ export default function FeedbackTable({
             feedback.map((item) => (
               <TableRow key={item.id}>
                 <TableCell className="max-w-[200px]">
-                  <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap">
-                    {item.id}
-                  </code>
+                  <TableItemShortUuid id={item.id} />
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-2">
@@ -52,13 +50,15 @@ export default function FeedbackTable({
                     />
                   </div>
                 </TableCell>
-                <TableCell>
+                <TableCell className="max-w-[200px]">
                   <FeedbackValue
                     feedback={item}
                     metric={metrics[getMetricName(item)]}
                   />
                 </TableCell>
-                <TableCell>{formatDate(new Date(item.timestamp))}</TableCell>
+                <TableCell>
+                  <TableItemTime timestamp={item.timestamp} />
+                </TableCell>
               </TableRow>
             ))
           )}

@@ -48,5 +48,3 @@ pub fn parse_hunk(hunk: &str, hunk_file_extension: &str) -> Result<Tree> {
         .ok_or_else(|| anyhow::anyhow!("Failed to parse hunk: {}", hunk))?;
     Ok(tree)
 }
-
-// foo

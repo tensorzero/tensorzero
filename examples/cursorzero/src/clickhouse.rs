@@ -70,5 +70,3 @@ pub async fn get_inferences_in_time_range(
 
     Ok(inferences)
 }
-
-// foo

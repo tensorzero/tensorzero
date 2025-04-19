@@ -509,7 +509,9 @@ export function EvaluationTable({
                                   className="h-[52px] text-center align-middle"
                                 >
                                   {/* Add group and relative positioning to the container */}
-                                  <div className="group relative flex h-full items-center justify-center">
+                                  <div
+                                    className={`group relative flex h-full items-center justify-center ${metricValue && evaluationType === "llm_judge" ? "pl-10" : ""}`}
+                                  >
                                     {metricValue ? (
                                       <>
                                         <MetricValue

@@ -99,10 +99,10 @@ pub(crate) async fn evaluate_inference(
                                     evaluator_name.to_string(),
                                 ),
                             ]);
-                            if let Some(inference_id) = result.inference_id() {
+                            if let Some(evaluator_inference_id) = result.evaluator_inference_id() {
                                 tags.insert(
                                     "tensorzero::evaluator_inference_id".to_string(),
-                                    inference_id.to_string(),
+                                    evaluator_inference_id.to_string(),
                                 );
                             }
                             tags.extend(result.tags());
@@ -201,6 +201,7 @@ async fn run_evaluator(params: RunEvaluatorParams<'_>) -> Result<EvaluatorResult
     })
 }
 
+#[derive(Debug)]
 pub enum EvaluatorResult {
     ExactMatch(Option<Value>),
     LLMJudge(Option<LLMJudgeEvaluationResult>),
@@ -214,10 +215,10 @@ impl<'a> EvaluatorResult {
         }
     }
 
-    pub fn inference_id(&'a self) -> Option<&'a Uuid> {
+    pub fn evaluator_inference_id(&'a self) -> Option<&'a Uuid> {
         match self {
             EvaluatorResult::ExactMatch(_) => None,
-            EvaluatorResult::LLMJudge(value) => value.as_ref().map(|v| &v.inference_id),
+            EvaluatorResult::LLMJudge(value) => value.as_ref().map(|v| &v.evaluator_inference_id),
         }
     }
     pub fn value_owned(self) -> Option<Value> {

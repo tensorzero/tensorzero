@@ -180,5 +180,3 @@ pub fn get_commit_timestamp_and_parent_timestamp(commit: &Commit) -> Result<Comm
         parent_timestamp,
     })
 }
-
-// foo
