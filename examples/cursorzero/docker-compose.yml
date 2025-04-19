@@ -1,5 +1,3 @@
-version: '3'
-
 services:
   clickhouse:
     image: clickhouse/clickhouse-server:24.12-alpine
@@ -66,13 +64,14 @@ services:
   nginx:
     image: nginx:alpine
     ports:
-      - "80:80"
+      - "6900:80"
     volumes:
+
       - ./nginx/nginx.conf.template:/etc/nginx/nginx.conf.template
-      - ./docker-entrypoint.sh:/docker-entrypoint.sh
+      - ./nginx/entrypoint.sh:/entrypoint.sh
     environment:
       - API_TOKEN=${API_TOKEN}
-    command: /bin/sh -c "/docker-entrypoint.sh nginx -g 'daemon off;'"
+    command: /bin/sh -c "/entrypoint.sh nginx -g 'daemon off;'"
     depends_on:
       gateway:
         condition: service_healthy
