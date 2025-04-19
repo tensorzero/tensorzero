@@ -30,7 +30,7 @@ async fn test_datapoint_insert_synthetic_chat() {
         )))
         .json(&json!({
             "function_name": "basic_test",
-            "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "value": "My synthetic input"}]}]},
+            "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "text": "My synthetic input"}]}]},
             "output": [{"type": "text", "text": "My synthetic output"}],
             "source_inference_id": source_inference_id,
         }))
@@ -102,7 +102,7 @@ async fn test_datapoint_insert_synthetic_chat() {
         )))
         .json(&json!({
             "function_name": "basic_test",
-            "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "value": "My synthetic input"}]}]},
+            "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "text": "My synthetic input"}]}]},
             "output": [{"type": "text", "text": "My synthetic output"}],
             "source_inference_id": source_inference_id,
         }))
@@ -127,7 +127,7 @@ async fn test_datapoint_insert_synthetic_chat() {
        )))
        .json(&json!({
            "function_name": "basic_test",
-           "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "value": "My synthetic input"}]}]},
+           "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "text": "My synthetic input"}]}]},
            "output": [{"type": "text", "text": "My synthetic output"}],
            "source_inference_id": source_inference_id,
        }))
@@ -226,7 +226,7 @@ async fn test_datapoint_insert_synthetic_chat_with_tools() {
                     {
                         "role": "user",
                         "content": [
-                            {"type": "text", "value": "My synthetic input"}
+                            {"type": "text", "text": "My synthetic input"}
                         ]
                     }
                 ]
@@ -265,7 +265,7 @@ async fn test_datapoint_insert_synthetic_chat_with_tools() {
                     {
                         "role": "user",
                         "content": [
-                            {"type": "text", "value": "My synthetic input"}
+                            {"type": "text", "text": "My synthetic input"}
                         ]
                     }
                 ]
@@ -303,7 +303,7 @@ async fn test_datapoint_insert_synthetic_chat_with_tools() {
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "value": "My synthetic input"}
+                        {"type": "text", "text": "My synthetic input"}
                     ]
                 }
             ]
@@ -705,7 +705,7 @@ async fn test_datapoint_insert_invalid_input_synthetic_chat() {
         )))
         .json(&json!({
             "function_name": "variant_failover",
-            "input": {"system": {"assistant_name": "Ferris"}, "messages": [{"role": "user", "content": [{"type": "text", "value": "My synthetic input"}]}]},
+            "input": {"system": {"assistant_name": "Ferris"}, "messages": [{"role": "user", "content": [{"type": "text", "text": "My synthetic input"}]}]},
             "output": "Not a json object",
         }))
         .send()
@@ -739,7 +739,7 @@ async fn test_datapoint_insert_invalid_input_synthetic_json() {
         )))
         .json(&json!({
             "function_name": "json_success",
-            "input": {"system": {"assistant_name": "Ferris"}, "messages": [{"role": "user", "content": [{"type": "text", "value": "My synthetic input"}]}]},
+            "input": {"system": {"assistant_name": "Ferris"}, "messages": [{"role": "user", "content": [{"type": "text", "text": "My synthetic input"}]}]},
             "output": "Not a json object",
             "output_schema": {},
         }))
@@ -1684,7 +1684,7 @@ async fn test_datapoint_insert_missing_output_chat() {
         )))
         .json(&json!({
             "function_name": "basic_test",
-            "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "value": "My synthetic input"}]}]},
+            "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "text": "My synthetic input"}]}]},
             // output field is deliberately omitted
         }))
         .send()
@@ -1748,7 +1748,7 @@ async fn test_datapoint_insert_null_output_chat() {
         )))
         .json(&json!({
             "function_name": "basic_test",
-            "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "value": "My synthetic input"}]}]},
+            "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "text": "My synthetic input"}]}]},
             "output": null, // explicitly null output
         }))
         .send()
