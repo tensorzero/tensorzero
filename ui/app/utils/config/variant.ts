@@ -97,12 +97,20 @@ export const ChatCompletionConfigSchema = BaseChatCompletionConfigSchema.extend(
 
 export type ChatCompletionConfig = z.infer<typeof ChatCompletionConfigSchema>;
 
+export const ChainOfThoughtConfigSchema = z.object({
+  ...ChatCompletionConfigSchema.shape,
+  type: z.literal("experimental_chain_of_thought"),
+});
+
+export type ChainOfThoughtConfig = z.infer<typeof ChainOfThoughtConfigSchema>;
+
 // Variant config using template content
 export const VariantConfigSchema = z.discriminatedUnion("type", [
   ChatCompletionConfigSchema,
   BestOfNSamplingConfigSchema,
   DiclConfigSchema,
   MixtureOfNConfigSchema,
+  ChainOfThoughtConfigSchema,
 ]);
 
 export type VariantConfig = z.infer<typeof VariantConfigSchema>;

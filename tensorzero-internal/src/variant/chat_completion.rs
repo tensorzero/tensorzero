@@ -18,7 +18,7 @@ use crate::inference::types::{
 use crate::inference::types::{
     InferenceResult, ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent,
 };
-use crate::jsonschema_util::JSONSchemaFromPath;
+use crate::jsonschema_util::StaticJSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
 use crate::variant::JsonMode;
@@ -434,7 +434,7 @@ impl Variant for ChatCompletionConfig {
 }
 
 pub fn validate_template_and_schema(
-    schema: Option<&JSONSchemaFromPath>,
+    schema: Option<&StaticJSONSchema>,
     template: Option<&PathBuf>,
     templates: &TemplateConfig,
 ) -> Result<(), Error> {
@@ -483,7 +483,7 @@ mod tests {
     use crate::inference::types::{
         ContentBlockChatOutput, InferenceResultChunk, ModelInferenceRequestJsonMode, Usage,
     };
-    use crate::jsonschema_util::{DynamicJSONSchema, JSONSchemaFromPath};
+    use crate::jsonschema_util::{DynamicJSONSchema, StaticJSONSchema};
     use crate::minijinja_util::tests::get_test_template_config;
     use crate::model::{ModelConfig, ModelProvider, ProviderConfig};
     use crate::tool::{ToolCallConfig, ToolChoice};
@@ -1270,7 +1270,7 @@ mod tests {
             "additionalProperties": false
         });
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
-        let output_schema = JSONSchemaFromPath::from_value(&output_schema).unwrap();
+        let output_schema = StaticJSONSchema::from_value(&output_schema).unwrap();
         let json_function_config = FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             assistant_schema: None,
@@ -1420,7 +1420,7 @@ mod tests {
         let implicit_tool_call_config =
             ToolCallConfig::implicit_from_value(&hardcoded_output_schema);
         let hardcoded_output_schema =
-            JSONSchemaFromPath::from_value(&hardcoded_output_schema).unwrap();
+            StaticJSONSchema::from_value(&hardcoded_output_schema).unwrap();
         let json_function_config = FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             assistant_schema: None,
@@ -1529,7 +1529,7 @@ mod tests {
         let implicit_tool_call_config =
             ToolCallConfig::implicit_from_value(&hardcoded_output_schema);
         let hardcoded_output_schema =
-            JSONSchemaFromPath::from_value(&hardcoded_output_schema).unwrap();
+            StaticJSONSchema::from_value(&hardcoded_output_schema).unwrap();
         let json_function_config = FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             assistant_schema: None,
@@ -1990,7 +1990,7 @@ mod tests {
             system_schema: None,
             user_schema: None,
             assistant_schema: None,
-            output_schema: JSONSchemaFromPath::from_value(&output_schema_value).unwrap(),
+            output_schema: StaticJSONSchema::from_value(&output_schema_value).unwrap(),
             implicit_tool_call_config: ToolCallConfig {
                 tools_available: vec![],
                 tool_choice: ToolChoice::Auto,
@@ -2115,7 +2115,7 @@ mod tests {
     #[test]
     fn test_validate_template_and_schema_both_some() {
         let templates = get_test_template_config();
-        let schema = JSONSchemaFromPath::new(
+        let schema = StaticJSONSchema::from_path(
             PathBuf::from("fixtures/config/functions/templates_with_variables/system_schema.json"),
             PathBuf::new(),
         )
@@ -2153,7 +2153,7 @@ mod tests {
     #[test]
     fn test_validate_template_and_schema_schema_some_template_none() {
         let templates = get_test_template_config(); // Default TemplateConfig
-        let schema = JSONSchemaFromPath::new(
+        let schema = StaticJSONSchema::from_path(
             PathBuf::from("fixtures/config/functions/templates_with_variables/system_schema.json"),
             PathBuf::new(),
         )
