@@ -863,7 +863,7 @@ struct OpenAICompatibleChoiceChunk {
 
 fn is_none_or_empty<T>(v: &Option<Vec<T>>) -> bool {
     // if it’s None → skip, or if the Vec is empty → skip
-    v.as_ref().map_or(true, |vec| vec.is_empty())
+    v.as_ref().is_none_or(|v| v.is_empty())
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]

@@ -18,7 +18,9 @@ fn get_language_for_extension(ext: &str) -> Result<Language> {
     }
 
     // Slow path: upgrade to exclusive write-lock
-    let mut w = lock.write().unwrap();
+    let mut w = lock
+        .write()
+        .map_err(|_| anyhow::anyhow!("Failed to lock languages"))?;
     if let Some(lang) = w.get(ext) {
         return Ok(lang.clone());
     }
@@ -26,6 +28,9 @@ fn get_language_for_extension(ext: &str) -> Result<Language> {
     let lang = match ext {
         "rs" => tree_sitter_rust::LANGUAGE.into(),
         "toml" => tree_sitter_toml_ng::LANGUAGE.into(),
+        "py" => tree_sitter_python::LANGUAGE.into(),
+        "ts" => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
+        "tsx" => tree_sitter_typescript::LANGUAGE_TSX.into(),
         _ => return Err(anyhow::anyhow!("Unsupported file extension: {}", ext)),
     };
     w.insert(ext.to_string(), lang);

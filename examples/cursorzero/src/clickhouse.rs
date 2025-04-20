@@ -65,7 +65,7 @@ pub async fn get_inferences_in_time_range(
     let inferences: Vec<InferenceInfo> = results
         .lines()
         .filter(|line| !line.trim().is_empty())
-        .map(|line| serde_json::from_str::<InferenceInfo>(line))
+        .map(serde_json::from_str::<InferenceInfo>)
         .collect::<Result<_, _>>()?;
 
     Ok(inferences)
