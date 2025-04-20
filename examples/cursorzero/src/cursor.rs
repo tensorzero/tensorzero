@@ -31,7 +31,7 @@ use std::path::{Path, PathBuf};
 #[derive(Debug)]
 pub struct CursorCodeBlock {
     pub language_extension: String,
-    pub path: String, // normalized to the git root
+    pub path: PathBuf, // normalized to the git root
     pub content: String,
 }
 
@@ -82,7 +82,7 @@ pub fn parse_cursor_output<P: AsRef<Path>>(
 
         blocks.push(CursorCodeBlock {
             language_extension,
-            path: normalized.to_string_lossy().into_owned(),
+            path: normalized,
             content,
         });
     }
