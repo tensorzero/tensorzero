@@ -10,6 +10,7 @@ workspace = true
 tokio = { workspace = true }
 clap = { workspace = true }
 anyhow = { workspace = true }
+tracing = { workspace = true }
 git2 = "0.20.1"
 tree-sitter = "0.25.3"
 tree-sitter-rust = "0.24.0"
@@ -22,5 +23,6 @@ chrono.workspace = true
 uuid.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+regex = "1.11.1"
 
 [dev-dependencies]
