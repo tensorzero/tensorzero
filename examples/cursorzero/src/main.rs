@@ -44,18 +44,14 @@ async fn main() -> Result<()> {
     let inferences = get_inferences_in_time_range(&clickhouse, commit_interval).await?;
     println!("Found {} inferences", inferences.len());
     for inference in inferences {
-        let code_blocks = parse_cursor_output(
-            inference.input.system.as_ref(),
-            &inference.output,
-            &repo.path(),
-        )
-        .map_err(|e| {
-            anyhow!(
-                "Error parsing cursor output for inference {}: {}",
-                inference.id,
-                e
-            )
-        })?;
+        let code_blocks = parse_cursor_output(&inference.input, &inference.output, &repo.path())
+            .map_err(|e| {
+                anyhow!(
+                    "Error parsing cursor output for inference {}: {}",
+                    inference.id,
+                    e
+                )
+            })?;
         println!("Inference: {}", inference.id);
         println!("  Code blocks: {:?}", code_blocks);
     }
