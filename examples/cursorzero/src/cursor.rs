@@ -25,8 +25,10 @@ We should grab the workspace path from this string and use it to normalize the p
 */
 use anyhow::Result;
 use regex::Regex;
+use serde_json::Value;
 use std::convert::AsRef;
 use std::path::{Path, PathBuf};
+use tensorzero_internal::inference::types::ContentBlockChatOutput;
 
 #[derive(Debug)]
 pub struct CursorCodeBlock {
@@ -36,10 +38,24 @@ pub struct CursorCodeBlock {
 }
 
 pub fn parse_cursor_output<P: AsRef<Path>>(
-    system: &str,
-    output: &str,
+    system: Option<&Value>,
+    output: &Vec<ContentBlockChatOutput>,
     git_root_path: P,
 ) -> Result<Vec<CursorCodeBlock>> {
+    let Some(Value::String(system)) = system else {
+        return Err(anyhow::anyhow!("No system message found"));
+    };
+    let output = match output.len() {
+        1 => {
+            let ContentBlockChatOutput::Text(text) = &output[0] else {
+                return Err(anyhow::anyhow!("Output is not a text block"));
+            };
+            text.text.as_str()
+        }
+        _ => {
+            return Err(anyhow::anyhow!("Output is not a single text block"));
+        }
+    };
     // 1. Extract the workspace path from the system string.
     //    e.g. "...workspace is /Users/viraj/.../examples/cursorzero."
     let workspace_path = {

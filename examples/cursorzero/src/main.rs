@@ -1,7 +1,8 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use clap::Parser;
 use cursorzero::{
     clickhouse::get_inferences_in_time_range,
+    cursor::parse_cursor_output,
     git::{get_commit_timestamp_and_parent_timestamp, get_diff_by_file, get_last_commit_from_repo},
     parsing::parse_hunk,
 };
@@ -43,15 +44,20 @@ async fn main() -> Result<()> {
     let inferences = get_inferences_in_time_range(&clickhouse, commit_interval).await?;
     println!("Found {} inferences", inferences.len());
     for inference in inferences {
+        let code_blocks = parse_cursor_output(
+            inference.input.system.as_ref(),
+            &inference.output,
+            &repo.path(),
+        )
+        .map_err(|e| {
+            anyhow!(
+                "Error parsing cursor output for inference {}: {}",
+                inference.id,
+                e
+            )
+        })?;
         println!("Inference: {}", inference.id);
-        println!(
-            "  Input: {}",
-            serde_json::to_string_pretty(&inference.input)?
-        );
-        println!(
-            "  Output: {}",
-            serde_json::to_string_pretty(&inference.output)?
-        );
+        println!("  Code blocks: {:?}", code_blocks);
     }
     Ok(())
 }
