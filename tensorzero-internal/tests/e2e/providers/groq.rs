@@ -31,8 +31,8 @@ crate::generate_provider_tests!(get_providers);
 crate::generate_batch_inference_tests!(get_providers);
 
 async fn get_providers() -> E2ETestProviders {
-    let credentials = match std::env::var("OPENAI_API_KEY") {
-        Ok(key) => HashMap::from([("openai_api_key".to_string(), key)]),
+    let credentials = match std::env::var("GROQ_API_KEY") {
+        Ok(key) => HashMap::from([("groq_api_key".to_string(), key)]),
         Err(_) => HashMap::new(),
     };
 
