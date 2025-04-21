@@ -188,7 +188,7 @@ impl WrappedProvider for GroqProvider {
         >,
         start_time: Instant,
     ) -> ProviderInferenceResponseStreamInner {
-        stream_openai(PROVIDER_TYPE.to_string(), event_source, start_time)
+        stream_groq(PROVIDER_TYPE.to_string(), event_source, start_time)
     }
 }
 
@@ -283,7 +283,7 @@ impl InferenceProvider for GroqProvider {
             }
             .try_into()?)
         } else {
-            Err(handle_openai_error(
+            Err(handle_groq_error(
                 res.status(),
                 &res.text().await.map_err(|e| {
                     Error::new(ErrorDetails::InferenceServer {
@@ -361,7 +361,7 @@ impl InferenceProvider for GroqProvider {
                 })
             })?;
 
-        let stream = stream_openai(
+        let stream = stream_groq(
             PROVIDER_TYPE.to_string(),
             event_source.map_err(TensorZeroEventError::EventSource),
             start_time,
@@ -717,7 +717,7 @@ impl EmbeddingProvider for GroqProvider {
             }
             .try_into()?)
         } else {
-            Err(handle_openai_error(
+            Err(handle_groq_error(
                 res.status(),
                 &res.text().await.map_err(|e| {
                     Error::new(ErrorDetails::InferenceServer {
@@ -751,7 +751,7 @@ pub async fn convert_stream_error(provider_type: String, e: reqwest_eventsource:
     .into()
 }
 
-pub fn stream_openai(
+pub fn stream_groq(
     provider_type: String,
     event_source: impl Stream<Item = Result<Event, TensorZeroEventError>> + Send + 'static,
     start_time: Instant,
@@ -791,7 +791,7 @@ pub fn stream_openai(
 
                         let latency = start_time.elapsed();
                         let stream_message = data.and_then(|d| {
-                            openai_to_tensorzero_chunk(d, latency, &mut tool_call_ids, &mut tool_call_names)
+                            groq_to_tensorzero_chunk(d, latency, &mut tool_call_ids, &mut tool_call_names)
                         });
                         yield stream_message;
                     }
@@ -833,7 +833,7 @@ impl GroqProvider {
         })?;
 
         if res.status() != StatusCode::OK {
-            return Err(handle_openai_error(
+            return Err(handle_groq_error(
                 res.status(),
                 &res.text().await.map_err(|e| {
                     Error::new(ErrorDetails::InferenceServer {
@@ -961,7 +961,7 @@ fn get_embedding_url(base_url: &Url) -> Result<Url, Error> {
     })
 }
 
-pub(super) fn handle_openai_error(
+pub(super) fn handle_groq_error(
     response_code: StatusCode,
     response_body: &str,
     provider_type: &str,
@@ -1142,18 +1142,16 @@ impl GroqRequestMessage<'_> {
     }
 }
 
-pub(super) fn prepare_openai_messages<'a>(
+pub(super) fn prepare_groq_messages<'a>(
     request: &'a ModelInferenceRequest<'_>,
 ) -> Result<Vec<GroqRequestMessage<'a>>, Error> {
     let mut messages = Vec::with_capacity(request.messages.len());
     for message in request.messages.iter() {
-        messages.extend(tensorzero_to_openai_messages(message)?);
+        messages.extend(tensorzero_to_groq_messages(message)?);
     }
-    if let Some(system_msg) = tensorzero_to_openai_system_message(
-        request.system.as_deref(),
-        &request.json_mode,
-        &messages,
-    ) {
+    if let Some(system_msg) =
+        tensorzero_to_groq_system_message(request.system.as_deref(), &request.json_mode, &messages)
+    {
         messages.insert(0, system_msg);
     }
     Ok(messages)
@@ -1161,7 +1159,7 @@ pub(super) fn prepare_openai_messages<'a>(
 
 /// If there are no tools passed or the tools are empty, return None for both tools and tool_choice
 /// Otherwise convert the tool choice and tools to Groq format
-pub(super) fn prepare_openai_tools<'a>(
+pub(super) fn prepare_groq_tools<'a>(
     request: &'a ModelInferenceRequest,
 ) -> (
     Option<Vec<GroqTool<'a>>>,
@@ -1194,7 +1192,7 @@ pub(super) fn prepare_openai_tools<'a>(
 /// If ModelInferenceRequestJsonMode::On and the system message or instructions does not contain "JSON"
 /// the request will return an error.
 /// So, we need to format the instructions to include "Respond using JSON." if it doesn't already.
-pub(super) fn tensorzero_to_openai_system_message<'a>(
+pub(super) fn tensorzero_to_groq_system_message<'a>(
     system: Option<&'a str>,
     json_mode: &ModelInferenceRequestJsonMode,
     messages: &[GroqRequestMessage<'a>],
@@ -1237,16 +1235,16 @@ pub(super) fn tensorzero_to_openai_system_message<'a>(
     }
 }
 
-pub(super) fn tensorzero_to_openai_messages(
+pub(super) fn tensorzero_to_groq_messages(
     message: &RequestMessage,
 ) -> Result<Vec<GroqRequestMessage<'_>>, Error> {
     match message.role {
-        Role::User => tensorzero_to_openai_user_messages(&message.content),
-        Role::Assistant => tensorzero_to_openai_assistant_messages(&message.content),
+        Role::User => tensorzero_to_groq_user_messages(&message.content),
+        Role::Assistant => tensorzero_to_groq_assistant_messages(&message.content),
     }
 }
 
-fn tensorzero_to_openai_user_messages(
+fn tensorzero_to_groq_user_messages(
     content_blocks: &[ContentBlock],
 ) -> Result<Vec<GroqRequestMessage<'_>>, Error> {
     // We need to separate the tool result messages from the user content blocks.
@@ -1316,7 +1314,7 @@ fn tensorzero_to_openai_user_messages(
     Ok(messages)
 }
 
-fn tensorzero_to_openai_assistant_messages(
+fn tensorzero_to_groq_assistant_messages(
     content_blocks: &[ContentBlock],
 ) -> Result<Vec<GroqRequestMessage<'_>>, Error> {
     // We need to separate the tool result messages from the assistant content blocks.
@@ -1614,9 +1612,9 @@ impl<'a> GroqRequest<'a> {
             }),
             false => None,
         };
-        let mut messages = prepare_openai_messages(request)?;
+        let mut messages = prepare_groq_messages(request)?;
 
-        let (tools, tool_choice, mut parallel_tool_calls) = prepare_openai_tools(request);
+        let (tools, tool_choice, mut parallel_tool_calls) = prepare_groq_tools(request);
         if model.to_lowercase().starts_with("o1") && parallel_tool_calls == Some(false) {
             parallel_tool_calls = None;
         }
@@ -1726,11 +1724,11 @@ pub(super) struct GroqResponseToolCall {
 }
 
 impl From<GroqResponseToolCall> for ToolCall {
-    fn from(openai_tool_call: GroqResponseToolCall) -> Self {
+    fn from(groq_tool_call: GroqResponseToolCall) -> Self {
         ToolCall {
-            id: openai_tool_call.id,
-            name: openai_tool_call.function.name,
-            arguments: openai_tool_call.function.arguments,
+            id: groq_tool_call.id,
+            name: groq_tool_call.function.name,
+            arguments: groq_tool_call.function.arguments,
         }
     }
 }
@@ -1918,7 +1916,7 @@ struct GroqChatChunk {
 }
 
 /// Maps an Groq chunk to a TensorZero chunk for streaming inferences
-fn openai_to_tensorzero_chunk(
+fn groq_to_tensorzero_chunk(
     mut chunk: GroqChatChunk,
     latency: Duration,
     tool_call_ids: &mut Vec<String>,
@@ -2296,11 +2294,11 @@ mod tests {
     }
 
     #[test]
-    fn test_handle_openai_error() {
+    fn test_handle_groq_error() {
         use reqwest::StatusCode;
 
         // Test unauthorized error
-        let unauthorized = handle_openai_error(
+        let unauthorized = handle_groq_error(
             StatusCode::UNAUTHORIZED,
             "Unauthorized access",
             PROVIDER_TYPE,
@@ -2323,8 +2321,7 @@ mod tests {
         }
 
         // Test forbidden error
-        let forbidden =
-            handle_openai_error(StatusCode::FORBIDDEN, "Forbidden access", PROVIDER_TYPE);
+        let forbidden = handle_groq_error(StatusCode::FORBIDDEN, "Forbidden access", PROVIDER_TYPE);
         let details = forbidden.get_details();
         assert!(matches!(details, ErrorDetails::InferenceClient { .. }));
         if let ErrorDetails::InferenceClient {
@@ -2343,7 +2340,7 @@ mod tests {
         }
 
         // Test rate limit error
-        let rate_limit = handle_openai_error(
+        let rate_limit = handle_groq_error(
             StatusCode::TOO_MANY_REQUESTS,
             "Rate limit exceeded",
             PROVIDER_TYPE,
@@ -2366,7 +2363,7 @@ mod tests {
         }
 
         // Test server error
-        let server_error = handle_openai_error(
+        let server_error = handle_groq_error(
             StatusCode::INTERNAL_SERVER_ERROR,
             "Server error",
             PROVIDER_TYPE,
@@ -2388,7 +2385,7 @@ mod tests {
     }
 
     #[test]
-    fn test_openai_request_new() {
+    fn test_groq_request_new() {
         // Test basic request
         let basic_request = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
@@ -2418,24 +2415,21 @@ mod tests {
             ..Default::default()
         };
 
-        let openai_request = GroqRequest::new("gpt-3.5-turbo", &basic_request).unwrap();
+        let groq_request = GroqRequest::new("gpt-3.5-turbo", &basic_request).unwrap();
 
-        assert_eq!(openai_request.model, "gpt-3.5-turbo");
-        assert_eq!(openai_request.messages.len(), 2);
-        assert_eq!(openai_request.temperature, Some(0.7));
-        assert_eq!(openai_request.max_completion_tokens, Some(100));
-        assert_eq!(openai_request.seed, Some(69));
-        assert_eq!(openai_request.top_p, Some(0.9));
-        assert_eq!(openai_request.presence_penalty, Some(0.1));
-        assert_eq!(openai_request.frequency_penalty, Some(0.2));
-        assert!(openai_request.stream);
-        assert_eq!(
-            openai_request.response_format,
-            Some(GroqResponseFormat::Text)
-        );
-        assert!(openai_request.tools.is_none());
-        assert_eq!(openai_request.tool_choice, None);
-        assert!(openai_request.parallel_tool_calls.is_none());
+        assert_eq!(groq_request.model, "gpt-3.5-turbo");
+        assert_eq!(groq_request.messages.len(), 2);
+        assert_eq!(groq_request.temperature, Some(0.7));
+        assert_eq!(groq_request.max_completion_tokens, Some(100));
+        assert_eq!(groq_request.seed, Some(69));
+        assert_eq!(groq_request.top_p, Some(0.9));
+        assert_eq!(groq_request.presence_penalty, Some(0.1));
+        assert_eq!(groq_request.frequency_penalty, Some(0.2));
+        assert!(groq_request.stream);
+        assert_eq!(groq_request.response_format, Some(GroqResponseFormat::Text));
+        assert!(groq_request.tools.is_none());
+        assert_eq!(groq_request.tool_choice, None);
+        assert!(groq_request.parallel_tool_calls.is_none());
 
         // Test request with tools and JSON mode
         let request_with_tools = ModelInferenceRequest {
@@ -2460,27 +2454,27 @@ mod tests {
             ..Default::default()
         };
 
-        let openai_request = GroqRequest::new("gpt-4", &request_with_tools).unwrap();
+        let groq_request = GroqRequest::new("gpt-4", &request_with_tools).unwrap();
 
-        assert_eq!(openai_request.model, "gpt-4");
-        assert_eq!(openai_request.messages.len(), 2); // We'll add a system message containing Json to fit Groq requirements
-        assert_eq!(openai_request.temperature, None);
-        assert_eq!(openai_request.max_completion_tokens, None);
-        assert_eq!(openai_request.seed, None);
-        assert_eq!(openai_request.top_p, None);
-        assert_eq!(openai_request.presence_penalty, None);
-        assert_eq!(openai_request.frequency_penalty, None);
-        assert!(!openai_request.stream);
+        assert_eq!(groq_request.model, "gpt-4");
+        assert_eq!(groq_request.messages.len(), 2); // We'll add a system message containing Json to fit Groq requirements
+        assert_eq!(groq_request.temperature, None);
+        assert_eq!(groq_request.max_completion_tokens, None);
+        assert_eq!(groq_request.seed, None);
+        assert_eq!(groq_request.top_p, None);
+        assert_eq!(groq_request.presence_penalty, None);
+        assert_eq!(groq_request.frequency_penalty, None);
+        assert!(!groq_request.stream);
         assert_eq!(
-            openai_request.response_format,
+            groq_request.response_format,
             Some(GroqResponseFormat::JsonObject)
         );
-        assert!(openai_request.tools.is_some());
-        let tools = openai_request.tools.as_ref().unwrap();
+        assert!(groq_request.tools.is_some());
+        let tools = groq_request.tools.as_ref().unwrap();
         assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
         assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
         assert_eq!(
-            openai_request.tool_choice,
+            groq_request.tool_choice,
             Some(GroqToolChoice::Specific(SpecificToolChoice {
                 r#type: GroqToolType::Function,
                 function: SpecificToolFunction {
@@ -2512,20 +2506,20 @@ mod tests {
             ..Default::default()
         };
 
-        let openai_request = GroqRequest::new("gpt-4", &request_with_tools).unwrap();
+        let groq_request = GroqRequest::new("gpt-4", &request_with_tools).unwrap();
 
-        assert_eq!(openai_request.model, "gpt-4");
-        assert_eq!(openai_request.messages.len(), 1);
-        assert_eq!(openai_request.temperature, None);
-        assert_eq!(openai_request.max_completion_tokens, None);
-        assert_eq!(openai_request.seed, None);
-        assert!(!openai_request.stream);
-        assert_eq!(openai_request.top_p, None);
-        assert_eq!(openai_request.presence_penalty, None);
-        assert_eq!(openai_request.frequency_penalty, None);
+        assert_eq!(groq_request.model, "gpt-4");
+        assert_eq!(groq_request.messages.len(), 1);
+        assert_eq!(groq_request.temperature, None);
+        assert_eq!(groq_request.max_completion_tokens, None);
+        assert_eq!(groq_request.seed, None);
+        assert!(!groq_request.stream);
+        assert_eq!(groq_request.top_p, None);
+        assert_eq!(groq_request.presence_penalty, None);
+        assert_eq!(groq_request.frequency_penalty, None);
         // Resolves to normal JSON mode since no schema is provided (this shouldn't really happen in practice)
         assert_eq!(
-            openai_request.response_format,
+            groq_request.response_format,
             Some(GroqResponseFormat::JsonObject)
         );
 
@@ -2553,20 +2547,20 @@ mod tests {
             ..Default::default()
         };
 
-        let openai_request = GroqRequest::new("gpt-4", &request_with_tools).unwrap();
+        let groq_request = GroqRequest::new("gpt-4", &request_with_tools).unwrap();
 
-        assert_eq!(openai_request.model, "gpt-4");
-        assert_eq!(openai_request.messages.len(), 1);
-        assert_eq!(openai_request.temperature, None);
-        assert_eq!(openai_request.max_completion_tokens, None);
-        assert_eq!(openai_request.seed, None);
-        assert!(!openai_request.stream);
-        assert_eq!(openai_request.top_p, None);
-        assert_eq!(openai_request.presence_penalty, None);
-        assert_eq!(openai_request.frequency_penalty, None);
+        assert_eq!(groq_request.model, "gpt-4");
+        assert_eq!(groq_request.messages.len(), 1);
+        assert_eq!(groq_request.temperature, None);
+        assert_eq!(groq_request.max_completion_tokens, None);
+        assert_eq!(groq_request.seed, None);
+        assert!(!groq_request.stream);
+        assert_eq!(groq_request.top_p, None);
+        assert_eq!(groq_request.presence_penalty, None);
+        assert_eq!(groq_request.frequency_penalty, None);
         let expected_schema = serde_json::json!({"name": "response", "strict": true, "schema": {}});
         assert_eq!(
-            openai_request.response_format,
+            groq_request.response_format,
             Some(GroqResponseFormat::JsonSchema {
                 json_schema: expected_schema,
             })
@@ -2574,7 +2568,7 @@ mod tests {
     }
 
     #[test]
-    fn test_openai_new_request_o1() {
+    fn test_groq_new_request_o1() {
         let request = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
@@ -2597,22 +2591,19 @@ mod tests {
             ..Default::default()
         };
 
-        let openai_request = GroqRequest::new("o1-preview", &request).unwrap();
+        let groq_request = GroqRequest::new("o1-preview", &request).unwrap();
 
-        assert_eq!(openai_request.model, "o1-preview");
-        assert_eq!(openai_request.messages.len(), 1);
-        assert!(!openai_request.stream);
-        assert_eq!(
-            openai_request.response_format,
-            Some(GroqResponseFormat::Text)
-        );
-        assert_eq!(openai_request.temperature, Some(0.5));
-        assert_eq!(openai_request.max_completion_tokens, Some(100));
-        assert_eq!(openai_request.seed, Some(69));
-        assert_eq!(openai_request.top_p, Some(0.9));
-        assert_eq!(openai_request.presence_penalty, Some(0.1));
-        assert_eq!(openai_request.frequency_penalty, Some(0.2));
-        assert!(openai_request.tools.is_none());
+        assert_eq!(groq_request.model, "o1-preview");
+        assert_eq!(groq_request.messages.len(), 1);
+        assert!(!groq_request.stream);
+        assert_eq!(groq_request.response_format, Some(GroqResponseFormat::Text));
+        assert_eq!(groq_request.temperature, Some(0.5));
+        assert_eq!(groq_request.max_completion_tokens, Some(100));
+        assert_eq!(groq_request.seed, Some(69));
+        assert_eq!(groq_request.top_p, Some(0.9));
+        assert_eq!(groq_request.presence_penalty, Some(0.1));
+        assert_eq!(groq_request.frequency_penalty, Some(0.2));
+        assert!(groq_request.tools.is_none());
 
         // Test case: System message is converted to User message
         let request_with_system = ModelInferenceRequest {
@@ -2637,36 +2628,36 @@ mod tests {
             ..Default::default()
         };
 
-        let openai_request_with_system = GroqRequest::new("o1-mini", &request_with_system).unwrap();
+        let groq_request_with_system = GroqRequest::new("o1-mini", &request_with_system).unwrap();
 
         // Check that the system message was converted to a user message
-        assert_eq!(openai_request_with_system.messages.len(), 2);
+        assert_eq!(groq_request_with_system.messages.len(), 2);
         assert!(
             matches!(
-                openai_request_with_system.messages[0],
+                groq_request_with_system.messages[0],
                 GroqRequestMessage::User(ref msg) if msg.content == [GroqContentBlock::Text { text: "This is the system message".into() }]
             ),
             "Unexpected messages: {:?}",
-            openai_request_with_system.messages
+            groq_request_with_system.messages
         );
 
-        assert_eq!(openai_request_with_system.model, "o1-mini");
-        assert!(!openai_request_with_system.stream);
+        assert_eq!(groq_request_with_system.model, "o1-mini");
+        assert!(!groq_request_with_system.stream);
         assert_eq!(
-            openai_request_with_system.response_format,
+            groq_request_with_system.response_format,
             Some(GroqResponseFormat::Text)
         );
-        assert_eq!(openai_request_with_system.temperature, Some(0.5));
-        assert_eq!(openai_request_with_system.max_completion_tokens, Some(100));
-        assert_eq!(openai_request_with_system.seed, Some(69));
-        assert!(openai_request_with_system.tools.is_none());
-        assert_eq!(openai_request_with_system.top_p, Some(0.9));
-        assert_eq!(openai_request_with_system.presence_penalty, Some(0.1));
-        assert_eq!(openai_request_with_system.frequency_penalty, Some(0.2));
+        assert_eq!(groq_request_with_system.temperature, Some(0.5));
+        assert_eq!(groq_request_with_system.max_completion_tokens, Some(100));
+        assert_eq!(groq_request_with_system.seed, Some(69));
+        assert!(groq_request_with_system.tools.is_none());
+        assert_eq!(groq_request_with_system.top_p, Some(0.9));
+        assert_eq!(groq_request_with_system.presence_penalty, Some(0.1));
+        assert_eq!(groq_request_with_system.frequency_penalty, Some(0.2));
     }
 
     #[test]
-    fn test_try_from_openai_response() {
+    fn test_try_from_groq_response() {
         // Test case 1: Valid response with content
         let valid_response = GroqResponse {
             choices: vec![GroqResponseChoice {
@@ -2958,7 +2949,7 @@ mod tests {
     }
 
     #[test]
-    fn test_prepare_openai_tools() {
+    fn test_prepare_groq_tools() {
         let request_with_tools = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
@@ -2980,7 +2971,7 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let (tools, tool_choice, parallel_tool_calls) = prepare_openai_tools(&request_with_tools);
+        let (tools, tool_choice, parallel_tool_calls) = prepare_groq_tools(&request_with_tools);
         let tools = tools.unwrap();
         assert_eq!(tools.len(), 2);
         assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
@@ -3022,19 +3013,18 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let (tools, tool_choice, parallel_tool_calls) =
-            prepare_openai_tools(&request_without_tools);
+        let (tools, tool_choice, parallel_tool_calls) = prepare_groq_tools(&request_without_tools);
         assert!(tools.is_none());
         assert!(tool_choice.is_none());
         assert!(parallel_tool_calls.is_none());
     }
 
     #[test]
-    fn test_tensorzero_to_openai_messages() {
+    fn test_tensorzero_to_groq_messages() {
         let content_blocks = vec!["Hello".to_string().into()];
-        let openai_messages = tensorzero_to_openai_user_messages(&content_blocks).unwrap();
-        assert_eq!(openai_messages.len(), 1);
-        match &openai_messages[0] {
+        let groq_messages = tensorzero_to_groq_user_messages(&content_blocks).unwrap();
+        assert_eq!(groq_messages.len(), 1);
+        match &groq_messages[0] {
             GroqRequestMessage::User(content) => {
                 assert_eq!(
                     content.content,
@@ -3051,9 +3041,9 @@ mod tests {
             "Hello".to_string().into(),
             "How are you?".to_string().into(),
         ];
-        let openai_messages = tensorzero_to_openai_user_messages(&content_blocks).unwrap();
-        assert_eq!(openai_messages.len(), 1);
-        match &openai_messages[0] {
+        let groq_messages = tensorzero_to_groq_user_messages(&content_blocks).unwrap();
+        assert_eq!(groq_messages.len(), 1);
+        match &groq_messages[0] {
             GroqRequestMessage::User(content) => {
                 assert_eq!(
                     content.content,
@@ -3079,9 +3069,9 @@ mod tests {
             arguments: "{}".to_string(),
         });
         let content_blocks = vec!["Hello".to_string().into(), tool_block];
-        let openai_messages = tensorzero_to_openai_assistant_messages(&content_blocks).unwrap();
-        assert_eq!(openai_messages.len(), 1);
-        match &openai_messages[0] {
+        let groq_messages = tensorzero_to_groq_assistant_messages(&content_blocks).unwrap();
+        assert_eq!(groq_messages.len(), 1);
+        match &groq_messages[0] {
             GroqRequestMessage::Assistant(content) => {
                 assert_eq!(
                     content.content,
@@ -3100,7 +3090,7 @@ mod tests {
     }
 
     #[test]
-    fn test_openai_to_tensorzero_chunk() {
+    fn test_groq_to_tensorzero_chunk() {
         let chunk = GroqChatChunk {
             choices: vec![GroqChatChunkChoice {
                 delta: GroqDelta {
@@ -3113,7 +3103,7 @@ mod tests {
         };
         let mut tool_call_ids = vec!["id1".to_string()];
         let mut tool_call_names = vec!["name1".to_string()];
-        let message = openai_to_tensorzero_chunk(
+        let message = groq_to_tensorzero_chunk(
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
@@ -3146,7 +3136,7 @@ mod tests {
             }],
             usage: None,
         };
-        let message = openai_to_tensorzero_chunk(
+        let message = groq_to_tensorzero_chunk(
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
@@ -3180,7 +3170,7 @@ mod tests {
             }],
             usage: None,
         };
-        let error = openai_to_tensorzero_chunk(
+        let error = groq_to_tensorzero_chunk(
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
@@ -3215,7 +3205,7 @@ mod tests {
             }],
             usage: None,
         };
-        let message = openai_to_tensorzero_chunk(
+        let message = groq_to_tensorzero_chunk(
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
@@ -3248,7 +3238,7 @@ mod tests {
                 total_tokens: 30,
             }),
         };
-        let message = openai_to_tensorzero_chunk(
+        let message = groq_to_tensorzero_chunk(
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
@@ -3266,7 +3256,7 @@ mod tests {
     }
 
     #[test]
-    fn test_new_openai_response_format() {
+    fn test_new_groq_response_format() {
         // Test JSON mode On
         let json_mode = ModelInferenceRequestJsonMode::On;
         let output_schema = None;
@@ -3316,17 +3306,17 @@ mod tests {
     }
 
     #[test]
-    fn test_openai_api_base() {
+    fn test_groq_api_base() {
         assert_eq!(GROQ_DEFAULT_BASE_URL.as_str(), "https://api.groq.com/v1/");
     }
 
     #[test]
-    fn test_tensorzero_to_openai_system_message() {
+    fn test_tensorzero_to_groq_system_message() {
         // Test Case 1: system is None, json_mode is Off
         let system = None;
         let json_mode = ModelInferenceRequestJsonMode::Off;
         let messages: Vec<GroqRequestMessage> = vec![];
-        let result = tensorzero_to_openai_system_message(system, &json_mode, &messages);
+        let result = tensorzero_to_groq_system_message(system, &json_mode, &messages);
         assert_eq!(result, None);
 
         // Test Case 2: system is Some, json_mode is On, messages contain "json"
@@ -3348,7 +3338,7 @@ mod tests {
         let expected = Some(GroqRequestMessage::System(GroqSystemRequestMessage {
             content: Cow::Borrowed("System instructions"),
         }));
-        let result = tensorzero_to_openai_system_message(system, &json_mode, &messages);
+        let result = tensorzero_to_groq_system_message(system, &json_mode, &messages);
         assert_eq!(result, expected);
 
         // Test Case 3: system is Some, json_mode is On, messages do not contain "json"
@@ -3371,7 +3361,7 @@ mod tests {
         let expected = Some(GroqRequestMessage::System(GroqSystemRequestMessage {
             content: Cow::Owned(expected_content),
         }));
-        let result = tensorzero_to_openai_system_message(system, &json_mode, &messages);
+        let result = tensorzero_to_groq_system_message(system, &json_mode, &messages);
         assert_eq!(result, expected);
 
         // Test Case 4: system is Some, json_mode is Off
@@ -3393,7 +3383,7 @@ mod tests {
         let expected = Some(GroqRequestMessage::System(GroqSystemRequestMessage {
             content: Cow::Borrowed("System instructions"),
         }));
-        let result = tensorzero_to_openai_system_message(system, &json_mode, &messages);
+        let result = tensorzero_to_groq_system_message(system, &json_mode, &messages);
         assert_eq!(result, expected);
 
         // Test Case 5: system is Some, json_mode is Strict
@@ -3415,7 +3405,7 @@ mod tests {
         let expected = Some(GroqRequestMessage::System(GroqSystemRequestMessage {
             content: Cow::Borrowed("System instructions"),
         }));
-        let result = tensorzero_to_openai_system_message(system, &json_mode, &messages);
+        let result = tensorzero_to_groq_system_message(system, &json_mode, &messages);
         assert_eq!(result, expected);
 
         // Test Case 6: system contains "json", json_mode is On
@@ -3429,7 +3419,7 @@ mod tests {
         let expected = Some(GroqRequestMessage::System(GroqSystemRequestMessage {
             content: Cow::Borrowed("Respond using JSON.\n\nSystem instructions"),
         }));
-        let result = tensorzero_to_openai_system_message(system, &json_mode, &messages);
+        let result = tensorzero_to_groq_system_message(system, &json_mode, &messages);
         assert_eq!(result, expected);
 
         // Test Case 7: system is None, json_mode is On
@@ -3451,7 +3441,7 @@ mod tests {
         let expected = Some(GroqRequestMessage::System(GroqSystemRequestMessage {
             content: Cow::Owned("Respond using JSON.".to_string()),
         }));
-        let result = tensorzero_to_openai_system_message(system, &json_mode, &messages);
+        let result = tensorzero_to_groq_system_message(system, &json_mode, &messages);
         assert_eq!(result, expected);
 
         // Test Case 8: system is None, json_mode is Strict
@@ -3471,7 +3461,7 @@ mod tests {
             }),
         ];
 
-        let result = tensorzero_to_openai_system_message(system, &json_mode, &messages);
+        let result = tensorzero_to_groq_system_message(system, &json_mode, &messages);
         assert!(result.is_none());
 
         // Test Case 9: system is None, json_mode is On, with empty messages
@@ -3481,7 +3471,7 @@ mod tests {
         let expected = Some(GroqRequestMessage::System(GroqSystemRequestMessage {
             content: Cow::Owned("Respond using JSON.".to_string()),
         }));
-        let result = tensorzero_to_openai_system_message(system, &json_mode, &messages);
+        let result = tensorzero_to_groq_system_message(system, &json_mode, &messages);
         assert_eq!(result, expected);
 
         // Test Case 10: system is None, json_mode is Off, with messages containing "json"
@@ -3493,7 +3483,7 @@ mod tests {
             }],
         })];
         let expected = None;
-        let result = tensorzero_to_openai_system_message(system, &json_mode, &messages);
+        let result = tensorzero_to_groq_system_message(system, &json_mode, &messages);
         assert_eq!(result, expected);
     }
 
@@ -3545,7 +3535,7 @@ mod tests {
     }
 
     #[test]
-    fn test_try_from_openai_credentials() {
+    fn test_try_from_groq_credentials() {
         // Test Static credentials
         let generic = Credential::Static(SecretString::from("test_key"));
         let creds = GroqCredentials::try_from(generic).unwrap();
