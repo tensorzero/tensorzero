@@ -9,6 +9,7 @@
     "openai": "^4.87.1"
   },
   "devDependencies": {
+    "dotenv": "^16.5.0",
     "tsx": "^4.0.0"
   }
 }

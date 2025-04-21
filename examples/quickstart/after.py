@@ -1,4 +1,7 @@
 from tensorzero import TensorZeroGateway
+from dotenv import load_dotenv
+
+load_dotenv()
 
 with TensorZeroGateway.build_embedded(
     clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero",

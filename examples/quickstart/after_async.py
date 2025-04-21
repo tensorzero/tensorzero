@@ -1,7 +1,9 @@
 import asyncio
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from tensorzero import AsyncTensorZeroGateway
-
 
 async def main():
     async with await AsyncTensorZeroGateway.build_embedded(

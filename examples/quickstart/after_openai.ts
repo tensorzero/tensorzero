@@ -1,7 +1,9 @@
+import 'dotenv/config';
 import OpenAI from "openai";
 
 const client = new OpenAI({
   baseURL: "http://localhost:3000/openai/v1",
+  apiKey: process.env.OPENAI_API_KEY,
 });
 
 const response = await client.chat.completions.create({
