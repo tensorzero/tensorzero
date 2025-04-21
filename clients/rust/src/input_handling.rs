@@ -1,5 +1,6 @@
 use futures::future::try_join_all;
 use serde_json::Value;
+use tensorzero_internal::error::Error;
 
 use crate::{Client, ClientInput, ClientInputMessage, ClientInputMessageContent, TensorZeroError};
 use tensorzero_internal::tool::{ToolCall, ToolCallInput};
@@ -100,6 +101,72 @@ async fn resolved_input_message_content_to_client_input_message_content(
             model_provider_name,
         }),
     }
+}
+
+/// Since we store the input in the database in the form of ResolvedInput but without e.g. images inside,
+/// we need to reresolve the input when we retrieve it from the database.
+/// Resolves images in place.
+pub async fn reresolve_input(
+    input: &mut ResolvedInput,
+    client: &Client,
+) -> Result<(), TensorZeroError> {
+    let mut resolved_messages = Vec::with_capacity(input.messages.len());
+
+    for message in input.messages.iter_mut() {
+        let mut image_fetch_tasks = Vec::new();
+        let mut content_indices_to_update = Vec::new();
+
+        // First pass: identify images to fetch and collect tasks
+        for (index, content) in message.content.iter_mut().enumerate() {
+            if let ResolvedInputMessageContent::Image(image_with_path) = content {
+                if image_with_path.image.data.is_none() {
+                    let storage_path = image_with_path.storage_path.clone();
+                    let fut = async move { fetch_image_data(storage_path, client).await };
+                    image_fetch_tasks.push(fut);
+                    content_indices_to_update.push(index);
+                }
+            }
+        }
+
+        // Execute fetch tasks concurrently for the current message
+        if !image_fetch_tasks.is_empty() {
+            let fetched_data_results = futures::future::try_join_all(image_fetch_tasks).await?;
+
+            // Second pass: update the content with fetched data
+            let mut results_iter = fetched_data_results.into_iter();
+            for index in content_indices_to_update {
+                if let Some(ResolvedInputMessageContent::Image(image_with_path)) =
+                    message.content.get_mut(index)
+                {
+                    if let Some(fetched_data) = results_iter.next() {
+                        image_with_path.image.data = Some(fetched_data);
+                    } else {
+                        // This should not happen if logic is correct
+                        return Err(TensorZeroError::Other {
+                            source: Error::new(ErrorDetails::Serialization {
+                                message:
+                                    "Mismatch between fetch tasks and results during input reresolution"
+                                        .to_string(),
+                            }).into()
+                        });
+                    }
+                } else {
+                    // This should not happen if logic is correct
+                    return Err(TensorZeroError::Other {
+                        source: Error::new(ErrorDetails::Serialization {
+                            message:
+                                "Content type changed or index invalid during input reresolution"
+                                    .to_string(),
+                        })
+                        .into(),
+                    });
+                }
+            }
+        }
+        resolved_messages.push(message);
+    }
+
+    Ok(())
 }
 
 async fn fetch_image_data(

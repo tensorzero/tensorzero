@@ -1056,11 +1056,13 @@ impl AsyncTensorZeroGateway {
                 "Called _internal_get_curated_inferences on HTTP gateway",
             )?);
         };
+        let client = this.as_super().client.clone();
         Ok(
             pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
                 let inferences_result = crate::internal::get_curated_inferences(
                     &app_state.config,
                     &app_state.clickhouse_connection_info,
+                    &client,
                     &function_name,
                     metric_name.as_deref(),
                     threshold,
