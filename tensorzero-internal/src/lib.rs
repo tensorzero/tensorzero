@@ -21,3 +21,7 @@ mod testing;
 pub mod tool; // types and methods for working with TensorZero tools
 mod uuid_util; // utilities for working with UUIDs
 pub mod variant; // types and methods for working with TensorZero variants
+
+pub mod built_info {
+    include!(concat!(env!("OUT_DIR"), "/built.rs"));
+}
