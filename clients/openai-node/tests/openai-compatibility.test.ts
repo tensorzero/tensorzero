@@ -218,7 +218,7 @@ describe("OpenAI Compatibility", () => {
         expect(chunk.choices[0].delta.content).toBe(expectedText[i]);
         expect(chunk.choices[0].finish_reason).toBeNull();
       } else {
-        expect(chunk.choices[0].delta.content).toBeNull();
+        expect(chunk.choices[0].delta.content).toBeUndefined();
         // No usage information because we didn't set `include_usage`
         expect(chunk.usage).toBeNull();
         expect(chunk.choices[0].finish_reason).toBe("stop");
@@ -519,8 +519,8 @@ describe("OpenAI Compatibility", () => {
         expect(toolCall.function?.name).toBe("get_temperature");
         expect(toolCall.function?.arguments).toBe(expectedText[i]);
       } else {
-        expect(chunk.choices[0].delta.content).toBeNull();
-        expect(chunk.choices[0].delta.tool_calls?.length).toBe(0);
+        expect(chunk.choices[0].delta.content).toBeUndefined();
+        expect(chunk.choices[0].delta.tool_calls).toBeUndefined();
         // No usage information because we didn't set `include_usage`
         expect(chunk.usage).toBeNull();
         expect(chunk.choices[0].finish_reason).toBe("tool_calls");
