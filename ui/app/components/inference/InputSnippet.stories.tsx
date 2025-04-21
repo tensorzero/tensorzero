@@ -186,6 +186,61 @@ export const MultiTurnToolUse: Story = {
   },
 };
 
+export const LongMultiTurnToolUse: Story = {
+  args: {
+    input: {
+      messages: [
+        {
+          role: "user",
+          content: [{ type: "text", value: "What is the weather in Tokyo?" }],
+        },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "text",
+              value: "I can help you with that.",
+            },
+            {
+              type: "tool_call",
+              name: "summarize_tool",
+              arguments: JSON.stringify({
+                verbosity: "high",
+                text: "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nullam et nunc augue. Pellentesque at facilisis ipsum. Donec facilisis lorem ligula, ultrices feugiat nibh consectetur id. Aenean pulvinar est ac ipsum vulputate, nec maximus ligula elementum. Cras a eros eget velit varius finibus ut sollicitudin enim. Nulla et augue ac massa consequat cursus. Curabitur eget dolor tristique, porttitor mi non, commodo augue. Integer tincidunt dui lectus, egestas dapibus mauris porta sit amet. Morbi tincidunt turpis id tortor ornare, vel viverra elit cursus. Cras a felis ultricies, interdum dui vel, facilisis risus.",
+              }),
+              id: "acd0806d-4ec6-4efd-864e-a29aa66ec3fc",
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              name: "summarize_tool",
+              result: JSON.stringify({
+                summary:
+                  "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nullam et nunc augue. Pellentesque at facilisis ipsum. Donec facilisis lorem ligula, ultrices feugiat nibh consectetur id. Aenean pulvinar est ac ipsum vulputate, nec maximus ligula elementum. Cras a eros eget velit varius finibus ut sollicitudin enim. Nulla et augue ac massa consequat cursus. Curabitur eget dolor tristique, porttitor mi non, commodo augue. Integer tincidunt dui lectus, egestas dapibus mauris porta sit amet. Morbi tincidunt turpis id tortor ornare, vel viverra elit cursus. Cras a felis ultricies, interdum dui vel, facilisis risus.",
+              }),
+              id: "acd0806d-4ec6-4efd-864e-a29aa66ec3fc",
+            },
+          ],
+        },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "text",
+              value:
+                "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nullam et nunc augue. Pellentesque at facilisis ipsum. Donec facilisis lorem ligula, ultrices feugiat nibh consectetur id. Aenean pulvinar est ac ipsum vulputate, nec maximus ligula elementum. Cras a eros eget velit varius finibus ut sollicitudin enim. Nulla et augue ac massa consequat cursus. Curabitur eget dolor tristique, porttitor mi non, commodo augue. Integer tincidunt dui lectus, egestas dapibus mauris porta sit amet. Morbi tincidunt turpis id tortor ornare, vel viverra elit cursus. Cras a felis ultricies, interdum dui vel, facilisis risus.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+};
+
 export const MultiTurnParallelToolUse: Story = {
   args: {
     input: {
