@@ -264,21 +264,25 @@ async fn query_demonstration_data(
     let query = format!(
         r#"
         SELECT
-            argmax(i.variant_name, d.timestamp) as variant_name,
-            argmax(i.input, d.timestamp) as input,
-            argmax(d.value, d.timestamp) as value,
-            argmax(i.episode_id, d.timestamp) as episode_id
+            argMax(i.variant_name, d.timestamp) as variant_name,
+            argMax(i.input, d.timestamp) as input,
+            argMax(d.value, d.timestamp) as output,
+            argMax(i.episode_id, d.timestamp) as episode_id
         FROM
           {{inference_table_name:Identifier}} i
         JOIN DemonstrationFeedback d
         ON i.id = d.inference_id
+        WHERE i.function_name = {{function_name:String}}
         GROUP BY d.inference_id
         {limit_clause}
         FORMAT JSONEachRow
     "#
     );
 
-    let params = vec![("inference_table_name", inference_table_name)];
+    let params = vec![
+        ("inference_table_name", inference_table_name),
+        ("function_name", function_name),
+    ];
     let rows = clickhouse
         .run_query_synchronous(query, Some(&params.into_iter().collect()))
         .await
