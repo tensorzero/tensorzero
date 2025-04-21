@@ -33,6 +33,8 @@ test("should display inferences with image content", async ({ page }) => {
   // Verify that images display in the modelInference section too
   // Click on the modelInference section
   await page.getByText("0196372f-2b63-7ed1-9a5a-9d0fa69c43e9").click();
+  // Wait for 500ms
+  await page.waitForTimeout(500);
   // Assert that the images are visible
   const newImages = page.locator("img");
   await expect(newImages).toHaveCount(4);

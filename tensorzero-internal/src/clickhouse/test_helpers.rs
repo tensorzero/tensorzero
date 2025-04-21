@@ -419,6 +419,7 @@ pub struct StaticEvaluationHumanFeedback {
     pub output: String,
     pub value: String,
     pub feedback_id: Uuid,
+    pub evaluator_inference_id: Option<Uuid>,
 }
 
 #[cfg(feature = "e2e_tests")]
