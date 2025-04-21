@@ -342,6 +342,11 @@ model_name = "grok-2-1212"
 [models."grok_2_1212-dynamic"]
 routing = ["xai"]
 
+[provider_types.gcp_vertex_gemini.batch]
+storage_type = "cloud_storage"
+input_uri_prefix = "gs://tensorzero-batch-tests-input/input-prefix/"
+output_uri_prefix = "gs://tensorzero-batch-tests-output/output-prefix/"
+
 [models."grok_2_1212-dynamic".providers.xai]
 type = "xai"
 model_name = "grok-2-1212"

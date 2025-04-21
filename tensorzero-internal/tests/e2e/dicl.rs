@@ -7,7 +7,8 @@ use serde_json::{json, Value};
 use std::time::Duration;
 use tensorzero_internal::{
     clickhouse::{test_helpers::select_json_inference_clickhouse, ClickHouseConnectionInfo},
-    embeddings::{EmbeddingProvider, EmbeddingProviderConfig, EmbeddingRequest},
+    config_parser::ProviderTypesConfig,
+    embeddings::{EmbeddingProvider, EmbeddingRequest, UninitializedEmbeddingProviderConfig},
     endpoints::inference::InferenceCredentials,
     inference::types::{
         ContentBlock, ContentBlockChatOutput, JsonInferenceOutput, RequestMessage, ResolvedInput,
@@ -357,8 +358,11 @@ async fn embed_insert_example(
     type = "openai"
     model_name = "text-embedding-3-small"
     "#;
-    let provider_config: EmbeddingProviderConfig = toml::from_str(provider_config_serialized)
-        .expect("Failed to deserialize EmbeddingProviderConfig");
+    let provider_config =
+        toml::from_str::<UninitializedEmbeddingProviderConfig>(provider_config_serialized)
+            .expect("Failed to deserialize EmbeddingProviderConfig")
+            .load(&ProviderTypesConfig::default())
+            .unwrap();
 
     let client = Client::new();
     let request = EmbeddingRequest {
