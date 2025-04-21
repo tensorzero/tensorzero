@@ -511,7 +511,7 @@ describe("OpenAI Compatibility", () => {
 
       if (i + 1 < chunks.length) {
         expect(chunk.choices.length).toBe(1);
-        expect(chunk.choices[0].delta.content).toBeNull();
+        expect(chunk.choices[0].delta.content).toBeUndefined();
         expect(chunk.choices[0].delta.tool_calls?.length).toBe(1);
 
         const toolCall = chunk.choices[0].delta.tool_calls![0];

@@ -858,6 +858,7 @@ struct OpenAICompatibleResponseChunk {
     created: u32,
     model: String,
     system_fingerprint: String,
+    service_tier: String,
     object: String,
     usage: Option<OpenAICompatibleUsage>,
 }
@@ -866,12 +867,20 @@ struct OpenAICompatibleResponseChunk {
 struct OpenAICompatibleChoiceChunk {
     index: u32,
     finish_reason: Option<OpenAICompatibleFinishReason>,
+    logprobs: Option<()>, // This is always set to None for now
     delta: OpenAICompatibleDelta,
+}
+
+fn is_none_or_empty<T>(v: &Option<Vec<T>>) -> bool {
+    // if it’s None → skip, or if the Vec is empty → skip
+    v.as_ref().is_none_or(|vec| vec.is_empty())
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 struct OpenAICompatibleDelta {
+    #[serde(skip_serializing_if = "Option::is_none")]
     content: Option<String>,
+    #[serde(skip_serializing_if = "is_none_or_empty")]
     tool_calls: Option<Vec<OpenAICompatibleToolCallChunk>>,
 }
 
@@ -889,12 +898,14 @@ fn convert_inference_response_chunk_to_openai_compatible(
                 choices: vec![OpenAICompatibleChoiceChunk {
                     index: 0,
                     finish_reason: c.finish_reason.map(|finish_reason| finish_reason.into()),
+                    logprobs: None,
                     delta: OpenAICompatibleDelta {
                         content,
                         tool_calls: Some(tool_calls),
                     },
                 }],
                 created: current_timestamp() as u32,
+                service_tier: "".to_string(),
                 model: format!("{response_model_prefix}{}", c.variant_name),
                 system_fingerprint: "".to_string(),
                 object: "chat.completion.chunk".to_string(),
@@ -908,12 +919,14 @@ fn convert_inference_response_chunk_to_openai_compatible(
             choices: vec![OpenAICompatibleChoiceChunk {
                 index: 0,
                 finish_reason: c.finish_reason.map(|finish_reason| finish_reason.into()),
+                logprobs: None,
                 delta: OpenAICompatibleDelta {
                     content: Some(c.raw),
                     tool_calls: None,
                 },
             }],
             created: current_timestamp() as u32,
+            service_tier: "".to_string(),
             model: format!("{response_model_prefix}{}", c.variant_name),
             system_fingerprint: "".to_string(),
             object: "chat.completion.chunk".to_string(),
@@ -1047,6 +1060,7 @@ fn prepare_serialized_openai_compatible_events(
                 model: format!("{response_model_prefix}{}", variant_name),
                 system_fingerprint: "".to_string(),
                 object: "chat.completion.chunk".to_string(),
+                service_tier: "".to_string(),
                 usage: Some(OpenAICompatibleUsage {
                     prompt_tokens: total_usage.prompt_tokens,
                     completion_tokens: total_usage.completion_tokens,

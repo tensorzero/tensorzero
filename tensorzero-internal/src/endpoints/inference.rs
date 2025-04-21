@@ -935,6 +935,11 @@ pub struct JsonInferenceResponseChunk {
     pub finish_reason: Option<FinishReason>,
 }
 
+const ZERO_USAGE: Usage = Usage {
+    input_tokens: 0,
+    output_tokens: 0,
+};
+
 impl InferenceResponseChunk {
     fn new(
         inference_result: InferenceResultChunk,
@@ -950,7 +955,13 @@ impl InferenceResponseChunk {
                     episode_id,
                     variant_name,
                     content: result.content,
-                    usage: if cached { None } else { result.usage },
+                    // Token usage is intended to represent 'billed tokens',
+                    // so set it to zero if the result is cached
+                    usage: if cached {
+                        Some(ZERO_USAGE)
+                    } else {
+                        result.usage
+                    },
                     finish_reason: result.finish_reason,
                 })
             }
@@ -963,7 +974,13 @@ impl InferenceResponseChunk {
                     episode_id,
                     variant_name,
                     raw: result.raw.unwrap_or_default(),
-                    usage: if cached { None } else { result.usage },
+                    // Token usage is intended to represent 'billed tokens',
+                    // so set it to zero if the result is cached
+                    usage: if cached {
+                        Some(ZERO_USAGE)
+                    } else {
+                        result.usage
+                    },
                     finish_reason: result.finish_reason,
                 })
             }

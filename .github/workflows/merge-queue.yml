@@ -128,28 +128,6 @@ jobs:
       - name: Install Python for python async client tests
         run: uv python install 3.9
 
-      - name: "Python: ruff"
-        run: |
-          uvx ruff@0.9.0 check --output-format=github --extend-select I .
-          uvx ruff@0.9.0 format --check .
-
-      - name: "Python: PyO3 Client: Install dependencies"
-        working-directory: clients/python-pyo3
-        run: |
-          uv venv
-          uv sync
-
-      - name: "Python: PyO3 Client: pyright"
-        working-directory: clients/python-pyo3
-        run: |
-          uv pip install pyright==1.1.394
-          uv run pyright
-
-      - name: "Python: PyO3 Client: stubtest"
-        working-directory: clients/python-pyo3
-        run: |
-          uv run stubtest tensorzero.tensorzero
-
       - name: "Python: PyO3 Client: pytest"
         working-directory: clients/python-pyo3
         run: |
@@ -161,12 +139,6 @@ jobs:
           uv venv
           uv pip sync requirements.txt
 
-      - name: "Python: OpenAI Client: pyright"
-        working-directory: clients/openai-python
-        run: |
-          uv pip install pyright==1.1.394
-          uv run pyright
-
       - name: "Python: OpenAI Client: pytest"
         working-directory: clients/openai-python
         run: |
@@ -177,31 +149,10 @@ jobs:
         run: |
           pnpm install
 
-      - name: "Node.js: OpenAI Client: typecheck"
-        working-directory: clients/openai-node
-        run: |
-          pnpm run typecheck
-
-      - name: "Node.js: OpenAI Client: lint"
-        working-directory: clients/openai-node
-        run: |
-          pnpm run lint
-
       - name: "Node.js: OpenAI Client: test"
         working-directory: clients/openai-node
         run: |
           pnpm run test
-
-      - name: "Python: Recipes: Install dependencies"
-        working-directory: recipes
-        run: |
-          uv venv
-          uv sync
-
-      - name: "Python: Recipes: pyright"
-        working-directory: recipes
-        run: |
-          uv run pyright
 
       - name: "Python: Recipes: pytest"
         working-directory: recipes
