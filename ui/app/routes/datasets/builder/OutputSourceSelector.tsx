@@ -25,6 +25,8 @@ export default function OutputSourceSelector({
         `/api/function/${encodeURIComponent(functionValue)}/feedback_counts`,
       );
     }
+    // TODO: Fix and stop ignoring lint rule
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [functionValue]);
 
   const demonstrationCount = useMemo(() => {

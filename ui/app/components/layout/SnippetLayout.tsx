@@ -106,10 +106,9 @@ export function SnippetTabs({
   children,
   onTabChange,
 }: SnippetTabsProps) {
-  if (!tabs || tabs.length === 0) return null;
-
-  const defaultTabId = defaultTab || tabs[0].id;
+  const defaultTabId = defaultTab || tabs[0]?.id;
   const [activeTab, setActiveTab] = useState(defaultTabId);
+  if (!tabs || tabs.length === 0) return null;
 
   const handleTabChange = (tabId: string) => {
     setActiveTab(tabId);
