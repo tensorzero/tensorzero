@@ -46,29 +46,29 @@ use crate::inference::providers::helpers::inject_extra_request_data;
 use super::provider_trait::{TensorZeroEventError, WrappedProvider};
 
 lazy_static! {
-    static ref OPENAI_DEFAULT_BASE_URL: Url = {
+    static ref GROQ_DEFAULT_BASE_URL: Url = {
         #[allow(clippy::expect_used)]
-        Url::parse("https://api.openai.com/v1/").expect("Failed to parse OPENAI_DEFAULT_BASE_URL")
+        Url::parse("https://api.groq.com/v1/").expect("Failed to parse GROQ_DEFAULT_BASE_URL")
     };
 }
 
 fn default_api_key_location() -> CredentialLocation {
-    CredentialLocation::Env("OPENAI_API_KEY".to_string())
+    CredentialLocation::Env("GROQ_API_KEY".to_string())
 }
 
-const PROVIDER_NAME: &str = "OpenAI";
-const PROVIDER_TYPE: &str = "openai";
+const PROVIDER_NAME: &str = "Groq";
+const PROVIDER_TYPE: &str = "groq";
 
 #[derive(Debug)]
-pub struct OpenAIProvider {
+pub struct GroqProvider {
     model_name: String,
     api_base: Option<Url>,
-    credentials: OpenAICredentials,
+    credentials: GroqCredentials,
 }
 
-static DEFAULT_CREDENTIALS: OnceLock<OpenAICredentials> = OnceLock::new();
+static DEFAULT_CREDENTIALS: OnceLock<GroqCredentials> = OnceLock::new();
 
-impl OpenAIProvider {
+impl GroqProvider {
     pub fn new(
         model_name: String,
         api_base: Option<Url>,
@@ -80,7 +80,7 @@ impl OpenAIProvider {
             PROVIDER_TYPE,
             &DEFAULT_CREDENTIALS,
         )?;
-        Ok(OpenAIProvider {
+        Ok(GroqProvider {
             model_name,
             api_base,
             credentials,
@@ -89,36 +89,36 @@ impl OpenAIProvider {
 }
 
 #[derive(Clone, Debug)]
-pub enum OpenAICredentials {
+pub enum GroqCredentials {
     Static(SecretString),
     Dynamic(String),
     None,
 }
 
-impl TryFrom<Credential> for OpenAICredentials {
+impl TryFrom<Credential> for GroqCredentials {
     type Error = Error;
 
     fn try_from(credentials: Credential) -> Result<Self, Error> {
         match credentials {
-            Credential::Static(key) => Ok(OpenAICredentials::Static(key)),
-            Credential::Dynamic(key_name) => Ok(OpenAICredentials::Dynamic(key_name)),
-            Credential::None => Ok(OpenAICredentials::None),
-            Credential::Missing => Ok(OpenAICredentials::None),
+            Credential::Static(key) => Ok(GroqCredentials::Static(key)),
+            Credential::Dynamic(key_name) => Ok(GroqCredentials::Dynamic(key_name)),
+            Credential::None => Ok(GroqCredentials::None),
+            Credential::Missing => Ok(GroqCredentials::None),
             _ => Err(Error::new(ErrorDetails::Config {
-                message: "Invalid api_key_location for OpenAI provider".to_string(),
+                message: "Invalid api_key_location for Groq provider".to_string(),
             })),
         }
     }
 }
 
-impl OpenAICredentials {
+impl GroqCredentials {
     pub fn get_api_key<'a>(
         &'a self,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<Option<&'a SecretString>, Error> {
         match self {
-            OpenAICredentials::Static(api_key) => Ok(Some(api_key)),
-            OpenAICredentials::Dynamic(key_name) => {
+            GroqCredentials::Static(api_key) => Ok(Some(api_key)),
+            GroqCredentials::Dynamic(key_name) => {
                 Some(dynamic_api_keys.get(key_name).ok_or_else(|| {
                     ErrorDetails::ApiKeyMissing {
                         provider_name: PROVIDER_NAME.to_string(),
@@ -127,12 +127,12 @@ impl OpenAICredentials {
                 }))
                 .transpose()
             }
-            OpenAICredentials::None => Ok(None),
+            GroqCredentials::None => Ok(None),
         }
     }
 }
 
-impl WrappedProvider for OpenAIProvider {
+impl WrappedProvider for GroqProvider {
     fn make_body<'a>(
         &'a self,
         ModelProviderRequest {
@@ -141,11 +141,11 @@ impl WrappedProvider for OpenAIProvider {
             model_name: _,
         }: ModelProviderRequest<'a>,
     ) -> Result<serde_json::Value, Error> {
-        let request_body = serde_json::to_value(OpenAIRequest::new(&self.model_name, request)?)
+        let request_body = serde_json::to_value(GroqRequest::new(&self.model_name, request)?)
             .map_err(|e| {
                 Error::new(ErrorDetails::Serialization {
                     message: format!(
-                        "Error serializing OpenAI request: {}",
+                        "Error serializing Groq request: {}",
                         DisplayOrDebugGateway::new(e)
                     ),
                 })
@@ -171,7 +171,7 @@ impl WrappedProvider for OpenAIProvider {
             })
         })?;
 
-        OpenAIResponseWithMetadata {
+        GroqResponseWithMetadata {
             response,
             raw_response,
             latency,
@@ -192,7 +192,7 @@ impl WrappedProvider for OpenAIProvider {
     }
 }
 
-impl InferenceProvider for OpenAIProvider {
+impl InferenceProvider for GroqProvider {
     async fn infer<'a>(
         &'a self,
         request: ModelProviderRequest<'a>,
@@ -200,7 +200,7 @@ impl InferenceProvider for OpenAIProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_url = get_chat_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
+        let request_url = get_chat_url(self.api_base.as_ref().unwrap_or(&GROQ_DEFAULT_BASE_URL))?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let mut request_body = self.make_body(request)?;
@@ -237,7 +237,7 @@ impl InferenceProvider for OpenAIProvider {
                 Error::new(ErrorDetails::InferenceClient {
                     status_code: e.status(),
                     message: format!(
-                        "Error sending request to OpenAI: {}",
+                        "Error sending request to Groq: {}",
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
@@ -274,7 +274,7 @@ impl InferenceProvider for OpenAIProvider {
             let latency = Latency::NonStreaming {
                 response_time: start_time.elapsed(),
             };
-            Ok(OpenAIResponseWithMetadata {
+            Ok(GroqResponseWithMetadata {
                 response,
                 raw_response,
                 latency,
@@ -312,15 +312,15 @@ impl InferenceProvider for OpenAIProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let mut request_body = serde_json::to_value(OpenAIRequest::new(&self.model_name, request)?)
+        let mut request_body = serde_json::to_value(GroqRequest::new(&self.model_name, request)?)
             .map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: format!(
-                        "Error serializing OpenAI request: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                })
-            })?;
+            Error::new(ErrorDetails::Serialization {
+                message: format!(
+                    "Error serializing Groq request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
+            })
+        })?;
         let headers = inject_extra_request_data(
             &request.extra_body,
             model_provider,
@@ -335,7 +335,7 @@ impl InferenceProvider for OpenAIProvider {
                 ),
             })
         })?;
-        let request_url = get_chat_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
+        let request_url = get_chat_url(self.api_base.as_ref().unwrap_or(&GROQ_DEFAULT_BASE_URL))?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let mut request_builder = http_client
@@ -351,7 +351,7 @@ impl InferenceProvider for OpenAIProvider {
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
                     message: format!(
-                        "Error sending request to OpenAI: {}",
+                        "Error sending request to Groq: {}",
                         DisplayOrDebugGateway::new(e)
                     ),
                     status_code: None,
@@ -372,7 +372,7 @@ impl InferenceProvider for OpenAIProvider {
 
     // Get a single chunk from the stream and make sure it is OK then send to client.
     // We want to do this here so that we can tell that the request is working.
-    /// 1. Upload the requests to OpenAI as a File
+    /// 1. Upload the requests to Groq as a File
     /// 2. Start the batch inference
     ///    We do them in sequence here.
     async fn start_batch_inference<'a>(
@@ -383,13 +383,13 @@ impl InferenceProvider for OpenAIProvider {
     ) -> Result<StartBatchProviderInferenceResponse, Error> {
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let request_url = get_file_url(
-            self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL),
+            self.api_base.as_ref().unwrap_or(&GROQ_DEFAULT_BASE_URL),
             None,
         )?;
         let mut batch_requests = Vec::with_capacity(requests.len());
         for request in requests {
             batch_requests.push(
-                OpenAIBatchFileInput::new(request.inference_id, &self.model_name, request).await?,
+                GroqBatchFileInput::new(request.inference_id, &self.model_name, request).await?,
             );
         }
         let raw_requests: Result<Vec<String>, serde_json::Error> = batch_requests
@@ -436,12 +436,12 @@ impl InferenceProvider for OpenAIProvider {
         if let Some(api_key) = api_key {
             request_builder = request_builder.bearer_auth(api_key.expose_secret());
         }
-        // Actually upload the file to OpenAI
+        // Actually upload the file to Groq
         let res = request_builder.multipart(form).send().await.map_err(|e| {
             Error::new(ErrorDetails::InferenceClient {
                 status_code: e.status(),
                 message: format!(
-                    "Error sending request to OpenAI: {}",
+                    "Error sending request to Groq: {}",
                     DisplayOrDebugGateway::new(e)
                 ),
                 provider_type: PROVIDER_TYPE.to_string(),
@@ -460,7 +460,7 @@ impl InferenceProvider for OpenAIProvider {
                 raw_response: None,
             })
         })?;
-        let response: OpenAIFileResponse = serde_json::from_str(&text).map_err(|e| {
+        let response: GroqFileResponse = serde_json::from_str(&text).map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error parsing JSON response: {e}, text: {text}"),
                 raw_request: None,
@@ -469,10 +469,9 @@ impl InferenceProvider for OpenAIProvider {
             })
         })?;
         let file_id = response.id;
-        let batch_request = OpenAIBatchRequest::new(&file_id);
-        let raw_request = serde_json::to_string(&batch_request).map_err(|_| Error::new(ErrorDetails::Serialization { message: "Error serializing OpenAI batch request. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string() }))?;
-        let request_url =
-            get_batch_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
+        let batch_request = GroqBatchRequest::new(&file_id);
+        let raw_request = serde_json::to_string(&batch_request).map_err(|_| Error::new(ErrorDetails::Serialization { message: "Error serializing Groq batch request. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string() }))?;
+        let request_url = get_batch_url(self.api_base.as_ref().unwrap_or(&GROQ_DEFAULT_BASE_URL))?;
         let mut request_builder = client.post(request_url);
         if let Some(api_key) = api_key {
             request_builder = request_builder.bearer_auth(api_key.expose_secret());
@@ -486,7 +485,7 @@ impl InferenceProvider for OpenAIProvider {
                 Error::new(ErrorDetails::InferenceClient {
                     status_code: e.status(),
                     message: format!(
-                        "Error sending request to OpenAI: {}",
+                        "Error sending request to Groq: {}",
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
@@ -505,7 +504,7 @@ impl InferenceProvider for OpenAIProvider {
                 provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
-        let response: OpenAIBatchResponse = serde_json::from_str(&text).map_err(|e| {
+        let response: GroqBatchResponse = serde_json::from_str(&text).map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error parsing JSON response: {e}, text: {text}"),
                 raw_request: Some(serde_json::to_string(&batch_request).unwrap_or_default()),
@@ -513,14 +512,14 @@ impl InferenceProvider for OpenAIProvider {
                 provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
-        let batch_params = OpenAIBatchParams {
+        let batch_params = GroqBatchParams {
             file_id: Cow::Owned(file_id),
             batch_id: Cow::Owned(response.id),
         };
         let batch_params = serde_json::to_value(batch_params).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!(
-                    "Error serializing OpenAI batch params: {}",
+                    "Error serializing Groq batch params: {}",
                     DisplayOrDebugGateway::new(e)
                 ),
             })
@@ -560,9 +559,9 @@ impl InferenceProvider for OpenAIProvider {
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<PollBatchInferenceResponse, Error> {
-        let batch_params = OpenAIBatchParams::from_ref(&batch_request.batch_params)?;
+        let batch_params = GroqBatchParams::from_ref(&batch_request.batch_params)?;
         let mut request_url =
-            get_batch_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
+            get_batch_url(self.api_base.as_ref().unwrap_or(&GROQ_DEFAULT_BASE_URL))?;
         request_url
             .path_segments_mut()
             .map_err(|_| {
@@ -583,7 +582,7 @@ impl InferenceProvider for OpenAIProvider {
             Error::new(ErrorDetails::InferenceClient {
                 status_code: e.status(),
                 message: format!(
-                    "Error sending request to OpenAI: {}",
+                    "Error sending request to Groq: {}",
                     DisplayOrDebugGateway::new(e)
                 ),
                 provider_type: PROVIDER_TYPE.to_string(),
@@ -602,7 +601,7 @@ impl InferenceProvider for OpenAIProvider {
                 provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
-        let response: OpenAIBatchResponse = serde_json::from_str(&text).map_err(|e| {
+        let response: GroqBatchResponse = serde_json::from_str(&text).map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error parsing JSON response: {e}."),
                 raw_request: Some(serde_json::to_string(&batch_request).unwrap_or_default()),
@@ -647,7 +646,7 @@ impl InferenceProvider for OpenAIProvider {
     }
 }
 
-impl EmbeddingProvider for OpenAIProvider {
+impl EmbeddingProvider for GroqProvider {
     async fn embed(
         &self,
         request: &EmbeddingRequest,
@@ -655,9 +654,9 @@ impl EmbeddingProvider for OpenAIProvider {
         dynamic_api_keys: &InferenceCredentials,
     ) -> Result<EmbeddingProviderResponse, Error> {
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
-        let request_body = OpenAIEmbeddingRequest::new(&self.model_name, &request.input);
+        let request_body = GroqEmbeddingRequest::new(&self.model_name, &request.input);
         let request_url =
-            get_embedding_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
+            get_embedding_url(self.api_base.as_ref().unwrap_or(&GROQ_DEFAULT_BASE_URL))?;
         let start_time = Instant::now();
         let mut request_builder = client
             .post(request_url)
@@ -673,7 +672,7 @@ impl EmbeddingProvider for OpenAIProvider {
                 Error::new(ErrorDetails::InferenceClient {
                     status_code: e.status(),
                     message: format!(
-                        "Error sending request to OpenAI: {}",
+                        "Error sending request to Groq: {}",
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
@@ -694,7 +693,7 @@ impl EmbeddingProvider for OpenAIProvider {
                 })
             })?;
 
-            let response: OpenAIEmbeddingResponse =
+            let response: GroqEmbeddingResponse =
                 serde_json::from_str(&raw_response).map_err(|e| {
                     Error::new(ErrorDetails::InferenceServer {
                         message: format!(
@@ -710,7 +709,7 @@ impl EmbeddingProvider for OpenAIProvider {
                 response_time: start_time.elapsed(),
             };
 
-            Ok(OpenAIEmbeddingResponseWithMetadata {
+            Ok(GroqEmbeddingResponseWithMetadata {
                 response,
                 latency,
                 request: request_body,
@@ -779,7 +778,7 @@ pub fn stream_openai(
                         if message.data == "[DONE]" {
                             break;
                         }
-                        let data: Result<OpenAIChatChunk, Error> =
+                        let data: Result<GroqChatChunk, Error> =
                             serde_json::from_str(&message.data).map_err(|e| Error::new(ErrorDetails::InferenceServer {
                                 message: format!(
                                     "Error parsing chunk. Error: {}",
@@ -802,8 +801,8 @@ pub fn stream_openai(
     })
 }
 
-impl OpenAIProvider {
-    // Once a batch has been completed we need to retrieve the results from OpenAI using the files API
+impl GroqProvider {
+    // Once a batch has been completed we need to retrieve the results from Groq using the files API
     #[instrument(skip_all, fields(file_id = file_id))]
     async fn collect_finished_batch(
         &self,
@@ -814,7 +813,7 @@ impl OpenAIProvider {
         raw_response: String,
     ) -> Result<ProviderBatchInferenceResponse, Error> {
         let file_url = get_file_url(
-            self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL),
+            self.api_base.as_ref().unwrap_or(&GROQ_DEFAULT_BASE_URL),
             Some(file_id),
         )?;
         let api_key = self.credentials.get_api_key(credentials)?;
@@ -825,7 +824,7 @@ impl OpenAIProvider {
         let res = request_builder.send().await.map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
                 message: format!(
-                    "Error downloading batch results from OpenAI for file {file_id}: {e}"
+                    "Error downloading batch results from Groq for file {file_id}: {e}"
                 ),
                 raw_request: None,
                 raw_response: None,
@@ -875,7 +874,7 @@ impl OpenAIProvider {
             })
         })?;
         for line in text.lines() {
-            let row = match serde_json::from_str::<OpenAIBatchFileRow>(line) {
+            let row = match serde_json::from_str::<GroqBatchFileRow>(line) {
                 Ok(row) => row,
                 Err(e) => {
                     // Construct error for logging but don't return it
@@ -990,18 +989,18 @@ pub(super) fn handle_openai_error(
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub(super) struct OpenAISystemRequestMessage<'a> {
+pub(super) struct GroqSystemRequestMessage<'a> {
     pub content: Cow<'a, str>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub(super) struct OpenAIUserRequestMessage<'a> {
+pub(super) struct GroqUserRequestMessage<'a> {
     #[serde(serialize_with = "serialize_text_content_vec")]
-    pub(super) content: Vec<OpenAIContentBlock<'a>>,
+    pub(super) content: Vec<GroqContentBlock<'a>>,
 }
 
 fn serialize_text_content_vec<S>(
-    content: &Vec<OpenAIContentBlock<'_>>,
+    content: &Vec<GroqContentBlock<'_>>,
     serializer: S,
 ) -> Result<S::Ok, S::Error>
 where
@@ -1009,7 +1008,7 @@ where
 {
     // If we have a single text block, serialize it as a string
     // to stay compatible with older providers which may not support content blocks
-    if let [OpenAIContentBlock::Text { text }] = &content.as_slice() {
+    if let [GroqContentBlock::Text { text }] = &content.as_slice() {
         text.serialize(serializer)
     } else {
         content.serialize(serializer)
@@ -1017,7 +1016,7 @@ where
 }
 
 fn serialize_optional_text_content_vec<S>(
-    content: &Option<Vec<OpenAIContentBlock<'_>>>,
+    content: &Option<Vec<GroqContentBlock<'_>>>,
     serializer: S,
 ) -> Result<S::Ok, S::Error>
 where
@@ -1030,13 +1029,13 @@ where
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum OpenAIContentBlock<'a> {
+pub enum GroqContentBlock<'a> {
     Text { text: Cow<'a, str> },
-    ImageUrl { image_url: OpenAIImageUrl },
+    ImageUrl { image_url: GroqImageUrl },
     Unknown { data: Cow<'a, Value> },
 }
 
-impl Serialize for OpenAIContentBlock<'_> {
+impl Serialize for GroqContentBlock<'_> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -1045,43 +1044,43 @@ impl Serialize for OpenAIContentBlock<'_> {
         #[serde(tag = "type", rename_all = "snake_case")]
         enum Helper<'a> {
             Text { text: &'a str },
-            ImageUrl { image_url: &'a OpenAIImageUrl },
+            ImageUrl { image_url: &'a GroqImageUrl },
         }
         match self {
-            OpenAIContentBlock::Text { text } => Helper::Text { text }.serialize(serializer),
-            OpenAIContentBlock::ImageUrl { image_url } => {
+            GroqContentBlock::Text { text } => Helper::Text { text }.serialize(serializer),
+            GroqContentBlock::ImageUrl { image_url } => {
                 Helper::ImageUrl { image_url }.serialize(serializer)
             }
-            OpenAIContentBlock::Unknown { data } => data.serialize(serializer),
+            GroqContentBlock::Unknown { data } => data.serialize(serializer),
         }
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub struct OpenAIImageUrl {
+pub struct GroqImageUrl {
     pub url: String,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct OpenAIRequestFunctionCall<'a> {
+pub struct GroqRequestFunctionCall<'a> {
     pub name: &'a str,
     pub arguments: &'a str,
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq, Deserialize)]
-pub struct OpenAIRequestToolCall<'a> {
+pub struct GroqRequestToolCall<'a> {
     pub id: &'a str,
-    pub r#type: OpenAIToolType,
-    pub function: OpenAIRequestFunctionCall<'a>,
+    pub r#type: GroqToolType,
+    pub function: GroqRequestFunctionCall<'a>,
 }
 
-impl<'a> From<&'a ToolCall> for OpenAIRequestToolCall<'a> {
+impl<'a> From<&'a ToolCall> for GroqRequestToolCall<'a> {
     fn from(tool_call: &'a ToolCall) -> Self {
-        OpenAIRequestToolCall {
+        GroqRequestToolCall {
             id: &tool_call.id,
-            r#type: OpenAIToolType::Function,
-            function: OpenAIRequestFunctionCall {
+            r#type: GroqToolType::Function,
+            function: GroqRequestFunctionCall {
                 name: &tool_call.name,
                 arguments: &tool_call.arguments,
             },
@@ -1090,18 +1089,18 @@ impl<'a> From<&'a ToolCall> for OpenAIRequestToolCall<'a> {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub(super) struct OpenAIAssistantRequestMessage<'a> {
+pub(super) struct GroqAssistantRequestMessage<'a> {
     #[serde(
         skip_serializing_if = "Option::is_none",
         serialize_with = "serialize_optional_text_content_vec"
     )]
-    pub content: Option<Vec<OpenAIContentBlock<'a>>>,
+    pub content: Option<Vec<GroqContentBlock<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub tool_calls: Option<Vec<OpenAIRequestToolCall<'a>>>,
+    pub tool_calls: Option<Vec<GroqRequestToolCall<'a>>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub(super) struct OpenAIToolRequestMessage<'a> {
+pub(super) struct GroqToolRequestMessage<'a> {
     pub content: &'a str,
     pub tool_call_id: &'a str,
 }
@@ -1109,43 +1108,43 @@ pub(super) struct OpenAIToolRequestMessage<'a> {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(tag = "role")]
 #[serde(rename_all = "lowercase")]
-pub(super) enum OpenAIRequestMessage<'a> {
-    System(OpenAISystemRequestMessage<'a>),
-    User(OpenAIUserRequestMessage<'a>),
-    Assistant(OpenAIAssistantRequestMessage<'a>),
-    Tool(OpenAIToolRequestMessage<'a>),
+pub(super) enum GroqRequestMessage<'a> {
+    System(GroqSystemRequestMessage<'a>),
+    User(GroqUserRequestMessage<'a>),
+    Assistant(GroqAssistantRequestMessage<'a>),
+    Tool(GroqToolRequestMessage<'a>),
 }
 
-impl OpenAIRequestMessage<'_> {
+impl GroqRequestMessage<'_> {
     pub fn content_contains_case_insensitive(&self, value: &str) -> bool {
         match self {
-            OpenAIRequestMessage::System(msg) => msg.content.to_lowercase().contains(value),
-            OpenAIRequestMessage::User(msg) => msg.content.iter().any(|c| match c {
-                OpenAIContentBlock::Text { text } => text.to_lowercase().contains(value),
-                OpenAIContentBlock::ImageUrl { .. } => false,
+            GroqRequestMessage::System(msg) => msg.content.to_lowercase().contains(value),
+            GroqRequestMessage::User(msg) => msg.content.iter().any(|c| match c {
+                GroqContentBlock::Text { text } => text.to_lowercase().contains(value),
+                GroqContentBlock::ImageUrl { .. } => false,
                 // Don't inspect the contents of 'unknown' blocks
-                OpenAIContentBlock::Unknown { data: _ } => false,
+                GroqContentBlock::Unknown { data: _ } => false,
             }),
-            OpenAIRequestMessage::Assistant(msg) => {
+            GroqRequestMessage::Assistant(msg) => {
                 if let Some(content) = &msg.content {
                     content.iter().any(|c| match c {
-                        OpenAIContentBlock::Text { text } => text.to_lowercase().contains(value),
-                        OpenAIContentBlock::ImageUrl { .. } => false,
+                        GroqContentBlock::Text { text } => text.to_lowercase().contains(value),
+                        GroqContentBlock::ImageUrl { .. } => false,
                         // Don't inspect the contents of 'unknown' blocks
-                        OpenAIContentBlock::Unknown { data: _ } => false,
+                        GroqContentBlock::Unknown { data: _ } => false,
                     })
                 } else {
                     false
                 }
             }
-            OpenAIRequestMessage::Tool(msg) => msg.content.to_lowercase().contains(value),
+            GroqRequestMessage::Tool(msg) => msg.content.to_lowercase().contains(value),
         }
     }
 }
 
 pub(super) fn prepare_openai_messages<'a>(
     request: &'a ModelInferenceRequest<'_>,
-) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
+) -> Result<Vec<GroqRequestMessage<'a>>, Error> {
     let mut messages = Vec::with_capacity(request.messages.len());
     for message in request.messages.iter() {
         messages.extend(tensorzero_to_openai_messages(message)?);
@@ -1161,12 +1160,12 @@ pub(super) fn prepare_openai_messages<'a>(
 }
 
 /// If there are no tools passed or the tools are empty, return None for both tools and tool_choice
-/// Otherwise convert the tool choice and tools to OpenAI format
+/// Otherwise convert the tool choice and tools to Groq format
 pub(super) fn prepare_openai_tools<'a>(
     request: &'a ModelInferenceRequest,
 ) -> (
-    Option<Vec<OpenAITool<'a>>>,
-    Option<OpenAIToolChoice<'a>>,
+    Option<Vec<GroqTool<'a>>>,
+    Option<GroqToolChoice<'a>>,
     Option<bool>,
 ) {
     match &request.tool_config {
@@ -1189,7 +1188,7 @@ pub(super) fn prepare_openai_tools<'a>(
     }
 }
 
-/// This function is complicated only by the fact that OpenAI and Azure require
+/// This function is complicated only by the fact that Groq and Azure require
 /// different instructions depending on the json mode and the content of the messages.
 ///
 /// If ModelInferenceRequestJsonMode::On and the system message or instructions does not contain "JSON"
@@ -1198,8 +1197,8 @@ pub(super) fn prepare_openai_tools<'a>(
 pub(super) fn tensorzero_to_openai_system_message<'a>(
     system: Option<&'a str>,
     json_mode: &ModelInferenceRequestJsonMode,
-    messages: &[OpenAIRequestMessage<'a>],
-) -> Option<OpenAIRequestMessage<'a>> {
+    messages: &[GroqRequestMessage<'a>],
+) -> Option<GroqRequestMessage<'a>> {
     match system {
         Some(system) => {
             match json_mode {
@@ -1209,19 +1208,19 @@ pub(super) fn tensorzero_to_openai_system_message<'a>(
                         .any(|msg| msg.content_contains_case_insensitive("json"))
                         || system.to_lowercase().contains("json")
                     {
-                        OpenAIRequestMessage::System(OpenAISystemRequestMessage {
+                        GroqRequestMessage::System(GroqSystemRequestMessage {
                             content: Cow::Borrowed(system),
                         })
                     } else {
                         let formatted_instructions = format!("Respond using JSON.\n\n{system}");
-                        OpenAIRequestMessage::System(OpenAISystemRequestMessage {
+                        GroqRequestMessage::System(GroqSystemRequestMessage {
                             content: Cow::Owned(formatted_instructions),
                         })
                     }
                 }
 
                 // If JSON mode is either off or strict, we don't need to do anything special
-                _ => OpenAIRequestMessage::System(OpenAISystemRequestMessage {
+                _ => GroqRequestMessage::System(GroqSystemRequestMessage {
                     content: Cow::Borrowed(system),
                 }),
             }
@@ -1229,7 +1228,7 @@ pub(super) fn tensorzero_to_openai_system_message<'a>(
         }
         None => match *json_mode {
             ModelInferenceRequestJsonMode::On => {
-                Some(OpenAIRequestMessage::System(OpenAISystemRequestMessage {
+                Some(GroqRequestMessage::System(GroqSystemRequestMessage {
                     content: Cow::Owned("Respond using JSON.".to_string()),
                 }))
             }
@@ -1240,7 +1239,7 @@ pub(super) fn tensorzero_to_openai_system_message<'a>(
 
 pub(super) fn tensorzero_to_openai_messages(
     message: &RequestMessage,
-) -> Result<Vec<OpenAIRequestMessage<'_>>, Error> {
+) -> Result<Vec<GroqRequestMessage<'_>>, Error> {
     match message.role {
         Role::User => tensorzero_to_openai_user_messages(&message.content),
         Role::Assistant => tensorzero_to_openai_assistant_messages(&message.content),
@@ -1249,7 +1248,7 @@ pub(super) fn tensorzero_to_openai_messages(
 
 fn tensorzero_to_openai_user_messages(
     content_blocks: &[ContentBlock],
-) -> Result<Vec<OpenAIRequestMessage<'_>>, Error> {
+) -> Result<Vec<GroqRequestMessage<'_>>, Error> {
     // We need to separate the tool result messages from the user content blocks.
 
     let mut messages = Vec::new();
@@ -1258,7 +1257,7 @@ fn tensorzero_to_openai_user_messages(
     for block in content_blocks.iter() {
         match block {
             ContentBlock::Text(Text { text }) => {
-                user_content_blocks.push(OpenAIContentBlock::Text {
+                user_content_blocks.push(GroqContentBlock::Text {
                     text: Cow::Borrowed(text),
                 });
             }
@@ -1268,7 +1267,7 @@ fn tensorzero_to_openai_user_messages(
                 }));
             }
             ContentBlock::ToolResult(tool_result) => {
-                messages.push(OpenAIRequestMessage::Tool(OpenAIToolRequestMessage {
+                messages.push(GroqRequestMessage::Tool(GroqToolRequestMessage {
                     content: &tool_result.result,
                     tool_call_id: &tool_result.id,
                 }));
@@ -1277,8 +1276,8 @@ fn tensorzero_to_openai_user_messages(
                 image,
                 storage_path: _,
             }) => {
-                user_content_blocks.push(OpenAIContentBlock::ImageUrl {
-                    image_url: OpenAIImageUrl {
+                user_content_blocks.push(GroqContentBlock::ImageUrl {
+                    image_url: GroqImageUrl {
                         // This will only produce an error if we pass in a bad
                         // `Base64Image` (with missing image data)
                         url: format!("data:{};base64,{}", image.mime_type, image.data()?),
@@ -1286,21 +1285,21 @@ fn tensorzero_to_openai_user_messages(
                 });
             }
             ContentBlock::Thought(_) => {
-                // OpenAI doesn't support thought blocks.
+                // Groq doesn't support thought blocks.
                 // This can only happen if the thought block was generated by another model provider.
                 // At this point, we can either convert the thought blocks to text or drop them.
-                // We chose to drop them, because it's more consistent with the behavior that OpenAI expects.
+                // We chose to drop them, because it's more consistent with the behavior that Groq expects.
 
                 // TODO (#1361): test that this warning is logged when we drop thought blocks
                 tracing::warn!(
-                    "Dropping `thought` content block from user message. OpenAI does not support them."
+                    "Dropping `thought` content block from user message. Groq does not support them."
                 );
             }
             ContentBlock::Unknown {
                 data,
                 model_provider_name: _,
             } => {
-                user_content_blocks.push(OpenAIContentBlock::Unknown {
+                user_content_blocks.push(GroqContentBlock::Unknown {
                     data: Cow::Borrowed(data),
                 });
             }
@@ -1309,7 +1308,7 @@ fn tensorzero_to_openai_user_messages(
 
     // If there are any user content blocks, combine them into a single user message.
     if !user_content_blocks.is_empty() {
-        messages.push(OpenAIRequestMessage::User(OpenAIUserRequestMessage {
+        messages.push(GroqRequestMessage::User(GroqUserRequestMessage {
             content: user_content_blocks,
         }));
     }
@@ -1319,7 +1318,7 @@ fn tensorzero_to_openai_user_messages(
 
 fn tensorzero_to_openai_assistant_messages(
     content_blocks: &[ContentBlock],
-) -> Result<Vec<OpenAIRequestMessage<'_>>, Error> {
+) -> Result<Vec<GroqRequestMessage<'_>>, Error> {
     // We need to separate the tool result messages from the assistant content blocks.
     let mut assistant_content_blocks = Vec::new();
     let mut assistant_tool_calls = Vec::new();
@@ -1327,15 +1326,15 @@ fn tensorzero_to_openai_assistant_messages(
     for block in content_blocks.iter() {
         match block {
             ContentBlock::Text(Text { text }) => {
-                assistant_content_blocks.push(OpenAIContentBlock::Text {
+                assistant_content_blocks.push(GroqContentBlock::Text {
                     text: Cow::Borrowed(text),
                 });
             }
             ContentBlock::ToolCall(tool_call) => {
-                let tool_call = OpenAIRequestToolCall {
+                let tool_call = GroqRequestToolCall {
                     id: &tool_call.id,
-                    r#type: OpenAIToolType::Function,
-                    function: OpenAIRequestFunctionCall {
+                    r#type: GroqToolType::Function,
+                    function: GroqRequestFunctionCall {
                         name: &tool_call.name,
                         arguments: &tool_call.arguments,
                     },
@@ -1352,8 +1351,8 @@ fn tensorzero_to_openai_assistant_messages(
                 image,
                 storage_path: _,
             }) => {
-                assistant_content_blocks.push(OpenAIContentBlock::ImageUrl {
-                    image_url: OpenAIImageUrl {
+                assistant_content_blocks.push(GroqContentBlock::ImageUrl {
+                    image_url: GroqImageUrl {
                         // This will only produce an error if we pass in a bad
                         // `Base64Image` (with missing image data)
                         url: format!("data:{};base64,{}", image.mime_type, image.data()?),
@@ -1361,21 +1360,21 @@ fn tensorzero_to_openai_assistant_messages(
                 });
             }
             ContentBlock::Thought(_) => {
-                // OpenAI doesn't support thought blocks.
+                // Groq doesn't support thought blocks.
                 // This can only happen if the thought block was generated by another model provider.
                 // At this point, we can either convert the thought blocks to text or drop them.
-                // We chose to drop them, because it's more consistent with the behavior that OpenAI expects.
+                // We chose to drop them, because it's more consistent with the behavior that Groq expects.
 
                 // TODO (#1361): test that this warning is logged when we drop thought blocks
                 tracing::warn!(
-                    "Dropping `thought` content block from assistant message. OpenAI does not support them."
+                    "Dropping `thought` content block from assistant message. Groq does not support them."
                 );
             }
             ContentBlock::Unknown {
                 data,
                 model_provider_name: _,
             } => {
-                assistant_content_blocks.push(OpenAIContentBlock::Unknown {
+                assistant_content_blocks.push(GroqContentBlock::Unknown {
                     data: Cow::Borrowed(data),
                 });
             }
@@ -1392,7 +1391,7 @@ fn tensorzero_to_openai_assistant_messages(
         _ => Some(assistant_tool_calls),
     };
 
-    let message = OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
+    let message = GroqRequestMessage::Assistant(GroqAssistantRequestMessage {
         content,
         tool_calls,
     });
@@ -1403,7 +1402,7 @@ fn tensorzero_to_openai_assistant_messages(
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "type")]
-enum OpenAIResponseFormat {
+enum GroqResponseFormat {
     #[default]
     Text,
     JsonObject,
@@ -1412,25 +1411,25 @@ enum OpenAIResponseFormat {
     },
 }
 
-impl OpenAIResponseFormat {
+impl GroqResponseFormat {
     fn new(
         json_mode: &ModelInferenceRequestJsonMode,
         output_schema: Option<&Value>,
         model: &str,
     ) -> Self {
         if model.contains("3.5") && *json_mode == ModelInferenceRequestJsonMode::Strict {
-            return OpenAIResponseFormat::JsonObject;
+            return GroqResponseFormat::JsonObject;
         }
 
         match json_mode {
-            ModelInferenceRequestJsonMode::On => OpenAIResponseFormat::JsonObject,
-            ModelInferenceRequestJsonMode::Off => OpenAIResponseFormat::Text,
+            ModelInferenceRequestJsonMode::On => GroqResponseFormat::JsonObject,
+            ModelInferenceRequestJsonMode::Off => GroqResponseFormat::Text,
             ModelInferenceRequestJsonMode::Strict => match output_schema {
                 Some(schema) => {
                     let json_schema = json!({"name": "response", "strict": true, "schema": schema});
-                    OpenAIResponseFormat::JsonSchema { json_schema }
+                    GroqResponseFormat::JsonSchema { json_schema }
                 }
-                None => OpenAIResponseFormat::JsonObject,
+                None => GroqResponseFormat::JsonObject,
             },
         }
     }
@@ -1438,12 +1437,12 @@ impl OpenAIResponseFormat {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
-pub enum OpenAIToolType {
+pub enum GroqToolType {
     Function,
 }
 
 #[derive(Debug, PartialEq, Serialize)]
-pub(super) struct OpenAIFunction<'a> {
+pub(super) struct GroqFunction<'a> {
     pub(super) name: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) description: Option<&'a str>,
@@ -1451,17 +1450,17 @@ pub(super) struct OpenAIFunction<'a> {
 }
 
 #[derive(Debug, PartialEq, Serialize)]
-pub(super) struct OpenAITool<'a> {
-    pub(super) r#type: OpenAIToolType,
-    pub(super) function: OpenAIFunction<'a>,
+pub(super) struct GroqTool<'a> {
+    pub(super) r#type: GroqToolType,
+    pub(super) function: GroqFunction<'a>,
     pub(super) strict: bool,
 }
 
-impl<'a> From<&'a ToolConfig> for OpenAITool<'a> {
+impl<'a> From<&'a ToolConfig> for GroqTool<'a> {
     fn from(tool: &'a ToolConfig) -> Self {
-        OpenAITool {
-            r#type: OpenAIToolType::Function,
-            function: OpenAIFunction {
+        GroqTool {
+            r#type: GroqToolType::Function,
+            function: GroqFunction {
                 name: tool.name(),
                 description: Some(tool.description()),
                 parameters: tool.parameters(),
@@ -1472,13 +1471,13 @@ impl<'a> From<&'a ToolConfig> for OpenAITool<'a> {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-struct OpenAIBatchParams<'a> {
+struct GroqBatchParams<'a> {
     file_id: Cow<'a, str>,
     batch_id: Cow<'a, str>,
 }
 
-impl<'a> OpenAIBatchParams<'a> {
-    #[instrument(name = "OpenAIBatchParams::from_ref", skip_all, fields(%value))]
+impl<'a> GroqBatchParams<'a> {
+    #[instrument(name = "GroqBatchParams::from_ref", skip_all, fields(%value))]
     fn from_ref(value: &'a Value) -> Result<Self, Error> {
         let file_id = value
             .get("file_id")
@@ -1515,14 +1514,14 @@ impl<'a> OpenAIBatchParams<'a> {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(untagged)]
-pub(super) enum OpenAIToolChoice<'a> {
-    String(OpenAIToolChoiceString),
+pub(super) enum GroqToolChoice<'a> {
+    String(GroqToolChoiceString),
     Specific(SpecificToolChoice<'a>),
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
-pub(super) enum OpenAIToolChoiceString {
+pub(super) enum GroqToolChoiceString {
     None,
     Auto,
     Required,
@@ -1530,7 +1529,7 @@ pub(super) enum OpenAIToolChoiceString {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub(super) struct SpecificToolChoice<'a> {
-    pub(super) r#type: OpenAIToolType,
+    pub(super) r#type: GroqToolType,
     pub(super) function: SpecificToolFunction<'a>,
 }
 
@@ -1539,20 +1538,20 @@ pub(super) struct SpecificToolFunction<'a> {
     pub(super) name: &'a str,
 }
 
-impl Default for OpenAIToolChoice<'_> {
+impl Default for GroqToolChoice<'_> {
     fn default() -> Self {
-        OpenAIToolChoice::String(OpenAIToolChoiceString::None)
+        GroqToolChoice::String(GroqToolChoiceString::None)
     }
 }
 
-impl<'a> From<&'a ToolChoice> for OpenAIToolChoice<'a> {
+impl<'a> From<&'a ToolChoice> for GroqToolChoice<'a> {
     fn from(tool_choice: &'a ToolChoice) -> Self {
         match tool_choice {
-            ToolChoice::None => OpenAIToolChoice::String(OpenAIToolChoiceString::None),
-            ToolChoice::Auto => OpenAIToolChoice::String(OpenAIToolChoiceString::Auto),
-            ToolChoice::Required => OpenAIToolChoice::String(OpenAIToolChoiceString::Required),
-            ToolChoice::Specific(tool_name) => OpenAIToolChoice::Specific(SpecificToolChoice {
-                r#type: OpenAIToolType::Function,
+            ToolChoice::None => GroqToolChoice::String(GroqToolChoiceString::None),
+            ToolChoice::Auto => GroqToolChoice::String(GroqToolChoiceString::Auto),
+            ToolChoice::Required => GroqToolChoice::String(GroqToolChoiceString::Required),
+            ToolChoice::Specific(tool_name) => GroqToolChoice::Specific(SpecificToolChoice {
+                r#type: GroqToolType::Function,
                 function: SpecificToolFunction { name: tool_name },
             }),
         }
@@ -1564,15 +1563,15 @@ pub(super) struct StreamOptions {
     pub(super) include_usage: bool,
 }
 
-/// This struct defines the supported parameters for the OpenAI API
-/// See the [OpenAI API documentation](https://platform.openai.com/docs/api-reference/chat/create)
+/// This struct defines the supported parameters for the Groq API
+/// See the [Groq API documentation](https://platform.groq.com/docs/api-reference/chat/create)
 /// for more details.
 /// We are not handling logprobs, top_logprobs, n,
 /// presence_penalty, seed, service_tier, stop, user,
 /// or the deprecated function_call and functions arguments.
 #[derive(Debug, Serialize)]
-struct OpenAIRequest<'a> {
-    messages: Vec<OpenAIRequestMessage<'a>>,
+struct GroqRequest<'a> {
+    messages: Vec<GroqRequestMessage<'a>>,
     model: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
@@ -1590,21 +1589,21 @@ struct OpenAIRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     stream_options: Option<StreamOptions>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    response_format: Option<OpenAIResponseFormat>,
+    response_format: Option<GroqResponseFormat>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tools: Option<Vec<OpenAITool<'a>>>,
+    tools: Option<Vec<GroqTool<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tool_choice: Option<OpenAIToolChoice<'a>>,
+    tool_choice: Option<GroqToolChoice<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     parallel_tool_calls: Option<bool>,
 }
 
-impl<'a> OpenAIRequest<'a> {
+impl<'a> GroqRequest<'a> {
     pub fn new(
         model: &'a str,
         request: &'a ModelInferenceRequest<'_>,
-    ) -> Result<OpenAIRequest<'a>, Error> {
-        let response_format = Some(OpenAIResponseFormat::new(
+    ) -> Result<GroqRequest<'a>, Error> {
+        let response_format = Some(GroqResponseFormat::new(
             &request.json_mode,
             request.output_schema,
             model,
@@ -1623,10 +1622,10 @@ impl<'a> OpenAIRequest<'a> {
         }
 
         if model.to_lowercase().starts_with("o1-mini") {
-            if let Some(OpenAIRequestMessage::System(_)) = messages.first() {
-                if let OpenAIRequestMessage::System(system_msg) = messages.remove(0) {
-                    let user_msg = OpenAIRequestMessage::User(OpenAIUserRequestMessage {
-                        content: vec![OpenAIContentBlock::Text {
+            if let Some(GroqRequestMessage::System(_)) = messages.first() {
+                if let GroqRequestMessage::System(system_msg) = messages.remove(0) {
+                    let user_msg = GroqRequestMessage::User(GroqUserRequestMessage {
+                        content: vec![GroqContentBlock::Text {
                             text: system_msg.content,
                         }],
                     });
@@ -1635,7 +1634,7 @@ impl<'a> OpenAIRequest<'a> {
             }
         }
 
-        Ok(OpenAIRequest {
+        Ok(GroqRequest {
             messages,
             model,
             temperature: request.temperature,
@@ -1655,20 +1654,20 @@ impl<'a> OpenAIRequest<'a> {
 }
 
 #[derive(Debug, Serialize)]
-struct OpenAIBatchFileInput<'a> {
+struct GroqBatchFileInput<'a> {
     custom_id: String,
     method: String,
     url: String,
-    body: OpenAIRequest<'a>,
+    body: GroqRequest<'a>,
 }
 
-impl<'a> OpenAIBatchFileInput<'a> {
+impl<'a> GroqBatchFileInput<'a> {
     async fn new(
         inference_id: Uuid,
         model: &'a str,
         request: &'a ModelInferenceRequest<'_>,
     ) -> Result<Self, Error> {
-        let body = OpenAIRequest::new(model, request)?;
+        let body = GroqRequest::new(model, request)?;
         Ok(Self {
             custom_id: inference_id.to_string(),
             method: "POST".to_string(),
@@ -1679,14 +1678,14 @@ impl<'a> OpenAIBatchFileInput<'a> {
 }
 
 #[derive(Debug, Serialize)]
-struct OpenAIBatchRequest<'a> {
+struct GroqBatchRequest<'a> {
     input_file_id: &'a str,
     endpoint: &'a str,
     completion_window: &'a str,
     // metadata: HashMap<String, String>
 }
 
-impl<'a> OpenAIBatchRequest<'a> {
+impl<'a> GroqBatchRequest<'a> {
     fn new(input_file_id: &'a str) -> Self {
         Self {
             input_file_id,
@@ -1697,15 +1696,15 @@ impl<'a> OpenAIBatchRequest<'a> {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub(super) struct OpenAIUsage {
+pub(super) struct GroqUsage {
     pub prompt_tokens: u32,
     #[serde(default)]
     pub completion_tokens: u32,
     pub total_tokens: u32,
 }
 
-impl From<OpenAIUsage> for Usage {
-    fn from(usage: OpenAIUsage) -> Self {
+impl From<GroqUsage> for Usage {
+    fn from(usage: GroqUsage) -> Self {
         Usage {
             input_tokens: usage.prompt_tokens,
             output_tokens: usage.completion_tokens,
@@ -1714,20 +1713,20 @@ impl From<OpenAIUsage> for Usage {
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq, Deserialize)]
-struct OpenAIResponseFunctionCall {
+struct GroqResponseFunctionCall {
     name: String,
     arguments: String,
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq, Deserialize)]
-pub(super) struct OpenAIResponseToolCall {
+pub(super) struct GroqResponseToolCall {
     id: String,
-    r#type: OpenAIToolType,
-    function: OpenAIResponseFunctionCall,
+    r#type: GroqToolType,
+    function: GroqResponseFunctionCall,
 }
 
-impl From<OpenAIResponseToolCall> for ToolCall {
-    fn from(openai_tool_call: OpenAIResponseToolCall) -> Self {
+impl From<GroqResponseToolCall> for ToolCall {
+    fn from(openai_tool_call: GroqResponseToolCall) -> Self {
         ToolCall {
             id: openai_tool_call.id,
             name: openai_tool_call.function.name,
@@ -1737,16 +1736,16 @@ impl From<OpenAIResponseToolCall> for ToolCall {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub(super) struct OpenAIResponseMessage {
+pub(super) struct GroqResponseMessage {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) tool_calls: Option<Vec<OpenAIResponseToolCall>>,
+    pub(super) tool_calls: Option<Vec<GroqResponseToolCall>>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
-pub(super) enum OpenAIFinishReason {
+pub(super) enum GroqFinishReason {
     Stop,
     Length,
     ContentFilter,
@@ -1756,46 +1755,46 @@ pub(super) enum OpenAIFinishReason {
     Unknown,
 }
 
-impl From<OpenAIFinishReason> for FinishReason {
-    fn from(finish_reason: OpenAIFinishReason) -> Self {
+impl From<GroqFinishReason> for FinishReason {
+    fn from(finish_reason: GroqFinishReason) -> Self {
         match finish_reason {
-            OpenAIFinishReason::Stop => FinishReason::Stop,
-            OpenAIFinishReason::Length => FinishReason::Length,
-            OpenAIFinishReason::ContentFilter => FinishReason::ContentFilter,
-            OpenAIFinishReason::ToolCalls => FinishReason::ToolCall,
-            OpenAIFinishReason::FunctionCall => FinishReason::ToolCall,
-            OpenAIFinishReason::Unknown => FinishReason::Unknown,
+            GroqFinishReason::Stop => FinishReason::Stop,
+            GroqFinishReason::Length => FinishReason::Length,
+            GroqFinishReason::ContentFilter => FinishReason::ContentFilter,
+            GroqFinishReason::ToolCalls => FinishReason::ToolCall,
+            GroqFinishReason::FunctionCall => FinishReason::ToolCall,
+            GroqFinishReason::Unknown => FinishReason::Unknown,
         }
     }
 }
 
 // Leaving out logprobs and finish_reason for now
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub(super) struct OpenAIResponseChoice {
+pub(super) struct GroqResponseChoice {
     pub(super) index: u8,
-    pub(super) message: OpenAIResponseMessage,
-    pub(super) finish_reason: OpenAIFinishReason,
+    pub(super) message: GroqResponseMessage,
+    pub(super) finish_reason: GroqFinishReason,
 }
 
 // Leaving out id, created, model, service_tier, system_fingerprint, object for now
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub(super) struct OpenAIResponse {
-    pub(super) choices: Vec<OpenAIResponseChoice>,
-    pub(super) usage: OpenAIUsage,
+pub(super) struct GroqResponse {
+    pub(super) choices: Vec<GroqResponseChoice>,
+    pub(super) usage: GroqUsage,
 }
 
-struct OpenAIResponseWithMetadata<'a> {
-    response: OpenAIResponse,
+struct GroqResponseWithMetadata<'a> {
+    response: GroqResponse,
     latency: Latency,
     raw_request: String,
     generic_request: &'a ModelInferenceRequest<'a>,
     raw_response: String,
 }
 
-impl<'a> TryFrom<OpenAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
+impl<'a> TryFrom<GroqResponseWithMetadata<'a>> for ProviderInferenceResponse {
     type Error = Error;
-    fn try_from(value: OpenAIResponseWithMetadata<'a>) -> Result<Self, Self::Error> {
-        let OpenAIResponseWithMetadata {
+    fn try_from(value: GroqResponseWithMetadata<'a>) -> Result<Self, Self::Error> {
+        let GroqResponseWithMetadata {
             mut response,
             latency,
             raw_request,
@@ -1814,7 +1813,7 @@ impl<'a> TryFrom<OpenAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
             }
             .into());
         }
-        let OpenAIResponseChoice {
+        let GroqResponseChoice {
             message,
             finish_reason,
             ..
@@ -1855,7 +1854,7 @@ impl<'a> TryFrom<OpenAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct OpenAIFunctionCallChunk {
+struct GroqFunctionCallChunk {
     #[serde(skip_serializing_if = "Option::is_none")]
     name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1863,22 +1862,22 @@ struct OpenAIFunctionCallChunk {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct OpenAIToolCallChunk {
+struct GroqToolCallChunk {
     index: u8,
     #[serde(skip_serializing_if = "Option::is_none")]
     id: Option<String>,
     // NOTE: these are externally tagged enums, for now we're gonna just keep this hardcoded as there's only one option
     // If we were to do this better, we would need to check the `type` field
-    function: OpenAIFunctionCallChunk,
+    function: GroqFunctionCallChunk,
 }
 
 // This doesn't include role
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct OpenAIDelta {
+struct GroqDelta {
     #[serde(skip_serializing_if = "Option::is_none")]
     content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tool_calls: Option<Vec<OpenAIToolCallChunk>>,
+    tool_calls: Option<Vec<GroqToolCallChunk>>,
 }
 
 // Custom deserializer function for empty string to None
@@ -1904,23 +1903,23 @@ where
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct OpenAIChatChunkChoice {
-    delta: OpenAIDelta,
+struct GroqChatChunkChoice {
+    delta: GroqDelta,
     #[serde(default)]
     #[serde(deserialize_with = "empty_string_as_none")]
-    finish_reason: Option<OpenAIFinishReason>,
+    finish_reason: Option<GroqFinishReason>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct OpenAIChatChunk {
-    choices: Vec<OpenAIChatChunkChoice>,
+struct GroqChatChunk {
+    choices: Vec<GroqChatChunkChoice>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    usage: Option<OpenAIUsage>,
+    usage: Option<GroqUsage>,
 }
 
-/// Maps an OpenAI chunk to a TensorZero chunk for streaming inferences
+/// Maps an Groq chunk to a TensorZero chunk for streaming inferences
 fn openai_to_tensorzero_chunk(
-    mut chunk: OpenAIChatChunk,
+    mut chunk: GroqChatChunk,
     latency: Duration,
     tool_call_ids: &mut Vec<String>,
     tool_names: &mut Vec<String>,
@@ -1928,7 +1927,7 @@ fn openai_to_tensorzero_chunk(
     let raw_message = serde_json::to_string(&chunk).map_err(|e| {
         Error::new(ErrorDetails::InferenceServer {
             message: format!(
-                "Error parsing response from OpenAI: {}",
+                "Error parsing response from Groq: {}",
                 DisplayOrDebugGateway::new(e)
             ),
             raw_request: None,
@@ -2014,39 +2013,39 @@ fn openai_to_tensorzero_chunk(
 }
 
 #[derive(Debug, Serialize)]
-struct OpenAIEmbeddingRequest<'a> {
+struct GroqEmbeddingRequest<'a> {
     model: &'a str,
     input: &'a str,
 }
 
-impl<'a> OpenAIEmbeddingRequest<'a> {
+impl<'a> GroqEmbeddingRequest<'a> {
     fn new(model: &'a str, input: &'a str) -> Self {
         Self { model, input }
     }
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-struct OpenAIEmbeddingResponse {
-    data: Vec<OpenAIEmbeddingData>,
-    usage: OpenAIUsage,
+struct GroqEmbeddingResponse {
+    data: Vec<GroqEmbeddingData>,
+    usage: GroqUsage,
 }
 
-struct OpenAIEmbeddingResponseWithMetadata<'a> {
-    response: OpenAIEmbeddingResponse,
+struct GroqEmbeddingResponseWithMetadata<'a> {
+    response: GroqEmbeddingResponse,
     latency: Latency,
-    request: OpenAIEmbeddingRequest<'a>,
+    request: GroqEmbeddingRequest<'a>,
     raw_response: String,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-struct OpenAIEmbeddingData {
+struct GroqEmbeddingData {
     embedding: Vec<f32>,
 }
 
-impl<'a> TryFrom<OpenAIEmbeddingResponseWithMetadata<'a>> for EmbeddingProviderResponse {
+impl<'a> TryFrom<GroqEmbeddingResponseWithMetadata<'a>> for EmbeddingProviderResponse {
     type Error = Error;
-    fn try_from(response: OpenAIEmbeddingResponseWithMetadata<'a>) -> Result<Self, Self::Error> {
-        let OpenAIEmbeddingResponseWithMetadata {
+    fn try_from(response: GroqEmbeddingResponseWithMetadata<'a>) -> Result<Self, Self::Error> {
+        let GroqEmbeddingResponseWithMetadata {
             response,
             latency,
             request,
@@ -2098,19 +2097,19 @@ impl<'a> TryFrom<OpenAIEmbeddingResponseWithMetadata<'a>> for EmbeddingProviderR
 }
 
 #[derive(Debug, Deserialize)]
-struct OpenAIFileResponse {
+struct GroqFileResponse {
     id: String,
 }
 
 #[derive(Debug, Deserialize)]
-struct OpenAIBatchResponse {
+struct GroqBatchResponse {
     id: String,
     // object: String,
     // endpoint: String,
-    errors: Option<OpenAIBatchErrors>,
+    errors: Option<GroqBatchErrors>,
     // input_file_id: String,
     // completion_window: String,
-    status: OpenAIBatchStatus,
+    status: GroqBatchStatus,
     output_file_id: Option<String>,
     // error_file_id: String,
     // created_at: i64,
@@ -2122,13 +2121,13 @@ struct OpenAIBatchResponse {
     // expired_at: Option<i64>,
     // cancelling_at: Option<i64>,
     // cancelled_at: Option<i64>,
-    // request_counts: OpenAIBatchRequestCounts,
+    // request_counts: GroqBatchRequestCounts,
     // metadata: HashMap<String, String>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
-enum OpenAIBatchStatus {
+enum GroqBatchStatus {
     Validating,
     Failed,
     InProgress,
@@ -2139,25 +2138,25 @@ enum OpenAIBatchStatus {
     Cancelled,
 }
 
-impl From<OpenAIBatchStatus> for BatchStatus {
-    fn from(status: OpenAIBatchStatus) -> Self {
+impl From<GroqBatchStatus> for BatchStatus {
+    fn from(status: GroqBatchStatus) -> Self {
         match status {
-            OpenAIBatchStatus::Completed => BatchStatus::Completed,
-            OpenAIBatchStatus::Validating
-            | OpenAIBatchStatus::InProgress
-            | OpenAIBatchStatus::Finalizing => BatchStatus::Pending,
-            OpenAIBatchStatus::Failed
-            | OpenAIBatchStatus::Expired
-            | OpenAIBatchStatus::Cancelling
-            | OpenAIBatchStatus::Cancelled => BatchStatus::Failed,
+            GroqBatchStatus::Completed => BatchStatus::Completed,
+            GroqBatchStatus::Validating
+            | GroqBatchStatus::InProgress
+            | GroqBatchStatus::Finalizing => BatchStatus::Pending,
+            GroqBatchStatus::Failed
+            | GroqBatchStatus::Expired
+            | GroqBatchStatus::Cancelling
+            | GroqBatchStatus::Cancelled => BatchStatus::Failed,
         }
     }
 }
 
-impl TryFrom<OpenAIBatchFileRow> for ProviderBatchInferenceOutput {
+impl TryFrom<GroqBatchFileRow> for ProviderBatchInferenceOutput {
     type Error = Error;
 
-    fn try_from(row: OpenAIBatchFileRow) -> Result<Self, Self::Error> {
+    fn try_from(row: GroqBatchFileRow) -> Result<Self, Self::Error> {
         let mut response = row.response.body;
         // Validate we have exactly one choice
         if response.choices.len() != 1 {
@@ -2181,7 +2180,7 @@ impl TryFrom<OpenAIBatchFileRow> for ProviderBatchInferenceOutput {
         })?;
 
         // Extract the message from choices
-        let OpenAIResponseChoice {
+        let GroqResponseChoice {
             message,
             finish_reason,
             ..
@@ -2217,13 +2216,13 @@ impl TryFrom<OpenAIBatchFileRow> for ProviderBatchInferenceOutput {
 }
 
 #[derive(Debug, Deserialize)]
-struct OpenAIBatchErrors {
+struct GroqBatchErrors {
     // object: String,
-    data: Vec<OpenAIBatchError>,
+    data: Vec<GroqBatchError>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct OpenAIBatchError {
+struct GroqBatchError {
     code: String,
     message: String,
     param: Option<String>,
@@ -2231,24 +2230,24 @@ struct OpenAIBatchError {
 }
 
 #[derive(Debug, Deserialize)]
-struct OpenAIBatchRequestCounts {
+struct GroqBatchRequestCounts {
     // total: u32,
     // completed: u32,
     // failed: u32,
 }
 
 #[derive(Debug, Deserialize)]
-struct OpenAIBatchFileRow {
+struct GroqBatchFileRow {
     #[serde(rename = "custom_id")]
     inference_id: Uuid,
-    response: OpenAIBatchFileResponse,
+    response: GroqBatchFileResponse,
 }
 
 #[derive(Debug, Deserialize)]
-struct OpenAIBatchFileResponse {
+struct GroqBatchFileResponse {
     // status_code: u16,
     // request_id: String,
-    body: OpenAIResponse,
+    body: GroqResponse,
 }
 
 #[cfg(test)]
@@ -2273,11 +2272,11 @@ mod tests {
     #[test]
     fn test_get_chat_url() {
         // Test with custom base URL
-        let custom_base = "https://custom.openai.com/api/";
+        let custom_base = "https://custom.groq.com/api/";
         let custom_url = get_chat_url(&Url::parse(custom_base).unwrap()).unwrap();
         assert_eq!(
             custom_url.as_str(),
-            "https://custom.openai.com/api/chat/completions"
+            "https://custom.groq.com/api/chat/completions"
         );
 
         // Test with URL without trailing slash
@@ -2419,7 +2418,7 @@ mod tests {
             ..Default::default()
         };
 
-        let openai_request = OpenAIRequest::new("gpt-3.5-turbo", &basic_request).unwrap();
+        let openai_request = GroqRequest::new("gpt-3.5-turbo", &basic_request).unwrap();
 
         assert_eq!(openai_request.model, "gpt-3.5-turbo");
         assert_eq!(openai_request.messages.len(), 2);
@@ -2432,7 +2431,7 @@ mod tests {
         assert!(openai_request.stream);
         assert_eq!(
             openai_request.response_format,
-            Some(OpenAIResponseFormat::Text)
+            Some(GroqResponseFormat::Text)
         );
         assert!(openai_request.tools.is_none());
         assert_eq!(openai_request.tool_choice, None);
@@ -2461,10 +2460,10 @@ mod tests {
             ..Default::default()
         };
 
-        let openai_request = OpenAIRequest::new("gpt-4", &request_with_tools).unwrap();
+        let openai_request = GroqRequest::new("gpt-4", &request_with_tools).unwrap();
 
         assert_eq!(openai_request.model, "gpt-4");
-        assert_eq!(openai_request.messages.len(), 2); // We'll add a system message containing Json to fit OpenAI requirements
+        assert_eq!(openai_request.messages.len(), 2); // We'll add a system message containing Json to fit Groq requirements
         assert_eq!(openai_request.temperature, None);
         assert_eq!(openai_request.max_completion_tokens, None);
         assert_eq!(openai_request.seed, None);
@@ -2474,7 +2473,7 @@ mod tests {
         assert!(!openai_request.stream);
         assert_eq!(
             openai_request.response_format,
-            Some(OpenAIResponseFormat::JsonObject)
+            Some(GroqResponseFormat::JsonObject)
         );
         assert!(openai_request.tools.is_some());
         let tools = openai_request.tools.as_ref().unwrap();
@@ -2482,8 +2481,8 @@ mod tests {
         assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
         assert_eq!(
             openai_request.tool_choice,
-            Some(OpenAIToolChoice::Specific(SpecificToolChoice {
-                r#type: OpenAIToolType::Function,
+            Some(GroqToolChoice::Specific(SpecificToolChoice {
+                r#type: GroqToolType::Function,
                 function: SpecificToolFunction {
                     name: WEATHER_TOOL.name(),
                 }
@@ -2513,7 +2512,7 @@ mod tests {
             ..Default::default()
         };
 
-        let openai_request = OpenAIRequest::new("gpt-4", &request_with_tools).unwrap();
+        let openai_request = GroqRequest::new("gpt-4", &request_with_tools).unwrap();
 
         assert_eq!(openai_request.model, "gpt-4");
         assert_eq!(openai_request.messages.len(), 1);
@@ -2527,7 +2526,7 @@ mod tests {
         // Resolves to normal JSON mode since no schema is provided (this shouldn't really happen in practice)
         assert_eq!(
             openai_request.response_format,
-            Some(OpenAIResponseFormat::JsonObject)
+            Some(GroqResponseFormat::JsonObject)
         );
 
         // Test request with strict JSON mode with an output schema
@@ -2554,7 +2553,7 @@ mod tests {
             ..Default::default()
         };
 
-        let openai_request = OpenAIRequest::new("gpt-4", &request_with_tools).unwrap();
+        let openai_request = GroqRequest::new("gpt-4", &request_with_tools).unwrap();
 
         assert_eq!(openai_request.model, "gpt-4");
         assert_eq!(openai_request.messages.len(), 1);
@@ -2568,7 +2567,7 @@ mod tests {
         let expected_schema = serde_json::json!({"name": "response", "strict": true, "schema": {}});
         assert_eq!(
             openai_request.response_format,
-            Some(OpenAIResponseFormat::JsonSchema {
+            Some(GroqResponseFormat::JsonSchema {
                 json_schema: expected_schema,
             })
         );
@@ -2598,14 +2597,14 @@ mod tests {
             ..Default::default()
         };
 
-        let openai_request = OpenAIRequest::new("o1-preview", &request).unwrap();
+        let openai_request = GroqRequest::new("o1-preview", &request).unwrap();
 
         assert_eq!(openai_request.model, "o1-preview");
         assert_eq!(openai_request.messages.len(), 1);
         assert!(!openai_request.stream);
         assert_eq!(
             openai_request.response_format,
-            Some(OpenAIResponseFormat::Text)
+            Some(GroqResponseFormat::Text)
         );
         assert_eq!(openai_request.temperature, Some(0.5));
         assert_eq!(openai_request.max_completion_tokens, Some(100));
@@ -2638,15 +2637,14 @@ mod tests {
             ..Default::default()
         };
 
-        let openai_request_with_system =
-            OpenAIRequest::new("o1-mini", &request_with_system).unwrap();
+        let openai_request_with_system = GroqRequest::new("o1-mini", &request_with_system).unwrap();
 
         // Check that the system message was converted to a user message
         assert_eq!(openai_request_with_system.messages.len(), 2);
         assert!(
             matches!(
                 openai_request_with_system.messages[0],
-                OpenAIRequestMessage::User(ref msg) if msg.content == [OpenAIContentBlock::Text { text: "This is the system message".into() }]
+                GroqRequestMessage::User(ref msg) if msg.content == [GroqContentBlock::Text { text: "This is the system message".into() }]
             ),
             "Unexpected messages: {:?}",
             openai_request_with_system.messages
@@ -2656,7 +2654,7 @@ mod tests {
         assert!(!openai_request_with_system.stream);
         assert_eq!(
             openai_request_with_system.response_format,
-            Some(OpenAIResponseFormat::Text)
+            Some(GroqResponseFormat::Text)
         );
         assert_eq!(openai_request_with_system.temperature, Some(0.5));
         assert_eq!(openai_request_with_system.max_completion_tokens, Some(100));
@@ -2670,16 +2668,16 @@ mod tests {
     #[test]
     fn test_try_from_openai_response() {
         // Test case 1: Valid response with content
-        let valid_response = OpenAIResponse {
-            choices: vec![OpenAIResponseChoice {
+        let valid_response = GroqResponse {
+            choices: vec![GroqResponseChoice {
                 index: 0,
-                message: OpenAIResponseMessage {
+                message: GroqResponseMessage {
                     content: Some("Hello, world!".to_string()),
                     tool_calls: None,
                 },
-                finish_reason: OpenAIFinishReason::Stop,
+                finish_reason: GroqFinishReason::Stop,
             }],
-            usage: OpenAIUsage {
+            usage: GroqUsage {
                 prompt_tokens: 10,
                 completion_tokens: 20,
                 total_tokens: 30,
@@ -2707,7 +2705,7 @@ mod tests {
             ..Default::default()
         };
 
-        let request_body = OpenAIRequest {
+        let request_body = GroqRequest {
             messages: vec![],
             model: "gpt-3.5-turbo",
             temperature: Some(0.5),
@@ -2717,7 +2715,7 @@ mod tests {
             max_completion_tokens: Some(100),
             seed: Some(69),
             stream: false,
-            response_format: Some(OpenAIResponseFormat::Text),
+            response_format: Some(GroqResponseFormat::Text),
             stream_options: None,
             tools: None,
             tool_choice: None,
@@ -2725,7 +2723,7 @@ mod tests {
         };
         let raw_request = serde_json::to_string(&request_body).unwrap();
         let raw_response = "test_response".to_string();
-        let result = ProviderInferenceResponse::try_from(OpenAIResponseWithMetadata {
+        let result = ProviderInferenceResponse::try_from(GroqResponseWithMetadata {
             response: valid_response,
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
@@ -2760,23 +2758,23 @@ mod tests {
             }]
         );
         // Test case 2: Valid response with tool calls
-        let valid_response_with_tools = OpenAIResponse {
-            choices: vec![OpenAIResponseChoice {
+        let valid_response_with_tools = GroqResponse {
+            choices: vec![GroqResponseChoice {
                 index: 0,
-                finish_reason: OpenAIFinishReason::ToolCalls,
-                message: OpenAIResponseMessage {
+                finish_reason: GroqFinishReason::ToolCalls,
+                message: GroqResponseMessage {
                     content: None,
-                    tool_calls: Some(vec![OpenAIResponseToolCall {
+                    tool_calls: Some(vec![GroqResponseToolCall {
                         id: "call1".to_string(),
-                        r#type: OpenAIToolType::Function,
-                        function: OpenAIResponseFunctionCall {
+                        r#type: GroqToolType::Function,
+                        function: GroqResponseFunctionCall {
                             name: "test_function".to_string(),
                             arguments: "{}".to_string(),
                         },
                     }]),
                 },
             }],
-            usage: OpenAIUsage {
+            usage: GroqUsage {
                 prompt_tokens: 15,
                 completion_tokens: 25,
                 total_tokens: 40,
@@ -2804,7 +2802,7 @@ mod tests {
             ..Default::default()
         };
 
-        let request_body = OpenAIRequest {
+        let request_body = GroqRequest {
             messages: vec![],
             model: "gpt-3.5-turbo",
             temperature: Some(0.5),
@@ -2814,14 +2812,14 @@ mod tests {
             max_completion_tokens: Some(100),
             seed: Some(69),
             stream: false,
-            response_format: Some(OpenAIResponseFormat::Text),
+            response_format: Some(GroqResponseFormat::Text),
             stream_options: None,
             tools: None,
             tool_choice: None,
             parallel_tool_calls: None,
         };
         let raw_request = serde_json::to_string(&request_body).unwrap();
-        let result = ProviderInferenceResponse::try_from(OpenAIResponseWithMetadata {
+        let result = ProviderInferenceResponse::try_from(GroqResponseWithMetadata {
             response: valid_response_with_tools,
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(110),
@@ -2863,15 +2861,15 @@ mod tests {
             }]
         );
         // Test case 3: Invalid response with no choices
-        let invalid_response_no_choices = OpenAIResponse {
+        let invalid_response_no_choices = GroqResponse {
             choices: vec![],
-            usage: OpenAIUsage {
+            usage: GroqUsage {
                 prompt_tokens: 5,
                 completion_tokens: 0,
                 total_tokens: 5,
             },
         };
-        let request_body = OpenAIRequest {
+        let request_body = GroqRequest {
             messages: vec![],
             model: "gpt-3.5-turbo",
             temperature: Some(0.5),
@@ -2881,13 +2879,13 @@ mod tests {
             max_completion_tokens: Some(100),
             seed: Some(69),
             stream: false,
-            response_format: Some(OpenAIResponseFormat::Text),
+            response_format: Some(GroqResponseFormat::Text),
             stream_options: None,
             tools: None,
             tool_choice: None,
             parallel_tool_calls: None,
         };
-        let result = ProviderInferenceResponse::try_from(OpenAIResponseWithMetadata {
+        let result = ProviderInferenceResponse::try_from(GroqResponseWithMetadata {
             response: invalid_response_no_choices,
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(120),
@@ -2902,33 +2900,33 @@ mod tests {
         assert!(matches!(details, ErrorDetails::InferenceServer { .. }));
 
         // Test case 4: Invalid response with multiple choices
-        let invalid_response_multiple_choices = OpenAIResponse {
+        let invalid_response_multiple_choices = GroqResponse {
             choices: vec![
-                OpenAIResponseChoice {
+                GroqResponseChoice {
                     index: 0,
-                    message: OpenAIResponseMessage {
+                    message: GroqResponseMessage {
                         content: Some("Choice 1".to_string()),
                         tool_calls: None,
                     },
-                    finish_reason: OpenAIFinishReason::Stop,
+                    finish_reason: GroqFinishReason::Stop,
                 },
-                OpenAIResponseChoice {
+                GroqResponseChoice {
                     index: 1,
-                    finish_reason: OpenAIFinishReason::Stop,
-                    message: OpenAIResponseMessage {
+                    finish_reason: GroqFinishReason::Stop,
+                    message: GroqResponseMessage {
                         content: Some("Choice 2".to_string()),
                         tool_calls: None,
                     },
                 },
             ],
-            usage: OpenAIUsage {
+            usage: GroqUsage {
                 prompt_tokens: 10,
                 completion_tokens: 10,
                 total_tokens: 20,
             },
         };
 
-        let request_body = OpenAIRequest {
+        let request_body = GroqRequest {
             messages: vec![],
             model: "gpt-3.5-turbo",
             temperature: Some(0.5),
@@ -2938,13 +2936,13 @@ mod tests {
             max_completion_tokens: Some(100),
             seed: Some(69),
             stream: false,
-            response_format: Some(OpenAIResponseFormat::Text),
+            response_format: Some(GroqResponseFormat::Text),
             stream_options: None,
             tools: None,
             tool_choice: None,
             parallel_tool_calls: None,
         };
-        let result = ProviderInferenceResponse::try_from(OpenAIResponseWithMetadata {
+        let result = ProviderInferenceResponse::try_from(GroqResponseWithMetadata {
             response: invalid_response_multiple_choices,
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(130),
@@ -2992,7 +2990,7 @@ mod tests {
         let tool_choice = tool_choice.unwrap();
         assert_eq!(
             tool_choice,
-            OpenAIToolChoice::String(OpenAIToolChoiceString::Required)
+            GroqToolChoice::String(GroqToolChoiceString::Required)
         );
         let parallel_tool_calls = parallel_tool_calls.unwrap();
         assert!(parallel_tool_calls);
@@ -3037,10 +3035,10 @@ mod tests {
         let openai_messages = tensorzero_to_openai_user_messages(&content_blocks).unwrap();
         assert_eq!(openai_messages.len(), 1);
         match &openai_messages[0] {
-            OpenAIRequestMessage::User(content) => {
+            GroqRequestMessage::User(content) => {
                 assert_eq!(
                     content.content,
-                    &[OpenAIContentBlock::Text {
+                    &[GroqContentBlock::Text {
                         text: "Hello".into()
                     }]
                 );
@@ -3056,14 +3054,14 @@ mod tests {
         let openai_messages = tensorzero_to_openai_user_messages(&content_blocks).unwrap();
         assert_eq!(openai_messages.len(), 1);
         match &openai_messages[0] {
-            OpenAIRequestMessage::User(content) => {
+            GroqRequestMessage::User(content) => {
                 assert_eq!(
                     content.content,
                     vec![
-                        OpenAIContentBlock::Text {
+                        GroqContentBlock::Text {
                             text: "Hello".into()
                         },
-                        OpenAIContentBlock::Text {
+                        GroqContentBlock::Text {
                             text: "How are you?".into()
                         }
                     ]
@@ -3073,7 +3071,7 @@ mod tests {
         }
 
         // User message with one string and one tool call block
-        // Since user messages in OpenAI land can't contain tool calls (nor should they honestly),
+        // Since user messages in Groq land can't contain tool calls (nor should they honestly),
         // We split the tool call out into a separate assistant message
         let tool_block = ContentBlock::ToolCall(ToolCall {
             id: "call1".to_string(),
@@ -3084,10 +3082,10 @@ mod tests {
         let openai_messages = tensorzero_to_openai_assistant_messages(&content_blocks).unwrap();
         assert_eq!(openai_messages.len(), 1);
         match &openai_messages[0] {
-            OpenAIRequestMessage::Assistant(content) => {
+            GroqRequestMessage::Assistant(content) => {
                 assert_eq!(
                     content.content,
-                    Some(vec![OpenAIContentBlock::Text {
+                    Some(vec![GroqContentBlock::Text {
                         text: "Hello".into()
                     }])
                 );
@@ -3103,13 +3101,13 @@ mod tests {
 
     #[test]
     fn test_openai_to_tensorzero_chunk() {
-        let chunk = OpenAIChatChunk {
-            choices: vec![OpenAIChatChunkChoice {
-                delta: OpenAIDelta {
+        let chunk = GroqChatChunk {
+            choices: vec![GroqChatChunkChoice {
+                delta: GroqDelta {
                     content: Some("Hello".to_string()),
                     tool_calls: None,
                 },
-                finish_reason: Some(OpenAIFinishReason::Stop),
+                finish_reason: Some(GroqFinishReason::Stop),
             }],
             usage: None,
         };
@@ -3131,15 +3129,15 @@ mod tests {
         );
         assert_eq!(message.finish_reason, Some(FinishReason::Stop));
         // Test what an intermediate tool chunk should look like
-        let chunk = OpenAIChatChunk {
-            choices: vec![OpenAIChatChunkChoice {
-                finish_reason: Some(OpenAIFinishReason::ToolCalls),
-                delta: OpenAIDelta {
+        let chunk = GroqChatChunk {
+            choices: vec![GroqChatChunkChoice {
+                finish_reason: Some(GroqFinishReason::ToolCalls),
+                delta: GroqDelta {
                     content: None,
-                    tool_calls: Some(vec![OpenAIToolCallChunk {
+                    tool_calls: Some(vec![GroqToolCallChunk {
                         index: 0,
                         id: None,
-                        function: OpenAIFunctionCallChunk {
+                        function: GroqFunctionCallChunk {
                             name: None,
                             arguments: Some("{\"hello\":\"world\"}".to_string()),
                         },
@@ -3165,15 +3163,15 @@ mod tests {
         );
         assert_eq!(message.finish_reason, Some(FinishReason::ToolCall));
         // Test what a bad tool chunk would do (new ID but no names)
-        let chunk = OpenAIChatChunk {
-            choices: vec![OpenAIChatChunkChoice {
+        let chunk = GroqChatChunk {
+            choices: vec![GroqChatChunkChoice {
                 finish_reason: None,
-                delta: OpenAIDelta {
+                delta: GroqDelta {
                     content: None,
-                    tool_calls: Some(vec![OpenAIToolCallChunk {
+                    tool_calls: Some(vec![GroqToolCallChunk {
                         index: 1,
                         id: None,
-                        function: OpenAIFunctionCallChunk {
+                        function: GroqFunctionCallChunk {
                             name: None,
                             arguments: Some("{\"hello\":\"world\"}".to_string()),
                         },
@@ -3200,15 +3198,15 @@ mod tests {
             }
         );
         // Test a correct new tool chunk
-        let chunk = OpenAIChatChunk {
-            choices: vec![OpenAIChatChunkChoice {
-                finish_reason: Some(OpenAIFinishReason::Stop),
-                delta: OpenAIDelta {
+        let chunk = GroqChatChunk {
+            choices: vec![GroqChatChunkChoice {
+                finish_reason: Some(GroqFinishReason::Stop),
+                delta: GroqDelta {
                     content: None,
-                    tool_calls: Some(vec![OpenAIToolCallChunk {
+                    tool_calls: Some(vec![GroqToolCallChunk {
                         index: 1,
                         id: Some("id2".to_string()),
-                        function: OpenAIFunctionCallChunk {
+                        function: GroqFunctionCallChunk {
                             name: Some("name2".to_string()),
                             arguments: Some("{\"hello\":\"world\"}".to_string()),
                         },
@@ -3242,9 +3240,9 @@ mod tests {
 
         // Check a chunk with no choices and only usage
         // Test a correct new tool chunk
-        let chunk = OpenAIChatChunk {
+        let chunk = GroqChatChunk {
             choices: vec![],
-            usage: Some(OpenAIUsage {
+            usage: Some(GroqUsage {
                 prompt_tokens: 10,
                 completion_tokens: 20,
                 total_tokens: 30,
@@ -3272,18 +3270,18 @@ mod tests {
         // Test JSON mode On
         let json_mode = ModelInferenceRequestJsonMode::On;
         let output_schema = None;
-        let format = OpenAIResponseFormat::new(&json_mode, output_schema, "gpt-4o");
-        assert_eq!(format, OpenAIResponseFormat::JsonObject);
+        let format = GroqResponseFormat::new(&json_mode, output_schema, "gpt-4o");
+        assert_eq!(format, GroqResponseFormat::JsonObject);
 
         // Test JSON mode Off
         let json_mode = ModelInferenceRequestJsonMode::Off;
-        let format = OpenAIResponseFormat::new(&json_mode, output_schema, "gpt-4o");
-        assert_eq!(format, OpenAIResponseFormat::Text);
+        let format = GroqResponseFormat::new(&json_mode, output_schema, "gpt-4o");
+        assert_eq!(format, GroqResponseFormat::Text);
 
         // Test JSON mode Strict with no schema
         let json_mode = ModelInferenceRequestJsonMode::Strict;
-        let format = OpenAIResponseFormat::new(&json_mode, output_schema, "gpt-4o");
-        assert_eq!(format, OpenAIResponseFormat::JsonObject);
+        let format = GroqResponseFormat::new(&json_mode, output_schema, "gpt-4o");
+        assert_eq!(format, GroqResponseFormat::JsonObject);
 
         // Test JSON mode Strict with schema
         let json_mode = ModelInferenceRequestJsonMode::Strict;
@@ -3294,9 +3292,9 @@ mod tests {
             }
         });
         let output_schema = Some(&schema);
-        let format = OpenAIResponseFormat::new(&json_mode, output_schema, "gpt-4o");
+        let format = GroqResponseFormat::new(&json_mode, output_schema, "gpt-4o");
         match format {
-            OpenAIResponseFormat::JsonSchema { json_schema } => {
+            GroqResponseFormat::JsonSchema { json_schema } => {
                 assert_eq!(json_schema["schema"], schema);
                 assert_eq!(json_schema["name"], "response");
                 assert_eq!(json_schema["strict"], true);
@@ -3313,16 +3311,13 @@ mod tests {
             }
         });
         let output_schema = Some(&schema);
-        let format = OpenAIResponseFormat::new(&json_mode, output_schema, "gpt-3.5-turbo");
-        assert_eq!(format, OpenAIResponseFormat::JsonObject);
+        let format = GroqResponseFormat::new(&json_mode, output_schema, "gpt-3.5-turbo");
+        assert_eq!(format, GroqResponseFormat::JsonObject);
     }
 
     #[test]
     fn test_openai_api_base() {
-        assert_eq!(
-            OPENAI_DEFAULT_BASE_URL.as_str(),
-            "https://api.openai.com/v1/"
-        );
+        assert_eq!(GROQ_DEFAULT_BASE_URL.as_str(), "https://api.groq.com/v1/");
     }
 
     #[test]
@@ -3330,7 +3325,7 @@ mod tests {
         // Test Case 1: system is None, json_mode is Off
         let system = None;
         let json_mode = ModelInferenceRequestJsonMode::Off;
-        let messages: Vec<OpenAIRequestMessage> = vec![];
+        let messages: Vec<GroqRequestMessage> = vec![];
         let result = tensorzero_to_openai_system_message(system, &json_mode, &messages);
         assert_eq!(result, None);
 
@@ -3338,19 +3333,19 @@ mod tests {
         let system = Some("System instructions");
         let json_mode = ModelInferenceRequestJsonMode::On;
         let messages = vec![
-            OpenAIRequestMessage::User(OpenAIUserRequestMessage {
-                content: vec![OpenAIContentBlock::Text {
+            GroqRequestMessage::User(GroqUserRequestMessage {
+                content: vec![GroqContentBlock::Text {
                     text: "Please respond in JSON format.".into(),
                 }],
             }),
-            OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
-                content: Some(vec![OpenAIContentBlock::Text {
+            GroqRequestMessage::Assistant(GroqAssistantRequestMessage {
+                content: Some(vec![GroqContentBlock::Text {
                     text: "Sure, here is the data.".into(),
                 }]),
                 tool_calls: None,
             }),
         ];
-        let expected = Some(OpenAIRequestMessage::System(OpenAISystemRequestMessage {
+        let expected = Some(GroqRequestMessage::System(GroqSystemRequestMessage {
             content: Cow::Borrowed("System instructions"),
         }));
         let result = tensorzero_to_openai_system_message(system, &json_mode, &messages);
@@ -3360,20 +3355,20 @@ mod tests {
         let system = Some("System instructions");
         let json_mode = ModelInferenceRequestJsonMode::On;
         let messages = vec![
-            OpenAIRequestMessage::User(OpenAIUserRequestMessage {
-                content: vec![OpenAIContentBlock::Text {
+            GroqRequestMessage::User(GroqUserRequestMessage {
+                content: vec![GroqContentBlock::Text {
                     text: "Hello, how are you?".into(),
                 }],
             }),
-            OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
-                content: Some(vec![OpenAIContentBlock::Text {
+            GroqRequestMessage::Assistant(GroqAssistantRequestMessage {
+                content: Some(vec![GroqContentBlock::Text {
                     text: "I am fine, thank you!".into(),
                 }]),
                 tool_calls: None,
             }),
         ];
         let expected_content = "Respond using JSON.\n\nSystem instructions".to_string();
-        let expected = Some(OpenAIRequestMessage::System(OpenAISystemRequestMessage {
+        let expected = Some(GroqRequestMessage::System(GroqSystemRequestMessage {
             content: Cow::Owned(expected_content),
         }));
         let result = tensorzero_to_openai_system_message(system, &json_mode, &messages);
@@ -3383,19 +3378,19 @@ mod tests {
         let system = Some("System instructions");
         let json_mode = ModelInferenceRequestJsonMode::Off;
         let messages = vec![
-            OpenAIRequestMessage::User(OpenAIUserRequestMessage {
-                content: vec![OpenAIContentBlock::Text {
+            GroqRequestMessage::User(GroqUserRequestMessage {
+                content: vec![GroqContentBlock::Text {
                     text: "Hello, how are you?".into(),
                 }],
             }),
-            OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
-                content: Some(vec![OpenAIContentBlock::Text {
+            GroqRequestMessage::Assistant(GroqAssistantRequestMessage {
+                content: Some(vec![GroqContentBlock::Text {
                     text: "I am fine, thank you!".into(),
                 }]),
                 tool_calls: None,
             }),
         ];
-        let expected = Some(OpenAIRequestMessage::System(OpenAISystemRequestMessage {
+        let expected = Some(GroqRequestMessage::System(GroqSystemRequestMessage {
             content: Cow::Borrowed("System instructions"),
         }));
         let result = tensorzero_to_openai_system_message(system, &json_mode, &messages);
@@ -3405,19 +3400,19 @@ mod tests {
         let system = Some("System instructions");
         let json_mode = ModelInferenceRequestJsonMode::Strict;
         let messages = vec![
-            OpenAIRequestMessage::User(OpenAIUserRequestMessage {
-                content: vec![OpenAIContentBlock::Text {
+            GroqRequestMessage::User(GroqUserRequestMessage {
+                content: vec![GroqContentBlock::Text {
                     text: "Hello, how are you?".into(),
                 }],
             }),
-            OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
-                content: Some(vec![OpenAIContentBlock::Text {
+            GroqRequestMessage::Assistant(GroqAssistantRequestMessage {
+                content: Some(vec![GroqContentBlock::Text {
                     text: "I am fine, thank you!".into(),
                 }]),
                 tool_calls: None,
             }),
         ];
-        let expected = Some(OpenAIRequestMessage::System(OpenAISystemRequestMessage {
+        let expected = Some(GroqRequestMessage::System(GroqSystemRequestMessage {
             content: Cow::Borrowed("System instructions"),
         }));
         let result = tensorzero_to_openai_system_message(system, &json_mode, &messages);
@@ -3426,12 +3421,12 @@ mod tests {
         // Test Case 6: system contains "json", json_mode is On
         let system = Some("Respond using JSON.\n\nSystem instructions");
         let json_mode = ModelInferenceRequestJsonMode::On;
-        let messages = vec![OpenAIRequestMessage::User(OpenAIUserRequestMessage {
-            content: vec![OpenAIContentBlock::Text {
+        let messages = vec![GroqRequestMessage::User(GroqUserRequestMessage {
+            content: vec![GroqContentBlock::Text {
                 text: "Hello, how are you?".into(),
             }],
         })];
-        let expected = Some(OpenAIRequestMessage::System(OpenAISystemRequestMessage {
+        let expected = Some(GroqRequestMessage::System(GroqSystemRequestMessage {
             content: Cow::Borrowed("Respond using JSON.\n\nSystem instructions"),
         }));
         let result = tensorzero_to_openai_system_message(system, &json_mode, &messages);
@@ -3441,19 +3436,19 @@ mod tests {
         let system = None;
         let json_mode = ModelInferenceRequestJsonMode::On;
         let messages = vec![
-            OpenAIRequestMessage::User(OpenAIUserRequestMessage {
-                content: vec![OpenAIContentBlock::Text {
+            GroqRequestMessage::User(GroqUserRequestMessage {
+                content: vec![GroqContentBlock::Text {
                     text: "Tell me a joke.".into(),
                 }],
             }),
-            OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
-                content: Some(vec![OpenAIContentBlock::Text {
+            GroqRequestMessage::Assistant(GroqAssistantRequestMessage {
+                content: Some(vec![GroqContentBlock::Text {
                     text: "Sure, here's one for you.".into(),
                 }]),
                 tool_calls: None,
             }),
         ];
-        let expected = Some(OpenAIRequestMessage::System(OpenAISystemRequestMessage {
+        let expected = Some(GroqRequestMessage::System(GroqSystemRequestMessage {
             content: Cow::Owned("Respond using JSON.".to_string()),
         }));
         let result = tensorzero_to_openai_system_message(system, &json_mode, &messages);
@@ -3463,13 +3458,13 @@ mod tests {
         let system = None;
         let json_mode = ModelInferenceRequestJsonMode::Strict;
         let messages = vec![
-            OpenAIRequestMessage::User(OpenAIUserRequestMessage {
-                content: vec![OpenAIContentBlock::Text {
+            GroqRequestMessage::User(GroqUserRequestMessage {
+                content: vec![GroqContentBlock::Text {
                     text: "Provide a summary of the news.".into(),
                 }],
             }),
-            OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
-                content: Some(vec![OpenAIContentBlock::Text {
+            GroqRequestMessage::Assistant(GroqAssistantRequestMessage {
+                content: Some(vec![GroqContentBlock::Text {
                     text: "Here's the summary.".into(),
                 }]),
                 tool_calls: None,
@@ -3482,8 +3477,8 @@ mod tests {
         // Test Case 9: system is None, json_mode is On, with empty messages
         let system = None;
         let json_mode = ModelInferenceRequestJsonMode::On;
-        let messages: Vec<OpenAIRequestMessage> = vec![];
-        let expected = Some(OpenAIRequestMessage::System(OpenAISystemRequestMessage {
+        let messages: Vec<GroqRequestMessage> = vec![];
+        let expected = Some(GroqRequestMessage::System(GroqSystemRequestMessage {
             content: Cow::Owned("Respond using JSON.".to_string()),
         }));
         let result = tensorzero_to_openai_system_message(system, &json_mode, &messages);
@@ -3492,8 +3487,8 @@ mod tests {
         // Test Case 10: system is None, json_mode is Off, with messages containing "json"
         let system = None;
         let json_mode = ModelInferenceRequestJsonMode::Off;
-        let messages = vec![OpenAIRequestMessage::User(OpenAIUserRequestMessage {
-            content: vec![OpenAIContentBlock::Text {
+        let messages = vec![GroqRequestMessage::User(GroqUserRequestMessage {
+            content: vec![GroqContentBlock::Text {
                 text: "Please include JSON in your response.".into(),
             }],
         })];
@@ -3507,21 +3502,21 @@ mod tests {
         use url::Url;
 
         // Test Case 1: Base URL without trailing slash
-        let base_url = Url::parse("https://api.openai.com/v1").unwrap();
+        let base_url = Url::parse("https://api.groq.com/v1").unwrap();
         let file_id = Some("file123");
         let result = get_file_url(&base_url, file_id).unwrap();
         assert_eq!(
             result.as_str(),
-            "https://api.openai.com/v1/files/file123/content"
+            "https://api.groq.com/v1/files/file123/content"
         );
 
         // Test Case 2: Base URL with trailing slash
-        let base_url = Url::parse("https://api.openai.com/v1/").unwrap();
+        let base_url = Url::parse("https://api.groq.com/v1/").unwrap();
         let file_id = Some("file456");
         let result = get_file_url(&base_url, file_id).unwrap();
         assert_eq!(
             result.as_str(),
-            "https://api.openai.com/v1/files/file456/content"
+            "https://api.groq.com/v1/files/file456/content"
         );
 
         // Test Case 3: Base URL with custom domain
@@ -3534,14 +3529,14 @@ mod tests {
         );
 
         // Test Case 4: Base URL without trailing slash, no file ID
-        let base_url = Url::parse("https://api.openai.com/v1").unwrap();
+        let base_url = Url::parse("https://api.groq.com/v1").unwrap();
         let result = get_file_url(&base_url, None).unwrap();
-        assert_eq!(result.as_str(), "https://api.openai.com/v1/files");
+        assert_eq!(result.as_str(), "https://api.groq.com/v1/files");
 
         // Test Case 5: Base URL with trailing slash, no file ID
-        let base_url = Url::parse("https://api.openai.com/v1/").unwrap();
+        let base_url = Url::parse("https://api.groq.com/v1/").unwrap();
         let result = get_file_url(&base_url, None).unwrap();
-        assert_eq!(result.as_str(), "https://api.openai.com/v1/files");
+        assert_eq!(result.as_str(), "https://api.groq.com/v1/files");
 
         // Test Case 6: Custom domain base URL, no file ID
         let base_url = Url::parse("https://custom-openai.example.com").unwrap();
@@ -3553,27 +3548,27 @@ mod tests {
     fn test_try_from_openai_credentials() {
         // Test Static credentials
         let generic = Credential::Static(SecretString::from("test_key"));
-        let creds = OpenAICredentials::try_from(generic).unwrap();
-        assert!(matches!(creds, OpenAICredentials::Static(_)));
+        let creds = GroqCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, GroqCredentials::Static(_)));
 
         // Test Dynamic credentials
         let generic = Credential::Dynamic("key_name".to_string());
-        let creds = OpenAICredentials::try_from(generic).unwrap();
-        assert!(matches!(creds, OpenAICredentials::Dynamic(_)));
+        let creds = GroqCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, GroqCredentials::Dynamic(_)));
 
         // Test None credentials
         let generic = Credential::None;
-        let creds = OpenAICredentials::try_from(generic).unwrap();
-        assert!(matches!(creds, OpenAICredentials::None));
+        let creds = GroqCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, GroqCredentials::None));
 
         // Test Missing credentials
         let generic = Credential::Missing;
-        let creds = OpenAICredentials::try_from(generic).unwrap();
-        assert!(matches!(creds, OpenAICredentials::None));
+        let creds = GroqCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, GroqCredentials::None));
 
         // Test invalid credential type
         let generic = Credential::FileContents(SecretString::from("test"));
-        let result = OpenAICredentials::try_from(generic);
+        let result = GroqCredentials::try_from(generic);
         assert!(result.is_err());
         assert!(matches!(
             result.unwrap_err().get_owned_details(),
@@ -3584,8 +3579,8 @@ mod tests {
     #[test]
     fn test_serialize_user_messages() {
         // Test that a single message is serialized as 'content: string'
-        let message = OpenAIUserRequestMessage {
-            content: vec![OpenAIContentBlock::Text {
+        let message = GroqUserRequestMessage {
+            content: vec![GroqContentBlock::Text {
                 text: "My single message".into(),
             }],
         };
@@ -3593,12 +3588,12 @@ mod tests {
         assert_eq!(serialized, r#"{"content":"My single message"}"#);
 
         // Test that a multiple messages are serialized as an array of content blocks
-        let message = OpenAIUserRequestMessage {
+        let message = GroqUserRequestMessage {
             content: vec![
-                OpenAIContentBlock::Text {
+                GroqContentBlock::Text {
                     text: "My first message".into(),
                 },
-                OpenAIContentBlock::Text {
+                GroqContentBlock::Text {
                     text: "My second message".into(),
                 },
             ],
