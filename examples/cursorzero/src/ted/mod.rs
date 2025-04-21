@@ -5,10 +5,6 @@
 //!    subtrees.
 //!  * De‑duplicates key‑roots (prevents O(n²) redundant DP calls).
 //!  * Adds many `debug_assert!`s to document invariants.
-//!  * Heavy inline commentary so you can quickly adapt it to Tree‑sitter.
-//!
-//! The public API is intentionally unchanged except for extra genericity on
-//! `TreeNode` labels, so you can drop‑in‑replace the older file in your tests.
 
 use std::{cmp, collections::HashMap};
 
