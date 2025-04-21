@@ -68,6 +68,11 @@ const getProviderInfo = (
         name: "Google AI Studio",
         className: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300",
       };
+    case "groq":
+      return {
+        name: "Groq",
+        className: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300",
+      };
     case "hyperbolic":
       return {
         name: "Hyperbolic",
