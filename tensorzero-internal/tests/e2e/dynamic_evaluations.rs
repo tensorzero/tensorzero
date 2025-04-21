@@ -121,6 +121,13 @@ async fn test_dynamic_evaluation() {
             tags.get("bop").unwrap().as_str().unwrap(),
             format!("bop_{i}")
         );
+        assert_eq!(
+            tags.get("tensorzero::dynamic_evaluation_run_id")
+                .unwrap()
+                .as_str()
+                .unwrap(),
+            run_id.to_string()
+        );
         let episode_row =
             select_dynamic_evaluation_run_episode_clickhouse(&clickhouse, run_id, episode_id)
                 .await
@@ -140,6 +147,10 @@ async fn test_dynamic_evaluation() {
                 ("foo".to_string(), "bar".to_string()),
                 ("baz".to_string(), format!("baz_{i}")),
                 ("zoo".to_string(), format!("zoo_{i}")),
+                (
+                    "tensorzero::dynamic_evaluation_run_id".to_string(),
+                    run_id.to_string()
+                ),
             ])
         );
     }

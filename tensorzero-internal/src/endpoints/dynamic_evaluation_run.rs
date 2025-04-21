@@ -58,11 +58,17 @@ pub async fn dynamic_evaluation_run(
     validate_tags(&params.tags, false)?;
     validate_variant_pins(&params.variants, &config)?;
     let run_id = Uuid::now_v7();
+    let run_id_str = run_id.to_string();
+    let mut tags = params.tags;
+    tags.insert(
+        "tensorzero::dynamic_evaluation_run_id".to_string(),
+        run_id_str,
+    );
     write_dynamic_evaluation_run(
         clickhouse_connection_info,
         run_id,
         params.variants,
-        params.tags,
+        tags,
         params.project_name,
         params.display_name,
     )

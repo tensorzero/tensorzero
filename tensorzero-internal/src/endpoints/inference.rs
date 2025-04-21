@@ -200,6 +200,7 @@ pub async fn inference(
     let start_time = Instant::now();
     let inference_id = Uuid::now_v7();
     tracing::Span::current().record("inference_id", inference_id.to_string());
+    validate_tags(&params.tags, params.internal)?;
 
     if params.include_original_response && params.stream.unwrap_or(false) {
         return Err(ErrorDetails::InvalidRequest {
@@ -222,7 +223,6 @@ pub async fn inference(
     .await?;
     tracing::Span::current().record("episode_id", episode_id.to_string());
 
-    validate_tags(&params.tags, params.internal)?;
     let (function, function_name) = find_function(&params, &config)?;
     // Collect the function variant names as a Vec<&str>
     let mut candidate_variant_names: Vec<&str> =
