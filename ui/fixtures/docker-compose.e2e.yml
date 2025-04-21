@@ -8,6 +8,8 @@ services:
     tmpfs:
       # So the fixtures aren't persisted between restarts of the containers and double-added
       - /var/lib/clickhouse
+    volumes:
+      - ./config.xml:/etc/clickhouse-server/config.xml:ro
     ports:
       - "8123:8123" # HTTP port
       - "9000:9000" # Native port
