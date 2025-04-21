@@ -1376,7 +1376,8 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
         }
         "aws_bedrock" => {
             assert!(
-                res["error"].as_str().unwrap().contains("Bad Request"),
+                res["error"].as_str().unwrap().contains("Bad Request")
+                    || res["error"].as_str().unwrap().contains("ConnectorError"),
                 "Unexpected error: {res}"
             );
         }

@@ -125,6 +125,26 @@ async fn check_cache<
             }
         }
     }
+    if args.sanitize_aws_sigv4 {
+        let header_names = [
+            "authorization",
+            "x-amz-date",
+            "amz-sdk-invocation-id",
+            "user-agent",
+            "x-amz-user-agent",
+            "amz-sdk-request",
+        ];
+        for header_name in &header_names {
+            if request.headers().contains_key(*header_name) {
+                request.headers_mut().insert(
+                    *header_name,
+                    HeaderValue::from_static("TENSORZERO_PROVIDER_PROXY_TOKEN"),
+                );
+                sanitized_header = true;
+            }
+        }
+        println!("New request: {:?}", request);
+    }
     let json_request = http_serde_ext::request::serialize(&request, serde_json::value::Serializer)
         .with_context(|| "Failed to serialize request")?;
     let hash = hash_value(&json_request)?;
@@ -226,6 +246,8 @@ pub struct Args {
     /// when constructing a cache key.
     #[arg(long, default_value = "true")]
     pub sanitize_bearer_auth: bool,
+    #[arg(long, default_value = "true")]
+    pub sanitize_aws_sigv4: bool,
     /// Whether to write to the cache when a cache miss occurs.
     /// If false, the proxy will still read existing entries from the cache, but not write new ones.
     #[arg(long, action = ArgAction::Set, default_value_t = true, num_args = 1)]
