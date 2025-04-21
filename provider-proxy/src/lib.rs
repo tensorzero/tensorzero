@@ -21,6 +21,7 @@ use http_body_util::{combinators::BoxBody, BodyExt, Full};
 use hyper::service::service_fn;
 use mitm_server::MitmProxy;
 use moka::sync::Cache;
+use serde::Serialize;
 use sha2::{Digest, Sha256};
 use streaming_body_collector::StreamingBodyCollector;
 use tokio::sync::oneshot;
@@ -63,9 +64,18 @@ fn save_cache_body(
 ) -> Result<(), anyhow::Error> {
     let path_str = path.to_string_lossy().into_owned();
     tracing::info!(path = path_str, "Finished processing request");
-    let body_str = String::from_utf8(body.to_vec())
-        .with_context(|| format!("Failed to convert body to string for path {path_str}"))?;
-    let mut reconstructed = hyper::Response::from_parts(parts, body_str);
+
+    #[derive(Serialize)]
+    #[serde(untagged)]
+    enum BodyKind {
+        Bytes(Bytes),
+        String(String),
+    }
+
+    let mut reconstructed = match String::from_utf8(body.to_vec()) {
+        Ok(body_str) => hyper::Response::from_parts(parts, BodyKind::String(body_str)),
+        Err(_) => hyper::Response::from_parts(parts, BodyKind::Bytes(body.into())),
+    };
     reconstructed.extensions_mut().clear();
     let json_response =
         http_serde_ext::response::serialize(&reconstructed, serde_json::value::Serializer)
@@ -143,7 +153,6 @@ async fn check_cache<
                 sanitized_header = true;
             }
         }
-        println!("New request: {:?}", request);
     }
     let json_request = http_serde_ext::request::serialize(&request, serde_json::value::Serializer)
         .with_context(|| "Failed to serialize request")?;
