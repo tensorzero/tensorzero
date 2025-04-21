@@ -98,7 +98,16 @@ pub async fn get_curated_inferences(
         }
     };
 
-    // TODO - handle demonstrations
+    if metric_name == "demonstration" {
+        return query_demonstration_data(
+            clickhouse,
+            function_name,
+            inference_table_name,
+            max_samples,
+        )
+        .await;
+    }
+
     let metric_config = config
         .get_metric_or_err(metric_name)
         .map_err(|e| TensorZeroError::Other { source: e.into() })?;
@@ -116,6 +125,16 @@ pub async fn get_curated_inferences(
     .await
 }
 
+#[derive(Deserialize, Serialize)]
+struct InferenceData {
+    variant_name: String,
+    #[serde(deserialize_with = "deserialize_json_string")]
+    input: ResolvedInput,
+    #[serde(deserialize_with = "deserialize_json_string")]
+    output: Value,
+    episode_id: Option<Uuid>,
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn query_curated_metric_data(
     clickhouse: &ClickHouseConnectionInfo,
@@ -129,9 +148,7 @@ async fn query_curated_metric_data(
 ) -> Result<Vec<Value>, TensorZeroError> {
     // Set defaults and prepare limit clause
     let optimize = metric_config.optimize;
-    let limit_clause = max_samples
-        .map(|s| format!("LIMIT {}", s))
-        .unwrap_or_default();
+    let limit_clause = get_limit_clause(max_samples);
 
     // Prepare value condition
     let mut value_condition = String::new();
@@ -162,16 +179,6 @@ async fn query_curated_metric_data(
         MetricConfigLevel::Episode => "episode_id",
         MetricConfigLevel::Inference => "id",
     };
-
-    #[derive(Deserialize, Serialize)]
-    struct InferenceData {
-        variant_name: String,
-        #[serde(deserialize_with = "deserialize_json_string")]
-        input: ResolvedInput,
-        #[serde(deserialize_with = "deserialize_json_string")]
-        output: Value,
-        episode_id: Option<Uuid>,
-    }
 
     // Construct the query
     let query = format!(
@@ -244,6 +251,67 @@ async fn query_curated_metric_data(
         }
     }
     Ok(json_rows)
+}
+
+async fn query_demonstration_data(
+    clickhouse: &ClickHouseConnectionInfo,
+    function_name: &str,
+    inference_table_name: &str,
+    max_samples: Option<u64>,
+) -> Result<Vec<Value>, TensorZeroError> {
+    let limit_clause = get_limit_clause(max_samples);
+
+    let query = format!(
+        r#"
+        SELECT
+            argmax(i.variant_name, d.timestamp) as variant_name,
+            argmax(i.input, d.timestamp) as input,
+            argmax(d.value, d.timestamp) as value,
+            argmax(i.episode_id, d.timestamp) as episode_id
+        FROM
+          {{inference_table_name:Identifier}} i
+        JOIN DemonstrationFeedback d
+        ON i.id = d.inference_id
+        GROUP BY d.inference_id
+        {limit_clause}
+        FORMAT JSONEachRow
+    "#
+    );
+
+    let params = vec![("inference_table_name", inference_table_name)];
+    let rows = clickhouse
+        .run_query_synchronous(query, Some(&params.into_iter().collect()))
+        .await
+        .map_err(|e| TensorZeroError::Other { source: e.into() })?;
+
+    let json_rows: Result<Vec<Value>, _> = rows
+        .lines()
+        .map(|line| {
+            let inference: InferenceData = serde_json::from_str(line)?;
+            serde_json::to_value(inference)
+        })
+        .collect();
+
+    let mut json_rows = json_rows.map_err(|e| TensorZeroError::Other {
+        source: Error::new(ErrorDetails::Serialization {
+            message: format!("Failed to deserialize inferences: {e:?}"),
+        })
+        .into(),
+    })?;
+
+    if function_name.starts_with("tensorzero::llm_judge::") {
+        for row in json_rows.iter_mut() {
+            handle_llm_judge_output(row)?;
+        }
+    }
+
+    Ok(json_rows)
+}
+
+fn get_limit_clause(max_samples: Option<u64>) -> String {
+    max_samples
+        .map(|s| format!("LIMIT {}", s))
+        .unwrap_or_default()
 }
 
 // Helper function to determine comparison operator based on optimization goal
