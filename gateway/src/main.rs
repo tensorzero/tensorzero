@@ -81,7 +81,7 @@ async fn main() {
     // Set up logs and metrics
     observability::setup_logs(true, args.log_format);
 
-    let git_sha = tensorzero_internal::built_info::GIT_COMMIT_HASH_SHORT.unwrap_or("<unknown>");
+    let git_sha = tensorzero_internal::built_info::GIT_COMMIT_HASH_SHORT.unwrap_or("unknown");
 
     tracing::info!("Starting TensorZero Gateway {TENSORZERO_VERSION} (commit: {git_sha})");
 
