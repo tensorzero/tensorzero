@@ -156,13 +156,14 @@ async function startPythonFineTune(
   );
 }
 
-function SupervisedFineTuningImpl({
-  loaderData,
-}: Route.ComponentProps & {
-  loaderData: { status: "running" | "completed" | "idle" };
-}) {
+type LoaderData = Route.ComponentProps["loaderData"];
+
+function SupervisedFineTuningImpl(
+  props: LoaderData & {
+    status: "running" | "completed" | "idle";
+  },
+) {
   const config = useConfig();
-  const status = loaderData;
   const revalidator = useRevalidator();
 
   const [submissionPhase, setSubmissionPhase] = useState<
@@ -171,7 +172,7 @@ function SupervisedFineTuningImpl({
 
   // If running, periodically poll for updates on the job
   useEffect(() => {
-    if (status.status === "running") {
+    if (props.status === "running") {
       setSubmissionPhase("pending");
       const interval = setInterval(
         () => {
@@ -181,12 +182,12 @@ function SupervisedFineTuningImpl({
       );
       return () => clearInterval(interval);
     }
-  }, [status, revalidator]);
+  }, [props, revalidator]);
 
   const finalResult =
-    status.status === "completed"
+    props.status === "completed"
       ? dump_model_config(
-          get_fine_tuned_model_config(status.result, status.modelProvider),
+          get_fine_tuned_model_config(props.result, props.modelProvider),
         )
       : null;
   if (finalResult && submissionPhase !== "complete") {
@@ -197,14 +198,14 @@ function SupervisedFineTuningImpl({
     <PageLayout>
       <PageHeader heading="Supervised Fine-Tuning" />
       <SectionLayout>
-        {status.status === "idle" && (
+        {props.status === "idle" && (
           <SFTForm
             config={config}
             submissionPhase={submissionPhase}
             setSubmissionPhase={setSubmissionPhase}
           />
         )}
-        <FineTuningStatus status={status} />
+        <FineTuningStatus status={props} />
         <SFTResult finalResult={finalResult} />
       </SectionLayout>
     </PageLayout>
@@ -224,5 +225,5 @@ export default function SupervisedFineTuning(props: Route.ComponentProps) {
       </PageLayout>
     );
   }
-  return <SupervisedFineTuningImpl {...props} loaderData={loaderData} />;
+  return <SupervisedFineTuningImpl {...loaderData} />;
 }
