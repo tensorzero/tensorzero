@@ -69,7 +69,7 @@ export async function loader({
 }
 
 async function loadPythonFineTuneJob(job_id: string) {
-  const res = await fetch(`http://localhost:7000/optimizations/poll/${job_id}`);
+  const res = await fetch(`http://localhost:7001/optimizations/poll/${job_id}`);
   if (!res.ok) {
     if (res.status === 404) {
       throw new Response(JSON.stringify({ error: await res.text() }), {
@@ -124,7 +124,7 @@ async function startPythonFineTune(
   validatedData: SFTFormValues,
 ) {
   try {
-    const res = await fetch("http://localhost:7000/optimizations", {
+    const res = await fetch("http://localhost:7001/optimizations", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
