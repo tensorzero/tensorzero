@@ -3520,12 +3520,12 @@ mod tests {
         );
 
         // Test Case 3: Base URL with custom domain
-        let base_url = Url::parse("https://custom-openai.example.com").unwrap();
+        let base_url = Url::parse("https://custom-groq.example.com").unwrap();
         let file_id = Some("file789");
         let result = get_file_url(&base_url, file_id).unwrap();
         assert_eq!(
             result.as_str(),
-            "https://custom-openai.example.com/files/file789/content"
+            "https://custom-groq.example.com/files/file789/content"
         );
 
         // Test Case 4: Base URL without trailing slash, no file ID
@@ -3539,9 +3539,9 @@ mod tests {
         assert_eq!(result.as_str(), "https://api.groq.com/v1/files");
 
         // Test Case 6: Custom domain base URL, no file ID
-        let base_url = Url::parse("https://custom-openai.example.com").unwrap();
+        let base_url = Url::parse("https://custom-groq.example.com").unwrap();
         let result = get_file_url(&base_url, None).unwrap();
-        assert_eq!(result.as_str(), "https://custom-openai.example.com/files");
+        assert_eq!(result.as_str(), "https://custom-groq.example.com/files");
     }
 
     #[test]
