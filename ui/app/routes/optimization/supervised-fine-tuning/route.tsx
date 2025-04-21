@@ -156,21 +156,12 @@ async function startPythonFineTune(
   );
 }
 
-// Renders the fine-tuning form and status info.
-export default function SupervisedFineTuning({
+function SupervisedFineTuningImpl({
   loaderData,
-}: Route.ComponentProps) {
+}: Route.ComponentProps & {
+  loaderData: { status: "running" | "completed" | "idle" };
+}) {
   const config = useConfig();
-  if (loaderData.status === "error") {
-    return (
-      <PageLayout>
-        <PageHeader heading="Supervised Fine-Tuning" />
-        <SectionLayout>
-          <div className="text-sm text-red-500">Error: {loaderData.error}</div>
-        </SectionLayout>
-      </PageLayout>
-    );
-  }
   const status = loaderData;
   const revalidator = useRevalidator();
 
@@ -218,4 +209,20 @@ export default function SupervisedFineTuning({
       </SectionLayout>
     </PageLayout>
   );
+}
+
+// Renders the fine-tuning form and status info.
+export default function SupervisedFineTuning(props: Route.ComponentProps) {
+  const { loaderData } = props;
+  if (loaderData.status === "error") {
+    return (
+      <PageLayout>
+        <PageHeader heading="Supervised Fine-Tuning" />
+        <SectionLayout>
+          <div className="text-sm text-red-500">Error: {loaderData.error}</div>
+        </SectionLayout>
+      </PageLayout>
+    );
+  }
+  return <SupervisedFineTuningImpl {...props} loaderData={loaderData} />;
 }

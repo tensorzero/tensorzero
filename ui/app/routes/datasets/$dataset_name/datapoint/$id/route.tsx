@@ -4,7 +4,7 @@ import { v7 as uuid } from "uuid";
 import BasicInfo from "./DatapointBasicInfo";
 import Input from "~/components/inference/Input";
 import Output from "~/components/inference/Output";
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState } from "react";
 import { useConfig } from "~/context/config";
 import { getDatapoint } from "~/utils/clickhouse/datasets.server";
 import { VariantResponseModal } from "~/components/inference/VariantResponseModal";
@@ -169,11 +169,11 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
     useState(false);
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
   const [input, setInput] = useState<typeof datapoint.input>(datapoint.input);
-  const originalInput = useMemo(() => datapoint.input, []);
+  const [originalInput] = useState(datapoint.input);
+  const [originalOutput] = useState(datapoint.output);
   const [output, setOutput] = useState<typeof datapoint.output>(
     datapoint.output,
   );
-  const originalOutput = useMemo(() => datapoint.output, []);
   const config = useConfig();
   const [isEditing, setIsEditing] = useState(false);
   const [resetKey, setResetKey] = useState(0);
