@@ -45,9 +45,9 @@ use crate::{
             anthropic::AnthropicProvider, aws_bedrock::AWSBedrockProvider, azure::AzureProvider,
             deepseek::DeepSeekProvider, fireworks::FireworksProvider,
             gcp_vertex_anthropic::GCPVertexAnthropicProvider,
-            gcp_vertex_gemini::GCPVertexGeminiProvider, mistral::MistralProvider,
-            openai::OpenAIProvider, provider_trait::InferenceProvider, together::TogetherProvider,
-            vllm::VLLMProvider, xai::XAIProvider,
+            gcp_vertex_gemini::GCPVertexGeminiProvider, groq::GroqProvider,
+            mistral::MistralProvider, openai::OpenAIProvider, provider_trait::InferenceProvider,
+            together::TogetherProvider, vllm::VLLMProvider, xai::XAIProvider,
         },
         types::{ModelInferenceRequest, ModelInferenceResponse, ProviderInferenceResponse},
     },
@@ -575,6 +575,7 @@ pub enum ProviderConfig {
     GCPVertexAnthropic(GCPVertexAnthropicProvider),
     GCPVertexGemini(GCPVertexGeminiProvider),
     GoogleAIStudioGemini(GoogleAIStudioGeminiProvider),
+    Groq(GroqProvider),
     Hyperbolic(HyperbolicProvider),
     Mistral(MistralProvider),
     OpenAI(OpenAIProvider),
@@ -649,6 +650,11 @@ pub(super) enum UninitializedProviderConfig {
     #[serde(rename = "google_ai_studio_gemini")]
     GoogleAIStudioGemini {
         model_name: String,
+        api_key_location: Option<CredentialLocation>,
+    },
+    Groq {
+        model_name: String,
+        api_base: Option<Url>,
         api_key_location: Option<CredentialLocation>,
     },
     Hyperbolic {
@@ -812,6 +818,11 @@ impl UninitializedProviderConfig {
                 model_name,
                 api_key_location,
             )?),
+            UninitializedProviderConfig::Groq {
+                model_name,
+                api_base,
+                api_key_location,
+            } => ProviderConfig::Groq(GroqProvider::new(model_name, api_base, api_key_location)?),
             UninitializedProviderConfig::Hyperbolic {
                 model_name,
                 api_key_location,
@@ -903,6 +914,7 @@ impl ModelProvider {
             ProviderConfig::GCPVertexGemini(provider) => {
                 provider.infer(request, client, api_keys, self).await
             }
+            ProviderConfig::Groq(provider) => provider.infer(request, client, api_keys, self).await,
             ProviderConfig::GoogleAIStudioGemini(provider) => {
                 provider.infer(request, client, api_keys, self).await
             }
@@ -968,6 +980,9 @@ impl ModelProvider {
                 provider.infer_stream(request, client, api_keys, self).await
             }
             ProviderConfig::GoogleAIStudioGemini(provider) => {
+                provider.infer_stream(request, client, api_keys, self).await
+            }
+            ProviderConfig::Groq(provider) => {
                 provider.infer_stream(request, client, api_keys, self).await
             }
             ProviderConfig::Hyperbolic(provider) => {
@@ -1047,6 +1062,11 @@ impl ModelProvider {
                     .await
             }
             ProviderConfig::GoogleAIStudioGemini(provider) => {
+                provider
+                    .start_batch_inference(requests, client, api_keys)
+                    .await
+            }
+            ProviderConfig::Groq(provider) => {
                 provider
                     .start_batch_inference(requests, client, api_keys)
                     .await
@@ -1148,6 +1168,11 @@ impl ModelProvider {
                     .await
             }
             ProviderConfig::GoogleAIStudioGemini(provider) => {
+                provider
+                    .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
+                    .await
+            }
+            ProviderConfig::Groq(provider) => {
                 provider
                     .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
                     .await
