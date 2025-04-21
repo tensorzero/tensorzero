@@ -24,7 +24,6 @@ The instructions below assume you're using the provided setup with fixture data.
 5. Set the UI environment variables in the shell (not `.env`). See `./.env.example` for reference.
 6. Run `pnpm install` to install the dependencies.
 7. Run `pnpm dev` to start the development server. Optionally, enable the feature flags to try out new features:
-   - `VITE_TENSORZERO_UI_FF_ENABLE_DATASETS=1` for datasets and evaluations
    - `VITE_TENSORZERO_UI_FF_ENABLE_FEEDBACK=1` for human feedback in the UI
    - `TENSORZERO_UI_FF_ENABLE_PYTHON=1` for delegating to Python-based optimization server
 
