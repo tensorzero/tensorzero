@@ -1368,7 +1368,7 @@ dependencies = [
 
 [[package]]
 name = "evaluations"
-version = "2025.4.5"
+version = "2025.4.6"
 dependencies = [
  "anyhow",
  "clap",
@@ -1568,7 +1568,7 @@ dependencies = [
 
 [[package]]
 name = "gateway"
-version = "2025.4.5"
+version = "2025.4.6"
 dependencies = [
  "axum",
  "clap",
@@ -2431,7 +2431,7 @@ dependencies = [
 
 [[package]]
 name = "minijinja-bindings"
-version = "2025.4.5"
+version = "2025.4.6"
 dependencies = [
  "console_error_panic_hook",
  "minijinja",
@@ -3873,7 +3873,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-internal"
-version = "2025.4.5"
+version = "2025.4.6"
 dependencies = [
  "async-stream",
  "async-trait",
@@ -3934,7 +3934,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-python"
-version = "2025.4.5"
+version = "2025.4.6"
 dependencies = [
  "futures",
  "pyo3",
