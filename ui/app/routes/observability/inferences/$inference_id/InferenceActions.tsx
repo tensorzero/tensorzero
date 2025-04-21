@@ -10,8 +10,6 @@ import type {
   JsonInferenceOutput,
 } from "~/utils/clickhouse/common";
 
-const FF_ENABLE_DATASETS =
-  import.meta.env.VITE_TENSORZERO_UI_FF_ENABLE_DATASETS === "1";
 const FF_ENABLE_FEEDBACK =
   import.meta.env.VITE_TENSORZERO_UI_FF_ENABLE_FEEDBACK === "1";
 
@@ -52,13 +50,11 @@ export function InferenceActions({
         onVariantSelect={onVariantSelect}
         isLoading={variantInferenceIsLoading}
       />
-      {FF_ENABLE_DATASETS && (
-        <AddToDatasetButton
-          dataset_counts={dataset_counts}
-          onDatasetSelect={onDatasetSelect}
-          hasDemonstration={hasDemonstration}
-        />
-      )}
+      <AddToDatasetButton
+        dataset_counts={dataset_counts}
+        onDatasetSelect={onDatasetSelect}
+        hasDemonstration={hasDemonstration}
+      />
       {FF_ENABLE_FEEDBACK && <HumanFeedbackButton onClick={handleModalOpen} />}
       <HumanFeedbackModal
         isOpen={isModalOpen}

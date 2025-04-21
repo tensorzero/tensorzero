@@ -49,9 +49,19 @@ export async function addHumanFeedback(formData: FormData) {
   const tags: Record<string, string> = {
     "tensorzero::human_feedback": "true",
   };
+  // We should either get both of these or none of them
   const datapointId = formData.get("datapointId");
-  if (datapointId) {
+  const evaluatorInferenceId = formData.get("evaluatorInferenceId");
+  if (datapointId && evaluatorInferenceId) {
     tags["tensorzero::datapoint_id"] = datapointId.toString();
+    tags["tensorzero::evaluator_inference_id"] =
+      evaluatorInferenceId.toString();
+  } else if (!datapointId && !evaluatorInferenceId) {
+    // Do nothing
+  } else {
+    throw new Error(
+      "Either both or neither of datapointId and evaluatorInferenceId should be provided",
+    );
   }
   if ((episodeId && inferenceId) || (!episodeId && !inferenceId)) {
     throw new Error(

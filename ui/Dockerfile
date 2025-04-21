@@ -40,7 +40,9 @@ RUN wasm-pack build --features console_error_panic_hook
 
 FROM rust:latest AS evaluations-build-env
 
+RUN cargo install sccache --locked
 RUN apt-get update && apt-get install -y clang libc++-dev && rm -rf /var/lib/apt/lists/*
+ENV RUSTC_WRAPPER=sccache SCCACHE_DIR=/sccache
 
 COPY . /tensorzero
 
@@ -50,7 +52,7 @@ ARG CARGO_BUILD_FLAGS=""
 
 RUN --mount=type=cache,id=tensorzero-evaluations-release,sharing=shared,target=/usr/local/cargo/registry \
     --mount=type=cache,id=tensorzero-evaluations-release,sharing=shared,target=/usr/local/cargo/git \
-    --mount=type=cache,id=tensorzero-evaluations-release,sharing=locked,target=/tensorzero/target \
+    --mount=type=cache,id=tensorzero-evaluations-release,sharing=locked,target=/sccache \
     cargo build --release -p evaluations $CARGO_BUILD_FLAGS && \
     cp -r /tensorzero/target/release /release
 
@@ -67,12 +69,8 @@ COPY --from=development-dependencies-env /app/node_modules /app/node_modules
 
 WORKDIR /app
 
-# Declare the build argument with a default value (e.g., 0)
-ARG VITE_TENSORZERO_UI_FF_ENABLE_FEEDBACK=0
-# Set the environment variable using the build argument
-ENV VITE_TENSORZERO_UI_FF_ENABLE_FEEDBACK=${VITE_TENSORZERO_UI_FF_ENABLE_FEEDBACK}
+ENV VITE_TENSORZERO_UI_FF_ENABLE_FEEDBACK=1
 
-ENV VITE_TENSORZERO_UI_FF_ENABLE_DATASETS=1
 
 RUN pnpm run build
 
@@ -85,7 +83,7 @@ WORKDIR /build/optimizations-server
 # UV_PYTHON_DOWNLOADS=never
 # https://hynek.me/articles/docker-uv/
 ENV UV_COMPILE_BYTECODE=1
-RUN --mount=type=cache,target=/uv-cache CARGO_TARGET_DIR=/uv-cache/cargo-target uv --cache-dir /uv-cache --verbose sync --locked --no-dev
+RUN --mount=type=cache,sharing=locked,target=/uv-cache CARGO_TARGET_DIR=/uv-cache/cargo-target uv --cache-dir /uv-cache --verbose sync --locked --no-dev
 
 # ========== ui ==========
 

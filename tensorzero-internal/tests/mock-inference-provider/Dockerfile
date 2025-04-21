@@ -9,7 +9,6 @@ ARG CARGO_BUILD_FLAGS=""
 
 RUN --mount=type=cache,id=tensorzero-mock-inference-provider-release,sharing=shared,target=/usr/local/cargo/registry \
     --mount=type=cache,id=tensorzero-mock-inference-provider-release,sharing=shared,target=/usr/local/cargo/git \
-    --mount=type=cache,id=tensorzero-mock-inference-provider-release,sharing=locked,target=/src/target \
     cargo build --release -p mock-inference-provider $CARGO_BUILD_FLAGS && \
     cp -r /src/target/release /release
 
