@@ -83,7 +83,7 @@ async fn main() {
 
     let git_sha = tensorzero_internal::built_info::GIT_COMMIT_HASH_SHORT.unwrap_or("<unknown>");
 
-    tracing::info!("Starting TensorZero Gateway version {TENSORZERO_VERSION} (SHA {git_sha})");
+    tracing::info!("Starting TensorZero Gateway {TENSORZERO_VERSION} (commit: {git_sha})");
 
     let metrics_handle = observability::setup_metrics().expect_pretty("Failed to set up metrics");
 
@@ -213,7 +213,7 @@ async fn main() {
     };
 
     tracing::info!(
-        "TensorZero Gateway version {TENSORZERO_VERSION} (SHA {git_sha}) is listening on {bind_address} with {config_path_pretty} and observability {observability_enabled_pretty}.",
+        "TensorZero Gateway is listening on {bind_address} with {config_path_pretty} and observability {observability_enabled_pretty}.",
     );
 
     axum::serve(listener, router)
