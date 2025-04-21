@@ -10,6 +10,7 @@ import {
   BestOfNSamplingConfigSchema,
   MixtureOfNConfigSchema,
   DiclConfigSchema,
+  ChainOfThoughtConfigSchema,
 } from "./variant";
 import {
   LLMJudgeIncludeConfigSchema,
@@ -171,6 +172,11 @@ export const UnintializedLLMJudgeVariantConfigSchema = z.discriminatedUnion(
     z.object({
       type: z.literal("experimental_dynamic_in_context_learning"),
       ...UninitializedLLMJudgeDiclVariantConfigSchema.shape,
+    }),
+    z.object({
+      type: z.literal("experimental_chain_of_thought"),
+      ...UninitializedLLMJudgeChatCompletionVariantConfigSchema.shape,
+      // This is the same as ChatCompletionVariantConfigSchema because they have the same config options
     }),
   ],
 );
@@ -402,6 +408,37 @@ async function loadLLMJudgeVariant(
         presence_penalty: variantConfig.presence_penalty,
         frequency_penalty: variantConfig.frequency_penalty,
         max_tokens: variantConfig.max_tokens,
+        seed: variantConfig.seed,
+        json_mode: variantConfig.json_mode,
+        retries: variantConfig.retries,
+        extra_body: variantConfig.extra_body,
+        extra_headers: variantConfig.extra_headers,
+      });
+    }
+
+    case "experimental_chain_of_thought": {
+      const systemInstructions = await readSystemInstructions(
+        variantConfig.system_instructions,
+        basePath,
+      );
+
+      const system_template: TemplateWithContent = {
+        path: systemTemplatePath,
+        content: systemInstructions,
+      };
+
+      // Validate and return ChainOfThoughtConfig
+      return ChainOfThoughtConfigSchema.parse({
+        type: "experimental_chain_of_thought" as const,
+        weight: weight, // Use calculated weight
+        model: variantConfig.model,
+        system_template: system_template, // Use formatted content
+        user_template: user_template, // Use conditional template
+        temperature: variantConfig.temperature,
+        top_p: variantConfig.top_p,
+        max_tokens: variantConfig.max_tokens,
+        presence_penalty: variantConfig.presence_penalty,
+        frequency_penalty: variantConfig.frequency_penalty,
         seed: variantConfig.seed,
         json_mode: variantConfig.json_mode,
         retries: variantConfig.retries,
