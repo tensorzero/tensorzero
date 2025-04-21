@@ -586,6 +586,19 @@ type = "gcp_vertex_gemini"
 model_id = "gemini-1.5-pro-001"
 location = "us-central1"
 project_id = "tensorzero-public"
+
+[functions.image_test.variants.gcp-vertex-haiku]
+type = "chat_completion"
+model = "claude-3-haiku-20240307-gcp-vertex"
+
+[models.claude-3-haiku-20240307-gcp-vertex]
+routing = ["gcp_vertex_anthropic"]
+
+[models.claude-3-haiku-20240307-gcp-vertex.providers.gcp_vertex_anthropic]
+type = "gcp_vertex_anthropic"
+model_id = "claude-3-haiku@20240307"
+location = "us-central1"
+project_id = "tensorzero-public"
 "#;
 
 pub async fn test_image_url_inference_with_provider_filesystem(provider: E2ETestProvider) {
