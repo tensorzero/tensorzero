@@ -179,7 +179,7 @@ jobs:
 
       - name: Test (Rust)
         run: |
-          cargo test-unit ${{vars.CARGO_NEXTEST_ARGS}}
+          cargo test-unit ${{ vars.CARGO_NEXTEST_EXTRA_ARGS }}
 
       - name: Install Python for python async client tests
         run: uv python install 3.9
