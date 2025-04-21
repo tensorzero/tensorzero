@@ -20,6 +20,11 @@ weight = 1
 type = "chat_completion"
 model = "google_ai_studio_gemini::gemini-2.5-pro-preview-03-25"
 
+[functions.cursorzero.variants."o4-mini"]
+weight = 1
+type = "chat_completion"
+model = "openai::o4-mini-2025-04-16"
+
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                  METRICS                                   │

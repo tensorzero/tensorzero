@@ -1,11 +1,14 @@
 use std::{collections::HashMap, path::PathBuf};
 
-use anyhow::{anyhow, Result};
+use anyhow::{Context, Result};
 use clap::Parser;
 use cursorzero::{
     clickhouse::get_inferences_in_time_range,
     cursor::parse_cursor_output,
-    git::{get_commit_timestamp_and_parent_timestamp, get_diff_by_file, get_last_commit_from_repo},
+    git::{
+        find_paths_in_repo, get_commit_timestamp_and_parent_timestamp, get_diff_by_file,
+        get_last_commit_from_repo,
+    },
     parsing::parse_hunk,
 };
 use git2::Repository;
@@ -54,12 +57,8 @@ async fn main() -> Result<()> {
         println!("  Input: {:?}", inference.input);
         println!("  Output: {:?}", inference.output);
         let code_blocks =
-            parse_cursor_output(&inference.input, &inference.output).map_err(|e| {
-                anyhow!(
-                    "Error parsing cursor output for inference {}: {}",
-                    inference.id,
-                    e
-                )
+            parse_cursor_output(&inference.input, &inference.output).with_context(|| {
+                format!("Error parsing cursor output for inference {}", inference.id)
             })?;
         println!("Code blocks: {:?}", code_blocks);
         for code_block in code_blocks {
@@ -77,6 +76,21 @@ async fn main() -> Result<()> {
             }
         }
     }
+    // Map all the InferenceTreeInfo to NormalizedInferenceTreeInfo
+    let mut normalized_inference_trees: HashMap<Uuid, Vec<NormalizedInferenceTreeInfo>> =
+        HashMap::new();
+    for (inference_id, inference_tree_info) in inference_trees {
+        for tree_info in inference_tree_info {
+            let path = find_paths_in_repo(&repo, &tree_info.path)?;
+            normalized_inference_trees
+                .entry(inference_id)
+                .or_default()
+                .push(NormalizedInferenceTreeInfo {
+                    path,
+                    tree: tree_info.tree,
+                });
+        }
+    }
     // TODOs:
     // - For each InferenceTreeInfo in the map, find the git-relative file path and find the diff tree that corresponds to it.
     // - Compute for each diff tree the minimum edit distance to the inference tree.
@@ -87,6 +101,12 @@ async fn main() -> Result<()> {
 
 #[derive(Debug)]
 struct InferenceTreeInfo {
-    path: PathBuf,
+    path: PathBuf, // VSCode workspace relative path
+    tree: Tree,
+}
+
+#[derive(Debug)]
+struct NormalizedInferenceTreeInfo {
+    path: Vec<PathBuf>, // git-relative paths that might be the right path for this inference
     tree: Tree,
 }

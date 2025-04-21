@@ -63,18 +63,11 @@ pub fn parse_cursor_output(
 /// In this file, we take a particular Cursor output (as a &str)
 /// and return a Vec<CursorCodeBlock>.
 ///
-/// Since the cursor root and the git root might be different, we also normalize the paths to the git root.
-///
-/// The system message for Cursor also contains as a substring:
-///
-/// <user_info>
-/// The user's OS version is darwin 24.3.0. The absolute path of the user's workspace is /Users/viraj/tensorzero/tensorzero/examples/cursorzero. The user's shell is /bin/zsh.
-/// </user_info>
-///
-/// We should grab the workspace path from this string and use it to normalize the paths of the code blocks.
+/// Note: all paths here and in the rest of this file are relative to the Cursor workspace root.
+/// later on, we'll need to normalize these paths to the git root.
 fn parse_cursor_ask_output(output_text: &str) -> Result<Vec<CursorCodeBlock>> {
-    // 2. Find all ```lang:rel/path/to/file\n...``` blocks in the output.
-    //    We use (?s) so `.` matches newlines, and make the match non‑greedy.
+    //  Find all ```lang:rel/path/to/file\n...``` blocks in the output.
+    //  We use (?s) so `.` matches newlines, and make the match non‑greedy.
     let block_re =
         Regex::new(r"(?s)```(?P<lang>[^:\n]+):(?P<file>[^\n]+)\r?\n(?P<content>.*?)```")?;
 
@@ -146,7 +139,7 @@ fn parse_cursor_edit_output(
             return Err(anyhow::anyhow!("Expected text in second user message"));
         }
     };
-    // 2. Extract the relative path from the second user message.
+    // 1. Extract the relative path from the second user message.
     let file_re = Regex::new(r"## Selection to Rewrite\r?\n```(?P<file>[^\n]+)")?;
     let file_ref = file_re
         .captures(second_message_text)
@@ -154,7 +147,7 @@ fn parse_cursor_edit_output(
         .map(|m| m.as_str())
         .ok_or_else(|| anyhow::anyhow!("Couldn't find file reference in edit selection"))?;
     let file_ref = PathBuf::from(file_ref);
-    // 3. Extract the generated code from the output.
+    // 2. Extract the generated code from the output.
     //    We simply strip the first two lines and the last two lines of the output.
     let lines: Vec<&str> = output_text.lines().collect();
 
@@ -172,7 +165,7 @@ fn parse_cursor_edit_output(
     // Extract the code content by skipping the first two and last two lines.
     let code_content_lines = &lines[2..lines.len() - 2];
     let content = code_content_lines.join("\n");
-    // 4. Get the git root relative path from the workspace path.
+    // 3. Get the git root relative path from the workspace path.
     let language_extension = file_ref
         .extension()
         .map(|ext| ext.to_string_lossy())
