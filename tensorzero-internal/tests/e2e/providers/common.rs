@@ -2411,6 +2411,13 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
             full_content.push_str(content);
         }
 
+        // When we get a cache hit, the usage should be explicitly set to 0
+        if check_cache {
+            let usage = chunk_json.get("usage").unwrap();
+            assert_eq!(usage.get("input_tokens").unwrap().as_u64().unwrap(), 0);
+            assert_eq!(usage.get("output_tokens").unwrap().as_u64().unwrap(), 0);
+        }
+
         if let Some(usage) = chunk_json.get("usage") {
             input_tokens += usage.get("input_tokens").unwrap().as_u64().unwrap();
             output_tokens += usage.get("output_tokens").unwrap().as_u64().unwrap();
