@@ -54,6 +54,7 @@ RUN --mount=type=cache,id=tensorzero-evaluations-release,sharing=shared,target=/
     --mount=type=cache,id=tensorzero-evaluations-release,sharing=shared,target=/usr/local/cargo/git \
     --mount=type=cache,id=tensorzero-evaluations-release,sharing=locked,target=/sccache \
     cargo build --release -p evaluations $CARGO_BUILD_FLAGS && \
+    sccache --show-stats && \
     cp -r /tensorzero/target/release /release
 
 
