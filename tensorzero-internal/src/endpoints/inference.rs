@@ -33,9 +33,9 @@ use crate::inference::types::storage::StoragePath;
 use crate::inference::types::{
     collect_chunks, Base64Image, ChatInferenceDatabaseInsert, CollectChunksArgs,
     ContentBlockChatOutput, ContentBlockChunk, FetchContext, FinishReason, InferenceResult,
-    InferenceResultChunk, InferenceResultStream, Input, JsonInferenceDatabaseInsert,
-    JsonInferenceOutput, ModelInferenceResponseWithMetadata, RequestMessage, ResolvedInput,
-    ResolvedInputMessageContent, Usage,
+    InferenceResultChunk, InferenceResultStream, Input, InternalJsonInferenceOutput,
+    JsonInferenceDatabaseInsert, JsonInferenceOutput, ModelInferenceResponseWithMetadata,
+    RequestMessage, ResolvedInput, ResolvedInputMessageContent, Usage,
 };
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::model::ModelTable;
@@ -515,7 +515,7 @@ fn find_function(params: &Params, config: &Config) -> Result<(Arc<FunctionConfig
                     user_schema: None,
                     assistant_schema: None,
                     tools: vec![],
-                    tool_choice: ToolChoice::None,
+                    tool_choice: ToolChoice::Auto,
                     parallel_tool_calls: None,
                     description: None,
                 })),
@@ -847,15 +847,19 @@ impl InferenceResponse {
                 original_response: result.original_response,
                 finish_reason: result.finish_reason,
             }),
-            InferenceResult::Json(result) => InferenceResponse::Json(JsonInferenceResponse {
-                inference_id: result.inference_id,
-                episode_id,
-                variant_name,
-                output: result.output,
-                usage: result.usage,
-                original_response: result.original_response,
-                finish_reason: result.finish_reason,
-            }),
+            InferenceResult::Json(result) => {
+                let InternalJsonInferenceOutput { raw, parsed, .. } = result.output;
+                let output = JsonInferenceOutput { raw, parsed };
+                InferenceResponse::Json(JsonInferenceResponse {
+                    inference_id: result.inference_id,
+                    episode_id,
+                    variant_name,
+                    output,
+                    usage: result.usage,
+                    original_response: result.original_response,
+                    finish_reason: result.finish_reason,
+                })
+            }
         }
     }
 

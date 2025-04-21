@@ -118,17 +118,6 @@ export default function BasicInfo({
           />
         </BasicInfoItemContent>
       </BasicInfoItem>
-      {/*
-      <BasicInfoItem>
-        <BasicInfoItemTitle>Processing Time</BasicInfoItemTitle>
-        <BasicInfoItemContent>
-          <Chip
-            icon={<Timer className="text-fg-tertiary" />}
-            label={`${inference.processing_time_ms} ms`}
-          />
-        </BasicInfoItemContent>
-      </BasicInfoItem>
-      */}
     </BasicInfoLayout>
   );
 }

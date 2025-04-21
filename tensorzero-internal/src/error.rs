@@ -29,6 +29,8 @@ pub fn set_debug(debug: bool) -> Result<(), Error> {
     })
 }
 
+pub const IMPOSSIBLE_ERROR_MESSAGE: &str = "This should never happen, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports";
+
 /// Chooses between a `Debug` or `Display` representation based on the gateway-level `DEBUG` flag.
 pub struct DisplayOrDebugGateway<T: Debug + Display> {
     val: T,
@@ -331,6 +333,16 @@ pub enum ErrorDetails {
     UnsupportedVariantForBatchInference {
         variant_name: Option<String>,
     },
+    UnsupportedVariantForStreamingInference {
+        variant_type: String,
+        issue_link: Option<String>,
+    },
+    UnsupportedVariantForFunctionType {
+        function_name: String,
+        variant_name: String,
+        function_type: String,
+        variant_type: String,
+    },
     UnsupportedContentBlockType {
         content_block_type: String,
         provider_type: String,
@@ -421,6 +433,8 @@ impl ErrorDetails {
             ErrorDetails::UnknownMetric { .. } => tracing::Level::WARN,
             ErrorDetails::UnsupportedModelProviderForBatchInference { .. } => tracing::Level::WARN,
             ErrorDetails::UnsupportedVariantForBatchInference { .. } => tracing::Level::WARN,
+            ErrorDetails::UnsupportedVariantForFunctionType { .. } => tracing::Level::ERROR,
+            ErrorDetails::UnsupportedVariantForStreamingInference { .. } => tracing::Level::WARN,
             ErrorDetails::UuidInFuture { .. } => tracing::Level::WARN,
             ErrorDetails::RouteNotFound { .. } => tracing::Level::WARN,
         }
@@ -506,6 +520,12 @@ impl ErrorDetails {
                 StatusCode::INTERNAL_SERVER_ERROR
             }
             ErrorDetails::UnsupportedVariantForBatchInference { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::UnsupportedVariantForStreamingInference { .. } => {
+                StatusCode::INTERNAL_SERVER_ERROR
+            }
+            ErrorDetails::UnsupportedVariantForFunctionType { .. } => {
+                StatusCode::INTERNAL_SERVER_ERROR
+            }
             ErrorDetails::UuidInFuture { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::RouteNotFound { .. } => StatusCode::NOT_FOUND,
         }
@@ -857,6 +877,32 @@ impl std::fmt::Display for ErrorDetails {
                     ),
                     None => write!(f, "Unsupported variant for batch inference"),
                 }
+            }
+            ErrorDetails::UnsupportedVariantForStreamingInference {
+                variant_type,
+                issue_link,
+            } => {
+                if let Some(link) = issue_link {
+                    write!(
+                        f,
+                        "Unsupported variant for streaming inference of type {}. For more information, see: {}",
+                        variant_type, link
+                    )
+                } else {
+                    write!(
+                        f,
+                        "Unsupported variant for streaming inference of type {}",
+                        variant_type
+                    )
+                }
+            }
+            ErrorDetails::UnsupportedVariantForFunctionType {
+                function_name,
+                variant_name,
+                function_type,
+                variant_type,
+            } => {
+                write!(f, "Unsupported variant `{variant_name}` of type `{variant_type}` for function `{function_name}` of type `{function_type}`")
             }
             ErrorDetails::UuidInFuture { raw_uuid } => {
                 write!(f, "UUID is in the future: {}", raw_uuid)

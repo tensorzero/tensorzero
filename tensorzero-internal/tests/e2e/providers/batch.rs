@@ -4032,6 +4032,11 @@ pub async fn test_poll_completed_parallel_tool_use_batch_inference_request_with_
 }
 
 pub async fn test_json_mode_batch_inference_request_with_provider(provider: E2ETestProvider) {
+    if provider.variant_name.ends_with("cot") {
+        // Don't test chain of thought variants with batch mode
+        return;
+    }
+
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -4220,6 +4225,11 @@ pub async fn test_json_mode_batch_inference_request_with_provider(provider: E2ET
 pub async fn test_poll_existing_json_mode_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    if provider.variant_name.ends_with("cot") {
+        // Don't test chain of thought variants with batch mode
+        return;
+    }
+
     let clickhouse = get_clickhouse().await;
     let function_name = "json_success";
     let latest_pending_batch_inference = get_latest_batch_inference(
@@ -4299,6 +4309,11 @@ pub async fn test_poll_existing_json_mode_batch_inference_request_with_provider(
 pub async fn test_poll_completed_json_mode_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    if provider.variant_name.ends_with("cot") {
+        // Don't test chain of thought variants with batch mode
+        return;
+    }
+
     let clickhouse = get_clickhouse().await;
     let function_name = "json_success";
     let latest_pending_batch_inference = insert_fake_pending_batch_inference_data(
@@ -4371,6 +4386,11 @@ pub async fn test_poll_completed_json_mode_batch_inference_request_with_provider
 pub async fn test_dynamic_json_mode_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    if provider.variant_name.ends_with("cot") {
+        // Don't test chain of thought variants with batch mode
+        return;
+    }
+
     let episode_id = Uuid::now_v7();
     let output_schema = json!({
       "type": "object",
@@ -4570,6 +4590,11 @@ pub async fn test_dynamic_json_mode_batch_inference_request_with_provider(
 pub async fn test_poll_existing_dynamic_json_mode_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    if provider.variant_name.ends_with("cot") {
+        // Don't test chain of thought variants with batch mode
+        return;
+    }
+
     let clickhouse = get_clickhouse().await;
     let function_name = "json_success";
     let latest_pending_batch_inference = get_latest_batch_inference(
@@ -4663,6 +4688,11 @@ pub async fn test_poll_existing_dynamic_json_mode_batch_inference_request_with_p
 pub async fn test_poll_completed_dynamic_json_mode_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    if provider.variant_name.ends_with("cot") {
+        // Don't test chain of thought variants with batch mode
+        return;
+    }
+
     let clickhouse = get_clickhouse().await;
     let function_name = "json_success";
     let latest_pending_batch_inference = insert_fake_pending_batch_inference_data(
