@@ -1,0 +1,13 @@
+[models.gpt_4o_mini_2024_07_18]
+routing = ["groq"]
+
+[models.gpt_4o_mini_2024_07_18.providers.groq]
+type = "groq"
+model_name = "gpt-4o-mini-2024-07-18"
+
+[functions.my_function_name]
+type = "chat"
+
+[functions.my_function_name.variants.my_variant_name]
+type = "chat_completion"
+model = "gpt_4o_mini_2024_07_18"
