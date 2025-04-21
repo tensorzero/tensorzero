@@ -1444,6 +1444,7 @@ const SHORTHAND_MODEL_PREFIXES: &[&str] = &[
     "fireworks::",
     "google_ai_studio_gemini::",
     "hyperbolic::",
+    "groq::",
     "mistral::",
     "openai::",
     "together::",
