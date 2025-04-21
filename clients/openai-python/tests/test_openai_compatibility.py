@@ -533,7 +533,7 @@ async def test_async_tool_call_streaming(async_client):
             assert tool_call.function.arguments == expected_text[i]
         else:
             assert chunk.choices[0].delta.content is None
-            assert len(chunk.choices[0].delta.tool_calls) == 0
+            assert chunk.choices[0].delta.tool_calls is None
             assert chunk.usage.prompt_tokens == 10
             assert chunk.usage.completion_tokens == 5
             assert chunk.choices[0].finish_reason == "tool_calls"
