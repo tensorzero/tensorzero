@@ -711,18 +711,18 @@ impl TensorZeroGateway {
     /// :param project_name: (Optional) The name of the project to associate with the dynamic evaluation run.
     /// :param run_display_name: (Optional) The display name of the dynamic evaluation run.
     /// :return: A `DynamicEvaluationRunResponse` object.
-    #[pyo3(signature = (*, variants, tags, project_name=None, display_name=None))]
+    #[pyo3(signature = (*, variants, tags=None, project_name=None, display_name=None))]
     fn dynamic_evaluation_run(
         this: PyRef<'_, Self>,
         variants: HashMap<String, String>,
-        tags: HashMap<String, String>,
+        tags: Option<HashMap<String, String>>,
         project_name: Option<String>,
         display_name: Option<String>,
     ) -> PyResult<Py<PyAny>> {
         let client = this.as_super().client.clone();
         let params = DynamicEvaluationRunParams {
             variants,
-            tags,
+            tags: tags.unwrap_or_default(),
             project_name,
             display_name,
         };
@@ -1098,18 +1098,18 @@ impl AsyncTensorZeroGateway {
     /// :param project_name: (Optional) The name of the project to associate with the dynamic evaluation run.
     /// :param run_display_name: (Optional) The display name of the dynamic evaluation run.
     /// :return: A `DynamicEvaluationRunResponse` object.
-    #[pyo3(signature = (*, variants, tags, project_name=None, display_name=None))]
+    #[pyo3(signature = (*, variants, tags=None, project_name=None, display_name=None))]
     fn dynamic_evaluation_run(
         this: PyRef<'_, Self>,
         variants: HashMap<String, String>,
-        tags: HashMap<String, String>,
+        tags: Option<HashMap<String, String>>,
         project_name: Option<String>,
         display_name: Option<String>,
     ) -> PyResult<Bound<'_, PyAny>> {
         let client = this.as_super().client.clone();
         let params = DynamicEvaluationRunParams {
             variants,
-            tags,
+            tags: tags.unwrap_or_default(),
             project_name,
             display_name,
         };
