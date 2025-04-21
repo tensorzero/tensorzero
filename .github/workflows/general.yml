@@ -1,4 +1,5 @@
 name: General Checks
+run-name: General Checks for ${{ github.event.pull_request.title || github.ref }}
 
 on:
   merge_group:
