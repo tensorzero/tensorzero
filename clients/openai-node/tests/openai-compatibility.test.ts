@@ -218,10 +218,9 @@ describe("OpenAI Compatibility", () => {
         expect(chunk.choices[0].delta.content).toBe(expectedText[i]);
         expect(chunk.choices[0].finish_reason).toBeNull();
       } else {
-        expect(chunk.choices[0].delta.content).toBeNull();
-        expect(chunk.usage?.prompt_tokens).toBe(10);
-        expect(chunk.usage?.completion_tokens).toBe(16);
-        expect(chunk.usage?.total_tokens).toBe(26);
+        expect(chunk.choices[0].delta.content).toBeUndefined();
+        // No usage information because we didn't set `include_usage`
+        expect(chunk.usage).toBeNull();
         expect(chunk.choices[0].finish_reason).toBe("stop");
       }
     }
@@ -512,7 +511,7 @@ describe("OpenAI Compatibility", () => {
 
       if (i + 1 < chunks.length) {
         expect(chunk.choices.length).toBe(1);
-        expect(chunk.choices[0].delta.content).toBeNull();
+        expect(chunk.choices[0].delta.content).toBeUndefined();
         expect(chunk.choices[0].delta.tool_calls?.length).toBe(1);
 
         const toolCall = chunk.choices[0].delta.tool_calls![0];
@@ -520,10 +519,10 @@ describe("OpenAI Compatibility", () => {
         expect(toolCall.function?.name).toBe("get_temperature");
         expect(toolCall.function?.arguments).toBe(expectedText[i]);
       } else {
-        expect(chunk.choices[0].delta.content).toBeNull();
-        expect(chunk.choices[0].delta.tool_calls?.length).toBe(0);
-        expect(chunk.usage?.prompt_tokens).toBe(10);
-        expect(chunk.usage?.completion_tokens).toBe(5);
+        expect(chunk.choices[0].delta.content).toBeUndefined();
+        expect(chunk.choices[0].delta.tool_calls).toBeUndefined();
+        // No usage information because we didn't set `include_usage`
+        expect(chunk.usage).toBeNull();
         expect(chunk.choices[0].finish_reason).toBe("tool_calls");
       }
     }
@@ -608,8 +607,8 @@ describe("OpenAI Compatibility", () => {
         expect(chunk.choices[0].delta.content).toBe(expectedText[i]);
       } else {
         expect(chunk.choices[0].delta.content).toBe("");
-        expect(chunk.usage?.prompt_tokens).toBe(10);
-        expect(chunk.usage?.completion_tokens).toBe(16);
+        // No usage information because we didn't set `include_usage`
+        expect(chunk.usage).toBeNull();
       }
     }
   });
@@ -834,6 +833,9 @@ describe("OpenAI Compatibility", () => {
       messages,
       model: "tensorzero::function_name::basic_test",
       stream: true,
+      stream_options: {
+        include_usage: true,
+      },
       seed: 69,
     });
 
@@ -869,11 +871,15 @@ describe("OpenAI Compatibility", () => {
       }
     }
 
-    // Check final chunk
+    const prevChunk = chunks[chunks.length - 2];
+    expect(prevChunk.choices[0].finish_reason).toBe("stop");
+    expect(prevChunk.usage).toBeNull();
+
+    // Check final chunk (which contains usage)
     const finalChunk = chunks[chunks.length - 1];
-    expect(finalChunk.choices[0].finish_reason).toBe("stop");
     expect(finalChunk.usage?.prompt_tokens).toBe(10);
     expect(finalChunk.usage?.completion_tokens).toBe(16);
+    expect(finalChunk.choices).toStrictEqual([]);
 
     // Second streaming request with cache
     // @ts-expect-error - custom TensorZero property
@@ -881,6 +887,9 @@ describe("OpenAI Compatibility", () => {
       messages,
       model: "tensorzero::function_name::basic_test",
       stream: true,
+      stream_options: {
+        include_usage: true,
+      },
       seed: 69,
       "tensorzero::cache_options": {
         max_age_s: 10,
@@ -903,19 +912,15 @@ describe("OpenAI Compatibility", () => {
 
     expect(content).toBe(cachedContent);
 
+    const prevCachedChunk = cachedChunks[cachedChunks.length - 2];
+    expect(prevCachedChunk.choices[0].finish_reason).toBe("stop");
+    expect(prevCachedChunk.usage).toBeNull();
+
     // Check final cached chunk
     const finalCachedChunk = cachedChunks[cachedChunks.length - 1];
-    expect(finalCachedChunk.choices[0].finish_reason).toBe("stop");
-
-    // Check cached usage stats if present
-    if (
-      finalCachedChunk.usage !== undefined &&
-      finalCachedChunk.usage !== null
-    ) {
-      expect(finalCachedChunk.usage.prompt_tokens).toBe(0);
-      expect(finalCachedChunk.usage.completion_tokens).toBe(0);
-      expect(finalCachedChunk.usage.total_tokens).toBe(0);
-    }
+    expect(finalCachedChunk.usage?.prompt_tokens).toBe(0);
+    expect(finalCachedChunk.usage?.completion_tokens).toBe(0);
+    expect(finalCachedChunk.usage?.total_tokens).toBe(0);
   });
 
   it("should handle dynamic tool use inference with OpenAI", async () => {
