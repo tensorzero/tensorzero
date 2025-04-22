@@ -38,35 +38,32 @@ Why?
 1. Create a `.env` file with your provider credentials. (See `.env.example` for reference.)
 2. Run `docker compose up` to start TensorZero.
 3. Install Codex:
-   > [^INFO]
-   >
    > At the time of writing, OpenAI has merged the required features for using multiple providers with Codex, but hasn't released a new version of Codex on `npm`, so you'll need to build it from source.
    > It's easy!
    >
-   > (If OpenAI makes a new release, you can skip this step and instead install the latest version of Codex with `npm i -g @openai/codex`.)
-   >
-   > ```bash
-   > # Clone the Codex repository
-   > git clone https://github.com/openai/codex.git
-   >
-   > # Install dependencies
-   > cd codex/codex-cli
-   >
-   > # Install the Codex dependencies
-   > npm install
-   >
-   > # Build Codex
-   > npm run build
-   >
-   > # Link the version of Codex you just built
-   > npm link
-   > ```
-4. Run Codex with TensorZero:
-   > ```bash
-   > OPENAI_BASE_URL="http://localhost:3000/openai/v1" OPENAI_API_KEY="not-used" codex -p tensorzero -m tensorzero::model_name::anthropic::claude-3-7-sonnet-20250219
-   > ```
+   > If OpenAI makes a new release, you can skip this step and instead install Codex with `npm i -g @openai/codex`.
+   ```bash
+   # Clone the Codex repository
+   git clone https://github.com/openai/codex.git
+   
+   # Install dependencies
+   cd codex/codex-cli
+   
+   # Install the Codex dependencies
+   npm install
+   
+   # Build Codex
+   npm run build
+   
+   # Link the version of Codex you just built
+   npm link
+   ```
+5. Run Codex with TensorZero:
+   ```bash
+   OPENAI_BASE_URL="http://localhost:3000/openai/v1" OPENAI_API_KEY="not-used" codex -p tensorzero -m tensorzero::model_name::anthropic::claude-3-7-sonnet-20250219
+   ```
 
-> [^TIP]
+> [!TIP]
 >
 > Replace `tensorzero::model_name::anthropic::claude-3-7-sonnet-20250219` with any other model supported by TensorZero, e.g. `tensorzero::model_name::mistral::open-mistral-nemo-2407`.
 >
