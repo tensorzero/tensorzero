@@ -1,4 +1,5 @@
 name: Merge Queue Checks
+run-name: Merge Queue Checks for ${{ github.ref }}
 
 on:
   workflow_dispatch:
