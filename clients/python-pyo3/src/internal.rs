@@ -96,7 +96,6 @@ pub async fn get_curated_inferences(
             FORMAT JSONEachRow
             "#
             );
-            println!("query: {}", query);
             let rows = clickhouse
                 .run_query_synchronous(
                     query,
