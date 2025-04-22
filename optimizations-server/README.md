@@ -1,6 +1,6 @@
 # optimizations-server
 
-This is a Python Fast-api based server which implements optimizations recipes used by the UI
+This is a Python FastAPI based server which implements optimizations recipes used by the UI
 Currently supported optimizations:
 * OpenAI fine-tuning
 * Fireworks fine-tuning
