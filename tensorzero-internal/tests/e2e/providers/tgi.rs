@@ -34,6 +34,13 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
+    let json_mode_off_providers = vec![E2ETestProvider {
+        variant_name: "tgi_json_mode_off".to_string(),
+        model_name: model_name.clone(),
+        model_provider_name: "tgi".into(),
+        credentials: HashMap::new(),
+    }];
+
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
         extra_body_inference: extra_body_providers,
@@ -46,7 +53,7 @@ async fn get_providers() -> E2ETestProviders {
         dynamic_tool_use_inference: vec![],
         parallel_tool_use_inference: vec![],
         json_mode_inference: json_providers.clone(),
-        json_mode_off_inference: vec![],
+        json_mode_off_inference: json_mode_off_providers.clone(),
         image_inference: vec![],
 
         shorthand_inference: vec![],

@@ -54,7 +54,7 @@ async fn get_providers() -> E2ETestProviders {
     ];
 
     let json_mode_off_providers = vec![E2ETestProvider {
-        variant_name: "xai".to_string(),
+        variant_name: "xai_json_mode_off".to_string(),
         model_name: "grok_2_1212".into(),
         model_provider_name: "xai".into(),
         credentials: HashMap::new(),

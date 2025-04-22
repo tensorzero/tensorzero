@@ -70,7 +70,7 @@ async fn get_providers() -> E2ETestProviders {
     ];
 
     let json_mode_off_providers = vec![E2ETestProvider {
-        variant_name: "gcp-vertex-gemini-flash".to_string(),
+        variant_name: "gcp_vertex_gemini_flash_json_mode_off".to_string(),
         model_name: "gemini-2.0-flash-001".into(),
         model_provider_name: "gcp_vertex_gemini".into(),
         credentials: HashMap::new(),

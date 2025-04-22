@@ -149,6 +149,8 @@ impl InferenceProvider for XAIProvider {
             .header("Content-Type", "application/json")
             .bearer_auth(api_key.expose_secret());
 
+        println!("Request body: {request_body:#?}");
+
         let res = request_builder
             .json(&request_body)
             .headers(headers)

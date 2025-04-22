@@ -10338,7 +10338,7 @@ pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETes
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
-        "function_name": "json_with_json_mode_off",
+        "function_name": "json_success",
         "variant_name": provider.variant_name,
         "episode_id": episode_id,
         "input":
@@ -10347,7 +10347,7 @@ pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETes
                "messages": [
                    {
                        "role": "user",
-                       "content": {"country": "Japan"}
+                       "content": [{"type": "text", "arguments": {"country": "Japan"}}]
                    }
                ]
             },
@@ -10369,6 +10369,8 @@ pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETes
     // Check that the API response is ok
     assert_eq!(response.status(), StatusCode::OK);
     let response_json = response.json::<Value>().await.unwrap();
+
+    println!("Response JSON: {response_json:#?}");
 
     // Assert the output isn't JSON
     let output = response_json.get("output").unwrap().as_object().unwrap();

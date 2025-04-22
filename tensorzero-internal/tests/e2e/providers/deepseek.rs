@@ -61,7 +61,7 @@ async fn get_providers() -> E2ETestProviders {
     ];
 
     let json_mode_off_providers = vec![E2ETestProvider {
-        variant_name: "deepseek-chat".to_string(),
+        variant_name: "deepseek_chat_json_mode_off".to_string(),
         model_name: "deepseek-chat".to_string(),
         model_provider_name: "deepseek".to_string(),
         credentials: credentials.clone(),

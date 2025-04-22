@@ -1664,13 +1664,7 @@ user_template = "../../fixtures/config/functions/json_success/prompt/user_templa
 max_tokens = 100
 json_mode = "implicit_tool"
 
-[functions.json_with_json_mode_off]
-type = "json"
-system_schema = "../../fixtures/config/functions/basic_test/system_schema.json"
-user_schema = "../../fixtures/config/functions/json_success/user_schema.json"
-output_schema = "../../fixtures/config/functions/basic_test/output_schema.json"
-
-[functions.json_with_json_mode_off.variants.anthropic]
+[functions.json_success.variants.anthropic_json_mode_off]
 type = "chat_completion"
 model = "claude-3-haiku-20240307-anthropic"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
@@ -1678,7 +1672,7 @@ user_template = "../../fixtures/config/functions/json_success/prompt/user_templa
 json_mode = "off"
 max_tokens = 100
 
-[functions.json_with_json_mode_off.variants.aws-bedrock]
+[functions.json_success.variants.aws_bedrock_json_mode_off]
 type = "chat_completion"
 model = "claude-3-haiku-20240307-aws-bedrock"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
@@ -1686,7 +1680,7 @@ user_template = "../../fixtures/config/functions/json_success/prompt/user_templa
 json_mode = "off"
 max_tokens = 100
 
-[functions.json_with_json_mode_off.variants.azure]
+[functions.json_success.variants.azure_json_mode_off]
 type = "chat_completion"
 model = "gpt-4o-mini-azure"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
@@ -1694,7 +1688,15 @@ user_template = "../../fixtures/config/functions/json_success/prompt/user_templa
 json_mode = "off"
 max_tokens = 100
 
-[functions.json_with_json_mode_off.variants.fireworks]
+[functions.json_success.variants.deepseek_chat_json_mode_off]
+type = "chat_completion"
+model = "deepseek-chat"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
+json_mode = "off"
+max_tokens = 100
+
+[functions.json_success.variants.fireworks_json_mode_off]
 type = "chat_completion"
 model = "llama3.3-70b-instruct-fireworks"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
@@ -1702,7 +1704,7 @@ user_template = "../../fixtures/config/functions/json_success/prompt/user_templa
 json_mode = "off"
 max_tokens = 100
 
-[functions.json_with_json_mode_off.variants.together-deepseek-r1]
+[functions.json_success.variants.together_deepseek_r1_json_mode_off]
 type = "chat_completion"
 model = "together-deepseek-r1"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
@@ -1710,7 +1712,7 @@ user_template = "../../fixtures/config/functions/json_success/prompt/user_templa
 json_mode = "off"
 max_tokens = 100
 
-[functions.json_with_json_mode_off.variants.gcp-vertex-gemini-flash]
+[functions.json_success.variants.gcp_vertex_gemini_flash_json_mode_off]
 type = "chat_completion"
 model = "gemini-2.0-flash-001"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
@@ -1718,7 +1720,7 @@ user_template = "../../fixtures/config/functions/json_success/prompt/user_templa
 json_mode = "off"
 max_tokens = 100
 
-[functions.json_with_json_mode_off.variants.gcp-vertex-gemini-pro]
+[functions.json_success.variants.gcp_vertex_gemini_pro_json_mode_off]
 type = "chat_completion"
 model = "gemini-1.5-pro-001"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
@@ -1726,7 +1728,7 @@ user_template = "../../fixtures/config/functions/json_success/prompt/user_templa
 json_mode = "off"
 max_tokens = 100
 
-[functions.json_with_json_mode_off.variants.gcp-vertex-haiku]
+[functions.json_success.variants.gcp_vertex_haiku_json_mode_off]
 type = "chat_completion"
 model = "claude-3-haiku-20240307-gcp-vertex"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
@@ -1734,7 +1736,7 @@ user_template = "../../fixtures/config/functions/json_success/prompt/user_templa
 json_mode = "off"
 max_tokens = 100
 
-[functions.json_with_json_mode_off.variants.google-ai-studio-gemini-flash-8b]
+[functions.json_success.variants.google_ai_studio_gemini_flash_8b_json_mode_off]
 type = "chat_completion"
 model = "gemini-2.0-flash-lite"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
@@ -1742,7 +1744,7 @@ user_template = "../../fixtures/config/functions/json_success/prompt/user_templa
 json_mode = "off"
 max_tokens = 100
 
-[functions.json_with_json_mode_off.variants.google-ai-studio-gemini-pro-002]
+[functions.json_success.variants.google_ai_studio_gemini_pro_002_json_mode_off]
 type = "chat_completion"
 model = "gemini-1.5-pro-002"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
@@ -1750,7 +1752,7 @@ user_template = "../../fixtures/config/functions/json_success/prompt/user_templa
 json_mode = "off"
 max_tokens = 100
 
-[functions.json_with_json_mode_off.variants.mistral]
+[functions.json_success.variants.mistral_json_mode_off]
 type = "chat_completion"
 model = "open-mistral-nemo-2407"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
@@ -1758,7 +1760,7 @@ user_template = "../../fixtures/config/functions/json_success/prompt/user_templa
 json_mode = "off"
 max_tokens = 100
 
-[functions.json_with_json_mode_off.variants.openai]
+[functions.json_success.variants.openai_json_mode_off]
 type = "chat_completion"
 model = "gpt-4o-mini-2024-07-18"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
@@ -1766,7 +1768,7 @@ user_template = "../../fixtures/config/functions/json_success/prompt/user_templa
 json_mode = "off"
 max_tokens = 100
 
-[functions.json_with_json_mode_off.variants.openai-o1]
+[functions.json_success.variants.openai_o1_json_mode_off]
 type = "chat_completion"
 model = "o1-2024-12-17"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
@@ -1774,7 +1776,7 @@ user_template = "../../fixtures/config/functions/json_success/prompt/user_templa
 json_mode = "off"
 max_tokens = 100
 
-[functions.json_with_json_mode_off.variants.together]
+[functions.json_success.variants.together_json_mode_off]
 type = "chat_completion"
 model = "llama3.1-8b-instruct-together"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
@@ -1782,7 +1784,7 @@ user_template = "../../fixtures/config/functions/json_success/prompt/user_templa
 json_mode = "off"
 max_tokens = 100
 
-[functions.json_with_json_mode_off.variants.xai]
+[functions.json_success.variants.xai_json_mode_off]
 type = "chat_completion"
 model = "grok_2_1212"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"

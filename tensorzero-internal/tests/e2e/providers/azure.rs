@@ -67,7 +67,7 @@ async fn get_providers() -> E2ETestProviders {
     ];
 
     let json_mode_off_providers = vec![E2ETestProvider {
-        variant_name: "azure".to_string(),
+        variant_name: "azure_json_mode_off".to_string(),
         model_name: "gpt-4o-mini-azure".into(),
         model_provider_name: "azure".into(),
         credentials: HashMap::new(),

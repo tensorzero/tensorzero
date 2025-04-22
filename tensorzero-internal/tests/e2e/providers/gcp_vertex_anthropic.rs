@@ -49,7 +49,7 @@ async fn get_providers() -> E2ETestProviders {
     ];
 
     let json_mode_off_providers = vec![E2ETestProvider {
-        variant_name: "gcp-vertex-haiku".to_string(),
+        variant_name: "gcp_vertex_haiku_json_mode_off".to_string(),
         model_name: "claude-3-haiku-20240307-gcp-vertex".into(),
         model_provider_name: "gcp_vertex_anthropic".into(),
         credentials: HashMap::new(),

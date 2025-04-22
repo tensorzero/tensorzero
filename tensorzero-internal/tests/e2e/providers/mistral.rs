@@ -48,7 +48,7 @@ async fn get_providers() -> E2ETestProviders {
     ];
 
     let json_mode_off_providers = vec![E2ETestProvider {
-        variant_name: "mistral".to_string(),
+        variant_name: "mistral_json_mode_off".to_string(),
         model_name: "open-mistral-nemo-2407".into(),
         model_provider_name: "mistral".into(),
         credentials: HashMap::new(),

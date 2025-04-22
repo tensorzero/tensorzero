@@ -134,13 +134,13 @@ async fn get_providers() -> E2ETestProviders {
 
     let json_mode_off_providers = vec![
         E2ETestProvider {
-            variant_name: "openai".to_string(),
+            variant_name: "openai_json_mode_off".to_string(),
             model_name: "gpt-4o-mini-2024-07-18".into(),
             model_provider_name: "openai".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
-            variant_name: "openai-o1".to_string(),
+            variant_name: "openai_o1_json_mode_off".to_string(),
             model_name: "o1-2024-12-17".into(),
             model_provider_name: "openai".into(),
             credentials: HashMap::new(),
