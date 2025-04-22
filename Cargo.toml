@@ -13,7 +13,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "2025.4.5"
+version = "2025.4.6"
 
 [workspace.dependencies]
 reqwest = { version = "0.12.15", features = [
@@ -30,6 +30,7 @@ tracing-test = { version = "0.2.5", features = ["no-env-filter"] }
 toml = "0.8.15"
 reqwest-eventsource = "0.6.0"
 async-stream = "0.3.5"
+http = "1.3.1"
 tokio-stream = "0.1.15"
 tokio = { version = "1.44.2", features = ["full"] }
 tracing = { version = "0.1.40", features = ["log"] }

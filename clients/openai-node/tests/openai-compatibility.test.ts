@@ -218,7 +218,7 @@ describe("OpenAI Compatibility", () => {
         expect(chunk.choices[0].delta.content).toBe(expectedText[i]);
         expect(chunk.choices[0].finish_reason).toBeNull();
       } else {
-        expect(chunk.choices[0].delta.content).toBeNull();
+        expect(chunk.choices[0].delta.content).toBeUndefined();
         expect(chunk.usage?.prompt_tokens).toBe(10);
         expect(chunk.usage?.completion_tokens).toBe(16);
         expect(chunk.usage?.total_tokens).toBe(26);
@@ -512,7 +512,7 @@ describe("OpenAI Compatibility", () => {
 
       if (i + 1 < chunks.length) {
         expect(chunk.choices.length).toBe(1);
-        expect(chunk.choices[0].delta.content).toBeNull();
+        expect(chunk.choices[0].delta.content).toBeUndefined();
         expect(chunk.choices[0].delta.tool_calls?.length).toBe(1);
 
         const toolCall = chunk.choices[0].delta.tool_calls![0];
@@ -520,8 +520,8 @@ describe("OpenAI Compatibility", () => {
         expect(toolCall.function?.name).toBe("get_temperature");
         expect(toolCall.function?.arguments).toBe(expectedText[i]);
       } else {
-        expect(chunk.choices[0].delta.content).toBeNull();
-        expect(chunk.choices[0].delta.tool_calls?.length).toBe(0);
+        expect(chunk.choices[0].delta.content).toBeUndefined();
+        expect(chunk.choices[0].delta.tool_calls).toBeUndefined();
         expect(chunk.usage?.prompt_tokens).toBe(10);
         expect(chunk.usage?.completion_tokens).toBe(5);
         expect(chunk.choices[0].finish_reason).toBe("tool_calls");

@@ -1,6 +1,6 @@
 # Tutorial: TensorZero Evaluations
 
-This directory contains the code for the **[TensorZero Evaluations Guide](https://www.tensorzero.com/docs/evaluations/guide)**.
+This directory contains the code for the **[TensorZero Evaluations Guide](https://www.tensorzero.com/docs/evaluations/tutorial)**.
 
 ## Getting Started
 
