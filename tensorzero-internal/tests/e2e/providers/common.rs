@@ -10370,8 +10370,6 @@ pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETes
     assert_eq!(response.status(), StatusCode::OK);
     let response_json = response.json::<Value>().await.unwrap();
 
-    println!("Response JSON: {response_json:#?}");
-
     // Assert the output isn't JSON
     let output = response_json.get("output").unwrap().as_object().unwrap();
     let parsed = output.get("parsed").unwrap().as_object();
@@ -10467,32 +10465,17 @@ pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETes
     let raw_request_val: Value =
         serde_json::from_str(raw_request).expect("raw_request should be valid JSON");
 
-    // Check for the presence of response_format:{"type":"text"} or similar structure
-    // depending on the provider
-    let response_format_present = if provider.model_provider_name == "openai" {
-        raw_request_val
-            .get("response_format")
-            .and_then(|rf| rf.get("type"))
-            .is_some_and(|t| t == "text")
-    } else if provider.model_provider_name == "anthropic" {
-        raw_request_val.get("response_format").is_none()
-    } else if provider.model_provider_name == "google_ai_studio_gemini"
+    // Check that we're not sending `response_format` or `generationConfig`
+
+    if provider.model_provider_name == "google_ai_studio_gemini"
         || provider.model_provider_name == "gcp_vertex_gemini"
     {
-        raw_request_val
-            .get("generationConfig")
-            .and_then(|gc| gc.get("response_mime_type"))
-            .is_none()
+        assert!(raw_request_val["generationConfig"]
+            .get("response_mime_type")
+            .is_none());
     } else {
-        // For other providers, we may not know the exact format
-        // so we'll just check that the request is valid
-        true
-    };
-
-    assert!(
-        response_format_present,
-        "Expected response_format to be set appropriately for text output"
-    );
+        assert!(raw_request_val.get("response_format").is_none());
+    }
 
     let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
     assert!(input_tokens > 5);
