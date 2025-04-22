@@ -25,8 +25,6 @@ Why?
 - Set up advanced inference features like [retries](https://www.tensorzero.com/docs/gateway/guides/retries-fallbacks/), [fallbacks](https://www.tensorzero.com/docs/gateway/guides/retries-fallbacks/), [load balancing](https://www.tensorzero.com/docs/gateway/guides/retries-fallbacks/#load-balancing), [inference-time optimizations](https://www.tensorzero.com/docs/gateway/guides/inference-time-optimizations/), [experimentation (A/B testing)](https://www.tensorzero.com/docs/gateway/guides/experimentation/), and more.
 - Collect data for fine-tuning and other optimization techniques, and use TensorZero recipes to create custom models for your Codex usage.
 
-
-
 ## Getting Started
 
 ### Prerequisites
@@ -64,12 +62,16 @@ Why?
 
 4. Run Codex with TensorZero:
    ```bash
-   OPENAI_BASE_URL="http://localhost:3000/openai/v1" OPENAI_API_KEY="not-used" codex -p tensorzero -m tensorzero::model_name::anthropic::claude-3-7-sonnet-20250219
+   OPENAI_BASE_URL="http://localhost:3000/openai/v1" \
+   OPENAI_API_KEY="not-used" \
+   codex \
+   -p tensorzero \
+   -m tensorzero::model_name::anthropic::claude-3-7-sonnet-20250219
    ```
 
 You can replace `tensorzero::model_name::anthropic::claude-3-7-sonnet-20250219` with any other model supported by TensorZero, e.g. `tensorzero::model_name::mistral::open-mistral-nemo-2407`.
 
-You can also define custom TensorZero functions in the `config/tensorzero.toml` file, and use them with Codex as `tensorzero::function_name::xxx`.
+You can also define custom TensorZero functions in the `config/tensorzero.toml` file, and use them with Codex as `tensorzero::function_name::your_function_name`.
 This will enable you to use advanced inference features, collect data for fine-tuning and other optimization recipes, and more.
 See our [Quick Start Guide](https://www.tensorzero.com/docs/quickstart/) for more details.
 
