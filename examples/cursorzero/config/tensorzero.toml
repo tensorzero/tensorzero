@@ -30,17 +30,12 @@ model = "openai::o4-mini-2025-04-16"
 # │                                  METRICS                                   │
 # └────────────────────────────────────────────────────────────────────────────┘
 
-# [metrics.exact_match]
-# type = "boolean"
-# level = "inference"
-# optimize = "max"
+[metrics.min_ted]
+type = "float"
+level = "inference"
+optimize = "min"
 
-# [metrics.jaccard_similarity]
-# type = "float"
-# level = "inference"
-# optimize = "max"
-
-# [metrics.valid_output]
-# type = "boolean"
-# level = "inference"
-# optimize = "max"
+[metrics.ted_ratio]
+type = "float"
+level = "inference"
+optimize = "max"

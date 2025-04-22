@@ -24,5 +24,6 @@ uuid.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 regex = "1.11.1"
+url.workspace = true
 
 [dev-dependencies]

@@ -117,7 +117,7 @@ fn parse_cursor_ask_output(output_text: &str) -> Result<Vec<CursorCodeBlock>> {
 /// Therefore, we can simply extract the code block from the output and remove the comments.
 /// This is equivalent to taking the whole string except for the first two lines and the last 2 lines.
 fn parse_cursor_edit_output(
-    messages: &Vec<ResolvedInputMessage>,
+    messages: &[ResolvedInputMessage],
     output_text: &str,
 ) -> Result<Vec<CursorCodeBlock>> {
     // There should be 2 messages in the input:
@@ -190,7 +190,7 @@ fn parse_cursor_edit_output(
 /// and then the next line is ```path/to/file.ext
 /// We can grab this via a regex.
 fn parse_cursor_insert_output(
-    messages: &Vec<ResolvedInputMessage>,
+    messages: &[ResolvedInputMessage],
     output_text: &str,
 ) -> Result<Vec<CursorCodeBlock>> {
     if messages.is_empty() {

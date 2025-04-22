@@ -33,7 +33,7 @@ pub struct DiffAddition {
 pub fn get_diff_by_file(
     repo: &Repository,
     commit: &Commit,
-) -> Result<HashMap<String, Vec<DiffAddition>>> {
+) -> Result<HashMap<PathBuf, Vec<DiffAddition>>> {
     // Use the commit tree and its parent tree if there is one to get the diff
     let tree = commit.tree()?;
     let parent_tree = commit.parent(0).ok().map(|p| p.tree()).transpose()?;
@@ -46,9 +46,9 @@ pub fn get_diff_by_file(
         repo.diff_tree_to_tree(parent_tree.as_ref(), Some(&tree), Some(&mut diff_options))?;
 
     struct DiffWalkState {
-        current_file: Option<String>,
+        current_file: Option<PathBuf>,
         current_chunk: Option<Chunk>,
-        result: HashMap<String, Vec<DiffAddition>>,
+        result: HashMap<PathBuf, Vec<DiffAddition>>,
     }
     let state = Rc::new(RefCell::new(DiffWalkState {
         current_file: None,
@@ -72,10 +72,7 @@ pub fn get_diff_by_file(
 
             // `delta.new_file().path()` is *None* for pure deletions,
             // so skip those straight away.
-            s.current_file = delta
-                .new_file()
-                .path()
-                .map(|p| p.to_string_lossy().into_owned());
+            s.current_file = delta.new_file().path().map(PathBuf::from);
             // return `true` to keep iterating
             true
         },
@@ -178,8 +175,6 @@ pub fn get_commit_timestamp_and_parent_timestamp(commit: &Commit) -> Result<Comm
         let parent_time_unix = p.time().seconds();
         Utc.timestamp_opt(parent_time_unix, 0).single()
     });
-    println!("Commit timestamp: {}", commit_timestamp);
-    println!("Parent timestamp: {}", parent_timestamp.unwrap_or_default());
     Ok(CommitInterval {
         commit_timestamp,
         parent_timestamp,
