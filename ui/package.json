@@ -45,6 +45,7 @@
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
     "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^5.2.0",
     "isbot": "^5.1.25",
     "lucide-react": "^0.487.0",
     "openai": "^4.91.1",
