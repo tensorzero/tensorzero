@@ -63,7 +63,7 @@ pub async fn get_curated_inferences(
     metric_name: Option<&str>,
     threshold: Option<f64>,
     max_samples: Option<u64>,
-) -> Result<Vec<Value>, TensorZeroError> {
+) -> Result<Vec<InferenceData>, TensorZeroError> {
     let function_config = config
         .get_function(function_name)
         .map_err(|e| TensorZeroError::Other { source: e.into() })?;
@@ -85,7 +85,7 @@ pub async fn get_curated_inferences(
                 ("inference_table_name", inference_table_name),
                 ].into_iter().collect())).await.map_err(|e| TensorZeroError::Other { source: e.into() })?;
 
-            let mut json_rows: Vec<Value> = rows
+            let mut json_rows: Vec<InferenceData> = rows
                 .lines()
                 .filter_map(|line| serde_json::from_str(line).ok())
                 .collect();
@@ -126,13 +126,13 @@ pub async fn get_curated_inferences(
 }
 
 #[derive(Deserialize, Serialize)]
-struct InferenceData {
-    variant_name: String,
+pub struct InferenceData {
+    pub variant_name: String,
     #[serde(deserialize_with = "deserialize_json_string")]
-    input: ResolvedInput,
+    pub input: ResolvedInput,
     #[serde(deserialize_with = "deserialize_json_string")]
-    output: Value,
-    episode_id: Option<Uuid>,
+    pub output: Value,
+    pub episode_id: Option<Uuid>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -145,7 +145,7 @@ async fn query_curated_metric_data(
     filter_good: bool,
     threshold: Option<f64>,
     max_samples: Option<u64>,
-) -> Result<Vec<Value>, TensorZeroError> {
+) -> Result<Vec<InferenceData>, TensorZeroError> {
     // Set defaults and prepare limit clause
     let optimize = metric_config.optimize;
     let limit_clause = get_limit_clause(max_samples);
@@ -230,13 +230,7 @@ async fn query_curated_metric_data(
         .map_err(|e| TensorZeroError::Other { source: e.into() })?;
 
     // Parse the results
-    let json_rows: Result<Vec<Value>, _> = rows
-        .lines()
-        .map(|line| {
-            let inference: InferenceData = serde_json::from_str(line)?;
-            serde_json::to_value(inference)
-        })
-        .collect();
+    let json_rows: Result<Vec<InferenceData>, _> = rows.lines().map(serde_json::from_str).collect();
 
     let mut json_rows = json_rows.map_err(|e| TensorZeroError::Other {
         source: Error::new(ErrorDetails::Serialization {
@@ -258,7 +252,7 @@ async fn query_demonstration_data(
     function_name: &str,
     inference_table_name: &str,
     max_samples: Option<u64>,
-) -> Result<Vec<Value>, TensorZeroError> {
+) -> Result<Vec<InferenceData>, TensorZeroError> {
     let limit_clause = get_limit_clause(max_samples);
 
     let query = format!(
@@ -288,13 +282,7 @@ async fn query_demonstration_data(
         .await
         .map_err(|e| TensorZeroError::Other { source: e.into() })?;
 
-    let json_rows: Result<Vec<Value>, _> = rows
-        .lines()
-        .map(|line| {
-            let inference: InferenceData = serde_json::from_str(line)?;
-            serde_json::to_value(inference)
-        })
-        .collect();
+    let json_rows: Result<Vec<InferenceData>, _> = rows.lines().map(serde_json::from_str).collect();
 
     let mut json_rows = json_rows.map_err(|e| TensorZeroError::Other {
         source: Error::new(ErrorDetails::Serialization {
@@ -330,8 +318,8 @@ fn get_comparison_operator(optimize: MetricConfigOptimize) -> &'static str {
 /// We have since removed it, but we need to handle the old data.
 /// So, we transform any old LLM Judge outputs to the new format by removing the thinking section from the
 /// parsed and raw outputs.
-fn handle_llm_judge_output(output: &mut Value) -> Result<(), TensorZeroError> {
-    if let Some(parsed) = output.get_mut("parsed") {
+fn handle_llm_judge_output(output: &mut InferenceData) -> Result<(), TensorZeroError> {
+    if let Some(parsed) = output.output.get_mut("parsed") {
         if parsed.get("thinking").is_some() {
             if let Some(obj) = parsed.as_object_mut() {
                 obj.remove("thinking");
@@ -345,7 +333,7 @@ fn handle_llm_judge_output(output: &mut Value) -> Result<(), TensorZeroError> {
             .into(),
         })?;
 
-        *output = json!({
+        output.output = json!({
             "parsed": parsed,
             "raw": raw_json
         });
@@ -361,13 +349,21 @@ mod tests {
     #[test]
     fn test_handle_llm_judge_output() {
         // Test removing the thinking field from the output
-        let mut input = json!({
-            "parsed": {
-                "thinking": "This is a test",
-                "answer": "This is a test"
+        let mut input = InferenceData {
+            variant_name: "test".to_string(),
+            input: ResolvedInput {
+                system: None,
+                messages: vec![],
             },
-            "raw": "{\"thinking\": \"This is a test\", \"answer\": \"This is a test\"}"
-        });
+            output: json!({
+                "parsed": {
+                    "thinking": "This is a test",
+                    "answer": "This is a test"
+                },
+                "raw": "{\"thinking\": \"This is a test\", \"answer\": \"This is a test\"}"
+            }),
+            episode_id: None,
+        };
 
         handle_llm_judge_output(&mut input).unwrap();
 
@@ -378,23 +374,30 @@ mod tests {
             "raw": "{\"answer\":\"This is a test\"}"
         });
 
-        assert_eq!(input, expected);
+        assert_eq!(input.output, expected);
 
         // Test the correct output is unmodified
         handle_llm_judge_output(&mut input).unwrap();
-        assert_eq!(input, expected);
+        assert_eq!(input.output, expected);
 
         // Test not modifying the output if the parsed field is not present
-        let mut input = json!({
-            "raw": "This is a test"
-        });
-
+        let mut input = InferenceData {
+            variant_name: "test".to_string(),
+            input: ResolvedInput {
+                system: None,
+                messages: vec![],
+            },
+            output: json!({
+                "raw": "This is a test"
+            }),
+            episode_id: None,
+        };
         handle_llm_judge_output(&mut input).unwrap();
 
         let expected = json!({
             "raw": "This is a test"
         });
 
-        assert_eq!(input, expected);
+        assert_eq!(input.output, expected);
     }
 }
