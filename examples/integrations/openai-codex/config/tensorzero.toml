@@ -1,0 +1,17 @@
+# You can use this configuration file to define custom functions, models, and more.
+# This is useful for using advanced TensorZero features with Codex.
+#
+# See our https://www.tensorzero.com/docs/quickstart/ for more details.
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                 FUNCTIONS                                  │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+# You can use this function on Codex with `tensorzero::function_name::codex`.
+[functions.codex]
+type = "chat"
+
+[functions.codex.variants.anthropic_claude_3_7_sonnet]
+type = "chat_completion"
+model = "anthropic::claude-3-7-sonnet-20240620"
+retries = { num_retries = 4, max_delay_s = 10 }
