@@ -44,8 +44,18 @@ pub fn parse_cursor_output(
     if system.contains("pair programming with a USER to solve their coding task") {
         return parse_cursor_ask_output(output_text);
     }
+    // TODO: handle the following:
+
+    /*
+     System message doesn't fit our expected format: You are an intelligent programmer. You are helping a colleague write a terminal command. In your response, only output the terminal command to write, surrounded by backticks. If you want to run a script, make sure to use the correct path relative to the active terminal's working directory. Immediately start your response with <cmd>.
+
+    Only output a single command, but make it however complicated it needs to be. If you want it to be multiline, remember to appropriately use "\" or "`" to delimit the lines.
+
+    Produce nothing else other than the command to run, on a single line. Surround the insertion with the tags <cmd> and</cmd>. For example, if you want to run ls -la, you would write <cmd>ls -la</cmd>.
+     */
     Err(anyhow::anyhow!(
-        "System message doesn't fit our expected format"
+        "System message doesn't fit our expected format: {}",
+        system
     ))
 }
 
