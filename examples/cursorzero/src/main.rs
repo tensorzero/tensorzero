@@ -146,11 +146,6 @@ async fn main() -> Result<()> {
         }
     }
 
-    // TODOs:
-    // - For each InferenceTreeInfo in the map, find the git-relative file path and find the diff tree that corresponds to it.
-    // - Compute for each diff tree the minimum edit distance to the inference tree.
-    // - Print the results.
-    // - Send feedback to TensorZero for that inference.
     Ok(())
 }
 
