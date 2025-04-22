@@ -5,6 +5,8 @@ services:
       - CLICKHOUSE_USER=chuser
       - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
       - CLICKHOUSE_PASSWORD=chpassword
+    volumes:
+      - ./clickhouse-users.xml:/etc/clickhouse-server/users.d/users.xml
     ports:
       - "8123:8123" # HTTP port
       - "9000:9000" # Native port

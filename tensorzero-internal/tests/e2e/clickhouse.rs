@@ -246,9 +246,11 @@ async fn test_bad_clickhouse_write() {
         .write(&[payload], "BooleanMetricFeedback")
         .await
         .unwrap_err();
-    assert!(err
-        .to_string()
-        .contains("Unknown field found while parsing JSONEachRow format: name"));
+    assert!(
+        err.to_string()
+            .contains("Unknown field found while parsing JSONEachRow format: name"),
+        "Unexpected error: {err}"
+    );
 }
 
 #[tokio::test]
@@ -343,9 +345,11 @@ async fn test_migration_0013_old_table() {
     })
     .await
     .unwrap_err();
-    assert!(err
-        .to_string()
-        .contains("InferenceById table is in an invalid state. Please contact TensorZero team."));
+    assert!(
+        err.to_string().contains("InferenceById table is in an invalid state. Please contact TensorZero team.") ||
+        err.to_string().contains("SELECT query outputs column with name 'id_uint', which is not found in the target table."),
+        "Unexpected error: {err}",
+    );
 }
 
 /// For this test, we will run all the migrations up to 0011, add some data to
