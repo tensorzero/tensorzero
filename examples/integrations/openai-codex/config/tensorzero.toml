@@ -1,7 +1,7 @@
 # You can use this configuration file to define custom functions, models, and more.
 # This is useful for using advanced TensorZero features with Codex.
 #
-# See our (https://www.tensorzero.com/docs/quickstart/ for more details.
+# See our https://www.tensorzero.com/docs/quickstart/ for more details.
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                 FUNCTIONS                                  │
