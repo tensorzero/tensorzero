@@ -1,6 +1,6 @@
 from tensorzero import AsyncTensorZeroGateway, ToolCall, ToolResult
 from tools import load_wikipedia_page, search_wikipedia
-
+from asyncio import Semaphore
 # ## Agentic RAG
 #
 # Here we define the function that will be used to ask a question to the multi-hop retrieval agent.
@@ -15,7 +15,7 @@ MAX_INFERENCES = 20
 
 
 async def ask_question(
-    t0: AsyncTensorZeroGateway, question: str, verbose: bool = False
+    t0: AsyncTensorZeroGateway, semaphore: Semaphore, question: str, verbose: bool = False, 
 ):
     """
     Asks a question to the multi-hop retrieval agent and returns the answer.
@@ -35,11 +35,12 @@ async def ask_question(
 
     for _ in range(MAX_INFERENCES):
         print()
-        response = await t0.inference(
-            function_name="multi_hop_rag_agent",
-            input={"messages": messages},
-            episode_id=episode_id,
-        )
+        async with semaphore:
+            response = await t0.inference(
+                function_name="multi_hop_rag_agent",
+                input={"messages": messages},
+                episode_id=episode_id,
+            )
 
         # Append the assistant's response to the messages
         messages.append({"role": "assistant", "content": response.content})
