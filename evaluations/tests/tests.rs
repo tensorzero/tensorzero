@@ -73,6 +73,7 @@ async fn run_evaluations_json() {
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
+        // This test relies on the cache (see below), so we need to enable it
         inference_cache: CacheEnabledMode::On,
     };
 
@@ -307,7 +308,7 @@ async fn run_evaluations_json() {
         .unwrap();
         assert_eq!(
             clickhouse_feedback["tags"]["tensorzero::derived_from_human_feedback"],
-            "true"
+            "true",
         );
         assert_eq!(
             clickhouse_feedback["tags"]["tensorzero::evaluator_inference_id"],
@@ -342,7 +343,7 @@ async fn run_exact_match_evaluation_chat() {
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
-        inference_cache: CacheEnabledMode::On,
+        inference_cache: CacheEnabledMode::Off,
     };
 
     let mut output = Vec::new();
@@ -463,7 +464,7 @@ async fn run_llm_judge_evaluation_chat() {
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
-        inference_cache: CacheEnabledMode::On,
+        inference_cache: CacheEnabledMode::Off,
     };
 
     let mut output = Vec::new();
@@ -892,7 +893,7 @@ async fn check_invalid_image_evaluation() {
         variant_name: "honest_answer".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
-        inference_cache: CacheEnabledMode::On,
+        inference_cache: CacheEnabledMode::Off,
     };
 
     let mut output = Vec::new();
@@ -991,7 +992,7 @@ async fn run_llm_judge_evaluation_chat_pretty() {
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Pretty,
-        inference_cache: CacheEnabledMode::On,
+        inference_cache: CacheEnabledMode::Off,
     };
 
     let mut output = Vec::new();
@@ -1032,7 +1033,7 @@ async fn run_llm_judge_evaluation_json_pretty() {
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Pretty,
-        inference_cache: CacheEnabledMode::On,
+        inference_cache: CacheEnabledMode::Off,
     };
 
     let mut output = Vec::new();
@@ -1186,7 +1187,7 @@ async fn run_evaluations_errors() {
         variant_name: "dummy_error".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
-        inference_cache: CacheEnabledMode::On,
+        inference_cache: CacheEnabledMode::Off,
     };
 
     let mut output = Vec::new();
@@ -1292,7 +1293,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         evaluator_name: "happy_bool",
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
-        inference_cache: CacheEnabledMode::On,
+        inference_cache: CacheEnabledMode::Off,
     })
     .await
     .unwrap()
@@ -1308,7 +1309,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         evaluator_name: "sad_bool",
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
-        inference_cache: CacheEnabledMode::On,
+        inference_cache: CacheEnabledMode::Off,
     })
     .await
     .unwrap()
@@ -1324,7 +1325,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         evaluator_name: "zero",
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
-        inference_cache: CacheEnabledMode::On,
+        inference_cache: CacheEnabledMode::Off,
     })
     .await
     .unwrap()
@@ -1340,7 +1341,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         evaluator_name: "one",
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
-        inference_cache: CacheEnabledMode::On,
+        inference_cache: CacheEnabledMode::Off,
     })
     .await
     .unwrap()
@@ -1380,7 +1381,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         evaluator_name: "happy_bool",
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
-        inference_cache: CacheEnabledMode::On,
+        inference_cache: CacheEnabledMode::Off,
     })
     .await
     .unwrap();
@@ -1459,7 +1460,7 @@ async fn test_run_llm_judge_evaluator_json() {
         evaluator_name: "happy_bool",
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
-        inference_cache: CacheEnabledMode::On,
+        inference_cache: CacheEnabledMode::Off,
     })
     .await
     .unwrap()
@@ -1475,7 +1476,7 @@ async fn test_run_llm_judge_evaluator_json() {
         evaluator_name: "sad_bool",
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
-        inference_cache: CacheEnabledMode::On,
+        inference_cache: CacheEnabledMode::Off,
     })
     .await
     .unwrap()
@@ -1491,7 +1492,7 @@ async fn test_run_llm_judge_evaluator_json() {
         evaluator_name: "zero",
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
-        inference_cache: CacheEnabledMode::On,
+        inference_cache: CacheEnabledMode::Off,
     })
     .await
     .unwrap()
@@ -1507,7 +1508,7 @@ async fn test_run_llm_judge_evaluator_json() {
         evaluator_name: "one",
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
-        inference_cache: CacheEnabledMode::On,
+        inference_cache: CacheEnabledMode::Off,
     })
     .await
     .unwrap()
@@ -1547,7 +1548,7 @@ async fn test_run_llm_judge_evaluator_json() {
         evaluator_name: "happy_bool",
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
-        inference_cache: CacheEnabledMode::On,
+        inference_cache: CacheEnabledMode::Off,
     })
     .await
     .unwrap();
@@ -1579,7 +1580,7 @@ async fn run_evaluations_best_of_3() {
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
-        inference_cache: CacheEnabledMode::On,
+        inference_cache: CacheEnabledMode::Off,
     };
 
     let mut output = Vec::new();
@@ -1764,7 +1765,7 @@ async fn run_evaluations_mixture_of_3() {
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
-        inference_cache: CacheEnabledMode::On,
+        inference_cache: CacheEnabledMode::Off,
     };
 
     let mut output = Vec::new();
@@ -1952,7 +1953,7 @@ async fn run_evaluations_dicl() {
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
-        inference_cache: CacheEnabledMode::On,
+        inference_cache: CacheEnabledMode::Off,
     };
 
     let mut output = Vec::new();
