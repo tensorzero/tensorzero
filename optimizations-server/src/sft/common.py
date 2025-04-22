@@ -56,7 +56,6 @@ def render_message(content: t.Dict[str, Any], role: str, env: Environment) -> st
         raise ValueError(f"Content block must be of type text: {content}")
 
     content = content["value"]
-    print(f"content: {content}")
 
     if isinstance(content, str):
         return content
