@@ -36,108 +36,67 @@ async fn get_providers() -> E2ETestProviders {
         Err(_) => HashMap::new(),
     };
 
-    let standard_without_o1 = vec![E2ETestProvider {
-        variant_name: "openai".to_string(),
-        model_name: "gpt-4o-mini-2024-07-18".into(),
+    let standard_providers = vec![E2ETestProvider {
+        variant_name: "groq".to_string(),
+        model_name: "gpt-4o-mini-groq".into(),
         model_provider_name: "groq".into(),
         credentials: HashMap::new(),
     }];
 
     let extra_body_providers = vec![E2ETestProvider {
-        variant_name: "openai-extra-body".to_string(),
-        model_name: "gpt-4o-mini-2024-07-18".into(),
+        variant_name: "groq-extra-body".to_string(),
+        model_name: "gpt-4o-mini-groq".into(),
         model_provider_name: "groq".into(),
         credentials: HashMap::new(),
     }];
 
     let bad_auth_extra_headers = vec![E2ETestProvider {
-        variant_name: "openai-extra-headers".to_string(),
-        model_name: "gpt-4o-mini-2024-07-18".into(),
+        variant_name: "groq-extra-headers".to_string(),
+        model_name: "gpt-4o-mini-groq".into(),
         model_provider_name: "groq".into(),
         credentials: HashMap::new(),
     }];
 
-    let standard_providers = vec![
-        E2ETestProvider {
-            variant_name: "openai".to_string(),
-            model_name: "gpt-4o-mini-2024-07-18".into(),
-            model_provider_name: "groq".into(),
-            credentials: HashMap::new(),
-        },
-        E2ETestProvider {
-            variant_name: "openai-o1".to_string(),
-            model_name: "o1-2024-12-17".into(),
-            model_provider_name: "groq".into(),
-            credentials: HashMap::new(),
-        },
-    ];
-
     let inference_params_providers = vec![E2ETestProvider {
-        variant_name: "openai".to_string(),
-        model_name: "gpt-4o-mini-2024-07-18".into(),
+        variant_name: "groq".to_string(),
+        model_name: "gpt-4o-mini-groq".into(),
         model_provider_name: "groq".into(),
         credentials: credentials.clone(),
     }];
 
     let inference_params_dynamic_providers = vec![E2ETestProvider {
-        variant_name: "openai-dynamic".to_string(),
-        model_name: "gpt-4o-mini-2024-07-18-dynamic".into(),
+        variant_name: "groq-dynamic".to_string(),
+        model_name: "gpt-4o-mini-groq-dynamic".into(),
         model_provider_name: "groq".into(),
         credentials,
     }];
 
-    let image_providers = vec![E2ETestProvider {
-        variant_name: "openai".to_string(),
-        model_name: "openai::gpt-4o-mini-2024-07-18".into(),
-        model_provider_name: "groq".into(),
-        credentials: HashMap::new(),
-    }];
-
     let json_providers = vec![
         E2ETestProvider {
-            variant_name: "openai".to_string(),
-            model_name: "gpt-4o-mini-2024-07-18".into(),
+            variant_name: "groq".to_string(),
+            model_name: "gpt-4o-mini-groq".into(),
             model_provider_name: "groq".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
-            variant_name: "openai-implicit".to_string(),
-            model_name: "gpt-4o-mini-2024-07-18".into(),
+            variant_name: "groq-implicit".to_string(),
+            model_name: "gpt-4o-mini-groq".into(),
             model_provider_name: "groq".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
-            variant_name: "openai-strict".to_string(),
-            model_name: "gpt-4o-mini-2024-07-18".into(),
+            variant_name: "groq-strict".to_string(),
+            model_name: "gpt-4o-mini-groq".into(),
             model_provider_name: "groq".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
-            variant_name: "openai-o1".to_string(),
-            model_name: "o1-2024-12-17".into(),
-            model_provider_name: "groq".into(),
-            credentials: HashMap::new(),
-        },
-        E2ETestProvider {
-            variant_name: "openai-default".to_string(),
-            model_name: "gpt-4o-mini-2024-07-18".into(),
-            model_provider_name: "groq".into(),
-            credentials: HashMap::new(),
-        },
-        E2ETestProvider {
-            variant_name: "openai-cot".to_string(),
-            model_name: "openai::gpt-4.1-nano-2025-04-14".into(),
+            variant_name: "groq-default".to_string(),
+            model_name: "gpt-4o-mini-groq".into(),
             model_provider_name: "groq".into(),
             credentials: HashMap::new(),
         },
     ];
-
-    let shorthand_providers = vec![E2ETestProvider {
-        variant_name: "openai-shorthand".to_string(),
-        model_name: "openai::gpt-4o-mini-2024-07-18".into(),
-        model_provider_name: "groq".into(),
-        credentials: HashMap::new(),
-    }];
 
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
@@ -149,11 +108,10 @@ async fn get_providers() -> E2ETestProviders {
         tool_use_inference: standard_providers.clone(),
         tool_multi_turn_inference: standard_providers.clone(),
         dynamic_tool_use_inference: standard_providers.clone(),
-        parallel_tool_use_inference: standard_without_o1.clone(),
+        parallel_tool_use_inference: standard_providers.clone(),
         json_mode_inference: json_providers.clone(),
-        image_inference: image_providers.clone(),
-
-        shorthand_inference: shorthand_providers.clone(),
+        image_inference: vec![],
+        shorthand_inference: vec![],
         supports_batch_inference: true,
     }
 }
@@ -785,7 +743,7 @@ async fn test_chat_function_json_override_with_mode(json_mode: ModelInferenceReq
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, "gpt-4o-mini-2024-07-18");
+    assert_eq!(model_name, "gpt-4o-mini-groq");
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, "openai");
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
@@ -795,13 +753,13 @@ async fn test_chat_function_json_override_with_mode(json_mode: ModelInferenceReq
         serde_json::from_str(raw_request).expect("raw_request should be valid JSON");
     let expected_request = match json_mode {
         ModelInferenceRequestJsonMode::Off => {
-            json!({"messages":[{"role":"system","content":"You are a helpful and friendly assistant named AskJeeves"},{"role":"user","content":"What is the capital of Japan (possibly as JSON)?"}],"model":"gpt-4o-mini-2024-07-18","max_completion_tokens":100,"stream":false,"response_format":{"type":"text"}})
+            json!({"messages":[{"role":"system","content":"You are a helpful and friendly assistant named AskJeeves"},{"role":"user","content":"What is the capital of Japan (possibly as JSON)?"}],"model":"gpt-4o-mini-groq","max_completion_tokens":100,"stream":false,"response_format":{"type":"text"}})
         }
         ModelInferenceRequestJsonMode::On => {
-            json!({"messages":[{"role":"system","content":"You are a helpful and friendly assistant named AskJeeves"},{"role":"user","content":"What is the capital of Japan (possibly as JSON)?"}],"model":"gpt-4o-mini-2024-07-18","max_completion_tokens":100,"stream":false,"response_format":{"type":"json_object"}})
+            json!({"messages":[{"role":"system","content":"You are a helpful and friendly assistant named AskJeeves"},{"role":"user","content":"What is the capital of Japan (possibly as JSON)?"}],"model":"gpt-4o-mini-groq","max_completion_tokens":100,"stream":false,"response_format":{"type":"json_object"}})
         }
         ModelInferenceRequestJsonMode::Strict => {
-            json!({"messages":[{"role":"system","content":"You are a helpful and friendly assistant named AskJeeves"},{"role":"user","content":"What is the capital of Japan (possibly as JSON)?"}],"model":"gpt-4o-mini-2024-07-18","max_completion_tokens":100,"stream":false,"response_format":{"type":"json_object"}})
+            json!({"messages":[{"role":"system","content":"You are a helpful and friendly assistant named AskJeeves"},{"role":"user","content":"What is the capital of Japan (possibly as JSON)?"}],"model":"gpt-4o-mini-groq","max_completion_tokens":100,"stream":false,"response_format":{"type":"json_object"}})
         }
     };
     assert_eq!(raw_request_val, expected_request);
@@ -1253,7 +1211,7 @@ pub async fn test_image_inference_with_provider_cloudflare_r2() {
 
     let provider = E2ETestProvider {
         variant_name: "openai".to_string(),
-        model_name: "openai::gpt-4o-mini-2024-07-18".into(),
+        model_name: "openai::gpt-4o-mini-groq".into(),
         model_provider_name: "groq".into(),
         credentials: HashMap::new(),
     };
@@ -1296,7 +1254,7 @@ pub async fn test_image_inference_with_provider_cloudflare_r2() {
 
     [functions.image_test.variants.openai]
     type = "chat_completion"
-    model = "openai::gpt-4o-mini-2024-07-18"
+    model = "openai::gpt-4o-mini-groq"
     "#
         ),
         test_bucket,
@@ -1446,7 +1404,7 @@ pub async fn test_image_inference_with_provider_gcp_storage() {
 
     let provider = E2ETestProvider {
         variant_name: "openai".to_string(),
-        model_name: "openai::gpt-4o-mini-2024-07-18".into(),
+        model_name: "openai::gpt-4o-mini-groq".into(),
         model_provider_name: "groq".into(),
         credentials: HashMap::new(),
     };
@@ -1518,7 +1476,7 @@ pub async fn test_image_inference_with_provider_docker_minio() {
 
     let provider = E2ETestProvider {
         variant_name: "openai".to_string(),
-        model_name: "openai::gpt-4o-mini-2024-07-18".into(),
+        model_name: "openai::gpt-4o-mini-groq".into(),
         model_provider_name: "groq".into(),
         credentials: HashMap::new(),
     };
@@ -1562,7 +1520,7 @@ pub async fn test_image_inference_with_provider_docker_minio() {
 
     [functions.image_test.variants.openai]
     type = "chat_completion"
-    model = "openai::gpt-4o-mini-2024-07-18"
+    model = "openai::gpt-4o-mini-groq"
     "#
         ),
         test_bucket,
@@ -1579,7 +1537,7 @@ pub async fn test_parallel_tool_use_default_true_inference_request() {
 
     let provider = E2ETestProvider {
         variant_name: "openai".to_string(),
-        model_name: "gpt-4o-mini-2024-07-18".into(),
+        model_name: "gpt-4o-mini-groq".into(),
         model_provider_name: "groq".into(),
         credentials: HashMap::new(),
     };

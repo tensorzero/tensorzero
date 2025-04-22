@@ -70,6 +70,25 @@ deployment_id = "gpt4o-mini-20240718"
 endpoint = "https://t0-azure-openai-east.openai.azure.com"
 api_key_location = "dynamic::azure_openai_api_key"
 
+## Groq
+
+[models."gpt-4o-mini-groq"]
+routing = ["groq"]
+
+[models."gpt-4o-mini-groq".providers.groq]
+type = "groq"
+model_name = "gpt-4o-mini-2024-07-18"
+
+
+[models."gpt-4o-mini-groq-dynamic"]
+routing = ["groq"]
+
+[models."gpt-4o-mini-groq-dynamic".providers.groq]
+type = "groq"
+model_name = "gpt-4o-mini-groq"
+api_key_location = "dynamic::groq_api_key"
+
+
 [models."claude-3-7-sonnet-20250219-thinking"]
 routing = ["anthropic-extra-body"]
 
@@ -824,6 +843,34 @@ system_template = "../../fixtures/config/functions/basic_test/prompt/system_temp
 max_tokens = 100
 extra_headers = [{ name = "Content-Length", value = "2" }]
 
+[functions.basic_test.variants.groq]
+type = "chat_completion"
+model = "gpt-4o-mini-groq"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.groq-extra-body]
+type = "chat_completion"
+model = "gpt-4o-mini-groq"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_body = [{ pointer = "/temperature", value = 0.123 }]
+
+[functions.basic_test.variants.groq-extra-headers]
+type = "chat_completion"
+model = "gpt-4o-mini-groq"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_headers = [
+    { name = "Authorization", value = "Bearer: invalid_openai_auth" },
+]
+
+[functions.basic_test.variants.groq-dynamic]
+type = "chat_completion"
+model = "gpt-4o-mini-groq-dynamic"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
 [functions.basic_test.variants.mistral]
 type = "chat_completion"
 model = "open-mistral-nemo-2407"
@@ -1458,6 +1505,38 @@ system_template = "../../fixtures/config/functions/json_success/prompt/system_te
 user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "implicit_tool"
 max_tokens = 500
+
+[functions.json_success.variants.groq]
+type = "chat_completion"
+model = "gpt-4o-mini-groq"
+system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
+json_mode = "on"
+max_tokens = 100
+
+[functions.json_success.variants.groq-default]
+type = "chat_completion"
+model = "gpt-4o-mini-groq"
+system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
+max_tokens = 100
+json_mode = "strict"
+
+[functions.json_success.variants.groq-implicit]
+type = "chat_completion"
+model = "gpt-4o-mini-groq"
+system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
+json_mode = "implicit_tool"
+max_tokens = 100
+
+[functions.json_success.variants.groq-strict]
+type = "chat_completion"
+model = "gpt-4o-mini-groq"
+system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
+json_mode = "strict"
+max_tokens = 100
 
 [functions.json_success.variants.json_reasoner]
 type = "chat_completion"
