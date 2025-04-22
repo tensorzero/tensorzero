@@ -680,6 +680,9 @@ async fn test_openai_compatible_streaming_tool_call() {
     let episode_id = Uuid::now_v7();
     let body = json!({
         "stream": true,
+        "stream_options": {
+            "include_usage": true
+        },
         "model": "tensorzero::model_name::openai::gpt-4o",
         "messages": [
             {
@@ -771,11 +774,13 @@ async fn test_openai_compatible_streaming_tool_call() {
             assert_eq!(finish_reason, "tool_calls");
             assert_eq!(i, chunks.len() - 2);
         }
-        if i == chunks.len() - 1 {
+        if i == chunks.len() - 2 {
             assert!(parsed_chunk["choices"][0]["delta"].get("content").is_none());
             assert!(parsed_chunk["choices"][0]["delta"]
                 .get("tool_calls")
                 .is_none());
+        }
+        if i == chunks.len() - 1 {
             let usage = parsed_chunk["usage"].as_object().unwrap();
             assert!(usage["prompt_tokens"].as_i64().unwrap() > 0);
             assert!(usage["completion_tokens"].as_i64().unwrap() > 0);
