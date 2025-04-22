@@ -53,7 +53,7 @@ async fn get_providers() -> E2ETestProviders {
             credentials: credentials.clone(),
         },
         E2ETestProvider {
-            variant_name: "deepseek-chat-default".to_string(),
+            variant_name: "deepseek-chat-strict".to_string(),
             model_name: "deepseek-chat".to_string(),
             model_provider_name: "deepseek".to_string(),
             credentials: credentials.clone(),

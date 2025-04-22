@@ -34,13 +34,13 @@ async fn get_providers() -> E2ETestProviders {
 
     let json_providers = vec![
         E2ETestProvider {
-            variant_name: "vllm-default".to_string(),
+            variant_name: "vllm".to_string(),
             model_name: "microsoft/Phi-3.5-mini-instruct".into(),
             model_provider_name: "vllm".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
-            variant_name: "vllm-default".to_string(),
+            variant_name: "vllm-strict".to_string(),
             model_name: "microsoft/Phi-3.5-mini-instruct".into(),
             model_provider_name: "vllm".into(),
             credentials: HashMap::new(),
@@ -76,7 +76,6 @@ async fn get_providers() -> E2ETestProviders {
         json_mode_inference: json_providers.clone(),
         json_mode_off_inference: json_mode_off_providers.clone(),
         image_inference: vec![],
-
         shorthand_inference: vec![],
         supports_batch_inference: false,
     }

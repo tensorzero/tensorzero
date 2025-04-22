@@ -40,12 +40,6 @@ async fn get_providers() -> E2ETestProviders {
             credentials: HashMap::new(),
         },
         E2ETestProvider {
-            variant_name: "xai-default".to_string(),
-            model_name: "grok_2_1212".into(),
-            model_provider_name: "xai".into(),
-            credentials: HashMap::new(),
-        },
-        E2ETestProvider {
             variant_name: "xai-strict".to_string(),
             model_name: "grok_2_1212".into(),
             model_provider_name: "xai".into(),

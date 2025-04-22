@@ -10326,15 +10326,6 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
 }
 
 pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETestProvider) {
-    // Some providers don't support configuring JSON mode,
-    // so we'll skip the test for them
-    if provider.model_provider_name == "sglang"
-        || provider.model_provider_name == "tgi"
-        || provider.model_provider_name == "vllm"
-    {
-        return;
-    }
-
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -10466,7 +10457,6 @@ pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETes
         serde_json::from_str(raw_request).expect("raw_request should be valid JSON");
 
     // Check that we're not sending `response_format` or `generationConfig`
-
     if provider.model_provider_name == "google_ai_studio_gemini"
         || provider.model_provider_name == "gcp_vertex_gemini"
     {

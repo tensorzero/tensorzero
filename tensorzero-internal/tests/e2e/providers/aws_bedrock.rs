@@ -53,7 +53,7 @@ async fn get_providers() -> E2ETestProviders {
             credentials: HashMap::new(),
         },
         E2ETestProvider {
-            variant_name: "aws-bedrock-default".to_string(),
+            variant_name: "aws-bedrock-strict".to_string(),
             model_name: "claude-3-haiku-20240307-aws-bedrock".into(),
             model_provider_name: "aws_bedrock".into(),
             credentials: HashMap::new(),

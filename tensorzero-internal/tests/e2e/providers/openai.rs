@@ -119,12 +119,6 @@ async fn get_providers() -> E2ETestProviders {
             credentials: HashMap::new(),
         },
         E2ETestProvider {
-            variant_name: "openai-default".to_string(),
-            model_name: "gpt-4o-mini-2024-07-18".into(),
-            model_provider_name: "openai".into(),
-            credentials: HashMap::new(),
-        },
-        E2ETestProvider {
             variant_name: "openai-cot".to_string(),
             model_name: "openai::gpt-4.1-nano-2025-04-14".into(),
             model_provider_name: "openai".into(),

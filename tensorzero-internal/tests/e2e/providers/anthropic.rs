@@ -73,7 +73,7 @@ async fn get_providers() -> E2ETestProviders {
             credentials: HashMap::new(),
         },
         E2ETestProvider {
-            variant_name: "anthropic-default".to_string(),
+            variant_name: "anthropic-strict".to_string(),
             model_name: "claude-3-haiku-20240307-anthropic".into(),
             model_provider_name: "anthropic".into(),
             credentials: HashMap::new(),

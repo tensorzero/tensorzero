@@ -40,7 +40,7 @@ async fn get_providers() -> E2ETestProviders {
             credentials: HashMap::new(),
         },
         E2ETestProvider {
-            variant_name: "mistral-default".to_string(),
+            variant_name: "mistral-strict".to_string(),
             model_name: "open-mistral-nemo-2407".into(),
             model_provider_name: "mistral".into(),
             credentials: HashMap::new(),
