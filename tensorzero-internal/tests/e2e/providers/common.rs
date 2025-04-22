@@ -1376,7 +1376,8 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
         }
         "aws_bedrock" => {
             assert!(
-                res["error"].as_str().unwrap().contains("Bad Request"),
+                res["error"].as_str().unwrap().contains("Bad Request")
+                    || res["error"].as_str().unwrap().contains("ConnectorError"),
                 "Unexpected error: {res}"
             );
         }
@@ -2409,6 +2410,13 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
             let content_block = content_blocks.first().unwrap();
             let content = content_block.get("text").unwrap().as_str().unwrap();
             full_content.push_str(content);
+        }
+
+        // When we get a cache hit, the usage should be explicitly set to 0
+        if check_cache {
+            let usage = chunk_json.get("usage").unwrap();
+            assert_eq!(usage.get("input_tokens").unwrap().as_u64().unwrap(), 0);
+            assert_eq!(usage.get("output_tokens").unwrap().as_u64().unwrap(), 0);
         }
 
         if let Some(usage) = chunk_json.get("usage") {

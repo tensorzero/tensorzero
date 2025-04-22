@@ -652,13 +652,15 @@ const EvaluatorProperties = ({
     .filter((runId) => statsByRunId.has(runId))
     .map((runId) => statsByRunId.get(runId)!);
 
+  const assigner = useColorAssigner();
+
   return (
     <div className="mt-2 flex flex-col items-center gap-1">
       {orderedStats.length > 0 && (
         <div className="text-muted-foreground mt-2 text-center text-xs">
           {orderedStats.map((stat) => {
             // Get the variant color for the circle using the run ID from the stat
-            const variantColorClass = useColorAssigner().getColor(
+            const variantColorClass = assigner.getColor(
               stat.evaluation_run_id,
               false,
             ); // Pass 'false' to get non-hover version

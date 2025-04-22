@@ -1,4 +1,5 @@
 name: General Checks
+run-name: "General Checks for: ${{ github.event.pull_request.title || github.ref }}"
 
 on:
   merge_group:
@@ -116,6 +117,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
         with:
+          cache-provider: "buildjet"
           save-if: ${{ github.event_name == 'merge_group' }}
       - name: "TensorZero PyO3 Client: Build"
         uses: PyO3/maturin-action@b3709a81b3e175ce3ede866725776fee42465311

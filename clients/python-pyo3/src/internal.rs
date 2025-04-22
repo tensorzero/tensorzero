@@ -182,7 +182,7 @@ impl UnprocessedInferenceData {
     ) -> Result<ProcessedInferenceData, TensorZeroError> {
         reresolve_input_for_fine_tuning(&mut self.input, client).await?;
         if function_name.starts_with("tensorzero::llm_judge::") {
-            handle_llm_judge_output(&mut self.output)?;
+            handle_llm_judge_output(&mut self)?;
         }
         Ok(ProcessedInferenceData {
             variant_name: self.variant_name,
@@ -374,8 +374,8 @@ fn get_comparison_operator(optimize: MetricConfigOptimize) -> &'static str {
 /// We have since removed it, but we need to handle the old data.
 /// So, we transform any old LLM Judge outputs to the new format by removing the thinking section from the
 /// parsed and raw outputs.
-fn handle_llm_judge_output(output: &mut Value) -> Result<(), TensorZeroError> {
-    if let Some(parsed) = output.get_mut("parsed") {
+fn handle_llm_judge_output(output: &mut UnprocessedInferenceData) -> Result<(), TensorZeroError> {
+    if let Some(parsed) = output.output.get_mut("parsed") {
         if parsed.get("thinking").is_some() {
             if let Some(obj) = parsed.as_object_mut() {
                 obj.remove("thinking");
@@ -389,7 +389,7 @@ fn handle_llm_judge_output(output: &mut Value) -> Result<(), TensorZeroError> {
             .into(),
         })?;
 
-        *output = json!({
+        output.output = json!({
             "parsed": parsed,
             "raw": raw_json
         });
@@ -405,13 +405,21 @@ mod tests {
     #[test]
     fn test_handle_llm_judge_output() {
         // Test removing the thinking field from the output
-        let mut input = json!({
-            "parsed": {
-                "thinking": "This is a test",
-                "answer": "This is a test"
+        let mut input = UnprocessedInferenceData {
+            variant_name: "test".to_string(),
+            input: ResolvedInput {
+                system: None,
+                messages: vec![],
             },
-            "raw": "{\"thinking\": \"This is a test\", \"answer\": \"This is a test\"}"
-        });
+            output: json!({
+                "parsed": {
+                    "thinking": "This is a test",
+                    "answer": "This is a test"
+                },
+                "raw": "{\"thinking\": \"This is a test\", \"answer\": \"This is a test\"}"
+            }),
+            episode_id: None,
+        };
 
         handle_llm_judge_output(&mut input).unwrap();
 
@@ -422,23 +430,30 @@ mod tests {
             "raw": "{\"answer\":\"This is a test\"}"
         });
 
-        assert_eq!(input, expected);
+        assert_eq!(input.output, expected);
 
         // Test the correct output is unmodified
         handle_llm_judge_output(&mut input).unwrap();
-        assert_eq!(input, expected);
+        assert_eq!(input.output, expected);
 
         // Test not modifying the output if the parsed field is not present
-        let mut input = json!({
-            "raw": "This is a test"
-        });
-
+        let mut input = UnprocessedInferenceData {
+            variant_name: "test".to_string(),
+            input: ResolvedInput {
+                system: None,
+                messages: vec![],
+            },
+            output: json!({
+                "raw": "This is a test"
+            }),
+            episode_id: None,
+        };
         handle_llm_judge_output(&mut input).unwrap();
 
         let expected = json!({
             "raw": "This is a test"
         });
 
-        assert_eq!(input, expected);
+        assert_eq!(input.output, expected);
     }
 }
