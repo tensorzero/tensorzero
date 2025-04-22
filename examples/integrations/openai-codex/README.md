@@ -1,6 +1,8 @@
 # Example: OpenAI Codex and TensorZero Integration
 
-This example shows how to use OpenAI Codex with TensorZero. Why?
+This example shows how to use OpenAI Codex with TensorZero.
+
+Why?
 
 - Use every major model provider with Codex:
   [Anthropic](https://www.tensorzero.com/docs/gateway/guides/providers/anthropic),
@@ -19,9 +21,9 @@ This example shows how to use OpenAI Codex with TensorZero. Why?
   [vLLM](https://www.tensorzero.com/docs/gateway/guides/providers/vllm),
   [xAI](https://www.tensorzero.com/docs/gateway/guides/providers/xai),
   and [any OpenAI-compatible provider (e.g. Ollama)](https://www.tensorzero.com/docs/gateway/guides/providers/openai-compatible)
-- Set up advanced inference features like retries, fallbacks, load balancing, inference-time optimizations, experimentation (A/B testing), and more.
-- Gain comprehensive observability into your LLM usage, including detailed logs, metrics, and feedback collection for continuous improvement.
-- Collect data for fine-tuning and other optimization techniques, and use TensorZero recipes to learn from your experience to produce better variants of the LLM.
+- Gain comprehensive observability into your Codex usage, including detailed logs for every LLM call.
+- Set up advanced inference features like [retries](https://www.tensorzero.com/docs/gateway/guides/retries-fallbacks/), [fallbacks](https://www.tensorzero.com/docs/gateway/guides/retries-fallbacks/), [load balancing](https://www.tensorzero.com/docs/gateway/guides/retries-fallbacks/#load-balancing), [inference-time optimizations](https://www.tensorzero.com/docs/gateway/guides/inference-time-optimizations/), [experimentation (A/B testing)](https://www.tensorzero.com/docs/gateway/guides/experimentation/), and more.
+- Collect data for fine-tuning and other optimization techniques, and use TensorZero recipes to create custom models for your Codex usage.
 
 ## Getting Started
 
