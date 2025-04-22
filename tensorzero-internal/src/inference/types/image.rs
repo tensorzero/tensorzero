@@ -1,12 +1,16 @@
 use std::fmt::{self, Display};
 
+use scoped_tls::scoped_thread_local;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use url::Url;
 
 use crate::error::{Error, ErrorDetails};
 use aws_smithy_types::base64;
 
 use super::{resolved_input::ImageWithPath, ContentBlock, RequestMessage};
+
+scoped_thread_local!(static SERIALIZE_IMAGE_DATA: ());
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -35,7 +39,7 @@ impl Display for ImageKind {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 pub struct Base64Image {
     // The original url we used to download the image
     pub url: Option<Url>,
@@ -56,6 +60,49 @@ impl Base64Image {
             })
         })
     }
+}
+
+impl Serialize for Base64Image {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+
+        let mut state = serializer.serialize_struct(
+            "Base64Image",
+            if SERIALIZE_IMAGE_DATA.is_set() && self.data.is_some() {
+                3
+            } else {
+                2
+            },
+        )?;
+
+        if let Some(url) = &self.url {
+            state.serialize_field("url", url)?;
+        }
+
+        state.serialize_field("mime_type", &self.mime_type)?;
+
+        // Only serialize the data field if SERIALIZE_IMAGE_DATA is set and data exists
+        if SERIALIZE_IMAGE_DATA.is_set() {
+            if let Some(data) = &self.data {
+                state.serialize_field("data", data)?;
+            }
+        }
+
+        state.end()
+    }
+}
+
+pub fn serialize_with_image_data<T: Serialize>(value: &T) -> Result<Value, Error> {
+    SERIALIZE_IMAGE_DATA.set(&(), || {
+        serde_json::to_value(value).map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!("Error serializing value: {e}"),
+            })
+        })
+    })
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
