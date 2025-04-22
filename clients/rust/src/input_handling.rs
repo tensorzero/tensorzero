@@ -119,8 +119,8 @@ pub async fn reresolve_input_for_fine_tuning(
                 if image_with_path.image.data.is_none() {
                     let storage_path = image_with_path.storage_path.clone();
                     let fut = async move {
-                        let result = fetch_image_data(storage_path, client).await;
-                        (message_index, content_index, result)
+                        let result = fetch_image_data(storage_path, client).await?;
+                        Ok((message_index, content_index, result))
                     };
                     image_fetch_tasks.push(fut);
                 }
@@ -130,11 +130,10 @@ pub async fn reresolve_input_for_fine_tuning(
 
     // Execute fetch tasks concurrently for the current message
     if !image_fetch_tasks.is_empty() {
-        let fetched_data_results = futures::future::join_all(image_fetch_tasks).await;
+        let fetched_data_results = try_join_all(image_fetch_tasks).await?;
 
         // Second pass: update the content with fetched data
-        for (message_index, content_index, result) in fetched_data_results {
-            let fetched_data = result?;
+        for (message_index, content_index, fetched_data) in fetched_data_results {
             if let Some(message) = input.messages.get_mut(message_index) {
                 if let Some(ResolvedInputMessageContent::Image(image_with_path)) =
                     message.content.get_mut(content_index)

@@ -39,13 +39,17 @@ impl Display for ImageKind {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+fn skip_serialize_image_data(_: &Option<String>) -> bool {
+    !SERIALIZE_IMAGE_DATA.is_set()
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub struct Base64Image {
     // The original url we used to download the image
     pub url: Option<Url>,
     pub mime_type: ImageKind,
     // TODO - should we add a wrapper type to enforce base64?
-    #[serde(skip)]
+    #[serde(skip_serializing_if = "skip_serialize_image_data")]
     #[serde(default)]
     // This is normally `Some`, unless it was deserialized from ClickHouse
     // (with the image data stripped out).
@@ -59,39 +63,6 @@ impl Base64Image {
                 message: "Tried to get image data from deserialized Base64Image".to_string(),
             })
         })
-    }
-}
-
-impl Serialize for Base64Image {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        use serde::ser::SerializeStruct;
-
-        let mut state = serializer.serialize_struct(
-            "Base64Image",
-            if SERIALIZE_IMAGE_DATA.is_set() && self.data.is_some() {
-                3
-            } else {
-                2
-            },
-        )?;
-
-        if let Some(url) = &self.url {
-            state.serialize_field("url", url)?;
-        }
-
-        state.serialize_field("mime_type", &self.mime_type)?;
-
-        // Only serialize the data field if SERIALIZE_IMAGE_DATA is set and data exists
-        if SERIALIZE_IMAGE_DATA.is_set() {
-            if let Some(data) = &self.data {
-                state.serialize_field("data", data)?;
-            }
-        }
-
-        state.end()
     }
 }
 
