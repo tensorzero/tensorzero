@@ -55,6 +55,8 @@ pub struct E2ETestProvider {
     pub model_provider_name: String,
 
     pub credentials: HashMap<String, String>,
+
+    pub supports_batch_inference: bool,
 }
 
 /// Enforce that every provider implements a common set of tests.
@@ -84,7 +86,6 @@ pub struct E2ETestProviders {
     pub image_inference: Vec<E2ETestProvider>,
 
     pub shorthand_inference: Vec<E2ETestProvider>,
-    pub supports_batch_inference: bool,
 }
 
 pub async fn make_http_gateway() -> tensorzero::Client {
