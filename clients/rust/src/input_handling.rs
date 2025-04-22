@@ -110,48 +110,37 @@ pub async fn reresolve_input_for_fine_tuning(
     input: &mut ResolvedInput,
     client: &Client,
 ) -> Result<(), TensorZeroError> {
-    let mut resolved_messages = Vec::with_capacity(input.messages.len());
+    let mut image_fetch_tasks = Vec::new();
 
-    for message in input.messages.iter_mut() {
-        let mut image_fetch_tasks = Vec::new();
-        let mut content_indices_to_update = Vec::new();
-
+    for (message_index, message) in input.messages.iter_mut().enumerate() {
         // First pass: identify images to fetch and collect tasks
-        for (index, content) in message.content.iter_mut().enumerate() {
+        for (content_index, content) in message.content.iter_mut().enumerate() {
             if let ResolvedInputMessageContent::Image(image_with_path) = content {
                 if image_with_path.image.data.is_none() {
                     let storage_path = image_with_path.storage_path.clone();
-                    let fut = async move { fetch_image_data(storage_path, client).await };
+                    let fut = async move {
+                        let result = fetch_image_data(storage_path, client).await;
+                        (message_index, content_index, result)
+                    };
                     image_fetch_tasks.push(fut);
-                    content_indices_to_update.push(index);
                 }
             }
         }
+    }
 
-        // Execute fetch tasks concurrently for the current message
-        if !image_fetch_tasks.is_empty() {
-            let fetched_data_results = futures::future::try_join_all(image_fetch_tasks).await?;
+    // Execute fetch tasks concurrently for the current message
+    if !image_fetch_tasks.is_empty() {
+        let fetched_data_results = futures::future::join_all(image_fetch_tasks).await;
 
-            // Second pass: update the content with fetched data
-            let mut results_iter = fetched_data_results.into_iter();
-            for index in content_indices_to_update {
+        // Second pass: update the content with fetched data
+        for (message_index, content_index, result) in fetched_data_results {
+            let fetched_data = result?;
+            if let Some(message) = input.messages.get_mut(message_index) {
                 if let Some(ResolvedInputMessageContent::Image(image_with_path)) =
-                    message.content.get_mut(index)
+                    message.content.get_mut(content_index)
                 {
-                    if let Some(fetched_data) = results_iter.next() {
-                        image_with_path.image.data = Some(fetched_data);
-                    } else {
-                        // This should not happen if logic is correct
-                        return Err(TensorZeroError::Other {
-                            source: Error::new(ErrorDetails::Serialization {
-                                message:
-                                    "Mismatch between fetch tasks and results during input reresolution"
-                                        .to_string(),
-                            }).into()
-                        });
-                    }
+                    image_with_path.image.data = Some(fetched_data);
                 } else {
-                    // This should not happen if logic is correct
                     return Err(TensorZeroError::Other {
                         source: Error::new(ErrorDetails::Serialization {
                             message:
@@ -161,9 +150,15 @@ pub async fn reresolve_input_for_fine_tuning(
                         .into(),
                     });
                 }
+            } else {
+                return Err(TensorZeroError::Other {
+                    source: Error::new(ErrorDetails::Serialization {
+                        message: "Message index invalid during input reresolution".to_string(),
+                    })
+                    .into(),
+                });
             }
         }
-        resolved_messages.push(message);
     }
 
     Ok(())
