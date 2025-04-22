@@ -1,0 +1,75 @@
+# Example: OpenAI Codex and TensorZero Integration
+
+This example shows how to use OpenAI Codex with TensorZero. Why?
+
+- Use every major model provider with Codex:
+  [Anthropic](https://www.tensorzero.com/docs/gateway/guides/providers/anthropic),
+  [AWS Bedrock](https://www.tensorzero.com/docs/gateway/guides/providers/aws-bedrock),
+  [AWS SageMaker](https://www.tensorzero.com/docs/gateway/guides/providers/aws-sagemaker),
+  [Azure OpenAI Service](https://www.tensorzero.com/docs/gateway/guides/providers/azure),
+  [DeepSeek](https://www.tensorzero.com/docs/gateway/guides/providers/deepseek),
+  [Fireworks](https://www.tensorzero.com/docs/gateway/guides/providers/fireworks),
+  [GCP Vertex AI Anthropic](https://www.tensorzero.com/docs/gateway/guides/providers/gcp-vertex-ai-anthropic),
+  [GCP Vertex AI Gemini](https://www.tensorzero.com/docs/gateway/guides/providers/gcp-vertex-ai-gemini),
+  [Google AI Studio (Gemini API)](https://www.tensorzero.com/docs/gateway/guides/providers/google-ai-studio-gemini),
+  [Hyperbolic](https://www.tensorzero.com/docs/gateway/guides/providers/hyperbolic),
+  [Mistral](https://www.tensorzero.com/docs/gateway/guides/providers/mistral),
+  [OpenAI](https://www.tensorzero.com/docs/gateway/guides/providers/openai),
+  [Together](https://www.tensorzero.com/docs/gateway/guides/providers/together),
+  [vLLM](https://www.tensorzero.com/docs/gateway/guides/providers/vllm),
+  [xAI](https://www.tensorzero.com/docs/gateway/guides/providers/xai),
+  and [any OpenAI-compatible provider (e.g. Ollama)](https://www.tensorzero.com/docs/gateway/guides/providers/openai-compatible)
+- Set up advanced inference features like retries, fallbacks, load balancing, inference-time optimizations, experimentation (A/B testing), and more.
+- Gain comprehensive observability into your LLM usage, including detailed logs, metrics, and feedback collection for continuous improvement.
+- Collect data for fine-tuning and other optimization techniques, and use TensorZero recipes to learn from your experience to produce better variants of the LLM.
+
+## Getting Started
+
+### Prerequisites
+
+1. Install Docker.
+2. Install Node 22+.
+3. Generate credentials for the providers you want to use (e.g. `ANTHROPIC_API_KEY`).
+
+### Setup
+
+1. Create a `.env` file with your provider credentials. (See `.env.example` for reference.)
+2. Run `docker compose up` to start TensorZero.
+3. Install Codex:
+   > [^INFO]
+   >
+   > At the time of writing, OpenAI has merged the required features for using multiple providers with Codex, but hasn't released a new version of Codex on `npm`, so you'll need to build it from source.
+   > It's easy!
+   >
+   > (If OpenAI makes a new release, you can skip this step and instead install the latest version of Codex with `npm i -g @openai/codex`.)
+   >
+   > ```bash
+   > # Clone the Codex repository
+   > git clone https://github.com/openai/codex.git
+   >
+   > # Install dependencies
+   > cd codex/codex-cli
+   >
+   > # Install the Codex dependencies
+   > npm install
+   >
+   > # Build Codex
+   > npm run build
+   >
+   > # Link the version of Codex you just built
+   > npm link
+   > ```
+4. Run Codex with TensorZero:
+   > ```bash
+   > OPENAI_BASE_URL="http://localhost:3000/openai/v1" OPENAI_API_KEY="not-used" codex -p tensorzero -m tensorzero::model_name::anthropic::claude-3-7-sonnet-20250219
+   > ```
+
+> [^TIP]
+>
+> Replace `tensorzero::model_name::anthropic::claude-3-7-sonnet-20250219` with any other model supported by TensorZero, e.g. `tensorzero::model_name::mistral::open-mistral-nemo-2407`.
+>
+> You can also define TensorZero functions in the `config/tensorzero.toml` file, and use them with Codex as `tensorzero::function_name::xxx`.
+>
+> For example, this will allow you to use ...
+>
+> retries, fallbacks, load balancing, inference-time optimizations, experimentation (A/B testing), collect data for fine-tuning, and more.
