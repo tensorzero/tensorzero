@@ -20,7 +20,7 @@ services:
       clickhouse:
         condition: service_healthy
 
-
+  # We use ClickHouse to store observability data from the TensorZero Gateway (optional).
   clickhouse:
     image: clickhouse/clickhouse-server:24.12-alpine
     environment:
@@ -35,7 +35,7 @@ services:
       start_interval: 1s
       timeout: 1s
 
-
+  # TensorZero UI provides observability and other features (optional).
   ui:
     image: tensorzero/ui
     volumes:
