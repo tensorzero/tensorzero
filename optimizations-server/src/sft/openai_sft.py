@@ -70,6 +70,7 @@ class OpenAISFTJob(BaseSFTJob):
             threshold=data.threshold,
             max_samples=data.maxSamples,
         )
+        print("curated_inferences: ", curated_inferences)
         if not curated_inferences or len(curated_inferences) == 0:
             raise ValueError("No curated inferences found")
 

@@ -16,7 +16,7 @@ use tensorzero_internal::{
     inference::types::ResolvedInput,
     variant::VariantConfig,
 };
-use tensorzero_rust::{input_handling::reresolve_input, Client, TensorZeroError};
+use tensorzero_rust::{input_handling::reresolve_input_for_fine_tuning, Client, TensorZeroError};
 use uuid::Uuid;
 
 use crate::convert_error;
@@ -81,10 +81,36 @@ pub async fn get_curated_inferences(
     let metric_name = match metric_name {
         Some(name) => name,
         None => {
-            let rows = clickhouse.run_query_synchronous("SELECT variant_name, input, output, episode_id from {inference_table_name:Identifier} WHERE function_name = {function_name:String} FORMAT JSONEachRow".to_string() + &limit_clause, Some(&[
-                ("function_name", function_name),
-                ("inference_table_name", inference_table_name),
-                ].into_iter().collect())).await.map_err(|e| TensorZeroError::Other { source: e.into() })?;
+            let query = format!(
+                r#"
+            SELECT
+                variant_name,
+                input,
+                output,
+                episode_id
+            FROM
+                {{inference_table_name:Identifier}}
+            WHERE
+                function_name = {{function_name:String}}
+            {limit_clause}
+            FORMAT JSONEachRow
+            "#
+            );
+            println!("query: {}", query);
+            let rows = clickhouse
+                .run_query_synchronous(
+                    query,
+                    Some(
+                        &[
+                            ("function_name", function_name),
+                            ("inference_table_name", inference_table_name),
+                        ]
+                        .into_iter()
+                        .collect(),
+                    ),
+                )
+                .await
+                .map_err(|e| TensorZeroError::Other { source: e.into() })?;
 
             let unprocessed_rows: Vec<UnprocessedInferenceData> = rows
                 .lines()
@@ -155,7 +181,7 @@ impl UnprocessedInferenceData {
         client: &Client,
         function_name: &str,
     ) -> Result<ProcessedInferenceData, TensorZeroError> {
-        reresolve_input(&mut self.input, client).await?;
+        reresolve_input_for_fine_tuning(&mut self.input, client).await?;
         if function_name.starts_with("tensorzero::llm_judge::") {
             handle_llm_judge_output(&mut self.output)?;
         }

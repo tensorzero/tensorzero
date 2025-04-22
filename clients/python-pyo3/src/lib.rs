@@ -1069,6 +1069,7 @@ impl AsyncTensorZeroGateway {
                     max_samples,
                 )
                 .await;
+                println!("inferences_result: {:?}", inferences_result);
 
                 Python::with_gil(|py| {
                     let inferences = inferences_result.map_err(|e| convert_error(py, e))?;

@@ -106,7 +106,9 @@ async fn resolved_input_message_content_to_client_input_message_content(
 /// Since we store the input in the database in the form of ResolvedInput but without e.g. images inside,
 /// we need to reresolve the input when we retrieve it from the database.
 /// Resolves images in place.
-pub async fn reresolve_input(
+/// TODO(Viraj): ResolvedInput does not serialize the image so when we convert to Python we lose the actual image data.
+/// We need to find a workaround that actually passes the image data to Python
+pub async fn reresolve_input_for_fine_tuning(
     input: &mut ResolvedInput,
     client: &Client,
 ) -> Result<(), TensorZeroError> {
