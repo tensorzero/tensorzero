@@ -65,6 +65,7 @@ secrecy = { workspace = true }
 serde = { workspace = true }
 serde-untagged = { workspace = true }
 serde_json = { workspace = true }
+http = { workspace = true }
 serde_path_to_error = "0.1.17"
 sha2 = "0.10.8"
 strum = { version = "0.27.1", features = ["derive"] }
