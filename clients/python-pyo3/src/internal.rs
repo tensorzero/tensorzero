@@ -174,7 +174,9 @@ pub struct ProcessedInferenceData {
 }
 
 impl UnprocessedInferenceData {
-    /// Normally, we would use a new() method for this but since we need to deserialize into
+    /// Normally, we would use a new() method for this but since we need to deserialize into the
+    /// UnprocessedInferenceData struct and we want to force the caller to call this function,
+    /// this is the only way to get a ProcessedInferenceData struct.
     pub async fn postprocess(
         mut self,
         client: &Client,
