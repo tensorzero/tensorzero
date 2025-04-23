@@ -56,7 +56,8 @@ pub fn uuid_elapsed(uuid: &Uuid) -> Result<Duration, Error> {
     let (seconds, subsec_nanos) = uuid
         .get_timestamp()
         .ok_or_else(|| {
-            Error::new(ErrorDetails::InvalidUuid {
+            // Since this can be OK (e.g. for dynamic evaluation runs), we don't log here.
+            Error::new_without_logging(ErrorDetails::InvalidUuid {
                 raw_uuid: uuid.to_string(),
             })
         })?
