@@ -31,7 +31,6 @@ export const RawFunctionConfigChatSchema = rawBaseConfigSchema.extend({
     .default("none"),
   parallel_tool_calls: z.boolean().default(false),
 });
-
 // Schema for FunctionConfigJson
 export const RawFunctionConfigJsonSchema = rawBaseConfigSchema.extend({
   type: z.literal("json"),
