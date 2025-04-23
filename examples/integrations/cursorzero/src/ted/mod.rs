@@ -12,13 +12,19 @@ mod matrix;
 use crate::ted::matrix::Matrix;
 use tree_sitter::{Node, TreeCursor};
 
+#[derive(Debug)]
 pub struct TedInfo {
     pub min_ted: u64,
     pub ted_ratio: f64,
     pub size: usize,
 }
 
-pub fn minimum_ted(needle: &Node, haystack: &Node) -> TedInfo {
+pub fn minimum_ted(
+    needle: &Node,
+    needle_src: &[u8],
+    haystack: &Node,
+    haystack_src: &[u8],
+) -> TedInfo {
     // We need to walk the haystack to get the postorder traversal
     let mut haystack_cursor = haystack.walk();
     let mut haystack_post = Vec::new();
@@ -26,6 +32,7 @@ pub fn minimum_ted(needle: &Node, haystack: &Node) -> TedInfo {
     let mut haystack_sizes = Vec::new();
     dfs_postorder(
         &mut haystack_cursor,
+        haystack_src,
         &mut haystack_post,
         &mut haystack_subtree_start,
         &mut haystack_sizes,
@@ -36,18 +43,21 @@ pub fn minimum_ted(needle: &Node, haystack: &Node) -> TedInfo {
     let mut needle_sizes = Vec::new();
     dfs_postorder(
         &mut needle_cursor,
+        needle_src,
         &mut needle_post,
         &mut needle_subtree_start,
         &mut needle_sizes,
     );
+    debug_assert!(!needle_post.is_empty(), "needle must have ≥1 node");
+    debug_assert!(!haystack_post.is_empty(), "haystack must have ≥1 node");
     // Construct the needle tree
     let needle_tree = Tree::new_from_postorder(&needle_post, &needle_subtree_start, 0);
     // Iterate over the haystack and create the subtree ending at each index
     let mut min_ted = u64::MAX;
     for (end, &start) in haystack_subtree_start.iter().enumerate() {
         let haystack_tree = Tree::new_from_postorder(
-            &haystack_post[start..end],
-            &haystack_subtree_start[start..end],
+            &haystack_post[start..=end],
+            &haystack_subtree_start[start..=end],
             start,
         );
         let ted = haystack_tree.tree_edit_distance(&needle_tree);
@@ -63,20 +73,36 @@ pub fn minimum_ted(needle: &Node, haystack: &Node) -> TedInfo {
     }
 }
 
-struct TsNodeWrapper<'a> {
-    node: Node<'a>,
+#[derive(Debug)]
+struct TsNodeWrapper<'tree> {
+    node: Node<'tree>,
+    leaf_text: Option<String>,
 }
 
-impl<'a> TsNodeWrapper<'a> {
-    pub fn new(node: Node<'a>) -> Self {
-        Self { node }
+impl<'tree> TsNodeWrapper<'tree> {
+    pub fn new(node: Node<'tree>, src: &'tree [u8]) -> Self {
+        let leaf_text = if node.child_count() == 0 {
+            // I don't want to propagate non-UTF-8 errors
+            // since that's just deeply wrong if we get here.
+            #[allow(clippy::unwrap_used)]
+            Some(node.utf8_text(src).unwrap().to_string())
+        } else {
+            None
+        };
+        Self { node, leaf_text }
     }
 }
 
 impl PartialEq for TsNodeWrapper<'_> {
     fn eq(&self, other: &Self) -> bool {
-        self.node.grammar_name() == other.node.grammar_name()
-            && self.node.kind() == other.node.kind()
+        if self.node.kind() != other.node.kind() {
+            return false;
+        }
+        match (&self.leaf_text, &other.leaf_text) {
+            (Some(a), Some(b)) => a == b,
+            (None, None) => true,
+            _ => false,
+        }
     }
 }
 impl Eq for TsNodeWrapper<'_> {}
@@ -86,9 +112,10 @@ impl Eq for TsNodeWrapper<'_> {}
 /// and returns the ordered list of node wrappers as well as the starting index of each subtree.
 /// Since postorder traversal lets you visit all the children before visiting the node this is straightforward.
 /// This function assumes previously initialized empty vectors for post and subtree_start as the base case.
-fn dfs_postorder<'a>(
-    cursor: &mut TreeCursor<'a>,
-    post: &mut Vec<TreeNode<TsNodeWrapper<'a>>>,
+fn dfs_postorder<'tree>(
+    cursor: &mut TreeCursor<'tree>,
+    src: &'tree [u8],
+    post: &mut Vec<TreeNode<TsNodeWrapper<'tree>>>,
     subtree_start: &mut Vec<usize>,
     sizes: &mut Vec<usize>,
 ) {
@@ -99,7 +126,7 @@ fn dfs_postorder<'a>(
     if cursor.goto_first_child() {
         loop {
             // visit all the children
-            dfs_postorder(cursor, post, subtree_start, sizes);
+            dfs_postorder(cursor, src, post, subtree_start, sizes);
             if !cursor.goto_next_sibling() {
                 break;
             }
@@ -108,23 +135,23 @@ fn dfs_postorder<'a>(
         cursor.goto_parent();
     }
 
-    post.push(TreeNode::new(TsNodeWrapper::new(current_node)));
+    post.push(TreeNode::new(TsNodeWrapper::new(current_node, src)));
     subtree_start.push(start);
     sizes.push(post.len() - start);
 }
 
 /// A labelled, ordered tree in **post‑order** representation plus per‑node metadata.
-/// Lifetime `'a` ties the `Tree` to the lifetime of its underlying `TreeNode`s.
-struct Tree<'a, L: Eq> {
+/// Lifetime `'tree` ties the `Tree` to the lifetime of its underlying `TreeNode`s.
+struct Tree<'tree, L: Eq> {
     /// Post‑order list of pointers into the original node arena.
-    post_order: &'a [TreeNode<L>], // length == n
+    post_order: &'tree [TreeNode<L>], // length == n
 
     /// For every node *i* (in post‑order), `left_most_leaf_descendant[i]` is the
     /// index (also in post‑order) of the left‑most leaf in the subtree rooted at *i*.
     /// This is computed from the post_order traversal of the root tree. We have to compute
     /// the left-most leaf descendant for Zhang-Sasha by subtracting the parent offset from
     /// each value in this array.
-    left_most_leaf_descendant_root: &'a [usize], // length == n, O(1) lookup
+    left_most_leaf_descendant_root: &'tree [usize], // length == n, O(1) lookup
 
     /// Parent offset for this subtree. This means that the left-most node of this subtree
     /// starts at this index in the larger list. Therefore the numbers in the `left_most_leaf_descendant_root`
@@ -149,14 +176,23 @@ impl<L: Eq> TreeNode<L> {
     }
 }
 
-impl<'a, L: Eq> Tree<'a, L> {
+impl<'tree, L: Eq> Tree<'tree, L> {
     // ------------------------- construction helpers ------------------------- //
     fn new_from_postorder(
-        post: &'a [TreeNode<L>],
-        left_most_leaf_descendant_root: &'a [usize],
+        post: &'tree [TreeNode<L>],
+        left_most_leaf_descendant_root: &'tree [usize],
         parent_offset: usize,
     ) -> Self {
         let key_roots = Self::compute_key_roots(left_most_leaf_descendant_root, parent_offset);
+        debug_assert!(!key_roots.is_empty(), "key_roots must have ≥1 node");
+        for root in key_roots.iter() {
+            debug_assert!(*root < post.len(), "key_root must be within bounds");
+        }
+        debug_assert_eq!(
+            left_most_leaf_descendant_root.len(),
+            post.len(),
+            "left_most_leaf_descendant_root and post_order must have the same length"
+        );
         Self {
             post_order: post,
             left_most_leaf_descendant_root,
@@ -210,6 +246,10 @@ impl<'a, L: Eq> Tree<'a, L> {
         // Aliases used in the original paper.
         let l1 = t1.left_most_leaf_descendant(k1);
         let l2 = t2.left_most_leaf_descendant(k2);
+        debug_assert!(
+            l1 <= k1 && l2 <= k2,
+            "leftmost descendant index must not exceed key‐root"
+        );
 
         // Forest DP buffer sized to (|A|+1) × (|B|+1).
         let rows = k1 - l1 + 2; // +1 for empty prefix, +1 because inclusive indices
@@ -269,6 +309,9 @@ impl<'a, L: Eq> Tree<'a, L> {
         del_cost: u64,
         relabel_cost: u64,
     ) -> u64 {
+        if self.post_order.is_empty() || other.post_order.is_empty() {
+            return self.post_order.len().max(other.post_order.len()) as u64;
+        }
         let mut td = Matrix::<u64>::zeros(self.post_order.len(), other.post_order.len());
         for &x in &self.key_roots {
             for &y in &other.key_roots {

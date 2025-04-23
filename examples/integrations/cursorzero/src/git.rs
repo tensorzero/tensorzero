@@ -5,7 +5,7 @@ use std::{
     rc::Rc,
 };
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Result};
 use chrono::{DateTime, TimeZone, Utc};
 use git2::{Commit, DiffDelta, DiffOptions, Repository};
 
@@ -183,15 +183,7 @@ pub fn get_commit_timestamp_and_parent_timestamp(commit: &Commit) -> Result<Comm
 
 /// Resolves a VSCode workpace relative path to a vector of git-relative paths.
 pub fn find_paths_in_repo<P: AsRef<Path>>(repo: &Repository, path: &P) -> Result<Vec<PathBuf>> {
-    let repo_root = repo.workdir().context("bare repository not supported")?;
-
-    // 1. Fast path - the VSCode root was the same as the git root
-    let candidate = repo_root.join(path);
-    if candidate.exists() {
-        return Ok(vec![candidate]);
-    }
-
-    // 2. Slow path - we need to search the repo for the path
+    // Search the repo for the path that suffixes with the given path
     let mut paths = Vec::new();
     let index = repo.index()?;
     for entry in index.iter() {

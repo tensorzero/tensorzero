@@ -1,3 +1,17 @@
+//! This file is intended to run as a post-commit hook for the cursorzero application.
+//!
+//! Steps performed in `main`:
+//! 1. Parse command-line arguments (repository path and gateway URL).
+//! 2. Discover the Git repository at the given path.
+//! 3. Retrieve the latest commit and its parent's timestamp interval.
+//! 4. Generate diffs for each file in the commit.
+//! 5. For each diff hunk, parse its content into a syntax tree.
+//! 6. Compute tree-edit-distance metrics and collect inference data.
+//! 7. Send collected inferences to an external service via HTTP gateway.
+//!
+//! By running automatically after each commit, this hook enables continuous
+//! code-change analysis and integration with TensorZero.
+
 use std::{collections::HashMap, path::PathBuf};
 
 use anyhow::{Context, Result};
@@ -24,7 +38,7 @@ use uuid::Uuid;
 struct Cli {
     #[clap(short, long, default_value = ".")]
     path: String,
-    #[clap(long, default_value = "http://localhost:6900")]
+    #[clap(long, default_value = "http://localhost:6904")]
     gateway_url: Url,
 }
 
@@ -35,7 +49,7 @@ async fn main() -> Result<()> {
     let commit = get_last_commit_from_repo(&repo)?;
     let commit_interval = get_commit_timestamp_and_parent_timestamp(&commit)?;
     let diffs = get_diff_by_file(&repo, &commit)?;
-    let mut diff_trees: HashMap<PathBuf, Vec<Tree>> = HashMap::new();
+    let mut diff_trees: HashMap<PathBuf, Vec<TreeInfo>> = HashMap::new();
     let client = ClientBuilder::new(ClientBuilderMode::HTTPGateway {
         url: args.gateway_url,
     })
@@ -50,13 +64,17 @@ async fn main() -> Result<()> {
             let Some(tree) = tree else {
                 continue;
             };
-            diff_trees.entry(file.clone()).or_default().push(tree);
+            diff_trees.entry(file.clone()).or_default().push(TreeInfo {
+                path: file.clone(),
+                tree,
+                src: diff.content.into(),
+            });
         }
     }
     let clickhouse_url = std::env::var("CURSORZERO_CLICKHOUSE_URL")?;
     let clickhouse = ClickHouseConnectionInfo::new(&clickhouse_url).await?;
     let inferences = get_inferences_in_time_range(&clickhouse, commit_interval).await?;
-    let mut inference_trees: HashMap<Uuid, Vec<InferenceTreeInfo>> = HashMap::new();
+    let mut inference_trees: HashMap<Uuid, Vec<TreeInfo>> = HashMap::new();
     for inference in inferences {
         let code_blocks =
             parse_cursor_output(&inference.input, &inference.output).with_context(|| {
@@ -68,9 +86,10 @@ async fn main() -> Result<()> {
                 inference_trees
                     .entry(inference.id)
                     .or_default()
-                    .push(InferenceTreeInfo {
+                    .push(TreeInfo {
                         path: code_block.path,
                         tree,
+                        src: code_block.content.into(),
                     });
             }
         }
@@ -87,10 +106,10 @@ async fn main() -> Result<()> {
                 .push(NormalizedInferenceTreeInfo {
                     paths: path,
                     tree: tree_info.tree,
+                    src: tree_info.src,
                 });
         }
     }
-
     for (inference_id, inference_tree_info) in normalized_inference_trees {
         for tree_info in inference_tree_info {
             // Get all the diff trees for the paths in this NormalizedInferenceTreeInfo
@@ -106,7 +125,12 @@ async fn main() -> Result<()> {
                 // TODO: do all the DFS once for each tree (maybe lazily) and memoize the results.
                 // TODO: skip all checks here or in the inner loop where the tree size difference is larger than the minimum TED
                 // already found.
-                let ted = minimum_ted(&tree_info.tree.root_node(), &diff_tree.root_node());
+                let ted = minimum_ted(
+                    &tree_info.tree.root_node(),
+                    &tree_info.src,
+                    &diff_tree.tree.root_node(),
+                    &diff_tree.src,
+                );
                 if best_ted_info.is_none() {
                     best_ted_info = Some(ted);
                 } else if let Some(ted_info) = best_ted_info.as_ref() {
@@ -150,13 +174,15 @@ async fn main() -> Result<()> {
 }
 
 #[derive(Debug)]
-struct InferenceTreeInfo {
-    path: PathBuf, // VSCode workspace relative path
+struct TreeInfo {
+    path: PathBuf, // VSCode workspace relative path for inferences, git-relative path for diffs
     tree: Tree,
+    src: Vec<u8>,
 }
 
 #[derive(Debug)]
 struct NormalizedInferenceTreeInfo {
     paths: Vec<PathBuf>, // git-relative paths that might be the right path for this inference
     tree: Tree,
+    src: Vec<u8>,
 }

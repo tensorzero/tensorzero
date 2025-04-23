@@ -35,6 +35,8 @@ services:
       - ${ENV_FILE:-.env}
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    ports:
+      - "6904:3000"
     depends_on:
       clickhouse:
         condition: service_healthy
