@@ -31,7 +31,7 @@ export const FunctionConfigChatSchema = baseConfigSchema.extend({
     .union([
       z.literal("none"),
       z.literal("auto"),
-      z.literal("any"),
+      z.literal("required"),
       specificToolChoiceSchema,
     ])
     .default("none"),
