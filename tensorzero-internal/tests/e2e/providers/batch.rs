@@ -88,8 +88,8 @@ macro_rules! generate_batch_inference_tests {
         async fn test_start_simple_image_batch_inference_request() {
             let all_providers = $func().await;
             let providers = all_providers.simple_inference;
-            if all_providers.supports_batch_inference {
-                for provider in providers {
+            for provider in providers {
+                if provider.supports_batch_inference {
                     test_start_simple_image_batch_inference_request_with_provider(provider).await;
                 }
             }
@@ -99,8 +99,8 @@ macro_rules! generate_batch_inference_tests {
         async fn test_poll_existing_simple_image_batch_inference_request() {
             let all_providers = $func().await;
             let providers = all_providers.simple_inference;
-            if all_providers.supports_batch_inference {
-                for provider in providers {
+            for provider in providers {
+                if provider.supports_batch_inference {
                     test_poll_existing_simple_image_batch_inference_request_with_provider(provider).await;
                 }
             }
@@ -110,8 +110,8 @@ macro_rules! generate_batch_inference_tests {
         async fn test_poll_completed_simple_image_batch_inference_request() {
             let all_providers = $func().await;
             let providers = all_providers.simple_inference;
-            if all_providers.supports_batch_inference {
-                for provider in providers {
+            for provider in providers {
+                if provider.supports_batch_inference {
                     test_poll_completed_simple_image_batch_inference_request_with_provider(provider).await;
                 }
             }
@@ -121,8 +121,8 @@ macro_rules! generate_batch_inference_tests {
         async fn test_start_inference_params_batch_inference_request() {
             let all_providers = $func().await;
             let providers = all_providers.inference_params_inference;
-            if all_providers.supports_batch_inference {
-                for provider in providers {
+            for provider in providers {
+                if provider.supports_batch_inference {
                     test_start_inference_params_batch_inference_request_with_provider(provider).await;
                 }
             }
@@ -132,8 +132,8 @@ macro_rules! generate_batch_inference_tests {
         async fn test_poll_existing_inference_params_batch_inference_request() {
             let all_providers = $func().await;
             let providers = all_providers.inference_params_inference;
-            if all_providers.supports_batch_inference {
-                for provider in providers {
+            for provider in providers {
+                if provider.supports_batch_inference {
                     test_poll_existing_inference_params_batch_inference_request_with_provider(provider).await;
                 }
             }
@@ -143,8 +143,8 @@ macro_rules! generate_batch_inference_tests {
         async fn test_poll_completed_inference_params_batch_inference_request() {
             let all_providers = $func().await;
             let providers = all_providers.inference_params_inference;
-            if all_providers.supports_batch_inference {
-                for provider in providers {
+            for provider in providers {
+                if provider.supports_batch_inference {
                     test_poll_completed_inference_params_batch_inference_request_with_provider(provider).await;
                 }
             }
@@ -154,8 +154,8 @@ macro_rules! generate_batch_inference_tests {
         async fn test_start_tool_use_batch_inference_request() {
             let all_providers = $func().await;
             let providers = all_providers.tool_use_inference;
-            if all_providers.supports_batch_inference {
-                for provider in providers {
+            for provider in providers {
+                if provider.supports_batch_inference {
                     test_tool_use_batch_inference_request_with_provider(provider).await;
                 }
             }
@@ -165,9 +165,10 @@ macro_rules! generate_batch_inference_tests {
         async fn test_poll_existing_tool_choice_batch_inference_request() {
             let all_providers = $func().await;
             let providers = all_providers.tool_use_inference;
-            if all_providers.supports_batch_inference {
-                for provider in providers {
+            for provider in providers {
+                if provider.supports_batch_inference {
                     test_poll_existing_tool_choice_batch_inference_request_with_provider(provider).await;
+
                 }
             }
         }
@@ -176,9 +177,10 @@ macro_rules! generate_batch_inference_tests {
         async fn test_poll_completed_tool_use_batch_inference_request() {
             let all_providers = $func().await;
             let providers = all_providers.tool_use_inference;
-            if all_providers.supports_batch_inference {
-                for provider in providers {
+            for provider in providers {
+                if provider.supports_batch_inference {
                     test_poll_completed_tool_use_batch_inference_request_with_provider(provider).await;
+
                 }
             }
         }
@@ -187,9 +189,10 @@ macro_rules! generate_batch_inference_tests {
         async fn test_start_tool_multi_turn_batch_inference_request() {
             let all_providers = $func().await;
             let providers = all_providers.tool_multi_turn_inference;
-            if all_providers.supports_batch_inference {
-                for provider in providers {
+            for provider in providers {
+                if provider.supports_batch_inference {
                     test_tool_multi_turn_batch_inference_request_with_provider(provider).await;
+
                 }
             }
         }
@@ -198,9 +201,10 @@ macro_rules! generate_batch_inference_tests {
         async fn test_poll_existing_multi_turn_batch_inference_request() {
             let all_providers = $func().await;
             let providers = all_providers.tool_multi_turn_inference;
-            if all_providers.supports_batch_inference {
-                for provider in providers {
+            for provider in providers {
+                if provider.supports_batch_inference {
                     test_poll_existing_multi_turn_batch_inference_request_with_provider(provider).await;
+
                 }
             }
         }
@@ -209,9 +213,10 @@ macro_rules! generate_batch_inference_tests {
         async fn test_poll_completed_multi_turn_batch_inference_request() {
             let all_providers = $func().await;
             let providers = all_providers.tool_multi_turn_inference;
-            if all_providers.supports_batch_inference {
-                for provider in providers {
+            for provider in providers {
+                if provider.supports_batch_inference {
                     test_poll_completed_multi_turn_batch_inference_request_with_provider(provider).await;
+
                 }
             }
         }
@@ -220,9 +225,10 @@ macro_rules! generate_batch_inference_tests {
         async fn test_start_multi_turn_parallel_tool_use_batch_inference_request() {
             let all_providers = $func().await;
             let providers = all_providers.parallel_tool_use_inference;
-            if all_providers.supports_batch_inference {
-                for provider in providers {
+            for provider in providers {
+                if provider.supports_batch_inference {
                     test_multi_turn_parallel_tool_use_batch_inference_request_with_provider(provider).await;
+
                 }
             }
         }
@@ -231,9 +237,10 @@ macro_rules! generate_batch_inference_tests {
         async fn test_poll_existing_multi_turn_parallel_tool_use_batch_inference_request() {
             let all_providers = $func().await;
             let providers = all_providers.parallel_tool_use_inference;
-            if all_providers.supports_batch_inference {
-                for provider in providers {
+            for provider in providers {
+                if provider.supports_batch_inference {
                     test_poll_existing_multi_turn_parallel_batch_inference_request_with_provider(provider).await;
+
                 }
             }
         }
@@ -242,9 +249,10 @@ macro_rules! generate_batch_inference_tests {
         async fn test_poll_completed_multi_turn_parallel_tool_use_batch_inference_request() {
             let all_providers = $func().await;
             let providers = all_providers.parallel_tool_use_inference;
-            if all_providers.supports_batch_inference {
-                for provider in providers {
+            for provider in providers {
+                if provider.supports_batch_inference {
                     test_poll_completed_multi_turn_parallel_batch_inference_request_with_provider(provider).await;
+
                 }
             }
         }
@@ -253,9 +261,10 @@ macro_rules! generate_batch_inference_tests {
         async fn test_start_dynamic_tool_use_batch_inference_request() {
             let all_providers = $func().await;
             let providers = all_providers.dynamic_tool_use_inference;
-            if all_providers.supports_batch_inference {
-                for provider in providers {
+            for provider in providers {
+                if provider.supports_batch_inference {
                     test_dynamic_tool_use_batch_inference_request_with_provider(provider).await;
+
                 }
             }
         }
@@ -264,9 +273,10 @@ macro_rules! generate_batch_inference_tests {
         async fn test_poll_existing_dynamic_tool_use_batch_inference_request() {
             let all_providers = $func().await;
             let providers = all_providers.dynamic_tool_use_inference;
-            if all_providers.supports_batch_inference {
-                for provider in providers {
+            for provider in providers {
+                if provider.supports_batch_inference {
                     test_poll_existing_dynamic_tool_use_batch_inference_request_with_provider(provider).await;
+
                 }
             }
         }
@@ -275,9 +285,10 @@ macro_rules! generate_batch_inference_tests {
         async fn test_poll_completed_dynamic_tool_use_batch_inference_request() {
             let all_providers = $func().await;
             let providers = all_providers.dynamic_tool_use_inference;
-            if all_providers.supports_batch_inference {
-                for provider in providers {
+            for provider in providers {
+                if provider.supports_batch_inference {
                     test_poll_completed_dynamic_tool_use_batch_inference_request_with_provider(provider).await;
+
                 }
             }
         }
@@ -286,9 +297,10 @@ macro_rules! generate_batch_inference_tests {
         async fn test_start_parallel_tool_use_batch_inference_request() {
             let all_providers = $func().await;
             let providers = all_providers.parallel_tool_use_inference;
-            if all_providers.supports_batch_inference {
-                for provider in providers {
+            for provider in providers {
+                if provider.supports_batch_inference {
                     test_parallel_tool_use_batch_inference_request_with_provider(provider).await;
+
                 }
             }
         }
@@ -297,9 +309,10 @@ macro_rules! generate_batch_inference_tests {
         async fn test_poll_existing_parallel_tool_use_batch_inference_request() {
             let all_providers = $func().await;
             let providers = all_providers.parallel_tool_use_inference;
-            if all_providers.supports_batch_inference {
-                for provider in providers {
+            for provider in providers {
+                if provider.supports_batch_inference {
                     test_poll_existing_parallel_tool_use_batch_inference_request_with_provider(provider).await;
+
                 }
             }
         }
@@ -308,9 +321,10 @@ macro_rules! generate_batch_inference_tests {
         async fn test_poll_completed_parallel_tool_use_batch_inference_request() {
             let all_providers = $func().await;
             let providers = all_providers.parallel_tool_use_inference;
-            if all_providers.supports_batch_inference {
-                for provider in providers {
+            for provider in providers {
+                if provider.supports_batch_inference {
                     test_poll_completed_parallel_tool_use_batch_inference_request_with_provider(provider).await;
+
                 }
             }
         }
@@ -319,9 +333,10 @@ macro_rules! generate_batch_inference_tests {
         async fn test_start_json_mode_batch_inference_request() {
             let all_providers = $func().await;
             let providers = all_providers.json_mode_inference;
-            if all_providers.supports_batch_inference {
-                for provider in providers {
+            for provider in providers {
+                if provider.supports_batch_inference {
                     test_json_mode_batch_inference_request_with_provider(provider).await;
+
                 }
             }
         }
@@ -330,9 +345,10 @@ macro_rules! generate_batch_inference_tests {
         async fn test_poll_existing_json_mode_batch_inference_request() {
             let all_providers = $func().await;
             let providers = all_providers.json_mode_inference;
-            if all_providers.supports_batch_inference {
-                for provider in providers {
+            for provider in providers {
+                if provider.supports_batch_inference {
                     test_poll_existing_json_mode_batch_inference_request_with_provider(provider).await;
+
                 }
             }
         }
@@ -341,9 +357,10 @@ macro_rules! generate_batch_inference_tests {
         async fn test_poll_completed_json_mode_batch_inference_request() {
             let all_providers = $func().await;
             let providers = all_providers.json_mode_inference;
-            if all_providers.supports_batch_inference {
-                for provider in providers {
+            for provider in providers {
+                if provider.supports_batch_inference {
                     test_poll_completed_json_mode_batch_inference_request_with_provider(provider).await;
+
                 }
             }
         }
@@ -352,9 +369,10 @@ macro_rules! generate_batch_inference_tests {
         async fn test_start_dynamic_json_mode_batch_inference_request() {
             let all_providers = $func().await;
             let providers = all_providers.json_mode_inference;
-            if all_providers.supports_batch_inference {
-                for provider in providers {
+            for provider in providers {
+                if provider.supports_batch_inference {
                     test_dynamic_json_mode_batch_inference_request_with_provider(provider).await;
+
                 }
             }
         }
@@ -363,9 +381,10 @@ macro_rules! generate_batch_inference_tests {
         async fn test_poll_existing_dynamic_json_mode_batch_inference_request() {
             let all_providers = $func().await;
             let providers = all_providers.json_mode_inference;
-            if all_providers.supports_batch_inference {
-                for provider in providers {
+            for provider in providers {
+                if provider.supports_batch_inference {
                     test_poll_existing_dynamic_json_mode_batch_inference_request_with_provider(provider).await;
+
                 }
             }
         }
@@ -374,9 +393,10 @@ macro_rules! generate_batch_inference_tests {
         async fn test_poll_completed_dynamic_json_mode_batch_inference_request() {
             let all_providers = $func().await;
             let providers = all_providers.json_mode_inference;
-            if all_providers.supports_batch_inference {
-                for provider in providers {
+            for provider in providers {
+                if provider.supports_batch_inference {
                     test_poll_completed_dynamic_json_mode_batch_inference_request_with_provider(provider).await;
+
                 }
             }
         }
@@ -385,9 +405,10 @@ macro_rules! generate_batch_inference_tests {
         async fn test_start_allowed_tools_batch_inference_request() {
             let all_providers = $func().await;
             let providers = all_providers.tool_use_inference;
-            if all_providers.supports_batch_inference {
-                for provider in providers {
+            for provider in providers {
+                if provider.supports_batch_inference {
                     test_allowed_tools_batch_inference_request_with_provider(provider).await;
+
                 }
             }
         }
@@ -396,9 +417,10 @@ macro_rules! generate_batch_inference_tests {
         async fn test_poll_existing_allowed_tools_batch_inference_request() {
             let all_providers = $func().await;
             let providers = all_providers.tool_use_inference;
-            if all_providers.supports_batch_inference {
-                for provider in providers {
+            for provider in providers {
+                if provider.supports_batch_inference {
                     test_poll_existing_allowed_tools_batch_inference_request_with_provider(provider).await;
+
                 }
             }
         }
@@ -407,9 +429,10 @@ macro_rules! generate_batch_inference_tests {
         async fn test_poll_completed_allowed_tools_batch_inference_request() {
             let all_providers = $func().await;
             let providers = all_providers.tool_use_inference;
-            if all_providers.supports_batch_inference {
-                for provider in providers {
+            for provider in providers {
+                if provider.supports_batch_inference {
                     test_poll_completed_allowed_tools_batch_inference_request_with_provider(provider).await;
+
                 }
             }
         }
