@@ -12,6 +12,7 @@ async fn get_providers() -> E2ETestProviders {
     };
 
     let standard_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "xai".to_string(),
         model_name: "grok_2_1212".into(),
         model_provider_name: "xai".into(),
@@ -19,6 +20,7 @@ async fn get_providers() -> E2ETestProviders {
     }];
 
     let extra_body_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "xai-extra-body".to_string(),
         model_name: "grok_2_1212".into(),
         model_provider_name: "xai".into(),
@@ -26,6 +28,7 @@ async fn get_providers() -> E2ETestProviders {
     }];
 
     let bad_auth_extra_headers = vec![E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "xai-extra-headers".to_string(),
         model_name: "grok_2_1212".into(),
         model_provider_name: "xai".into(),
@@ -34,18 +37,21 @@ async fn get_providers() -> E2ETestProviders {
 
     let json_providers = vec![
         E2ETestProvider {
+            supports_batch_inference: false,
             variant_name: "xai".to_string(),
             model_name: "grok_2_1212".into(),
             model_provider_name: "xai".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
+            supports_batch_inference: false,
             variant_name: "xai-default".to_string(),
             model_name: "grok_2_1212".into(),
             model_provider_name: "xai".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
+            supports_batch_inference: false,
             variant_name: "xai-strict".to_string(),
             model_name: "grok_2_1212".into(),
             model_provider_name: "xai".into(),
@@ -53,6 +59,7 @@ async fn get_providers() -> E2ETestProviders {
         },
     ];
     let inference_params_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "xai".to_string(),
         model_name: "grok_2_1212".into(),
         model_provider_name: "xai".into(),
@@ -60,6 +67,7 @@ async fn get_providers() -> E2ETestProviders {
     }];
 
     let shorthand_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "xai-shorthand".to_string(),
         model_name: "xai::grok-2-1212".into(),
         model_provider_name: "xai".into(),
@@ -81,6 +89,5 @@ async fn get_providers() -> E2ETestProviders {
         image_inference: vec![],
 
         shorthand_inference: shorthand_providers.clone(),
-        supports_batch_inference: false,
     }
 }
