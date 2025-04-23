@@ -9,7 +9,7 @@ use reqwest::StatusCode;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Map, Value};
+use serde_json::{json, Value};
 use tokio::time::Instant;
 use uuid::Uuid;
 
@@ -549,13 +549,11 @@ enum GCPVertexGeminiContentPart<'a> {
 
 /// Since GCP expects a JSON object, we need to convert the tool result from String to JSON Object
 /// If it doesn't parse as an object, we wrap the result in a JSON object ourselves
-pub(crate) fn convert_tool_result_to_json_object(tool_result: &ToolResult) -> Map<String, Value> {
+pub(crate) fn convert_tool_result_to_json_object(tool_result: &ToolResult) -> Value {
     match serde_json::from_str(&tool_result.result) {
         Ok(response) => response,
         Err(_) => {
-            let mut map = Map::new();
-            map.insert("response".to_string(), json!(tool_result.result));
-            map
+            json!(tool_result.result)
         }
     }
 }
