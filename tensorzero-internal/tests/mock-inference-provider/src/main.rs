@@ -1,9 +1,11 @@
 // This project is used only for testing, so it's fine if it panics
 #![allow(clippy::unwrap_used, clippy::panic, clippy::expect_used)]
 
+mod error;
 mod fireworks;
 
 use async_stream::try_stream;
+use axum::http::StatusCode;
 use axum::{
     body::Body,
     extract::{Json, Multipart, Path},
@@ -12,11 +14,12 @@ use axum::{
         IntoResponse, Response,
     },
 };
+use error::Error;
 use futures::Stream;
 use mimalloc::MiMalloc;
 use rand::distr::{Alphanumeric, SampleString};
 use serde::Deserialize;
-use serde_json::json;
+use serde_json::{json, Value};
 use std::{
     collections::HashMap,
     net::SocketAddr,
@@ -228,7 +231,7 @@ async fn create_openai_fine_tuning_job(
     Json(job.val.clone())
 }
 
-async fn create_openai_file(mut form: Multipart) -> Json<serde_json::Value> {
+async fn create_openai_file(mut form: Multipart) -> Result<Json<serde_json::Value>, Error> {
     let file_id =
         "mock-inference-file-".to_string() + &Alphanumeric.sample_string(&mut rand::rng(), 10);
 
@@ -237,7 +240,52 @@ async fn create_openai_file(mut form: Multipart) -> Json<serde_json::Value> {
     let mut purpose = None;
     while let Some(field) = form.next_field().await.unwrap() {
         if field.name() == Some("file") {
-            file_len = Some(field.bytes().await.unwrap().len());
+            let bytes = field.bytes().await.unwrap();
+            file_len = Some(bytes.len());
+
+            // Try to parse the file as JSONL
+            if let Ok(content) = std::str::from_utf8(&bytes) {
+                // Check if it's valid JSONL by attempting to parse each line
+                for line in content.lines() {
+                    let result = serde_json::from_str::<OpenAIFineTuningRow>(line);
+                    match result {
+                        Ok(row) => {
+                            for message in row.messages.iter() {
+                                let Some(content_array) = message.content.as_array() else {
+                                    continue;
+                                };
+                                for content in content_array.iter() {
+                                    let object = content.as_object().unwrap();
+                                    let content_type = object.get("type").unwrap();
+                                    if content_type == "image_url" {
+                                        let url_data = object.get("image_url").unwrap();
+                                        let url =
+                                            url_data.get("url").and_then(|v| v.as_str()).unwrap();
+                                        if !url.starts_with("data:") {
+                                            return Err(Error::new(
+                                                format!("Invalid JSONL line (\"{line}\"): image_url is not a data URL"),
+                                                StatusCode::BAD_REQUEST,
+                                            ));
+                                        }
+                                        if url.len() < 100 {
+                                            return Err(Error::new(
+                                                format!("Invalid JSONL line (\"{line}\"): image_url is too short"),
+                                                StatusCode::BAD_REQUEST,
+                                            ));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            return Err(Error::new(
+                                format!("Invalid JSONL line (\"{line}\"): {e}"),
+                                StatusCode::BAD_REQUEST,
+                            ));
+                        }
+                    }
+                }
+            }
         } else if field.name() == Some("filename") {
             filename = Some(field.text().await.unwrap());
         } else if field.name() == Some("purpose") {
@@ -245,14 +293,25 @@ async fn create_openai_file(mut form: Multipart) -> Json<serde_json::Value> {
         }
     }
 
-    Json(json!({
+    Ok(Json(json!({
         "id": file_id,
         "object": "file",
         "bytes": file_len,
         "created_at": chrono::Utc::now().timestamp(),
         "filename": filename,
         "purpose": purpose,
-    }))
+    })))
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenAIFineTuningRow {
+    messages: Vec<OpenAIFineTuningMessage>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenAIFineTuningMessage {
+    // role is not used
+    content: Value,
 }
 
 async fn completions_handler(Json(params): Json<serde_json::Value>) -> Response<Body> {

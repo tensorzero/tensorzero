@@ -556,24 +556,10 @@ impl<'a> TryFrom<&'a ContentBlock> for Option<FlattenUnknown<'a, GCPVertexGemini
                 GCPVertexGeminiContentPart::Text { text },
             ))),
             ContentBlock::ToolResult(tool_result) => {
-                // Convert the tool result from String to JSON Value (GCP expects an object)
-                let response: Value = serde_json::from_str(&tool_result.result).map_err(|e| {
-                    Error::new(ErrorDetails::InferenceClient {
-                        status_code: Some(StatusCode::BAD_REQUEST),
-                        message: format!(
-                            "Error parsing tool result as JSON Value: {}",
-                            DisplayOrDebugGateway::new(e)
-                        ),
-                        provider_type: PROVIDER_TYPE.to_string(),
-                        raw_request: None,
-                        raw_response: Some(tool_result.result.clone()),
-                    })
-                })?;
-
                 // GCP expects the format below according to [the documentation](https://ai.google.dev/gemini-api/docs/function-calling#multi-turn-example-1)
                 let response = serde_json::json!({
                     "name": tool_result.name,
-                    "content": response,
+                    "content": tool_result.result
                 });
 
                 Ok(Some(FlattenUnknown::Normal(
@@ -1315,7 +1301,7 @@ mod tests {
                     name: "get_temperature",
                     response: json!({
                         "name": "get_temperature",
-                        "content": json!({"temperature": 25, "conditions": "sunny"})
+                        "content": r#"{"temperature": 25, "conditions": "sunny"}"#
                     }),
                 }
             })

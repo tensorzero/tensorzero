@@ -7,6 +7,7 @@ crate::generate_batch_inference_tests!(get_providers);
 async fn get_providers() -> E2ETestProviders {
     let model_name = "phi-3.5-mini-instruct-tgi".to_string();
     let standard_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "tgi".to_string(),
         model_name: model_name.clone(),
         model_provider_name: "tgi".into(),
@@ -14,6 +15,7 @@ async fn get_providers() -> E2ETestProviders {
     }];
 
     let extra_body_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "tgi-extra-body".to_string(),
         model_name: model_name.clone(),
         model_provider_name: "tgi".into(),
@@ -21,6 +23,7 @@ async fn get_providers() -> E2ETestProviders {
     }];
 
     let bad_auth_extra_headers = vec![E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "tgi-extra-headers".to_string(),
         model_name: model_name.clone(),
         model_provider_name: "tgi".into(),
@@ -28,6 +31,7 @@ async fn get_providers() -> E2ETestProviders {
     }];
 
     let json_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "tgi-default".to_string(),
         model_name: model_name.clone(),
         model_provider_name: "tgi".into(),
@@ -49,6 +53,5 @@ async fn get_providers() -> E2ETestProviders {
         image_inference: vec![],
 
         shorthand_inference: vec![],
-        supports_batch_inference: false,
     }
 }
