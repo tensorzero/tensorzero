@@ -5727,7 +5727,7 @@ pub async fn check_tool_use_tool_choice_specific_inference_response(
     // Assert at most one tool call (a model could decide to call no tools if to reads the `self_destruct` description).
     assert_eq!(tool_call_blocks.len(), 1, "Expected exactly one tool call");
 
-    let tool_call_block = tool_call_blocks.get(0);
+    let tool_call_block = tool_call_blocks.first();
     match tool_call_block {
         Some(ContentBlock::ToolCall(tool_call)) => {
             // Don't check which tool was called, as xAI can sometimes call a tool other than `self_destruct`.
