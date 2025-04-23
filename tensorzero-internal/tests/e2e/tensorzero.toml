@@ -2181,6 +2181,7 @@ output_schema = "../../fixtures/config/functions/basic_test/output_schema.json"
 type = "chat_completion"
 model = "null"
 max_tokens = 100
+json_mode = "strict"
 
 [functions.weather_helper]
 type = "chat"

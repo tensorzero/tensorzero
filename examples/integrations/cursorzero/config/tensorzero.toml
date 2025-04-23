@@ -31,7 +31,6 @@ extra_body = [{ pointer = "/temperature", value = 1.0 }]
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                  METRICS                                   │
 # └────────────────────────────────────────────────────────────────────────────┘
-
 [metrics.min_ted]
 type = "float"
 level = "inference"
@@ -41,3 +40,8 @@ optimize = "min"
 type = "float"
 level = "inference"
 optimize = "max"
+
+# [metrics.valid_output]
+# type = "boolean"
+# level = "inference"
+# optimize = "max"
