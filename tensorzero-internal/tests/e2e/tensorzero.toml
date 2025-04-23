@@ -2334,7 +2334,6 @@ tool_choice = "required"
 [functions.required_tool.variants.variant]
 type = "chat_completion"
 model = "test"
-system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 
 [functions.specific_tool]
 type = "chat"
