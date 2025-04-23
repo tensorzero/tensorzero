@@ -8,7 +8,7 @@ use crate::providers::common::{make_embedded_gateway, make_http_gateway};
 use serde_json::json;
 use tensorzero::{
     ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
-    DynamicEvaluationRunParams, InferenceOutput, Role,
+    DynamicEvaluationRunParams, FeedbackParams, InferenceOutput, Role,
 };
 use tensorzero_internal::{
     clickhouse::test_helpers::{
@@ -153,6 +153,19 @@ async fn test_dynamic_evaluation() {
                 ),
             ])
         );
+        // Send feedback for the dynamic evaluation run episode
+        let feedback_params = FeedbackParams {
+            episode_id: Some(episode_id),
+            metric_name: "goal_achieved".to_string(),
+            value: json!(true),
+            inference_id: None,
+            internal: false,
+            tags: HashMap::new(),
+            dryrun: None,
+        };
+        // We just want to make sure this doesn't error
+        // Feedback is thoroughly tested elsewhere
+        client.feedback(feedback_params).await.unwrap();
     }
 }
 
