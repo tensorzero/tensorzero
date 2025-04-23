@@ -22,3 +22,18 @@ Take a look at the server running on `http://localhost:6901` to see what your re
 Cursor calls go through
 TensorZero watches them
 See the requests flow
+
+## Feedback via post-commit hook
+
+In this directory we also include a Rust project that does the following:
+
+1. Discovers the Git repository at a given path
+2. Retrieves the latest commit and its parent's timestamp interval
+3. Generates diffs for each file in the commit
+4. Parses diff hunks into syntax trees
+5. Computes tree-edit-distance metrics between code changes and AI-generated inferences
+6. Sends these metrics to TensorZero as feedback, helping to evaluate how closely AI suggestions match actual code changes
+
+This will be useful for us so we can get a sense for which variants in TensorZero actually lead to code that gets merged.
+There is substantial room for improvement here, both in the implementation and in the overall strategy.
+This example is under active development -- please expect changes!
