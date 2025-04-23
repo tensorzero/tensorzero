@@ -2336,6 +2336,14 @@ type = "chat_completion"
 model = "test"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 
+[functions.specific_tool]
+type = "chat"
+tool_choice.specific = "get_temperature"
+
+[functions.specific_tool.variants.variant]
+type = "chat_completion"
+model = "test"
+
 [functions.best_of_n]
 type = "chat"
 system_schema = "../../fixtures/config/functions/basic_test/system_schema.json"
