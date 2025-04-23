@@ -9,7 +9,7 @@ use reqwest::StatusCode;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::Value;
 use tokio::time::Instant;
 use uuid::Uuid;
 
@@ -32,7 +32,7 @@ use crate::inference::types::{
 use crate::model::{
     build_creds_caching_default_with_fn, Credential, CredentialLocation, ModelProvider,
 };
-use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig, ToolResult};
+use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use super::helpers::inject_extra_request_data;
 use super::openai::convert_stream_error;
@@ -547,17 +547,6 @@ enum GCPVertexGeminiContentPart<'a> {
     // TODO (if needed): VideoMetadata { video_metadata: VideoMetadata },
 }
 
-/// Since GCP expects a JSON object, we need to convert the tool result from String to JSON Object
-/// If it doesn't parse as an object, we wrap the result in a JSON object ourselves
-pub(crate) fn convert_tool_result_to_json_object(tool_result: &ToolResult) -> Value {
-    match serde_json::from_str(&tool_result.result) {
-        Ok(response) => response,
-        Err(_) => {
-            json!(tool_result.result)
-        }
-    }
-}
-
 impl<'a> TryFrom<&'a ContentBlock> for Option<FlattenUnknown<'a, GCPVertexGeminiContentPart<'a>>> {
     type Error = Error;
 
@@ -567,12 +556,12 @@ impl<'a> TryFrom<&'a ContentBlock> for Option<FlattenUnknown<'a, GCPVertexGemini
                 GCPVertexGeminiContentPart::Text { text },
             ))),
             ContentBlock::ToolResult(tool_result) => {
-                let response = convert_tool_result_to_json_object(tool_result);
+                // let response = convert_tool_result_to_json_object(tool_result);
 
                 // GCP expects the format below according to [the documentation](https://ai.google.dev/gemini-api/docs/function-calling#multi-turn-example-1)
                 let response = serde_json::json!({
                     "name": tool_result.name,
-                    "content": response,
+                    "content": tool_result.result
                 });
 
                 Ok(Some(FlattenUnknown::Normal(
@@ -1314,7 +1303,7 @@ mod tests {
                     name: "get_temperature",
                     response: json!({
                         "name": "get_temperature",
-                        "content": json!({"temperature": 25, "conditions": "sunny"})
+                        "content": r#"{"temperature": 25, "conditions": "sunny"}"#
                     }),
                 }
             })

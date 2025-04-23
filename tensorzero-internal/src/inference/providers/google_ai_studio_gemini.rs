@@ -31,7 +31,7 @@ use crate::inference::types::{FinishReason, FlattenUnknown};
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
-use super::gcp_vertex_gemini::{convert_tool_result_to_json_object, process_output_schema};
+use super::gcp_vertex_gemini::process_output_schema;
 use super::helpers::inject_extra_request_data;
 use super::openai::convert_stream_error;
 
@@ -423,13 +423,10 @@ impl<'a> TryFrom<&'a ContentBlock> for Option<FlattenUnknown<'a, GeminiPart<'a>>
                 Ok(Some(FlattenUnknown::Normal(GeminiPart::Text { text })))
             }
             ContentBlock::ToolResult(tool_result) => {
-                // Convert the tool result from String to JSON Value (Gemini expects an object)
-                let response = convert_tool_result_to_json_object(tool_result);
-
                 // Gemini expects the format below according to [the documentation](https://ai.google.dev/gemini-api/docs/function-calling#multi-turn-example-1)
                 let response = serde_json::json!({
                     "name": tool_result.name,
-                    "content": response,
+                    "content": tool_result.result,
                 });
 
                 Ok(Some(FlattenUnknown::Normal(GeminiPart::FunctionResponse {
@@ -1116,7 +1113,7 @@ mod tests {
                     name: "get_temperature",
                     response: json!({
                         "name": "get_temperature",
-                        "content": json!({"temperature": 25, "conditions": "sunny"})
+                        "content": r#"{"temperature": 25, "conditions": "sunny"}"#
                     }),
                 }
             })
