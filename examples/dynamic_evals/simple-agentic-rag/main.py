@@ -9,7 +9,7 @@ from tensorzero.util import uuid7
 
 from judge import judge_answer
 
-MAX_SAMPLES = 10
+MAX_SAMPLES = 1
 CONCURRENCY = 10
 
 
@@ -20,8 +20,8 @@ async def main():
     )
     semaphore = Semaphore(CONCURRENCY)
     data = load_beerqa()
-    agent_variants = ["baseline", "gpt-4.1-mini", "gemini-2.5-flash"]
-    compact_context_variants = ["baseline", "gpt-4.1-nano", "gemini-2.5-flash"]
+    agent_variants = ["baseline", "gpt-4.1-mini", "claude-3.5-haiku"]
+    compact_context_variants = ["baseline", "gpt-4.1-nano"]
     # We want to evaluate all combinations of agent and compact_context variants
     tasks = []
     for agent_variant, compact_context_variant in itertools.product(agent_variants, compact_context_variants):
@@ -37,13 +37,22 @@ async def evaluate_variant_pins(t0: AsyncTensorZeroGateway, semaphore: Semaphore
     # and a 'answers' key with a list of strings value
     # We want to evaluate the agent on each key
     run_info = await t0.dynamic_evaluation_run(variants=variant_pins)
-    for question in data:
-        episode_info = await t0.dynamic_evaluation_run_episode(run_id=run_info.run_id)
-        episode_id = episode_info.episode_id
-        ai_answer = await ask_question(
-            t0, semaphore, question["question"], episode_id=episode_id, verbose=False
-        )
-        await judge_answer(t0, semaphore, question, ai_answer, episode_id)
+    
+    # Create tasks for each question
+    question_tasks = []
+    for question in data[:MAX_SAMPLES]:  # Apply MAX_SAMPLES limit here
+        question_tasks.append(evaluate_question(t0, semaphore, question, run_info.run_id))
+    
+    # Run all question evaluations concurrently
+    await asyncio.gather(*question_tasks)
+
+async def evaluate_question(t0: AsyncTensorZeroGateway, semaphore: Semaphore, question: dict, run_id: str):
+    episode_info = await t0.dynamic_evaluation_run_episode(run_id=run_id)
+    episode_id = episode_info.episode_id
+    ai_answer = await ask_question(
+        t0, semaphore, question["question"], episode_id=episode_id, verbose=False
+    )
+    await judge_answer(t0, semaphore, question, ai_answer, episode_id)
 
 
 if __name__ == "__main__":

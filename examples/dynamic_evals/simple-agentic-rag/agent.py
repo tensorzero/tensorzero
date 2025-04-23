@@ -42,7 +42,8 @@ async def ask_question(
     messages = [{"role": "user", "content": question}]
 
     for _ in range(MAX_INFERENCES):
-        print()
+        if verbose:
+            print()
         async with semaphore:
             response = await t0.inference(
                 function_name="multi_hop_rag_agent",
@@ -103,8 +104,8 @@ async def ask_question(
                 messages = messages[:-2]
     else:
         # In a production setting, the model could attempt to generate an answer using available information
-        # when the search process is stopped; here, we simply throw an exception.
-        raise Exception(f"Failed to answer question after {MAX_INFERENCES} inferences.")
+        # when the search process is stopped; here, we simply return a failure message.
+        return "The agent failed to answer the question."
 
 
 async def compact_context(
