@@ -1,5 +1,6 @@
-from tensorzero import AsyncTensorZeroGateway
 from asyncio import Semaphore
+
+from tensorzero import AsyncTensorZeroGateway
 
 
 async def judge_answer(
