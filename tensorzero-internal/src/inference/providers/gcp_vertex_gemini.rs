@@ -556,8 +556,6 @@ impl<'a> TryFrom<&'a ContentBlock> for Option<FlattenUnknown<'a, GCPVertexGemini
                 GCPVertexGeminiContentPart::Text { text },
             ))),
             ContentBlock::ToolResult(tool_result) => {
-                // let response = convert_tool_result_to_json_object(tool_result);
-
                 // GCP expects the format below according to [the documentation](https://ai.google.dev/gemini-api/docs/function-calling#multi-turn-example-1)
                 let response = serde_json::json!({
                     "name": tool_result.name,
