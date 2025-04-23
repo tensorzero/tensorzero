@@ -172,6 +172,11 @@ jobs:
       - name: Build Docker container for production deployment tests
         run: docker build -t tensorzero/gateway -f gateway/Dockerfile .
 
+      - name: Launch ClickHouse container for E2E tests
+        run: |
+          # 'docker compose' will exit with status code 1 if any container exits, even if the container exits with status code 0
+          docker compose -f tensorzero-internal/tests/e2e/docker-compose.yml up -d --wait || true
+
       - name: Set up .env file for production deployment tests
         run: |
           echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" > examples/production-deployment/.env
