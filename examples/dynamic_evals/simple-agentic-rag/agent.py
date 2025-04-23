@@ -1,6 +1,10 @@
-from tensorzero import AsyncTensorZeroGateway, ToolCall, ToolResult
-from tools import load_wikipedia_page, search_wikipedia
+import json
 from asyncio import Semaphore
+
+from tensorzero import AsyncTensorZeroGateway, ToolCall, ToolResult
+from tensorzero.types import ToDictEncoder
+from tools import load_wikipedia_page, search_wikipedia
+
 # ## Agentic RAG
 #
 # Here we define the function that will be used to ask a question to the multi-hop retrieval agent.
@@ -13,9 +17,16 @@ from asyncio import Semaphore
 # The maximum number of inferences the agent will make.
 MAX_INFERENCES = 20
 
+# The maximum number of characters in the messages before compacting.
+MAX_MESSAGE_LENGTH = 200000
+
 
 async def ask_question(
-    t0: AsyncTensorZeroGateway, semaphore: Semaphore, question: str, verbose: bool = False, 
+    t0: AsyncTensorZeroGateway,
+    semaphore: Semaphore,
+    question: str,
+    episode_id: str,
+    verbose: bool = False,
 ):
     """
     Asks a question to the multi-hop retrieval agent and returns the answer.
@@ -30,9 +41,6 @@ async def ask_question(
     # Initialize the message history with the user's question
     messages = [{"role": "user", "content": question}]
 
-    # The episode ID is used to track the agent's progress (`None` until the first inference)
-    episode_id = None
-
     for _ in range(MAX_INFERENCES):
         print()
         async with semaphore:
@@ -44,9 +52,6 @@ async def ask_question(
 
         # Append the assistant's response to the messages
         messages.append({"role": "assistant", "content": response.content})
-
-        # Update the episode ID
-        episode_id = response.episode_id
 
         # Start constructing the tool call results
         output_content_blocks = []
@@ -87,7 +92,39 @@ async def ask_question(
                 print(f"[Other Content Block] {content_block}")
 
         messages.append({"role": "user", "content": output_content_blocks})
+        approx_message_length = len(json.dumps(messages, cls=ToDictEncoder))
+        print(f"Approx message length: {approx_message_length}")
+        if approx_message_length > MAX_MESSAGE_LENGTH:
+            messages = await compact_context(
+                t0, semaphore, question, messages, episode_id, verbose
+            )
     else:
         # In a production setting, the model could attempt to generate an answer using available information
         # when the search process is stopped; here, we simply throw an exception.
         raise Exception(f"Failed to answer question after {MAX_INFERENCES} inferences.")
+
+
+async def compact_context(
+    t0: AsyncTensorZeroGateway,
+    semaphore: Semaphore,
+    question: str,
+    messages: list[dict],
+    episode_id: str,
+    verbose: bool = False,
+):
+    if verbose:
+        print("Compacting context...")
+    async with semaphore:
+        response = await t0.inference(
+            function_name="compact_context",
+            input={
+                "system": {"question": question},
+                "messages": messages,
+            },
+            episode_id=episode_id,
+        )
+    messages = [
+        {"role": "user", "content": question},
+        {"role": "assistant", "content": response.content},
+    ]
+    return messages
