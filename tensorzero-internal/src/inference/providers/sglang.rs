@@ -494,22 +494,24 @@ impl<'a> TryFrom<SGLangResponseWithMetadata<'a>> for ProviderInferenceResponse {
 
 #[cfg(test)]
 mod tests {
-    use std::{borrow::Cow, time::Duration};
-    use crate::tool::ToolChoice;
     use serde_json::json;
+    use std::{borrow::Cow, time::Duration};
     use uuid::Uuid;
 
     use crate::{
         inference::{
             providers::{
                 openai::{
-                    OpenAIFinishReason, OpenAIResponseChoice, OpenAIResponseMessage, OpenAIToolChoiceString, OpenAIUsage
+                    OpenAIFinishReason, OpenAIResponseChoice, OpenAIResponseMessage,
+                    OpenAIToolChoiceString, OpenAIUsage,
                 },
-                test_helpers::{MULTI_TOOL_CONFIG, WEATHER_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL},
+                test_helpers::{MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL, WEATHER_TOOL_CONFIG},
+            },
+            types::{
+                FinishReason, FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role,
+            },
         },
-        types::{FinishReason, FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role},
-    },
-    tool::ToolCallConfig,
+        tool::{ToolCallConfig, ToolChoice},
     };
 
     use super::*;
@@ -731,7 +733,7 @@ mod tests {
             max_tokens: None,
             seed: None,
             stream: false,
-            json_mode: ModelInferenceRequestJsonMode::On,
+            json_mode: ModelInferenceRequestJsonMode::Off,
             tool_config: Some(Cow::Borrowed(&MULTI_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
@@ -740,7 +742,7 @@ mod tests {
         };
 
         let sglang_request = SGLangRequest::new(&model_name, &request_with_tools).unwrap();
-        
+
         let tools = sglang_request.tools.unwrap();
         assert_eq!(tools.len(), 2);
         assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
@@ -775,7 +777,7 @@ mod tests {
             max_tokens: None,
             seed: None,
             stream: false,
-            json_mode: ModelInferenceRequestJsonMode::On,
+            json_mode: ModelInferenceRequestJsonMode::Off,
             tool_config: Some(Cow::Borrowed(&tool_config)),
             function_type: FunctionType::Chat,
             output_schema: None,
