@@ -463,8 +463,6 @@ impl<'a> TryFrom<SGLangResponseWithMetadata<'a>> for ProviderInferenceResponse {
             content.push(text.into());
         }
         if let Some(tool_calls) = message.tool_calls {
-            // See https://github.com/tensorzero/tensorzero/discussions/776
-            tracing::warn!("Tool calls are not yet supported for SGLang");
             for tool_call in tool_calls {
                 content.push(ContentBlockOutput::ToolCall(tool_call.into()));
             }
@@ -497,18 +495,21 @@ impl<'a> TryFrom<SGLangResponseWithMetadata<'a>> for ProviderInferenceResponse {
 #[cfg(test)]
 mod tests {
     use std::{borrow::Cow, time::Duration};
-
+    use crate::tool::ToolChoice;
     use serde_json::json;
     use uuid::Uuid;
 
-    use crate::inference::{
-        providers::{
-            openai::{
-                OpenAIFinishReason, OpenAIResponseChoice, OpenAIResponseMessage, OpenAIUsage,
-            },
-            test_helpers::WEATHER_TOOL_CONFIG,
+    use crate::{
+        inference::{
+            providers::{
+                openai::{
+                    OpenAIFinishReason, OpenAIResponseChoice, OpenAIResponseMessage, OpenAIToolChoiceString, OpenAIUsage
+                },
+                test_helpers::{MULTI_TOOL_CONFIG, WEATHER_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL},
         },
         types::{FinishReason, FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role},
+    },
+    tool::ToolCallConfig,
     };
 
     use super::*;
@@ -711,5 +712,79 @@ mod tests {
                 response_time: Duration::from_secs(0)
             }
         );
+    }
+
+    #[test]
+    fn test_sglang_tools() {
+        let model_name = PROVIDER_TYPE.to_string();
+        let request_with_tools = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["What's the weather?".to_string().into()],
+            }],
+            system: None,
+            temperature: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            max_tokens: None,
+            seed: None,
+            stream: false,
+            json_mode: ModelInferenceRequestJsonMode::On,
+            tool_config: Some(Cow::Borrowed(&MULTI_TOOL_CONFIG)),
+            function_type: FunctionType::Chat,
+            output_schema: None,
+            extra_body: Default::default(),
+            ..Default::default()
+        };
+
+        let sglang_request = SGLangRequest::new(&model_name, &request_with_tools).unwrap();
+        
+        let tools = sglang_request.tools.unwrap();
+        assert_eq!(tools.len(), 2);
+        assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
+        assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
+        assert_eq!(tools[1].function.name, QUERY_TOOL.name());
+        assert_eq!(tools[1].function.parameters, QUERY_TOOL.parameters());
+        let tool_choice = sglang_request.tool_choice.unwrap();
+        assert_eq!(
+            tool_choice,
+            OpenAIToolChoice::String(OpenAIToolChoiceString::Required)
+        );
+        let parallel_tool_calls = sglang_request.parallel_tool_calls.unwrap();
+        assert!(parallel_tool_calls);
+        let tool_config = ToolCallConfig {
+            tools_available: vec![],
+            tool_choice: ToolChoice::Required,
+            parallel_tool_calls: Some(true),
+        };
+
+        // Test no tools but a tool choice and make sure tool choice output is None
+        let request_without_tools = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["What's the weather?".to_string().into()],
+            }],
+            system: None,
+            temperature: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            max_tokens: None,
+            seed: None,
+            stream: false,
+            json_mode: ModelInferenceRequestJsonMode::On,
+            tool_config: Some(Cow::Borrowed(&tool_config)),
+            function_type: FunctionType::Chat,
+            output_schema: None,
+            extra_body: Default::default(),
+            ..Default::default()
+        };
+        let sglang_request = SGLangRequest::new(&model_name, &request_without_tools).unwrap();
+        assert!(sglang_request.tools.is_none());
+        assert!(sglang_request.tool_choice.is_none());
+        assert!(sglang_request.parallel_tool_calls.is_none());
     }
 }

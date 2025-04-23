@@ -42,6 +42,13 @@ async fn get_providers() -> E2ETestProviders {
         },
     ];
 
+    let tool_providers = vec![E2ETestProvider {
+        variant_name: "sglang".to_string(),
+        model_name: "HuggingFaceTB/SmolLM-1.7B-Instruct".to_string(),
+        model_provider_name: "sglang".to_string(),
+        credentials: HashMap::new(),
+    }];
+
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
         extra_body_inference: extra_body_providers,
@@ -49,8 +56,7 @@ async fn get_providers() -> E2ETestProviders {
         reasoning_inference: vec![],
         inference_params_inference: standard_providers.clone(),
         inference_params_dynamic_credentials: vec![],
-        // TODO: Support tool use once SGLang makes a releawe with https://github.com/sgl-project/sglang/pull/2544
-        tool_use_inference: vec![],
+        tool_use_inference: tool_providers.clone(),
         tool_multi_turn_inference: vec![],
         dynamic_tool_use_inference: vec![],
         parallel_tool_use_inference: vec![],
