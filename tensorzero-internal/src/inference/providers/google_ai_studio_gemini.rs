@@ -31,7 +31,7 @@ use crate::inference::types::{FinishReason, FlattenUnknown};
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
-use super::gcp_vertex_gemini::process_output_schema;
+use super::gcp_vertex_gemini::{convert_tool_result_to_json_object, process_output_schema};
 use super::helpers::inject_extra_request_data;
 use super::openai::convert_stream_error;
 
@@ -424,18 +424,7 @@ impl<'a> TryFrom<&'a ContentBlock> for Option<FlattenUnknown<'a, GeminiPart<'a>>
             }
             ContentBlock::ToolResult(tool_result) => {
                 // Convert the tool result from String to JSON Value (Gemini expects an object)
-                let response: Value = serde_json::from_str(&tool_result.result).map_err(|e| {
-                    Error::new(ErrorDetails::InferenceClient {
-                        status_code: Some(StatusCode::BAD_REQUEST),
-                        message: format!(
-                            "Error parsing tool result as JSON Value: {}",
-                            DisplayOrDebugGateway::new(e)
-                        ),
-                        provider_type: PROVIDER_TYPE.to_string(),
-                        raw_request: None,
-                        raw_response: Some(tool_result.result.clone()),
-                    })
-                })?;
+                let response = convert_tool_result_to_json_object(tool_result);
 
                 // Gemini expects the format below according to [the documentation](https://ai.google.dev/gemini-api/docs/function-calling#multi-turn-example-1)
                 let response = serde_json::json!({

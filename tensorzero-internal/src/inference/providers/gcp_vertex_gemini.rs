@@ -9,7 +9,7 @@ use reqwest::StatusCode;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{json, Map, Value};
 use tokio::time::Instant;
 use uuid::Uuid;
 
@@ -32,7 +32,7 @@ use crate::inference::types::{
 use crate::model::{
     build_creds_caching_default_with_fn, Credential, CredentialLocation, ModelProvider,
 };
-use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
+use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig, ToolResult};
 
 use super::helpers::inject_extra_request_data;
 use super::openai::convert_stream_error;
@@ -547,6 +547,19 @@ enum GCPVertexGeminiContentPart<'a> {
     // TODO (if needed): VideoMetadata { video_metadata: VideoMetadata },
 }
 
+/// Since GCP expects a JSON object, we need to convert the tool result from String to JSON Object
+/// If it doesn't parse as an object, we wrap the result in a JSON object ourselves
+pub(crate) fn convert_tool_result_to_json_object(tool_result: &ToolResult) -> Map<String, Value> {
+    match serde_json::from_str(&tool_result.result) {
+        Ok(response) => response,
+        Err(_) => {
+            let mut map = Map::new();
+            map.insert("response".to_string(), json!(tool_result.result));
+            map
+        }
+    }
+}
+
 impl<'a> TryFrom<&'a ContentBlock> for Option<FlattenUnknown<'a, GCPVertexGeminiContentPart<'a>>> {
     type Error = Error;
 
@@ -556,19 +569,7 @@ impl<'a> TryFrom<&'a ContentBlock> for Option<FlattenUnknown<'a, GCPVertexGemini
                 GCPVertexGeminiContentPart::Text { text },
             ))),
             ContentBlock::ToolResult(tool_result) => {
-                // Convert the tool result from String to JSON Value (GCP expects an object)
-                let response: Value = serde_json::from_str(&tool_result.result).map_err(|e| {
-                    Error::new(ErrorDetails::InferenceClient {
-                        status_code: Some(StatusCode::BAD_REQUEST),
-                        message: format!(
-                            "Error parsing tool result as JSON Value: {}",
-                            DisplayOrDebugGateway::new(e)
-                        ),
-                        provider_type: PROVIDER_TYPE.to_string(),
-                        raw_request: None,
-                        raw_response: Some(tool_result.result.clone()),
-                    })
-                })?;
+                let response = convert_tool_result_to_json_object(tool_result);
 
                 // GCP expects the format below according to [the documentation](https://ai.google.dev/gemini-api/docs/function-calling#multi-turn-example-1)
                 let response = serde_json::json!({
