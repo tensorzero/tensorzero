@@ -12,6 +12,7 @@ async fn get_providers() -> E2ETestProviders {
     };
 
     let standard_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "hyperbolic".to_string(),
         model_name: "meta-llama/Meta-Llama-3-70B-Instruct".into(),
         model_provider_name: "hyperbolic".into(),
@@ -19,6 +20,7 @@ async fn get_providers() -> E2ETestProviders {
     }];
 
     let extra_body_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "hyperbolic-extra-body".to_string(),
         model_name: "meta-llama/Meta-Llama-3-70B-Instruct".into(),
         model_provider_name: "hyperbolic".into(),
@@ -26,6 +28,7 @@ async fn get_providers() -> E2ETestProviders {
     }];
 
     let bad_auth_extra_headers = vec![E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "hyperbolic-extra-headers".to_string(),
         model_name: "meta-llama/Meta-Llama-3-70B-Instruct".into(),
         model_provider_name: "hyperbolic".into(),
@@ -33,6 +36,7 @@ async fn get_providers() -> E2ETestProviders {
     }];
 
     let inference_params_dynamic_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "hyperbolic-dynamic".to_string(),
         model_name: "meta-llama/Meta-Llama-3-70B-Instruct-dynamic".into(),
         model_provider_name: "hyperbolic".into(),
@@ -40,6 +44,7 @@ async fn get_providers() -> E2ETestProviders {
     }];
 
     let shorthand_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "hyperbolic-shorthand".to_string(),
         model_name: "hyperbolic::meta-llama/Meta-Llama-3-70B-Instruct".into(),
         model_provider_name: "hyperbolic".into(),
@@ -62,6 +67,5 @@ async fn get_providers() -> E2ETestProviders {
         image_inference: vec![],
 
         shorthand_inference: shorthand_providers.clone(),
-        supports_batch_inference: false,
     }
 }

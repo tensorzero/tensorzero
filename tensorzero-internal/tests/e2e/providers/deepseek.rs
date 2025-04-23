@@ -11,6 +11,7 @@ async fn get_providers() -> E2ETestProviders {
         Err(_) => HashMap::new(),
     };
     let standard_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "deepseek-chat".to_string(),
         model_name: "deepseek-chat".to_string(),
         model_provider_name: "deepseek".to_string(),
@@ -18,6 +19,7 @@ async fn get_providers() -> E2ETestProviders {
     }];
 
     let extra_body_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "deepseek-chat-extra-body".to_string(),
         model_name: "deepseek-chat".to_string(),
         model_provider_name: "deepseek".to_string(),
@@ -25,6 +27,7 @@ async fn get_providers() -> E2ETestProviders {
     }];
 
     let bad_auth_extra_headers = vec![E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "deepseek-chat-extra-headers".to_string(),
         model_name: "deepseek-chat".to_string(),
         model_provider_name: "deepseek".to_string(),
@@ -32,6 +35,7 @@ async fn get_providers() -> E2ETestProviders {
     }];
 
     let reasoning_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "deepseek-reasoner".to_string(),
         model_name: "deepseek-reasoner".to_string(),
         model_provider_name: "deepseek".to_string(),
@@ -39,6 +43,7 @@ async fn get_providers() -> E2ETestProviders {
     }];
 
     let inference_params_dynamic_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "deepseek-dynamic".to_string(),
         model_name: "deepseek-chat-dynamic".to_string(),
         model_provider_name: "deepseek".to_string(),
@@ -47,12 +52,14 @@ async fn get_providers() -> E2ETestProviders {
 
     let json_providers = vec![
         E2ETestProvider {
+            supports_batch_inference: false,
             variant_name: "deepseek-chat".to_string(),
             model_name: "deepseek-chat".to_string(),
             model_provider_name: "deepseek".to_string(),
             credentials: credentials.clone(),
         },
         E2ETestProvider {
+            supports_batch_inference: false,
             variant_name: "deepseek-chat-strict".to_string(),
             model_name: "deepseek-chat".to_string(),
             model_provider_name: "deepseek".to_string(),
@@ -68,6 +75,7 @@ async fn get_providers() -> E2ETestProviders {
     }];
 
     let shorthand_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "deepseek-shorthand".to_string(),
         model_name: "deepseek::deepseek-chat".to_string(),
         model_provider_name: "deepseek".to_string(),
@@ -90,6 +98,5 @@ async fn get_providers() -> E2ETestProviders {
         image_inference: vec![],
 
         shorthand_inference: shorthand_providers.clone(),
-        supports_batch_inference: false,
     }
 }
