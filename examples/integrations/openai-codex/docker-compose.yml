@@ -24,7 +24,7 @@ services:
   clickhouse:
     image: clickhouse/clickhouse-server:24.12-alpine
     environment:
-      - CLICKHOUSE_USER=chuser
+      CLICKHOUSE_USER: chuser
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
       CLICKHOUSE_PASSWORD: chpassword
     ports:
