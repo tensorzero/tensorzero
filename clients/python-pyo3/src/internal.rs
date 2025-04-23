@@ -16,7 +16,7 @@ use tensorzero_internal::{
     inference::types::ResolvedInput,
     variant::VariantConfig,
 };
-use tensorzero_rust::TensorZeroError;
+use tensorzero_rust::{input_handling::reresolve_input_for_fine_tuning, Client, TensorZeroError};
 use uuid::Uuid;
 
 use crate::convert_error;
@@ -59,11 +59,12 @@ pub fn get_template_config(
 pub async fn get_curated_inferences(
     config: &Config<'_>,
     clickhouse: &ClickHouseConnectionInfo,
+    client: &Client,
     function_name: &str,
     metric_name: Option<&str>,
     threshold: Option<f64>,
     max_samples: Option<u64>,
-) -> Result<Vec<Value>, TensorZeroError> {
+) -> Result<Vec<ProcessedInferenceData>, TensorZeroError> {
     let function_config = config
         .get_function(function_name)
         .map_err(|e| TensorZeroError::Other { source: e.into() })?;
@@ -80,31 +81,69 @@ pub async fn get_curated_inferences(
     let metric_name = match metric_name {
         Some(name) => name,
         None => {
-            let rows = clickhouse.run_query_synchronous("SELECT * from {inference_table_name:Identifier} WHERE function_name = {function_name:String} FORMAT JSONEachRow".to_string() + &limit_clause, Some(&[
-                ("function_name", function_name),
-                ("inference_table_name", inference_table_name),
-                ].into_iter().collect())).await.map_err(|e| TensorZeroError::Other { source: e.into() })?;
+            let query = format!(
+                r#"
+            SELECT
+                variant_name,
+                input,
+                output,
+                episode_id
+            FROM
+                {{inference_table_name:Identifier}}
+            WHERE
+                function_name = {{function_name:String}}
+            {limit_clause}
+            FORMAT JSONEachRow
+            "#
+            );
+            let rows = clickhouse
+                .run_query_synchronous(
+                    query,
+                    Some(
+                        &[
+                            ("function_name", function_name),
+                            ("inference_table_name", inference_table_name),
+                        ]
+                        .into_iter()
+                        .collect(),
+                    ),
+                )
+                .await
+                .map_err(|e| TensorZeroError::Other { source: e.into() })?;
 
-            let mut json_rows: Vec<Value> = rows
+            let unprocessed_rows: Vec<UnprocessedInferenceData> = rows
                 .lines()
                 .filter_map(|line| serde_json::from_str(line).ok())
                 .collect();
-            if function_name.starts_with("tensorzero::llm_judge::") {
-                for row in json_rows.iter_mut() {
-                    handle_llm_judge_output(row)?;
-                }
-            }
-            return Ok(json_rows);
+
+            let processing_futures = unprocessed_rows
+                .into_iter()
+                .map(|row| row.postprocess(client, function_name));
+
+            let processed_rows = futures::future::try_join_all(processing_futures).await?;
+
+            return Ok(processed_rows);
         }
     };
 
-    // TODO - handle demonstrations
+    if metric_name == "demonstration" {
+        return query_demonstration_data(
+            clickhouse,
+            client,
+            function_name,
+            inference_table_name,
+            max_samples,
+        )
+        .await;
+    }
+
     let metric_config = config
         .get_metric_or_err(metric_name)
         .map_err(|e| TensorZeroError::Other { source: e.into() })?;
 
     query_curated_metric_data(
         clickhouse,
+        client,
         function_name,
         metric_name,
         inference_table_name,
@@ -116,9 +155,50 @@ pub async fn get_curated_inferences(
     .await
 }
 
+#[derive(Debug, Deserialize)]
+struct UnprocessedInferenceData {
+    variant_name: String,
+    #[serde(deserialize_with = "deserialize_json_string")]
+    input: ResolvedInput,
+    #[serde(deserialize_with = "deserialize_json_string")]
+    output: Value,
+    episode_id: Option<Uuid>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ProcessedInferenceData {
+    variant_name: String,
+    input: ResolvedInput,
+    output: Value,
+    episode_id: Option<Uuid>,
+}
+
+impl UnprocessedInferenceData {
+    /// Normally, we would use a new() method for this but since we need to deserialize into the
+    /// UnprocessedInferenceData struct and we want to force the caller to call this function,
+    /// this is the only way to get a ProcessedInferenceData struct.
+    pub async fn postprocess(
+        mut self,
+        client: &Client,
+        function_name: &str,
+    ) -> Result<ProcessedInferenceData, TensorZeroError> {
+        reresolve_input_for_fine_tuning(&mut self.input, client).await?;
+        if function_name.starts_with("tensorzero::llm_judge::") {
+            handle_llm_judge_output(&mut self)?;
+        }
+        Ok(ProcessedInferenceData {
+            variant_name: self.variant_name,
+            input: self.input,
+            output: self.output,
+            episode_id: self.episode_id,
+        })
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn query_curated_metric_data(
     clickhouse: &ClickHouseConnectionInfo,
+    client: &Client,
     function_name: &str,
     metric_name: &str,
     inference_table_name: &str,
@@ -126,12 +206,10 @@ async fn query_curated_metric_data(
     filter_good: bool,
     threshold: Option<f64>,
     max_samples: Option<u64>,
-) -> Result<Vec<Value>, TensorZeroError> {
+) -> Result<Vec<ProcessedInferenceData>, TensorZeroError> {
     // Set defaults and prepare limit clause
     let optimize = metric_config.optimize;
-    let limit_clause = max_samples
-        .map(|s| format!("LIMIT {}", s))
-        .unwrap_or_default();
+    let limit_clause = get_limit_clause(max_samples);
 
     // Prepare value condition
     let mut value_condition = String::new();
@@ -162,16 +240,6 @@ async fn query_curated_metric_data(
         MetricConfigLevel::Episode => "episode_id",
         MetricConfigLevel::Inference => "id",
     };
-
-    #[derive(Deserialize, Serialize)]
-    struct InferenceData {
-        variant_name: String,
-        #[serde(deserialize_with = "deserialize_json_string")]
-        input: ResolvedInput,
-        #[serde(deserialize_with = "deserialize_json_string")]
-        output: Value,
-        episode_id: Option<Uuid>,
-    }
 
     // Construct the query
     let query = format!(
@@ -223,27 +291,77 @@ async fn query_curated_metric_data(
         .map_err(|e| TensorZeroError::Other { source: e.into() })?;
 
     // Parse the results
-    let json_rows: Result<Vec<Value>, _> = rows
-        .lines()
-        .map(|line| {
-            let inference: InferenceData = serde_json::from_str(line)?;
-            serde_json::to_value(inference)
-        })
-        .collect();
-
-    let mut json_rows = json_rows.map_err(|e| TensorZeroError::Other {
+    let unprocessed_rows: Result<Vec<UnprocessedInferenceData>, _> =
+        rows.lines().map(serde_json::from_str).collect();
+    let unprocessed_rows = unprocessed_rows.map_err(|e| TensorZeroError::Other {
         source: Error::new(ErrorDetails::Serialization {
             message: format!("Failed to deserialize inferences: {e:?}"),
         })
         .into(),
     })?;
+    let processing_futures = unprocessed_rows
+        .into_iter()
+        .map(|row| row.postprocess(client, function_name));
 
-    if function_name.starts_with("tensorzero::llm_judge::") {
-        for row in json_rows.iter_mut() {
-            handle_llm_judge_output(row)?;
-        }
-    }
-    Ok(json_rows)
+    let processed_rows = futures::future::try_join_all(processing_futures).await?;
+
+    Ok(processed_rows)
+}
+
+async fn query_demonstration_data(
+    clickhouse: &ClickHouseConnectionInfo,
+    client: &Client,
+    function_name: &str,
+    inference_table_name: &str,
+    max_samples: Option<u64>,
+) -> Result<Vec<ProcessedInferenceData>, TensorZeroError> {
+    let limit_clause = get_limit_clause(max_samples);
+
+    let query = format!(
+        r#"
+        SELECT
+            argMax(i.variant_name, d.timestamp) as variant_name,
+            argMax(i.input, d.timestamp) as input,
+            argMax(d.value, d.timestamp) as output,
+            argMax(i.episode_id, d.timestamp) as episode_id
+        FROM
+          {{inference_table_name:Identifier}} i
+        JOIN DemonstrationFeedback d
+        ON i.id = d.inference_id
+        WHERE i.function_name = {{function_name:String}}
+        GROUP BY d.inference_id
+        {limit_clause}
+        FORMAT JSONEachRow
+    "#
+    );
+
+    let params = vec![
+        ("inference_table_name", inference_table_name),
+        ("function_name", function_name),
+    ];
+    let rows = clickhouse
+        .run_query_synchronous(query, Some(&params.into_iter().collect()))
+        .await
+        .map_err(|e| TensorZeroError::Other { source: e.into() })?;
+
+    let unprocessed_rows: Vec<UnprocessedInferenceData> = rows
+        .lines()
+        .filter_map(|line| serde_json::from_str(line).ok())
+        .collect();
+
+    let processing_futures = unprocessed_rows
+        .into_iter()
+        .map(|row| row.postprocess(client, function_name));
+
+    let processed_rows = futures::future::try_join_all(processing_futures).await?;
+
+    Ok(processed_rows)
+}
+
+fn get_limit_clause(max_samples: Option<u64>) -> String {
+    max_samples
+        .map(|s| format!("LIMIT {}", s))
+        .unwrap_or_default()
 }
 
 // Helper function to determine comparison operator based on optimization goal
@@ -258,8 +376,8 @@ fn get_comparison_operator(optimize: MetricConfigOptimize) -> &'static str {
 /// We have since removed it, but we need to handle the old data.
 /// So, we transform any old LLM Judge outputs to the new format by removing the thinking section from the
 /// parsed and raw outputs.
-fn handle_llm_judge_output(output: &mut Value) -> Result<(), TensorZeroError> {
-    if let Some(parsed) = output.get_mut("parsed") {
+fn handle_llm_judge_output(output: &mut UnprocessedInferenceData) -> Result<(), TensorZeroError> {
+    if let Some(parsed) = output.output.get_mut("parsed") {
         if parsed.get("thinking").is_some() {
             if let Some(obj) = parsed.as_object_mut() {
                 obj.remove("thinking");
@@ -273,7 +391,7 @@ fn handle_llm_judge_output(output: &mut Value) -> Result<(), TensorZeroError> {
             .into(),
         })?;
 
-        *output = json!({
+        output.output = json!({
             "parsed": parsed,
             "raw": raw_json
         });
@@ -289,13 +407,21 @@ mod tests {
     #[test]
     fn test_handle_llm_judge_output() {
         // Test removing the thinking field from the output
-        let mut input = json!({
-            "parsed": {
-                "thinking": "This is a test",
-                "answer": "This is a test"
+        let mut input = UnprocessedInferenceData {
+            variant_name: "test".to_string(),
+            input: ResolvedInput {
+                system: None,
+                messages: vec![],
             },
-            "raw": "{\"thinking\": \"This is a test\", \"answer\": \"This is a test\"}"
-        });
+            output: json!({
+                "parsed": {
+                    "thinking": "This is a test",
+                    "answer": "This is a test"
+                },
+                "raw": "{\"thinking\": \"This is a test\", \"answer\": \"This is a test\"}"
+            }),
+            episode_id: None,
+        };
 
         handle_llm_judge_output(&mut input).unwrap();
 
@@ -306,23 +432,30 @@ mod tests {
             "raw": "{\"answer\":\"This is a test\"}"
         });
 
-        assert_eq!(input, expected);
+        assert_eq!(input.output, expected);
 
         // Test the correct output is unmodified
         handle_llm_judge_output(&mut input).unwrap();
-        assert_eq!(input, expected);
+        assert_eq!(input.output, expected);
 
         // Test not modifying the output if the parsed field is not present
-        let mut input = json!({
-            "raw": "This is a test"
-        });
-
+        let mut input = UnprocessedInferenceData {
+            variant_name: "test".to_string(),
+            input: ResolvedInput {
+                system: None,
+                messages: vec![],
+            },
+            output: json!({
+                "raw": "This is a test"
+            }),
+            episode_id: None,
+        };
         handle_llm_judge_output(&mut input).unwrap();
 
         let expected = json!({
             "raw": "This is a test"
         });
 
-        assert_eq!(input, expected);
+        assert_eq!(input.output, expected);
     }
 }

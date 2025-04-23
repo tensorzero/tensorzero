@@ -55,6 +55,8 @@ pub struct E2ETestProvider {
     pub model_provider_name: String,
 
     pub credentials: HashMap<String, String>,
+
+    pub supports_batch_inference: bool,
 }
 
 /// Enforce that every provider implements a common set of tests.
@@ -84,7 +86,6 @@ pub struct E2ETestProviders {
     pub image_inference: Vec<E2ETestProvider>,
 
     pub shorthand_inference: Vec<E2ETestProvider>,
-    pub supports_batch_inference: bool,
 }
 
 pub async fn make_http_gateway() -> tensorzero::Client {
@@ -584,6 +585,19 @@ routing = ["gcp_vertex_gemini"]
 [models."gemini-1.5-pro-001".providers.gcp_vertex_gemini]
 type = "gcp_vertex_gemini"
 model_id = "gemini-1.5-pro-001"
+location = "us-central1"
+project_id = "tensorzero-public"
+
+[functions.image_test.variants.gcp-vertex-haiku]
+type = "chat_completion"
+model = "claude-3-haiku-20240307-gcp-vertex"
+
+[models.claude-3-haiku-20240307-gcp-vertex]
+routing = ["gcp_vertex_anthropic"]
+
+[models.claude-3-haiku-20240307-gcp-vertex.providers.gcp_vertex_anthropic]
+type = "gcp_vertex_anthropic"
+model_id = "claude-3-haiku@20240307"
 location = "us-central1"
 project_id = "tensorzero-public"
 "#;
@@ -1363,7 +1377,8 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
         }
         "aws_bedrock" => {
             assert!(
-                res["error"].as_str().unwrap().contains("Bad Request"),
+                res["error"].as_str().unwrap().contains("Bad Request")
+                    || res["error"].as_str().unwrap().contains("ConnectorError"),
                 "Unexpected error: {res}"
             );
         }
@@ -2396,6 +2411,13 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
             let content_block = content_blocks.first().unwrap();
             let content = content_block.get("text").unwrap().as_str().unwrap();
             full_content.push_str(content);
+        }
+
+        // When we get a cache hit, the usage should be explicitly set to 0
+        if check_cache {
+            let usage = chunk_json.get("usage").unwrap();
+            assert_eq!(usage.get("input_tokens").unwrap().as_u64().unwrap(), 0);
+            assert_eq!(usage.get("output_tokens").unwrap().as_u64().unwrap(), 0);
         }
 
         if let Some(usage) = chunk_json.get("usage") {

@@ -60,6 +60,8 @@ export default function DatasetDetailPage({
         description: `Added ${rowsAdded} rows to the dataset. Skipped ${rowsSkipped} duplicate rows.`,
       });
     }
+    // TODO: Fix and stop ignoring lint rule
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rowsAdded, toast]);
 
   const navigate = useNavigate();

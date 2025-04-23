@@ -79,8 +79,6 @@ It provides a **data & learning flywheel for LLMs** by unifying:
   </tr>
 </table>
 
-
-
 ---
 
 ## Features
@@ -103,6 +101,7 @@ It provides a **data & learning flywheel for LLMs** by unifying:
       <ul>
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/anthropic">Anthropic</a></b></li>
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/aws-bedrock">AWS Bedrock</a></b></li>
+        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/aws-sagemaker">AWS SageMaker</a></b></li>
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/azure">Azure OpenAI Service</a></b></li>
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/deepseek">DeepSeek</a></b></li>
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/fireworks">Fireworks</a></b></li>
@@ -195,7 +194,7 @@ You can access any provider using the OpenAI Python client with TensorZero.
 3. Run inference:
 
 ```python
-from openai import OpenAI
+from openai import OpenAI  # or AsyncOpenAI
 from tensorzero import patch_openai_client
 
 client = OpenAI()
@@ -471,7 +470,7 @@ We are working on a series of **complete runnable examples** illustrating Tensor
 > You'll see TensorZero's "data flywheel in a box" in action: better variants leads to better data, and better data leads to better variants.
 > You'll see progress by fine-tuning the LLM multiple times.
 
-> **[Improving LLM Chess Ability with Best-of-N Sampling](https://github.com/tensorzero/tensorzero/tree/main/examples/chess-puzzles-best-of-n-sampling/)**
+> **[Improving LLM Chess Ability with Best-of-N Sampling](https://github.com/tensorzero/tensorzero/tree/main/examples/chess-puzzles/)**
 >
 > This example showcases how best-of-N sampling can significantly enhance an LLM's chess-playing abilities by selecting the most promising moves from multiple generated options.
 
