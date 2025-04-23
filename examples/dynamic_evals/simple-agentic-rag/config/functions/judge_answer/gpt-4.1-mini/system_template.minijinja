@@ -8,4 +8,4 @@ The ground truth answer(s) to the question are:
 {%- endfor -%}
 
 Please give a score between 0 and 1 for the answer in the form {"score": number}.
-You can give partial credit in the case where there are many answers but try and be strict.
+You can give partial credit in the case where there are many answers in your ground truth list but not if the answer is "close".

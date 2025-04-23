@@ -93,11 +93,14 @@ async def ask_question(
 
         messages.append({"role": "user", "content": output_content_blocks})
         approx_message_length = len(json.dumps(messages, cls=ToDictEncoder))
-        print(f"Approx message length: {approx_message_length}")
         if approx_message_length > MAX_MESSAGE_LENGTH:
-            messages = await compact_context(
-                t0, semaphore, question, messages, episode_id, verbose
-            )
+            try:
+                messages = await compact_context(
+                    t0, semaphore, question, messages, episode_id, verbose
+                )
+            except Exception as e:
+                print(f"Error compacting context: {e}")
+                messages = messages[:-2]
     else:
         # In a production setting, the model could attempt to generate an answer using available information
         # when the search process is stopped; here, we simply throw an exception.
