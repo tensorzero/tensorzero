@@ -17,6 +17,7 @@ tree-sitter-rust = "0.24.0"
 tree-sitter-typescript = "0.23.2"
 tree-sitter-python = "0.23.6"
 tree-sitter-toml-ng = "0.7.0"
+tree-sitter-md = "0.3.2"
 tensorzero = { path = "../../../clients/rust" }
 tensorzero-internal = { path = "../../../tensorzero-internal" }
 chrono.workspace = true

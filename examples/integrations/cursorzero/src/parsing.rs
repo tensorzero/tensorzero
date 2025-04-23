@@ -31,6 +31,7 @@ fn get_language_for_extension(ext: &str) -> Result<Language> {
         "py" => tree_sitter_python::LANGUAGE.into(),
         "ts" => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
         "tsx" => tree_sitter_typescript::LANGUAGE_TSX.into(),
+        "md" => tree_sitter_md::LANGUAGE.into(),
         _ => return Err(anyhow::anyhow!("Unsupported file extension: {}", ext)),
     };
     w.insert(ext.to_string(), lang);

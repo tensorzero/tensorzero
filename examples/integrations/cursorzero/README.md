@@ -16,3 +16,9 @@ This example demonstrates how TensorZero can be used as a proxy layer for Cursor
 Now, you can use Cursor as you would normally but with the `tensorzero::function_name::cursorzero` model you installed.
 This will send all traffic through your local TensorZero gateway.
 Take a look at the server running on `http://localhost:6901` to see what your requests look like!
+
+## A haiku about this integration
+
+Cursor calls go through
+TensorZero watches them
+See the requests flow
