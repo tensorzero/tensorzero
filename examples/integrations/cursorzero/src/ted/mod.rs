@@ -1,4 +1,6 @@
-//! A commented, slightly safer, and more efficient Zhang–Shasha tree‑edit‑distance implementation.
+//! A modified Zhang–Shasha tree‑edit‑distance implementation.
+//! This is based on the paper "Simple Fast Algorithms for the Editing Distance between Trees and Related Problems"
+//! by K. Zhang and D. Shasha.
 //! Adapted from MIT-licensed code (license at https://github.com/anonymrepo/tree-edit-distance/blob/master/LICENSE)
 //!
 //!  * Computes all metadata in **one DFS** (O(n)) instead of repeatedly walking
