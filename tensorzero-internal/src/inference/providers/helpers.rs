@@ -8,7 +8,7 @@ use crate::{
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
     inference::types::{
         extra_body::{FullExtraBodyConfig, InferenceExtraBody},
-        extra_headers::{ExtraHeader, FullExtraHeadersConfig},
+        extra_headers::{ExtraHeader, FullExtraHeadersConfig, InferenceExtraHeader},
         ProviderInferenceResponseChunk,
     },
     model::{fully_qualified_name, ModelProviderRequestInfo},
@@ -100,6 +100,64 @@ pub fn inject_extra_request_data(
                     })
                 })?,
             );
+        }
+    }
+
+    // Finally, write the inference-level extra_headers information. This can overwrite header set from the config-level extra_headers.
+    for extra_header in &extra_headers_config.inference_extra_headers.data {
+        match extra_header {
+            InferenceExtraHeader::Variant {
+                // We're iterating over a 'InferenceExtraHeader', so we've already removed any non-matching variant names.
+                // Any remaining `InferenceExtraHeader::Variant` values should be applied to the current request
+                variant_name: _,
+                name,
+                value,
+            } => {
+                headers.insert(
+                    http::header::HeaderName::from_bytes(name.as_bytes()).map_err(|e| {
+                        Error::new(ErrorDetails::Serialization {
+                            message: format!(
+                                "Invalid header name `{name}`: {}",
+                                DisplayOrDebugGateway::new(e)
+                            ),
+                        })
+                    })?,
+                    http::header::HeaderValue::from_bytes(value.as_bytes()).map_err(|e| {
+                        Error::new(ErrorDetails::Serialization {
+                            message: format!(
+                                "Invalid header value `{value}`: {}",
+                                DisplayOrDebugGateway::new(e)
+                            ),
+                        })
+                    })?,
+                );
+            }
+            InferenceExtraHeader::Provider {
+                model_provider_name,
+                name,
+                value,
+            } => {
+                if *model_provider_name == expected_provider_name {
+                    headers.insert(
+                        http::header::HeaderName::from_bytes(name.as_bytes()).map_err(|e| {
+                            Error::new(ErrorDetails::Serialization {
+                                message: format!(
+                                    "Invalid header name `{name}`: {}",
+                                    DisplayOrDebugGateway::new(e)
+                                ),
+                            })
+                        })?,
+                        http::header::HeaderValue::from_bytes(value.as_bytes()).map_err(|e| {
+                            Error::new(ErrorDetails::Serialization {
+                                message: format!(
+                                    "Invalid header value `{value}`: {}",
+                                    DisplayOrDebugGateway::new(e)
+                                ),
+                            })
+                        })?,
+                    );
+                }
+            }
         }
     }
 
@@ -251,7 +309,7 @@ mod tests {
 
     use crate::inference::types::{
         extra_body::{ExtraBodyConfig, ExtraBodyReplacement, FilteredInferenceExtraBody},
-        extra_headers::{ExtraHeadersConfig, FilteredInferenceExtraHeaders},
+        extra_headers::{ExtraHeadersConfig, FilteredInferenceExtraHeaders, InferenceExtraHeader},
         ContentBlockChunk, TextChunk,
     };
 
@@ -394,12 +452,31 @@ mod tests {
                             value: "My variant value".to_string(),
                         },
                         ExtraHeader {
+                            name: "X-My-Overridden-Inference".to_string(),
+                            value: "My variant value".to_string(),
+                        },
+                        ExtraHeader {
                             name: "X-My-Variant".to_string(),
                             value: "My variant header".to_string(),
                         },
                     ],
                 }),
-                inference_extra_headers: FilteredInferenceExtraHeaders { data: vec![] },
+                inference_extra_headers: FilteredInferenceExtraHeaders {
+                    data: vec![
+                        InferenceExtraHeader::Provider {
+                            model_provider_name:
+                                "tensorzero::model_name::dummy_model::provider_name::dummy_provider"
+                                    .to_string(),
+                            name: "X-My-Inference".to_string(),
+                            value: "My inference header value".to_string(),
+                        },
+                        InferenceExtraHeader::Variant {
+                            variant_name: "dummy_variant".to_string(),
+                            name: "X-My-Overridden-Inference".to_string(),
+                            value: "My inference value".to_string(),
+                        },
+                    ],
+                },
             },
             ModelProviderRequestInfo {
                 provider_name: "dummy_provider".into(),
@@ -408,6 +485,10 @@ mod tests {
                     data: vec![
                         ExtraHeader {
                             name: "X-My-Overridden".to_string(),
+                            value: "My model provider value".to_string(),
+                        },
+                        ExtraHeader {
+                            name: "X-My-Overridden-Inference".to_string(),
                             value: "My model provider value".to_string(),
                         },
                         ExtraHeader {
@@ -429,6 +510,14 @@ mod tests {
         assert_eq!(
             headers.get("X-My-ModelProvider").unwrap(),
             "My model provider header"
+        );
+        assert_eq!(
+            headers.get("X-My-Inference").unwrap(),
+            "My inference header value"
+        );
+        assert_eq!(
+            headers.get("X-My-Overridden-Inference").unwrap(),
+            "My inference value"
         );
     }
 
