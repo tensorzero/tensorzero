@@ -7,7 +7,7 @@ services:
       - ./config:/app/config:ro
     command: --config-file /app/config/tensorzero.toml
     # environment:
-    #   - TGI_API_KEY=${TGI_API_KEY:?Environment variable TGI_API_KEY must be set.}
+    #   TGI_API_KEY: ${TGI_API_KEY:?Environment variable TGI_API_KEY must be set.}
     ports:
       - "3000:3000"
     extra_hosts:

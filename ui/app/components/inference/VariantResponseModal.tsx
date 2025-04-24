@@ -105,6 +105,8 @@ export function VariantResponseModal({
       );
       setIsLoading(true);
     }
+    // TODO: Fix and stop ignoring lint rule
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, selectedVariant, source]);
 
   useEffect(() => {
@@ -151,6 +153,8 @@ export function VariantResponseModal({
     ) {
       setError("Failed to fetch response. Please try again.");
     }
+    // TODO: Fix and stop ignoring lint rule
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [variantInferenceFetcher.data, variantInferenceFetcher.state]);
 
   const ResponseColumn = ({

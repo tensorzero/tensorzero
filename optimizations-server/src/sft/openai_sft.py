@@ -222,10 +222,19 @@ def content_block_to_openai_message(content: Dict, role: str, env: Any) -> Dict:
             "content": content["result"],
         }
     elif content["type"] == "image":
-        raise ValidationError(
-            "Image content is not supported for OpenAI fine-tuning. "
-            "We have an open issue for this feature at https://github.com/tensorzero/tensorzero/issues/1132."
-        )
+        mime_type = content["image"]["mime_type"]
+        data = content["image"]["data"]
+        return {
+            "role": role,
+            "content": [
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:{mime_type};base64,{data}",
+                    },
+                }
+            ],
+        }
     elif content["type"] == "raw_text":
         return {
             "role": role,

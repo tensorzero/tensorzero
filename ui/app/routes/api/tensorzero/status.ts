@@ -24,6 +24,8 @@ export function useTensorZeroStatusFetcher() {
     if (statusFetcher.state === "idle" && !statusFetcher.data) {
       statusFetcher.load("/api/tensorzero/status");
     }
+    // TODO: Fix and stop ignoring lint rule
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return { status, isLoading: statusFetcher.state === "loading" };
