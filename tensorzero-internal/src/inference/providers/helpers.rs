@@ -395,7 +395,7 @@ mod tests {
     #[test]
     fn test_inject_no_matches() {
         let mut body = serde_json::json!({});
-        inject_extra_request_data(
+        let headers = inject_extra_request_data(
             &FullExtraBodyConfig {
                 extra_body: Some(ExtraBodyConfig { data: vec![] }),
                 inference_extra_body: FilteredInferenceExtraBody {
@@ -406,7 +406,16 @@ mod tests {
                     }],
                 },
             },
-            &Default::default(),
+            &FullExtraHeadersConfig {
+                variant_extra_headers: Some(ExtraHeadersConfig { data: vec![] }),
+                inference_extra_headers: FilteredInferenceExtraHeaders {
+                    data: vec![InferenceExtraHeader::Provider {
+                        model_provider_name: "wrong_provider".to_string(),
+                        name: "X-My-Header".to_string(),
+                        value: "My Value".to_string(),
+                    }],
+                },
+            },
             ModelProviderRequestInfo {
                 extra_headers: None,
                 provider_name: "dummy_provider".into(),
@@ -417,6 +426,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(body, serde_json::json!({}));
+        assert_eq!(headers.len(), 0);
     }
 
     #[test]
