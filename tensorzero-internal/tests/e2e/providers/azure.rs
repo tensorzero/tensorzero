@@ -12,6 +12,7 @@ async fn get_providers() -> E2ETestProviders {
     };
 
     let standard_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "azure".to_string(),
         model_name: "gpt-4o-mini-azure".into(),
         model_provider_name: "azure".into(),
@@ -19,6 +20,7 @@ async fn get_providers() -> E2ETestProviders {
     }];
 
     let extra_body_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "azure-extra-body".to_string(),
         model_name: "gpt-4o-mini-azure".into(),
         model_provider_name: "azure".into(),
@@ -26,6 +28,7 @@ async fn get_providers() -> E2ETestProviders {
     }];
 
     let bad_auth_extra_headers = vec![E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "azure-extra-headers".to_string(),
         model_name: "gpt-4o-mini-azure".into(),
         model_provider_name: "azure".into(),
@@ -33,6 +36,7 @@ async fn get_providers() -> E2ETestProviders {
     }];
 
     let inference_params_dynamic_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "azure-dynamic".to_string(),
         model_name: "gpt-4o-mini-azure-dynamic".into(),
         model_provider_name: "azure".into(),
@@ -41,24 +45,28 @@ async fn get_providers() -> E2ETestProviders {
 
     let json_providers = vec![
         E2ETestProvider {
+            supports_batch_inference: false,
             variant_name: "azure".to_string(),
             model_name: "gpt-4o-mini-azure".into(),
             model_provider_name: "azure".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
+            supports_batch_inference: false,
             variant_name: "azure-implicit".to_string(),
             model_name: "gpt-4o-mini-azure".into(),
             model_provider_name: "azure".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
+            supports_batch_inference: false,
             variant_name: "azure-strict".to_string(),
             model_name: "gpt-4o-mini-azure".into(),
             model_provider_name: "azure".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
+            supports_batch_inference: false,
             variant_name: "azure-default".to_string(),
             model_name: "gpt-4o-mini-azure".into(),
             model_provider_name: "azure".into(),
@@ -81,6 +89,5 @@ async fn get_providers() -> E2ETestProviders {
         image_inference: vec![],
 
         shorthand_inference: vec![],
-        supports_batch_inference: false,
     }
 }

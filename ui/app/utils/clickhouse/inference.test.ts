@@ -14,6 +14,7 @@ import {
   queryInferenceTableByFunctionName,
   queryInferenceTableBoundsByFunctionName,
   queryInferenceTableBoundsByVariantName,
+  queryModelInferencesByInferenceId,
 } from "./inference";
 import { countInferencesForFunction } from "./inference";
 import type {
@@ -118,7 +119,7 @@ test("queryInferenceTable pages through all results correctly using before", asy
   expect(currentPage.length).toBeLessThanOrEqual(PAGE_SIZE);
 
   // Verify total number of elements
-  expect(totalElements).toBe(3505);
+  expect(totalElements).toBe(3515);
 
   // We should have seen at least one full page
   expect(numFullPages).toBeGreaterThan(0);
@@ -178,7 +179,7 @@ test("queryInferenceTable pages through all results correctly using after", asyn
   expect(currentPage.length).toBeLessThanOrEqual(PAGE_SIZE);
 
   // Verify total number of elements matches the previous test
-  expect(totalElements).toBe(3504); // One less than with before because we excluded the first ID
+  expect(totalElements).toBe(3514); // One less than with before because we excluded the first ID
 
   // We should have seen at least one full page
   expect(numFullPages).toBeGreaterThan(0);
@@ -317,13 +318,13 @@ test("queryInferenceTableByEpisodeId pages through all results correctly using a
 test("queryInferenceTableBounds", async () => {
   const bounds = await queryInferenceTableBounds();
   expect(bounds.first_id).toBe("01934c9a-be70-74e2-8e6d-8eb19531638c");
-  expect(bounds.last_id).toBe("0196374c-2fc9-7892-b779-2412fc4d0942");
+  expect(bounds.last_id).toBe("01965ac8-0d98-7312-835f-aa2993fb655f");
 });
 
 test("queryEpisodeTableBounds", async () => {
   const bounds = await queryEpisodeTableBounds();
   expect(bounds.first_id).toBe("01934c9a-be70-74e2-8e6d-8eb19531638c");
-  expect(bounds.last_id).toBe("0196374c-2fc9-7892-b779-2412fc4d0942");
+  expect(bounds.last_id).toBe("01965ac8-0d98-7312-835f-aa2993fb655f");
 });
 
 test("queryInferenceTableBounds with episode_id", async () => {
@@ -509,7 +510,7 @@ test("queryEpisodeTable pages through all results correctly using before", async
   expect(currentPage.length).toBeLessThanOrEqual(PAGE_SIZE);
 
   // Verify total number of elements
-  expect(totalElements).toBe(1974);
+  expect(totalElements).toBe(1984);
 
   // We should have seen at least 9 full pages
   expect(numFullPages).toBeGreaterThan(8);
@@ -571,7 +572,7 @@ test("queryEpisodeTable pages through all results correctly using after", async 
   expect(currentPage.length).toBeLessThanOrEqual(PAGE_SIZE);
 
   // Verify total number of elements matches the previous test
-  expect(totalElements).toBe(1973); // One less than with before because we excluded the first ID
+  expect(totalElements).toBe(1983); // One less than with before because we excluded the first ID
 
   // We should have seen at least 9 full pages
   expect(numFullPages).toBeGreaterThan(8);
@@ -655,4 +656,17 @@ test("countInferencesByFunction", async () => {
       },
     ]),
   );
+});
+
+test("queryModelInferencesByInferenceId", async () => {
+  const modelInferences = await queryModelInferencesByInferenceId(
+    "0195aef6-6cee-75e3-9097-f7bdf6e9c9af",
+  );
+  expect(modelInferences.length).toBe(1);
+  const firstInference = modelInferences[0];
+  expect(firstInference.id).toBe("0195aef6-77a9-7ce1-8910-016c2bef9cec");
+  expect(firstInference.input_messages.length).toBe(1);
+  expect(firstInference.output.length).toBe(1);
+  expect(firstInference.output[0].type).toBe("text");
+  expect(!firstInference.cached);
 });

@@ -498,6 +498,7 @@ pub struct ModelProviderRequestInfo {
 }
 
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum ProviderConfig {
     Anthropic(AnthropicProvider),
     AWSBedrock(AWSBedrockProvider),

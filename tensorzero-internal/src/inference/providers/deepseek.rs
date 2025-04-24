@@ -327,11 +327,12 @@ enum DeepSeekResponseFormat {
 }
 
 impl DeepSeekResponseFormat {
-    fn new(json_mode: &ModelInferenceRequestJsonMode) -> Self {
+    fn new(json_mode: &ModelInferenceRequestJsonMode) -> Option<Self> {
         match json_mode {
-            ModelInferenceRequestJsonMode::On => DeepSeekResponseFormat::JsonObject,
-            ModelInferenceRequestJsonMode::Off => DeepSeekResponseFormat::Text,
-            ModelInferenceRequestJsonMode::Strict => DeepSeekResponseFormat::JsonObject,
+            ModelInferenceRequestJsonMode::On => Some(DeepSeekResponseFormat::JsonObject),
+            // For now, we never explicitly send `DeepSeekResponseFormat::Text`
+            ModelInferenceRequestJsonMode::Off => None,
+            ModelInferenceRequestJsonMode::Strict => Some(DeepSeekResponseFormat::JsonObject),
         }
     }
 }
@@ -391,7 +392,7 @@ impl<'a> DeepSeekRequest<'a> {
             tracing::warn!("DeepSeek provider does not support strict JSON mode. Downgrading to normal JSON mode.");
         }
 
-        let response_format = Some(DeepSeekResponseFormat::new(&request.json_mode));
+        let response_format = DeepSeekResponseFormat::new(&request.json_mode);
 
         // NOTE: as mentioned by the DeepSeek team here: https://github.com/deepseek-ai/DeepSeek-R1?tab=readme-ov-file#usage-recommendations
         // the R1 series of models does not perform well with the system prompt. As we move towards first-class support for reasoning models we should check

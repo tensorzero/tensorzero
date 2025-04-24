@@ -21,7 +21,7 @@ use crate::inference::types::batch::deserialize_optional_json_string;
 use crate::inference::types::{
     parse_chat_output, ContentBlockChatOutput, ContentBlockOutput, Text,
 };
-use crate::jsonschema_util::JSONSchemaFromPath;
+use crate::jsonschema_util::StaticJSONSchema;
 use crate::tool::{ToolCall, ToolCallConfig, ToolCallConfigDatabaseInsert};
 use crate::uuid_util::uuid_elapsed;
 
@@ -588,7 +588,7 @@ pub async fn validate_parse_demonstration(
         }
         (FunctionConfig::Json(_), DynamicDemonstrationInfo::Json(output_schema)) => {
             // For json functions, the value should be a valid json object.
-            JSONSchemaFromPath::from_value(&output_schema)?
+            StaticJSONSchema::from_value(&output_schema)?
                 .validate(value)
                 .map_err(|e| {
                     Error::new(ErrorDetails::InvalidRequest {
@@ -812,7 +812,7 @@ mod tests {
 
     use crate::config_parser::{Config, MetricConfig, MetricConfigOptimize};
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
-    use crate::jsonschema_util::JSONSchemaFromPath;
+    use crate::jsonschema_util::StaticJSONSchema;
     use crate::testing::get_unit_test_app_state_data;
     use crate::tool::{StaticToolConfig, ToolCallOutput, ToolChoice, ToolConfig};
 
@@ -1178,7 +1178,7 @@ mod tests {
         let weather_tool_config_static = StaticToolConfig {
             name: "get_temperature".to_string(),
             description: "Get the current temperature in a given location".to_string(),
-            parameters: JSONSchemaFromPath::from_value(&json!({
+            parameters: StaticJSONSchema::from_value(&json!({
                 "type": "object",
                 "properties": {
                     "location": {"type": "string"},
@@ -1328,7 +1328,7 @@ mod tests {
             system_schema: None,
             user_schema: None,
             assistant_schema: None,
-            output_schema: JSONSchemaFromPath::from_value(&output_schema).unwrap(),
+            output_schema: StaticJSONSchema::from_value(&output_schema).unwrap(),
             implicit_tool_call_config,
             description: None,
         })));

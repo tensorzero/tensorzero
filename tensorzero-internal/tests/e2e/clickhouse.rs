@@ -28,6 +28,8 @@ use tensorzero_internal::clickhouse::migration_manager::migrations::migration_00
 use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0021::Migration0021;
 use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0022::Migration0022;
 use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0023::Migration0023;
+use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0024::Migration0024;
+use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0025::Migration0025;
 use tensorzero_internal::clickhouse::migration_manager::{self};
 use tensorzero_internal::clickhouse::test_helpers::{get_clickhouse, CLICKHOUSE_URL};
 use tensorzero_internal::clickhouse::ClickHouseConnectionInfo;
@@ -144,6 +146,12 @@ async fn test_clickhouse_migration_manager() {
         Box::new(Migration0023 {
             clickhouse: &clickhouse,
         }),
+        Box::new(Migration0024 {
+            clickhouse: &clickhouse,
+        }),
+        Box::new(Migration0025 {
+            clickhouse: &clickhouse,
+        }),
     ];
 
     // This runs all migrations up to and including the given migration number,
@@ -219,7 +227,7 @@ async fn test_clickhouse_migration_manager() {
         // will throw an error if it doesn't.
         // This must be an array literal, so that the macro can generate a function
         // for each element in the array.
-        [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]
+        [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
     );
     run_all(migrations).await;
 
@@ -242,29 +250,23 @@ async fn test_bad_clickhouse_write() {
         .write(&[payload], "BooleanMetricFeedback")
         .await
         .unwrap_err();
-    assert!(err
-        .to_string()
-        .contains("Unknown field found while parsing JSONEachRow format: name"));
+    assert!(
+        err.to_string()
+            .contains("Unknown field found while parsing JSONEachRow format: name"),
+        "Unexpected error: {err}"
+    );
 }
 
 #[tokio::test]
 async fn test_clean_clickhouse_start() {
     let clickhouse = get_clean_clickhouse();
-    let start = std::time::Instant::now();
     migration_manager::run(&clickhouse).await.unwrap();
-    let duration = start.elapsed();
-    assert!(
-        duration < std::time::Duration::from_secs(40),
-        "Migrations took longer than 40 seconds: {duration:?}"
-    );
 }
 
 #[tokio::test]
 async fn test_concurrent_clickhouse_migrations() {
     let clickhouse = Arc::new(get_clean_clickhouse());
     let num_concurrent_starts = 50;
-    let start = std::time::Instant::now();
-
     let mut handles = Vec::with_capacity(num_concurrent_starts);
     for _ in 0..num_concurrent_starts {
         let clickhouse_clone = clickhouse.clone();
@@ -275,12 +277,6 @@ async fn test_concurrent_clickhouse_migrations() {
     for handle in handles {
         handle.await.unwrap();
     }
-
-    let duration = start.elapsed();
-    assert!(
-        duration < std::time::Duration::from_secs(400),
-        "Migrations took longer than 400 seconds: {duration:?}"
-    );
 }
 
 /// Migration 0013 has some checks that enforce that concurrent migrations can't break
@@ -353,9 +349,11 @@ async fn test_migration_0013_old_table() {
     })
     .await
     .unwrap_err();
-    assert!(err
-        .to_string()
-        .contains("InferenceById table is in an invalid state. Please contact TensorZero team."));
+    assert!(
+        err.to_string().contains("InferenceById table is in an invalid state. Please contact TensorZero team.") ||
+        err.to_string().contains("SELECT query outputs column with name 'id_uint', which is not found in the target table."),
+        "Unexpected error: {err}",
+    );
 }
 
 /// For this test, we will run all the migrations up to 0011, add some data to

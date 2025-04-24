@@ -34,9 +34,9 @@ use crate::inference::types::storage::StoragePath;
 use crate::inference::types::{
     collect_chunks, Base64Image, ChatInferenceDatabaseInsert, CollectChunksArgs,
     ContentBlockChatOutput, ContentBlockChunk, FetchContext, FinishReason, InferenceResult,
-    InferenceResultChunk, InferenceResultStream, Input, JsonInferenceDatabaseInsert,
-    JsonInferenceOutput, ModelInferenceResponseWithMetadata, RequestMessage, ResolvedInput,
-    ResolvedInputMessageContent, Usage,
+    InferenceResultChunk, InferenceResultStream, Input, InternalJsonInferenceOutput,
+    JsonInferenceDatabaseInsert, JsonInferenceOutput, ModelInferenceResponseWithMetadata,
+    RequestMessage, ResolvedInput, ResolvedInputMessageContent, Usage,
 };
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::model::ModelTable;
@@ -516,7 +516,7 @@ fn find_function(params: &Params, config: &Config) -> Result<(Arc<FunctionConfig
                     user_schema: None,
                     assistant_schema: None,
                     tools: vec![],
-                    tool_choice: ToolChoice::None,
+                    tool_choice: ToolChoice::Auto,
                     parallel_tool_calls: None,
                     description: None,
                 })),
@@ -852,15 +852,19 @@ impl InferenceResponse {
                 original_response: result.original_response,
                 finish_reason: result.finish_reason,
             }),
-            InferenceResult::Json(result) => InferenceResponse::Json(JsonInferenceResponse {
-                inference_id: result.inference_id,
-                episode_id,
-                variant_name,
-                output: result.output,
-                usage: result.usage,
-                original_response: result.original_response,
-                finish_reason: result.finish_reason,
-            }),
+            InferenceResult::Json(result) => {
+                let InternalJsonInferenceOutput { raw, parsed, .. } = result.output;
+                let output = JsonInferenceOutput { raw, parsed };
+                InferenceResponse::Json(JsonInferenceResponse {
+                    inference_id: result.inference_id,
+                    episode_id,
+                    variant_name,
+                    output,
+                    usage: result.usage,
+                    original_response: result.original_response,
+                    finish_reason: result.finish_reason,
+                })
+            }
         }
     }
 
@@ -944,6 +948,11 @@ pub struct JsonInferenceResponseChunk {
     pub finish_reason: Option<FinishReason>,
 }
 
+const ZERO_USAGE: Usage = Usage {
+    input_tokens: 0,
+    output_tokens: 0,
+};
+
 impl InferenceResponseChunk {
     fn new(
         inference_result: InferenceResultChunk,
@@ -959,7 +968,13 @@ impl InferenceResponseChunk {
                     episode_id,
                     variant_name,
                     content: result.content,
-                    usage: if cached { None } else { result.usage },
+                    // Token usage is intended to represent 'billed tokens',
+                    // so set it to zero if the result is cached
+                    usage: if cached {
+                        Some(ZERO_USAGE)
+                    } else {
+                        result.usage
+                    },
                     finish_reason: result.finish_reason,
                 })
             }
@@ -972,11 +987,38 @@ impl InferenceResponseChunk {
                     episode_id,
                     variant_name,
                     raw: result.raw.unwrap_or_default(),
-                    usage: if cached { None } else { result.usage },
+                    // Token usage is intended to represent 'billed tokens',
+                    // so set it to zero if the result is cached
+                    usage: if cached {
+                        Some(ZERO_USAGE)
+                    } else {
+                        result.usage
+                    },
                     finish_reason: result.finish_reason,
                 })
             }
         })
+    }
+
+    pub fn episode_id(&self) -> Uuid {
+        match self {
+            InferenceResponseChunk::Chat(c) => c.episode_id,
+            InferenceResponseChunk::Json(j) => j.episode_id,
+        }
+    }
+
+    pub fn inference_id(&self) -> Uuid {
+        match self {
+            InferenceResponseChunk::Chat(c) => c.inference_id,
+            InferenceResponseChunk::Json(j) => j.inference_id,
+        }
+    }
+
+    pub fn variant_name(&self) -> &str {
+        match self {
+            InferenceResponseChunk::Chat(c) => &c.variant_name,
+            InferenceResponseChunk::Json(j) => &j.variant_name,
+        }
     }
 }
 

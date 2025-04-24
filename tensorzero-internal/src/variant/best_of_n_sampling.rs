@@ -20,7 +20,7 @@ use crate::inference::types::{
     ModelInferenceResponseWithMetadata, RequestMessage, Role, Usage,
 };
 use crate::inference::types::{ContentBlockOutput, ResolvedInput};
-use crate::jsonschema_util::JSONSchemaFromPath;
+use crate::jsonschema_util::StaticJSONSchema;
 use crate::model::ModelTable;
 use crate::tool::{ImplicitToolConfig, ToolCallConfig, ToolChoice, ToolConfig};
 use crate::{
@@ -84,9 +84,9 @@ impl LoadableConfig<BestOfNSamplingConfig> for UninitializedBestOfNSamplingConfi
 }
 
 lazy_static! {
-    static ref EVALUATOR_OUTPUT_SCHEMA: JSONSchemaFromPath = {
+    static ref EVALUATOR_OUTPUT_SCHEMA: StaticJSONSchema = {
         #[allow(clippy::expect_used)]
-        JSONSchemaFromPath::from_value(&json!({
+        StaticJSONSchema::from_value(&json!({
             "type": "object",
             "properties": {
                 "thinking": { "type": "string" },
@@ -1032,6 +1032,8 @@ mod tests {
             Uuid::now_v7(),
             Some("{\"response\": \"Valid JSON response\"}".to_string()),
             Some(json!({"response": "Valid JSON response"})),
+            Some(0),
+            vec![],
             Usage {
                 input_tokens: 10,
                 output_tokens: 20,
@@ -1072,6 +1074,8 @@ mod tests {
             Uuid::now_v7(),
             Some("{\"oops: \"Malformed JSON response\"".to_string()),
             None, // malformed
+            Some(0),
+            vec![],
             Usage {
                 input_tokens: 15,
                 output_tokens: 25,

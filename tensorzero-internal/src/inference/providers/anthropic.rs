@@ -499,15 +499,15 @@ enum AnthropicMessageContent<'a> {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
-struct AnthropicImageSource {
-    r#type: AnthropicImageType,
-    media_type: ImageKind,
-    data: String,
+pub struct AnthropicImageSource {
+    pub r#type: AnthropicImageType,
+    pub media_type: ImageKind,
+    pub data: String,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
-enum AnthropicImageType {
+pub enum AnthropicImageType {
     Base64,
 }
 

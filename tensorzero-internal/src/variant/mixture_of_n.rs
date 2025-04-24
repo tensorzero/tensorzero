@@ -583,11 +583,11 @@ mod tests {
         inference::{
             providers::dummy::DummyProvider,
             types::{
-                ChatInferenceResult, FinishReason, JsonInferenceOutput, JsonInferenceResult,
-                Latency, ModelInferenceResponseWithMetadata,
+                ChatInferenceResult, FinishReason, InternalJsonInferenceOutput,
+                JsonInferenceResult, Latency, ModelInferenceResponseWithMetadata,
             },
         },
-        jsonschema_util::JSONSchemaFromPath,
+        jsonschema_util::StaticJSONSchema,
         minijinja_util::tests::get_test_template_config,
         model::{ModelConfig, ModelProvider, ProviderConfig},
         tool::{ToolCallConfig, ToolChoice},
@@ -866,6 +866,8 @@ mod tests {
             Uuid::now_v7(),
             Some("{\"response\": \"Valid JSON response\"}".to_string()),
             Some(json!({"response": "Valid JSON response"})),
+            Some(0),
+            vec![],
             Usage {
                 input_tokens: 10,
                 output_tokens: 20,
@@ -903,6 +905,8 @@ mod tests {
             Uuid::now_v7(),
             Some("{\"oops: \"Malformed JSON response\"".to_string()),
             None, // malformed
+            Some(0),
+            vec![],
             Usage {
                 input_tokens: 15,
                 output_tokens: 25,
@@ -952,7 +956,7 @@ mod tests {
             system_schema: None,
             user_schema: None,
             assistant_schema: None,
-            output_schema: JSONSchemaFromPath::from_value(&json!({})).unwrap(),
+            output_schema: StaticJSONSchema::from_value(&json!({})).unwrap(),
             implicit_tool_call_config: ToolCallConfig::default(),
             description: None,
         });
@@ -1097,9 +1101,11 @@ mod tests {
             input_tokens: 35,
             output_tokens: 55,
         };
-        let expected_content = JsonInferenceOutput {
+        let expected_content = InternalJsonInferenceOutput {
             raw: Some("{\"answer\":\"Hello\"}".to_string()),
             parsed: Some(json!({"answer": "Hello"})),
+            auxiliary_content: vec![],
+            json_block_index: Some(0),
         };
         match fused {
             InferenceResult::Json(fused) => {

@@ -328,13 +328,14 @@ impl SGLangResponseFormat {
     fn new(
         json_mode: &ModelInferenceRequestJsonMode,
         output_schema: Option<&Value>,
-    ) -> Result<Self, Error> {
+    ) -> Result<Option<Self>, Error> {
         match json_mode {
-            ModelInferenceRequestJsonMode::Off => Ok(SGLangResponseFormat::Text),
+            // For now, we never explicitly send `SGLangResponseFormat::Text`
+            ModelInferenceRequestJsonMode::Off => Ok(None),
             ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict => {
                 if let Some(schema) = output_schema {
                     let json_schema = json!({"name": "response", "strict": true, "schema": schema});
-                    return Ok(SGLangResponseFormat::JsonSchema { json_schema });
+                    return Ok(Some(SGLangResponseFormat::JsonSchema { json_schema }));
                 }
                 Err(ErrorDetails::InvalidRequest {
                     message: "The SGL models requires a schema to be provided in json mode"
@@ -386,10 +387,7 @@ impl<'a> SGLangRequest<'a> {
         model: &'a str,
         request: &'a ModelInferenceRequest<'_>,
     ) -> Result<SGLangRequest<'a>, Error> {
-        let response_format = Some(SGLangResponseFormat::new(
-            &request.json_mode,
-            request.output_schema,
-        )?);
+        let response_format = SGLangResponseFormat::new(&request.json_mode, request.output_schema)?;
         let stream_options = match request.stream {
             true => Some(StreamOptions {
                 include_usage: true,

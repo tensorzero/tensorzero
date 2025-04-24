@@ -63,7 +63,11 @@ def num_tokens_from_messages(
     for message in messages:
         num_tokens += tokens_per_message
         for key, value in message.items():
-            num_tokens += len(encoding.encode(value))
+            try:
+                num_tokens += len(encoding.encode(value))
+            except Exception as e:
+                warnings.warn(f"Error encoding message: {e}. Skipping.")
+                continue
             if key == "name":
                 num_tokens += tokens_per_name
     num_tokens += 3  # every reply is primed with <|start|>assistant<|message|>

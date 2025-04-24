@@ -8,7 +8,7 @@ services:
       - ./config:/app/config:ro
     command: --config-file /app/config/tensorzero.toml
     environment:
-      - HYPERBOLIC_API_KEY=${HYPERBOLIC_API_KEY:?Environment variable HYPERBOLIC_API_KEY must be set.}
+      HYPERBOLIC_API_KEY: ${HYPERBOLIC_API_KEY:?Environment variable HYPERBOLIC_API_KEY must be set.}
     ports:
       - "3000:3000"
     extra_hosts:

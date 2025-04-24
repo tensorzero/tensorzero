@@ -16,6 +16,7 @@ use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
+use crate::inference::types::resolved_input::ImageWithPath;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk, FunctionType,
     Latency, ModelInferenceRequestJsonMode, Role, Text, TextChunk,
@@ -31,7 +32,8 @@ use crate::model::{build_creds_caching_default_with_fn, CredentialLocation};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use super::anthropic::{
-    prefill_json_chunk_response, prefill_json_response, AnthropicMessageDelta, AnthropicStopReason,
+    prefill_json_chunk_response, prefill_json_response, AnthropicImageSource, AnthropicImageType,
+    AnthropicMessageDelta, AnthropicStopReason,
 };
 use super::gcp_vertex_gemini::{default_api_key_location, GCPVertexCredentials};
 use super::helpers::{inject_extra_request_data, peek_first_chunk};
@@ -398,10 +400,12 @@ impl<'a> From<&'a ToolConfig> for GCPVertexAnthropicTool<'a> {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
-// NB: Anthropic also supports Image blocks here but we won't for now
 enum GCPVertexAnthropicMessageContent<'a> {
     Text {
         text: &'a str,
+    },
+    Image {
+        source: AnthropicImageSource,
     },
     ToolResult {
         tool_use_id: &'a str,
@@ -466,10 +470,18 @@ impl<'a> TryFrom<&'a ContentBlock>
                     }],
                 },
             ))),
-            ContentBlock::Image(_) => Err(Error::new(ErrorDetails::UnsupportedContentBlockType {
-                content_block_type: "image".to_string(),
-                provider_type: PROVIDER_TYPE.to_string(),
-            })),
+            ContentBlock::Image(ImageWithPath {
+                image,
+                storage_path: _,
+            }) => Ok(Some(FlattenUnknown::Normal(
+                GCPVertexAnthropicMessageContent::Image {
+                    source: AnthropicImageSource {
+                        r#type: AnthropicImageType::Base64,
+                        media_type: image.mime_type,
+                        data: image.data()?.clone(),
+                    },
+                },
+            ))),
             // We don't support thought blocks being passed in from a request.
             // These are only possible to be passed in in the scenario where the
             // output of a chat completion is used as an input to another model inference,

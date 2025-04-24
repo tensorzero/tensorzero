@@ -98,6 +98,11 @@ impl Intercept for TensorZeroInterceptor {
             &self.model_name,
             &mut body_json,
         )?;
+        // Get a consistent order for use with the provider-proxy cache
+        if cfg!(feature = "e2e_tests") {
+            body_json.sort_all_objects();
+        }
+
         let raw_request = serde_json::to_string(&body_json).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!(
