@@ -27,6 +27,7 @@ app = modal.App(name="vllm-inference")
         "/root/.cache/vllm": vllm_cache_vol,
     },
     secrets=[modal.Secret.from_name("vllm-secret")],
+    max_containers=1,
 )
 @modal.concurrent(
     max_inputs=20
