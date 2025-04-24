@@ -110,6 +110,7 @@ async fn main() -> Result<()> {
                 });
         }
     }
+    let mut num_feedbacks_sent = 0;
     for (inference_id, inference_tree_info) in normalized_inference_trees {
         for tree_info in inference_tree_info {
             // Get all the diff trees for the paths in this NormalizedInferenceTreeInfo
@@ -165,11 +166,14 @@ async fn main() -> Result<()> {
                     dryrun: None,
                 })
                 .await?;
-
+            num_feedbacks_sent += 1;
             // TODO: Send a demonstration of the matching snippet if it's sufficiently good.
         }
     }
-
+    #[allow(clippy::print_stdout)]
+    {
+        println!("Number of feedbacks sent: {}", num_feedbacks_sent);
+    }
     Ok(())
 }
 
