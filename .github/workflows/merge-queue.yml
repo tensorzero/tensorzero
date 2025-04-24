@@ -44,7 +44,7 @@ jobs:
     steps:
       - name: Warm up vLLM modal instance
         run: |
-          curl https://tensorzero--vllm-inference-vllm-inference.modal.run/docs & > vllm_modal_logs.txt
+          curl https://tensorzero--vllm-inference-vllm-inference.modal.run/docs > vllm_modal_logs.txt &
 
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - name: Install Namespace CLI
