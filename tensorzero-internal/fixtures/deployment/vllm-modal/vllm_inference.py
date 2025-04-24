@@ -21,7 +21,7 @@ app = modal.App(name="vllm-inference")
 @app.function(
     image=vllm_image,
     gpu=f"T4:{N_GPU}",
-    scaledown_window=10 * MINUTES,
+    scaledown_window=5 * MINUTES,
     volumes={
         "/root/.cache/huggingface": hf_cache_vol,
         "/root/.cache/vllm": vllm_cache_vol,
