@@ -6,21 +6,21 @@ use async_trait::async_trait;
 use super::check_column_exists;
 
 /// This migration adds an `extra_headers` column to the `ChatInference`/`JsonInference` tables.
-pub struct Migration0024<'a> {
+pub struct Migration0025<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
 }
 
 #[async_trait]
-impl Migration for Migration0024<'_> {
+impl Migration for Migration0025<'_> {
     async fn can_apply(&self) -> Result<(), Error> {
         Ok(())
     }
 
     async fn should_apply(&self) -> Result<bool, Error> {
         let chat_extra_headers_column_exists =
-            check_column_exists(self.clickhouse, "ChatInference", "extra_headers", "0024").await?;
+            check_column_exists(self.clickhouse, "ChatInference", "extra_headers", "0025").await?;
         let json_extra_headers_column_exists =
-            check_column_exists(self.clickhouse, "JsonInference", "extra_headers", "0024").await?;
+            check_column_exists(self.clickhouse, "JsonInference", "extra_headers", "0025").await?;
 
         Ok(!chat_extra_headers_column_exists || !json_extra_headers_column_exists)
     }
