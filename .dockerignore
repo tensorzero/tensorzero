@@ -11,4 +11,4 @@ target-rust-analyzer
 .git
 /recipes
 /examples
-!/examples/integrations/cursorzero
+!/examples/integrations/cursor/experimental
