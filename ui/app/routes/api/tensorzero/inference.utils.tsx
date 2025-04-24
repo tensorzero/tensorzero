@@ -1,19 +1,15 @@
 import * as React from "react";
-import { useFetcher } from "react-router";
-import type {
-  SubmitTarget,
-  FetcherSubmitOptions,
-  FetcherWithComponents,
-} from "react-router";
+import { useFetcher, type FetcherFormProps } from "react-router";
+import type { SubmitTarget, FetcherSubmitOptions } from "react-router";
 import type {
   ContentBlockOutput,
   JsonInferenceOutput,
 } from "~/utils/clickhouse/common";
 import type { InferenceUsage } from "~/utils/clickhouse/helpers";
-import type { InferenceResponse } from "~/utils/tensorzero";
-import { resolvedInputToTensorZeroInput } from "./inference";
 import type { ParsedInferenceRow } from "~/utils/clickhouse/inference";
 import type { ParsedDatasetRow } from "~/utils/clickhouse/datasets";
+import type { InferenceResponse } from "~/utils/tensorzero";
+import { resolvedInputToTensorZeroInput } from "./inference";
 
 interface InferenceActionError {
   message: string;
@@ -21,15 +17,23 @@ interface InferenceActionError {
 }
 
 type InferenceActionResponse = {
-  info: VariantResponseInfo;
+  info?: VariantResponseInfo;
   raw: InferenceResponse;
 };
 
 type InferenceActionContext =
   | { state: "init"; data: null; error: null }
   | { state: "idle"; data: InferenceActionResponse | null; error: null }
-  | { state: "submitting"; data: InferenceActionResponse | null; error: null }
-  | { state: "loading"; data: InferenceActionResponse | null; error: null }
+  | {
+      state: "submitting";
+      data: InferenceActionResponse | null;
+      error: null | InferenceActionError;
+    }
+  | {
+      state: "loading";
+      data: InferenceActionResponse | null;
+      error: null | InferenceActionError;
+    }
   | {
       state: "error";
       data: (Pick<InferenceActionResponse, "raw"> & { info?: never }) | null;
@@ -39,24 +43,42 @@ type InferenceActionContext =
 const ENDPOINT = "/api/tensorzero/inference";
 
 type ActionFetcher = InferenceActionContext & {
+  Form: React.FC<Omit<FetcherFormProps, "method" | "encType" | "action">>;
   submit(
     target: SubmitTarget,
-    opts?: Omit<FetcherSubmitOptions, "method" | "method" | "action">,
+    opts?: Omit<FetcherSubmitOptions, "method" | "encType" | "action">,
   ): Promise<void>;
-  _raw: FetcherWithComponents<InferenceResponse>;
 };
 
+/**
+ * A wrapper around the `useFetcher` hook to handle POST requests to the
+ * inference endpoint.
+ */
 export function useInferenceActionFetcher() {
   const fetcher = useFetcher<InferenceResponse>();
+  /**
+   * The fetcher's state gives us the current status of the request alongside
+   * its data, but it does so in a generic interface that we still need to parse
+   * and interpret for rendering related UI. Because this fetcher is only be
+   * used for submitting POST requests to the given endpoint, we can safely add
+   * types and provide more specific context based on the shape of our data.
+   * This also gives our fetcher two additional states:
+   *  - `init`: before a request is actually made
+   *  - `error`: when the request fails, or when a successful response contains
+   *    an error instead of inference data
+   *
+   * All of this is derived from the fetcher's state and data so that we can
+   * avoid managing any state or synchronization via effects internally.
+   */
   const context = React.useMemo<InferenceActionContext>(() => {
-    if (fetcher.data) {
+    const inferenceOutput = fetcher.data;
+    if (inferenceOutput) {
       try {
-        const inferenceOutput = fetcher.data;
         // Check if the response contains an error
         if ("error" in inferenceOutput && inferenceOutput.error) {
           return {
-            state: "error",
-            data: { raw: fetcher.data },
+            state: fetcher.state === "idle" ? "error" : fetcher.state,
+            data: { raw: inferenceOutput },
             error: {
               caught: inferenceOutput.error,
               message: `Inference Failed: ${typeof inferenceOutput.error === "string" ? inferenceOutput.error : JSON.stringify(inferenceOutput.error)}`,
@@ -81,7 +103,7 @@ export function useInferenceActionFetcher() {
       } catch (error) {
         return {
           state: "error",
-          data: { raw: fetcher.data },
+          data: { raw: inferenceOutput },
           error: { message: "Failed to process response data", caught: error },
         } satisfies InferenceActionContext;
       }
@@ -100,16 +122,24 @@ export function useInferenceActionFetcher() {
     }
   }, [fetcher.state, fetcher.data]);
 
-  const { submit: fetcherSubmit } = fetcher;
   const submit = React.useCallback<ActionFetcher["submit"]>(
     (target, opts) => {
-      return fetcherSubmit(target, {
+      const submit = fetcher.submit;
+      return submit(target, {
         ...opts,
         method: "POST",
         action: ENDPOINT,
       });
     },
-    [fetcherSubmit],
+    [fetcher.submit],
+  );
+
+  const Form = React.useMemo<ActionFetcher["Form"]>(
+    () => (props) => {
+      const Form = fetcher.Form;
+      return <Form {...props} method="POST" action={ENDPOINT} />;
+    },
+    [fetcher.Form],
   );
 
   React.useEffect(() => {
@@ -120,9 +150,8 @@ export function useInferenceActionFetcher() {
 
   return {
     ...context,
+    Form,
     submit,
-    // shouldn't need this, used as an escape hatch
-    _raw: fetcher,
   } satisfies ActionFetcher;
 }
 
