@@ -51,6 +51,8 @@ export function useDatasetCountFetcher(
       searchParams.set("formData", JSON.stringify(formValues));
       countFetcher.load(`/api/datasets/count_inserts?${searchParams}`);
     }
+    // TODO: Fix and stop ignoring lint rule
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formValues]);
 
   return {

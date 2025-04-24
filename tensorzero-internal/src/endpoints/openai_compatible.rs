@@ -65,6 +65,7 @@ pub async fn inference_handler(
                 .collect::<Vec<_>>()
         );
     }
+    let stream_options = openai_compatible_params.stream_options;
     let params = Params::try_from_openai(headers, openai_compatible_params)?;
 
     // The prefix for the response's `model` field depends on the inference target
@@ -94,8 +95,11 @@ pub async fn inference_handler(
             Ok(Json(openai_compatible_response).into_response())
         }
         InferenceOutput::Streaming(stream) => {
-            let openai_compatible_stream =
-                prepare_serialized_openai_compatible_events(stream, response_model_prefix);
+            let openai_compatible_stream = prepare_serialized_openai_compatible_events(
+                stream,
+                response_model_prefix,
+                stream_options,
+            );
             Ok(Sse::new(openai_compatible_stream)
                 .keep_alive(axum::response::sse::KeepAlive::new())
                 .into_response())
@@ -217,6 +221,12 @@ enum ChatCompletionToolChoiceOption {
     Named(OpenAICompatibleNamedToolChoice),
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq)]
+struct OpenAICompatibleStreamOptions {
+    #[serde(default)]
+    include_usage: bool,
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 pub struct OpenAICompatibleParams {
     messages: Vec<OpenAICompatibleMessage>,
@@ -228,6 +238,7 @@ pub struct OpenAICompatibleParams {
     response_format: Option<OpenAICompatibleResponseFormat>,
     seed: Option<u32>,
     stream: Option<bool>,
+    stream_options: Option<OpenAICompatibleStreamOptions>,
     temperature: Option<f32>,
     tools: Option<Vec<OpenAICompatibleTool>>,
     tool_choice: Option<ChatCompletionToolChoiceOption>,
@@ -847,8 +858,8 @@ struct OpenAICompatibleResponseChunk {
     created: u32,
     model: String,
     system_fingerprint: String,
+    service_tier: String,
     object: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
     usage: Option<OpenAICompatibleUsage>,
 }
 
@@ -856,12 +867,20 @@ struct OpenAICompatibleResponseChunk {
 struct OpenAICompatibleChoiceChunk {
     index: u32,
     finish_reason: Option<OpenAICompatibleFinishReason>,
+    logprobs: Option<()>, // This is always set to None for now
     delta: OpenAICompatibleDelta,
+}
+
+fn is_none_or_empty<T>(v: &Option<Vec<T>>) -> bool {
+    // if it’s None → skip, or if the Vec is empty → skip
+    v.as_ref().is_none_or(|vec| vec.is_empty())
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 struct OpenAICompatibleDelta {
+    #[serde(skip_serializing_if = "Option::is_none")]
     content: Option<String>,
+    #[serde(skip_serializing_if = "is_none_or_empty")]
     tool_calls: Option<Vec<OpenAICompatibleToolCallChunk>>,
 }
 
@@ -879,16 +898,19 @@ fn convert_inference_response_chunk_to_openai_compatible(
                 choices: vec![OpenAICompatibleChoiceChunk {
                     index: 0,
                     finish_reason: c.finish_reason.map(|finish_reason| finish_reason.into()),
+                    logprobs: None,
                     delta: OpenAICompatibleDelta {
                         content,
                         tool_calls: Some(tool_calls),
                     },
                 }],
                 created: current_timestamp() as u32,
+                service_tier: "".to_string(),
                 model: format!("{response_model_prefix}{}", c.variant_name),
                 system_fingerprint: "".to_string(),
                 object: "chat.completion.chunk".to_string(),
-                usage: c.usage.map(|usage| usage.into()),
+                // We emit a single chunk containing 'usage' at the end of the stream
+                usage: None,
             }
         }
         InferenceResponseChunk::Json(c) => OpenAICompatibleResponseChunk {
@@ -897,16 +919,19 @@ fn convert_inference_response_chunk_to_openai_compatible(
             choices: vec![OpenAICompatibleChoiceChunk {
                 index: 0,
                 finish_reason: c.finish_reason.map(|finish_reason| finish_reason.into()),
+                logprobs: None,
                 delta: OpenAICompatibleDelta {
                     content: Some(c.raw),
                     tool_calls: None,
                 },
             }],
             created: current_timestamp() as u32,
+            service_tier: "".to_string(),
             model: format!("{response_model_prefix}{}", c.variant_name),
             system_fingerprint: "".to_string(),
             object: "chat.completion.chunk".to_string(),
-            usage: c.usage.map(|usage| usage.into()),
+            // We emit a single chunk containing 'usage' at the end of the stream
+            usage: None,
         },
     };
 
@@ -956,16 +981,41 @@ fn process_chat_content_chunk(
 fn prepare_serialized_openai_compatible_events(
     mut stream: InferenceStream,
     response_model_prefix: String,
+    stream_options: Option<OpenAICompatibleStreamOptions>,
 ) -> impl Stream<Item = Result<Event, Error>> {
     async_stream::stream! {
         let mut tool_id_to_index = HashMap::new();
         let mut is_first_chunk = true;
+        let mut total_usage = OpenAICompatibleUsage {
+            prompt_tokens: 0,
+            completion_tokens: 0,
+            total_tokens: 0,
+        };
+        let mut inference_id = None;
+        let mut episode_id = None;
+        let mut variant_name = None;
         while let Some(chunk) = stream.next().await {
             // NOTE - in the future, we may want to end the stream early if we get an error
             // For now, we just ignore the error and try to get more chunks
             let Ok(chunk) = chunk else {
                 continue;
             };
+            inference_id = Some(chunk.inference_id());
+            episode_id = Some(chunk.episode_id());
+            variant_name = Some(chunk.variant_name().to_string());
+            let chunk_usage = match &chunk {
+                InferenceResponseChunk::Chat(c) => {
+                    &c.usage
+                }
+                InferenceResponseChunk::Json(c) => {
+                    &c.usage
+                }
+            };
+            if let Some(chunk_usage) = chunk_usage {
+                total_usage.prompt_tokens += chunk_usage.input_tokens;
+                total_usage.completion_tokens += chunk_usage.output_tokens;
+                total_usage.total_tokens += chunk_usage.input_tokens + chunk_usage.output_tokens;
+            }
             let openai_compatible_chunks = convert_inference_response_chunk_to_openai_compatible(chunk, &mut tool_id_to_index, &response_model_prefix);
             for chunk in openai_compatible_chunks {
                 let mut chunk_json = serde_json::to_value(chunk).map_err(|e| {
@@ -985,6 +1035,45 @@ fn prepare_serialized_openai_compatible_events(
                     })
                 })
             }
+        }
+        if stream_options.map(|s| s.include_usage).unwrap_or(false) {
+            let episode_id = episode_id.ok_or_else(|| {
+                Error::new(ErrorDetails::Inference {
+                    message: "Cannot find episode_id - no chunks were produced by TensorZero".to_string(),
+                })
+            })?;
+            let inference_id = inference_id.ok_or_else(|| {
+                Error::new(ErrorDetails::Inference {
+                    message: "Cannot find inference_id - no chunks were produced by TensorZero".to_string(),
+                })
+            })?;
+            let variant_name = variant_name.ok_or_else(|| {
+                Error::new(ErrorDetails::Inference {
+                    message: "Cannot find variant_name - no chunks were produced by TensorZero".to_string(),
+                })
+            })?;
+            let usage_chunk = OpenAICompatibleResponseChunk {
+                id: inference_id.to_string(),
+                episode_id: episode_id.to_string(),
+                choices: vec![],
+                created: current_timestamp() as u32,
+                model: format!("{response_model_prefix}{}", variant_name),
+                system_fingerprint: "".to_string(),
+                object: "chat.completion.chunk".to_string(),
+                service_tier: "".to_string(),
+                usage: Some(OpenAICompatibleUsage {
+                    prompt_tokens: total_usage.prompt_tokens,
+                    completion_tokens: total_usage.completion_tokens,
+                    total_tokens: total_usage.total_tokens,
+                }),
+            };
+            yield Event::default().json_data(
+                usage_chunk)
+                .map_err(|e| {
+                    Error::new(ErrorDetails::Inference {
+                        message: format!("Failed to convert usage chunk to JSON: {}", e),
+                    })
+                });
         }
         yield Ok(Event::default().data("[DONE]"));
     }
@@ -1052,6 +1141,7 @@ mod tests {
                 tensorzero_dryrun: None,
                 tensorzero_cache_options: None,
                 unknown_fields: Default::default(),
+                stream_options: None,
             },
         )
         .unwrap();
@@ -1515,6 +1605,7 @@ mod tests {
                 tensorzero_episode_id: None,
                 tensorzero_cache_options: None,
                 unknown_fields: Default::default(),
+                stream_options: None,
             },
         )
         .unwrap();
@@ -1548,6 +1639,7 @@ mod tests {
                     enabled: CacheEnabledMode::On,
                 }),
                 unknown_fields: Default::default(),
+                stream_options: None,
             },
         )
         .unwrap();
@@ -1587,6 +1679,7 @@ mod tests {
                     enabled: CacheEnabledMode::On,
                 }),
                 unknown_fields: Default::default(),
+                stream_options: None,
             },
         )
         .unwrap();
@@ -1626,6 +1719,7 @@ mod tests {
                     enabled: CacheEnabledMode::WriteOnly,
                 }),
                 unknown_fields: Default::default(),
+                stream_options: None,
             },
         )
         .unwrap();

@@ -713,6 +713,7 @@ export const modelInferenceRowSchema = z.object({
   system: z.string().nullable(),
   input_messages: z.string(),
   output: z.string(),
+  cached: z.boolean(),
 });
 
 export type ModelInferenceRow = z.infer<typeof modelInferenceRowSchema>;

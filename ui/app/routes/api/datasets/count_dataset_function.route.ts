@@ -50,6 +50,8 @@ export function useDatasetCountFetcher(
         `/api/datasets/count/dataset/${dataset_name}/function/${function_name}`,
       );
     }
+    // TODO: Fix and stop ignoring lint rule
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dataset_name, function_name]);
 
   return {

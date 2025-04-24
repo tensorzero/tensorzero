@@ -943,6 +943,11 @@ pub struct JsonInferenceResponseChunk {
     pub finish_reason: Option<FinishReason>,
 }
 
+const ZERO_USAGE: Usage = Usage {
+    input_tokens: 0,
+    output_tokens: 0,
+};
+
 impl InferenceResponseChunk {
     fn new(
         inference_result: InferenceResultChunk,
@@ -958,7 +963,13 @@ impl InferenceResponseChunk {
                     episode_id,
                     variant_name,
                     content: result.content,
-                    usage: if cached { None } else { result.usage },
+                    // Token usage is intended to represent 'billed tokens',
+                    // so set it to zero if the result is cached
+                    usage: if cached {
+                        Some(ZERO_USAGE)
+                    } else {
+                        result.usage
+                    },
                     finish_reason: result.finish_reason,
                 })
             }
@@ -971,11 +982,38 @@ impl InferenceResponseChunk {
                     episode_id,
                     variant_name,
                     raw: result.raw.unwrap_or_default(),
-                    usage: if cached { None } else { result.usage },
+                    // Token usage is intended to represent 'billed tokens',
+                    // so set it to zero if the result is cached
+                    usage: if cached {
+                        Some(ZERO_USAGE)
+                    } else {
+                        result.usage
+                    },
                     finish_reason: result.finish_reason,
                 })
             }
         })
+    }
+
+    pub fn episode_id(&self) -> Uuid {
+        match self {
+            InferenceResponseChunk::Chat(c) => c.episode_id,
+            InferenceResponseChunk::Json(j) => j.episode_id,
+        }
+    }
+
+    pub fn inference_id(&self) -> Uuid {
+        match self {
+            InferenceResponseChunk::Chat(c) => c.inference_id,
+            InferenceResponseChunk::Json(j) => j.inference_id,
+        }
+    }
+
+    pub fn variant_name(&self) -> &str {
+        match self {
+            InferenceResponseChunk::Chat(c) => &c.variant_name,
+            InferenceResponseChunk::Json(j) => &j.variant_name,
+        }
     }
 }
 

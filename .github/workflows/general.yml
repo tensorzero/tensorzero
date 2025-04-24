@@ -1,4 +1,5 @@
 name: General Checks
+run-name: "General Checks for: ${{ github.event.pull_request.title || github.ref }}"
 
 on:
   merge_group:
@@ -25,6 +26,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
         with:
+          cache-provider: "buildjet"
           save-if: ${{ github.event_name == 'merge_group' }}
       - name: Install cargo-nextest
         uses: taiki-e/install-action@37bdc826eaedac215f638a96472df572feab0f9b
@@ -116,6 +118,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
         with:
+          cache-provider: "buildjet"
           save-if: ${{ github.event_name == 'merge_group' }}
       - name: "TensorZero PyO3 Client: Build"
         uses: PyO3/maturin-action@b3709a81b3e175ce3ede866725776fee42465311
@@ -179,7 +182,7 @@ jobs:
 
       - name: Test (Rust)
         run: |
-          cargo test-unit ${{vars.CARGO_NEXTEST_ARGS}}
+          cargo test-unit ${{ vars.CARGO_NEXTEST_EXTRA_ARGS }}
 
       - name: Install Python for python async client tests
         run: uv python install 3.9
@@ -288,21 +291,29 @@ jobs:
     # to avoid unnecessarily using Namespace credits (it should still always finish before
     # the main 'validate' job)
     runs-on: ubuntu-latest
+    continue-on-error: ${{ matrix.clickhouse_version.allow_failure }}
     strategy:
       matrix:
         clickhouse_version:
           - tag: "24.12-alpine"
             prefix: "24.12"
+            allow_failure: false
           - tag: "25.2-alpine"
             prefix: "25.2"
+            allow_failure: false
           - tag: "latest-alpine"
             prefix: ""
+            # ClickHouse can make new releases at any time, which might break our tests.
+            # We allow this job to fail to avoid blocking CI whenever this happens.
+            # However, we'll still want to fix the failing tests soon after we notice the failure
+            allow_failure: true
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
         with:
+          cache-provider: "buildjet"
           save-if: ${{ github.event_name == 'merge_group' }}
       - name: Install cargo-nextest
         uses: taiki-e/install-action@37bdc826eaedac215f638a96472df572feab0f9b
@@ -358,9 +369,19 @@ jobs:
       contents: read
       # Permission to fetch GitHub OIDC token authentication
       id-token: write
+    continue-on-error: ${{ matrix.clickhouse_version.allow_failure }}
     strategy:
       matrix:
-        clickhouse_version: ["24.12-alpine", "25.2-alpine", "latest-alpine"]
+        clickhouse_version:
+          - tag: "24.12-alpine"
+            allow_failure: false
+          - tag: "25.2-alpine"
+            allow_failure: false
+          - tag: "latest-alpine"
+            # ClickHouse can make new releases at any time, which might break our tests.
+            # We allow this job to fail to avoid blocking CI whenever this happens.
+            # However, we'll still want to fix the failing tests soon after we notice the failure
+            allow_failure: true
     steps:
       - uses: actions/checkout@v4
 
@@ -403,7 +424,7 @@ jobs:
           echo "FIREWORKS_API_KEY=not_used" >> fixtures/.env
           echo "FIREWORKS_ACCOUNT_ID=not_used" >> fixtures/.env
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures" >> fixtures/.env
-          TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version }} docker compose -f fixtures/docker-compose.yml up -d --build --force-recreate --wait
+          TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f fixtures/docker-compose.yml up -d --build --force-recreate --wait
 
       - name: Run ui tests
         working-directory: ui
