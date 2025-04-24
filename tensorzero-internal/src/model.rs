@@ -68,7 +68,11 @@ pub(crate) struct UninitializedModelConfig {
 }
 
 impl UninitializedModelConfig {
-    pub fn load(self, provider_types: &ProviderTypesConfig) -> Result<ModelConfig, Error> {
+    pub fn load(
+        self,
+        model_name: &str,
+        provider_types: &ProviderTypesConfig,
+    ) -> Result<ModelConfig, Error> {
         // We want `ModelProvider` to know its own name (from the 'providers' config section).
         // We first deserialize to `HashMap<Arc<str>, UninitializedModelProvider>`, and then
         // build `ModelProvider`s using the name keys from the map.
@@ -79,8 +83,12 @@ impl UninitializedModelConfig {
                 Ok((
                     name.clone(),
                     ModelProvider {
-                        name,
-                        config: provider.config.load(provider_types)?,
+                        name: name.clone(),
+                        config: provider.config.load(provider_types).map_err(|e| {
+                            Error::new(ErrorDetails::Config {
+                                message: format!("models.{model_name}.providers.{name}: {e}"),
+                            })
+                        })?,
                         extra_body: provider.extra_body,
                         extra_headers: provider.extra_headers,
                     },

@@ -370,7 +370,7 @@ impl<'c> Config<'c> {
             .into_iter()
             .map(|(name, config)| {
                 config
-                    .load(&uninitialized_config.provider_types)
+                    .load(&name, &uninitialized_config.provider_types)
                     .map(|c| (name, c))
             })
             .collect::<Result<HashMap<_, _>, _>>()?;
@@ -1959,7 +1959,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             Error::new(ErrorDetails::Config {
-                message: "models: Model name 'tensorzero::bad_model' contains a reserved prefix"
+                message: "Failed to load models: Model name 'tensorzero::bad_model' contains a reserved prefix"
                     .to_string()
             })
         );
@@ -1987,7 +1987,7 @@ mod tests {
                 result.unwrap_err(),
                 Error::new(ErrorDetails::Config {
                     message:
-                        "embedding_models: Embedding model name 'tensorzero::bad_embedding_model' contains a reserved prefix"
+                        "Failed to load embedding models: Embedding model name 'tensorzero::bad_embedding_model' contains a reserved prefix"
                             .to_string()
                 })
             );
