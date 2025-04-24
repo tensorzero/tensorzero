@@ -630,56 +630,56 @@ export async function queryInferenceById(
   id: string,
 ): Promise<ParsedInferenceRow | null> {
   const query = `
-WITH inference AS (
+    WITH inference AS (
+        SELECT
+            id_uint,
+            function_name,
+            variant_name,
+            episode_id,
+            function_type
+        FROM InferenceById FINAL
+        WHERE id_uint = toUInt128({id:UUID})
+        LIMIT 1
+    )
     SELECT
-        id_uint,
-        function_name,
-        variant_name,
-        episode_id,
-        function_type
-    FROM InferenceById FINAL
-    WHERE id_uint = toUInt128({id:UUID})
+        uint_to_uuid(i.id_uint) AS id,
+        c.function_name,
+        c.variant_name,
+        c.episode_id,
+        c.input,
+        c.output,
+        c.tool_params,
+        c.inference_params,
+        c.processing_time_ms,
+        NULL AS output_schema, -- Placeholder for JSON column
+        formatDateTime(c.timestamp, '%Y-%m-%dT%H:%i:%SZ') AS timestamp,
+        c.tags,
+        i.function_type
+    FROM ChatInference c
+    INNER JOIN inference i ON uint_to_uuid(i.id_uint) = c.id -- Join directly by ID
+    WHERE i.function_type = 'chat' -- Filter based on type from inference CTE
     LIMIT 1
-)
-SELECT
-    uint_to_uuid(i.id_uint) AS id,
-    c.function_name,
-    c.variant_name,
-    c.episode_id,
-    c.input,
-    c.output,
-    c.tool_params,
-    c.inference_params,
-    c.processing_time_ms,
-    NULL AS output_schema, -- Placeholder for JSON column
-    formatDateTime(c.timestamp, '%Y-%m-%dT%H:%i:%SZ') AS timestamp,
-    c.tags,
-    i.function_type
-FROM ChatInference c
-INNER JOIN inference i ON uint_to_uuid(i.id_uint) = c.id -- Join directly by ID
-WHERE i.function_type = 'chat' -- Filter based on type from inference CTE
-LIMIT 1
 
-UNION ALL
+    UNION ALL
 
-SELECT
-    uint_to_uuid(i.id_uint) AS id,
-    j.function_name,
-    j.variant_name,
-    j.episode_id,
-    j.input,
-    j.output,
-    NULL AS tool_params, -- Placeholder for Chat column
-    j.inference_params,
-    j.processing_time_ms,
-    j.output_schema,
-    formatDateTime(j.timestamp, '%Y-%m-%dT%H:%i:%SZ') AS timestamp,
-    j.tags,
-    i.function_type
-FROM JsonInference j
-INNER JOIN inference i ON uint_to_uuid(i.id_uint) = j.id -- Join directly by ID
-WHERE i.function_type = 'json' -- Filter based on type from inference CTE
-LIMIT 1
+    SELECT
+        uint_to_uuid(i.id_uint) AS id,
+        j.function_name,
+        j.variant_name,
+        j.episode_id,
+        j.input,
+        j.output,
+        NULL AS tool_params, -- Placeholder for Chat column
+        j.inference_params,
+        j.processing_time_ms,
+        j.output_schema,
+        formatDateTime(j.timestamp, '%Y-%m-%dT%H:%i:%SZ') AS timestamp,
+        j.tags,
+        i.function_type
+    FROM JsonInference j
+    INNER JOIN inference i ON uint_to_uuid(i.id_uint) = j.id -- Join directly by ID
+    WHERE i.function_type = 'json' -- Filter based on type from inference CTE
+    LIMIT 1
   `;
 
   const resultSet = await clickhouseClient.query({
