@@ -219,25 +219,25 @@ async fn test_thinking_inference_extra_header_128k() {
         },
         "extra_headers": [
             {
-                "model_provider_name": "tensorzero::model_name::claude-3-7-sonnet-20250219-thinking::provider_name::anthropic",
+                "model_provider_name": "tensorzero::model_name::anthropic::claude-3-7-sonnet-20250219::provider_name::anthropic",
                 "name": "anthropic-beta",
                 "value": "output-128k-2025-02-19"
             }
         ],
         "extra_body": [
             {
-                "model_provider_name": "tensorzero::model_name::claude-3-7-sonnet-20250219-thinking::provider_name::anthropic",
+                "model_provider_name": "tensorzero::model_name::anthropic::claude-3-7-sonnet-20250219::provider_name::anthropic",
                 "pointer": "/thinking",
                 // We use a budget tokens of 1024 to make sure that it doesn't think for too long,
                 // since 'stop_sequences' does not seem to apply to thinking. We set 'max_tokens'
                 // to 128k in 'test_thinking_128k'
-                "value": { 
+                "value": {
                     "type": "enabled",
                     "budget_tokens": 1024,
                 }
             },
             {
-                "model_provider_name": "tensorzero::model_name::claude-3-7-sonnet-20250219-thinking::provider_name::anthropic",
+                "model_provider_name": "tensorzero::model_name::anthropic::claude-3-7-sonnet-20250219::provider_name::anthropic",
                 "pointer": "/stop_sequences",
                 "value": [
                     "my_custom_stop",
@@ -248,15 +248,31 @@ async fn test_thinking_inference_extra_header_128k() {
     });
 
     let response = test_thinking_helper(&client, &payload).await;
-    let inference_id = response
-        .get("inference_id")
-        .unwrap()
-        .as_str()
+    let inference_id = response.get("inference_id").unwrap().as_str().unwrap();
+
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+
+    // Sleep for 100ms to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    // Check ClickHouse
+    let clickhouse = get_clickhouse().await;
+
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+        .await
         .unwrap();
 
-    // We don't check the database, as we already do that in lots of places.
+    // Check that 'extra_body' and 'extra_headers' were written out correctly to ClickHouse
+    assert_eq!(
+        result["extra_body"],
+        r#"[{"model_provider_name":"tensorzero::model_name::anthropic::claude-3-7-sonnet-20250219::provider_name::anthropic","pointer":"/thinking","value":{"type":"enabled","budget_tokens":1024}},{"model_provider_name":"tensorzero::model_name::anthropic::claude-3-7-sonnet-20250219::provider_name::anthropic","pointer":"/stop_sequences","value":["my_custom_stop"]}]"#
+    );
+    assert_eq!(
+        result["extra_headers"],
+        r#"[{"model_provider_name":"tensorzero::model_name::anthropic::claude-3-7-sonnet-20250219::provider_name::anthropic","name":"anthropic-beta","value":"output-128k-2025-02-19"}]"#
+    );
+    // We don't check anything else in the database, as we already do that in lots of places.
 }
-
 
 #[tokio::test]
 async fn test_thinking_128k() {

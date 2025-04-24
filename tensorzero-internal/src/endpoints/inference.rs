@@ -330,6 +330,7 @@ pub async fn inference(
 
         inference_config.variant_name = Some(variant_name);
         inference_config.extra_body = params.extra_body.clone();
+        inference_config.extra_headers = params.extra_headers.clone();
         if stream {
             let result = variant
                 .infer_stream(
