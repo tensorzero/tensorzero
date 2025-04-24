@@ -18,15 +18,16 @@ use crate::{
         ChatInferenceDatabaseInsert, ContentBlockChatOutput, FetchContext, Input,
         JsonInferenceDatabaseInsert, JsonInferenceOutput, ResolvedInput,
     },
-    tool::{ToolCallConfigDatabaseInsert, ToolChoice},
+    tool::{BatchDynamicToolParams, ToolCallConfigDatabaseInsert, ToolChoice},
     uuid_util::validate_tensorzero_uuid,
 };
 use tracing::instrument;
 
 pub const CLICKHOUSE_DATETIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S%.6f";
 use super::{
+    batch_inference::{BatchOutputSchemas, BatchTags},
     feedback::{validate_parse_demonstration, DemonstrationOutput, DynamicDemonstrationInfo},
-    inference::DEFAULT_FUNCTION_NAME,
+    inference::{InferenceOutput, DEFAULT_FUNCTION_NAME},
 };
 
 #[derive(Debug, Deserialize)]
@@ -256,14 +257,14 @@ struct WithFunctionName {
     function_name: String,
 }
 
-/// The handler for the POST `/datasets/:dataset/datapoints` endpoint.
-/// This inserts a new datapoint into `ChatInferenceDatapoint`/`JsonInferenceDatapoint`
+// The handler for the POST `/internal/datasets/:dataset/datapoints` endpoint.
+/// This inserts a new datapoint into `ChatInferenceDatapoint`/`JsonInferenceDatapoint`/
 /// based on an existing inference (specified by `inference_id`).
 ///
 /// The inference is mostly copied as-is, except for the 'output' field.
 /// Based on the 'output' parameter, the output is copied, ignored, or fetched from a demonstration.
 #[instrument(name = "create_datapoint", skip(app_state))]
-pub async fn create_datapoint_handler(
+pub async fn create_from_existing_datapoint_handler(
     State(app_state): AppState,
     Path(path_params): Path<CreatePathParams>,
     StructuredJson(existing_inference): StructuredJson<ExistingInference>,
@@ -278,7 +279,7 @@ pub async fn create_datapoint_handler(
     Ok(Json(CreateDatapointResponse { id: datapoint_id }))
 }
 
-/// The handler for the PUT `/datasets/:dataset/datapoints/:id"` endpoint.
+/// The handler for the PUT `/internal/datasets/:dataset/datapoints/:id"` endpoint.
 /// This writes a datapoint with the given id, overwriting any existing datapoint
 /// with the same id.
 ///
@@ -435,6 +436,62 @@ pub async fn update_datapoint_handler(
         }
     }
     Ok(Json(CreateDatapointResponse { id: path_params.id }))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+pub enum DatapointOutput {
+    Json(JsonInferenceOutput),
+    Chat(Vec<ContentBlockChatOutput>),
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateDatapointParams {
+    // the function name
+    pub function_name: String,
+    // the input for each datapoint
+    pub input: Vec<Input>,
+    // the output for each datapoint
+    // This can be None globally or include nulls for datapoints that
+    // should not have an output
+    #[serde(default)]
+    pub output: Option<Vec<Option<DatapointOutput>>>,
+    // the tags for each datapoint
+    #[serde(default)]
+    pub tags: Option<BatchTags>,
+    // dynamic information about tool calling. Don't directly include `dynamic_tool_params` in `Params`.
+    #[serde(flatten)]
+    pub dynamic_tool_params: BatchDynamicToolParams,
+    // `dynamic_tool_params` includes the following fields, passed at the top level of `Params`:
+    // If provided, the inference will only use the specified tools (a subset of the function's tools)
+    // allowed_tools: Option<Vec<Option<Vec<String>>>>,
+    // If provided, the inference will use the specified tools in addition to the function's tools
+    // additional_tools: Option<Vec<Option<Vec<Tool>>>>,
+    // If provided, the inference will use the specified tool choice
+    // tool_choice: Option<Vec<Option<ToolChoice>>>,
+    // If true, the inference will use parallel tool calls
+    // parallel_tool_calls: Option<Vec<Option<bool>>>,
+    // If provided for a JSON inference, the inference will use the specified output schema instead of the
+    // configured one. We only lazily validate this schema.
+    #[serde(default)]
+    pub output_schemas: Option<BatchOutputSchemas>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateDatapointPathParams {
+    pub dataset_name: String,
+}
+
+// The handler for the POST `/datasets/:dataset_name/datapoints` endpoint.
+/// This inserts a new datapoint into `ChatInferenceDatapoint`/`JsonInferenceDatapoint`/
+pub async fn create_datapoint_handler(
+    State(app_state): AppState,
+    Path(path_params): Path<CreateDatapointPathParams>,
+    StructuredJson(params): StructuredJson<CreateDatapointParams>,
+) -> Result<Json<CreateDatapointResponse>, Error> {
+    validate_dataset_name(&path_params.dataset_name)?;
+    let function_config = get_possibly_default_function(&params.function_name, &app_state.config)?;
+    todo!()
 }
 
 #[derive(Debug, Deserialize)]
