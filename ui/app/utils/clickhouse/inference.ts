@@ -659,6 +659,7 @@ export async function queryInferenceById(
     INNER JOIN inference i ON uint_to_uuid(i.id_uint) = c.id -- Join directly by ID
     WHERE i.function_type = 'chat' -- Filter based on type from inference CTE
     LIMIT 1
+    SETTINGS join_algorithm = 'auto'
 
     UNION ALL
 
@@ -680,6 +681,7 @@ export async function queryInferenceById(
     INNER JOIN inference i ON uint_to_uuid(i.id_uint) = j.id -- Join directly by ID
     WHERE i.function_type = 'json' -- Filter based on type from inference CTE
     LIMIT 1
+    SETTINGS join_algorithm = 'auto'
   `;
 
   const resultSet = await clickhouseClient.query({
