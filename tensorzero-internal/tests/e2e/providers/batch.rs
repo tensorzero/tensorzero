@@ -42,10 +42,7 @@ use crate::providers::common::{
 };
 use crate::{
     common::get_gateway_endpoint,
-    providers::common::{
-        check_inference_params_response, check_simple_image_inference_response,
-        check_simple_inference_response,
-    },
+    providers::common::{check_inference_params_response, check_simple_image_inference_response},
 };
 
 use super::common::E2ETestProvider;
@@ -439,6 +436,42 @@ macro_rules! generate_batch_inference_tests {
     };
 }
 
+async fn check_clickhouse_batch_request_status(
+    clickhouse: &ClickHouseConnectionInfo,
+    batch_id: Uuid,
+    provider: &E2ETestProvider,
+    expected_status: &str,
+) {
+    // Check if ClickHouse is ok - BatchRequest Table
+    let result = select_latest_batch_request_clickhouse(clickhouse, batch_id)
+        .await
+        .unwrap();
+
+    println!("ClickHouse - BatchRequest: {result:#?}");
+
+    let id = result.get("id").unwrap().as_str().unwrap();
+    Uuid::parse_str(id).unwrap();
+
+    let retrieved_batch_id = result.get("batch_id").unwrap().as_str().unwrap();
+    let retrieved_batch_id = Uuid::parse_str(retrieved_batch_id).unwrap();
+    assert_eq!(retrieved_batch_id, batch_id);
+    let batch_params = result.get("batch_params").unwrap().as_str().unwrap();
+    let _batch_params: Value = serde_json::from_str(batch_params).unwrap();
+    // We can't check that the batch params are exactly the same because they vary per-provider
+    // We will check that they are valid by using them instead.
+    let model_name = result.get("model_name").unwrap().as_str().unwrap();
+    assert_eq!(model_name, provider.model_name);
+
+    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
+    assert_eq!(model_provider_name, provider.model_provider_name);
+
+    let status = result.get("status").unwrap().as_str().unwrap();
+    assert_eq!(status, expected_status);
+
+    let errors = result.get("errors").unwrap().as_array().unwrap();
+    assert_eq!(errors.len(), 0);
+}
+
 fn get_poll_batch_inference_url(query: PollPathParams) -> Url {
     let mut url = get_gateway_endpoint("/batch_inference");
     match query {
@@ -548,7 +581,9 @@ struct InsertedFakeDataIds {
 /// this will create new pending batch inferences with new batch and inference IDs.
 /// This will test polling in a short-term way if possible (there is already data in the DB with valid params).
 ///
-/// If `tags` is provided, it will only duplicate batch inferences that match the provided tags.
+/// If `tags` is provided, it will only look up batch inferences that match the provided tags.
+/// The new `BatchRequest` will be written out with different tags, to ensure that it doesn't
+/// affect tests running in parallel that want to check the original batch inference.
 async fn insert_fake_pending_batch_inference_data(
     clickhouse: &ClickHouseConnectionInfo,
     function_name: &str,
@@ -572,7 +607,18 @@ async fn insert_fake_pending_batch_inference_data(
     batch_request.batch_id = new_batch_id;
     for inference in batch_inferences.iter_mut() {
         inference.batch_id = new_batch_id;
-        inference.inference_id = Uuid::now_v7();
+        inference.tags = HashMap::from([(
+            "fake_pending".to_string(),
+            serde_json::to_string(&serde_json::Value::Object(
+                inference
+                    .tags
+                    .clone()
+                    .into_iter()
+                    .map(|(k, v)| (k, v.into()))
+                    .collect::<serde_json::Map<String, Value>>(),
+            ))
+            .unwrap(),
+        )]);
     }
 
     clickhouse
@@ -763,34 +809,7 @@ pub async fn test_start_simple_image_batch_inference_request_with_provider(
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(!raw_request.is_empty());
 
-    // Check if ClickHouse is ok - BatchRequest Table
-    let result = select_latest_batch_request_clickhouse(&clickhouse, batch_id)
-        .await
-        .unwrap();
-
-    println!("ClickHouse - BatchRequest: {result:#?}");
-
-    let id = result.get("id").unwrap().as_str().unwrap();
-    Uuid::parse_str(id).unwrap();
-
-    let retrieved_batch_id = result.get("batch_id").unwrap().as_str().unwrap();
-    let retrieved_batch_id = Uuid::parse_str(retrieved_batch_id).unwrap();
-    assert_eq!(retrieved_batch_id, batch_id);
-    let batch_params = result.get("batch_params").unwrap().as_str().unwrap();
-    let _batch_params: Value = serde_json::from_str(batch_params).unwrap();
-    // We can't check that the batch params are exactly the same because they vary per-provider
-    // We will check that they are valid by using them instead.
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
-
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, provider.model_provider_name);
-
-    let status = result.get("status").unwrap().as_str().unwrap();
-    assert_eq!(status, "pending");
-
-    let errors = result.get("errors").unwrap().as_array().unwrap();
-    assert_eq!(errors.len(), 0);
+    check_clickhouse_batch_request_status(&clickhouse, batch_id, &provider, "pending").await;
 }
 
 /// If there is a pending batch inference for the function, variant, and tags
@@ -870,6 +889,7 @@ pub async fn test_poll_existing_simple_image_batch_inference_request_with_provid
     assert_eq!(inferences_json.len(), 1);
     check_simple_image_inference_response(inferences_json[0].clone(), None, &provider, true, false)
         .await;
+    check_clickhouse_batch_request_status(&clickhouse, batch_id, &provider, "completed").await;
 }
 
 /// If there is a completed batch inference for the function, variant, and tags
@@ -952,6 +972,8 @@ pub async fn test_poll_completed_simple_image_batch_inference_request_with_provi
 
     check_simple_image_inference_response(inferences_json[0].clone(), None, &provider, true, false)
         .await;
+
+    check_clickhouse_batch_request_status(&clickhouse, ids.batch_id, &provider, "completed").await;
 }
 
 pub async fn test_start_inference_params_batch_inference_request_with_provider(
@@ -1132,34 +1154,7 @@ pub async fn test_start_inference_params_batch_inference_request_with_provider(
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(!raw_request.is_empty());
 
-    // Check if ClickHouse is ok - BatchRequest Table
-    let result = select_latest_batch_request_clickhouse(&clickhouse, batch_id)
-        .await
-        .unwrap();
-
-    println!("ClickHouse - BatchRequest: {result:#?}");
-
-    let id = result.get("id").unwrap().as_str().unwrap();
-    Uuid::parse_str(id).unwrap();
-
-    let retrieved_batch_id = result.get("batch_id").unwrap().as_str().unwrap();
-    let retrieved_batch_id = Uuid::parse_str(retrieved_batch_id).unwrap();
-    assert_eq!(retrieved_batch_id, batch_id);
-    let batch_params = result.get("batch_params").unwrap().as_str().unwrap();
-    let _batch_params: Value = serde_json::from_str(batch_params).unwrap();
-    // We can't check that the batch params are exactly the same because they vary per-provider
-    // We will check that they are valid by using them instead.
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
-
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, provider.model_provider_name);
-
-    let status = result.get("status").unwrap().as_str().unwrap();
-    assert_eq!(status, "pending");
-
-    let errors = result.get("errors").unwrap().as_array().unwrap();
-    assert_eq!(errors.len(), 0);
+    check_clickhouse_batch_request_status(&clickhouse, batch_id, &provider, "pending").await;
 }
 
 /// If there is a pending batch inference for the function, variant, and tags
@@ -1237,6 +1232,7 @@ pub async fn test_poll_existing_inference_params_batch_inference_request_with_pr
     let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
     check_inference_params_response(inferences_json[0].clone(), &provider, None, true).await;
+    check_clickhouse_batch_request_status(&clickhouse, batch_id, &provider, "completed").await;
 }
 
 /// If there is a completed batch inference for the function, variant, and tags
@@ -1291,7 +1287,7 @@ pub async fn test_poll_completed_inference_params_batch_inference_request_with_p
     let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
 
-    check_simple_inference_response(inferences_json[0].clone(), None, &provider, true, false).await;
+    check_inference_params_response(inferences_json[0].clone(), &provider, None, true).await;
 
     // Poll by batch_id
     let url = get_poll_batch_inference_url(PollPathParams {
@@ -1317,6 +1313,7 @@ pub async fn test_poll_completed_inference_params_batch_inference_request_with_p
     assert_eq!(inferences_json.len(), 1);
 
     check_inference_params_response(inferences_json[0].clone(), &provider, None, true).await;
+    check_clickhouse_batch_request_status(&clickhouse, ids.batch_id, &provider, "completed").await;
 }
 
 /// Tests that the tool use works as expected in a batch inference request.
@@ -1750,34 +1747,7 @@ pub async fn test_tool_use_batch_inference_request_with_provider(provider: E2ETe
         assert!(!raw_request.is_empty());
     }
 
-    // Check if ClickHouse is ok - BatchRequest Table
-    let result = select_latest_batch_request_clickhouse(&clickhouse, batch_id)
-        .await
-        .unwrap();
-
-    println!("ClickHouse - BatchRequest: {result:#?}");
-
-    let id = result.get("id").unwrap().as_str().unwrap();
-    Uuid::parse_str(id).unwrap();
-
-    let retrieved_batch_id = result.get("batch_id").unwrap().as_str().unwrap();
-    let retrieved_batch_id = Uuid::parse_str(retrieved_batch_id).unwrap();
-    assert_eq!(retrieved_batch_id, batch_id);
-    let batch_params = result.get("batch_params").unwrap().as_str().unwrap();
-    let _batch_params: Value = serde_json::from_str(batch_params).unwrap();
-    // We can't check that the batch params are exactly the same because they vary per-provider
-    // We will check that they are valid by using them instead.
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
-
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, provider.model_provider_name);
-
-    let status = result.get("status").unwrap().as_str().unwrap();
-    assert_eq!(status, "pending");
-
-    let errors = result.get("errors").unwrap().as_array().unwrap();
-    assert_eq!(errors.len(), 0);
+    check_clickhouse_batch_request_status(&clickhouse, batch_id, &provider, "pending").await;
 }
 
 /// For a given batch id, get the tags for all inferences in the batch
@@ -1922,6 +1892,7 @@ pub async fn test_poll_existing_tool_choice_batch_inference_request_with_provide
     }
 
     assert_eq!(test_types_seen.len(), 5);
+    check_clickhouse_batch_request_status(&clickhouse, batch_id, &provider, "completed").await;
 }
 
 /// If there is a completed batch inference for the function, variant, and tags
@@ -1988,7 +1959,14 @@ pub async fn test_poll_completed_tool_use_batch_inference_request_with_provider(
             .unwrap();
         let inference_id = Uuid::parse_str(inference_id).unwrap();
         let tags = inference_tags.get(&inference_id).unwrap();
-        let test_type = tags.get("test_type").unwrap();
+        // `insert_fake_pending_batch_inference_data` wraps the original tags to avoid clashing
+        // with other tests
+        let original_tags: HashMap<String, String> = serde_json::from_str(
+            tags.get("fake_pending")
+                .expect("Missing 'fake_pending' tag"),
+        )
+        .unwrap();
+        let test_type = original_tags.get("test_type").unwrap();
         match test_type.as_str() {
             "auto_used" => {
                 check_tool_use_tool_choice_auto_used_inference_response(
@@ -2041,6 +2019,7 @@ pub async fn test_poll_completed_tool_use_batch_inference_request_with_provider(
     }
 
     assert_eq!(test_types_seen.len(), 5);
+    check_clickhouse_batch_request_status(&clickhouse, batch_id, &provider, "completed").await;
 }
 
 pub async fn test_allowed_tools_batch_inference_request_with_provider(provider: E2ETestProvider) {
@@ -2211,34 +2190,7 @@ pub async fn test_allowed_tools_batch_inference_request_with_provider(provider: 
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(!raw_request.is_empty());
 
-    // Check if ClickHouse is ok - BatchRequest Table
-    let result = select_latest_batch_request_clickhouse(&clickhouse, batch_id)
-        .await
-        .unwrap();
-
-    println!("ClickHouse - BatchRequest: {result:#?}");
-
-    let id = result.get("id").unwrap().as_str().unwrap();
-    Uuid::parse_str(id).unwrap();
-
-    let retrieved_batch_id = result.get("batch_id").unwrap().as_str().unwrap();
-    let retrieved_batch_id = Uuid::parse_str(retrieved_batch_id).unwrap();
-    assert_eq!(retrieved_batch_id, batch_id);
-    let batch_params = result.get("batch_params").unwrap().as_str().unwrap();
-    let _batch_params: Value = serde_json::from_str(batch_params).unwrap();
-    // We can't check that the batch params are exactly the same because they vary per-provider
-    // We will check that they are valid by using them instead.
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
-
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, provider.model_provider_name);
-
-    let status = result.get("status").unwrap().as_str().unwrap();
-    assert_eq!(status, "pending");
-
-    let errors = result.get("errors").unwrap().as_array().unwrap();
-    assert_eq!(errors.len(), 0);
+    check_clickhouse_batch_request_status(&clickhouse, batch_id, &provider, "pending").await;
 }
 
 /// If there is a pending batch inference for the function, variant, and tags
@@ -2327,6 +2279,7 @@ pub async fn test_poll_existing_allowed_tools_batch_inference_request_with_provi
         true,
     )
     .await;
+    check_clickhouse_batch_request_status(&clickhouse, batch_id, &provider, "completed").await;
 }
 
 /// If there is a completed batch inference for the function, variant, and tags
@@ -2419,6 +2372,8 @@ pub async fn test_poll_completed_allowed_tools_batch_inference_request_with_prov
         true,
     )
     .await;
+
+    check_clickhouse_batch_request_status(&clickhouse, ids.batch_id, &provider, "completed").await;
 }
 
 pub async fn test_multi_turn_parallel_tool_use_batch_inference_request_with_provider(
@@ -2684,34 +2639,7 @@ pub async fn test_multi_turn_parallel_tool_use_batch_inference_request_with_prov
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(!raw_request.is_empty());
 
-    // Check if ClickHouse is ok - BatchRequest Table
-    let result = select_latest_batch_request_clickhouse(&clickhouse, batch_id)
-        .await
-        .unwrap();
-
-    println!("ClickHouse - BatchRequest: {result:#?}");
-
-    let id = result.get("id").unwrap().as_str().unwrap();
-    Uuid::parse_str(id).unwrap();
-
-    let retrieved_batch_id = result.get("batch_id").unwrap().as_str().unwrap();
-    let retrieved_batch_id = Uuid::parse_str(retrieved_batch_id).unwrap();
-    assert_eq!(retrieved_batch_id, batch_id);
-    let batch_params = result.get("batch_params").unwrap().as_str().unwrap();
-    let _batch_params: Value = serde_json::from_str(batch_params).unwrap();
-    // We can't check that the batch params are exactly the same because they vary per-provider
-    // We will check that they are valid by using them instead.
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
-
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, provider.model_provider_name);
-
-    let status = result.get("status").unwrap().as_str().unwrap();
-    assert_eq!(status, "pending");
-
-    let errors = result.get("errors").unwrap().as_array().unwrap();
-    assert_eq!(errors.len(), 0);
+    check_clickhouse_batch_request_status(&clickhouse, batch_id, &provider, "pending").await;
 }
 
 pub async fn test_tool_multi_turn_batch_inference_request_with_provider(provider: E2ETestProvider) {
@@ -2914,34 +2842,7 @@ pub async fn test_tool_multi_turn_batch_inference_request_with_provider(provider
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(!raw_request.is_empty());
 
-    // Check if ClickHouse is ok - BatchRequest Table
-    let result = select_latest_batch_request_clickhouse(&clickhouse, batch_id)
-        .await
-        .unwrap();
-
-    println!("ClickHouse - BatchRequest: {result:#?}");
-
-    let id = result.get("id").unwrap().as_str().unwrap();
-    Uuid::parse_str(id).unwrap();
-
-    let retrieved_batch_id = result.get("batch_id").unwrap().as_str().unwrap();
-    let retrieved_batch_id = Uuid::parse_str(retrieved_batch_id).unwrap();
-    assert_eq!(retrieved_batch_id, batch_id);
-    let batch_params = result.get("batch_params").unwrap().as_str().unwrap();
-    let _batch_params: Value = serde_json::from_str(batch_params).unwrap();
-    // We can't check that the batch params are exactly the same because they vary per-provider
-    // We will check that they are valid by using them instead.
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
-
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, provider.model_provider_name);
-
-    let status = result.get("status").unwrap().as_str().unwrap();
-    assert_eq!(status, "pending");
-
-    let errors = result.get("errors").unwrap().as_array().unwrap();
-    assert_eq!(errors.len(), 0);
+    check_clickhouse_batch_request_status(&clickhouse, batch_id, &provider, "pending").await;
 }
 
 /// If there is a pending batch inference for the function, variant, and tags
@@ -3020,6 +2921,7 @@ pub async fn test_poll_existing_multi_turn_batch_inference_request_with_provider
     assert_eq!(inferences_json.len(), 1);
     check_tool_use_multi_turn_inference_response(inferences_json[0].clone(), &provider, None, true)
         .await;
+    check_clickhouse_batch_request_status(&clickhouse, batch_id, &provider, "completed").await;
 }
 
 pub async fn test_poll_existing_multi_turn_parallel_batch_inference_request_with_provider(
@@ -3103,6 +3005,7 @@ pub async fn test_poll_existing_multi_turn_parallel_batch_inference_request_with
         true,
     )
     .await;
+    check_clickhouse_batch_request_status(&clickhouse, batch_id, &provider, "completed").await;
 }
 
 pub async fn test_poll_completed_multi_turn_parallel_batch_inference_request_with_provider(
@@ -3187,6 +3090,8 @@ pub async fn test_poll_completed_multi_turn_parallel_batch_inference_request_wit
         true,
     )
     .await;
+
+    check_clickhouse_batch_request_status(&clickhouse, ids.batch_id, &provider, "completed").await;
 }
 
 /// If there is a completed batch inference for the function, variant, and tags
@@ -3269,6 +3174,8 @@ pub async fn test_poll_completed_multi_turn_batch_inference_request_with_provide
 
     check_tool_use_multi_turn_inference_response(inferences_json[0].clone(), &provider, None, true)
         .await;
+
+    check_clickhouse_batch_request_status(&clickhouse, ids.batch_id, &provider, "completed").await;
 }
 
 pub async fn test_dynamic_tool_use_batch_inference_request_with_provider(
@@ -3464,34 +3371,7 @@ pub async fn test_dynamic_tool_use_batch_inference_request_with_provider(
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(!raw_request.is_empty());
 
-    // Check if ClickHouse is ok - BatchRequest Table
-    let result = select_latest_batch_request_clickhouse(&clickhouse, batch_id)
-        .await
-        .unwrap();
-
-    println!("ClickHouse - BatchRequest: {result:#?}");
-
-    let id = result.get("id").unwrap().as_str().unwrap();
-    Uuid::parse_str(id).unwrap();
-
-    let retrieved_batch_id = result.get("batch_id").unwrap().as_str().unwrap();
-    let retrieved_batch_id = Uuid::parse_str(retrieved_batch_id).unwrap();
-    assert_eq!(retrieved_batch_id, batch_id);
-    let batch_params = result.get("batch_params").unwrap().as_str().unwrap();
-    let _batch_params: Value = serde_json::from_str(batch_params).unwrap();
-    // We can't check that the batch params are exactly the same because they vary per-provider
-    // We will check that they are valid by using them instead.
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
-
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, provider.model_provider_name);
-
-    let status = result.get("status").unwrap().as_str().unwrap();
-    assert_eq!(status, "pending");
-
-    let errors = result.get("errors").unwrap().as_array().unwrap();
-    assert_eq!(errors.len(), 0);
+    check_clickhouse_batch_request_status(&clickhouse, batch_id, &provider, "pending").await;
 }
 
 /// If there is a pending batch inference for the function, variant, and tags
@@ -3570,6 +3450,7 @@ pub async fn test_poll_existing_dynamic_tool_use_batch_inference_request_with_pr
     assert_eq!(inferences_json.len(), 1);
     check_dynamic_tool_use_inference_response(inferences_json[0].clone(), &provider, None, true)
         .await;
+    check_clickhouse_batch_request_status(&clickhouse, batch_id, &provider, "completed").await;
 }
 
 /// If there is a completed batch inference for the function, variant, and tags
@@ -3652,6 +3533,8 @@ pub async fn test_poll_completed_dynamic_tool_use_batch_inference_request_with_p
 
     check_dynamic_tool_use_inference_response(inferences_json[0].clone(), &provider, None, true)
         .await;
+
+    check_clickhouse_batch_request_status(&clickhouse, ids.batch_id, &provider, "completed").await;
 }
 
 pub async fn test_parallel_tool_use_batch_inference_request_with_provider(
@@ -3839,34 +3722,7 @@ pub async fn test_parallel_tool_use_batch_inference_request_with_provider(
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(!raw_request.is_empty());
 
-    // Check if ClickHouse is ok - BatchRequest Table
-    let result = select_latest_batch_request_clickhouse(&clickhouse, batch_id)
-        .await
-        .unwrap();
-
-    println!("ClickHouse - BatchRequest: {result:#?}");
-
-    let id = result.get("id").unwrap().as_str().unwrap();
-    Uuid::parse_str(id).unwrap();
-
-    let retrieved_batch_id = result.get("batch_id").unwrap().as_str().unwrap();
-    let retrieved_batch_id = Uuid::parse_str(retrieved_batch_id).unwrap();
-    assert_eq!(retrieved_batch_id, batch_id);
-    let batch_params = result.get("batch_params").unwrap().as_str().unwrap();
-    let _batch_params: Value = serde_json::from_str(batch_params).unwrap();
-    // We can't check that the batch params are exactly the same because they vary per-provider
-    // We will check that they are valid by using them instead.
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
-
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, provider.model_provider_name);
-
-    let status = result.get("status").unwrap().as_str().unwrap();
-    assert_eq!(status, "pending");
-
-    let errors = result.get("errors").unwrap().as_array().unwrap();
-    assert_eq!(errors.len(), 0);
+    check_clickhouse_batch_request_status(&clickhouse, batch_id, &provider, "pending").await;
 }
 
 /// If there is a pending batch inference for the function, variant, and tags
@@ -3958,6 +3814,7 @@ pub async fn test_poll_existing_parallel_tool_use_batch_inference_request_with_p
         true.into(),
     )
     .await;
+    check_clickhouse_batch_request_status(&clickhouse, batch_id, &provider, "completed").await;
 }
 
 /// If there is a completed batch inference for the function, variant, and tags
@@ -4052,6 +3909,8 @@ pub async fn test_poll_completed_parallel_tool_use_batch_inference_request_with_
         true.into(),
     )
     .await;
+
+    check_clickhouse_batch_request_status(&clickhouse, ids.batch_id, &provider, "completed").await;
 }
 
 pub async fn test_json_mode_batch_inference_request_with_provider(provider: E2ETestProvider) {
@@ -4210,34 +4069,7 @@ pub async fn test_json_mode_batch_inference_request_with_provider(provider: E2ET
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(!raw_request.is_empty());
 
-    // Check if ClickHouse is ok - BatchRequest Table
-    let result = select_latest_batch_request_clickhouse(&clickhouse, batch_id)
-        .await
-        .unwrap();
-
-    println!("ClickHouse - BatchRequest: {result:#?}");
-
-    let id = result.get("id").unwrap().as_str().unwrap();
-    Uuid::parse_str(id).unwrap();
-
-    let retrieved_batch_id = result.get("batch_id").unwrap().as_str().unwrap();
-    let retrieved_batch_id = Uuid::parse_str(retrieved_batch_id).unwrap();
-    assert_eq!(retrieved_batch_id, batch_id);
-    let batch_params = result.get("batch_params").unwrap().as_str().unwrap();
-    let _batch_params: Value = serde_json::from_str(batch_params).unwrap();
-    // We can't check that the batch params are exactly the same because they vary per-provider
-    // We will check that they are valid by using them instead.
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
-
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, provider.model_provider_name);
-
-    let status = result.get("status").unwrap().as_str().unwrap();
-    assert_eq!(status, "pending");
-
-    let errors = result.get("errors").unwrap().as_array().unwrap();
-    assert_eq!(errors.len(), 0);
+    check_clickhouse_batch_request_status(&clickhouse, batch_id, &provider, "pending").await;
 }
 
 /// If there is a pending batch inference for the function, variant, and tags
@@ -4319,6 +4151,7 @@ pub async fn test_poll_existing_json_mode_batch_inference_request_with_provider(
     let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
     check_json_mode_inference_response(inferences_json[0].clone(), &provider, None, true).await;
+    check_clickhouse_batch_request_status(&clickhouse, batch_id, &provider, "completed").await;
 }
 
 /// If there is a completed batch inference for the function, variant, and tags
@@ -4404,6 +4237,7 @@ pub async fn test_poll_completed_json_mode_batch_inference_request_with_provider
     assert_eq!(inferences_json.len(), 1);
 
     check_json_mode_inference_response(inferences_json[0].clone(), &provider, None, true).await;
+    check_clickhouse_batch_request_status(&clickhouse, ids.batch_id, &provider, "completed").await;
 }
 
 pub async fn test_dynamic_json_mode_batch_inference_request_with_provider(
@@ -4575,34 +4409,7 @@ pub async fn test_dynamic_json_mode_batch_inference_request_with_provider(
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(!raw_request.is_empty());
 
-    // Check if ClickHouse is ok - BatchRequest Table
-    let result = select_latest_batch_request_clickhouse(&clickhouse, batch_id)
-        .await
-        .unwrap();
-
-    println!("ClickHouse - BatchRequest: {result:#?}");
-
-    let id = result.get("id").unwrap().as_str().unwrap();
-    Uuid::parse_str(id).unwrap();
-
-    let retrieved_batch_id = result.get("batch_id").unwrap().as_str().unwrap();
-    let retrieved_batch_id = Uuid::parse_str(retrieved_batch_id).unwrap();
-    assert_eq!(retrieved_batch_id, batch_id);
-    let batch_params = result.get("batch_params").unwrap().as_str().unwrap();
-    let _batch_params: Value = serde_json::from_str(batch_params).unwrap();
-    // We can't check that the batch params are exactly the same because they vary per-provider
-    // We will check that they are valid by using them instead.
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
-
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, provider.model_provider_name);
-
-    let status = result.get("status").unwrap().as_str().unwrap();
-    assert_eq!(status, "pending");
-
-    let errors = result.get("errors").unwrap().as_array().unwrap();
-    assert_eq!(errors.len(), 0);
+    check_clickhouse_batch_request_status(&clickhouse, batch_id, &provider, "pending").await;
 }
 
 /// If there is a pending batch inference for the function, variant, and tags
@@ -4698,6 +4505,7 @@ pub async fn test_poll_existing_dynamic_json_mode_batch_inference_request_with_p
         true,
     )
     .await;
+    check_clickhouse_batch_request_status(&clickhouse, batch_id, &provider, "completed").await;
 }
 
 /// If there is a completed batch inference for the function, variant, and tags
@@ -4724,7 +4532,7 @@ pub async fn test_poll_completed_dynamic_json_mode_batch_inference_request_with_
         &provider.variant_name,
         Some(HashMap::from([(
             "test_type".to_string(),
-            "json_mode".to_string(),
+            "dynamic_json_mode".to_string(),
         )])),
     )
     .await;
@@ -4797,4 +4605,5 @@ pub async fn test_poll_completed_dynamic_json_mode_batch_inference_request_with_
         true,
     )
     .await;
+    check_clickhouse_batch_request_status(&clickhouse, ids.batch_id, &provider, "completed").await;
 }
