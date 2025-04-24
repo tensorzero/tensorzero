@@ -292,6 +292,11 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
     submit({ data: JSON.stringify(request) });
   };
 
+  const handleModalClose = () => {
+    setIsModalOpen(false);
+    setSelectedVariant(null);
+  };
+
   return (
     <PageLayout>
       <PageHeader label="Datapoint" name={datapoint.id} />
@@ -356,10 +361,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
           error={variantInferenceFetcher.error?.message}
           variantResponse={variantInferenceFetcher.data?.info ?? null}
           rawResponse={variantInferenceFetcher.data?.raw ?? null}
-          onClose={() => {
-            setIsModalOpen(false);
-            setSelectedVariant(null);
-          }}
+          onClose={handleModalClose}
           item={datapoint}
           selectedVariant={selectedVariant}
           source="datapoint"

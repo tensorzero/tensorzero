@@ -265,6 +265,11 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
     submit({ data: JSON.stringify(request) });
   };
 
+  const handleModalClose = () => {
+    setIsModalOpen(false);
+    setSelectedVariant(null);
+  };
+
   return (
     <PageLayout>
       <PageHeader label="Inference" name={inference.id}>
@@ -362,10 +367,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
           error={variantInferenceFetcher.error?.message}
           variantResponse={variantInferenceFetcher.data?.info ?? null}
           rawResponse={variantInferenceFetcher.data?.raw ?? null}
-          onClose={() => {
-            setIsModalOpen(false);
-            setSelectedVariant(null);
-          }}
+          onClose={handleModalClose}
           item={inference}
           inferenceUsage={getTotalInferenceUsage(model_inferences)}
           selectedVariant={selectedVariant}
