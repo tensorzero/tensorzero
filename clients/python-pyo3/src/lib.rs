@@ -343,7 +343,6 @@ impl BaseTensorZeroGateway {
         cache_options: Option<&Bound<'_, PyDict>>,
         extra_body: Option<&Bound<'_, PyList>>,
     ) -> PyResult<ClientInferenceParams> {
-        // let episode_id = python_uuid_to_uuid("episode_id", episode_id)?;
         let episode_id = episode_id
             .map(|id| python_uuid_to_uuid("episode_id", id))
             .transpose()?;
@@ -751,11 +750,10 @@ impl TensorZeroGateway {
         let run_id = python_uuid_to_uuid("run_id", run_id)?;
         let client = this.as_super().client.clone();
         let params = DynamicEvaluationRunEpisodeParams {
-            run_id,
             datapoint_name,
             tags: tags.unwrap_or_default(),
         };
-        let fut = client.dynamic_evaluation_run_episode(params);
+        let fut = client.dynamic_evaluation_run_episode(run_id, params);
         let resp = tokio_block_on_without_gil(this.py(), fut);
         match resp {
             Ok(resp) => parse_dynamic_evaluation_run_episode_response(this.py(), resp),
@@ -1139,13 +1137,12 @@ impl AsyncTensorZeroGateway {
         let run_id = python_uuid_to_uuid("run_id", run_id)?;
         let client = this.as_super().client.clone();
         let params = DynamicEvaluationRunEpisodeParams {
-            run_id,
             datapoint_name,
             tags: tags.unwrap_or_default(),
         };
 
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
-            let res = client.dynamic_evaluation_run_episode(params).await;
+            let res = client.dynamic_evaluation_run_episode(run_id, params).await;
             Python::with_gil(|py| match res {
                 Ok(resp) => parse_dynamic_evaluation_run_episode_response(py, resp),
                 Err(e) => Err(convert_error(py, e)),

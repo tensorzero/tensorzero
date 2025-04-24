@@ -4,7 +4,7 @@ use anyhow::{anyhow, Result};
 use serde::Deserialize;
 use serde_json::Value;
 use tensorzero::{CacheParamsOptions, DynamicToolParams, InferenceResponse};
-use tensorzero_internal::clickhouse::escape_string_for_clickhouse_comparison;
+use tensorzero_internal::clickhouse::escape_string_for_clickhouse_literal;
 use tensorzero_internal::inference::types::batch::deserialize_json_string;
 use tensorzero_internal::{
     cache::CacheEnabledMode, clickhouse::ClickHouseConnectionInfo, function::FunctionConfig,
@@ -97,7 +97,7 @@ pub async fn check_static_eval_human_feedback(
         LIMIT 1
         FORMAT JSONEachRow
     "#;
-    let escaped_serialized_output = escape_string_for_clickhouse_comparison(&serialized_output);
+    let escaped_serialized_output = escape_string_for_clickhouse_literal(&serialized_output);
     let result = clickhouse
         .run_query_synchronous(
             query.to_string(),

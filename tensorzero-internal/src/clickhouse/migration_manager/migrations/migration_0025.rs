@@ -53,6 +53,7 @@ impl Migration for Migration0025<'_> {
             (
                 run_id UUID,
                 episode_id_uint UInt128, -- UUID encoded as a UInt128
+                -- this is duplicated so that we can look it up without joining at inference time
                 variant_pins Map(String, String),
                 datapoint_name Nullable(String),
                 tags Map(String, String),
