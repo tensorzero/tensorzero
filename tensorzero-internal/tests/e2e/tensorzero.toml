@@ -286,21 +286,21 @@ type = "sglang"
 model_name = "HuggingFaceTB/SmolLM-1.7B-Instruct"
 api_base = "https://s6o7i4kpd3a1em-80.proxy.runpod.net/v1/"
 
-[models."microsoft/Phi-3.5-mini-instruct"]
+[models."smol-lm-instruct-vllm"]
 routing = ["vllm"]
 
-[models."microsoft/Phi-3.5-mini-instruct".providers.vllm]
+[models."smol-lm-instruct-vllm".providers.vllm]
 type = "vllm"
-model_name = "microsoft/Phi-3.5-mini-instruct"
-api_base = "https://pun1owldydhycl-8000.proxy.runpod.net/v1/"
+model_name = "HuggingFaceTB/SmolLM-1.7B-Instruct"
+api_base = "https://tensorzero--vllm-inference-vllm-inference.modal.run/v1/"
 
-[models."microsoft/Phi-3.5-mini-instruct-dynamic"]
+[models."smol-lm-instruct-vllm-dynamic"]
 routing = ["vllm"]
 
-[models."microsoft/Phi-3.5-mini-instruct-dynamic".providers.vllm]
+[models."smol-lm-instruct-vllm-dynamic".providers.vllm]
 type = "vllm"
-model_name = "microsoft/Phi-3.5-mini-instruct"
-api_base = "https://pun1owldydhycl-8000.proxy.runpod.net/v1/"
+model_name = "HuggingFaceTB/SmolLM-1.7B-Instruct"
+api_base = "https://tensorzero--vllm-inference-vllm-inference.modal.run/v1/"
 api_key_location = "dynamic::vllm_api_key"
 
 [models."open-mistral-nemo-2407"]
@@ -987,27 +987,27 @@ extra_headers = [
 
 [functions.basic_test.variants.vllm]
 type = "chat_completion"
-model = "microsoft/Phi-3.5-mini-instruct"
+model = "smol-lm-instruct-vllm"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
 [functions.basic_test.variants.vllm-extra-body]
 type = "chat_completion"
-model = "microsoft/Phi-3.5-mini-instruct"
+model = "smol-lm-instruct-vllm"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 extra_body = [{ pointer = "/temperature", value = 0.123 }]
 
 [functions.basic_test.variants.vllm-extra-headers]
 type = "chat_completion"
-model = "microsoft/Phi-3.5-mini-instruct"
+model = "smol-lm-instruct-vllm"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 extra_headers = [{ name = "Authorization", value = "invalid_vllm_auth" }]
 
 [functions.basic_test.variants.vllm-dynamic]
 type = "chat_completion"
-model = "microsoft/Phi-3.5-mini-instruct-dynamic"
+model = "smol-lm-instruct-vllm-dynamic"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
@@ -1569,7 +1569,7 @@ json_mode = "strict"
 
 [functions.json_success.variants.vllm]
 type = "chat_completion"
-model = "microsoft/Phi-3.5-mini-instruct"
+model = "smol-lm-instruct-vllm"
 system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "on"
@@ -1577,7 +1577,7 @@ max_tokens = 100
 
 [functions.json_success.variants.vllm-default]
 type = "chat_completion"
-model = "microsoft/Phi-3.5-mini-instruct"
+model = "smol-lm-instruct-vllm"
 system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 max_tokens = 100
@@ -1585,7 +1585,7 @@ json_mode = "strict"
 
 [functions.json_success.variants.vllm-implicit]
 type = "chat_completion"
-model = "microsoft/Phi-3.5-mini-instruct"
+model = "smol-lm-instruct-vllm"
 system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "implicit_tool"
@@ -2010,7 +2010,7 @@ max_tokens = 100
 
 [functions.dynamic_json.variants.vllm]
 type = "chat_completion"
-model = "microsoft/Phi-3.5-mini-instruct"
+model = "smol-lm-instruct-vllm"
 system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
 json_mode = "on"
@@ -2018,7 +2018,7 @@ max_tokens = 100
 
 [functions.dynamic_json.variants.vllm-default]
 type = "chat_completion"
-model = "microsoft/Phi-3.5-mini-instruct"
+model = "smol-lm-instruct-vllm"
 system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
 max_tokens = 100
@@ -2026,7 +2026,7 @@ json_mode = "strict"
 
 [functions.dynamic_json.variants.vllm-implicit]
 type = "chat_completion"
-model = "microsoft/Phi-3.5-mini-instruct"
+model = "smol-lm-instruct-vllm"
 system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
 json_mode = "implicit_tool"
