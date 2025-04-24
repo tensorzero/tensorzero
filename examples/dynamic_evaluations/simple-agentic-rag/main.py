@@ -7,8 +7,8 @@ from dataset import load_beerqa
 from judge import judge_answer
 from tensorzero import AsyncTensorZeroGateway
 
-MAX_SAMPLES = 1
-CONCURRENCY = 10
+MAX_SAMPLES = 10
+CONCURRENCY = 20
 
 
 async def main():
@@ -18,8 +18,8 @@ async def main():
     )
     semaphore = Semaphore(CONCURRENCY)
     data = load_beerqa()
-    agent_variants = ["baseline", "gpt-4.1-mini", "claude-3.5-haiku"]
-    compact_context_variants = ["baseline", "gpt-4.1-nano"]
+    agent_variants = ["baseline", "gpt-4.1-mini", "gemini-2.5-flash"]
+    compact_context_variants = ["baseline", "gemini-2.5-flash"]
     # We want to evaluate all combinations of agent and compact_context variants
     tasks = []
     for agent_variant, compact_context_variant in itertools.product(
