@@ -2429,6 +2429,23 @@ weight = 1
 model = "llama3.1-405b-instruct-turbo-together"
 system_template = "../../fixtures/config/functions/weather_helper_parallel/prompt/system_template.minijinja"
 
+[functions.required_tool]
+type = "chat"
+tool_choice = "required"
+
+[functions.required_tool.variants.variant]
+type = "chat_completion"
+model = "test"
+
+[functions.specific_tool]
+type = "chat"
+tool_choice.specific = "get_temperature"
+
+[functions.specific_tool.variants.variant]
+type = "chat_completion"
+model = "test"
+
+
 [functions.best_of_n]
 type = "chat"
 system_schema = "../../fixtures/config/functions/basic_test/system_schema.json"
