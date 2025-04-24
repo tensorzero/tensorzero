@@ -464,7 +464,7 @@ async fn run_llm_judge_evaluation_chat() {
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
-        inference_cache: CacheEnabledMode::Off,
+        inference_cache: CacheEnabledMode::On,
     };
 
     let mut output = Vec::new();
