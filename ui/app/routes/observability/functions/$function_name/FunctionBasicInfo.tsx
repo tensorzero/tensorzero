@@ -35,7 +35,14 @@ export default function BasicInfo({ functionConfig }: BasicInfoProps) {
           <BasicInfoItem>
             <BasicInfoItemTitle>Tool Choice</BasicInfoItemTitle>
             <BasicInfoItemContent>
-              <Chip label={functionConfig.tool_choice} font="mono" />
+              <Chip
+                label={
+                  typeof functionConfig.tool_choice === "object"
+                    ? functionConfig.tool_choice.specific
+                    : functionConfig.tool_choice
+                }
+                font="mono"
+              />
             </BasicInfoItemContent>
           </BasicInfoItem>
 
