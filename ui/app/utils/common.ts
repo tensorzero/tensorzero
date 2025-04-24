@@ -1,5 +1,6 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
+import type { JsonValue, JsonPrimitive } from "type-fest";
 
 /**
  * A helper function to merge class names conditionally, and deduplicating potentially conflicting
@@ -29,3 +30,5 @@ export function extractTimestampFromUUIDv7(uuid: string): Date {
 
   return date;
 }
+
+export class JSONParseError extends SyntaxError {}

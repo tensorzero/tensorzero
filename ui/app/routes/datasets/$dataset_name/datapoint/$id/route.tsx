@@ -1,15 +1,22 @@
-import { useFetcher } from "react-router";
-import { data, isRouteErrorResponse, redirect } from "react-router";
+import type { ActionFunctionArgs } from "react-router";
+import {
+  data,
+  isRouteErrorResponse,
+  Link,
+  redirect,
+  useFetcher,
+  useParams,
+} from "react-router";
 import { v7 as uuid } from "uuid";
 import BasicInfo from "./DatapointBasicInfo";
 import Input from "~/components/inference/Input";
 import Output from "~/components/inference/Output";
 import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import { useConfig } from "~/context/config";
 import { getDatapoint } from "~/utils/clickhouse/datasets.server";
 import { VariantResponseModal } from "~/components/inference/VariantResponseModal";
 import type { Route } from "./+types/route";
-import type { ActionFunctionArgs } from "react-router";
 import {
   ParsedDatasetRowSchema,
   type ParsedDatasetRow,
@@ -30,6 +37,10 @@ import { DatapointActions } from "./DatapointActions";
 import type { ResolvedInputMessage } from "~/utils/clickhouse/common";
 import { getConfig } from "~/utils/config/index.server";
 import { resolvedInputToTensorZeroInput } from "~/routes/api/tensorzero/inference";
+import {
+  prepareInferenceActionRequest,
+  useInferenceActionFetcher,
+} from "~/routes/api/tensorzero/inference.utils";
 
 export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData();
@@ -165,8 +176,6 @@ export async function loader({
 export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   const { datapoint } = loaderData;
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [variantInferenceIsLoading, setVariantInferenceIsLoading] =
-    useState(false);
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
   const [input, setInput] = useState<typeof datapoint.input>(datapoint.input);
   const [originalInput] = useState(datapoint.input);
@@ -262,15 +271,25 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
     config.functions[datapoint.function_name]?.variants || {},
   );
 
+  const variantInferenceFetcher = useInferenceActionFetcher();
+  const variantSource = "datapoint";
+  const variantInferenceIsLoading =
+    // only concerned with rendering loading state when the modal is open
+    isModalOpen &&
+    (variantInferenceFetcher.state === "submitting" ||
+      variantInferenceFetcher.state === "loading");
+
+  const { submit } = variantInferenceFetcher;
   const onVariantSelect = (variant: string) => {
     setSelectedVariant(variant);
     setIsModalOpen(true);
-  };
-
-  const handleModalClose = () => {
-    setIsModalOpen(false);
-    setSelectedVariant(null);
-    setVariantInferenceIsLoading(false);
+    const request = prepareInferenceActionRequest({
+      resource: datapoint,
+      source: variantSource,
+      variant,
+    });
+    // TODO: handle JSON.stringify error
+    submit({ data: JSON.stringify(request) });
   };
 
   return (
@@ -334,8 +353,15 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
         <VariantResponseModal
           isOpen={isModalOpen}
           isLoading={variantInferenceIsLoading}
-          setIsLoading={setVariantInferenceIsLoading}
-          onClose={handleModalClose}
+          error={variantInferenceFetcher.error?.message}
+          variantResponse={variantInferenceFetcher.data?.info ?? null}
+          rawResponse={variantInferenceFetcher.data?.raw ?? null}
+          onOpenChange={(isOpen) => {
+            setIsModalOpen(isOpen);
+            if (!isOpen) {
+              setSelectedVariant(null);
+            }
+          }}
           item={datapoint}
           selectedVariant={selectedVariant}
           source="datapoint"
@@ -345,32 +371,70 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   );
 }
 
-export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  console.error(error);
-
+function getUserFacingError(error: unknown): {
+  heading: string;
+  message: ReactNode;
+} {
   if (isRouteErrorResponse(error)) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 text-red-500">
-        <h1 className="text-2xl font-bold">
-          {error.status} {error.statusText}
-        </h1>
-        <p>{error.data}</p>
-      </div>
-    );
-  } else if (error instanceof Error) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 text-red-500">
-        <h1 className="text-2xl font-bold">Error</h1>
-        <p>{error.message}</p>
-      </div>
-    );
-  } else {
-    return (
-      <div className="flex h-screen items-center justify-center text-red-500">
-        <h1 className="text-2xl font-bold">Unknown Error</h1>
-      </div>
-    );
+    switch (error.status) {
+      case 400:
+        return {
+          heading: `${error.status}: Bad Request`,
+          message: "Please try again later.",
+        };
+      case 401:
+        return {
+          heading: `${error.status}: Unauthorized`,
+          message: "You do not have permission to access this resource.",
+        };
+      case 403:
+        return {
+          heading: `${error.status}: Forbidden`,
+          message: "You do not have permission to access this resource.",
+        };
+      case 404:
+        return {
+          heading: `${error.status}: Not Found`,
+          message:
+            "The requested resource was not found. Please check the URL and try again.",
+        };
+      case 500:
+      default:
+        return {
+          heading: "An unknown error occurred",
+          message: "Please try again later.",
+        };
+    }
   }
+  return {
+    heading: "An unknown error occurred",
+    message: "Please try again later.",
+  };
+}
+
+export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
+  useEffect(() => {
+    console.error(error);
+  }, [error]);
+  const { heading, message } = getUserFacingError(error);
+  const { dataset_name: datasetName } = useParams<{
+    dataset_name: string;
+    id: string;
+  }>();
+  return (
+    <div className="flex flex-col items-center justify-center md:h-full">
+      <div className="mt-8 flex flex-col items-center justify-center gap-2 rounded-xl border border-red-500 bg-red-50 p-6 md:mt-0">
+        <h1 className="text-2xl font-bold">{heading}</h1>
+        {typeof message === "string" ? <p>{message}</p> : message}
+        <Link
+          to={`/datasets/${datasetName}`}
+          className="font-bold text-red-900 hover:text-red-800 hover:underline"
+        >
+          Go back
+        </Link>
+      </div>
+    </div>
+  );
 }
 
 function transformOutputForTensorZero(
