@@ -362,11 +362,9 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
           error={variantInferenceFetcher.error?.message}
           variantResponse={variantInferenceFetcher.data?.info ?? null}
           rawResponse={variantInferenceFetcher.data?.raw ?? null}
-          onOpenChange={(isOpen) => {
-            setIsModalOpen(isOpen);
-            if (!isOpen) {
-              setSelectedVariant(null);
-            }
+          onClose={() => {
+            setIsModalOpen(false);
+            setSelectedVariant(null);
           }}
           item={inference}
           inferenceUsage={getTotalInferenceUsage(model_inferences)}
