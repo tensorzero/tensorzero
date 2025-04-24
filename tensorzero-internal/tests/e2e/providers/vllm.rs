@@ -53,6 +53,7 @@ async fn get_providers() -> E2ETestProviders {
     ];
 
     let json_mode_off_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "vllm_json_mode_off".to_string(),
         model_name: "microsoft/Phi-3.5-mini-instruct".into(),
         model_provider_name: "vllm".into(),

@@ -32,12 +32,14 @@ async fn get_providers() -> E2ETestProviders {
 
     let json_providers = vec![
         E2ETestProvider {
+            supports_batch_inference: false,
             variant_name: "tgi".to_string(),
             model_name: model_name.clone(),
             model_provider_name: "tgi".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
+            supports_batch_inference: false,
             variant_name: "tgi-strict".to_string(),
             model_name: model_name.clone(),
             model_provider_name: "tgi".into(),

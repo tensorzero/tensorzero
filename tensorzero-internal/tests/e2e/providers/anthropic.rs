@@ -89,6 +89,7 @@ async fn get_providers() -> E2ETestProviders {
     ];
 
     let json_mode_off_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "anthropic_json_mode_off".to_string(),
         model_name: "claude-3-haiku-20240307-anthropic".into(),
         model_provider_name: "anthropic".into(),

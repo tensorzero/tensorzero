@@ -76,6 +76,7 @@ async fn get_providers() -> E2ETestProviders {
     ];
 
     let json_mode_off_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "fireworks_json_mode_off".to_string(),
         model_name: "llama3.3-70b-instruct-fireworks".into(),
         model_provider_name: "fireworks".into(),

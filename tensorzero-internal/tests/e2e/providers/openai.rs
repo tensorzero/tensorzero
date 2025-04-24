@@ -131,6 +131,7 @@ async fn get_providers() -> E2ETestProviders {
             credentials: HashMap::new(),
         },
         E2ETestProvider {
+            supports_batch_inference: true,
             variant_name: "openai-cot".to_string(),
             model_name: "openai::gpt-4.1-nano-2025-04-14".into(),
             model_provider_name: "openai".into(),

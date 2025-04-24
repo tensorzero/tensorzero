@@ -48,6 +48,7 @@ async fn get_providers() -> E2ETestProviders {
     ];
 
     let json_mode_off_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "sglang_json_mode_off".to_string(),
         model_name: "HuggingFaceTB/SmolLM-1.7B-Instruct".to_string(),
         model_provider_name: "sglang".to_string(),
