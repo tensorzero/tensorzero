@@ -1,15 +1,15 @@
 # TensorZero as a Cursor proxy layer
 
-Note: This is active work in progress.
-
 This example demonstrates how TensorZero can be used as a proxy layer for Cursor. To try it out:
 
 - put credentials for whatever LLM providers you want in `.env` as in any other TensorZero deployment. Our example uses OpenAI, Anthropic, and Google AI studio. But, you can use any LLM provider TensorZero supports.
-- Set an API key to protect your gateway endpoint. For now, this requires editing `nginx/nginx.conf` where it says `your-token-here` but we'll likely switch this for an environment variable soon.
-- Run `docker compose up`. This stands up ClickHouse, the TensorZero Gateway, the TensorZero UI, and nginx.
-- Install and run `ngrok`; you may need to install it with a package manager. The nginx front end runs on port 6900 so you should run `ngrok http: http://localhost:6900`. Keep track of the URL where your service is running.
+- Copy `.env.example` to `.env`
+- Generate a strong API key to protect your gateway endpoint in your .env file and use it replace the `API_TOKEN` value.
+- Make an [ngrok](https://ngrok.com/) account. Grab your auth token and add it to the .env file as the value for `NGROK_AUTHTOKEN`.
+- Run `docker compose up`. This stands up ClickHouse, the TensorZero Gateway, the TensorZero UI, nginx, and ngrok.
+- Visit [http://localhost:4040](http://localhost:4040) and grab your ngrok URL.
 - Set your Cursor `OPENAI_BASE_URL` to `https://your-id.ngrok-free.app/openai/v1`. This should be available in your Cursor model settings.
-- Set your OpenAI API key to the value you set in your `nginx.conf`.
+- Set your OpenAI API key to the `API_TOKEN` value you set in your `nginx.conf`.
 - Turn off all the models in Cursor and add a custom one called `tensorzero::function_name::cursorzero`.
 - Verify the new OpenAI connection by turning on your custom API key.
 

@@ -38,7 +38,7 @@ use uuid::Uuid;
 struct Cli {
     #[clap(short, long, default_value = ".")]
     path: String,
-    #[clap(long, default_value = "http://localhost:6904")]
+    #[clap(long, default_value = "http://localhost:6900")]
     gateway_url: Url,
 }
 
