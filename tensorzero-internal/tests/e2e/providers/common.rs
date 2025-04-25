@@ -6758,7 +6758,7 @@ pub async fn test_tool_multi_turn_inference_request_with_provider(provider: E2ET
                             "type": "tool_call",
                             "id": "123456789",
                             "name": "get_temperature",
-                            "arguments": "{\"location\": \"Tokyo\", \"units\": \"celsius\"}"
+                            "arguments": {"location": "Tokyo", "units": "celsius"}
                         }
                     ]
                 },
@@ -6864,7 +6864,7 @@ pub async fn check_tool_use_multi_turn_inference_response(
             },
             {
                 "role": "assistant",
-                "content": [{"type": "tool_call", "id": "123456789", "name": "get_temperature", "arguments": "{\"location\": \"Tokyo\", \"units\": \"celsius\"}"}]
+                "content": [{"type": "tool_call", "id": "123456789", "name": "get_temperature", "arguments": "{\"location\":\"Tokyo\",\"units\":\"celsius\"}"}]
             },
             {
                 "role": "user",
@@ -6982,7 +6982,7 @@ pub async fn check_tool_use_multi_turn_inference_response(
             content: vec![ContentBlock::ToolCall(ToolCall {
                 id: "123456789".to_string(),
                 name: "get_temperature".to_string(),
-                arguments: "{\"location\": \"Tokyo\", \"units\": \"celsius\"}".to_string(),
+                arguments: "{\"location\":\"Tokyo\",\"units\":\"celsius\"}".to_string(),
             })],
         },
         RequestMessage {
