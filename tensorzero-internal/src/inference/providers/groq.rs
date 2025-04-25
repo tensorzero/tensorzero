@@ -6,7 +6,7 @@ use reqwest_eventsource::{Event, RequestBuilderExt};
 use secrecy::{ExposeSecret, SecretString};
 use serde::de::IntoDeserializer;
 use serde::{Deserialize, Deserializer, Serialize};
-use serde_json::{json, Value};
+use serde_json::Value;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::io::Write;
@@ -1401,35 +1401,24 @@ fn tensorzero_to_groq_assistant_messages(
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "type")]
-enum GroqResponseFormat {
+enum GroqResponseFormat<'a> {
     #[default]
     Text,
-    JsonObject,
-    JsonSchema {
-        json_schema: Value,
+    JsonObject {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        schema: Option<&'a Value>, // the desired JSON schema
     },
 }
 
-impl GroqResponseFormat {
-    fn new(
-        json_mode: &ModelInferenceRequestJsonMode,
-        output_schema: Option<&Value>,
-        model: &str,
-    ) -> Self {
-        if model.contains("3.5") && *json_mode == ModelInferenceRequestJsonMode::Strict {
-            return GroqResponseFormat::JsonObject;
-        }
-
+impl<'a> GroqResponseFormat<'a> {
+    fn new(json_mode: &ModelInferenceRequestJsonMode, output_schema: Option<&'a Value>) -> Self {
         match json_mode {
-            ModelInferenceRequestJsonMode::On => GroqResponseFormat::JsonObject,
-            ModelInferenceRequestJsonMode::Off => GroqResponseFormat::Text,
-            ModelInferenceRequestJsonMode::Strict => match output_schema {
-                Some(schema) => {
-                    let json_schema = json!({"name": "response", "strict": true, "schema": schema});
-                    GroqResponseFormat::JsonSchema { json_schema }
+            ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict => {
+                GroqResponseFormat::JsonObject {
+                    schema: output_schema,
                 }
-                None => GroqResponseFormat::JsonObject,
-            },
+            }
+            ModelInferenceRequestJsonMode::Off => GroqResponseFormat::Text,
         }
     }
 }
@@ -1588,7 +1577,7 @@ struct GroqRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     stream_options: Option<StreamOptions>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    response_format: Option<GroqResponseFormat>,
+    response_format: Option<GroqResponseFormat<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<Vec<GroqTool<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1605,7 +1594,6 @@ impl<'a> GroqRequest<'a> {
         let response_format = Some(GroqResponseFormat::new(
             &request.json_mode,
             request.output_schema,
-            model,
         ));
         let stream_options = match request.stream {
             true => Some(StreamOptions {
@@ -2562,8 +2550,8 @@ mod tests {
         let expected_schema = serde_json::json!({"name": "response", "strict": true, "schema": {}});
         assert_eq!(
             groq_request.response_format,
-            Some(GroqResponseFormat::JsonSchema {
-                json_schema: expected_schema,
+            Some(GroqResponseFormat::JsonObject {
+                schema: expected_schema,
             })
         );
     }
@@ -3261,18 +3249,18 @@ mod tests {
         // Test JSON mode On
         let json_mode = ModelInferenceRequestJsonMode::On;
         let output_schema = None;
-        let format = GroqResponseFormat::new(&json_mode, output_schema, "gpt-4o");
-        assert_eq!(format, GroqResponseFormat::JsonObject);
+        let format = GroqResponseFormat::new(&json_mode, output_schema);
+        assert_eq!(format, GroqResponseFormat::JsonObject { schema: None });
 
         // Test JSON mode Off
         let json_mode = ModelInferenceRequestJsonMode::Off;
-        let format = GroqResponseFormat::new(&json_mode, output_schema, "gpt-4o");
+        let format = GroqResponseFormat::new(&json_mode, output_schema);
         assert_eq!(format, GroqResponseFormat::Text);
 
         // Test JSON mode Strict with no schema
         let json_mode = ModelInferenceRequestJsonMode::Strict;
-        let format = GroqResponseFormat::new(&json_mode, output_schema, "gpt-4o");
-        assert_eq!(format, GroqResponseFormat::JsonObject);
+        let format = GroqResponseFormat::new(&json_mode, output_schema);
+        assert_eq!(format, GroqResponseFormat::JsonObject { schema: None });
 
         // Test JSON mode Strict with schema
         let json_mode = ModelInferenceRequestJsonMode::Strict;
@@ -3283,9 +3271,9 @@ mod tests {
             }
         });
         let output_schema = Some(&schema);
-        let format = GroqResponseFormat::new(&json_mode, output_schema, "gpt-4o");
+        let format = GroqResponseFormat::new(&json_mode, output_schema);
         match format {
-            GroqResponseFormat::JsonSchema { json_schema } => {
+            GroqResponseFormat::JsonObject { json_schema } => {
                 assert_eq!(json_schema["schema"], schema);
                 assert_eq!(json_schema["name"], "response");
                 assert_eq!(json_schema["strict"], true);
@@ -3302,8 +3290,8 @@ mod tests {
             }
         });
         let output_schema = Some(&schema);
-        let format = GroqResponseFormat::new(&json_mode, output_schema, "gpt-3.5-turbo");
-        assert_eq!(format, GroqResponseFormat::JsonObject);
+        let format = GroqResponseFormat::new(&json_mode, output_schema);
+        assert_eq!(format, GroqResponseFormat::JsonObject { schema: None });
     }
 
     #[test]
