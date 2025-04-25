@@ -37,6 +37,7 @@ async fn get_providers() -> E2ETestProviders {
     };
 
     let standard_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "groq".to_string(),
         model_name: "gpt-4o-mini-groq".into(),
         model_provider_name: "groq".into(),
@@ -44,6 +45,7 @@ async fn get_providers() -> E2ETestProviders {
     }];
 
     let extra_body_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "groq-extra-body".to_string(),
         model_name: "gpt-4o-mini-groq".into(),
         model_provider_name: "groq".into(),
@@ -51,6 +53,7 @@ async fn get_providers() -> E2ETestProviders {
     }];
 
     let bad_auth_extra_headers = vec![E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "groq-extra-headers".to_string(),
         model_name: "gpt-4o-mini-groq".into(),
         model_provider_name: "groq".into(),
@@ -58,6 +61,7 @@ async fn get_providers() -> E2ETestProviders {
     }];
 
     let inference_params_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "groq".to_string(),
         model_name: "gpt-4o-mini-groq".into(),
         model_provider_name: "groq".into(),
@@ -65,6 +69,7 @@ async fn get_providers() -> E2ETestProviders {
     }];
 
     let inference_params_dynamic_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "groq-dynamic".to_string(),
         model_name: "gpt-4o-mini-groq-dynamic".into(),
         model_provider_name: "groq".into(),
@@ -73,24 +78,28 @@ async fn get_providers() -> E2ETestProviders {
 
     let json_providers = vec![
         E2ETestProvider {
+            supports_batch_inference: false,
             variant_name: "groq".to_string(),
             model_name: "gpt-4o-mini-groq".into(),
             model_provider_name: "groq".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
+            supports_batch_inference: false,
             variant_name: "groq-implicit".to_string(),
             model_name: "gpt-4o-mini-groq".into(),
             model_provider_name: "groq".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
+            supports_batch_inference: false,
             variant_name: "groq-strict".to_string(),
             model_name: "gpt-4o-mini-groq".into(),
             model_provider_name: "groq".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
+            supports_batch_inference: false,
             variant_name: "groq-default".to_string(),
             model_name: "gpt-4o-mini-groq".into(),
             model_provider_name: "groq".into(),
@@ -112,7 +121,6 @@ async fn get_providers() -> E2ETestProviders {
         json_mode_inference: json_providers.clone(),
         image_inference: vec![],
         shorthand_inference: vec![],
-        supports_batch_inference: true,
     }
 }
 
@@ -1210,6 +1218,7 @@ pub async fn test_image_inference_with_provider_cloudflare_r2() {
     std::env::set_var("S3_SECRET_ACCESS_KEY", r2_secret_access_key);
 
     let provider = E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "openai".to_string(),
         model_name: "openai::gpt-4o-mini-groq".into(),
         model_provider_name: "groq".into(),
@@ -1403,6 +1412,7 @@ pub async fn test_image_inference_with_provider_gcp_storage() {
     std::env::set_var("S3_SECRET_ACCESS_KEY", gcloud_secret_access_key);
 
     let provider = E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "openai".to_string(),
         model_name: "openai::gpt-4o-mini-groq".into(),
         model_provider_name: "groq".into(),
@@ -1475,6 +1485,7 @@ pub async fn test_image_inference_with_provider_docker_minio() {
     std::env::set_var("S3_SECRET_ACCESS_KEY", minio_secret_access_key);
 
     let provider = E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "openai".to_string(),
         model_name: "openai::gpt-4o-mini-groq".into(),
         model_provider_name: "groq".into(),
@@ -1536,6 +1547,7 @@ pub async fn test_parallel_tool_use_default_true_inference_request() {
     let episode_id = Uuid::now_v7();
 
     let provider = E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "openai".to_string(),
         model_name: "gpt-4o-mini-groq".into(),
         model_provider_name: "groq".into(),
