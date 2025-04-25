@@ -69,7 +69,7 @@ export async function loader({
 }
 
 async function loadPythonFineTuneJob(job_id: string) {
-  const res = await fetch(`http://localhost:7000/optimizations/poll/${job_id}`);
+  const res = await fetch(`http://localhost:7001/optimizations/poll/${job_id}`);
   if (!res.ok) {
     if (res.status === 404) {
       throw new Response(JSON.stringify({ error: await res.text() }), {
@@ -124,7 +124,7 @@ async function startPythonFineTune(
   validatedData: SFTFormValues,
 ) {
   try {
-    const res = await fetch("http://localhost:7000/optimizations", {
+    const res = await fetch("http://localhost:7001/optimizations", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -156,22 +156,14 @@ async function startPythonFineTune(
   );
 }
 
-// Renders the fine-tuning form and status info.
-export default function SupervisedFineTuning({
-  loaderData,
-}: Route.ComponentProps) {
+type LoaderData = Route.ComponentProps["loaderData"];
+
+function SupervisedFineTuningImpl(
+  props: LoaderData & {
+    status: "running" | "completed" | "idle";
+  },
+) {
   const config = useConfig();
-  if (loaderData.status === "error") {
-    return (
-      <PageLayout>
-        <PageHeader heading="Supervised Fine-Tuning" />
-        <SectionLayout>
-          <div className="text-sm text-red-500">Error: {loaderData.error}</div>
-        </SectionLayout>
-      </PageLayout>
-    );
-  }
-  const status = loaderData;
   const revalidator = useRevalidator();
 
   const [submissionPhase, setSubmissionPhase] = useState<
@@ -180,7 +172,7 @@ export default function SupervisedFineTuning({
 
   // If running, periodically poll for updates on the job
   useEffect(() => {
-    if (status.status === "running") {
+    if (props.status === "running") {
       setSubmissionPhase("pending");
       const interval = setInterval(
         () => {
@@ -190,12 +182,12 @@ export default function SupervisedFineTuning({
       );
       return () => clearInterval(interval);
     }
-  }, [status, revalidator]);
+  }, [props, revalidator]);
 
   const finalResult =
-    status.status === "completed"
+    props.status === "completed"
       ? dump_model_config(
-          get_fine_tuned_model_config(status.result, status.modelProvider),
+          get_fine_tuned_model_config(props.result, props.modelProvider),
         )
       : null;
   if (finalResult && submissionPhase !== "complete") {
@@ -206,16 +198,32 @@ export default function SupervisedFineTuning({
     <PageLayout>
       <PageHeader heading="Supervised Fine-Tuning" />
       <SectionLayout>
-        {status.status === "idle" && (
+        {props.status === "idle" && (
           <SFTForm
             config={config}
             submissionPhase={submissionPhase}
             setSubmissionPhase={setSubmissionPhase}
           />
         )}
-        <FineTuningStatus status={status} />
+        <FineTuningStatus status={props} />
         <SFTResult finalResult={finalResult} />
       </SectionLayout>
     </PageLayout>
   );
+}
+
+// Renders the fine-tuning form and status info.
+export default function SupervisedFineTuning(props: Route.ComponentProps) {
+  const { loaderData } = props;
+  if (loaderData.status === "error") {
+    return (
+      <PageLayout>
+        <PageHeader heading="Supervised Fine-Tuning" />
+        <SectionLayout>
+          <div className="text-sm text-red-500">Error: {loaderData.error}</div>
+        </SectionLayout>
+      </PageLayout>
+    );
+  }
+  return <SupervisedFineTuningImpl {...loaderData} />;
 }

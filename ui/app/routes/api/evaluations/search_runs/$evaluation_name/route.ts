@@ -56,6 +56,8 @@ export function useSearchEvaluationRunsFetcher(params: {
         `/api/evaluations/search_runs/${params.evaluationName}?${searchParams}`,
       );
     }
+    // TODO: Fix and stop ignoring lint rule
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.evaluationName, params.query]);
 
   return {

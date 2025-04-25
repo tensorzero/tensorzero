@@ -2,7 +2,7 @@
  * TensorZero UI version information
  *
  * This module exports the current version of the TensorZero UI.
- * It serves as a single source of truth for version information.
+ * It serves as the single source of truth for version information.
  */
 
-export const VERSION = "2025.4.5";
+export const VERSION = "2025.4.7";

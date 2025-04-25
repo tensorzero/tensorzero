@@ -8,7 +8,7 @@ services:
       - ./config:/app/config:ro
     command: --config-file /app/config/tensorzero.toml
     environment:
-      - GOOGLE_AI_STUDIO_API_KEY=${GOOGLE_AI_STUDIO_API_KEY:?Environment variable GOOGLE_AI_STUDIO_API_KEY must be set.}
+      GOOGLE_AI_STUDIO_API_KEY: ${GOOGLE_AI_STUDIO_API_KEY:?Environment variable GOOGLE_AI_STUDIO_API_KEY must be set.}
     ports:
       - "3000:3000"
     extra_hosts:

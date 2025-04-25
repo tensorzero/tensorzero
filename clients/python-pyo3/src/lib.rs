@@ -25,7 +25,10 @@ use python_helpers::{
     parse_inference_response, parse_tool, python_uuid_to_uuid, serialize_to_dict,
 };
 use tensorzero_internal::{
-    gateway_util::ShutdownHandle, inference::types::extra_body::UnfilteredInferenceExtraBody,
+    gateway_util::ShutdownHandle,
+    inference::types::{
+        extra_body::UnfilteredInferenceExtraBody, image::serialize_with_image_data,
+    },
 };
 use tensorzero_rust::{
     err_to_http, observability::LogFormat, CacheParamsOptions, Client, ClientBuilder,
@@ -1056,11 +1059,13 @@ impl AsyncTensorZeroGateway {
                 "Called _internal_get_curated_inferences on HTTP gateway",
             )?);
         };
+        let client = this.as_super().client.clone();
         Ok(
             pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
                 let inferences_result = crate::internal::get_curated_inferences(
                     &app_state.config,
                     &app_state.clickhouse_connection_info,
+                    &client,
                     &function_name,
                     metric_name.as_deref(),
                     threshold,
@@ -1072,7 +1077,12 @@ impl AsyncTensorZeroGateway {
                     let inferences = inferences_result.map_err(|e| convert_error(py, e))?;
                     let mut dict_inferences = Vec::with_capacity(inferences.len());
                     for inference in inferences {
-                        dict_inferences.push(serialize_to_dict(py, inference)?);
+                        dict_inferences.push(serialize_to_dict(
+                            py,
+                            serialize_with_image_data(&inference).map_err(|e| {
+                                convert_error(py, TensorZeroError::Other { source: e.into() })
+                            })?,
+                        )?);
                     }
                     Ok(PyList::new(py, dict_inferences)?.unbind())
                 })

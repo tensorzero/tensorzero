@@ -9,9 +9,9 @@ services:
         soft: 262144
         hard: 262144
     environment:
-      - CLICKHOUSE_USER=chuser
-      - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
-      - CLICKHOUSE_PASSWORD=chpassword
+      CLICKHOUSE_USER: chuser
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+      CLICKHOUSE_PASSWORD: chpassword
     healthcheck:
       test: wget --spider --tries 1 http://chuser:chpassword@clickhouse:8123/ping
       start_period: 30s
@@ -25,8 +25,8 @@ services:
       - ${GCP_VERTEX_CREDENTIALS_PATH:-/dev/null}:/app/gcp-credentials.json:ro
     command: --config-file /app/config/tensorzero.toml
     environment:
-      - GCP_VERTEX_CREDENTIALS_PATH=${GCP_VERTEX_CREDENTIALS_PATH:+/app/gcp-credentials.json}
-      - TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero
+      GCP_VERTEX_CREDENTIALS_PATH: ${GCP_VERTEX_CREDENTIALS_PATH:+/app/gcp-credentials.json}
+      TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero
     env_file:
       - ${ENV_FILE:-.env}
     ports:
@@ -42,8 +42,8 @@ services:
     volumes:
       - ./config:/app/config:ro
     environment:
-      - TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero
-      - TENSORZERO_GATEWAY_URL=http://gateway:3000
+      TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero
+      TENSORZERO_GATEWAY_URL: http://gateway:3000
     env_file:
       - ${ENV_FILE:-.env}
     ports:

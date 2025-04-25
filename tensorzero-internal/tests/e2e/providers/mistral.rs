@@ -12,6 +12,7 @@ async fn get_providers() -> E2ETestProviders {
     };
 
     let providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "mistral".to_string(),
         model_name: "open-mistral-nemo-2407".into(),
         model_provider_name: "mistral".into(),
@@ -19,6 +20,7 @@ async fn get_providers() -> E2ETestProviders {
     }];
 
     let extra_body_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "mistral-extra-body".to_string(),
         model_name: "open-mistral-nemo-2407".into(),
         model_provider_name: "mistral".into(),
@@ -26,6 +28,7 @@ async fn get_providers() -> E2ETestProviders {
     }];
 
     let bad_auth_extra_headers = vec![E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "mistral-extra-headers".to_string(),
         model_name: "open-mistral-nemo-2407".into(),
         model_provider_name: "mistral".into(),
@@ -34,20 +37,31 @@ async fn get_providers() -> E2ETestProviders {
 
     let json_providers = vec![
         E2ETestProvider {
+            supports_batch_inference: false,
             variant_name: "mistral".to_string(),
             model_name: "open-mistral-nemo-2407".into(),
             model_provider_name: "mistral".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
-            variant_name: "mistral-default".to_string(),
+            supports_batch_inference: false,
+            variant_name: "mistral-strict".to_string(),
             model_name: "open-mistral-nemo-2407".into(),
             model_provider_name: "mistral".into(),
             credentials: HashMap::new(),
         },
     ];
 
+    let json_mode_off_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "mistral_json_mode_off".to_string(),
+        model_name: "open-mistral-nemo-2407".into(),
+        model_provider_name: "mistral".into(),
+        credentials: HashMap::new(),
+    }];
+
     let inference_params_dynamic_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "mistral-dynamic".to_string(),
         model_name: "open-mistral-nemo-2407-dynamic".into(),
         model_provider_name: "mistral".into(),
@@ -55,6 +69,7 @@ async fn get_providers() -> E2ETestProviders {
     }];
 
     let shorthand_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "mistral-shorthand".to_string(),
         model_name: "mistral::open-mistral-nemo-2407".into(),
         model_provider_name: "mistral".into(),
@@ -73,9 +88,9 @@ async fn get_providers() -> E2ETestProviders {
         dynamic_tool_use_inference: providers.clone(),
         parallel_tool_use_inference: vec![],
         json_mode_inference: json_providers.clone(),
+        json_mode_off_inference: json_mode_off_providers.clone(),
         image_inference: vec![],
 
         shorthand_inference: shorthand_providers.clone(),
-        supports_batch_inference: false,
     }
 }
