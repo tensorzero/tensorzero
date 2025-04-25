@@ -2105,6 +2105,30 @@ user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_templa
 json_mode = "implicit_tool"
 max_tokens = 100
 
+[functions.dynamic_json.variants.groq]
+type = "chat_completion"
+model = "llama-scout-groq"
+system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
+json_mode = "on"
+max_tokens = 100
+
+[functions.dynamic_json.variants.groq-strict]
+type = "chat_completion"
+model = "llama-scout-groq"
+system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
+max_tokens = 100
+json_mode = "strict"
+
+[functions.dynamic_json.variants.groq-implicit]
+type = "chat_completion"
+model = "llama-scout-groq"
+system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
+json_mode = "implicit_tool"
+max_tokens = 100
+
 [functions.dynamic_json.variants.mistral]
 type = "chat_completion"
 model = "open-mistral-nemo-2407"
