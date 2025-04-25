@@ -262,14 +262,10 @@ async fn test_thinking_inference_extra_header_128k() {
         .await
         .unwrap();
 
-    // Check that 'extra_body' and 'extra_headers' were written out correctly to ClickHouse
+    // Check that 'extra_body' was written out correctly to ClickHouse (we don't store 'extra_headers'))
     assert_eq!(
         result["extra_body"],
         r#"[{"model_provider_name":"tensorzero::model_name::anthropic::claude-3-7-sonnet-20250219::provider_name::anthropic","pointer":"/thinking","value":{"type":"enabled","budget_tokens":1024}},{"model_provider_name":"tensorzero::model_name::anthropic::claude-3-7-sonnet-20250219::provider_name::anthropic","pointer":"/stop_sequences","value":["my_custom_stop"]}]"#
-    );
-    assert_eq!(
-        result["extra_headers"],
-        r#"[{"model_provider_name":"tensorzero::model_name::anthropic::claude-3-7-sonnet-20250219::provider_name::anthropic","name":"anthropic-beta","value":"output-128k-2025-02-19"}]"#
     );
     // We don't check anything else in the database, as we already do that in lots of places.
 }

@@ -639,7 +639,6 @@ pub struct ChatInferenceDatabaseInsert {
     pub tags: HashMap<String, String>,
     #[serde(default)]
     pub extra_body: UnfilteredInferenceExtraBody,
-    pub extra_headers: UnfilteredInferenceExtraHeaders,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -661,7 +660,6 @@ pub struct JsonInferenceDatabaseInsert {
     pub tags: HashMap<String, String>,
     #[serde(default)]
     pub extra_body: UnfilteredInferenceExtraBody,
-    pub extra_headers: UnfilteredInferenceExtraHeaders,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -1115,7 +1113,6 @@ impl ChatInferenceDatabaseInsert {
             processing_time_ms,
             tags: metadata.tags,
             extra_body: metadata.extra_body,
-            extra_headers: metadata.extra_headers,
         }
     }
 }
@@ -1152,7 +1149,6 @@ impl JsonInferenceDatabaseInsert {
             output_schema: json_result.output_schema,
             tags: metadata.tags,
             extra_body: metadata.extra_body,
-            extra_headers: metadata.extra_headers,
         }
     }
 }

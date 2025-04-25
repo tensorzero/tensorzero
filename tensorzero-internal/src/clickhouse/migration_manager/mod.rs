@@ -24,7 +24,6 @@ use migrations::migration_0021::Migration0021;
 use migrations::migration_0022::Migration0022;
 use migrations::migration_0023::Migration0023;
 use migrations::migration_0024::Migration0024;
-use migrations::migration_0025::Migration0025;
 
 pub async fn run(clickhouse: &ClickHouseConnectionInfo) -> Result<(), Error> {
     clickhouse.health().await?;
@@ -90,7 +89,6 @@ pub async fn run(clickhouse: &ClickHouseConnectionInfo) -> Result<(), Error> {
     run_migration(&Migration0022 { clickhouse }).await?;
     run_migration(&Migration0023 { clickhouse }).await?;
     run_migration(&Migration0024 { clickhouse }).await?;
-    run_migration(&Migration0025 { clickhouse }).await?;
     // NOTE:
     // When we add more migrations, we need to add a test that applies them in a cumulative (N^2) way.
     //
