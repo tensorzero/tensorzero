@@ -1,5 +1,6 @@
 import json
 from asyncio import Semaphore
+from dataclasses import dataclass
 
 from tensorzero import AsyncTensorZeroGateway, ToolCall, ToolResult
 from tensorzero.types import ToDictEncoder
@@ -21,13 +22,19 @@ MAX_INFERENCES = 20
 MAX_MESSAGE_LENGTH = 200000
 
 
+@dataclass
+class RunResult:
+    answer: str
+    t: int
+
+
 async def ask_question(
     t0: AsyncTensorZeroGateway,
     semaphore: Semaphore,
     question: str,
     episode_id: str,
     verbose: bool = False,
-):
+) -> RunResult:
     """
     Asks a question to the multi-hop retrieval agent and returns the answer.
 
@@ -41,7 +48,7 @@ async def ask_question(
     # Initialize the message history with the user's question
     messages = [{"role": "user", "content": question}]
 
-    for _ in range(MAX_INFERENCES):
+    for t in range(MAX_INFERENCES):
         if verbose:
             print()
         async with semaphore:
@@ -87,7 +94,7 @@ async def ask_question(
                         )
                     )
                 elif content_block.name == "answer_question":
-                    return content_block.arguments["answer"]
+                    return RunResult(answer=content_block.arguments["answer"], t=t)
             else:
                 # We don't need to do anything with other content blocks.
                 print(f"[Other Content Block] {content_block}")
@@ -105,7 +112,7 @@ async def ask_question(
     else:
         # In a production setting, the model could attempt to generate an answer using available information
         # when the search process is stopped; here, we simply return a failure message.
-        return "The agent failed to answer the question."
+        return RunResult(answer="The agent failed to answer the question.", t=t)
 
 
 async def compact_context(

@@ -1,4 +1,4 @@
-from asyncio import Semaphore
+from asyncio import Semaphore, gather
 
 from tensorzero import AsyncTensorZeroGateway
 
@@ -9,6 +9,7 @@ async def judge_answer(
     question: dict,
     ai_answer: str,
     episode_id: str,
+    t: int,
 ):
     async with semaphore:
         response = await t0.inference(
@@ -29,9 +30,17 @@ async def judge_answer(
             },
         )
     score = response.output.parsed["score"]
-    await t0.feedback(
-        metric_name="judge_score",
-        episode_id=episode_id,
-        value=score,
+    # Run both feedback calls concurrently
+    await gather(
+        t0.feedback(
+            metric_name="judge_score",
+            episode_id=episode_id,
+            value=score,
+        ),
+        t0.feedback(
+            metric_name="num_iterations",
+            value=t,
+            episode_id=episode_id,
+        ),
     )
     return score

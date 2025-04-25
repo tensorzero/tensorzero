@@ -98,3 +98,8 @@ strict = true
 type = "float"
 level = "episode"
 optimize = "max"
+
+[metrics.num_iterations]
+type = "float"
+level = "episode"
+optimize = "min"

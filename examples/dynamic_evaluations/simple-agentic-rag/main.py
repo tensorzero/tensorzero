@@ -7,7 +7,7 @@ from dataset import load_beerqa
 from judge import judge_answer
 from tensorzero import AsyncTensorZeroGateway
 
-MAX_SAMPLES = 10
+MAX_SAMPLES = 1
 CONCURRENCY = 20
 
 
@@ -60,10 +60,10 @@ async def evaluate_question(
 ):
     episode_info = await t0.dynamic_evaluation_run_episode(run_id=run_id)
     episode_id = episode_info.episode_id
-    ai_answer = await ask_question(
+    ai_answer, t = await ask_question(
         t0, semaphore, question["question"], episode_id=episode_id, verbose=False
     )
-    await judge_answer(t0, semaphore, question, ai_answer, episode_id)
+    await judge_answer(t0, semaphore, question, ai_answer, episode_id, t)
 
 
 if __name__ == "__main__":
