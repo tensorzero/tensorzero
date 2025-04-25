@@ -11,7 +11,7 @@ import { Separator } from "~/components/ui/separator";
 import type { ParsedInferenceRow } from "~/utils/clickhouse/inference";
 import type { ParsedDatasetRow } from "~/utils/clickhouse/datasets";
 import type { InferenceUsage } from "~/utils/clickhouse/helpers";
-import { OutputContent } from "~/components/inference/Output";
+import NewOutput from "~/components/inference/NewOutput";
 import type { InferenceResponse } from "~/utils/tensorzero";
 import { Card, CardContent } from "~/components/ui/card";
 import type { VariantResponseInfo } from "~/routes/api/tensorzero/inference.utils";
@@ -88,16 +88,17 @@ export function VariantResponseModal({
       ) : (
         response && (
           <>
-            <div className="flex-1">
-              <h4 className="mb-1 text-xs font-semibold">Output</h4>
-              {response.output && (
-                <Card>
-                  <CardContent className="pt-8">
-                    <OutputContent output={response.output} />
-                  </CardContent>
-                </Card>
-              )}
-            </div>
+            {response.output && (
+              <div className="flex-1">
+                <NewOutput
+                  output={response.output}
+                  outputSchema={
+                    "output_schema" in item ? item.output_schema : undefined
+                  }
+                />
+              </div>
+            )}
+
             {response.usage && (
               <div className="mt-4">
                 <h4 className="mb-1 text-xs font-semibold">Usage</h4>
@@ -144,7 +145,7 @@ export function VariantResponseModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-h-[90vh] sm:max-w-[1200px]">
+      <DialogContent className="max-h-[90vh] sm:max-w-[90vw]">
         <DialogHeader>
           <DialogTitle>{getTitle()}</DialogTitle>
         </DialogHeader>
