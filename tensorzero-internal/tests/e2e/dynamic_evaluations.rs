@@ -46,14 +46,16 @@ async fn test_dynamic_evaluation() {
     for i in 0..2 {
         // Get the episode_id from the dynamic_evaluation_run_episode endpoint
         let episode_id = client
-            .dynamic_evaluation_run_episode(DynamicEvaluationRunEpisodeParams {
+            .dynamic_evaluation_run_episode(
                 run_id,
-                datapoint_name: Some(format!("test_datapoint_{i}")),
-                tags: HashMap::from([
-                    ("baz".to_string(), format!("baz_{i}")),
-                    ("zoo".to_string(), format!("zoo_{i}")),
-                ]),
-            })
+                DynamicEvaluationRunEpisodeParams {
+                    datapoint_name: Some(format!("test_datapoint_{i}")),
+                    tags: HashMap::from([
+                        ("baz".to_string(), format!("baz_{i}")),
+                        ("zoo".to_string(), format!("zoo_{i}")),
+                    ]),
+                },
+            )
             .await
             .unwrap()
             .episode_id;
@@ -205,11 +207,13 @@ async fn test_dynamic_evaluation_other_function() {
     assert_eq!(run_row.project_name, None);
     assert_eq!(run_row.run_display_name, None);
     let episode_id = client
-        .dynamic_evaluation_run_episode(DynamicEvaluationRunEpisodeParams {
+        .dynamic_evaluation_run_episode(
             run_id,
-            datapoint_name: None,
-            tags: HashMap::new(),
-        })
+            DynamicEvaluationRunEpisodeParams {
+                datapoint_name: None,
+                tags: HashMap::new(),
+            },
+        )
         .await
         .unwrap()
         .episode_id;
@@ -271,11 +275,13 @@ async fn test_dynamic_evaluation_override_variant_tags() {
     assert_eq!(run_row.project_name, None);
     assert_eq!(run_row.run_display_name, None);
     let episode_id = client
-        .dynamic_evaluation_run_episode(DynamicEvaluationRunEpisodeParams {
+        .dynamic_evaluation_run_episode(
             run_id,
-            datapoint_name: None,
-            tags: HashMap::new(),
-        })
+            DynamicEvaluationRunEpisodeParams {
+                datapoint_name: None,
+                tags: HashMap::new(),
+            },
+        )
         .await
         .unwrap()
         .episode_id;

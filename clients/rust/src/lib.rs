@@ -18,6 +18,7 @@ use thiserror::Error;
 use tokio::{sync::Mutex, time::error::Elapsed};
 use tokio_stream::StreamExt;
 use url::Url;
+use uuid::Uuid;
 
 mod client_inference_params;
 mod client_input;
@@ -537,13 +538,14 @@ impl Client {
 
     pub async fn dynamic_evaluation_run_episode(
         &self,
+        run_id: Uuid,
         params: DynamicEvaluationRunEpisodeParams,
     ) -> Result<DynamicEvaluationRunEpisodeResponse, TensorZeroError> {
         match &self.mode {
             ClientMode::HTTPGateway(client) => {
-                let url = client.base_url.join("dynamic_evaluation_run_episode").map_err(|e| TensorZeroError::Other {
+                let url = client.base_url.join(&format!("dynamic_evaluation_run/{}/episode", run_id)).map_err(|e| TensorZeroError::Other {
                     source: tensorzero_internal::error::Error::new(ErrorDetails::InvalidBaseUrl {
-                        message: format!("Failed to join base URL with /dynamic_evaluation_run_episode endpoint: {}", e),
+                        message: format!("Failed to join base URL with /dynamic_evaluation_run/{}/episode endpoint: {}", run_id, e),
                     })
                     .into(),
                 })?;
@@ -554,6 +556,7 @@ impl Client {
                 Ok(with_embedded_timeout(*timeout, async {
                     tensorzero_internal::endpoints::dynamic_evaluation_run::dynamic_evaluation_run_episode(
                         gateway.state.clone(),
+                        run_id,
                         params,
                     )
                     .await

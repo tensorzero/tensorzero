@@ -2754,7 +2754,7 @@ def test_sync_dynamic_evaluation_run(sync_client: TensorZeroGateway):
         variants={"basic_test": "test2"},
         tags={"foo": "bar"},
     )
-    # assert isinstance(response, DynamicEvaluationRunResponse)
+    assert isinstance(response, DynamicEvaluationRunResponse)
     run_id = response.run_id
     assert isinstance(run_id, UUID)
     assert run_id is not None

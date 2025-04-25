@@ -1,11 +1,15 @@
 use std::collections::HashMap;
 
-use axum::{debug_handler, extract::State, Json};
+use axum::{
+    debug_handler,
+    extract::{Path, State},
+    Json,
+};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    clickhouse::ClickHouseConnectionInfo,
+    clickhouse::{escape_string_for_clickhouse_literal, ClickHouseConnectionInfo},
     config_parser::Config,
     endpoints::validate_tags,
     error::{Error, ErrorDetails},
@@ -58,17 +62,11 @@ pub async fn dynamic_evaluation_run(
     validate_tags(&params.tags, false)?;
     validate_variant_pins(&params.variants, &config)?;
     let run_id = Uuid::now_v7();
-    let run_id_str = run_id.to_string();
-    let mut tags = params.tags;
-    tags.insert(
-        "tensorzero::dynamic_evaluation_run_id".to_string(),
-        run_id_str,
-    );
     write_dynamic_evaluation_run(
         clickhouse_connection_info,
         run_id,
         params.variants,
-        tags,
+        params.tags,
         params.project_name,
         params.display_name,
     )
@@ -76,9 +74,13 @@ pub async fn dynamic_evaluation_run(
     Ok(DynamicEvaluationRunResponse { run_id })
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+pub struct DynamicEvaluationRunEpisodePathParams {
+    pub run_id: Uuid,
+}
+
 #[derive(Debug, Default, Deserialize, Serialize)]
 pub struct DynamicEvaluationRunEpisodeParams {
-    pub run_id: Uuid,
     #[serde(default)]
     pub datapoint_name: Option<String>,
     #[serde(default)]
@@ -93,9 +95,10 @@ pub struct DynamicEvaluationRunEpisodeResponse {
 #[debug_handler(state = AppStateData)]
 pub async fn dynamic_evaluation_run_episode_handler(
     State(app_state): AppState,
+    Path(path_params): Path<DynamicEvaluationRunEpisodePathParams>,
     StructuredJson(params): StructuredJson<DynamicEvaluationRunEpisodeParams>,
 ) -> Result<Json<DynamicEvaluationRunEpisodeResponse>, Error> {
-    dynamic_evaluation_run_episode(app_state, params)
+    dynamic_evaluation_run_episode(app_state, path_params.run_id, params)
         .await
         .map(Json)
 }
@@ -105,11 +108,26 @@ pub async fn dynamic_evaluation_run_episode(
         clickhouse_connection_info,
         ..
     }: AppStateData,
+    run_id: Uuid,
     params: DynamicEvaluationRunEpisodeParams,
 ) -> Result<DynamicEvaluationRunEpisodeResponse, Error> {
     validate_tags(&params.tags, false)?;
     let episode_id = generate_dynamic_evaluation_run_episode_id();
-    write_dynamic_evaluation_run_episode(&clickhouse_connection_info, params, episode_id).await?;
+    let run_id_str = run_id.to_string();
+    // We add the dynamic evaluation run ID to the tags so that we can look it up per-inference later
+    let mut tags = params.tags;
+    tags.insert(
+        "tensorzero::dynamic_evaluation_run_id".to_string(),
+        run_id_str,
+    );
+    write_dynamic_evaluation_run_episode(
+        &clickhouse_connection_info,
+        params.datapoint_name.as_deref(),
+        tags,
+        run_id,
+        episode_id,
+    )
+    .await?;
     Ok(DynamicEvaluationRunEpisodeResponse { episode_id })
 }
 
@@ -135,10 +153,15 @@ fn validate_variant_pins(
 }
 
 fn to_map_literal(map: &HashMap<String, String>) -> String {
-    // TODO before merging (Viraj): escape the keys and values here.
     let items: Vec<String> = map
         .iter()
-        .map(|(k, v)| format!("'{}':'{}'", k, v))
+        .map(|(k, v)| {
+            format!(
+                "'{}':'{}'",
+                escape_string_for_clickhouse_literal(k),
+                escape_string_for_clickhouse_literal(v)
+            )
+        })
         .collect();
     format!("{{{}}}", items.join(","))
 }
@@ -205,7 +228,9 @@ pub struct DynamicEvaluationRunEpisodeRow {
 
 async fn write_dynamic_evaluation_run_episode(
     clickhouse: &ClickHouseConnectionInfo,
-    params: DynamicEvaluationRunEpisodeParams,
+    datapoint_name: Option<&str>,
+    tags: HashMap<String, String>,
+    run_id: Uuid,
     episode_id: Uuid,
 ) -> Result<(), Error> {
     let query = r#"
@@ -227,15 +252,12 @@ async fn write_dynamic_evaluation_run_episode(
     WHERE run_id_uint = toUInt128({run_id:UUID})
     "#;
     let mut query_params = HashMap::new();
-    let run_id_str = params.run_id.to_string();
+    let run_id_str = run_id.to_string();
     let episode_id_str = episode_id.to_string();
     query_params.insert("run_id", run_id_str.as_str());
     query_params.insert("episode_id", episode_id_str.as_str());
-    query_params.insert(
-        "datapoint_name",
-        params.datapoint_name.as_deref().unwrap_or("\\N"),
-    ); // Use \\N to indicate NULL
-    let tags_str = to_map_literal(&params.tags);
+    query_params.insert("datapoint_name", datapoint_name.unwrap_or("\\N")); // Use \\N to indicate NULL
+    let tags_str = to_map_literal(&tags);
     query_params.insert("tags", tags_str.as_str());
     clickhouse
         .run_query_synchronous(query.to_string(), Some(&query_params))
