@@ -2,9 +2,9 @@ services:
   clickhouse:
     image: clickhouse/clickhouse-server:24.12-alpine
     environment:
-      - CLICKHOUSE_USER=chuser
-      - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
-      - CLICKHOUSE_PASSWORD=chpassword
+      CLICKHOUSE_USER: chuser
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+      CLICKHOUSE_PASSWORD: chpassword
     ports:
       - "8123:8123" # HTTP port
       - "9000:9000" # Native port
@@ -27,8 +27,8 @@ services:
       - ${GCP_VERTEX_CREDENTIALS_PATH:-/dev/null}:/app/gcp-credentials.json:ro
     command: --config-file /app/config/tensorzero.toml
     environment:
-      - TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero
-      - GCP_VERTEX_CREDENTIALS_PATH=${GCP_VERTEX_CREDENTIALS_PATH:+/app/gcp-credentials.json}
+      TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero
+      GCP_VERTEX_CREDENTIALS_PATH: ${GCP_VERTEX_CREDENTIALS_PATH:+/app/gcp-credentials.json}
     env_file:
       - ${ENV_FILE:-.env}
     ports:
@@ -44,8 +44,8 @@ services:
     volumes:
       - ./config:/app/config:ro
     environment:
-      - TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero
-      - TENSORZERO_GATEWAY_URL=http://gateway:3000
+      TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero
+      TENSORZERO_GATEWAY_URL: http://gateway:3000
     env_file:
       - ${ENV_FILE:-.env}
     ports:
@@ -59,8 +59,8 @@ services:
     profiles: [load-fixture]
     image: clickhouse/clickhouse-server:24.12-alpine
     environment:
-      - CLICKHOUSE_USER=chuser
-      - CLICKHOUSE_PASSWORD=chpassword
+      CLICKHOUSE_USER: chuser
+      CLICKHOUSE_PASSWORD: chpassword
     command: |
       bash -c "clickhouse-client --host clickhouse --query \"DROP DATABASE IF EXISTS tensorzero; RESTORE DATABASE tensorzero FROM File('mounted/fixture.zip');\" && exit 0"
     depends_on:

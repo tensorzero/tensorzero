@@ -45,19 +45,21 @@ async fn get_providers() -> E2ETestProviders {
         },
         E2ETestProvider {
             supports_batch_inference: false,
-            variant_name: "xai-default".to_string(),
-            model_name: "grok_2_1212".into(),
-            model_provider_name: "xai".into(),
-            credentials: HashMap::new(),
-        },
-        E2ETestProvider {
-            supports_batch_inference: false,
             variant_name: "xai-strict".to_string(),
             model_name: "grok_2_1212".into(),
             model_provider_name: "xai".into(),
             credentials: HashMap::new(),
         },
     ];
+
+    let json_mode_off_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "xai_json_mode_off".to_string(),
+        model_name: "grok_2_1212".into(),
+        model_provider_name: "xai".into(),
+        credentials: HashMap::new(),
+    }];
+
     let inference_params_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "xai".to_string(),
@@ -86,6 +88,7 @@ async fn get_providers() -> E2ETestProviders {
         dynamic_tool_use_inference: standard_providers.clone(),
         parallel_tool_use_inference: vec![],
         json_mode_inference: json_providers,
+        json_mode_off_inference: json_mode_off_providers.clone(),
         image_inference: vec![],
 
         shorthand_inference: shorthand_providers.clone(),

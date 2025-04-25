@@ -25,9 +25,8 @@ retries = { backoff = "exponential", count = 8, delay = "5s", jitter = true, max
 
 # Run E2E provider tests sequentially to avoid rate limits
 [test-groups]
-e2e_aws_bedrock = { max-threads = 1 }
+e2e_aws_bedrock = { max-threads = 2 }
 e2e_fireworks = { max-threads = 1 }
-e2e_xai = { max-threads = 1 }
 # Our Sagemaker instance seems to be able to handle 2 concurrent requests
 e2e_aws_sagemaker = { max-threads = 2 }
 
@@ -42,10 +41,6 @@ test-group = 'e2e_aws_sagemaker'
 [[profile.default.overrides]]
 filter = 'binary(e2e) and test(providers::fireworks::)'
 test-group = 'e2e_fireworks'
-
-[[profile.default.overrides]]
-filter = 'binary(e2e) and test(providers::xai::)'
-test-group = 'e2e_xai'
 
 [[profile.default.overrides]]
 filter = 'test(test_concurrent_clickhouse_migrations)'
