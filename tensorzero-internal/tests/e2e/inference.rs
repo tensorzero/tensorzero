@@ -1188,7 +1188,7 @@ async fn e2e_test_variant_failover() {
                     "messages": [
                     {
                         "role": "user",
-                        "content": [{"type": "text", "text": {"type": "tacos", "quantity": 13}}],
+                        "content": [{"type": "text", "arguments": {"type": "tacos", "quantity": 13}}],
                     }
                 ]},
             "stream": false,

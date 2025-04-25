@@ -1103,7 +1103,7 @@ async fn test_dicl_json_request() {
                "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "text": {"country": "Brazil"}}]
+                    "content": [{"type": "text", "arguments": {"country": "Brazil"}}]
                 }
             ]},
         "stream": false,
