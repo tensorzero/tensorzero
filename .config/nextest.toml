@@ -25,7 +25,7 @@ retries = { backoff = "exponential", count = 8, delay = "5s", jitter = true, max
 
 # Run E2E provider tests sequentially to avoid rate limits
 [test-groups]
-e2e_aws_bedrock = { max-threads = 1 }
+e2e_aws_bedrock = { max-threads = 2 }
 e2e_fireworks = { max-threads = 1 }
 # Our Sagemaker instance seems to be able to handle 2 concurrent requests
 e2e_aws_sagemaker = { max-threads = 2 }
