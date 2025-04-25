@@ -162,7 +162,7 @@ export function VariantResponseModal({
             </div>
           ) : (
             <>
-              <div className="flex min-h-[300px] space-x-4">
+              <div className="flex flex-col gap-4 md:grid md:min-h-[300px] md:grid-cols-2">
                 <ResponseColumn title="Original" response={baselineResponse} />
                 <ResponseColumn
                   title="New"
