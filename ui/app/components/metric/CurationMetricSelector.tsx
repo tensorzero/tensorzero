@@ -67,6 +67,8 @@ export default function CurationMetricSelector<
         `/api/function/${encodeURIComponent(functionValue)}/feedback_counts`,
       );
     }
+    // TODO: Fix and stop ignoring lint rule
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [functionValue]);
 
   const validMetrics = useMemo(() => {
@@ -94,6 +96,8 @@ export default function CurationMetricSelector<
       // TODO: Figure out how to generalize the generic for this function so that it accepts a null value
       setValue(name, null as PathValue<T, Path<T>>);
     }
+    // TODO: Fix and stop ignoring lint rule
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [functionValue, validMetrics, getValues, setValue]);
 
   return (

@@ -117,10 +117,8 @@ export async function queryBooleanMetricFeedbackBoundsByTargetId(params: {
   const { target_id } = params;
   const query = `
      SELECT
-    (SELECT id FROM BooleanMetricFeedbackByTargetId WHERE toUInt128(id) = (SELECT MIN(toUInt128(id)) FROM BooleanMetricFeedbackByTargetId WHERE target_id = {target_id:String})) AS first_id,
-    (SELECT id FROM BooleanMetricFeedbackByTargetId WHERE toUInt128(id) = (SELECT MAX(toUInt128(id)) FROM BooleanMetricFeedbackByTargetId WHERE target_id = {target_id:String})) AS last_id
-    FROM BooleanMetricFeedbackByTargetId
-    LIMIT 1
+      (SELECT id FROM BooleanMetricFeedbackByTargetId WHERE target_id = {target_id:String} ORDER BY toUInt128(id) ASC LIMIT 1) AS first_id,
+      (SELECT id FROM BooleanMetricFeedbackByTargetId WHERE target_id = {target_id:String} ORDER BY toUInt128(id) DESC LIMIT 1) AS last_id
     `;
 
   try {
@@ -574,10 +572,8 @@ export async function queryFloatMetricFeedbackBoundsByTargetId(params: {
   const { target_id } = params;
   const query = `
      SELECT
-    (SELECT id FROM FloatMetricFeedbackByTargetId WHERE toUInt128(id) = (SELECT MIN(toUInt128(id)) FROM FloatMetricFeedbackByTargetId WHERE target_id = {target_id:String})) AS first_id,
-    (SELECT id FROM FloatMetricFeedbackByTargetId WHERE toUInt128(id) = (SELECT MAX(toUInt128(id)) FROM FloatMetricFeedbackByTargetId WHERE target_id = {target_id:String})) AS last_id
-    FROM FloatMetricFeedbackByTargetId
-    LIMIT 1
+      (SELECT id FROM FloatMetricFeedbackByTargetId WHERE target_id = {target_id:String} ORDER BY toUInt128(id) ASC LIMIT 1) AS first_id,
+      (SELECT id FROM FloatMetricFeedbackByTargetId WHERE target_id = {target_id:String} ORDER BY toUInt128(id) DESC LIMIT 1) AS last_id
     `;
 
   try {

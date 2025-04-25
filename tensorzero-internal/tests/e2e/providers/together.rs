@@ -12,6 +12,7 @@ async fn get_providers() -> E2ETestProviders {
     };
 
     let standard_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "together".to_string(),
         model_name: "llama3.1-8b-instruct-together".into(),
         model_provider_name: "together".into(),
@@ -19,6 +20,7 @@ async fn get_providers() -> E2ETestProviders {
     }];
 
     let extra_body_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "together-extra-body".to_string(),
         model_name: "llama3.1-8b-instruct-together".into(),
         model_provider_name: "together".into(),
@@ -26,6 +28,7 @@ async fn get_providers() -> E2ETestProviders {
     }];
 
     let bad_auth_extra_headers = vec![E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "together-extra-headers".to_string(),
         model_name: "llama3.1-8b-instruct-together".into(),
         model_provider_name: "together".into(),
@@ -33,6 +36,7 @@ async fn get_providers() -> E2ETestProviders {
     }];
 
     let inference_params_dynamic_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "together-dynamic".to_string(),
         model_name: "llama3.1-8b-instruct-together-dynamic".into(),
         model_provider_name: "together".into(),
@@ -41,20 +45,31 @@ async fn get_providers() -> E2ETestProviders {
 
     let json_providers = vec![
         E2ETestProvider {
+            supports_batch_inference: false,
             variant_name: "together".to_string(),
             model_name: "llama3.1-8b-instruct-together".into(),
             model_provider_name: "together".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
-            variant_name: "together-default".to_string(),
+            supports_batch_inference: false,
+            variant_name: "together-strict".to_string(),
             model_name: "llama3.1-8b-instruct-together".into(),
             model_provider_name: "together".into(),
             credentials: HashMap::new(),
         },
     ];
 
+    let json_mode_off_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "together_json_mode_off".to_string(),
+        model_name: "llama3.1-8b-instruct-together".into(),
+        model_provider_name: "together".into(),
+        credentials: HashMap::new(),
+    }];
+
     let tool_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "together-tool".to_string(),
         model_name: "llama3.1-405b-instruct-turbo-together".into(),
         model_provider_name: "together".into(),
@@ -62,6 +77,7 @@ async fn get_providers() -> E2ETestProviders {
     }];
 
     let reasoning_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "together-deepseek-r1".to_string(),
         model_name: "together-deepseek-r1".to_string(),
         model_provider_name: "together".to_string(),
@@ -69,6 +85,7 @@ async fn get_providers() -> E2ETestProviders {
     }];
 
     let shorthand_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "together-shorthand".to_string(),
         model_name: "together::meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo".into(),
         model_provider_name: "together".into(),
@@ -87,9 +104,9 @@ async fn get_providers() -> E2ETestProviders {
         dynamic_tool_use_inference: tool_providers.clone(),
         parallel_tool_use_inference: tool_providers.clone(),
         json_mode_inference: json_providers.clone(),
+        json_mode_off_inference: json_mode_off_providers.clone(),
         image_inference: vec![],
 
         shorthand_inference: shorthand_providers.clone(),
-        supports_batch_inference: false,
     }
 }

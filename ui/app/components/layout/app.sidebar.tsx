@@ -31,9 +31,6 @@ import {
 } from "~/components/ui/sidebar";
 import TensorZeroStatusIndicator from "./TensorZeroStatusIndicator";
 
-const FF_ENABLE_DATASETS =
-  import.meta.env.VITE_TENSORZERO_UI_FF_ENABLE_DATASETS === "1";
-
 interface NavigationItem {
   title: string;
   url: string;
@@ -76,25 +73,21 @@ const navigation: NavigationSection[] = [
       },
     ],
   },
-  ...(FF_ENABLE_DATASETS
-    ? [
-        {
-          title: "Workflows",
-          items: [
-            {
-              title: "Datasets",
-              url: "/datasets",
-              icon: Dataset,
-            },
-            {
-              title: "Evaluations",
-              url: "/evaluations",
-              icon: Evaluation,
-            },
-          ],
-        },
-      ]
-    : []),
+  {
+    title: "Workflows",
+    items: [
+      {
+        title: "Datasets",
+        url: "/datasets",
+        icon: Dataset,
+      },
+      {
+        title: "Evaluations",
+        url: "/evaluations",
+        icon: Evaluation,
+      },
+    ],
+  },
 ];
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {

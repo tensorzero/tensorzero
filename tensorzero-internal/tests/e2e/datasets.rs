@@ -1182,7 +1182,7 @@ async fn test_datapoint_insert_output_demonstration_chat() {
     }
 
     // Sleep to ensure that we wrote to ClickHouse
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
     let resp = client
         .post(get_gateway_endpoint(&format!(

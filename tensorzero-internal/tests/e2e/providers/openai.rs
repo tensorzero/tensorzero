@@ -37,6 +37,7 @@ async fn get_providers() -> E2ETestProviders {
     };
 
     let standard_without_o1 = vec![E2ETestProvider {
+        supports_batch_inference: true,
         variant_name: "openai".to_string(),
         model_name: "gpt-4o-mini-2024-07-18".into(),
         model_provider_name: "openai".into(),
@@ -44,6 +45,7 @@ async fn get_providers() -> E2ETestProviders {
     }];
 
     let extra_body_providers = vec![E2ETestProvider {
+        supports_batch_inference: true,
         variant_name: "openai-extra-body".to_string(),
         model_name: "gpt-4o-mini-2024-07-18".into(),
         model_provider_name: "openai".into(),
@@ -51,6 +53,7 @@ async fn get_providers() -> E2ETestProviders {
     }];
 
     let bad_auth_extra_headers = vec![E2ETestProvider {
+        supports_batch_inference: true,
         variant_name: "openai-extra-headers".to_string(),
         model_name: "gpt-4o-mini-2024-07-18".into(),
         model_provider_name: "openai".into(),
@@ -59,12 +62,14 @@ async fn get_providers() -> E2ETestProviders {
 
     let standard_providers = vec![
         E2ETestProvider {
+            supports_batch_inference: true,
             variant_name: "openai".to_string(),
             model_name: "gpt-4o-mini-2024-07-18".into(),
             model_provider_name: "openai".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
+            supports_batch_inference: true,
             variant_name: "openai-o1".to_string(),
             model_name: "o1-2024-12-17".into(),
             model_provider_name: "openai".into(),
@@ -73,6 +78,7 @@ async fn get_providers() -> E2ETestProviders {
     ];
 
     let inference_params_providers = vec![E2ETestProvider {
+        supports_batch_inference: true,
         variant_name: "openai".to_string(),
         model_name: "gpt-4o-mini-2024-07-18".into(),
         model_provider_name: "openai".into(),
@@ -80,6 +86,7 @@ async fn get_providers() -> E2ETestProviders {
     }];
 
     let inference_params_dynamic_providers = vec![E2ETestProvider {
+        supports_batch_inference: true,
         variant_name: "openai-dynamic".to_string(),
         model_name: "gpt-4o-mini-2024-07-18-dynamic".into(),
         model_provider_name: "openai".into(),
@@ -87,6 +94,7 @@ async fn get_providers() -> E2ETestProviders {
     }];
 
     let image_providers = vec![E2ETestProvider {
+        supports_batch_inference: true,
         variant_name: "openai".to_string(),
         model_name: "openai::gpt-4o-mini-2024-07-18".into(),
         model_provider_name: "openai".into(),
@@ -95,38 +103,61 @@ async fn get_providers() -> E2ETestProviders {
 
     let json_providers = vec![
         E2ETestProvider {
+            supports_batch_inference: true,
             variant_name: "openai".to_string(),
             model_name: "gpt-4o-mini-2024-07-18".into(),
             model_provider_name: "openai".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
+            supports_batch_inference: true,
             variant_name: "openai-implicit".to_string(),
             model_name: "gpt-4o-mini-2024-07-18".into(),
             model_provider_name: "openai".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
+            supports_batch_inference: true,
             variant_name: "openai-strict".to_string(),
             model_name: "gpt-4o-mini-2024-07-18".into(),
             model_provider_name: "openai".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
+            supports_batch_inference: true,
             variant_name: "openai-o1".to_string(),
             model_name: "o1-2024-12-17".into(),
             model_provider_name: "openai".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
-            variant_name: "openai-default".to_string(),
+            supports_batch_inference: true,
+            variant_name: "openai-cot".to_string(),
+            model_name: "openai::gpt-4.1-nano-2025-04-14".into(),
+            model_provider_name: "openai".into(),
+            credentials: HashMap::new(),
+        },
+    ];
+
+    let json_mode_off_providers = vec![
+        E2ETestProvider {
+            supports_batch_inference: true,
+            variant_name: "openai_json_mode_off".to_string(),
             model_name: "gpt-4o-mini-2024-07-18".into(),
+            model_provider_name: "openai".into(),
+            credentials: HashMap::new(),
+        },
+        E2ETestProvider {
+            supports_batch_inference: true,
+            variant_name: "openai_o1_json_mode_off".to_string(),
+            model_name: "o1-2024-12-17".into(),
             model_provider_name: "openai".into(),
             credentials: HashMap::new(),
         },
     ];
 
     let shorthand_providers = vec![E2ETestProvider {
+        supports_batch_inference: true,
         variant_name: "openai-shorthand".to_string(),
         model_name: "openai::gpt-4o-mini-2024-07-18".into(),
         model_provider_name: "openai".into(),
@@ -145,10 +176,10 @@ async fn get_providers() -> E2ETestProviders {
         dynamic_tool_use_inference: standard_providers.clone(),
         parallel_tool_use_inference: standard_without_o1.clone(),
         json_mode_inference: json_providers.clone(),
+        json_mode_off_inference: json_mode_off_providers.clone(),
         image_inference: image_providers.clone(),
 
         shorthand_inference: shorthand_providers.clone(),
-        supports_batch_inference: true,
     }
 }
 
@@ -247,6 +278,82 @@ pub async fn test_provider_config_extra_body() {
             .expect("frequency_penalty is not a number"),
         1.42
     );
+}
+
+#[tokio::test]
+async fn test_default_function_default_tool_choice() {
+    let client = Client::new();
+    let episode_id = Uuid::now_v7();
+
+    let payload = json!({
+        "model_name": "openai::gpt-4o-mini",
+        "episode_id" : episode_id,
+        "input": {
+            "messages": [{"role": "user", "content": "What is the weather in NYC?"}],
+        },
+        "additional_tools": [
+            {
+                "name": "temperature_api",
+                "description": "Get the current temperature",
+                "parameters": {
+                  "$schema": "http://json-schema.org/draft-07/schema#",
+                  "type": "object",
+                  "description": "Get the current temperature in Celsius for a given location.",
+                  "properties": {
+                    "location": {
+                      "type": "string",
+                      "description": "The location to get the temperature for (e.g. \"New York\")"
+                    }
+                  },
+                  "required": ["location"],
+                  "additionalProperties": false
+                }
+                ,
+                "strict": true
+            }
+        ],
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    // Check Response is OK, then fields in order
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+    println!("Response: {response_json}");
+
+    // Check that inference_id is here
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+
+    let content_blocks = response_json.get("content").unwrap().as_array().unwrap();
+    assert_eq!(content_blocks.len(), 1);
+
+    assert_eq!(
+        content_blocks[0].get("type").unwrap().as_str().unwrap(),
+        "tool_call"
+    );
+
+    // Sleep for 100ms second to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    // Just check 'tool_choice' in the raw request, since we already have lots of tests
+    // that check the full ChatInference/ModelInference rows
+    let clickhouse = get_clickhouse().await;
+
+    // Check the ModelInference Table
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
+    assert_eq!(inference_id_result, inference_id);
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request_json: Value = serde_json::from_str(raw_request).unwrap();
+    assert_eq!(raw_request_json["tool_choice"], "auto");
 }
 
 // Tests using 'model_name' with a shorthand model
@@ -713,7 +820,7 @@ async fn test_chat_function_json_override_with_mode(json_mode: ModelInferenceReq
         serde_json::from_str(raw_request).expect("raw_request should be valid JSON");
     let expected_request = match json_mode {
         ModelInferenceRequestJsonMode::Off => {
-            json!({"messages":[{"role":"system","content":"You are a helpful and friendly assistant named AskJeeves"},{"role":"user","content":"What is the capital of Japan (possibly as JSON)?"}],"model":"gpt-4o-mini-2024-07-18","max_completion_tokens":100,"stream":false,"response_format":{"type":"text"}})
+            json!({"messages":[{"role":"system","content":"You are a helpful and friendly assistant named AskJeeves"},{"role":"user","content":"What is the capital of Japan (possibly as JSON)?"}],"model":"gpt-4o-mini-2024-07-18","max_completion_tokens":100,"stream":false})
         }
         ModelInferenceRequestJsonMode::On => {
             json!({"messages":[{"role":"system","content":"You are a helpful and friendly assistant named AskJeeves"},{"role":"user","content":"What is the capital of Japan (possibly as JSON)?"}],"model":"gpt-4o-mini-2024-07-18","max_completion_tokens":100,"stream":false,"response_format":{"type":"json_object"}})
@@ -1170,6 +1277,7 @@ pub async fn test_image_inference_with_provider_cloudflare_r2() {
     std::env::set_var("S3_SECRET_ACCESS_KEY", r2_secret_access_key);
 
     let provider = E2ETestProvider {
+        supports_batch_inference: true,
         variant_name: "openai".to_string(),
         model_name: "openai::gpt-4o-mini-2024-07-18".into(),
         model_provider_name: "openai".into(),
@@ -1363,6 +1471,7 @@ pub async fn test_image_inference_with_provider_gcp_storage() {
     std::env::set_var("S3_SECRET_ACCESS_KEY", gcloud_secret_access_key);
 
     let provider = E2ETestProvider {
+        supports_batch_inference: true,
         variant_name: "openai".to_string(),
         model_name: "openai::gpt-4o-mini-2024-07-18".into(),
         model_provider_name: "openai".into(),
@@ -1435,6 +1544,7 @@ pub async fn test_image_inference_with_provider_docker_minio() {
     std::env::set_var("S3_SECRET_ACCESS_KEY", minio_secret_access_key);
 
     let provider = E2ETestProvider {
+        supports_batch_inference: true,
         variant_name: "openai".to_string(),
         model_name: "openai::gpt-4o-mini-2024-07-18".into(),
         model_provider_name: "openai".into(),
@@ -1496,6 +1606,7 @@ pub async fn test_parallel_tool_use_default_true_inference_request() {
     let episode_id = Uuid::now_v7();
 
     let provider = E2ETestProvider {
+        supports_batch_inference: true,
         variant_name: "openai".to_string(),
         model_name: "gpt-4o-mini-2024-07-18".into(),
         model_provider_name: "openai".into(),

@@ -1,12 +1,16 @@
 use std::fmt::{self, Display};
 
+use scoped_tls::scoped_thread_local;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use url::Url;
 
 use crate::error::{Error, ErrorDetails};
 use aws_smithy_types::base64;
 
 use super::{resolved_input::ImageWithPath, ContentBlock, RequestMessage};
+
+scoped_thread_local!(static SERIALIZE_IMAGE_DATA: ());
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -35,13 +39,17 @@ impl Display for ImageKind {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+fn skip_serialize_image_data(_: &Option<String>) -> bool {
+    !SERIALIZE_IMAGE_DATA.is_set()
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub struct Base64Image {
     // The original url we used to download the image
     pub url: Option<Url>,
     pub mime_type: ImageKind,
     // TODO - should we add a wrapper type to enforce base64?
-    #[serde(skip)]
+    #[serde(skip_serializing_if = "skip_serialize_image_data")]
     #[serde(default)]
     // This is normally `Some`, unless it was deserialized from ClickHouse
     // (with the image data stripped out).
@@ -56,6 +64,16 @@ impl Base64Image {
             })
         })
     }
+}
+
+pub fn serialize_with_image_data<T: Serialize>(value: &T) -> Result<Value, Error> {
+    SERIALIZE_IMAGE_DATA.set(&(), || {
+        serde_json::to_value(value).map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!("Error serializing value: {e}"),
+            })
+        })
+    })
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]

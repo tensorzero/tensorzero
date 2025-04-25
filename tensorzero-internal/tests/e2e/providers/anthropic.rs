@@ -25,6 +25,7 @@ async fn get_providers() -> E2ETestProviders {
     };
 
     let standard_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "anthropic".to_string(),
         model_name: "claude-3-haiku-20240307-anthropic".into(),
         model_provider_name: "anthropic".into(),
@@ -32,6 +33,7 @@ async fn get_providers() -> E2ETestProviders {
     }];
 
     let image_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "anthropic".to_string(),
         model_name: "anthropic::claude-3-haiku-20240307".into(),
         model_provider_name: "anthropic".into(),
@@ -39,6 +41,7 @@ async fn get_providers() -> E2ETestProviders {
     }];
 
     let extra_body_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "anthropic-extra-body".to_string(),
         model_name: "claude-3-haiku-20240307-anthropic".into(),
         model_provider_name: "anthropic".into(),
@@ -46,6 +49,7 @@ async fn get_providers() -> E2ETestProviders {
     }];
 
     let bad_auth_extra_headers = vec![E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "anthropic-extra-headers".to_string(),
         model_name: "claude-3-haiku-20240307-anthropic".into(),
         model_provider_name: "anthropic".into(),
@@ -53,6 +57,7 @@ async fn get_providers() -> E2ETestProviders {
     }];
 
     let inference_params_dynamic_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "anthropic-dynamic".to_string(),
         model_name: "claude-3-haiku-20240307-anthropic-dynamic".into(),
         model_provider_name: "anthropic".into(),
@@ -61,26 +66,38 @@ async fn get_providers() -> E2ETestProviders {
 
     let json_providers = vec![
         E2ETestProvider {
+            supports_batch_inference: false,
             variant_name: "anthropic".to_string(),
             model_name: "claude-3-haiku-20240307-anthropic".into(),
             model_provider_name: "anthropic".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
+            supports_batch_inference: false,
             variant_name: "anthropic-implicit".to_string(),
             model_name: "claude-3-haiku-20240307-anthropic".into(),
             model_provider_name: "anthropic".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
-            variant_name: "anthropic-default".to_string(),
+            supports_batch_inference: false,
+            variant_name: "anthropic-strict".to_string(),
             model_name: "claude-3-haiku-20240307-anthropic".into(),
             model_provider_name: "anthropic".into(),
             credentials: HashMap::new(),
         },
     ];
 
+    let json_mode_off_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "anthropic_json_mode_off".to_string(),
+        model_name: "claude-3-haiku-20240307-anthropic".into(),
+        model_provider_name: "anthropic".into(),
+        credentials: HashMap::new(),
+    }];
+
     let shorthand_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "anthropic-shorthand".to_string(),
         model_name: "anthropic::claude-3-haiku-20240307".into(),
         model_provider_name: "anthropic".into(),
@@ -99,10 +116,10 @@ async fn get_providers() -> E2ETestProviders {
         dynamic_tool_use_inference: standard_providers.clone(),
         parallel_tool_use_inference: standard_providers.clone(),
         json_mode_inference: json_providers.clone(),
+        json_mode_off_inference: json_mode_off_providers.clone(),
         image_inference: image_providers,
 
         shorthand_inference: shorthand_providers.clone(),
-        supports_batch_inference: false,
     }
 }
 
