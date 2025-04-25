@@ -1,4 +1,3 @@
-import { Badge } from "~/components/ui/badge";
 import { Link } from "react-router";
 import {
   AlignLeft,
@@ -13,7 +12,9 @@ interface EmptyMessageProps {
   message?: string;
 }
 
-function EmptyMessage({ message = "No content defined" }: EmptyMessageProps) {
+export function EmptyMessage({
+  message = "No content defined",
+}: EmptyMessageProps) {
   return (
     <div className="text-fg-muted flex items-center justify-center py-16 text-sm">
       {message}
@@ -24,13 +25,17 @@ function EmptyMessage({ message = "No content defined" }: EmptyMessageProps) {
 // Label component
 interface LabelProps {
   text?: string;
+  icon?: React.ReactNode;
 }
 
-function Label({ text }: LabelProps) {
+function Label({ text, icon }: LabelProps) {
   if (!text) return null;
 
   return (
-    <Badge className="bg-bg-muted text-fg-primary mx-4 mt-4 mb-0">{text}</Badge>
+    <div className="mx-4 mt-4 mb-0 flex flex-row items-center gap-1">
+      {icon && icon}
+      <span className="text-fg-tertiary text-xs font-medium">{text}</span>
+    </div>
   );
 }
 
@@ -63,7 +68,7 @@ export function CodeMessage({
         <div className="w-full">
           <div className="flex w-full">
             {showLineNumbers && (
-              <div className="bg-bg-primary text-fg-muted pointer-events-none sticky left-0 min-w-[3rem] shrink-0 py-5 pr-3 pl-4 text-right font-mono select-none">
+              <div className="bg-bg-primary text-fg-muted pointer-events-none sticky left-0 min-w-[2rem] shrink-0 pr-3 text-right font-mono select-none">
                 {Array.from({ length: lineCount }, (_, i) => (
                   <div key={i} className="text-sm leading-6">
                     {i + 1}
@@ -72,7 +77,7 @@ export function CodeMessage({
               </div>
             )}
             <div className="w-0 grow overflow-auto">
-              <pre className="w-full px-4 py-5">
+              <pre className="w-full">
                 <code className="text-fg-primary block font-mono text-sm leading-6 whitespace-pre">
                   {content || ""}
                 </code>
@@ -106,41 +111,8 @@ export function TextMessage({
       <Label text={label} />
 
       <div className="bg-bg-primary w-full overflow-hidden rounded-lg">
-        <div className="p-5">
-          <div className="text-fg-primary text-sm break-words whitespace-pre-wrap">
-            {content || ""}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Input message component
-interface InputMessageProps {
-  role?: string;
-  children?: React.ReactNode;
-  emptyMessage?: string;
-}
-
-export function InputMessage({
-  role,
-  children,
-  emptyMessage,
-}: InputMessageProps) {
-  if (!children) {
-    return <EmptyMessage message={emptyMessage} />;
-  }
-
-  return (
-    <div className="relative w-full">
-      <div className="bg-bg-primary flex w-full flex-col gap-1 overflow-hidden rounded-lg px-5 py-2">
-        <div className="text-sm font-medium text-purple-700 capitalize">
-          {role}
-        </div>
-        <div className="my-1 flex">
-          <div className="border-border mr-4 self-stretch border-l"></div>
-          <div className="flex flex-1 flex-col gap-4">{children}</div>
+        <div className="text-fg-primary text-sm break-words whitespace-pre-wrap">
+          {content || ""}
         </div>
       </div>
     </div>

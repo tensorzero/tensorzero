@@ -8,6 +8,7 @@ import {
 import {
   SnippetLayout,
   SnippetContent,
+  SnippetMessage,
 } from "~/components/layout/SnippetLayout";
 import { CodeMessage, TextMessage } from "~/components/layout/SnippetContent";
 
@@ -28,7 +29,9 @@ export function CommentModal({ feedback }: FeedbackTableModalProps) {
         <SectionLayout>
           <SnippetLayout>
             <SnippetContent maxHeight="Content">
-              <TextMessage content={feedback.value} />
+              <SnippetMessage>
+                <TextMessage content={feedback.value} />
+              </SnippetMessage>
             </SnippetContent>
           </SnippetLayout>
         </SectionLayout>
@@ -50,7 +53,9 @@ export function DemonstrationModal({ feedback }: FeedbackTableModalProps) {
         <SectionLayout>
           <SnippetLayout>
             <SnippetContent maxHeight="Content">
-              <CodeMessage showLineNumbers content={feedback.value} />
+              <SnippetMessage>
+                <CodeMessage showLineNumbers content={feedback.value} />
+              </SnippetMessage>
             </SnippetContent>
           </SnippetLayout>
         </SectionLayout>

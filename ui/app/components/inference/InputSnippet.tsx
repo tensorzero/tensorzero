@@ -8,10 +8,10 @@ import {
   SnippetContent,
   SnippetHeading,
   SnippetDivider,
+  SnippetMessage,
 } from "~/components/layout/SnippetLayout";
 import {
   CodeMessage,
-  InputMessage,
   InputTextMessage,
   ToolCallMessage,
   ToolResultMessage,
@@ -20,6 +20,7 @@ import {
   StructuredTextMessage,
   RawTextMessage,
   TextMessage,
+  EmptyMessage,
 } from "~/components/layout/SnippetContent";
 
 interface InputSnippetProps {
@@ -90,12 +91,12 @@ function renderContentBlock(block: ResolvedInputMessageContent, index: number) {
 
 function renderMessage(message: ResolvedInputMessage, messageIndex: number) {
   return (
-    <InputMessage key={messageIndex} role={message.role}>
+    <SnippetMessage variant="input" key={messageIndex} role={message.role}>
       {message.content.map(
         (block: ResolvedInputMessageContent, blockIndex: number) =>
           renderContentBlock(block, blockIndex),
       )}
-    </InputMessage>
+    </SnippetMessage>
   );
 }
 
@@ -106,14 +107,16 @@ export default function InputSnippet({ input }: InputSnippetProps) {
         <div>
           <SnippetHeading heading="System" />
           <SnippetContent>
-            {typeof input.system === "object" ? (
-              <CodeMessage
-                content={JSON.stringify(input.system, null, 2)}
-                showLineNumbers={true}
-              />
-            ) : (
-              <TextMessage content={input.system} />
-            )}
+            <SnippetMessage variant="default">
+              {typeof input.system === "object" ? (
+                <CodeMessage
+                  content={JSON.stringify(input.system, null, 2)}
+                  showLineNumbers={true}
+                />
+              ) : (
+                <TextMessage content={input.system} />
+              )}
+            </SnippetMessage>
           </SnippetContent>
           <SnippetDivider />
         </div>
@@ -122,7 +125,7 @@ export default function InputSnippet({ input }: InputSnippetProps) {
       <div>
         {input.messages.length === 0 ? (
           <SnippetContent>
-            <InputMessage emptyMessage="No input messages found" />
+            <EmptyMessage message="No input messages found" />
           </SnippetContent>
         ) : (
           <>
