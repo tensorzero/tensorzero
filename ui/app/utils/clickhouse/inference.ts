@@ -639,6 +639,7 @@ export async function queryInferenceById(
             function_type
         FROM InferenceById FINAL
         WHERE id_uint = toUInt128({id:UUID})
+        LIMIT 1
     )
     SELECT
         c.id,
