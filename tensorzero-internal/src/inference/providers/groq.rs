@@ -48,7 +48,8 @@ use super::provider_trait::{TensorZeroEventError, WrappedProvider};
 lazy_static! {
     static ref GROQ_DEFAULT_BASE_URL: Url = {
         #[allow(clippy::expect_used)]
-        Url::parse("https://api.groq.com/v1/").expect("Failed to parse GROQ_DEFAULT_BASE_URL")
+        Url::parse("https://api.groq.com/openai/v1/")
+            .expect("Failed to parse GROQ_DEFAULT_BASE_URL")
     };
 }
 
@@ -3307,7 +3308,10 @@ mod tests {
 
     #[test]
     fn test_groq_api_base() {
-        assert_eq!(GROQ_DEFAULT_BASE_URL.as_str(), "https://api.groq.com/v1/");
+        assert_eq!(
+            GROQ_DEFAULT_BASE_URL.as_str(),
+            "https://api.groq.com/openai/v1/"
+        );
     }
 
     #[test]
