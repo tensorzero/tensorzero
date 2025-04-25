@@ -2399,13 +2399,13 @@ pub async fn test_multi_turn_parallel_tool_use_batch_inference_request_with_prov
             "content": [
               {
                 "type": "tool_call",
-                "arguments": "{\"location\":\"Tokyo\",\"units\":\"fahrenheit\"}",
+                "arguments": {"location":"Tokyo","units":"fahrenheit"},
                 "id": "1234",
                 "name": "get_temperature"
               },
               {
                 "type": "tool_call",
-                "arguments": "{\"location\":\"Tokyo\"}",
+                "arguments": {"location":"Tokyo"},
                 "id": "5678",
                 "name": "get_humidity"
               }
