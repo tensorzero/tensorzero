@@ -56,19 +56,46 @@ pub struct GCPVertexAnthropicProvider {
 static DEFAULT_CREDENTIALS: OnceLock<GCPVertexCredentials> = OnceLock::new();
 
 impl GCPVertexAnthropicProvider {
-    pub fn new(
+    pub async fn new(
         model_id: String,
         location: String,
         project_id: String,
         api_key_location: Option<CredentialLocation>,
     ) -> Result<Self, Error> {
-        let credentials = build_creds_caching_default_with_fn(
-            api_key_location,
-            default_api_key_location(),
-            PROVIDER_TYPE,
-            &DEFAULT_CREDENTIALS,
-            |creds| GCPVertexCredentials::try_from((creds, PROVIDER_TYPE)),
-        )?;
+        let default_location = default_api_key_location();
+        let cred_location = api_key_location.as_ref().unwrap_or(&default_location);
+
+        let credentials = if matches!(cred_location, CredentialLocation::Sdk) {
+            // TODO - make 'new' an async fn
+            let creds = google_cloud_auth::credentials::create_access_token_credentials()
+                .await
+                .map_err(|e| {
+                    Error::new(ErrorDetails::GCPCredentials {
+                        message: format!(
+                            "Failed to create GCP Vertex Anthropic credentials from SDK: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
+                    })
+                })?;
+            // Test that the credentials are valid by getting a token
+            creds.token().await.map_err(|e| {
+                Error::new(ErrorDetails::GCPCredentials {
+                    message: format!(
+                        "Failed to get GCP Vertex Gemini access token from SDK: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
+                })
+            })?;
+            GCPVertexCredentials::Sdk(creds)
+        } else {
+            build_creds_caching_default_with_fn(
+                api_key_location,
+                default_api_key_location(),
+                PROVIDER_TYPE,
+                &DEFAULT_CREDENTIALS,
+                |creds| GCPVertexCredentials::try_from((creds, PROVIDER_TYPE)),
+            )?
+        };
         let request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/anthropic/models/{model_id}:rawPredict");
         let streaming_request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/anthropic/models/{model_id}:streamRawPredict");
         let audience = format!("https://{location}-aiplatform.googleapis.com/");
@@ -114,7 +141,8 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
         )?;
         let api_key = self
             .credentials
-            .get_api_key(&self.audience, dynamic_api_keys)?;
+            .get_api_key(&self.audience, dynamic_api_keys)
+            .await?;
         let start_time = Instant::now();
         let res = http_client
             .post(&self.request_url)
@@ -218,7 +246,8 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
         })?;
         let api_key = self
             .credentials
-            .get_api_key(&self.audience, dynamic_api_keys)?;
+            .get_api_key(&self.audience, dynamic_api_keys)
+            .await?;
         let start_time = Instant::now();
         let event_source = http_client
             .post(&self.streaming_request_url)

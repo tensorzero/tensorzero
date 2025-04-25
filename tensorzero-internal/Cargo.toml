@@ -91,6 +91,7 @@ aws-sdk-sagemakerruntime = { version = "1.66.0", features = [
 aws-smithy-runtime-api = "1.7.4"
 eventsource-stream = "0.2.3"
 scoped-tls = "1.0.1"
+google-cloud-auth = "0.19.0"
 
 
 [dev-dependencies]

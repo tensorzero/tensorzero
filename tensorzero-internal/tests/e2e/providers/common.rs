@@ -487,7 +487,7 @@ macro_rules! generate_provider_tests {
         }
 
 
-        #[tokio::test]
+        #[tokio::test(flavor = "multi_thread")]
         async fn test_image_inference_store_filesystem() {
             let providers = $func().await.image_inference;
             for provider in providers {
@@ -496,7 +496,7 @@ macro_rules! generate_provider_tests {
         }
 
 
-        #[tokio::test]
+        #[tokio::test(flavor = "multi_thread")]
         async fn test_image_url_inference_store_filesystem() {
             let providers = $func().await.image_inference;
             for provider in providers {
@@ -505,7 +505,7 @@ macro_rules! generate_provider_tests {
         }
 
 
-        #[tokio::test]
+        #[tokio::test(flavor = "multi_thread")]
         async fn test_image_inference_store_amazon_s3() {
             let providers = $func().await.image_inference;
             for provider in providers {
