@@ -72,20 +72,20 @@ api_key_location = "dynamic::azure_openai_api_key"
 
 ## Groq
 
-[models."gpt-4o-mini-groq"]
+[models."llama-scout-groq"]
 routing = ["groq"]
 
-[models."gpt-4o-mini-groq".providers.groq]
+[models."llama-scout-groq".providers.groq]
 type = "groq"
-model_name = "gpt-4o-mini-2024-07-18"
+model_name = "meta-llama/llama-4-scout-17b-16e-instruct"
 
 
-[models."gpt-4o-mini-groq-dynamic"]
+[models."llama-scout-groq-dynamic"]
 routing = ["groq"]
 
-[models."gpt-4o-mini-groq-dynamic".providers.groq]
+[models."llama-scout-groq-dynamic".providers.groq]
 type = "groq"
-model_name = "gpt-4o-mini-groq"
+model_name = "llama-scout-groq"
 api_key_location = "dynamic::groq_api_key"
 
 
@@ -845,20 +845,20 @@ extra_headers = [{ name = "Content-Length", value = "2" }]
 
 [functions.basic_test.variants.groq]
 type = "chat_completion"
-model = "gpt-4o-mini-groq"
+model = "llama-scout-groq"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
 [functions.basic_test.variants.groq-extra-body]
 type = "chat_completion"
-model = "gpt-4o-mini-groq"
+model = "llama-scout-groq"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 extra_body = [{ pointer = "/temperature", value = 0.123 }]
 
 [functions.basic_test.variants.groq-extra-headers]
 type = "chat_completion"
-model = "gpt-4o-mini-groq"
+model = "llama-scout-groq"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 extra_headers = [
@@ -867,7 +867,7 @@ extra_headers = [
 
 [functions.basic_test.variants.groq-dynamic]
 type = "chat_completion"
-model = "gpt-4o-mini-groq-dynamic"
+model = "llama-scout-groq-dynamic"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
@@ -1508,7 +1508,7 @@ max_tokens = 500
 
 [functions.json_success.variants.groq]
 type = "chat_completion"
-model = "gpt-4o-mini-groq"
+model = "llama-scout-groq"
 system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "on"
@@ -1516,7 +1516,7 @@ max_tokens = 100
 
 [functions.json_success.variants.groq-default]
 type = "chat_completion"
-model = "gpt-4o-mini-groq"
+model = "llama-scout-groq"
 system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 max_tokens = 100
@@ -1524,7 +1524,7 @@ json_mode = "strict"
 
 [functions.json_success.variants.groq-implicit]
 type = "chat_completion"
-model = "gpt-4o-mini-groq"
+model = "llama-scout-groq"
 system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "implicit_tool"
@@ -1532,7 +1532,7 @@ max_tokens = 100
 
 [functions.json_success.variants.groq-strict]
 type = "chat_completion"
-model = "gpt-4o-mini-groq"
+model = "llama-scout-groq"
 system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "strict"
