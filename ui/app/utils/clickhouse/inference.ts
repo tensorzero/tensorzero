@@ -639,10 +639,9 @@ export async function queryInferenceById(
             function_type
         FROM InferenceById FINAL
         WHERE id_uint = toUInt128({id:UUID})
-        LIMIT 1
     )
     SELECT
-        uint_to_uuid(i.id_uint) AS id,
+        c.id,
         c.function_name,
         c.variant_name,
         c.episode_id,
@@ -654,17 +653,19 @@ export async function queryInferenceById(
         NULL AS output_schema, -- Placeholder for JSON column
         formatDateTime(c.timestamp, '%Y-%m-%dT%H:%i:%SZ') AS timestamp,
         c.tags,
-        i.function_type
+        'chat' AS function_type
     FROM ChatInference c
-    INNER JOIN inference i ON uint_to_uuid(i.id_uint) = c.id -- Join directly by ID
-    WHERE i.function_type = 'chat' -- Filter based on type from inference CTE
-    LIMIT 1
-    SETTINGS join_algorithm = 'auto'
+    WHERE
+        'chat' = (SELECT function_type FROM inference)
+        AND c.function_name IN (SELECT function_name FROM inference)
+        AND c.variant_name IN (SELECT variant_name FROM inference)
+        AND c.episode_id IN (SELECT episode_id FROM inference)
+        AND c.id = {id:UUID}
 
     UNION ALL
 
     SELECT
-        uint_to_uuid(i.id_uint) AS id,
+        j.id,
         j.function_name,
         j.variant_name,
         j.episode_id,
@@ -676,12 +677,14 @@ export async function queryInferenceById(
         j.output_schema,
         formatDateTime(j.timestamp, '%Y-%m-%dT%H:%i:%SZ') AS timestamp,
         j.tags,
-        i.function_type
+        'json' AS function_type
     FROM JsonInference j
-    INNER JOIN inference i ON uint_to_uuid(i.id_uint) = j.id -- Join directly by ID
-    WHERE i.function_type = 'json' -- Filter based on type from inference CTE
-    LIMIT 1
-    SETTINGS join_algorithm = 'auto'
+    WHERE
+        'json' = (SELECT function_type FROM inference)
+        AND j.function_name IN (SELECT function_name FROM inference)
+        AND j.variant_name IN (SELECT variant_name FROM inference)
+        AND j.episode_id IN (SELECT episode_id FROM inference)
+        AND j.id = {id:UUID}
   `;
 
   const resultSet = await clickhouseClient.query({
