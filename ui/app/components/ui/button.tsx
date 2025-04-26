@@ -50,6 +50,10 @@ export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement>,
     VariantProps<typeof buttonVariants> {
   asChild?: boolean;
+  /**
+   * When using `asChild` only a single child is allowed. Using `slotLeft` or
+   * `slotRight` allows rendering elements adjacent to the child.
+   */
   slotLeft?: React.ReactNode;
   slotRight?: React.ReactNode;
 }
