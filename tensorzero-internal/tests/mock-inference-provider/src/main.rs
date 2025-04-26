@@ -24,10 +24,12 @@ use std::{
     collections::HashMap,
     net::SocketAddr,
     sync::{Mutex, OnceLock},
-    time::Duration,
 };
 use tokio::signal;
 use tower_http::trace::TraceLayer;
+
+#[cfg(unix)]
+use std::time::Duration;
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
@@ -75,6 +77,7 @@ pub async fn shutdown_signal() {
             .await;
     };
 
+    #[cfg(unix)]
     tokio::select! {
         _ = ctrl_c => {
             tracing::info!("Received Ctrl+C signal");
@@ -87,6 +90,13 @@ pub async fn shutdown_signal() {
             tracing::info!("Received SIGHUP signal");
         }
     };
+
+    #[cfg(not(unix))]
+    tokio::select! {
+        _ = ctrl_c => {
+            tracing::info!("Received Ctrl+C signal");
+        }
+    }
 }
 
 #[tokio::main]

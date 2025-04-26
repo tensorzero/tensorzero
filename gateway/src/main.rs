@@ -11,7 +11,6 @@ use std::io::ErrorKind;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::Duration;
 use tokio::signal;
 
 use tensorzero_internal::clickhouse::ClickHouseConnectionInfo;
@@ -21,6 +20,9 @@ use tensorzero_internal::endpoints::status::TENSORZERO_VERSION;
 use tensorzero_internal::error;
 use tensorzero_internal::gateway_util;
 use tensorzero_internal::observability::{self, LogFormat};
+
+#[cfg(unix)]
+use std::time::Duration;
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
@@ -245,6 +247,7 @@ pub async fn shutdown_signal() {
             .await;
     };
 
+    #[cfg(unix)]
     tokio::select! {
         _ = ctrl_c => {
             tracing::info!("Received Ctrl+C signal");
@@ -255,6 +258,13 @@ pub async fn shutdown_signal() {
         _ = hangup => {
             tokio::time::sleep(Duration::from_secs(1)).await;
             tracing::info!("Received SIGHUP signal");
+        }
+    };
+
+    #[cfg(not(unix))]
+    tokio::select! {
+        _ = ctrl_c => {
+            tracing::info!("Received Ctrl+C signal");
         }
     };
 }
