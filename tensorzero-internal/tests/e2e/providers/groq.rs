@@ -74,13 +74,6 @@ async fn get_providers() -> E2ETestProviders {
             model_provider_name: "groq".into(),
             credentials: HashMap::new(),
         },
-        E2ETestProvider {
-            supports_batch_inference: false,
-            variant_name: "groq-default".to_string(),
-            model_name: "llama-scout-groq".into(),
-            model_provider_name: "groq".into(),
-            credentials: HashMap::new(),
-        },
     ];
 
     E2ETestProviders {
