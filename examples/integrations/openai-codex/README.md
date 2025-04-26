@@ -44,11 +44,11 @@ Why?
    model: "tensorzero::model_name::anthropic::claude-3-7-sonnet-20250219"
    provider: tensorzero
    providers:
-   tensorzero:
-     name: TensorZero
-     baseURL: http://localhost:3000/openai/v1
-     envKey: TENSORZERO_API_KEY # not used but required by Codex
-   # ... other providers ...
+     tensorzero:
+       name: TensorZero
+       baseURL: http://localhost:3000/openai/v1
+       envKey: TENSORZERO_API_KEY # not used but required by Codex
+     # ... other providers ...
    ```
 
    ```json
