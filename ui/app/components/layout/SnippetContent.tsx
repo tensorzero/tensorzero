@@ -16,7 +16,7 @@ export function EmptyMessage({
   message = "No content defined",
 }: EmptyMessageProps) {
   return (
-    <div className="text-fg-muted flex items-center justify-center py-16 text-sm">
+    <div className="text-fg-muted flex items-center justify-center py-12 text-sm">
       {message}
     </div>
   );
@@ -32,7 +32,7 @@ function Label({ text, icon }: LabelProps) {
   if (!text) return null;
 
   return (
-    <div className="mx-4 mt-4 mb-0 flex flex-row items-center gap-1">
+    <div className="flex flex-row items-center gap-1">
       {icon && icon}
       <span className="text-fg-tertiary text-xs font-medium">{text}</span>
     </div>
@@ -107,8 +107,11 @@ export function TextMessage({
   }
 
   return (
-    <div className="relative w-full">
-      <Label text={label} />
+    <div className="relative flex max-w-200 min-w-80 flex-col gap-2">
+      <Label
+        text={label}
+        icon={<AlignLeft className="text-fg-muted h-3 w-3" />}
+      />
 
       <div className="bg-bg-primary w-full overflow-hidden rounded-lg">
         <div className="text-fg-primary text-sm break-words whitespace-pre-wrap">
@@ -127,10 +130,10 @@ interface InputTextMessageProps {
 export function InputTextMessage({ content }: InputTextMessageProps) {
   return (
     <div className="flex max-w-200 min-w-80 flex-col gap-1">
-      <div className="flex flex-row items-center gap-1">
-        <AlignLeft className="text-fg-muted h-3 w-3" />
-        <span className="text-fg-tertiary text-xs font-medium">Text</span>
-      </div>
+      <Label
+        text="Text"
+        icon={<AlignLeft className="text-fg-muted h-3 w-3" />}
+      />
       <pre className="whitespace-pre-wrap">
         <span className="font-sans text-sm">{content}</span>
       </pre>
@@ -146,12 +149,10 @@ interface StructuredTextMessageProps {
 export function StructuredTextMessage({ content }: StructuredTextMessageProps) {
   return (
     <div className="flex max-w-200 min-w-80 flex-col gap-1.5">
-      <div className="flex flex-row items-center gap-1">
-        <AlignLeft className="text-fg-muted h-3 w-3" />
-        <span className="text-fg-tertiary text-xs font-medium">
-          Text (Structured)
-        </span>
-      </div>
+      <Label
+        text="Text (Structured)"
+        icon={<AlignLeft className="text-fg-muted h-3 w-3" />}
+      />
       <pre className="max-w-full font-mono text-sm break-words whitespace-pre-wrap">
         {JSON.stringify(content, null, 2)}
       </pre>
@@ -173,10 +174,10 @@ export function ToolCallMessage({
 }: ToolCallMessageProps) {
   return (
     <div className="flex max-w-200 min-w-80 flex-col gap-1 overflow-x-auto">
-      <div className="flex flex-row items-center gap-1">
-        <Terminal className="text-fg-muted h-3 w-3" />
-        <span className="text-fg-tertiary text-xs font-medium">Tool Call</span>
-      </div>
+      <Label
+        text="Tool Call"
+        icon={<Terminal className="text-fg-muted h-3 w-3" />}
+      />
       <div className="border-border bg-bg-tertiary flex flex-col gap-1 rounded-md border px-3 py-2">
         <div className="flex flex-row items-center gap-1 whitespace-nowrap">
           <span className="text-fg-secondary w-16 min-w-16 text-sm">Name:</span>
@@ -211,12 +212,10 @@ export function ToolResultMessage({
 }: ToolResultMessageProps) {
   return (
     <div className="flex max-w-200 min-w-80 flex-col gap-1 overflow-x-auto">
-      <div className="flex flex-row items-center gap-1">
-        <ArrowRight className="text-fg-muted h-3 w-3" />
-        <span className="text-fg-tertiary text-xs font-medium">
-          Tool Result
-        </span>
-      </div>
+      <Label
+        text="Tool Result"
+        icon={<ArrowRight className="text-fg-muted h-3 w-3" />}
+      />
       <div className="border-border bg-bg-tertiary flex flex-col gap-1 rounded-md border px-3 py-2">
         <div className="flex flex-row items-start gap-1 whitespace-nowrap">
           <span className="text-fg-secondary w-16 min-w-16 text-sm">Name:</span>
@@ -248,10 +247,10 @@ interface ImageMessageProps {
 export function ImageMessage({ url, downloadName }: ImageMessageProps) {
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="flex flex-row items-center gap-1">
-        <ImageIcon className="text-fg-muted h-3 w-3" />
-        <span className="text-fg-tertiary text-xs font-medium">Image</span>
-      </div>
+      <Label
+        text="Image"
+        icon={<ImageIcon className="text-fg-muted h-3 w-3" />}
+      />
       <div>
         <Link
           to={url}
@@ -271,12 +270,10 @@ export function ImageMessage({ url, downloadName }: ImageMessageProps) {
 export function ImageErrorMessage() {
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="flex flex-row items-center gap-1">
-        <ImageIcon className="text-fg-muted h-3 w-3" />
-        <span className="text-fg-tertiary text-xs font-medium">
-          Image (Error)
-        </span>
-      </div>
+      <Label
+        text="Image (Error)"
+        icon={<ImageIcon className="text-fg-muted h-3 w-3" />}
+      />
       <div className="border-border bg-bg-tertiary relative aspect-video w-60 min-w-60 rounded-md border">
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-2">
           <ImageOff className="text-fg-muted h-4 w-4" />
@@ -297,10 +294,10 @@ interface RawTextMessageProps {
 export function RawTextMessage({ content }: RawTextMessageProps) {
   return (
     <div className="flex max-w-200 min-w-80 flex-col gap-1.5">
-      <div className="flex flex-row items-center gap-1">
-        <AlignLeft className="text-fg-muted h-3 w-3" />
-        <span className="text-fg-tertiary text-xs font-medium">Text (Raw)</span>
-      </div>
+      <Label
+        text="Text (Raw)"
+        icon={<AlignLeft className="text-fg-muted h-3 w-3" />}
+      />
       <pre className="whitespace-pre-wrap">
         <span className="font-mono text-sm">{content}</span>
       </pre>

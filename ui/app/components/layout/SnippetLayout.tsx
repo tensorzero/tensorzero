@@ -107,7 +107,7 @@ export function SnippetMessage({
     return (
       <div className="relative w-full">
         <div className="bg-bg-primary flex w-full flex-col gap-1 overflow-hidden rounded-lg px-5 py-2">
-          <div className="text-sm font-medium text-purple-700 capitalize">
+          <div className="text-sm font-medium text-purple-600 capitalize">
             {role}
           </div>
           <div className="my-1 flex">
