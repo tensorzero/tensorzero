@@ -2456,7 +2456,7 @@ mod tests {
         assert!(!groq_request.stream);
         assert_eq!(
             groq_request.response_format,
-            Some(GroqResponseFormat::JsonObject)
+            Some(GroqResponseFormat::JsonObject { schema: None })
         );
         assert!(groq_request.tools.is_some());
         let tools = groq_request.tools.as_ref().unwrap();
@@ -2509,7 +2509,7 @@ mod tests {
         // Resolves to normal JSON mode since no schema is provided (this shouldn't really happen in practice)
         assert_eq!(
             groq_request.response_format,
-            Some(GroqResponseFormat::JsonObject)
+            Some(GroqResponseFormat::JsonObject { schema: None })
         );
 
         // Test request with strict JSON mode with an output schema
@@ -2551,7 +2551,7 @@ mod tests {
         assert_eq!(
             groq_request.response_format,
             Some(GroqResponseFormat::JsonObject {
-                schema: expected_schema,
+                schema: Some(&expected_schema),
             })
         );
     }
@@ -3264,22 +3264,20 @@ mod tests {
 
         // Test JSON mode Strict with schema
         let json_mode = ModelInferenceRequestJsonMode::Strict;
-        let schema = serde_json::json!({
+        let json_schema = serde_json::json!({
             "type": "object",
             "properties": {
                 "foo": {"type": "string"}
             }
         });
-        let output_schema = Some(&schema);
+        let output_schema = Some(&json_schema);
         let format = GroqResponseFormat::new(&json_mode, output_schema);
-        match format {
-            GroqResponseFormat::JsonObject { json_schema } => {
-                assert_eq!(json_schema["schema"], schema);
-                assert_eq!(json_schema["name"], "response");
-                assert_eq!(json_schema["strict"], true);
+        assert_eq!(
+            format,
+            GroqResponseFormat::JsonObject {
+                schema: output_schema
             }
-            _ => panic!("Expected JsonSchema format"),
-        }
+        );
 
         // Test JSON mode Strict with schema but gpt-3.5
         let json_mode = ModelInferenceRequestJsonMode::Strict;
