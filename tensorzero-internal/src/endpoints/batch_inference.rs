@@ -468,8 +468,8 @@ pub async fn get_batch_request(
             response
         }
         PollPathParams {
+            batch_id,
             inference_id: Some(inference_id),
-            ..
         } => {
             let query = format!(
                 r#"
@@ -486,12 +486,11 @@ pub async fn get_batch_request(
                         br.errors as errors
                     FROM BatchIdByInferenceId bi
                     JOIN BatchRequest br ON bi.batch_id = br.batch_id
-                    WHERE bi.inference_id = '{}'
+                    WHERE bi.inference_id = '{inference_id}' AND bi.batch_id = '{batch_id}'
                     ORDER BY br.timestamp DESC
                     LIMIT 1
                     FORMAT JSONEachRow
                 "#,
-                inference_id
             );
             let response = clickhouse.run_query_synchronous(query, None).await?;
             if response.is_empty() {
@@ -695,11 +694,23 @@ pub async fn write_poll_batch_inference<'a>(
             Ok(PollInferenceResponse::Pending)
         }
         PollBatchInferenceResponse::Completed(response) => {
+            let raw_request = response.raw_request.clone();
+            let raw_response = response.raw_response.clone();
             let inferences = write_completed_batch_inference(
                 clickhouse_connection_info,
                 batch_request,
                 response,
                 config,
+            )
+            .await?;
+            // NOTE - in older versions of TensorZero, we were missing this call.
+            // As a result, some customers may have databases with duplicate inferences.
+            write_batch_request_status_update(
+                clickhouse_connection_info,
+                batch_request,
+                BatchStatus::Completed,
+                raw_request,
+                raw_response,
             )
             .await?;
             Ok(PollInferenceResponse::Completed(
@@ -728,7 +739,6 @@ pub async fn write_poll_batch_inference<'a>(
 
 /// This function updates the status of a batch request in the database
 /// It only updates the status of the batch request and does not write any other data to the database
-/// Should only be called if status is Pending or Failed
 async fn write_batch_request_status_update(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     batch_request: &BatchRequestRow<'_>,
@@ -736,14 +746,6 @@ async fn write_batch_request_status_update(
     raw_request: String,
     raw_response: String,
 ) -> Result<(), Error> {
-    if status != BatchStatus::Pending && status != BatchStatus::Failed {
-        return Err(Error::new(ErrorDetails::Inference {
-            message: format!(
-                "write_batch_request_status_update called with invalid status {:?}. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new",
-                status
-            ),
-        }));
-    }
     let batch_request_insert = BatchRequestRow::new(UnparsedBatchRequestRow {
         batch_id: batch_request.batch_id,
         batch_params: &batch_request.batch_params,

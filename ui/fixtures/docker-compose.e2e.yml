@@ -2,9 +2,9 @@ services:
   clickhouse:
     image: clickhouse/clickhouse-server:${TENSORZERO_CLICKHOUSE_VERSION:-24.12-alpine}
     environment:
-      - CLICKHOUSE_USER=chuser
-      - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
-      - CLICKHOUSE_PASSWORD=chpassword
+      CLICKHOUSE_USER: chuser
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+      CLICKHOUSE_PASSWORD: chpassword
     tmpfs:
       # So the fixtures aren't persisted between restarts of the containers and double-added
       - /var/lib/clickhouse
@@ -30,7 +30,7 @@ services:
       context: ../..
       dockerfile: tensorzero-internal/tests/mock-inference-provider/Dockerfile
     environment:
-      - RUST_LOG=debug
+      RUST_LOG: debug
     ports:
       - "3030:3030"
     healthcheck:
@@ -48,7 +48,7 @@ services:
       - ./config:/app/config:ro
     command: --config-file /app/config/tensorzero.e2e.toml
     environment:
-      - TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures
+      TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures
     env_file:
       - .env
     ports:
@@ -77,10 +77,10 @@ services:
     volumes:
       - .:/fixtures
     environment:
-      - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
-      - CLICKHOUSE_HOST=clickhouse
-      - CLICKHOUSE_PASSWORD=chpassword
-      - CLICKHOUSE_USER=chuser
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PASSWORD: chpassword
+      CLICKHOUSE_USER: chuser
     depends_on:
       gateway:
         condition: service_healthy

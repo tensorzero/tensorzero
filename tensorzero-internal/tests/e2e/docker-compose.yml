@@ -2,12 +2,12 @@ services:
   clickhouse:
     image: clickhouse/clickhouse-server:${TENSORZERO_CLICKHOUSE_VERSION:-24.12-alpine}
     environment:
-      - CLICKHOUSE_USER=chuser
-      - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
-      - CLICKHOUSE_PASSWORD=chpassword
+      CLICKHOUSE_USER: chuser
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+      CLICKHOUSE_PASSWORD: chpassword
     volumes:
-    # If the directory doesn't exist locally (i.e. we haven't defined a version-specific config),
-    # an empty dir will get mounted in the container
+      # If the directory doesn't exist locally (i.e. we haven't defined a version-specific config),
+      # an empty dir will get mounted in the container
       - ./clickhouse-configs/${TENSORZERO_CLICKHOUSE_VERSION:-24.12-alpine}/users.xml:/etc/clickhouse-server/users.d/users.xml
     ports:
       - "8123:8123" # HTTP port
@@ -28,9 +28,9 @@ services:
       - "8000:9000" # API port
       - "9001:9001" # Console port
     environment:
-      - MINIO_ROOT_USER=tensorzero-root
-      - MINIO_ROOT_PASSWORD=tensorzero-root
-      - MINIO_DEFAULT_BUCKETS=tensorzero-e2e-tests
+      MINIO_ROOT_USER: tensorzero-root
+      MINIO_ROOT_PASSWORD: tensorzero-root
+      MINIO_DEFAULT_BUCKETS: tensorzero-e2e-tests
     healthcheck:
       test: "mc ls local/tensorzero-e2e-tests || exit 1"
       start_period: 30s
