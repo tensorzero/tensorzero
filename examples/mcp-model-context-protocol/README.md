@@ -36,13 +36,12 @@ You have a total of 90 inferences recorded in the tensorzero.ModelInference tabl
 
 ### TensorZero
 
-We provide a simple configuraiton in `config/tensorzero.toml`.
+We provide a simple configuration in `config/tensorzero.toml`.
 The configuration specifies a straightforward chat function `clickhouse_copilot` with a single variant that uses GPT 4.1 Mini.
 
 ### MCP Server
 
-We provide a sample configuraiton for the MCP server in `config/mcp-clickhouse.toml`.
-
+We provide a sample configuration for the MCP server in `config/mcp-clickhouse.toml`.
 ### Prerequisites
 
 1. Install Docker.
