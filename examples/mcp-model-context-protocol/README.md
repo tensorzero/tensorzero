@@ -2,7 +2,7 @@
 
 This example shows how to use an MCP (Model Context Protocol) server with TensorZero.
 
-Concretely, we'll use [`mcp-clickhouse`](https://github.com/ClickHouse/mcp-clickhouse) to build a chatbot that can answer questions about the contents of your ClickHouse database.
+We'll use [`mcp-clickhouse`](https://github.com/ClickHouse/mcp-clickhouse) to build a chatbot that can answer questions about the contents of your ClickHouse database.
 
 ## Example
 
