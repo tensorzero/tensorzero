@@ -197,7 +197,7 @@ def parse_inference_response(data: Dict[str, Any]) -> InferenceResponse:
             finish_reason=finish_reason_enum,
         )
     elif "output" in data and isinstance(data["output"], dict):
-        output: Dict[str, Any] = data["output"]
+        output = t.cast(Dict[str, Any], data["output"])
         finish_reason = data.get("finish_reason")
         finish_reason_enum = FinishReason(finish_reason) if finish_reason else None
 
