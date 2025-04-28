@@ -51,6 +51,7 @@ chrono = { version = "0.4.40", features = ["serde"] }
 unsafe_code = "forbid"
 
 [workspace.lints.clippy]
+allow_attributes = "deny"
 dbg_macro = "deny"
 expect_used = "deny"
 panic = "deny"

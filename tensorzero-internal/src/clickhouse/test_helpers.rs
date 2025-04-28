@@ -1,4 +1,4 @@
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::print_stdout)]
+#![expect(clippy::unwrap_used, clippy::expect_used, clippy::print_stdout)]
 #[cfg(feature = "e2e_tests")]
 use super::escape_string_for_clickhouse_comparison;
 use super::ClickHouseConnectionInfo;
@@ -33,7 +33,6 @@ pub async fn clickhouse_flush_async_insert(clickhouse: &ClickHouseConnectionInfo
     }
 }
 
-#[allow(dead_code)]
 pub async fn select_chat_datapoint_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     inference_id: Uuid,
@@ -53,7 +52,6 @@ pub async fn select_chat_datapoint_clickhouse(
     Some(json)
 }
 
-#[allow(dead_code)]
 pub async fn select_json_datapoint_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     inference_id: Uuid,

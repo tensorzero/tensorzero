@@ -35,7 +35,7 @@ use crate::inference::types::{FinishReason, ProviderInferenceResponseArgs};
 use crate::model::ModelProvider;
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
-#[allow(unused)]
+#[expect(unused)]
 const PROVIDER_NAME: &str = "AWS Bedrock";
 const PROVIDER_TYPE: &str = "aws_bedrock";
 

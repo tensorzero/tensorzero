@@ -40,9 +40,9 @@ pub enum OutputKind {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
 struct Demonstration {
-    #[allow(dead_code)]
+    #[expect(dead_code)]
     id: Uuid,
-    #[allow(dead_code)]
+    #[expect(dead_code)]
     inference_id: Uuid,
     value: String,
 }

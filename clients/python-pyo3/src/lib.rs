@@ -72,7 +72,6 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
 struct LocalHttpGateway {
     #[pyo3(get)]
     base_url: String,
-    #[allow(dead_code)]
     shutdown_handle: Option<ShutdownHandle>,
 }
 
@@ -225,7 +224,7 @@ impl BaseTensorZeroGateway {
     }
 
     #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None))]
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     fn _prepare_inference_request(
         this: PyRef<'_, Self>,
         input: Bound<'_, PyDict>,
@@ -298,7 +297,7 @@ where
 }
 
 impl BaseTensorZeroGateway {
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     fn prepare_feedback_params(
         py: Python<'_>,
         metric_name: String,
@@ -320,7 +319,7 @@ impl BaseTensorZeroGateway {
         })
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     fn prepare_inference_params(
         py: Python<'_>,
         input: Bound<'_, PyDict>,
@@ -498,7 +497,7 @@ impl TensorZeroGateway {
     ///
     /// :param base_url: The base URL of the TensorZero gateway. Example: "http://localhost:3000"
     /// :param timeout: The timeout for the HTTP client in seconds. If not provided, no timeout will be set.
-    #[allow(unused_variables)]
+    #[expect(unused_variables)]
     #[pyo3(signature = (base_url, *, timeout=None))]
     fn __init__(this: Py<Self>, base_url: &str, timeout: Option<f64>) -> Py<Self> {
         // The actual logic is in the 'new' method - this method just exists to generate a docstring
@@ -582,7 +581,7 @@ impl TensorZeroGateway {
     /// :param dryrun: If true, the feedback request will be executed but won't be stored to the database (i.e. no-op).
     /// :param tags: If set, adds tags to the feedback request.
     /// :return: {"feedback_id": str}
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     fn feedback(
         this: PyRef<'_, Self>,
         py: Python<'_>,
@@ -616,7 +615,7 @@ impl TensorZeroGateway {
     }
 
     #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None))]
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     /// Make a request to the /inference endpoint.
     ///
     /// :param function_name: The name of the function to call
@@ -799,7 +798,7 @@ impl AsyncTensorZeroGateway {
     ///
     /// :param base_url: The base URL of the TensorZero gateway. Example: "http://localhost:3000"
     /// :param timeout: The timeout for the HTTP client in seconds. If not provided, no timeout will be set.
-    #[allow(unused_variables)]
+    #[expect(unused_variables)]
     #[pyo3(signature = (base_url, *, timeout=None))]
     fn __init__(this: Py<Self>, base_url: &str, timeout: Option<f64>) -> Py<Self> {
         // The actual logic is in the 'new' method - this method just exists to generate a docstring
@@ -896,7 +895,7 @@ impl AsyncTensorZeroGateway {
     }
 
     #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None,tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None))]
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     /// Make a request to the /inference endpoint.
     ///
     /// :param function_name: The name of the function to call
@@ -1009,7 +1008,7 @@ impl AsyncTensorZeroGateway {
     /// :param dryrun: If true, the feedback request will be executed but won't be stored to the database (i.e. no-op).
     /// :param tags: If set, adds tags to the feedback request.
     /// :return: {"feedback_id": str}
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     fn feedback<'a>(
         this: PyRef<'a, Self>,
         metric_name: String,
@@ -1110,7 +1109,7 @@ impl AsyncTensorZeroGateway {
     }
 }
 
-#[allow(unknown_lints)]
+#[expect(unknown_lints)]
 // This lint currently does nothing on stable, but let's include it
 // so that it will start working automatically when it's stabilized
 #[deny(non_exhaustive_omitted_patterns)]

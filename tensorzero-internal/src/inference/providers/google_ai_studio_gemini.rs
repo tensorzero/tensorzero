@@ -615,7 +615,7 @@ impl<'a> From<&'a ToolChoice> for GoogleAIStudioGeminiToolConfig<'a> {
 #[derive(Debug, PartialEq, Serialize)]
 enum GeminiResponseMimeType {
     #[serde(rename = "text/plain")]
-    #[allow(dead_code)]
+    #[expect(dead_code)]
     TextPlain,
     #[serde(rename = "application/json")]
     ApplicationJson,

@@ -119,7 +119,7 @@ impl TryFrom<ClientInferenceParams> for Params {
 // This asserts that the fields in `ClientInferenceParams` match the fields in `Params`,
 // by explicitly naming all of the fields in both structs.
 // This will stop compiling if the fields don't match.
-#[allow(unused)]
+#[expect(unused)]
 fn assert_params_match(client_params: ClientInferenceParams) {
     let ClientInferenceParams {
         function_name,
