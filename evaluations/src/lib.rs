@@ -381,6 +381,7 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
         include_original_response: false,
         internal: true,
         extra_body: Default::default(),
+        extra_headers: Default::default(),
     };
     let inference_result = clients.tensorzero_client.inference(params).await?;
     match inference_result {

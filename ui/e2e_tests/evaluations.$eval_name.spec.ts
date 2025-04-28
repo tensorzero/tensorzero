@@ -20,7 +20,9 @@ test("Navigate through ragged evaluation results", async ({ page }) => {
   // Wait for the table row containing the giant topic to be visible
   await expect(page.locator('td:has-text("sheet")').first()).toBeVisible();
 
-  // Click on the first row that contains "giant"
+  // Sleep for a bit to ensure the table is fully loaded
+  await page.waitForTimeout(500);
+  // Click on the first row that contains "sheet"
   await page.locator('td:has-text("sheet")').first().click();
 
   // Verify the URL contains the correct datapoint ID and evaluation run IDs

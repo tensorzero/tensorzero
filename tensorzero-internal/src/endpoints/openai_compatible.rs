@@ -31,6 +31,7 @@ use crate::endpoints::inference::{
 use crate::error::{Error, ErrorDetails};
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
+use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use crate::inference::types::{
     current_timestamp, ContentBlockChatOutput, ContentBlockChunk, FinishReason, Image, ImageKind,
     Input, InputMessage, InputMessageContent, Role, TextKind, Usage,
@@ -490,6 +491,7 @@ impl Params {
             include_original_response: false,
             // OpenAI compatible endpoint does not support 'extra_body'
             extra_body: UnfilteredInferenceExtraBody::default(),
+            extra_headers: UnfilteredInferenceExtraHeaders::default(),
         })
     }
 }
