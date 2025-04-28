@@ -40,7 +40,7 @@ fn get_clean_clickhouse() -> ClickHouseConnectionInfo {
     );
     let mut clickhouse_url = url::Url::parse(&CLICKHOUSE_URL).unwrap();
     clickhouse_url.set_path("");
-    clickhouse_url.set_query(Some(format!("database={}", database).as_str()));
+    clickhouse_url.set_query(Some(format!("database={database}").as_str()));
 
     ClickHouseConnectionInfo::Production {
         database_url: SecretString::from(clickhouse_url.to_string()),

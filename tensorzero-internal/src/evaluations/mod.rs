@@ -129,17 +129,11 @@ impl From<LLMJudgeOptimize> for MetricConfigOptimize {
 }
 
 pub fn get_llm_judge_function_name(evaluation_name: &str, evaluator_name: &str) -> String {
-    format!(
-        "tensorzero::llm_judge::{}::{}",
-        evaluation_name, evaluator_name
-    )
+    format!("tensorzero::llm_judge::{evaluation_name}::{evaluator_name}")
 }
 
 pub fn get_evaluator_metric_name(evaluation_name: &str, evaluator_name: &str) -> String {
-    format!(
-        "tensorzero::evaluation_name::{}::evaluator_name::{}",
-        evaluation_name, evaluator_name
-    )
+    format!("tensorzero::evaluation_name::{evaluation_name}::evaluator_name::{evaluator_name}")
 }
 
 #[derive(Debug, TensorZeroDeserialize)]

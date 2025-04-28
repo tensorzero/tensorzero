@@ -114,7 +114,7 @@ impl InferenceProvider for AWSSagemakerProvider {
         })?;
         let raw_response_string = String::from_utf8(raw_response.into_inner()).map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
-                message: format!("Error converting raw response to string: {}", e),
+                message: format!("Error converting raw response to string: {e}"),
                 raw_request: Some(raw_request.clone()),
                 raw_response: None,
                 provider_type: PROVIDER_TYPE.to_string(),

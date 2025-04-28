@@ -72,8 +72,7 @@ pub async fn inference_handler(
     // (We run this disambiguation deep in the `inference` call below but we don't get the decision out, so we duplicate it here)
     let response_model_prefix = match (&params.function_name, &params.model_name) {
         (Some(function_name), None) => Ok::<String, Error>(format!(
-            "tensorzero::function_name::{}::variant_name::",
-            function_name,
+            "tensorzero::function_name::{function_name}::variant_name::",
         )),
         (None, Some(_model_name)) => Ok("tensorzero::model_name::".to_string()),
         (Some(_), Some(_)) => Err(ErrorDetails::InvalidInferenceTarget {
@@ -1023,7 +1022,7 @@ fn prepare_serialized_openai_compatible_events(
             for chunk in openai_compatible_chunks {
                 let mut chunk_json = serde_json::to_value(chunk).map_err(|e| {
                     Error::new(ErrorDetails::Inference {
-                        message: format!("Failed to convert chunk to JSON: {}", e),
+                        message: format!("Failed to convert chunk to JSON: {e}"),
                     })
                 })?;
                 if is_first_chunk {
@@ -1034,7 +1033,7 @@ fn prepare_serialized_openai_compatible_events(
 
                 yield Event::default().json_data(chunk_json).map_err(|e| {
                     Error::new(ErrorDetails::Inference {
-                        message: format!("Failed to convert Value to Event: {}", e),
+                        message: format!("Failed to convert Value to Event: {e}"),
                     })
                 })
             }
@@ -1060,7 +1059,7 @@ fn prepare_serialized_openai_compatible_events(
                 episode_id: episode_id.to_string(),
                 choices: vec![],
                 created: current_timestamp() as u32,
-                model: format!("{response_model_prefix}{}", variant_name),
+                model: format!("{response_model_prefix}{variant_name}"),
                 system_fingerprint: "".to_string(),
                 object: "chat.completion.chunk".to_string(),
                 service_tier: "".to_string(),
@@ -1074,7 +1073,7 @@ fn prepare_serialized_openai_compatible_events(
                 usage_chunk)
                 .map_err(|e| {
                     Error::new(ErrorDetails::Inference {
-                        message: format!("Failed to convert usage chunk to JSON: {}", e),
+                        message: format!("Failed to convert usage chunk to JSON: {e}"),
                     })
                 });
         }
