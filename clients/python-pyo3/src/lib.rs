@@ -98,7 +98,7 @@ fn _start_http_gateway(
         )
         .await?;
         Ok(LocalHttpGateway {
-            base_url: format!("http://{}/openai/v1", addr),
+            base_url: format!("http://{addr}/openai/v1"),
             shutdown_handle: Some(handle),
         })
     };

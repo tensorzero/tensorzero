@@ -1036,8 +1036,7 @@ async fn e2e_test_float_feedback() {
     let error_message = response_json.get("error").unwrap().as_str().unwrap();
     assert!(
         error_message.contains("Correct ID was not provided for feedback level"),
-        "Unexpected error message: {}",
-        error_message
+        "Unexpected error message: {error_message}"
     );
 
     // Running without valid inference_id. Should fail.
@@ -1208,8 +1207,7 @@ async fn e2e_test_boolean_feedback() {
     let error_message = response_json.get("error").unwrap().as_str().unwrap();
     assert!(
         error_message.contains("Correct ID was not provided for feedback level"),
-        "Unexpected error message: {}",
-        error_message
+        "Unexpected error message: {error_message}"
     );
 
     // Try string feedback (should fail)

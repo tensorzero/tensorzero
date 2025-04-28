@@ -152,7 +152,7 @@ pub fn setup_http_client() -> Result<Client, Error> {
             http_client_builder = http_client_builder
                 .proxy(Proxy::all(proxy_url).map_err(|e| {
                     Error::new(ErrorDetails::AppState {
-                        message: format!("Invalid proxy URL: {}", e),
+                        message: format!("Invalid proxy URL: {e}"),
                     })
                 })?)
                 // When running e2e tests, we use `provider-proxy` as an MITM proxy
@@ -163,7 +163,7 @@ pub fn setup_http_client() -> Result<Client, Error> {
 
     http_client_builder.build().map_err(|e| {
         Error::new(ErrorDetails::AppState {
-            message: format!("Failed to build HTTP client: {}", e),
+            message: format!("Failed to build HTTP client: {e}"),
         })
     })
 }
@@ -187,12 +187,12 @@ pub async fn start_openai_compatible_gateway(
         .await
         .map_err(|e| {
             Error::new(ErrorDetails::InternalError {
-                message: format!("Failed to bind to a port: {}", e),
+                message: format!("Failed to bind to a port: {e}"),
             })
         })?;
     let bind_addr = listener.local_addr().map_err(|e| {
         Error::new(ErrorDetails::InternalError {
-            message: format!("Failed to get local address: {}", e),
+            message: format!("Failed to get local address: {e}"),
         })
     })?;
 

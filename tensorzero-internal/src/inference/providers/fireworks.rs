@@ -585,7 +585,7 @@ fn stream_fireworks(
                         }
                         let data: Result<FireworksChatChunk, Error> =
                             serde_json::from_str(&message.data).map_err(|e| Error::new(ErrorDetails::InferenceServer {
-                                message: format!("Error parsing chunk. Error: {}", e),
+                                message: format!("Error parsing chunk. Error: {e}"),
                                 raw_request: None,
                                 raw_response: Some(message.data.clone()),
                                 provider_type: PROVIDER_TYPE.to_string(),

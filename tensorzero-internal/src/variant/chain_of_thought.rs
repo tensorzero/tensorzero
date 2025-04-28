@@ -57,8 +57,7 @@ impl Variant for ChainOfThoughtConfig {
             // This should never happen, because we check this in `validate`
             return Err(ErrorDetails::Inference {
                 message: format!(
-                    "Can't use chain of thought variant type with non-JSON function. {}",
-                    IMPOSSIBLE_ERROR_MESSAGE
+                    "Can't use chain of thought variant type with non-JSON function. {IMPOSSIBLE_ERROR_MESSAGE}"
                 ),
             }
             .into());
