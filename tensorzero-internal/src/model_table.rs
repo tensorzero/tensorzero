@@ -4,7 +4,7 @@ use serde::Deserialize;
 
 use crate::{
     error::{Error, ErrorDetails},
-    model::ProviderConfigHelper,
+    model::UninitializedProviderConfig,
 };
 use lazy_static::lazy_static;
 use strum::VariantNames;
@@ -13,9 +13,9 @@ use strum::VariantNames;
 // currently supports them.
 lazy_static! {
     pub static ref RESERVED_MODEL_PREFIXES: Vec<String> = {
-        let mut prefixes: Vec<String> = ProviderConfigHelper::VARIANTS
+        let mut prefixes: Vec<String> = UninitializedProviderConfig::VARIANTS
             .iter()
-            .map(|&v| format!("{}::", v))
+            .map(|&v| format!("{v}::"))
             .collect();
         prefixes.push("tensorzero::".to_string());
         prefixes
@@ -133,7 +133,7 @@ impl<T: ShorthandModelConfig> BaseModelTable<T> {
         }
 
         Err(ErrorDetails::Config {
-            message: format!("Model name '{}' not found in model table", key),
+            message: format!("Model name '{key}' not found in model table"),
         }
         .into())
     }

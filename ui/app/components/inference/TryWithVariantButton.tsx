@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button } from "~/components/ui/button";
+import { Button, ButtonIcon } from "~/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,9 +26,9 @@ export function TryWithVariantButton({
     <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
       <DropdownMenuTrigger asChild>
         <Button variant="outline" size="sm" disabled={isLoading}>
-          <Compare className="text-fg-tertiary h-4 w-4" />
+          <ButtonIcon as={Compare} variant="tertiary" />
           Try with variant
-          <ChevronDown className="text-fg-tertiary h-4 w-4" />
+          <ButtonIcon as={ChevronDown} variant="tertiary" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent>

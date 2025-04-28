@@ -12,6 +12,7 @@ import type { Route } from "./+types/route";
 import {
   data,
   isRouteErrorResponse,
+  Link,
   redirect,
   useFetcher,
   useNavigate,
@@ -26,6 +27,7 @@ import { ParameterCard } from "./InferenceParameters";
 import { TagsTable } from "~/components/utils/TagsTable";
 import { ModelInferencesTable } from "./ModelInferencesTable";
 import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import { useConfig } from "~/context/config";
 import { VariantResponseModal } from "~/components/inference/VariantResponseModal";
 import { getTotalInferenceUsage } from "~/utils/clickhouse/helpers";
@@ -40,6 +42,10 @@ import { InferenceActions } from "./InferenceActions";
 import { getDatasetCounts } from "~/utils/clickhouse/datasets.server";
 import { Toaster } from "~/components/ui/toaster";
 import { useToast } from "~/hooks/use-toast";
+import {
+  prepareInferenceActionRequest,
+  useInferenceActionFetcher,
+} from "~/routes/api/tensorzero/inference.utils";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { inference_id } = params;
@@ -173,8 +179,6 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
   } = loaderData;
   const navigate = useNavigate();
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [variantInferenceIsLoading, setVariantInferenceIsLoading] =
-    useState(false);
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
 
   const topFeedback = feedback[0] as { id: string } | undefined;
@@ -211,16 +215,6 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
 
   const num_feedbacks = feedback.length;
 
-  const onVariantSelect = (variant: string) => {
-    setSelectedVariant(variant);
-    setIsModalOpen(true);
-  };
-
-  const handleModalClose = () => {
-    setIsModalOpen(false);
-    setSelectedVariant(null);
-    setVariantInferenceIsLoading(false);
-  };
   const config = useConfig();
   const variants = Object.keys(
     config.functions[inference.function_name]?.variants || {},
@@ -246,11 +240,35 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
 
   useEffect(() => {
     if (newFeedbackId) {
-      toast({
-        title: "Feedback Added",
-      });
+      toast({ title: "Feedback Added" });
     }
   }, [newFeedbackId, toast]);
+
+  const variantInferenceFetcher = useInferenceActionFetcher();
+  const variantSource = "inference";
+  const variantInferenceIsLoading =
+    // only concerned with rendering loading state when the modal is open
+    isModalOpen &&
+    (variantInferenceFetcher.state === "submitting" ||
+      variantInferenceFetcher.state === "loading");
+
+  const { submit } = variantInferenceFetcher;
+  const onVariantSelect = (variant: string) => {
+    setSelectedVariant(variant);
+    setIsModalOpen(true);
+    const request = prepareInferenceActionRequest({
+      resource: inference,
+      source: variantSource,
+      variant,
+    });
+    // TODO: handle JSON.stringify error
+    submit({ data: JSON.stringify(request) });
+  };
+
+  const handleModalClose = () => {
+    setIsModalOpen(false);
+    setSelectedVariant(null);
+  };
 
   return (
     <PageLayout>
@@ -346,12 +364,14 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
         <VariantResponseModal
           isOpen={isModalOpen}
           isLoading={variantInferenceIsLoading}
-          setIsLoading={setVariantInferenceIsLoading}
+          error={variantInferenceFetcher.error?.message}
+          variantResponse={variantInferenceFetcher.data?.info ?? null}
+          rawResponse={variantInferenceFetcher.data?.raw ?? null}
           onClose={handleModalClose}
           item={inference}
           inferenceUsage={getTotalInferenceUsage(model_inferences)}
           selectedVariant={selectedVariant}
-          source="inference"
+          source={variantSource}
         />
       )}
       <Toaster />
@@ -359,30 +379,64 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
   );
 }
 
-export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  console.error(error);
-
+function getUserFacingError(error: unknown): {
+  heading: string;
+  message: ReactNode;
+} {
   if (isRouteErrorResponse(error)) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 text-red-500">
-        <h1 className="text-2xl font-bold">
-          {error.status} {error.statusText}
-        </h1>
-        <p>{error.data}</p>
-      </div>
-    );
-  } else if (error instanceof Error) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 text-red-500">
-        <h1 className="text-2xl font-bold">Error</h1>
-        <p>{error.message}</p>
-      </div>
-    );
-  } else {
-    return (
-      <div className="flex h-screen items-center justify-center text-red-500">
-        <h1 className="text-2xl font-bold">Unknown Error</h1>
-      </div>
-    );
+    switch (error.status) {
+      case 400:
+        return {
+          heading: `${error.status}: Bad Request`,
+          message: "Please try again later.",
+        };
+      case 401:
+        return {
+          heading: `${error.status}: Unauthorized`,
+          message: "You do not have permission to access this resource.",
+        };
+      case 403:
+        return {
+          heading: `${error.status}: Forbidden`,
+          message: "You do not have permission to access this resource.",
+        };
+      case 404:
+        return {
+          heading: `${error.status}: Not Found`,
+          message:
+            "The requested resource was not found. Please check the URL and try again.",
+        };
+      case 500:
+      default:
+        return {
+          heading: "An unknown error occurred",
+          message: "Please try again later.",
+        };
+    }
   }
+  return {
+    heading: "An unknown error occurred",
+    message: "Please try again later.",
+  };
+}
+
+export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
+  useEffect(() => {
+    console.error(error);
+  }, [error]);
+  const { heading, message } = getUserFacingError(error);
+  return (
+    <div className="flex flex-col items-center justify-center md:h-full">
+      <div className="mt-8 flex flex-col items-center justify-center gap-2 rounded-xl bg-red-50 p-6 md:mt-0">
+        <h1 className="text-2xl font-bold">{heading}</h1>
+        {typeof message === "string" ? <p>{message}</p> : message}
+        <Link
+          to={`/observability/inferences`}
+          className="font-bold text-red-800 hover:text-red-600"
+        >
+          Go back &rarr;
+        </Link>
+      </div>
+    </div>
+  );
 }

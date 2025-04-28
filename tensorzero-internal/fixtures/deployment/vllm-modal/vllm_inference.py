@@ -32,7 +32,7 @@ app = modal.App(name="vllm-inference")
 @modal.concurrent(
     max_inputs=20
 )  #  how many concurrent requests can one container handle
-@modal.web_server(port=VLLM_PORT, startup_timeout=2 * MINUTES)
+@modal.web_server(port=VLLM_PORT, startup_timeout=2 * MINUTES, requires_proxy_auth=True)
 def vllm_inference():
     import os
     import subprocess

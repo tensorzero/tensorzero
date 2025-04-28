@@ -29,3 +29,5 @@ export function extractTimestampFromUUIDv7(uuid: string): Date {
 
   return date;
 }
+
+export class JSONParseError extends SyntaxError {}

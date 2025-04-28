@@ -48,6 +48,8 @@ use tensorzero_internal::clickhouse::test_helpers::{
     select_json_inference_clickhouse, select_model_inference_clickhouse, CLICKHOUSE_URL,
 };
 
+use super::helpers::get_extra_headers;
+
 #[derive(Clone, Debug)]
 pub struct E2ETestProvider {
     pub variant_name: String,
@@ -82,6 +84,7 @@ pub struct E2ETestProviders {
     pub dynamic_tool_use_inference: Vec<E2ETestProvider>,
     pub parallel_tool_use_inference: Vec<E2ETestProvider>,
     pub json_mode_inference: Vec<E2ETestProvider>,
+    pub json_mode_off_inference: Vec<E2ETestProvider>,
 
     pub image_inference: Vec<E2ETestProvider>,
 
@@ -201,6 +204,7 @@ macro_rules! generate_provider_tests {
         use $crate::providers::common::test_multi_turn_parallel_tool_use_inference_request_with_provider;
         use $crate::providers::common::test_multi_turn_parallel_tool_use_streaming_inference_request_with_provider;
         use $crate::providers::common::test_streaming_invalid_request_with_provider;
+        use $crate::providers::common::test_json_mode_off_inference_request_with_provider;
 
 
         #[tokio::test]
@@ -554,6 +558,15 @@ macro_rules! generate_provider_tests {
                 test_multi_turn_parallel_tool_use_streaming_inference_request_with_provider(provider).await;
             }
         }
+
+
+        #[tokio::test]
+        async fn test_json_mode_off_inference_request() {
+            let providers = $func().await.json_mode_off_inference;
+            for provider in providers {
+                test_json_mode_off_inference_request_with_provider(provider).await;
+            }
+        }
     };
 }
 
@@ -846,7 +859,7 @@ pub async fn test_url_image_inference_with_provider_and_store(
 
     // The '_shutdown_sender' will wake up the receiver on drop
     let (server_addr, _shutdown_sender) = make_temp_image_server().await;
-    let image_url = Url::parse(&format!("http://{}/ferris.png", server_addr)).unwrap();
+    let image_url = Url::parse(&format!("http://{server_addr}/ferris.png")).unwrap();
 
     let client = make_embedded_gateway_with_config(config_toml).await;
 
@@ -873,6 +886,7 @@ pub async fn test_url_image_inference_with_provider_and_store(
                     enabled: CacheEnabledMode::On,
                     max_age_s: Some(10),
                 },
+                extra_headers: get_extra_headers(),
                 ..Default::default()
             })
             .await
@@ -964,7 +978,7 @@ pub async fn test_extra_body_with_provider(provider: E2ETestProvider) {
 
 pub async fn test_extra_body_with_provider_and_stream(provider: &E2ETestProvider, stream: bool) {
     let episode_id = Uuid::now_v7();
-
+    let extra_headers = get_extra_headers();
     let payload = json!({
         "function_name": "basic_test",
         "variant_name": provider.variant_name,
@@ -985,6 +999,7 @@ pub async fn test_extra_body_with_provider_and_stream(provider: &E2ETestProvider
             ]},
         "stream": stream,
         "tags": {"foo": "bar"},
+        "extra_headers": extra_headers.headers,
     });
 
     let inference_id = if stream {
@@ -1154,7 +1169,7 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
             }
         ])
     };
-
+    let extra_headers = get_extra_headers();
     let payload = json!({
         "function_name": "basic_test",
         "variant_name": provider.variant_name,
@@ -1176,6 +1191,7 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
         "extra_body": extra_body,
         "stream": stream,
         "tags": {"foo": "bar"},
+        "extra_headers": extra_headers.headers,
     });
 
     let inference_id = if stream {
@@ -1317,6 +1333,7 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
     stream: bool,
 ) {
     // Inject randomness to prevent this from being cached, since provider-proxy will ignore the (invalid) auth header
+    let extra_headers = get_extra_headers();
     let payload = json!({
         "function_name": "basic_test",
         "variant_name": provider.variant_name,
@@ -1330,6 +1347,7 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
                 }
             ]},
         "stream": stream,
+        "extra_headers": extra_headers.headers,
     });
 
     let response = Client::new()
@@ -1468,7 +1486,7 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
 
 pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
-
+    let extra_headers = get_extra_headers();
     let payload = json!({
         "function_name": "basic_test",
         "variant_name": provider.variant_name,
@@ -1484,6 +1502,7 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
             ]},
         "stream": false,
         "tags": {"foo": "bar"},
+        "extra_headers": extra_headers.headers,
     });
 
     let response = Client::new()
@@ -1519,7 +1538,8 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
             ]},
         "stream": false,
         "tags": {"foo": "bar"},
-        "cache_options": {"enabled": "on", "lookback_s": 10}
+        "cache_options": {"enabled": "on", "lookback_s": 10},
+        "extra_headers": extra_headers.headers,
     });
 
     let response = Client::new()
@@ -2261,6 +2281,7 @@ pub async fn check_simple_image_inference_response(
 
 pub async fn test_streaming_invalid_request_with_provider(provider: E2ETestProvider) {
     // A top_p of -100 and temperature of -100 should produce errors on all providers
+    let extra_headers = get_extra_headers();
     let payload = json!({
         "function_name": "basic_test",
         "variant_name": provider.variant_name,
@@ -2286,7 +2307,8 @@ pub async fn test_streaming_invalid_request_with_provider(provider: E2ETestProvi
                 "pointer": "/messages/0/content",
                 "value": 123,
             },
-        ]
+        ],
+        "extra_headers": extra_headers.headers,
     });
 
     let mut event_source = Client::new()
@@ -2340,6 +2362,7 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     tag_value: &str,
     check_cache: bool,
 ) -> String {
+    let extra_headers = get_extra_headers();
     let payload = json!({
         "function_name": "basic_test",
         "variant_name": provider.variant_name,
@@ -2355,7 +2378,8 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
             ]},
         "stream": true,
         "tags": {"key": tag_value},
-        "cache_options": {"enabled": "on", "lookback_s": 10}
+        "cache_options": {"enabled": "on", "lookback_s": 10},
+        "extra_headers": extra_headers.headers,
     });
 
     let mut event_source = Client::new()
@@ -2611,7 +2635,7 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
 
 pub async fn test_inference_params_inference_request_with_provider(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
-
+    let extra_headers = get_extra_headers();
     let payload = json!({
         "function_name": "basic_test",
         "variant_name": provider.variant_name,
@@ -2637,6 +2661,7 @@ pub async fn test_inference_params_inference_request_with_provider(provider: E2E
         },
         "stream": false,
         "credentials": provider.credentials,
+        "extra_headers": extra_headers.headers,
     });
 
     let response = Client::new()
@@ -2848,7 +2873,7 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
     let episode_id = Uuid::now_v7();
-
+    let extra_headers = get_extra_headers();
     let payload = json!({
         "function_name": "basic_test",
         "variant_name": provider.variant_name,
@@ -2874,6 +2899,7 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
         },
         "stream": true,
         "credentials": provider.credentials,
+        "extra_headers": extra_headers.headers,
     });
 
     let mut event_source = Client::new()
@@ -3482,7 +3508,7 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
                     // We mostly care about the tool call, so we'll ignore the text.
                 }
                 _ => {
-                    panic!("Unexpected block type: {}", block_type);
+                    panic!("Unexpected block type: {block_type}");
                 }
             }
         }
@@ -3967,7 +3993,7 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
     match first {
         ContentBlock::Text(_text) => {}
         _ => {
-            panic!("Expected a text block, got {:?}", first);
+            panic!("Expected a text block, got {first:?}");
         }
     }
 }
@@ -4055,7 +4081,7 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
                     full_text.push_str(block.get("text").unwrap().as_str().unwrap());
                 }
                 _ => {
-                    panic!("Unexpected block type: {}", block_type);
+                    panic!("Unexpected block type: {block_type}");
                 }
             }
         }
@@ -4254,7 +4280,7 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
     match first {
         ContentBlock::Text(_text) => {}
         _ => {
-            panic!("Expected a text block, got {:?}", first);
+            panic!("Expected a text block, got {first:?}");
         }
     }
 }
@@ -4641,7 +4667,7 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
                     // We mostly care about the tool call, so we'll ignore the text.
                 }
                 _ => {
-                    panic!("Unexpected block type: {}", block_type);
+                    panic!("Unexpected block type: {block_type}");
                 }
             }
         }
@@ -5105,7 +5131,7 @@ pub async fn check_tool_use_tool_choice_none_inference_response(
     match first {
         ContentBlock::Text(_text) => {}
         _ => {
-            panic!("Expected a text block, got {:?}", first);
+            panic!("Expected a text block, got {first:?}");
         }
     }
 }
@@ -5201,7 +5227,7 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
                     full_text.push_str(block.get("text").unwrap().as_str().unwrap());
                 }
                 _ => {
-                    panic!("Unexpected block type: {}", block_type);
+                    panic!("Unexpected block type: {block_type}");
                 }
             }
         }
@@ -5401,7 +5427,7 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
     match first {
         ContentBlock::Text(_text) => {}
         _ => {
-            panic!("Expected a text block, got {:?}", first);
+            panic!("Expected a text block, got {first:?}");
         }
     }
 }
@@ -5868,7 +5894,7 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
                     // We mostly care about the tool call, so we'll ignore the text.
                 }
                 _ => {
-                    panic!("Unexpected block type: {}", block_type);
+                    panic!("Unexpected block type: {block_type}");
                 }
             }
         }
@@ -6493,7 +6519,7 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
                     // We mostly care about the tool call, so we'll ignore the text.
                 }
                 _ => {
-                    panic!("Unexpected block type: {}", block_type);
+                    panic!("Unexpected block type: {block_type}");
                 }
             }
         }
@@ -6747,7 +6773,7 @@ pub async fn test_tool_multi_turn_inference_request_with_provider(provider: E2ET
                             "type": "tool_call",
                             "id": "123456789",
                             "name": "get_temperature",
-                            "arguments": "{\"location\": \"Tokyo\", \"units\": \"celsius\"}"
+                            "arguments": {"location": "Tokyo", "units": "celsius"}
                         }
                     ]
                 },
@@ -6853,7 +6879,7 @@ pub async fn check_tool_use_multi_turn_inference_response(
             },
             {
                 "role": "assistant",
-                "content": [{"type": "tool_call", "id": "123456789", "name": "get_temperature", "arguments": "{\"location\": \"Tokyo\", \"units\": \"celsius\"}"}]
+                "content": [{"type": "tool_call", "id": "123456789", "name": "get_temperature", "arguments": "{\"location\":\"Tokyo\",\"units\":\"celsius\"}"}]
             },
             {
                 "role": "user",
@@ -6971,7 +6997,7 @@ pub async fn check_tool_use_multi_turn_inference_response(
             content: vec![ContentBlock::ToolCall(ToolCall {
                 id: "123456789".to_string(),
                 name: "get_temperature".to_string(),
-                arguments: "{\"location\": \"Tokyo\", \"units\": \"celsius\"}".to_string(),
+                arguments: "{\"location\":\"Tokyo\",\"units\":\"celsius\"}".to_string(),
             })],
         },
         RequestMessage {
@@ -6993,7 +7019,7 @@ pub async fn check_tool_use_multi_turn_inference_response(
             assert!(text.text.to_lowercase().contains("tokyo"));
         }
         _ => {
-            panic!("Expected a text block, got {:?}", first);
+            panic!("Expected a text block, got {first:?}");
         }
     }
 }
@@ -7312,7 +7338,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
             assert!(text.text.to_lowercase().contains("tokyo"));
         }
         _ => {
-            panic!("Expected a text block, got {:?}", first);
+            panic!("Expected a text block, got {first:?}");
         }
     }
 }
@@ -7732,7 +7758,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
                     // We mostly care about the tool call, so we'll ignore the text.
                 }
                 _ => {
-                    panic!("Unexpected block type: {}", block_type);
+                    panic!("Unexpected block type: {block_type}");
                 }
             }
         }
@@ -8293,7 +8319,7 @@ pub async fn check_parallel_tool_use_inference_response(
                 serde_json::from_str::<Value>(&tool_call.arguments).unwrap();
             }
             _ => {
-                panic!("Expected a tool call, got {:?}", block);
+                panic!("Expected a tool call, got {block:?}");
             }
         }
     }
@@ -8396,7 +8422,7 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
                             get_humidity_arguments.push_str(chunk_arguments);
                         }
                         _ => {
-                            panic!("Unexpected tool name: {}", tool_name);
+                            panic!("Unexpected tool name: {tool_name}");
                         }
                     }
                 }
@@ -8406,7 +8432,7 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
                     // We mostly care about the tool call, so we'll ignore the text.
                 }
                 _ => {
-                    panic!("Unexpected block type: {}", block_type);
+                    panic!("Unexpected block type: {block_type}");
                 }
             }
         }
@@ -8697,7 +8723,7 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
                 serde_json::from_str::<Value>(&tool_call.arguments).unwrap();
             }
             _ => {
-                panic!("Expected a tool call, got {:?}", block);
+                panic!("Expected a tool call, got {block:?}");
             }
         }
     }
@@ -8707,7 +8733,7 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
 
 pub async fn test_json_mode_inference_request_with_provider(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
-
+    let extra_headers = get_extra_headers();
     let payload = json!({
         "function_name": "json_success",
         "variant_name": provider.variant_name,
@@ -8722,6 +8748,7 @@ pub async fn test_json_mode_inference_request_with_provider(provider: E2ETestPro
                 }
             ]},
         "stream": false,
+        "extra_headers": extra_headers.headers,
     });
 
     let response = Client::new()
@@ -8937,6 +8964,7 @@ pub async fn check_json_mode_inference_response(
 
 pub async fn test_dynamic_json_mode_inference_request_with_provider(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
+    let extra_headers = get_extra_headers();
     let output_schema = json!({
       "type": "object",
       "properties": {
@@ -8964,6 +8992,7 @@ pub async fn test_dynamic_json_mode_inference_request_with_provider(provider: E2
             ]},
         "stream": false,
         "output_schema": output_schema.clone(),
+        "extra_headers": extra_headers.headers,
     });
 
     let response = Client::new()
@@ -9188,7 +9217,7 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
         return;
     }
     let episode_id = Uuid::now_v7();
-
+    let extra_headers = get_extra_headers();
     let payload = json!({
         "function_name": "json_success",
         "variant_name": provider.variant_name,
@@ -9199,10 +9228,11 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
                "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": {"country": "Japan"}}]
+                    "content": [{"type": "text", "arguments": {"country": "Japan"}}]
                 }
             ]},
         "stream": true,
+        "extra_headers": extra_headers.headers,
     });
 
     let mut event_source = Client::new()
@@ -9454,6 +9484,7 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
     }
 
     let episode_id = Uuid::now_v7();
+    let extra_headers = get_extra_headers();
 
     let payload = json!({
         "function_name": "basic_test",
@@ -9474,7 +9505,8 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
             "chat_completion": {
                 "max_tokens": 1
             }
-        }
+        },
+        "extra_headers": extra_headers.headers,
     });
     if provider.variant_name.contains("openai") && provider.variant_name.contains("o1") {
         // Can't pin a single token for o1
@@ -9519,7 +9551,8 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
             "chat_completion": {
                 "max_tokens": 1
             }
-        }
+        },
+        "extra_headers": extra_headers.headers,
     });
 
     let response = Client::new()
@@ -9987,7 +10020,7 @@ pub async fn check_multi_turn_parallel_tool_use_inference_response(
                 );
             }
             _ => {
-                panic!("Expected a tool call, got {:?}", tool_result);
+                panic!("Expected a tool call, got {tool_result:?}");
             }
         }
     }
@@ -10001,7 +10034,7 @@ pub async fn check_multi_turn_parallel_tool_use_inference_response(
             assert!(text.text.to_lowercase().contains("30"));
         }
         _ => {
-            panic!("Expected a text block, got {:?}", output_content);
+            panic!("Expected a text block, got {output_content:?}");
         }
     }
 }
@@ -10173,7 +10206,7 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
                     output_content.push_str(block.get("text").unwrap().as_str().unwrap());
                 }
                 _ => {
-                    panic!("Unexpected block type: {}", block_type);
+                    panic!("Unexpected block type: {block_type}");
                 }
             }
         }
@@ -10322,7 +10355,7 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
                 );
             }
             _ => {
-                panic!("Expected a tool call, got {:?}", tool_result);
+                panic!("Expected a tool call, got {tool_result:?}");
             }
         }
     }
@@ -10336,7 +10369,161 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
             assert!(text.text.to_lowercase().contains("30"));
         }
         _ => {
-            panic!("Expected a text block, got {:?}", output_content);
+            panic!("Expected a text block, got {output_content:?}");
         }
     }
+}
+
+pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETestProvider) {
+    let episode_id = Uuid::now_v7();
+
+    let payload = json!({
+        "function_name": "json_success",
+        "variant_name": provider.variant_name,
+        "episode_id": episode_id,
+        "input":
+            {
+               "system": {"assistant_name": "AskJeeves"},
+               "messages": [
+                   {
+                       "role": "user",
+                       "content": [{"type": "text", "arguments": {"country": "Japan"}}]
+                   }
+               ]
+            },
+        "params": {
+            "chat_completion": {
+                "json_mode": "off",
+            }
+        },
+        "stream": false,
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    // Check that the API response is ok
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+
+    // Assert the output isn't JSON
+    let output = response_json.get("output").unwrap().as_object().unwrap();
+    let parsed = output.get("parsed").unwrap().as_object();
+    assert_eq!(parsed, None);
+    let raw = output.get("raw").unwrap().as_str().unwrap();
+    assert!(serde_json::from_str::<Value>(raw).is_err());
+
+    // Assert that the answer is correct
+    assert!(raw.to_lowercase().contains("tokyo"));
+
+    // Check that inference_id is here
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+
+    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Check ClickHouse
+    let clickhouse = get_clickhouse().await;
+
+    // First, check Inference table
+    let result = select_json_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    let id = result.get("id").unwrap().as_str().unwrap();
+    let id_uuid = Uuid::parse_str(id).unwrap();
+    assert_eq!(id_uuid, inference_id);
+
+    let input: Value =
+        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+    let correct_input = json!({
+        "system": {"assistant_name": "AskJeeves"},
+        "messages": [
+            {
+                "role": "user",
+                "content": [{"type": "text", "value": {"country": "Japan"}}]
+            }
+        ]
+    });
+    assert_eq!(input, correct_input);
+
+    // Check that correctly parsed output is present
+    let output = result.get("output").unwrap().as_str().unwrap();
+    let output: Value = serde_json::from_str(output).unwrap();
+    let raw = output.get("raw").unwrap().as_str().unwrap();
+    assert!(raw.to_lowercase().contains("tokyo"));
+
+    // Check that episode_id is here and correct
+    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
+    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
+    assert_eq!(retrieved_episode_id, episode_id);
+
+    // Check the variant name
+    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
+    assert_eq!(variant_name, provider.variant_name);
+
+    // Check the processing time
+    let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
+    assert!(processing_time_ms > 0);
+
+    // Check that we saved the correct json mode to ClickHouse
+    let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
+    let inference_params: Value = serde_json::from_str(inference_params).unwrap();
+    let clickhouse_json_mode = inference_params
+        .get("chat_completion")
+        .unwrap()
+        .get("json_mode")
+        .unwrap()
+        .as_str()
+        .unwrap();
+    assert_eq!("off", clickhouse_json_mode);
+
+    // Check the ModelInference Table
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
+    assert_eq!(inference_id_result, inference_id);
+
+    let model_name = result.get("model_name").unwrap().as_str().unwrap();
+    assert_eq!(model_name, provider.model_name);
+
+    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
+    assert_eq!(model_provider_name, provider.model_provider_name);
+
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.to_lowercase().contains("japan"));
+
+    // Check that raw_request is valid JSON
+    let raw_request_val: Value =
+        serde_json::from_str(raw_request).expect("raw_request should be valid JSON");
+
+    // Check that we're not sending `response_format` or `generationConfig`
+    if provider.model_provider_name == "google_ai_studio_gemini"
+        || provider.model_provider_name == "gcp_vertex_gemini"
+    {
+        assert!(raw_request_val["generationConfig"]
+            .get("response_mime_type")
+            .is_none());
+    } else {
+        assert!(raw_request_val.get("response_format").is_none());
+    }
+
+    let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
+    assert!(input_tokens > 5);
+
+    let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
+    assert!(output_tokens > 5);
+
+    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+    assert!(response_time_ms > 0);
+
+    assert!(result.get("ttft_ms").unwrap().is_null());
 }
