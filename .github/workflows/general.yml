@@ -126,6 +126,18 @@ jobs:
           working-directory: clients/python-pyo3
           args: --find-interpreter
 
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
+        with:
+          cache-provider: "buildjet"
+          save-if: ${{ github.event_name == 'merge_group' }}
+      - name: Build Rust
+        run: cargo build --workspace
+
   validate:
     runs-on: namespace-profile-tensorzero-8x16
 
@@ -537,6 +549,7 @@ jobs:
         clickhouse-tests-cloud,
         check-docker-compose,
         check-pyo3-build,
+        build-windows,
         validate,
         clickhouse-tests,
         ui-tests,
