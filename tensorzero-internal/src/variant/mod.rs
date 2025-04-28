@@ -192,7 +192,7 @@ impl VariantConfig {
 
 impl Variant for VariantConfig {
     #[instrument(
-        fields(function_name = %inference_config.function_name, variant_name = %inference_config.variant_name.unwrap_or("")),
+        fields(function_name = %inference_config.function_name, variant_name = %inference_config.variant_name.unwrap_or(""), otel.name="tensorzero_variant_infer", stream=false),
         skip_all
     )]
     async fn infer<'a: 'request, 'request>(
@@ -270,7 +270,7 @@ impl Variant for VariantConfig {
     }
 
     #[instrument(
-        fields(function_name = %inference_config.function_name, variant_name = %inference_config.variant_name.unwrap_or("")),
+        fields(function_name = %inference_config.function_name, variant_name = %inference_config.variant_name.unwrap_or(""), otel.name="tensorzero_variant_infer", stream=true),
         skip_all
     )]
     async fn infer_stream<'a, 'request>(

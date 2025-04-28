@@ -186,11 +186,12 @@ pub struct InferenceIds {
     name="inference",
     skip(config, http_client, clickhouse_connection_info, params),
     fields(
-        function_name = ?params.function_name,
-        model_name = ?params.model_name,
-        variant_name = ?params.variant_name,
+        function_name,
+        model_name,
+        variant_name,
         inference_id,
         episode_id,
+        otel.name = "tensorzero_function_call"
     )
 )]
 pub async fn inference(
@@ -199,10 +200,23 @@ pub async fn inference(
     clickhouse_connection_info: ClickHouseConnectionInfo,
     params: Params,
 ) -> Result<InferenceOutput, Error> {
+    let span = tracing::Span::current();
+    if let Some(function_name) = &params.function_name {
+        span.record("function_name", function_name);
+    }
+    if let Some(model_name) = &params.model_name {
+        span.record("model_name", model_name);
+    }
+    if let Some(variant_name) = &params.variant_name {
+        span.record("variant_name", variant_name);
+    }
+    if let Some(episode_id) = &params.episode_id {
+        span.record("episode_id", episode_id.to_string());
+    }
     // To be used for the Inference table processing_time measurements
     let start_time = Instant::now();
     let inference_id = Uuid::now_v7();
-    tracing::Span::current().record("inference_id", inference_id.to_string());
+    span.record("inference_id", inference_id.to_string());
 
     if params.include_original_response && params.stream.unwrap_or(false) {
         return Err(ErrorDetails::InvalidRequest {

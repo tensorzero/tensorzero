@@ -14,6 +14,8 @@ mod inference;
 mod mixture_of_n;
 mod object_storage;
 mod openai_compatible;
+mod otel;
+mod otel_jaeger;
 mod prometheus;
 mod providers;
 mod proxy;
