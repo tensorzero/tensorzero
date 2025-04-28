@@ -39,7 +39,7 @@ impl Migration for Migration0020<'_> {
             if !check_table_exists(self.clickhouse, table, MIGRATION_ID).await? {
                 return Err(ErrorDetails::ClickHouseMigration {
                     id: MIGRATION_ID.to_string(),
-                    message: format!("Table {} does not exist", table),
+                    message: format!("Table {table} does not exist"),
                 }
                 .into());
             }
@@ -134,7 +134,7 @@ impl Migration for Migration0020<'_> {
             let random_suffix: String = (0..16)
                 .map(|_| rng.sample(rand::distr::Alphanumeric) as char)
                 .collect();
-            format!("InferenceById_temp0020_{}", random_suffix)
+            format!("InferenceById_temp0020_{random_suffix}")
         } else {
             "InferenceById".to_string()
         };
@@ -149,8 +149,7 @@ impl Migration for Migration0020<'_> {
                 function_type Enum8('chat' = 1, 'json' = 2)
             ) ENGINE = ReplacingMergeTree(id_uint)
             ORDER BY id_uint;
-        "#,
-            create_table_name = create_table_name
+        "#
         );
         let _ = self
             .clickhouse
@@ -158,12 +157,12 @@ impl Migration for Migration0020<'_> {
             .await?;
         // If the InferenceById table exists then we need to swap this table in and drop old one.
         if inference_by_id_exists {
-            let query = format!("EXCHANGE TABLES InferenceById AND {}", create_table_name);
+            let query = format!("EXCHANGE TABLES InferenceById AND {create_table_name}");
             let _ = self
                 .clickhouse
                 .run_query_synchronous(query.to_string(), None)
                 .await?;
-            let query = format!("DROP TABLE IF EXISTS {}", create_table_name);
+            let query = format!("DROP TABLE IF EXISTS {create_table_name}");
             let _ = self
                 .clickhouse
                 .run_query_synchronous(query.to_string(), None)
@@ -178,7 +177,7 @@ impl Migration for Migration0020<'_> {
             let random_suffix: String = (0..16)
                 .map(|_| rng.sample(rand::distr::Alphanumeric) as char)
                 .collect();
-            format!("InferenceByEpisodeId_temp0020_{}", random_suffix)
+            format!("InferenceByEpisodeId_temp0020_{random_suffix}")
         } else {
             "InferenceByEpisodeId".to_string()
         };
@@ -194,8 +193,7 @@ impl Migration for Migration0020<'_> {
             )
             ENGINE = ReplacingMergeTree(id_uint)
             ORDER BY (episode_id_uint, id_uint);
-        "#,
-            create_table_name = create_table_name
+        "#
         );
         let _ = self
             .clickhouse
@@ -203,15 +201,12 @@ impl Migration for Migration0020<'_> {
             .await?;
         // If the InferenceByEpisodeId table exists then we need to swap this table in and drop old one.
         if inference_by_episode_id_exists {
-            let query = format!(
-                "EXCHANGE TABLES InferenceByEpisodeId AND {}",
-                create_table_name
-            );
+            let query = format!("EXCHANGE TABLES InferenceByEpisodeId AND {create_table_name}");
             let _ = self
                 .clickhouse
                 .run_query_synchronous(query.to_string(), None)
                 .await?;
-            let query = format!("DROP TABLE IF EXISTS {}", create_table_name);
+            let query = format!("DROP TABLE IF EXISTS {create_table_name}");
             let _ = self
                 .clickhouse
                 .run_query_synchronous(query.to_string(), None)
@@ -260,8 +255,7 @@ impl Migration for Migration0020<'_> {
                     'chat' AS function_type
                 FROM ChatInference
                 {view_where_clause};
-            "#,
-            view_where_clause = view_where_clause
+            "#
         );
         let _ = self.clickhouse.run_query_synchronous(query, None).await?;
 
@@ -279,8 +273,7 @@ impl Migration for Migration0020<'_> {
                     'json' AS function_type
                 FROM JsonInference
                 {view_where_clause};
-            "#,
-            view_where_clause = view_where_clause
+            "#
         );
         let _ = self.clickhouse.run_query_synchronous(query, None).await?;
 
@@ -299,8 +292,7 @@ impl Migration for Migration0020<'_> {
                     'chat' as function_type
                 FROM ChatInference
                 {view_where_clause};
-            "#,
-            view_where_clause = view_where_clause
+            "#
         );
         let _ = self.clickhouse.run_query_synchronous(query, None).await?;
 
@@ -319,8 +311,7 @@ impl Migration for Migration0020<'_> {
                     'json' as function_type
                 FROM JsonInference
                 {view_where_clause};
-            "#,
-            view_where_clause = view_where_clause
+            "#
         );
         let _ = self.clickhouse.run_query_synchronous(query, None).await?;
 
@@ -341,8 +332,7 @@ impl Migration for Migration0020<'_> {
                     'chat' AS function_type
                 FROM ChatInference
                 WHERE UUIDv7ToDateTime(id) < toDateTime(toUnixTimestamp({view_timestamp}));
-            "#,
-                view_timestamp = view_timestamp
+            "#
             );
             self.clickhouse.run_query_synchronous(query, None).await?;
 
@@ -358,8 +348,7 @@ impl Migration for Migration0020<'_> {
                     'json' AS function_type
                 FROM JsonInference
                 WHERE UUIDv7ToDateTime(id) < toDateTime(toUnixTimestamp({view_timestamp}));
-            "#,
-                view_timestamp = view_timestamp
+            "#
             );
             self.clickhouse.run_query_synchronous(query, None).await?;
 
@@ -375,8 +364,7 @@ impl Migration for Migration0020<'_> {
                     'chat' as function_type
                 FROM ChatInference
                 WHERE UUIDv7ToDateTime(id) < toDateTime(toUnixTimestamp({view_timestamp}));
-            "#,
-                view_timestamp = view_timestamp
+            "#
             );
             self.clickhouse.run_query_synchronous(query, None).await?;
 
@@ -392,8 +380,7 @@ impl Migration for Migration0020<'_> {
                     'json' as function_type
                 FROM JsonInference
                 WHERE UUIDv7ToDateTime(id) < toDateTime(toUnixTimestamp({view_timestamp}));
-            "#,
-                view_timestamp = view_timestamp
+            "#
             );
             self.clickhouse.run_query_synchronous(query, None).await?;
         }

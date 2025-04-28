@@ -211,8 +211,7 @@ async fn test_thinking_signature() {
     let mut tensorzero_content_blocks = content_blocks.clone();
     assert!(
         content_blocks.len() == 3,
-        "Unexpected content blocks: {:?}",
-        content_blocks
+        "Unexpected content blocks: {content_blocks:?}"
     );
     let first_block = &content_blocks[0];
     let first_block_type = first_block.get("type").unwrap().as_str().unwrap();
@@ -372,8 +371,7 @@ async fn test_thinking_signature() {
     let content_blocks = response_json.get("content").unwrap().as_array().unwrap();
     assert!(
         content_blocks.len() == 1,
-        "Unexpected content blocks: {:?}",
-        content_blocks
+        "Unexpected content blocks: {content_blocks:?}"
     );
     assert_eq!(content_blocks[0]["type"], "text");
     assert!(
@@ -419,8 +417,7 @@ async fn test_redacted_thinking() {
     let tensorzero_content_blocks = content_blocks.clone();
     assert!(
         content_blocks.len() == 2,
-        "Unexpected content blocks: {:?}",
-        content_blocks
+        "Unexpected content blocks: {content_blocks:?}"
     );
     let first_block = &content_blocks[0];
     let first_block_type = first_block.get("type").unwrap().as_str().unwrap();
@@ -560,8 +557,7 @@ async fn test_redacted_thinking() {
     let content_blocks = response_json.get("content").unwrap().as_array().unwrap();
     assert!(
         content_blocks.len() == 2,
-        "Unexpected content blocks: {:?}",
-        content_blocks
+        "Unexpected content blocks: {content_blocks:?}"
     );
     assert_eq!(content_blocks[1]["type"], "text");
 }

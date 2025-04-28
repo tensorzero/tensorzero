@@ -137,7 +137,7 @@ pub fn tensorzero_derive(input: TokenStream) -> TokenStream {
             }
             Fields::Unnamed(fields) => {
                 let field_idents = fields.unnamed.iter().enumerate().map(|(i, field)| {
-                    syn::Ident::new(&format!("field_{}", i), field.ident.as_ref().map(|i| i.span()).unwrap_or_else(Span::call_site))
+                    syn::Ident::new(&format!("field_{i}"), field.ident.as_ref().map(|i| i.span()).unwrap_or_else(Span::call_site))
                 });
                 let field_idents_clone = field_idents.clone();
                 quote! {
@@ -152,7 +152,7 @@ pub fn tensorzero_derive(input: TokenStream) -> TokenStream {
         }
     });
 
-    let tag_err = format!("TensorZeroDerive: missing tag field `{}`", tag);
+    let tag_err = format!("TensorZeroDerive: missing tag field `{tag}`");
 
     let res = quote! {
         #[derive(::serde::Deserialize)]

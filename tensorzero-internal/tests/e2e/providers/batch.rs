@@ -510,12 +510,12 @@ async fn get_latest_batch_inference(
     let tags = tags.unwrap_or_default();
     let tag_conditions = tags
         .iter()
-        .map(|(k, v)| format!("tags['{}'] = '{}'", k, v))
+        .map(|(k, v)| format!("tags['{k}'] = '{v}'"))
         .collect::<Vec<_>>()
         .join(" AND ");
 
     let tag_filter = if !tags.is_empty() {
-        format!("AND bmi.{}", tag_conditions)
+        format!("AND bmi.{tag_conditions}")
     } else {
         String::new()
     };
@@ -536,15 +536,14 @@ async fn get_latest_batch_inference(
                 br.errors
             FROM BatchRequest br
             INNER JOIN BatchModelInference bmi ON br.batch_id = bmi.batch_id
-            WHERE br.function_name = '{}'
-                AND br.variant_name = '{}'
-                AND br.status = '{}'
-                {}
+            WHERE br.function_name = '{function_name}'
+                AND br.variant_name = '{variant_name}'
+                AND br.status = '{status}'
+                {tag_filter}
             ORDER BY br.timestamp DESC
             LIMIT 1
             FORMAT JSONEachRow
-        "#,
-        function_name, variant_name, status, tag_filter
+        "#
     );
     let response = clickhouse.run_query_synchronous(query, None).await.unwrap();
     if response.is_empty() {
@@ -559,8 +558,7 @@ async fn get_all_batch_inferences(
     batch_id: Uuid,
 ) -> Vec<BatchModelInferenceRow> {
     let query = format!(
-        "SELECT * FROM BatchModelInference WHERE batch_id = '{}' FORMAT JSONEachRow",
-        batch_id,
+        "SELECT * FROM BatchModelInference WHERE batch_id = '{batch_id}' FORMAT JSONEachRow",
     );
     let response = clickhouse.run_query_synchronous(query, None).await.unwrap();
     let rows = response

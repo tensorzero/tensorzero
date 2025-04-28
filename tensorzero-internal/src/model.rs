@@ -1200,8 +1200,7 @@ impl<'de> Deserialize<'de> for CredentialLocation {
             Ok(CredentialLocation::None)
         } else {
             Err(serde::de::Error::custom(format!(
-                "Invalid ApiKeyLocation format: {}",
-                s
+                "Invalid ApiKeyLocation format: {s}"
             )))
         }
     }
@@ -1320,8 +1319,7 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
                         } else {
                             return Err(Error::new(ErrorDetails::ApiKeyMissing {
                                 provider_name: format!(
-                                    "{}: Environment variable {} for credentials path is missing",
-                                    provider_type, env_key
+                                    "{provider_type}: Environment variable {env_key} for credentials path is missing"
                                 ),
                             }));
                         }
@@ -1343,8 +1341,7 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
                         } else {
                             Err(Error::new(ErrorDetails::ApiKeyMissing {
                                 provider_name: format!(
-                                    "{}: Failed to read credentials file - {}",
-                                    provider_type, e
+                                    "{provider_type}: Failed to read credentials file - {e}"
                                 ),
                             }))
                         }
@@ -1366,8 +1363,7 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
                     } else {
                         Err(Error::new(ErrorDetails::ApiKeyMissing {
                             provider_name: format!(
-                                "{}: Failed to read credentials file - {}",
-                                provider_type, e
+                                "{provider_type}: Failed to read credentials file - {e}"
                             ),
                         }))
                     }
@@ -1423,7 +1419,7 @@ impl ShorthandModelConfig for ModelConfig {
             "dummy" => ProviderConfig::Dummy(DummyProvider::new(model_name, None)?),
             _ => {
                 return Err(ErrorDetails::Config {
-                    message: format!("Invalid provider type: {}", provider_type),
+                    message: format!("Invalid provider type: {provider_type}"),
                 }
                 .into());
             }
@@ -2247,8 +2243,7 @@ mod tests {
         for &shorthand in SHORTHAND_MODEL_PREFIXES {
             assert!(
                 RESERVED_MODEL_PREFIXES.contains(&shorthand.to_string()),
-                "Shorthand prefix '{}' is not in RESERVED_MODEL_PREFIXES",
-                shorthand
+                "Shorthand prefix '{shorthand}' is not in RESERVED_MODEL_PREFIXES"
             );
         }
     }
