@@ -30,7 +30,7 @@ impl Migration for Migration0005<'_> {
                     if !exists {
                         return Err(ErrorDetails::ClickHouseMigration {
                             id: "0005".to_string(),
-                            message: format!("Table {} does not exist", table),
+                            message: format!("Table {table} does not exist"),
                         }
                         .into());
                     }
@@ -58,11 +58,10 @@ impl Migration for Migration0005<'_> {
                 r#"SELECT EXISTS(
                     SELECT 1
                     FROM system.columns
-                    WHERE database = '{}'
-                      AND table = '{}'
+                    WHERE database = '{database}'
+                      AND table = '{table}'
                       AND name = 'tags'
-                )"#,
-                database, table
+                )"#
             );
             match self.clickhouse.run_query_synchronous(query, None).await {
                 Err(e) => {

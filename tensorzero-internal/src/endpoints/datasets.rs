@@ -74,15 +74,12 @@ async fn query_demonstration(
         .await?;
     if result.is_empty() {
         return Err(Error::new(ErrorDetails::InvalidRequest {
-            message: format!("No demonstration found for inference `{}`", inference_id),
+            message: format!("No demonstration found for inference `{inference_id}`"),
         }));
     }
     let demonstration: Demonstration = serde_json::from_str(&result).map_err(|e| {
         Error::new(ErrorDetails::Serialization {
-            message: format!(
-                "Failed to deserialize demonstration ClickHouse response: {}",
-                e
-            ),
+            message: format!("Failed to deserialize demonstration ClickHouse response: {e}"),
         })
     })?;
     Ok(demonstration)
@@ -149,14 +146,14 @@ FORMAT JSONEachRow;"#
 
     if result.is_empty() {
         return Err(Error::new(ErrorDetails::InvalidRequest {
-            message: format!("Inference `{}` not found", inference_id),
+            message: format!("Inference `{inference_id}` not found"),
         }));
     }
 
     let inference_data: TaggedInferenceDatabaseInsert =
         serde_json::from_str(&result).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
-                message: format!("Failed to deserialize inference data: {}", e),
+                message: format!("Failed to deserialize inference data: {e}"),
             })
         })?;
     Ok(inference_data)
@@ -180,8 +177,7 @@ async fn insert_from_existing(
                     Some(serde_json::from_str(&demonstration.value).map_err(|e| {
                         Error::new(ErrorDetails::Serialization {
                             message: format!(
-                                "Failed to deserialize JSON demonstration output: {}",
-                                e
+                                "Failed to deserialize JSON demonstration output: {e}"
                             ),
                         })
                     })?)
@@ -218,8 +214,7 @@ async fn insert_from_existing(
                     Some(serde_json::from_str(&demonstration.value).map_err(|e| {
                         Error::new(ErrorDetails::InvalidRequest {
                             message: format!(
-                                "Failed to deserialize chat demonstration output: {}",
-                                e
+                                "Failed to deserialize chat demonstration output: {e}"
                             ),
                         })
                     })?)
@@ -300,7 +295,7 @@ pub async fn update_datapoint_handler(
     };
     let function_data: WithFunctionName = serde_json::from_value(params.clone()).map_err(|e| {
         Error::new(ErrorDetails::InvalidRequest {
-            message: format!("Failed to deserialize `function_name``: {}", e),
+            message: format!("Failed to deserialize `function_name``: {e}"),
         })
     })?;
     let function_config =
@@ -311,7 +306,7 @@ pub async fn update_datapoint_handler(
             let chat: SyntheticChatInferenceDatapoint =
                 serde_json::from_value(params).map_err(|e| {
                     Error::new(ErrorDetails::InvalidRequest {
-                        message: format!("Failed to deserialize chat datapoint: {}", e),
+                        message: format!("Failed to deserialize chat datapoint: {e}"),
                     })
                 })?;
 
@@ -374,7 +369,7 @@ pub async fn update_datapoint_handler(
             let json: SyntheticJsonInferenceDatapoint =
                 serde_json::from_value(params).map_err(|e| {
                     Error::new(ErrorDetails::InvalidRequest {
-                        message: format!("Failed to deserialize JSON datapoint: {}", e),
+                        message: format!("Failed to deserialize JSON datapoint: {e}"),
                     })
                 })?;
             let resolved_input = json.input.clone().resolve(&fetch_context).await?;
@@ -401,7 +396,7 @@ pub async fn update_datapoint_handler(
                 let json_out: JsonInferenceOutput =
                     serde_json::from_value(json_out).map_err(|e| {
                         Error::new(ErrorDetails::Serialization {
-                            message: format!("Failed to deserialize validated JSON output: {}", e),
+                            message: format!("Failed to deserialize validated JSON output: {e}"),
                         })
                     })?;
 
@@ -751,7 +746,7 @@ async fn put_deduped_chat_datapoint(
 ) -> Result<u64, Error> {
     let serialized_datapoint = serde_json::to_string(datapoint).map_err(|e| {
         Error::new(ErrorDetails::Serialization {
-            message: format!("Failed to serialize datapoint: {}", e),
+            message: format!("Failed to serialize datapoint: {e}"),
         })
     })?;
 
@@ -810,7 +805,7 @@ async fn put_deduped_json_datapoint(
 ) -> Result<u64, Error> {
     let serialized_datapoint = serde_json::to_string(datapoint).map_err(|e| {
         Error::new(ErrorDetails::Serialization {
-            message: format!("Failed to serialize datapoint: {}", e),
+            message: format!("Failed to serialize datapoint: {e}"),
         })
     })?;
 

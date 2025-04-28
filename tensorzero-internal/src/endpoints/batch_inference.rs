@@ -454,12 +454,11 @@ pub async fn get_batch_request(
                         raw_response,
                         errors
                     FROM BatchRequest
-                    WHERE batch_id = '{}'
+                    WHERE batch_id = '{batch_id}'
                     ORDER BY timestamp DESC
                     LIMIT 1
                     FORMAT JSONEachRow
-                "#,
-                batch_id
+                "#
             );
             let response = clickhouse.run_query_synchronous(query, None).await?;
             if response.is_empty() {
@@ -938,7 +937,7 @@ pub async fn get_batch_inferences(
     let query = format!(
         "SELECT * FROM BatchModelInference WHERE batch_id = '{}' AND inference_id IN ({}) FORMAT JSONEachRow",
         batch_id,
-        inference_ids.iter().map(|id| format!("'{}'", id)).join(",")
+        inference_ids.iter().map(|id| format!("'{id}'")).join(",")
     );
     let response = clickhouse_connection_info
         .run_query_synchronous(query, None)
@@ -950,7 +949,7 @@ pub async fn get_batch_inferences(
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| {
             Error::new(ErrorDetails::Serialization {
-                message: format!("Failed to deserialize batch model inference row: {}", e),
+                message: format!("Failed to deserialize batch model inference row: {e}"),
             })
         })?;
     Ok(rows)

@@ -36,7 +36,7 @@ pub fn setup_logs(debug: bool, log_format: LogFormat) {
 pub fn setup_metrics() -> Result<PrometheusHandle, Error> {
     PrometheusBuilder::new().install_recorder().map_err(|e| {
         Error::new(ErrorDetails::Observability {
-            message: format!("Failed to install Prometheus exporter: {}", e),
+            message: format!("Failed to install Prometheus exporter: {e}"),
         })
     })
 }

@@ -192,8 +192,7 @@ impl Migration for Migration0021<'_> {
                 FROM ChatInference
                 ARRAY JOIN mapKeys(tags) as key
                 {view_where_clause};
-        "#,
-            view_where_clause = view_where_clause
+        "#
         );
         let _ = self
             .clickhouse
@@ -216,8 +215,7 @@ impl Migration for Migration0021<'_> {
                 FROM JsonInference
                 ARRAY JOIN mapKeys(tags) as key
                 {view_where_clause};
-        "#,
-            view_where_clause = view_where_clause
+        "#
         );
         let _ = self
             .clickhouse
@@ -243,8 +241,7 @@ impl Migration for Migration0021<'_> {
                     FROM ChatInference
                     ARRAY JOIN mapKeys(tags) as key
                     WHERE UUIDv7ToDateTime(id) < toDateTime(toUnixTimestamp({view_timestamp}));
-                "#,
-                    view_timestamp = view_timestamp
+                "#
                 );
                 self.clickhouse.run_query_synchronous(query, None).await
             };
@@ -264,8 +261,7 @@ impl Migration for Migration0021<'_> {
                     FROM JsonInference
                     ARRAY JOIN mapKeys(tags) as key
                     WHERE UUIDv7ToDateTime(id) < toDateTime(toUnixTimestamp({view_timestamp}));
-                "#,
-                    view_timestamp = view_timestamp
+                "#
                 );
                 self.clickhouse.run_query_synchronous(query, None).await
             };
