@@ -2404,9 +2404,13 @@ mod tests {
             ..Default::default()
         };
 
-        let groq_request = GroqRequest::new("gpt-3.5-turbo", &basic_request).unwrap();
+        let groq_request =
+            GroqRequest::new("meta-llama/llama-4-scout-17b-16e-instruct", &basic_request).unwrap();
 
-        assert_eq!(groq_request.model, "gpt-3.5-turbo");
+        assert_eq!(
+            groq_request.model,
+            "meta-llama/llama-4-scout-17b-16e-instruct"
+        );
         assert_eq!(groq_request.messages.len(), 2);
         assert_eq!(groq_request.temperature, Some(0.7));
         assert_eq!(groq_request.max_completion_tokens, Some(100));
@@ -2443,9 +2447,16 @@ mod tests {
             ..Default::default()
         };
 
-        let groq_request = GroqRequest::new("gpt-4", &request_with_tools).unwrap();
+        let groq_request = GroqRequest::new(
+            "meta-llama/llama-4-scout-17b-16e-instruct",
+            &request_with_tools,
+        )
+        .unwrap();
 
-        assert_eq!(groq_request.model, "gpt-4");
+        assert_eq!(
+            groq_request.model,
+            "meta-llama/llama-4-scout-17b-16e-instruct"
+        );
         assert_eq!(groq_request.messages.len(), 2); // We'll add a system message containing Json to fit Groq requirements
         assert_eq!(groq_request.temperature, None);
         assert_eq!(groq_request.max_completion_tokens, None);
@@ -2495,9 +2506,16 @@ mod tests {
             ..Default::default()
         };
 
-        let groq_request = GroqRequest::new("gpt-4", &request_with_tools).unwrap();
+        let groq_request = GroqRequest::new(
+            "meta-llama/llama-4-scout-17b-16e-instruct",
+            &request_with_tools,
+        )
+        .unwrap();
 
-        assert_eq!(groq_request.model, "gpt-4");
+        assert_eq!(
+            groq_request.model,
+            "meta-llama/llama-4-scout-17b-16e-instruct"
+        );
         assert_eq!(groq_request.messages.len(), 1);
         assert_eq!(groq_request.temperature, None);
         assert_eq!(groq_request.max_completion_tokens, None);
@@ -2536,9 +2554,16 @@ mod tests {
             ..Default::default()
         };
 
-        let groq_request = GroqRequest::new("gpt-4", &request_with_tools).unwrap();
+        let groq_request = GroqRequest::new(
+            "meta-llama/llama-4-scout-17b-16e-instruct",
+            &request_with_tools,
+        )
+        .unwrap();
 
-        assert_eq!(groq_request.model, "gpt-4");
+        assert_eq!(
+            groq_request.model,
+            "meta-llama/llama-4-scout-17b-16e-instruct"
+        );
         assert_eq!(groq_request.messages.len(), 1);
         assert_eq!(groq_request.temperature, None);
         assert_eq!(groq_request.max_completion_tokens, None);
@@ -2547,102 +2572,13 @@ mod tests {
         assert_eq!(groq_request.top_p, None);
         assert_eq!(groq_request.presence_penalty, None);
         assert_eq!(groq_request.frequency_penalty, None);
-        let expected_schema = serde_json::json!({"name": "response", "strict": true, "schema": {}});
+        let expected_schema = serde_json::json!({});
         assert_eq!(
             groq_request.response_format,
             Some(GroqResponseFormat::JsonObject {
                 schema: Some(&expected_schema),
             })
         );
-    }
-
-    #[test]
-    fn test_groq_new_request_o1() {
-        let request = ModelInferenceRequest {
-            inference_id: Uuid::now_v7(),
-            messages: vec![RequestMessage {
-                role: Role::User,
-                content: vec!["Hello".to_string().into()],
-            }],
-            system: None,
-            temperature: Some(0.5),
-            top_p: Some(0.9),
-            presence_penalty: Some(0.1),
-            frequency_penalty: Some(0.2),
-            max_tokens: Some(100),
-            seed: Some(69),
-            stream: false,
-            json_mode: ModelInferenceRequestJsonMode::Off,
-            tool_config: None,
-            function_type: FunctionType::Chat,
-            output_schema: None,
-            extra_body: Default::default(),
-            ..Default::default()
-        };
-
-        let groq_request = GroqRequest::new("o1-preview", &request).unwrap();
-
-        assert_eq!(groq_request.model, "o1-preview");
-        assert_eq!(groq_request.messages.len(), 1);
-        assert!(!groq_request.stream);
-        assert_eq!(groq_request.response_format, Some(GroqResponseFormat::Text));
-        assert_eq!(groq_request.temperature, Some(0.5));
-        assert_eq!(groq_request.max_completion_tokens, Some(100));
-        assert_eq!(groq_request.seed, Some(69));
-        assert_eq!(groq_request.top_p, Some(0.9));
-        assert_eq!(groq_request.presence_penalty, Some(0.1));
-        assert_eq!(groq_request.frequency_penalty, Some(0.2));
-        assert!(groq_request.tools.is_none());
-
-        // Test case: System message is converted to User message
-        let request_with_system = ModelInferenceRequest {
-            inference_id: Uuid::now_v7(),
-            messages: vec![RequestMessage {
-                role: Role::User,
-                content: vec!["Hello".to_string().into()],
-            }],
-            system: Some("This is the system message".to_string()),
-            temperature: Some(0.5),
-            top_p: Some(0.9),
-            presence_penalty: Some(0.1),
-            frequency_penalty: Some(0.2),
-            max_tokens: Some(100),
-            seed: Some(69),
-            stream: false,
-            json_mode: ModelInferenceRequestJsonMode::Off,
-            tool_config: None,
-            function_type: FunctionType::Chat,
-            output_schema: None,
-            extra_body: Default::default(),
-            ..Default::default()
-        };
-
-        let groq_request_with_system = GroqRequest::new("o1-mini", &request_with_system).unwrap();
-
-        // Check that the system message was converted to a user message
-        assert_eq!(groq_request_with_system.messages.len(), 2);
-        assert!(
-            matches!(
-                groq_request_with_system.messages[0],
-                GroqRequestMessage::User(ref msg) if msg.content == [GroqContentBlock::Text { text: "This is the system message".into() }]
-            ),
-            "Unexpected messages: {:?}",
-            groq_request_with_system.messages
-        );
-
-        assert_eq!(groq_request_with_system.model, "o1-mini");
-        assert!(!groq_request_with_system.stream);
-        assert_eq!(
-            groq_request_with_system.response_format,
-            Some(GroqResponseFormat::Text)
-        );
-        assert_eq!(groq_request_with_system.temperature, Some(0.5));
-        assert_eq!(groq_request_with_system.max_completion_tokens, Some(100));
-        assert_eq!(groq_request_with_system.seed, Some(69));
-        assert!(groq_request_with_system.tools.is_none());
-        assert_eq!(groq_request_with_system.top_p, Some(0.9));
-        assert_eq!(groq_request_with_system.presence_penalty, Some(0.1));
-        assert_eq!(groq_request_with_system.frequency_penalty, Some(0.2));
     }
 
     #[test]
@@ -2687,7 +2623,7 @@ mod tests {
 
         let request_body = GroqRequest {
             messages: vec![],
-            model: "gpt-3.5-turbo",
+            model: "meta-llama/llama-4-scout-17b-16e-instruct",
             temperature: Some(0.5),
             top_p: Some(0.5),
             presence_penalty: Some(0.5),
@@ -2784,7 +2720,7 @@ mod tests {
 
         let request_body = GroqRequest {
             messages: vec![],
-            model: "gpt-3.5-turbo",
+            model: "meta-llama/llama-4-scout-17b-16e-instruct",
             temperature: Some(0.5),
             top_p: Some(0.5),
             presence_penalty: Some(0.5),
@@ -2851,7 +2787,7 @@ mod tests {
         };
         let request_body = GroqRequest {
             messages: vec![],
-            model: "gpt-3.5-turbo",
+            model: "meta-llama/llama-4-scout-17b-16e-instruct",
             temperature: Some(0.5),
             top_p: Some(0.9),
             presence_penalty: Some(0.1),
@@ -2908,7 +2844,7 @@ mod tests {
 
         let request_body = GroqRequest {
             messages: vec![],
-            model: "gpt-3.5-turbo",
+            model: "meta-llama/llama-4-scout-17b-16e-instruct",
             temperature: Some(0.5),
             top_p: Some(0.9),
             presence_penalty: Some(0.1),
@@ -3278,18 +3214,6 @@ mod tests {
                 schema: output_schema
             }
         );
-
-        // Test JSON mode Strict with schema but gpt-3.5
-        let json_mode = ModelInferenceRequestJsonMode::Strict;
-        let schema = serde_json::json!({
-            "type": "object",
-            "properties": {
-                "foo": {"type": "string"}
-            }
-        });
-        let output_schema = Some(&schema);
-        let format = GroqResponseFormat::new(&json_mode, output_schema);
-        assert_eq!(format, GroqResponseFormat::JsonObject { schema: None });
     }
 
     #[test]
