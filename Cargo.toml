@@ -50,18 +50,17 @@ chrono = { version = "0.4.40", features = ["serde"] }
 [workspace.lints.rust]
 unsafe_code = "forbid"
 
-
 [workspace.lints.clippy]
+dbg_macro = "deny"
 expect_used = "deny"
 panic = "deny"
 print_stderr = "deny"
 print_stdout = "deny"
 todo = "deny"
 unimplemented = "deny"
+uninlined_format_args = "deny"
 unreachable = "deny"
 unwrap_used = "deny"
-dbg_macro = "deny"
-
 
 [profile.performance]
 inherits = "release"
