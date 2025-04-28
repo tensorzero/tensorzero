@@ -242,7 +242,7 @@ pub async fn shutdown_signal() {
     #[cfg(unix)]
     let hangup = async {
         signal::unix::signal(signal::unix::SignalKind::hangup())
-            .expect("Failed to install SIGHUP handler")
+            .expect_pretty("Failed to install SIGHUP handler")
             .recv()
             .await;
     };
