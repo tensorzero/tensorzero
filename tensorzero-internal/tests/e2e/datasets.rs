@@ -42,7 +42,7 @@ async fn test_datapoint_insert_synthetic_chat() {
     let resp_json = resp.json::<Value>().await.unwrap();
 
     if !status.is_success() {
-        panic!("Bad request: {:?}", resp_json);
+        panic!("Bad request: {resp_json:?}");
     }
 
     let id: Uuid = resp_json
@@ -246,7 +246,7 @@ async fn test_datapoint_insert_synthetic_chat_with_tools() {
     // This should fail because the tool call is not in the tool_params
     assert_eq!(status, StatusCode::BAD_REQUEST);
     let err_msg = resp_json.get("error").unwrap().as_str().unwrap();
-    println!("Error: {}", err_msg);
+    println!("Error: {err_msg}");
     assert!(
         err_msg.contains("Demonstration contains invalid tool name"),
         "Unexpected error message: {err_msg}"
@@ -285,7 +285,7 @@ async fn test_datapoint_insert_synthetic_chat_with_tools() {
     // This request is correct
     assert_eq!(status, StatusCode::BAD_REQUEST);
     let err_msg = resp_json.get("error").unwrap().as_str().unwrap();
-    println!("Error: {}", err_msg);
+    println!("Error: {err_msg}");
     assert!(
         err_msg.contains("Demonstration contains invalid tool call arguments"),
         "Unexpected error message: {err_msg}"
@@ -397,7 +397,7 @@ async fn test_datapoint_insert_synthetic_json() {
     let resp_json = resp.json::<Value>().await.unwrap();
 
     if !status.is_success() {
-        panic!("Bad request: {:?}", resp_json);
+        panic!("Bad request: {resp_json:?}");
     }
 
     let id: Uuid = resp_json
@@ -591,7 +591,7 @@ async fn test_datapoint_insert_synthetic_json() {
 
     // Check that the datapoint was not inserted into clickhouse
     let datapoint = select_json_datapoint_clickhouse(&clickhouse, new_datapoint_id).await;
-    println!("datapoint: {:?}", datapoint);
+    println!("datapoint: {datapoint:?}");
     assert!(datapoint.is_none());
     // Let's stale the old datapoint and try again
     stale_datapoint_clickhouse(&clickhouse, datapoint_id).await;
@@ -1694,8 +1694,7 @@ async fn test_datapoint_insert_missing_output_chat() {
     let status = resp.status();
     assert!(
         status.is_success(),
-        "Expected successful response, got: {}",
-        status
+        "Expected successful response, got: {status}"
     );
 
     let resp_json = resp.json::<Value>().await.unwrap();
@@ -1758,8 +1757,7 @@ async fn test_datapoint_insert_null_output_chat() {
     let status = resp.status();
     assert!(
         status.is_success(),
-        "Expected successful response, got: {}",
-        status
+        "Expected successful response, got: {status}"
     );
 
     let resp_json = resp.json::<Value>().await.unwrap();
@@ -1823,8 +1821,7 @@ async fn test_datapoint_insert_missing_output_json() {
     let status = resp.status();
     assert!(
         status.is_success(),
-        "Expected successful response, got: {}",
-        status
+        "Expected successful response, got: {status}"
     );
 
     let resp_json = resp.json::<Value>().await.unwrap();
@@ -1888,8 +1885,7 @@ async fn test_datapoint_insert_null_output_json() {
     let status = resp.status();
     assert!(
         status.is_success(),
-        "Expected successful response, got: {}",
-        status
+        "Expected successful response, got: {status}"
     );
 
     let resp_json = resp.json::<Value>().await.unwrap();

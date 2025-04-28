@@ -1848,7 +1848,7 @@ model_name = "json"
     let good_response = gateway.inference(params.clone()).await.unwrap();
     let InferenceOutput::NonStreaming(InferenceResponse::Chat(good_response)) = good_response
     else {
-        panic!("Expected non-streaming response, got {:?}", good_response);
+        panic!("Expected non-streaming response, got {good_response:?}");
     };
 
     assert_eq!(
@@ -1859,7 +1859,7 @@ model_name = "json"
     // Second request to the flaky judge should fail
     let bad_response = gateway.inference(params).await.unwrap();
     let InferenceOutput::NonStreaming(InferenceResponse::Chat(bad_response)) = bad_response else {
-        panic!("Expected non-streaming response, got {:?}", bad_response);
+        panic!("Expected non-streaming response, got {bad_response:?}");
     };
 
     assert!(
@@ -1914,7 +1914,7 @@ model = "dummy::flaky_model"
     let good_response = gateway.inference(params.clone()).await.unwrap();
     let InferenceOutput::NonStreaming(InferenceResponse::Chat(good_response)) = good_response
     else {
-        panic!("Expected non-streaming response, got {:?}", good_response);
+        panic!("Expected non-streaming response, got {good_response:?}");
     };
 
     assert_eq!(
@@ -1925,7 +1925,7 @@ model = "dummy::flaky_model"
     // Second request to the flaky judge should fail
     let bad_response = gateway.inference(params).await.unwrap();
     let InferenceOutput::NonStreaming(InferenceResponse::Chat(bad_response)) = bad_response else {
-        panic!("Expected non-streaming response, got {:?}", bad_response);
+        panic!("Expected non-streaming response, got {bad_response:?}");
     };
 
     assert!(
