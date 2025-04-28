@@ -63,6 +63,8 @@ pub struct GCPProviderTypeConfig {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(tag = "storage_type", rename_all = "snake_case")]
 pub enum GCPBatchConfigType {
+    // In the future, we'll want to allow explicitly setting 'none' at the model provider level,
+    // to override the global provider-types batch config.
     None,
     CloudStorage(GCPBatchConfigCloudStorage),
 }
