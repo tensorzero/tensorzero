@@ -31,7 +31,7 @@ impl Migration for Migration0008<'_> {
             if !check_table_exists(self.clickhouse, table, "0006").await? {
                 return Err(ErrorDetails::ClickHouseMigration {
                     id: "0008".to_string(),
-                    message: format!("{} table does not exist", table),
+                    message: format!("{table} table does not exist"),
                 }
                 .into());
             }
