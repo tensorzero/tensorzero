@@ -10,9 +10,11 @@ use tensorzero::ClientInputMessage;
 use tensorzero::ClientInputMessageContent;
 use tensorzero_internal::cache::CacheEnabledMode;
 use tensorzero_internal::cache::CacheOptions;
+use tensorzero_internal::config_parser::ProviderTypesConfig;
 use tensorzero_internal::embeddings::EmbeddingModelConfig;
 #[allow(unused)]
 use tensorzero_internal::embeddings::EmbeddingProvider;
+use tensorzero_internal::embeddings::UninitializedEmbeddingProviderConfig;
 use tensorzero_internal::endpoints::inference::InferenceClients;
 use tensorzero_internal::{
     embeddings::{EmbeddingProviderConfig, EmbeddingRequest},
@@ -1085,8 +1087,11 @@ async fn test_embedding_request() {
     type = "openai"
     model_name = "text-embedding-3-small"
     "#;
-    let provider_config: EmbeddingProviderConfig = toml::from_str(provider_config_serialized)
-        .expect("Failed to deserialize EmbeddingProviderConfig");
+    let provider_config =
+        toml::from_str::<UninitializedEmbeddingProviderConfig>(provider_config_serialized)
+            .expect("Failed to deserialize EmbeddingProviderConfig")
+            .load(&ProviderTypesConfig::default())
+            .unwrap();
     assert!(matches!(
         provider_config,
         EmbeddingProviderConfig::OpenAI(_)
@@ -1198,8 +1203,11 @@ async fn test_embedding_sanity_check() {
     type = "openai"
     model_name = "text-embedding-3-small"
     "#;
-    let provider_config: EmbeddingProviderConfig = toml::from_str(provider_config_serialized)
-        .expect("Failed to deserialize EmbeddingProviderConfig");
+    let provider_config =
+        toml::from_str::<UninitializedEmbeddingProviderConfig>(provider_config_serialized)
+            .expect("Failed to deserialize EmbeddingProviderConfig")
+            .load(&ProviderTypesConfig::default())
+            .unwrap();
     let client = Client::new();
     let embedding_request_a = EmbeddingRequest {
         input: "Joe Biden is the president of the United States".to_string(),

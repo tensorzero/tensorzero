@@ -4,7 +4,7 @@ use serde::Deserialize;
 
 use crate::{
     error::{Error, ErrorDetails},
-    model::ProviderConfigHelper,
+    model::UninitializedProviderConfig,
 };
 use lazy_static::lazy_static;
 use strum::VariantNames;
@@ -13,7 +13,7 @@ use strum::VariantNames;
 // currently supports them.
 lazy_static! {
     pub static ref RESERVED_MODEL_PREFIXES: Vec<String> = {
-        let mut prefixes: Vec<String> = ProviderConfigHelper::VARIANTS
+        let mut prefixes: Vec<String> = UninitializedProviderConfig::VARIANTS
             .iter()
             .map(|&v| format!("{v}::"))
             .collect();

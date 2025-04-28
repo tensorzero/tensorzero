@@ -2714,6 +2714,7 @@ dependencies = [
  "rand 0.8.5",
  "reqwest",
  "ring",
+ "rustls-pemfile",
  "serde",
  "serde_json",
  "serde_urlencoded",
