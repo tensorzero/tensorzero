@@ -172,7 +172,7 @@ async fn main() -> Result<()> {
     }
     #[allow(clippy::print_stdout)]
     {
-        println!("Number of feedbacks sent: {}", num_feedbacks_sent);
+        println!("Number of feedbacks sent: {num_feedbacks_sent}");
     }
     Ok(())
 }
