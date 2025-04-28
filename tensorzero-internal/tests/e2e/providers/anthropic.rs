@@ -81,12 +81,20 @@ async fn get_providers() -> E2ETestProviders {
         },
         E2ETestProvider {
             supports_batch_inference: false,
-            variant_name: "anthropic-default".to_string(),
+            variant_name: "anthropic-strict".to_string(),
             model_name: "claude-3-haiku-20240307-anthropic".into(),
             model_provider_name: "anthropic".into(),
             credentials: HashMap::new(),
         },
     ];
+
+    let json_mode_off_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "anthropic_json_mode_off".to_string(),
+        model_name: "claude-3-haiku-20240307-anthropic".into(),
+        model_provider_name: "anthropic".into(),
+        credentials: HashMap::new(),
+    }];
 
     let shorthand_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
@@ -108,6 +116,7 @@ async fn get_providers() -> E2ETestProviders {
         dynamic_tool_use_inference: standard_providers.clone(),
         parallel_tool_use_inference: standard_providers.clone(),
         json_mode_inference: json_providers.clone(),
+        json_mode_off_inference: json_mode_off_providers.clone(),
         image_inference: image_providers,
 
         shorthand_inference: shorthand_providers.clone(),
@@ -202,8 +211,7 @@ async fn test_thinking_signature() {
     let mut tensorzero_content_blocks = content_blocks.clone();
     assert!(
         content_blocks.len() == 3,
-        "Unexpected content blocks: {:?}",
-        content_blocks
+        "Unexpected content blocks: {content_blocks:?}"
     );
     let first_block = &content_blocks[0];
     let first_block_type = first_block.get("type").unwrap().as_str().unwrap();
@@ -363,8 +371,7 @@ async fn test_thinking_signature() {
     let content_blocks = response_json.get("content").unwrap().as_array().unwrap();
     assert!(
         content_blocks.len() == 1,
-        "Unexpected content blocks: {:?}",
-        content_blocks
+        "Unexpected content blocks: {content_blocks:?}"
     );
     assert_eq!(content_blocks[0]["type"], "text");
     assert!(
@@ -410,8 +417,7 @@ async fn test_redacted_thinking() {
     let tensorzero_content_blocks = content_blocks.clone();
     assert!(
         content_blocks.len() == 2,
-        "Unexpected content blocks: {:?}",
-        content_blocks
+        "Unexpected content blocks: {content_blocks:?}"
     );
     let first_block = &content_blocks[0];
     let first_block_type = first_block.get("type").unwrap().as_str().unwrap();
@@ -551,8 +557,7 @@ async fn test_redacted_thinking() {
     let content_blocks = response_json.get("content").unwrap().as_array().unwrap();
     assert!(
         content_blocks.len() == 2,
-        "Unexpected content blocks: {:?}",
-        content_blocks
+        "Unexpected content blocks: {content_blocks:?}"
     );
     assert_eq!(content_blocks[1]["type"], "text");
 }

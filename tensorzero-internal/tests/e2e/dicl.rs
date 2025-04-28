@@ -54,7 +54,7 @@ async fn test_dicl_reject_unknown_content_block() {
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "value": "What is the name of the capital city of Japan?"},
+                        {"type": "text", "text": "What is the name of the capital city of Japan?"},
                         {"type": "unknown", "model_provider_name": "tensorzero::model_name::gpt-4o-mini-2024-07-18::provider_name::openai", "data": {"type": "text", "text": "My extra openai text"}}
                     ]
                 }
@@ -100,7 +100,7 @@ async fn test_dicl_reject_image_content_block() {
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "value": "What is the name of the capital city of Japan?"},
+                        {"type": "text", "text": "What is the name of the capital city of Japan?"},
                         {"type": "image", "mime_type": "image/jpeg", "data": "abc"}
                     ]
                 }
@@ -297,7 +297,7 @@ pub async fn test_dicl_inference_request_no_examples(dicl_variant_name: &str) {
                 assert!(model_inference.get("output_tokens").unwrap().is_null());
             }
             _ => {
-                panic!("Unexpected model: {}", model_name);
+                panic!("Unexpected model: {model_name}");
             }
         }
         let model_inference_id = model_inference.get("id").unwrap().as_str().unwrap();
@@ -404,8 +404,7 @@ pub async fn test_dicl_inference_request_simple() {
     let function_name = "basic_test";
     // Delete any existing examples for this function and variant
     let delete_query = format!(
-        "ALTER TABLE DynamicInContextLearningExample DELETE WHERE function_name = '{}' AND variant_name = '{}'",
-            function_name, variant_name
+        "ALTER TABLE DynamicInContextLearningExample DELETE WHERE function_name = '{function_name}' AND variant_name = '{variant_name}'"
         );
     clickhouse
         .run_query_synchronous(delete_query, None)
@@ -693,7 +692,7 @@ pub async fn test_dicl_inference_request_simple() {
                 assert_eq!(output.len(), 0);
             }
             _ => {
-                panic!("Unexpected model: {}", model_name);
+                panic!("Unexpected model: {model_name}");
             }
         }
         let model_inference_id = model_inference.get("id").unwrap().as_str().unwrap();
@@ -936,7 +935,7 @@ pub async fn test_dicl_inference_request_simple() {
                 assert_eq!(output.len(), 0);
             }
             _ => {
-                panic!("Unexpected model: {}", model_name);
+                panic!("Unexpected model: {model_name}");
             }
         }
         let model_inference_id = model_inference.get("id").unwrap().as_str().unwrap();
@@ -985,8 +984,7 @@ async fn test_dicl_json_request() {
     let function_name = "json_success";
     // Delete any existing examples for this function and variant
     let delete_query = format!(
-        "ALTER TABLE DynamicInContextLearningExample DELETE WHERE function_name = '{}' AND variant_name = '{}'",
-            function_name, variant_name
+        "ALTER TABLE DynamicInContextLearningExample DELETE WHERE function_name = '{function_name}' AND variant_name = '{variant_name}'"
         );
     clickhouse
         .run_query_synchronous(delete_query, None)
@@ -1103,7 +1101,7 @@ async fn test_dicl_json_request() {
                "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": {"country": "Brazil"}}]
+                    "content": [{"type": "text", "arguments": {"country": "Brazil"}}]
                 }
             ]},
         "stream": false,
@@ -1263,7 +1261,7 @@ async fn test_dicl_json_request() {
                 assert_eq!(output.len(), 0);
             }
             _ => {
-                panic!("Unexpected model: {}", model_name);
+                panic!("Unexpected model: {model_name}");
             }
         }
         let model_inference_id = model_inference.get("id").unwrap().as_str().unwrap();

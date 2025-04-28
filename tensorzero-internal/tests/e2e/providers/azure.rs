@@ -65,14 +65,15 @@ async fn get_providers() -> E2ETestProviders {
             model_provider_name: "azure".into(),
             credentials: HashMap::new(),
         },
-        E2ETestProvider {
-            supports_batch_inference: false,
-            variant_name: "azure-default".to_string(),
-            model_name: "gpt-4o-mini-azure".into(),
-            model_provider_name: "azure".into(),
-            credentials: HashMap::new(),
-        },
     ];
+
+    let json_mode_off_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "azure_json_mode_off".to_string(),
+        model_name: "gpt-4o-mini-azure".into(),
+        model_provider_name: "azure".into(),
+        credentials: HashMap::new(),
+    }];
 
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
@@ -86,6 +87,7 @@ async fn get_providers() -> E2ETestProviders {
         dynamic_tool_use_inference: standard_providers.clone(),
         parallel_tool_use_inference: vec![],
         json_mode_inference: json_providers.clone(),
+        json_mode_off_inference: json_mode_off_providers.clone(),
         image_inference: vec![],
 
         shorthand_inference: vec![],

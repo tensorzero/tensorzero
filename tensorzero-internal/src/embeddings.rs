@@ -44,7 +44,7 @@ impl ShorthandModelConfig for EmbeddingModelConfig {
             "dummy" => EmbeddingProviderConfig::Dummy(DummyProvider::new(model_name, None)?),
             _ => {
                 return Err(Error::new(ErrorDetails::Config {
-                    message: format!("Invalid provider type: {}", provider_type),
+                    message: format!("Invalid provider type: {provider_type}"),
                 }));
             }
         };
@@ -296,8 +296,7 @@ impl<'de> Deserialize<'de> for EmbeddingProviderConfig {
             ProviderConfig::OpenAI(provider) => EmbeddingProviderConfig::OpenAI(provider),
             _ => {
                 return Err(serde::de::Error::custom(format!(
-                    "Unsupported provider config: {:?}",
-                    provider_config
+                    "Unsupported provider config: {provider_config:?}"
                 )));
             }
         })

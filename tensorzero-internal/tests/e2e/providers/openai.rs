@@ -132,15 +132,25 @@ async fn get_providers() -> E2ETestProviders {
         },
         E2ETestProvider {
             supports_batch_inference: true,
-            variant_name: "openai-default".to_string(),
+            variant_name: "openai-cot".to_string(),
+            model_name: "openai::gpt-4.1-nano-2025-04-14".into(),
+            model_provider_name: "openai".into(),
+            credentials: HashMap::new(),
+        },
+    ];
+
+    let json_mode_off_providers = vec![
+        E2ETestProvider {
+            supports_batch_inference: true,
+            variant_name: "openai_json_mode_off".to_string(),
             model_name: "gpt-4o-mini-2024-07-18".into(),
             model_provider_name: "openai".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
             supports_batch_inference: true,
-            variant_name: "openai-cot".to_string(),
-            model_name: "openai::gpt-4.1-nano-2025-04-14".into(),
+            variant_name: "openai_o1_json_mode_off".to_string(),
+            model_name: "o1-2024-12-17".into(),
             model_provider_name: "openai".into(),
             credentials: HashMap::new(),
         },
@@ -166,6 +176,7 @@ async fn get_providers() -> E2ETestProviders {
         dynamic_tool_use_inference: standard_providers.clone(),
         parallel_tool_use_inference: standard_without_o1.clone(),
         json_mode_inference: json_providers.clone(),
+        json_mode_off_inference: json_mode_off_providers.clone(),
         image_inference: image_providers.clone(),
 
         shorthand_inference: shorthand_providers.clone(),
@@ -973,7 +984,7 @@ async fn test_o3_mini_inference_with_reasoning_effort() {
     // Check Response is OK, then fields in order
     // assert_eq!(response.status(), StatusCode::OK);
     let response_json = response.json::<Value>().await.unwrap();
-    println!("Response JSON: {:?}", response_json);
+    println!("Response JSON: {response_json:?}");
 
     let content_blocks = response_json.get("content").unwrap().as_array().unwrap();
     assert!(content_blocks.len() == 1);
@@ -1125,8 +1136,7 @@ async fn test_embedding_request() {
     // Assert that the norm is approximately 1 (allowing for small floating-point errors)
     assert!(
         (norm - 1.0).abs() < 1e-6,
-        "The L2 norm of the embedding should be 1, but it is {}",
-        norm
+        "The L2 norm of the embedding should be 1, but it is {norm}"
     );
     // Check that the timestamp in created is within 1 second of the current time
     let created = response.created;
@@ -1136,8 +1146,7 @@ async fn test_embedding_request() {
         .as_secs() as i64;
     assert!(
         (created as i64 - now).abs() <= 1,
-        "The created timestamp should be within 1 second of the current time, but it is {}",
-        created
+        "The created timestamp should be within 1 second of the current time, but it is {created}"
     );
     let parsed_raw_response: Value = serde_json::from_str(&response.raw_response).unwrap();
     assert!(
