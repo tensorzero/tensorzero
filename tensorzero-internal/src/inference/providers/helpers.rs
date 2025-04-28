@@ -11,7 +11,8 @@ use crate::{
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
     inference::types::{
         batch::{ProviderBatchInferenceOutput, ProviderBatchInferenceResponse},
-        extra_body::{ExtraHeader, FullExtraBodyConfig, InferenceExtraBody},
+        extra_body::{FullExtraBodyConfig, InferenceExtraBody},
+        extra_headers::{ExtraHeader, FullExtraHeadersConfig, InferenceExtraHeader},
         ProviderInferenceResponseChunk,
     },
     model::{fully_qualified_name, ModelProviderRequestInfo},
@@ -98,6 +99,7 @@ where
 #[must_use = "Extra headers must be inserted into request builder"]
 pub fn inject_extra_request_data(
     config: &FullExtraBodyConfig,
+    extra_headers_config: &FullExtraHeadersConfig,
     model_provider_data: impl Into<ModelProviderRequestInfo>,
     model_name: &str,
     body: &mut serde_json::Value,
@@ -154,9 +156,12 @@ pub fn inject_extra_request_data(
     // Write the variant extra_headers first, then the model_provider extra_headers.
     // This way, the model_provider extra_headers will overwrite keys in the
     // variant extra_headers.
-    for extra_headers in [&config.variant_extra_headers, &model_provider.extra_headers]
-        .into_iter()
-        .flatten()
+    for extra_headers in [
+        &extra_headers_config.variant_extra_headers,
+        &model_provider.extra_headers,
+    ]
+    .into_iter()
+    .flatten()
     {
         for ExtraHeader { name, value } in &extra_headers.data {
             headers.insert(
@@ -177,6 +182,64 @@ pub fn inject_extra_request_data(
                     })
                 })?,
             );
+        }
+    }
+
+    // Finally, write the inference-level extra_headers information. This can overwrite header set from the config-level extra_headers.
+    for extra_header in &extra_headers_config.inference_extra_headers.data {
+        match extra_header {
+            InferenceExtraHeader::Variant {
+                // We're iterating over a 'InferenceExtraHeader', so we've already removed any non-matching variant names.
+                // Any remaining `InferenceExtraHeader::Variant` values should be applied to the current request
+                variant_name: _,
+                name,
+                value,
+            } => {
+                headers.insert(
+                    http::header::HeaderName::from_bytes(name.as_bytes()).map_err(|e| {
+                        Error::new(ErrorDetails::Serialization {
+                            message: format!(
+                                "Invalid header name `{name}`: {}",
+                                DisplayOrDebugGateway::new(e)
+                            ),
+                        })
+                    })?,
+                    http::header::HeaderValue::from_bytes(value.as_bytes()).map_err(|e| {
+                        Error::new(ErrorDetails::Serialization {
+                            message: format!(
+                                "Invalid header value `{value}`: {}",
+                                DisplayOrDebugGateway::new(e)
+                            ),
+                        })
+                    })?,
+                );
+            }
+            InferenceExtraHeader::Provider {
+                model_provider_name,
+                name,
+                value,
+            } => {
+                if *model_provider_name == expected_provider_name {
+                    headers.insert(
+                        http::header::HeaderName::from_bytes(name.as_bytes()).map_err(|e| {
+                            Error::new(ErrorDetails::Serialization {
+                                message: format!(
+                                    "Invalid header name `{name}`: {}",
+                                    DisplayOrDebugGateway::new(e)
+                                ),
+                            })
+                        })?,
+                        http::header::HeaderValue::from_bytes(value.as_bytes()).map_err(|e| {
+                            Error::new(ErrorDetails::Serialization {
+                                message: format!(
+                                    "Invalid header value `{value}`: {}",
+                                    DisplayOrDebugGateway::new(e)
+                                ),
+                            })
+                        })?,
+                    );
+                }
+            }
         }
     }
 
@@ -327,9 +390,8 @@ mod tests {
     use futures::{stream, StreamExt};
 
     use crate::inference::types::{
-        extra_body::{
-            ExtraBodyConfig, ExtraBodyReplacement, ExtraHeadersConfig, FilteredInferenceExtraBody,
-        },
+        extra_body::{ExtraBodyConfig, ExtraBodyReplacement, FilteredInferenceExtraBody},
+        extra_headers::{ExtraHeadersConfig, FilteredInferenceExtraHeaders, InferenceExtraHeader},
         ContentBlockChunk, TextChunk,
     };
 
@@ -399,6 +461,7 @@ mod tests {
         let mut body = serde_json::json!({});
         inject_extra_request_data(
             &Default::default(),
+            &Default::default(),
             ModelProviderRequestInfo {
                 provider_name: "dummy_provider".into(),
                 extra_body: Default::default(),
@@ -414,15 +477,24 @@ mod tests {
     #[test]
     fn test_inject_no_matches() {
         let mut body = serde_json::json!({});
-        inject_extra_request_data(
+        let headers = inject_extra_request_data(
             &FullExtraBodyConfig {
-                variant_extra_headers: None,
                 extra_body: Some(ExtraBodyConfig { data: vec![] }),
                 inference_extra_body: FilteredInferenceExtraBody {
                     data: vec![InferenceExtraBody::Provider {
                         model_provider_name: "wrong_provider".to_string(),
                         pointer: "/my_key".to_string(),
                         value: "My Value".to_string().into(),
+                    }],
+                },
+            },
+            &FullExtraHeadersConfig {
+                variant_extra_headers: Some(ExtraHeadersConfig { data: vec![] }),
+                inference_extra_headers: FilteredInferenceExtraHeaders {
+                    data: vec![InferenceExtraHeader::Provider {
+                        model_provider_name: "wrong_provider".to_string(),
+                        name: "X-My-Header".to_string(),
+                        value: "My Value".to_string(),
                     }],
                 },
             },
@@ -436,11 +508,13 @@ mod tests {
         )
         .unwrap();
         assert_eq!(body, serde_json::json!({}));
+        assert_eq!(headers.len(), 0);
     }
 
     #[test]
     fn test_inject_to_non_map() {
         let err = inject_extra_request_data(
+            &Default::default(),
             &Default::default(),
             ModelProviderRequestInfo {
                 provider_name: "dummy_provider".into(),
@@ -461,11 +535,16 @@ mod tests {
     #[test]
     fn test_inject_headers() {
         let headers = inject_extra_request_data(
-            &FullExtraBodyConfig {
+            &Default::default(),
+            &FullExtraHeadersConfig {
                 variant_extra_headers: Some(ExtraHeadersConfig {
                     data: vec![
                         ExtraHeader {
                             name: "X-My-Overridden".to_string(),
+                            value: "My variant value".to_string(),
+                        },
+                        ExtraHeader {
+                            name: "X-My-Overridden-Inference".to_string(),
                             value: "My variant value".to_string(),
                         },
                         ExtraHeader {
@@ -474,8 +553,22 @@ mod tests {
                         },
                     ],
                 }),
-                extra_body: None,
-                inference_extra_body: FilteredInferenceExtraBody { data: vec![] },
+                inference_extra_headers: FilteredInferenceExtraHeaders {
+                    data: vec![
+                        InferenceExtraHeader::Provider {
+                            model_provider_name:
+                                "tensorzero::model_name::dummy_model::provider_name::dummy_provider"
+                                    .to_string(),
+                            name: "X-My-Inference".to_string(),
+                            value: "My inference header value".to_string(),
+                        },
+                        InferenceExtraHeader::Variant {
+                            variant_name: "dummy_variant".to_string(),
+                            name: "X-My-Overridden-Inference".to_string(),
+                            value: "My inference value".to_string(),
+                        },
+                    ],
+                },
             },
             ModelProviderRequestInfo {
                 provider_name: "dummy_provider".into(),
@@ -484,6 +577,10 @@ mod tests {
                     data: vec![
                         ExtraHeader {
                             name: "X-My-Overridden".to_string(),
+                            value: "My model provider value".to_string(),
+                        },
+                        ExtraHeader {
+                            name: "X-My-Overridden-Inference".to_string(),
                             value: "My model provider value".to_string(),
                         },
                         ExtraHeader {
@@ -506,6 +603,14 @@ mod tests {
             headers.get("X-My-ModelProvider").unwrap(),
             "My model provider header"
         );
+        assert_eq!(
+            headers.get("X-My-Inference").unwrap(),
+            "My inference header value"
+        );
+        assert_eq!(
+            headers.get("X-My-Overridden-Inference").unwrap(),
+            "My inference value"
+        );
     }
 
     #[test]
@@ -518,7 +623,6 @@ mod tests {
         });
         inject_extra_request_data(
             &FullExtraBodyConfig {
-                variant_extra_headers: None,
                 extra_body: Some(ExtraBodyConfig {
                     data: vec![
                         ExtraBodyReplacement {
@@ -543,6 +647,7 @@ mod tests {
                     }],
                 },
             },
+            &Default::default(),
             ModelProviderRequestInfo {
                 provider_name: "dummy_provider".into(),
                 extra_body: Default::default(),
@@ -579,7 +684,6 @@ mod tests {
         });
         inject_extra_request_data(
             &FullExtraBodyConfig {
-                variant_extra_headers: None,
                 extra_body: Some(ExtraBodyConfig {
                     data: vec![
                         ExtraBodyReplacement {
@@ -606,6 +710,7 @@ mod tests {
                     }],
                 },
             },
+            &Default::default(),
             ModelProviderRequestInfo {
                 provider_name: "dummy_provider".into(),
                 extra_body: Some(ExtraBodyConfig {

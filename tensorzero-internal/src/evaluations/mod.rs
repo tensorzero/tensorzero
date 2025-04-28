@@ -15,7 +15,7 @@ use crate::{
     },
     error::{Error, ErrorDetails},
     function::{FunctionConfig, FunctionConfigJson},
-    inference::types::extra_body::{ExtraBodyConfig, ExtraHeadersConfig},
+    inference::types::{extra_body::ExtraBodyConfig, extra_headers::ExtraHeadersConfig},
     jsonschema_util::StaticJSONSchema,
     tool::create_implicit_tool_call_config,
     variant::{

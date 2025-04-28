@@ -480,6 +480,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
         let model_provider_request = ModelProviderRequest {
@@ -504,6 +505,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
         let model_provider_request = ModelProviderRequest {
@@ -530,6 +532,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
         let model_provider_request = ModelProviderRequest {

@@ -28,6 +28,7 @@ use crate::function::FunctionConfig;
 use crate::function::{sample_variant, FunctionConfigChat};
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
+use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use crate::inference::types::resolved_input::ImageWithPath;
 use crate::inference::types::storage::StoragePath;
 use crate::inference::types::{
@@ -102,6 +103,8 @@ pub struct Params {
     pub include_original_response: bool,
     #[serde(default)]
     pub extra_body: UnfilteredInferenceExtraBody,
+    #[serde(default)]
+    pub extra_headers: UnfilteredInferenceExtraHeaders,
 }
 
 #[derive(Clone, Debug)]
@@ -125,6 +128,7 @@ struct InferenceMetadata {
     pub dynamic_output_schema: Option<DynamicJSONSchema>,
     pub cached: bool,
     pub extra_body: UnfilteredInferenceExtraBody,
+    pub extra_headers: UnfilteredInferenceExtraHeaders,
 }
 
 pub type InferenceCredentials = HashMap<String, SecretString>;
@@ -292,6 +296,7 @@ pub async fn inference(
         },
         extra_cache_key: None,
         extra_body: Default::default(),
+        extra_headers: Default::default(),
     };
     let inference_clients = InferenceClients {
         http_client,
@@ -324,6 +329,7 @@ pub async fn inference(
 
         inference_config.variant_name = Some(variant_name);
         inference_config.extra_body = params.extra_body.clone();
+        inference_config.extra_headers = params.extra_headers.clone();
         if stream {
             let result = variant
                 .infer_stream(
@@ -352,6 +358,7 @@ pub async fn inference(
             };
 
             let extra_body = inference_config.extra_body.clone();
+            let extra_headers = inference_config.extra_headers.clone();
 
             // Create InferenceMetadata for a streaming inference
             let inference_metadata = InferenceMetadata {
@@ -374,6 +381,7 @@ pub async fn inference(
                 dynamic_output_schema: output_schema,
                 cached: model_used_info.cached,
                 extra_body,
+                extra_headers,
             };
 
             let stream = create_stream(
@@ -413,6 +421,7 @@ pub async fn inference(
             if !dryrun {
                 // Spawn a thread for a trailing write to ClickHouse so that it doesn't block the response
                 let extra_body = inference_config.extra_body.clone();
+                let extra_headers = inference_config.extra_headers.clone();
                 let result_to_write = result.clone();
                 let write_metadata = InferenceDatabaseInsertMetadata {
                     function_name: function_name.to_string(),
@@ -422,6 +431,7 @@ pub async fn inference(
                     processing_time: Some(start_time.elapsed()),
                     tags: params.tags,
                     extra_body,
+                    extra_headers,
                 };
 
                 let async_writes = config.gateway.observability.async_writes;
@@ -572,6 +582,7 @@ fn create_stream(
                 dynamic_output_schema,
                 cached,
                 extra_body,
+                extra_headers,
             } = metadata;
 
             let config = config.clone();
@@ -596,6 +607,7 @@ fn create_stream(
                     tool_config: tool_config.as_ref(),
                     cached,
                     extra_body: extra_body.clone(),
+                    extra_headers: extra_headers.clone(),
                 };
                 let inference_response: Result<InferenceResult, Error> =
                     collect_chunks(collect_chunks_args).await;
@@ -613,6 +625,7 @@ fn create_stream(
                         processing_time: Some(start_time.elapsed()),
                         tags,
                         extra_body,
+                        extra_headers,
                     };
                     let config = config.clone();
 
@@ -688,6 +701,7 @@ pub struct InferenceDatabaseInsertMetadata {
     pub processing_time: Option<Duration>,
     pub tags: HashMap<String, String>,
     pub extra_body: UnfilteredInferenceExtraBody,
+    pub extra_headers: UnfilteredInferenceExtraHeaders,
 }
 
 async fn write_image(
@@ -1131,6 +1145,7 @@ mod tests {
             dynamic_output_schema: None,
             cached: false,
             extra_body: Default::default(),
+            extra_headers: Default::default(),
         };
 
         let result = prepare_response_chunk(&inference_metadata, chunk).unwrap();
@@ -1185,6 +1200,7 @@ mod tests {
             dynamic_output_schema: None,
             cached: false,
             extra_body: Default::default(),
+            extra_headers: Default::default(),
         };
 
         let result = prepare_response_chunk(&inference_metadata, chunk).unwrap();

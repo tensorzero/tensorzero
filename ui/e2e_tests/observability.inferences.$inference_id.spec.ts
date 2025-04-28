@@ -253,6 +253,8 @@ test("should be able to add chat demonstration feedback via the inference page",
   );
   // Click on the Add feedback button
   await page.getByText("Add feedback").click();
+  // Sleep for a little bit to ensure the dialog is open
+  await page.waitForTimeout(500);
 
   // Click "Select a metric"
   await page.getByText("Select a metric").click();
