@@ -250,10 +250,7 @@ pub async fn select_feedback_clickhouse(
 ) -> Option<Value> {
     clickhouse_flush_async_insert(clickhouse_connection_info).await;
 
-    let query = format!(
-        "SELECT * FROM {} WHERE id = '{}' FORMAT JSONEachRow",
-        table_name, feedback_id
-    );
+    let query = format!("SELECT * FROM {table_name} WHERE id = '{feedback_id}' FORMAT JSONEachRow");
 
     let text = clickhouse_connection_info
         .run_query_synchronous(query, None)
@@ -273,14 +270,12 @@ pub async fn select_feedback_by_target_id_clickhouse(
     let query = match metric_name {
         Some(metric_name) => {
             format!(
-                "SELECT * FROM {} WHERE target_id = '{}' AND metric_name = '{}' FORMAT JSONEachRow",
-                table_name, target_id, metric_name
+                "SELECT * FROM {table_name} WHERE target_id = '{target_id}' AND metric_name = '{metric_name}' FORMAT JSONEachRow"
             )
         }
-        None => format!(
-            "SELECT * FROM {} WHERE target_id = '{}' FORMAT JSONEachRow",
-            table_name, target_id
-        ),
+        None => {
+            format!("SELECT * FROM {table_name} WHERE target_id = '{target_id}' FORMAT JSONEachRow")
+        }
     };
 
     let text = clickhouse_connection_info
@@ -328,8 +323,7 @@ pub async fn stale_datapoint_clickhouse(
             now64() as staled_at,
             now64() as updated_at
         FROM ChatInferenceDatapoint FINAL
-        WHERE id = '{}'",
-        datapoint_id
+        WHERE id = '{datapoint_id}'"
     );
 
     // Execute the query and ignore errors (in case the datapoint doesn't exist in this table)
@@ -369,8 +363,7 @@ pub async fn stale_datapoint_clickhouse(
             now64() as staled_at,
             now64() as updated_at
         FROM JsonInferenceDatapoint FINAL
-        WHERE id = '{}'",
-        datapoint_id
+        WHERE id = '{datapoint_id}'"
     );
 
     clickhouse_flush_async_insert(clickhouse_connection_info).await;
@@ -390,8 +383,7 @@ pub async fn select_feedback_tags_clickhouse(
     clickhouse_flush_async_insert(clickhouse_connection_info).await;
 
     let query = format!(
-            "SELECT * FROM FeedbackTag WHERE metric_name = '{}' AND key = '{}' AND value = '{}' FORMAT JSONEachRow",
-            metric_name, tag_key, tag_value
+            "SELECT * FROM FeedbackTag WHERE metric_name = '{metric_name}' AND key = '{tag_key}' AND value = '{tag_value}' FORMAT JSONEachRow"
         );
 
     let text = clickhouse_connection_info

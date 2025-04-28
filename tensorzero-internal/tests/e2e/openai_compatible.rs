@@ -59,7 +59,7 @@ async fn test_openai_compatible_route_with_function_name_asmodel(model: &str) {
     // Check Response is OK, then fields in order
     assert_eq!(response.status(), StatusCode::OK);
     let response_json = response.json::<Value>().await.unwrap();
-    println!("response: {:?}", response_json);
+    println!("response: {response_json:?}");
     let choices = response_json.get("choices").unwrap().as_array().unwrap();
     assert!(choices.len() == 1);
     let choice = choices.first().unwrap();
@@ -135,7 +135,7 @@ async fn test_openai_compatible_route_with_function_name_asmodel(model: &str) {
     let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
-    println!("ModelInference result: {:?}", result);
+    println!("ModelInference result: {result:?}");
     let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
@@ -216,8 +216,7 @@ async fn test_openai_compatible_matches_response_fields() {
     let missing_keys: Vec<_> = openai_keys.difference(&tensorzero_keys).collect();
     assert!(
         missing_keys.is_empty(),
-        "Missing keys in TensorZero response: {:?}",
-        missing_keys
+        "Missing keys in TensorZero response: {missing_keys:?}"
     );
 }
 
@@ -252,7 +251,7 @@ async fn test_openai_compatible_dryrun() {
     // Check Response is OK, then fields in order
     assert_eq!(response.status(), StatusCode::OK);
     let response_json = response.json::<Value>().await.unwrap();
-    println!("response_json: {:?}", response_json);
+    println!("response_json: {response_json:?}");
     let choices = response_json.get("choices").unwrap().as_array().unwrap();
     assert!(choices.len() == 1);
     let choice = choices.first().unwrap();
@@ -333,7 +332,7 @@ async fn test_openai_compatible_route_with_default_function(
     // Check Response is OK, then fields in order
     assert_eq!(response.status(), StatusCode::OK);
     let response_json = response.json::<Value>().await.unwrap();
-    println!("response_json: {:?}", response_json);
+    println!("response_json: {response_json:?}");
     let choices = response_json.get("choices").unwrap().as_array().unwrap();
     assert!(choices.len() == 1);
     let choice = choices.first().unwrap();
@@ -630,7 +629,7 @@ async fn test_openai_compatible_route_with_json_schema() {
     // Check Response is OK, then fields in order
     assert_eq!(response.status(), StatusCode::OK);
     let response_json = response.json::<Value>().await.unwrap();
-    println!("response_json: {:?}", response_json);
+    println!("response_json: {response_json:?}");
     let choices = response_json.get("choices").unwrap().as_array().unwrap();
     assert!(choices.len() == 1);
     let choice = choices.first().unwrap();
@@ -815,7 +814,7 @@ async fn test_openai_compatible_streaming_tool_call() {
         "assistant"
     );
     assert!(parsed_chunk["choices"][0]["delta"].get("content").is_none());
-    println!("parsed_chunk: {:?}", parsed_chunk);
+    println!("parsed_chunk: {parsed_chunk:?}");
     let tool_calls = parsed_chunk["choices"][0]["delta"]["tool_calls"]
         .as_array()
         .unwrap();
