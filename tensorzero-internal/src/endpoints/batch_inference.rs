@@ -935,6 +935,7 @@ pub async fn get_batch_inferences(
     batch_id: Uuid,
     inference_ids: &[Uuid],
 ) -> Result<Vec<BatchModelInferenceRow<'static>>, Error> {
+    // Guard against the provider not giving us any inference ids
     if inference_ids.is_empty() {
         return Ok(vec![]);
     }

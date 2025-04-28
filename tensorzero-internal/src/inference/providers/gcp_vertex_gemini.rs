@@ -120,7 +120,7 @@ struct StoreAndPath {
     path: object_store::path::Path,
 }
 
-/// Joins a Google Cloud Storage director path (with an optional trailing slash) with a file name.
+/// Joins a Google Cloud Storage directory path (with an optional trailing slash) with a file name.
 /// This is used to support both "gs://bucket/path" and "gs://bucket/path/" formats in tensorzero.toml
 fn join_cloud_paths(dir: &str, file: &str) -> String {
     dir.strip_suffix("/").unwrap_or(dir).to_string() + "/" + file
@@ -818,7 +818,6 @@ impl InferenceProvider for GCPVertexGeminiProvider {
             .put(&store_and_path.path, jsonl_data.into())
             .await
             .map_err(|e| {
-                // TODO - use better error
                 Error::new(ErrorDetails::Serialization {
                     message: format!(
                         "Error uploading JSONL to object store: {}",
