@@ -44,7 +44,7 @@ futures = "0.3.30"
 lazy_static = { version = "1.5.0" }
 url = "2.5.4"
 serde-untagged = "0.1.7"
-object_store = { version = "0.12.0", features = ["serde", "aws"] }
+object_store = { version = "0.12.0", features = ["serde", "aws", "gcp"] }
 rand = "0.9.1"
 chrono = { version = "0.4.40", features = ["serde"] }
 

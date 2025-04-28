@@ -1,17 +1,99 @@
-use std::pin::Pin;
+use std::{collections::HashMap, pin::Pin};
 
 use axum::http;
+use bytes::Bytes;
 use futures::{stream::Peekable, Stream};
+use serde::de::DeserializeOwned;
 use serde_json::{map::Entry, Map, Value};
+use uuid::Uuid;
 
 use crate::{
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
     inference::types::{
+        batch::{ProviderBatchInferenceOutput, ProviderBatchInferenceResponse},
         extra_body::{ExtraHeader, FullExtraBodyConfig, InferenceExtraBody},
         ProviderInferenceResponseChunk,
     },
     model::{fully_qualified_name, ModelProviderRequestInfo},
 };
+
+pub struct JsonlBatchFileInfo {
+    pub provider_type: String,
+    pub raw_request: String,
+    pub raw_response: String,
+    pub file_id: String,
+}
+
+/// A helper function to parse lines from a JSONL file into a batch response.
+/// The provided type `T` is used to parse each line.
+pub async fn parse_jsonl_batch_file<T: DeserializeOwned, E: std::error::Error>(
+    bytes: Result<Bytes, E>,
+    JsonlBatchFileInfo {
+        provider_type,
+        raw_request,
+        raw_response,
+        file_id,
+    }: JsonlBatchFileInfo,
+) -> Result<ProviderBatchInferenceResponse, Error>
+where
+    ProviderBatchInferenceOutput: TryFrom<T>,
+{
+    let bytes = bytes.map_err(|e| {
+        Error::new(ErrorDetails::InferenceServer {
+            message: format!(
+                "Error reading batch results response for file {file_id}: {}",
+                DisplayOrDebugGateway::new(e)
+            ),
+            raw_request: None,
+            raw_response: None,
+            provider_type: provider_type.to_string(),
+        })
+    })?;
+    let mut elements: HashMap<Uuid, ProviderBatchInferenceOutput> = HashMap::new();
+    let text = std::str::from_utf8(&bytes).map_err(|e| {
+        Error::new(ErrorDetails::InferenceServer {
+            message: format!(
+                "Error parsing batch results response for file {file_id}: {}",
+                DisplayOrDebugGateway::new(e)
+            ),
+            raw_request: None,
+            raw_response: None,
+            provider_type: provider_type.to_string(),
+        })
+    })?;
+    for line in text.lines() {
+        let row = match serde_json::from_str::<T>(line) {
+            Ok(row) => row,
+            Err(e) => {
+                // Construct error for logging but don't return it
+                let _ = Error::new(ErrorDetails::InferenceServer {
+                    message: format!(
+                        "Error parsing batch results row for file {file_id}: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
+                    raw_request: None,
+                    raw_response: Some(line.to_string()),
+                    provider_type: provider_type.to_string(),
+                });
+                continue;
+            }
+        };
+        let output = match ProviderBatchInferenceOutput::try_from(row) {
+            Ok(output) => output,
+            Err(_) => {
+                // Construct error for logging but don't return it
+                continue;
+            }
+        };
+        elements.insert(output.id, output);
+    }
+
+    Ok(ProviderBatchInferenceResponse {
+        elements,
+        raw_request,
+        raw_response,
+    })
+}
 
 #[must_use = "Extra headers must be inserted into request builder"]
 pub fn inject_extra_request_data(

@@ -1820,7 +1820,7 @@ pub async fn test_poll_existing_tool_choice_batch_inference_request_with_provide
     match response_json.get("status").unwrap().as_str().unwrap() {
         "pending" => return,
         "completed" => (),
-        _ => panic!("Batch inference failed"),
+        status => panic!("Bad batch inference status: {status}"),
     }
     let returned_batch_id = response_json.get("batch_id").unwrap().as_str().unwrap();
     let returned_batch_id = Uuid::parse_str(returned_batch_id).unwrap();
