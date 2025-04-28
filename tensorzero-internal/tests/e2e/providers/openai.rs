@@ -134,15 +134,25 @@ async fn get_providers() -> E2ETestProviders {
         },
         E2ETestProvider {
             supports_batch_inference: true,
-            variant_name: "openai-default".to_string(),
+            variant_name: "openai-cot".to_string(),
+            model_name: "openai::gpt-4.1-nano-2025-04-14".into(),
+            model_provider_name: "openai".into(),
+            credentials: HashMap::new(),
+        },
+    ];
+
+    let json_mode_off_providers = vec![
+        E2ETestProvider {
+            supports_batch_inference: true,
+            variant_name: "openai_json_mode_off".to_string(),
             model_name: "gpt-4o-mini-2024-07-18".into(),
             model_provider_name: "openai".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
             supports_batch_inference: true,
-            variant_name: "openai-cot".to_string(),
-            model_name: "openai::gpt-4.1-nano-2025-04-14".into(),
+            variant_name: "openai_o1_json_mode_off".to_string(),
+            model_name: "o1-2024-12-17".into(),
             model_provider_name: "openai".into(),
             credentials: HashMap::new(),
         },
@@ -168,6 +178,7 @@ async fn get_providers() -> E2ETestProviders {
         dynamic_tool_use_inference: standard_providers.clone(),
         parallel_tool_use_inference: standard_without_o1.clone(),
         json_mode_inference: json_providers.clone(),
+        json_mode_off_inference: json_mode_off_providers.clone(),
         image_inference: image_providers.clone(),
 
         shorthand_inference: shorthand_providers.clone(),

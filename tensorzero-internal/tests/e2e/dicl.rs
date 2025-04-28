@@ -55,7 +55,7 @@ async fn test_dicl_reject_unknown_content_block() {
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "value": "What is the name of the capital city of Japan?"},
+                        {"type": "text", "text": "What is the name of the capital city of Japan?"},
                         {"type": "unknown", "model_provider_name": "tensorzero::model_name::gpt-4o-mini-2024-07-18::provider_name::openai", "data": {"type": "text", "text": "My extra openai text"}}
                     ]
                 }
@@ -101,7 +101,7 @@ async fn test_dicl_reject_image_content_block() {
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "value": "What is the name of the capital city of Japan?"},
+                        {"type": "text", "text": "What is the name of the capital city of Japan?"},
                         {"type": "image", "mime_type": "image/jpeg", "data": "abc"}
                     ]
                 }
@@ -1107,7 +1107,7 @@ async fn test_dicl_json_request() {
                "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": {"country": "Brazil"}}]
+                    "content": [{"type": "text", "arguments": {"country": "Brazil"}}]
                 }
             ]},
         "stream": false,

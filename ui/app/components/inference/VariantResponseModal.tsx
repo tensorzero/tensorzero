@@ -11,18 +11,14 @@ import { Separator } from "~/components/ui/separator";
 import type { ParsedInferenceRow } from "~/utils/clickhouse/inference";
 import type { ParsedDatasetRow } from "~/utils/clickhouse/datasets";
 import type { InferenceUsage } from "~/utils/clickhouse/helpers";
-import { useFetcher } from "react-router";
-import type { JsonInferenceOutput } from "~/utils/clickhouse/common";
-import type { ContentBlockOutput } from "~/utils/clickhouse/common";
 import { OutputContent } from "~/components/inference/Output";
 import type { InferenceResponse } from "~/utils/tensorzero";
 import { Card, CardContent } from "~/components/ui/card";
-import { resolvedInputToTensorZeroInput } from "~/routes/api/tensorzero/inference";
+import type { VariantResponseInfo } from "~/routes/api/tensorzero/inference.utils";
 
 interface VariantResponseModalProps {
   isOpen: boolean;
   isLoading: boolean;
-  setIsLoading: (isLoading: boolean) => void;
   onClose: () => void;
   // Use a union type to accept either inference or datapoint
   item: ParsedInferenceRow | ParsedDatasetRow;
@@ -31,30 +27,24 @@ interface VariantResponseModalProps {
   selectedVariant: string;
   // Add a source property to determine what type of item we're dealing with
   source: "inference" | "datapoint";
-}
-
-interface VariantResponseInfo {
-  output?: JsonInferenceOutput | ContentBlockOutput[];
-  usage?: InferenceUsage;
+  error?: string | null;
+  variantResponse: VariantResponseInfo | null;
+  rawResponse: InferenceResponse | null;
 }
 
 export function VariantResponseModal({
   isOpen,
   isLoading,
-  setIsLoading,
   onClose,
   item,
   inferenceUsage,
   selectedVariant,
   source,
+  error,
+  variantResponse,
+  rawResponse,
 }: VariantResponseModalProps) {
-  const [variantResponse, setVariantResponse] =
-    useState<VariantResponseInfo | null>(null);
-  const [rawResponse, setRawResponse] = useState<InferenceResponse | null>(
-    null,
-  );
   const [showRawResponse, setShowRawResponse] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   // Set up baseline response based on source type
   const baselineResponse: VariantResponseInfo = {
@@ -68,94 +58,10 @@ export function VariantResponseModal({
       ? (item as ParsedInferenceRow).variant_name
       : undefined;
 
-  const variantInferenceFetcher = useFetcher();
-
   useEffect(() => {
-    if (isOpen) {
-      setVariantResponse(null);
-      setShowRawResponse(false);
-      setError(null);
-
-      // Prepare request based on source and function type
-      let request;
-      if (
-        source === "inference" &&
-        item.function_name === "tensorzero::default"
-      ) {
-        request = prepareDefaultFunctionRequest(
-          item as ParsedInferenceRow,
-          selectedVariant,
-        );
-      } else {
-        const tensorZeroInput = resolvedInputToTensorZeroInput(item.input);
-        request = {
-          function_name: item.function_name,
-          input: tensorZeroInput,
-          variant_name: selectedVariant,
-          dryrun: true,
-        };
-      }
-
-      variantInferenceFetcher.submit(
-        { data: JSON.stringify(request) },
-        {
-          method: "POST",
-          action: "/api/tensorzero/inference",
-        },
-      );
-      setIsLoading(true);
-    }
-    // TODO: Fix and stop ignoring lint rule
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, selectedVariant, source]);
-
-  useEffect(() => {
-    if (
-      variantInferenceFetcher.state === "submitting" ||
-      variantInferenceFetcher.state === "loading"
-    ) {
-      setIsLoading(true);
-      return;
-    }
-
-    setIsLoading(false);
-
-    if (variantInferenceFetcher.data) {
-      setError(null);
-      try {
-        const inferenceOutput =
-          variantInferenceFetcher.data as InferenceResponse;
-
-        // Check if the response contains an error
-        if ("error" in inferenceOutput && inferenceOutput.error) {
-          setError(
-            `Inference Failed: ${typeof inferenceOutput.error === "string" ? inferenceOutput.error : JSON.stringify(inferenceOutput.error)}`,
-          );
-          return;
-        }
-
-        const variantResponse: VariantResponseInfo = {
-          output:
-            "content" in inferenceOutput
-              ? inferenceOutput.content
-              : inferenceOutput.output,
-          usage: inferenceOutput.usage,
-        };
-        setVariantResponse(variantResponse);
-        setRawResponse(inferenceOutput);
-      } catch (err) {
-        setError("Failed to process response data");
-        console.error("Error processing response:", err);
-      }
-    } else if (
-      variantInferenceFetcher.state === "idle" &&
-      variantInferenceFetcher.data === undefined
-    ) {
-      setError("Failed to fetch response. Please try again.");
-    }
-    // TODO: Fix and stop ignoring lint rule
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [variantInferenceFetcher.data, variantInferenceFetcher.state]);
+    // reset when modal opens or closes
+    setShowRawResponse(false);
+  }, [isOpen]);
 
   const ResponseColumn = ({
     title,
@@ -291,34 +197,4 @@ export function VariantResponseModal({
       </DialogContent>
     </Dialog>
   );
-}
-
-function prepareDefaultFunctionRequest(
-  inference: ParsedInferenceRow,
-  selectedVariant: string,
-) {
-  const tensorZeroInput = resolvedInputToTensorZeroInput(inference.input);
-  if (inference.function_type === "chat") {
-    const tool_choice = inference.tool_params?.tool_choice;
-    const parallel_tool_calls = inference.tool_params?.parallel_tool_calls;
-    const tools_available = inference.tool_params?.tools_available;
-    return {
-      model_name: selectedVariant,
-      input: tensorZeroInput,
-      dryrun: true,
-      tool_choice: tool_choice,
-      parallel_tool_calls: parallel_tool_calls,
-      // We need to add all tools as additional for the default function
-      additional_tools: tools_available,
-    };
-  } else if (inference.function_type === "json") {
-    // This should never happen, just in case and for type safety
-    const output_schema = inference.output_schema;
-    return {
-      model_name: selectedVariant,
-      input: tensorZeroInput,
-      dryrun: true,
-      output_schema: output_schema,
-    };
-  }
 }

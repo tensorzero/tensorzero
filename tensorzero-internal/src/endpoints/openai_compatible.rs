@@ -307,6 +307,7 @@ struct OpenAICompatibleResponse {
     created: u32,
     model: String,
     system_fingerprint: String,
+    service_tier: String,
     object: String,
     usage: OpenAICompatibleUsage,
 }
@@ -759,6 +760,7 @@ impl From<(InferenceResponse, String)> for OpenAICompatibleResponse {
                     }],
                     created: current_timestamp() as u32,
                     model: format!("{response_model_prefix}{}", response.variant_name),
+                    service_tier: "".to_string(),
                     system_fingerprint: "".to_string(),
                     object: "chat.completion".to_string(),
                     usage: response.usage.into(),
@@ -779,6 +781,7 @@ impl From<(InferenceResponse, String)> for OpenAICompatibleResponse {
                 created: current_timestamp() as u32,
                 model: format!("{response_model_prefix}{}", response.variant_name),
                 system_fingerprint: "".to_string(),
+                service_tier: "".to_string(),
                 object: "chat.completion".to_string(),
                 usage: OpenAICompatibleUsage {
                     prompt_tokens: response.usage.input_tokens,
