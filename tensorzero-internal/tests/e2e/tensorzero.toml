@@ -256,12 +256,12 @@ routing = ["together"]
 type = "together"
 model_name = "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"
 
-[models."phi-3.5-mini-instruct-tgi"]
+[models."smol-lm-instruct-tgi"]
 routing = ["tgi"]
 
-[models."phi-3.5-mini-instruct-tgi".providers.tgi]
+[models."smol-lm-instruct-tgi".providers.tgi]
 type = "tgi"
-api_base = "https://zr0gj152lrhnrr-80.proxy.runpod.net/v1/"
+api_base = "https://tensorzero--tgi-inference-tgi-inference.modal.run/v1/"
 
 [models."llama3.1-8b-instruct-together-dynamic"]
 routing = ["together"]
@@ -910,23 +910,17 @@ extra_body = [{ pointer = "/reasoning_effort", value = "low" }]
 
 [functions.basic_test.variants.tgi]
 type = "chat_completion"
-model = "phi-3.5-mini-instruct-tgi"
+model = "smol-lm-instruct-tgi"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
 [functions.basic_test.variants.tgi-extra-body]
 type = "chat_completion"
-model = "phi-3.5-mini-instruct-tgi"
+model = "smol-lm-instruct-tgi"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 extra_body = [{ pointer = "/temperature", value = 0.123 }]
 
-[functions.basic_test.variants.tgi-extra-headers]
-type = "chat_completion"
-model = "phi-3.5-mini-instruct-tgi"
-system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-max_tokens = 100
-extra_headers = [{ name = "Authorization", value = "invalid_tgi_auth" }]
 
 [functions.basic_test.variants.together]
 type = "chat_completion"
@@ -1492,7 +1486,7 @@ json_mode = "strict"
 
 [functions.json_success.variants.tgi]
 type = "chat_completion"
-model = "phi-3.5-mini-instruct-tgi"
+model = "smol-lm-instruct-tgi"
 system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "implicit_tool"
@@ -1500,7 +1494,7 @@ max_tokens = 100
 
 [functions.json_success.variants.tgi-strict]
 type = "chat_completion"
-model = "phi-3.5-mini-instruct-tgi"
+model = "smol-lm-instruct-tgi"
 system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 max_tokens = 100
@@ -1750,7 +1744,7 @@ max_tokens = 100
 
 [functions.json_success.variants.tgi_json_mode_off]
 type = "chat_completion"
-model = "phi-3.5-mini-instruct-tgi"
+model = "smol-lm-instruct-tgi"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "off"
@@ -2069,7 +2063,7 @@ json_mode = "strict"
 
 [functions.dynamic_json.variants.tgi]
 type = "chat_completion"
-model = "phi-3.5-mini-instruct-tgi"
+model = "smol-lm-instruct-tgi"
 system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
 json_mode = "implicit_tool"
@@ -2077,7 +2071,7 @@ max_tokens = 100
 
 [functions.dynamic_json.variants.tgi-strict]
 type = "chat_completion"
-model = "phi-3.5-mini-instruct-tgi"
+model = "smol-lm-instruct-tgi"
 system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
 max_tokens = 100

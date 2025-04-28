@@ -46,6 +46,8 @@ jobs:
       - name: Warm up vLLM modal instance
         run: |
           curl -H "Modal-Key: $MODAL_KEY" -H "Modal-Secret: $MODAL_SECRET" https://tensorzero--vllm-inference-vllm-inference.modal.run/docs > vllm_modal_logs.txt &
+          curl -H "Modal-Key: $MODAL_KEY" -H "Modal-Secret: $MODAL_SECRET" https://tensorzero--tgi-inference-tgi-inference.modal.run/docs > tgi_modal_logs.txt &
+          curl -H "Modal-Key: $MODAL_KEY" -H "Modal-Secret: $MODAL_SECRET" https://tensorzero--sglang-inference-sglang-inference.modal.run/docs > tgi_modal_logs.txt &
 
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - name: Install Namespace CLI

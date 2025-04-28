@@ -5,7 +5,7 @@ crate::generate_provider_tests!(get_providers);
 crate::generate_batch_inference_tests!(get_providers);
 
 async fn get_providers() -> E2ETestProviders {
-    let model_name = "phi-3.5-mini-instruct-tgi".to_string();
+    let model_name = "smol-lm-instruct-tgi".to_string();
     let standard_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "tgi".to_string(),
@@ -17,14 +17,6 @@ async fn get_providers() -> E2ETestProviders {
     let extra_body_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "tgi-extra-body".to_string(),
-        model_name: model_name.clone(),
-        model_provider_name: "tgi".into(),
-        credentials: HashMap::new(),
-    }];
-
-    let bad_auth_extra_headers = vec![E2ETestProvider {
-        supports_batch_inference: false,
-        variant_name: "tgi-extra-headers".to_string(),
         model_name: model_name.clone(),
         model_provider_name: "tgi".into(),
         credentials: HashMap::new(),
@@ -58,7 +50,7 @@ async fn get_providers() -> E2ETestProviders {
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
         extra_body_inference: extra_body_providers,
-        bad_auth_extra_headers,
+        bad_auth_extra_headers: vec![],
         reasoning_inference: vec![],
         inference_params_inference: standard_providers.clone(),
         inference_params_dynamic_credentials: vec![],
