@@ -10376,6 +10376,7 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
 
 pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
+    let extra_headers = get_extra_headers();
 
     let payload = json!({
         "function_name": "json_success",
@@ -10397,6 +10398,7 @@ pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETes
             }
         },
         "stream": false,
+        "extra_headers": extra_headers.headers,
     });
 
     let response = Client::new()
