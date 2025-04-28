@@ -146,7 +146,7 @@ fn make_gcp_object_store(
     })?;
     let key = object_store::path::Path::parse(path).map_err(|e| {
         Error::new(ErrorDetails::InternalError {
-            message: format!("Failed to parse Google Cloud Storage path: {}", e),
+            message: format!("Failed to parse Google Cloud Storage path: {e}"),
         })
     })?;
 
@@ -176,7 +176,7 @@ fn make_gcp_object_store(
 
     let store = builder.build().map_err(|e| {
         Error::new(ErrorDetails::InternalError {
-            message: format!("Failed to create GCS object store: {}", e),
+            message: format!("Failed to create GCS object store: {e}"),
         })
     })?;
 
@@ -265,7 +265,7 @@ impl GCPVertexGeminiProvider {
                     .await
                     .map_err(|e| {
                         Error::new(ErrorDetails::InternalError {
-                            message: format!("Failed to get GCS object: {}", e),
+                            message: format!("Failed to get GCS object: {e}"),
                         })
                     })?
                     .bytes()
@@ -366,12 +366,12 @@ impl TryFrom<GCPVertexBatchResponseLine> for ProviderBatchInferenceOutput {
         let raw_request = line.request.to_string();
         let request = GCPVertexGeminiRequestMinimal::deserialize(&*line.request).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
-                message: format!("Error deserializing batch request: {}", e),
+                message: format!("Error deserializing batch request: {e}"),
             })
         })?;
         let raw_response = serde_json::to_string(&line.response).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
-                message: format!("Error serializing batch response: {}", e),
+                message: format!("Error serializing batch response: {e}"),
             })
         })?;
         let inference_id = request.labels.get(INFERENCE_ID_LABEL).ok_or_else(|| {
@@ -399,7 +399,7 @@ impl TryFrom<GCPVertexBatchResponseLine> for ProviderBatchInferenceOutput {
         Ok(ProviderBatchInferenceOutput {
             id: Uuid::parse_str(inference_id).map_err(|e| {
                 Error::new(ErrorDetails::InternalError {
-                    message: format!("Invalid inference ID: {}", e),
+                    message: format!("Invalid inference ID: {e}"),
                 })
             })?,
             output,
