@@ -857,7 +857,7 @@ pub async fn test_url_image_inference_with_provider_and_store(
 
     // The '_shutdown_sender' will wake up the receiver on drop
     let (server_addr, _shutdown_sender) = make_temp_image_server().await;
-    let image_url = Url::parse(&format!("http://{}/ferris.png", server_addr)).unwrap();
+    let image_url = Url::parse(&format!("http://{server_addr}/ferris.png")).unwrap();
 
     let client = make_embedded_gateway_with_config(config_toml).await;
 
@@ -3493,7 +3493,7 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
                     // We mostly care about the tool call, so we'll ignore the text.
                 }
                 _ => {
-                    panic!("Unexpected block type: {}", block_type);
+                    panic!("Unexpected block type: {block_type}");
                 }
             }
         }
@@ -3978,7 +3978,7 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
     match first {
         ContentBlock::Text(_text) => {}
         _ => {
-            panic!("Expected a text block, got {:?}", first);
+            panic!("Expected a text block, got {first:?}");
         }
     }
 }
@@ -4066,7 +4066,7 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
                     full_text.push_str(block.get("text").unwrap().as_str().unwrap());
                 }
                 _ => {
-                    panic!("Unexpected block type: {}", block_type);
+                    panic!("Unexpected block type: {block_type}");
                 }
             }
         }
@@ -4265,7 +4265,7 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
     match first {
         ContentBlock::Text(_text) => {}
         _ => {
-            panic!("Expected a text block, got {:?}", first);
+            panic!("Expected a text block, got {first:?}");
         }
     }
 }
@@ -4652,7 +4652,7 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
                     // We mostly care about the tool call, so we'll ignore the text.
                 }
                 _ => {
-                    panic!("Unexpected block type: {}", block_type);
+                    panic!("Unexpected block type: {block_type}");
                 }
             }
         }
@@ -5116,7 +5116,7 @@ pub async fn check_tool_use_tool_choice_none_inference_response(
     match first {
         ContentBlock::Text(_text) => {}
         _ => {
-            panic!("Expected a text block, got {:?}", first);
+            panic!("Expected a text block, got {first:?}");
         }
     }
 }
@@ -5212,7 +5212,7 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
                     full_text.push_str(block.get("text").unwrap().as_str().unwrap());
                 }
                 _ => {
-                    panic!("Unexpected block type: {}", block_type);
+                    panic!("Unexpected block type: {block_type}");
                 }
             }
         }
@@ -5412,7 +5412,7 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
     match first {
         ContentBlock::Text(_text) => {}
         _ => {
-            panic!("Expected a text block, got {:?}", first);
+            panic!("Expected a text block, got {first:?}");
         }
     }
 }
@@ -5879,7 +5879,7 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
                     // We mostly care about the tool call, so we'll ignore the text.
                 }
                 _ => {
-                    panic!("Unexpected block type: {}", block_type);
+                    panic!("Unexpected block type: {block_type}");
                 }
             }
         }
@@ -6504,7 +6504,7 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
                     // We mostly care about the tool call, so we'll ignore the text.
                 }
                 _ => {
-                    panic!("Unexpected block type: {}", block_type);
+                    panic!("Unexpected block type: {block_type}");
                 }
             }
         }
@@ -7004,7 +7004,7 @@ pub async fn check_tool_use_multi_turn_inference_response(
             assert!(text.text.to_lowercase().contains("tokyo"));
         }
         _ => {
-            panic!("Expected a text block, got {:?}", first);
+            panic!("Expected a text block, got {first:?}");
         }
     }
 }
@@ -7323,7 +7323,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
             assert!(text.text.to_lowercase().contains("tokyo"));
         }
         _ => {
-            panic!("Expected a text block, got {:?}", first);
+            panic!("Expected a text block, got {first:?}");
         }
     }
 }
@@ -7743,7 +7743,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
                     // We mostly care about the tool call, so we'll ignore the text.
                 }
                 _ => {
-                    panic!("Unexpected block type: {}", block_type);
+                    panic!("Unexpected block type: {block_type}");
                 }
             }
         }
@@ -8304,7 +8304,7 @@ pub async fn check_parallel_tool_use_inference_response(
                 serde_json::from_str::<Value>(&tool_call.arguments).unwrap();
             }
             _ => {
-                panic!("Expected a tool call, got {:?}", block);
+                panic!("Expected a tool call, got {block:?}");
             }
         }
     }
@@ -8407,7 +8407,7 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
                             get_humidity_arguments.push_str(chunk_arguments);
                         }
                         _ => {
-                            panic!("Unexpected tool name: {}", tool_name);
+                            panic!("Unexpected tool name: {tool_name}");
                         }
                     }
                 }
@@ -8417,7 +8417,7 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
                     // We mostly care about the tool call, so we'll ignore the text.
                 }
                 _ => {
-                    panic!("Unexpected block type: {}", block_type);
+                    panic!("Unexpected block type: {block_type}");
                 }
             }
         }
@@ -8708,7 +8708,7 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
                 serde_json::from_str::<Value>(&tool_call.arguments).unwrap();
             }
             _ => {
-                panic!("Expected a tool call, got {:?}", block);
+                panic!("Expected a tool call, got {block:?}");
             }
         }
     }
@@ -9210,7 +9210,7 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
                "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": {"country": "Japan"}}]
+                    "content": [{"type": "text", "arguments": {"country": "Japan"}}]
                 }
             ]},
         "stream": true,
@@ -9998,7 +9998,7 @@ pub async fn check_multi_turn_parallel_tool_use_inference_response(
                 );
             }
             _ => {
-                panic!("Expected a tool call, got {:?}", tool_result);
+                panic!("Expected a tool call, got {tool_result:?}");
             }
         }
     }
@@ -10012,7 +10012,7 @@ pub async fn check_multi_turn_parallel_tool_use_inference_response(
             assert!(text.text.to_lowercase().contains("30"));
         }
         _ => {
-            panic!("Expected a text block, got {:?}", output_content);
+            panic!("Expected a text block, got {output_content:?}");
         }
     }
 }
@@ -10184,7 +10184,7 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
                     output_content.push_str(block.get("text").unwrap().as_str().unwrap());
                 }
                 _ => {
-                    panic!("Unexpected block type: {}", block_type);
+                    panic!("Unexpected block type: {block_type}");
                 }
             }
         }
@@ -10333,7 +10333,7 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
                 );
             }
             _ => {
-                panic!("Expected a tool call, got {:?}", tool_result);
+                panic!("Expected a tool call, got {tool_result:?}");
             }
         }
     }
@@ -10347,7 +10347,7 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
             assert!(text.text.to_lowercase().contains("30"));
         }
         _ => {
-            panic!("Expected a text block, got {:?}", output_content);
+            panic!("Expected a text block, got {output_content:?}");
         }
     }
 }

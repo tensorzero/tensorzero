@@ -93,7 +93,7 @@ impl std::fmt::Display for CallError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.message)?;
         if let Some(err) = self.source.as_ref() {
-            write!(f, ": {}", err)?;
+            write!(f, ": {err}")?;
         }
         Ok(())
     }

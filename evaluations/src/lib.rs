@@ -237,7 +237,7 @@ pub async fn run_evaluation(
 
         // Print all stats
         for (evaluator_name, evaluator_stats) in &stats {
-            writeln!(writer, "{}: {}", evaluator_name, evaluator_stats)?;
+            writeln!(writer, "{evaluator_name}: {evaluator_stats}")?;
         }
 
         // Check cutoffs and handle failures
@@ -247,8 +247,7 @@ pub async fn run_evaluation(
         for (name, cutoff, actual) in &failures {
             writeln!(
                 writer,
-                "Failed cutoff for evaluator {} ({:.2}, got {:.2})",
-                name, cutoff, actual
+                "Failed cutoff for evaluator {name} ({cutoff:.2}, got {actual:.2})"
             )?;
         }
 
@@ -299,9 +298,7 @@ pub fn check_evaluator_cutoffs(
 pub fn format_cutoff_failures(failures: &[(String, f32, f32)]) -> String {
     failures
         .iter()
-        .map(|(name, cutoff, actual)| {
-            format!("{} (cutoff: {:.2}, got: {:.2})", name, cutoff, actual)
-        })
+        .map(|(name, cutoff, actual)| format!("{name} (cutoff: {cutoff:.2}, got: {actual:.2})"))
         .collect::<Vec<_>>()
         .join("\n")
 }
@@ -385,6 +382,7 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
         include_original_response: false,
         internal: true,
         extra_body: Default::default(),
+        extra_headers: Default::default(),
     };
     let inference_result = clients.tensorzero_client.inference(params).await?;
     match inference_result {

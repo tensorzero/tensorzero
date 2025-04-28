@@ -53,7 +53,7 @@ impl Debug for ClientMode {
                 gateway: _,
                 timeout,
             } => {
-                write!(f, "EmbeddedGateway {{ timeout: {:?} }}", timeout)
+                write!(f, "EmbeddedGateway {{ timeout: {timeout:?} }}")
             }
         }
     }
@@ -343,8 +343,7 @@ impl Client {
                         source: tensorzero_internal::error::Error::new(
                             ErrorDetails::InvalidBaseUrl {
                                 message: format!(
-                                    "Failed to join base URL with /feedback endpoint: {}",
-                                    e
+                                    "Failed to join base URL with /feedback endpoint: {e}"
                                 ),
                             },
                         )
@@ -388,8 +387,7 @@ impl Client {
                             source: tensorzero_internal::error::Error::new(
                                 ErrorDetails::InvalidBaseUrl {
                                     message: format!(
-                                        "Failed to join base URL with /inference endpoint: {}",
-                                        e
+                                        "Failed to join base URL with /inference endpoint: {e}"
                                     ),
                                 },
                             )
@@ -464,8 +462,7 @@ impl Client {
                         source: tensorzero_internal::error::Error::new(
                             ErrorDetails::InvalidBaseUrl {
                                 message: format!(
-                                    "Failed to join base URL with /internal/object_storage endpoint: {}",
-                                    e
+                                    "Failed to join base URL with /internal/object_storage endpoint: {e}"
                                 ),
                             },
                         )
@@ -475,7 +472,7 @@ impl Client {
                     serde_json::to_string(&storage_path).map_err(|e| TensorZeroError::Other {
                         source: tensorzero_internal::error::Error::new(
                             ErrorDetails::Serialization {
-                                message: format!("Failed to serialize storage path: {}", e),
+                                message: format!("Failed to serialize storage path: {e}"),
                             },
                         )
                         .into(),

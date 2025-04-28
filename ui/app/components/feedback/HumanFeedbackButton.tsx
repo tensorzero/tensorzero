@@ -1,4 +1,4 @@
-import { Button, type ButtonProps } from "~/components/ui/button";
+import { Button, type ButtonProps, ButtonIcon } from "~/components/ui/button";
 import { Feedback } from "../icons/Icons";
 
 export type HumanFeedbackButtonProps = Omit<
@@ -9,7 +9,7 @@ export type HumanFeedbackButtonProps = Omit<
 export function HumanFeedbackButton(props: HumanFeedbackButtonProps) {
   return (
     <Button variant="outline" size="sm" {...props}>
-      <Feedback className="text-fg-tertiary h-4 w-4" />
+      <ButtonIcon as={Feedback} variant="tertiary" />
       Add feedback
     </Button>
   );

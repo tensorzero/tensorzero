@@ -9,14 +9,14 @@ use std::sync::Arc;
 use tensorzero_derive::TensorZeroDeserialize;
 use tracing::instrument;
 
-use crate::embeddings::EmbeddingModelTable;
+use crate::embeddings::{EmbeddingModelTable, UninitializedEmbeddingModelConfig};
 use crate::error::{Error, ErrorDetails};
 use crate::evaluations::{EvaluationConfig, UninitializedEvaluationConfig};
 use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
 use crate::inference::types::storage::StorageKind;
 use crate::jsonschema_util::StaticJSONSchema;
 use crate::minijinja_util::TemplateConfig;
-use crate::model::{ModelConfig, ModelTable};
+use crate::model::{ModelConfig, ModelTable, UninitializedModelConfig};
 use crate::model_table::{CowNoClone, ShorthandModelConfig};
 use crate::tool::{create_implicit_tool_call_config, StaticToolConfig, ToolChoice};
 use crate::variant::best_of_n_sampling::UninitializedBestOfNSamplingConfig;
@@ -40,6 +40,7 @@ pub struct Config<'c> {
     pub evaluations: HashMap<String, Arc<EvaluationConfig>>, // evaluation name => evaluation config
     pub templates: TemplateConfig<'c>,
     pub object_store_info: Option<ObjectStoreInfo>,
+    pub provider_types: ProviderTypesConfig,
 }
 
 #[derive(Debug, Default)]
@@ -50,6 +51,29 @@ pub struct GatewayConfig {
     /// If `true`, allow minijinja to read from the filesystem (within the tree of the config file) for '{% include %}'
     /// Defaults to `false`
     pub enable_template_filesystem_access: bool,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct GCPProviderTypeConfig {
+    #[serde(default)]
+    pub batch: Option<GCPBatchConfigType>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(tag = "storage_type", rename_all = "snake_case")]
+pub enum GCPBatchConfigType {
+    // In the future, we'll want to allow explicitly setting 'none' at the model provider level,
+    // to override the global provider-types batch config.
+    None,
+    CloudStorage(GCPBatchConfigCloudStorage),
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct GCPBatchConfigCloudStorage {
+    pub input_uri_prefix: String,
+    pub output_uri_prefix: String,
 }
 
 #[derive(Clone, Debug)]
@@ -343,18 +367,47 @@ impl<'c> Config<'c> {
             })
             .collect::<Result<HashMap<String, Arc<StaticToolConfig>>, Error>>()?;
 
+        let models = uninitialized_config
+            .models
+            .into_iter()
+            .map(|(name, config)| {
+                config
+                    .load(&name, &uninitialized_config.provider_types)
+                    .map(|c| (name, c))
+            })
+            .collect::<Result<HashMap<_, _>, _>>()?;
+
+        let embedding_models = uninitialized_config
+            .embedding_models
+            .into_iter()
+            .map(|(name, config)| {
+                config
+                    .load(&uninitialized_config.provider_types)
+                    .map(|c| (name, c))
+            })
+            .collect::<Result<HashMap<_, _>, _>>()?;
+
         let object_store_info = ObjectStoreInfo::new(uninitialized_config.object_storage)?;
 
         let mut config = Config {
             gateway,
-            models: uninitialized_config.models,
-            embedding_models: uninitialized_config.embedding_models,
+            models: models.try_into().map_err(|e| {
+                Error::new(ErrorDetails::Config {
+                    message: format!("Failed to load models: {e}"),
+                })
+            })?,
+            embedding_models: embedding_models.try_into().map_err(|e| {
+                Error::new(ErrorDetails::Config {
+                    message: format!("Failed to load embedding models: {e}"),
+                })
+            })?,
             functions,
             metrics: uninitialized_config.metrics,
             tools,
             evaluations: HashMap::new(),
             templates,
             object_store_info,
+            provider_types: uninitialized_config.provider_types,
         };
 
         // Initialize the templates
@@ -383,8 +436,7 @@ impl<'c> Config<'c> {
                 if config.functions.contains_key(&evaluation_function_name) {
                     return Err(ErrorDetails::Config {
                         message: format!(
-                            "Duplicate evaluator function name: `{}` already exists. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.",
-                            evaluation_function_name
+                            "Duplicate evaluator function name: `{evaluation_function_name}` already exists. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports."
                         ),
                     }
                     .into());
@@ -411,7 +463,7 @@ impl<'c> Config<'c> {
             for (evaluation_metric_name, evaluation_metric_config) in evaluation_metric_configs {
                 if config.metrics.contains_key(&evaluation_metric_name) {
                     return Err(ErrorDetails::Config {
-                        message: format!("Duplicate evaluator metric name: `{}` already exists. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.", evaluation_metric_name),
+                        message: format!("Duplicate evaluator metric name: `{evaluation_metric_name}` already exists. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports."),
                     }
                     .into());
                 }
@@ -451,10 +503,7 @@ impl<'c> Config<'c> {
         for metric_name in self.metrics.keys() {
             if metric_name == "comment" || metric_name == "demonstration" {
                 return Err(ErrorDetails::Config {
-                    message: format!(
-                        "Metric name '{}' is reserved and cannot be used",
-                        metric_name
-                    ),
+                    message: format!("Metric name '{metric_name}' is reserved and cannot be used"),
                 }
                 .into());
             }
@@ -586,9 +635,9 @@ pub trait LoadableConfig<T> {
 struct UninitializedConfig {
     pub gateway: Option<UninitializedGatewayConfig>,
     #[serde(default)]
-    pub models: ModelTable, // model name => model config
+    pub models: HashMap<Arc<str>, UninitializedModelConfig>, // model name => model config
     #[serde(default)]
-    pub embedding_models: EmbeddingModelTable, // embedding model name => embedding model config
+    pub embedding_models: HashMap<Arc<str>, UninitializedEmbeddingModelConfig>, // embedding model name => embedding model config
     #[serde(default)]
     pub functions: HashMap<String, UninitializedFunctionConfig>, // function name => function config
     #[serde(default)]
@@ -596,8 +645,17 @@ struct UninitializedConfig {
     #[serde(default)]
     pub tools: HashMap<String, UninitializedToolConfig>, // tool name => tool config
     #[serde(default)]
-    pub evaluations: HashMap<String, UninitializedEvaluationConfig>, // evaluation name => evaluation config
+    pub evaluations: HashMap<String, UninitializedEvaluationConfig>, // evaluation name => evaluation
+    #[serde(default)]
+    pub provider_types: ProviderTypesConfig, // global configuration for all model providers of a particular type
     pub object_storage: Option<StorageKind>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProviderTypesConfig {
+    #[serde(default)]
+    pub gcp_vertex_gemini: Option<GCPProviderTypeConfig>,
 }
 
 impl UninitializedConfig {
@@ -1899,7 +1957,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             Error::new(ErrorDetails::Config {
-                message: "models: Model name 'tensorzero::bad_model' contains a reserved prefix"
+                message: "Failed to load models: Model name 'tensorzero::bad_model' contains a reserved prefix"
                     .to_string()
             })
         );
@@ -1927,7 +1985,7 @@ mod tests {
                 result.unwrap_err(),
                 Error::new(ErrorDetails::Config {
                     message:
-                        "embedding_models: Embedding model name 'tensorzero::bad_embedding_model' contains a reserved prefix"
+                        "Failed to load embedding models: Embedding model name 'tensorzero::bad_embedding_model' contains a reserved prefix"
                             .to_string()
                 })
             );
