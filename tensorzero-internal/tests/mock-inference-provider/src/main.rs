@@ -69,6 +69,9 @@ pub async fn shutdown_signal() {
             .await;
     };
 
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
     #[cfg(unix)]
     let hangup = async {
         signal::unix::signal(signal::unix::SignalKind::hangup())
@@ -77,7 +80,9 @@ pub async fn shutdown_signal() {
             .await;
     };
 
-    #[cfg(unix)]
+    #[cfg(not(unix))]
+    let hangup = std::future::pending::<()>();
+
     tokio::select! {
         _ = ctrl_c => {
             tracing::info!("Received Ctrl+C signal");
@@ -90,13 +95,6 @@ pub async fn shutdown_signal() {
             tracing::info!("Received SIGHUP signal");
         }
     };
-
-    #[cfg(not(unix))]
-    tokio::select! {
-        _ = ctrl_c => {
-            tracing::info!("Received Ctrl+C signal");
-        }
-    }
 }
 
 #[tokio::main]
