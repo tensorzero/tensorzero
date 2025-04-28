@@ -21,7 +21,7 @@ pub struct JsExposedEnv {
 }
 
 fn annotate_error(err: minijinja::Error) -> JsError {
-    JsError::new(&format!("{:#}", err))
+    JsError::new(&format!("{err:#}"))
 }
 
 #[wasm_bindgen]

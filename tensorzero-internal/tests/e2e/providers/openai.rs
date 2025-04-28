@@ -986,7 +986,7 @@ async fn test_o3_mini_inference_with_reasoning_effort() {
     // Check Response is OK, then fields in order
     // assert_eq!(response.status(), StatusCode::OK);
     let response_json = response.json::<Value>().await.unwrap();
-    println!("Response JSON: {:?}", response_json);
+    println!("Response JSON: {response_json:?}");
 
     let content_blocks = response_json.get("content").unwrap().as_array().unwrap();
     assert!(content_blocks.len() == 1);
@@ -1141,8 +1141,7 @@ async fn test_embedding_request() {
     // Assert that the norm is approximately 1 (allowing for small floating-point errors)
     assert!(
         (norm - 1.0).abs() < 1e-6,
-        "The L2 norm of the embedding should be 1, but it is {}",
-        norm
+        "The L2 norm of the embedding should be 1, but it is {norm}"
     );
     // Check that the timestamp in created is within 1 second of the current time
     let created = response.created;
@@ -1152,8 +1151,7 @@ async fn test_embedding_request() {
         .as_secs() as i64;
     assert!(
         (created as i64 - now).abs() <= 1,
-        "The created timestamp should be within 1 second of the current time, but it is {}",
-        created
+        "The created timestamp should be within 1 second of the current time, but it is {created}"
     );
     let parsed_raw_response: Value = serde_json::from_str(&response.raw_response).unwrap();
     assert!(

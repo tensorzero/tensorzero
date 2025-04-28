@@ -309,7 +309,7 @@ impl TryFrom<(Credential, &str)> for GCPVertexCredentials {
                 parsed: GCPServiceAccountCredentials::from_json_str(file_content.expose_secret())
                     .map_err(|e| {
                     Error::new(ErrorDetails::GCPCredentials {
-                        message: format!("Failed to load GCP credentials: {}", e),
+                        message: format!("Failed to load GCP credentials: {e}"),
                     })
                 })?,
                 raw: file_content,
@@ -317,7 +317,7 @@ impl TryFrom<(Credential, &str)> for GCPVertexCredentials {
             Credential::Dynamic(key_name) => Ok(GCPVertexCredentials::Dynamic(key_name)),
             Credential::Missing => Ok(GCPVertexCredentials::None),
             _ => Err(Error::new(ErrorDetails::GCPCredentials {
-                message: format!("Invalid credential_location for {} provider", model),
+                message: format!("Invalid credential_location for {model} provider"),
             }))?,
         }
     }

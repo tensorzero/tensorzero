@@ -436,8 +436,7 @@ impl<'c> Config<'c> {
                 if config.functions.contains_key(&evaluation_function_name) {
                     return Err(ErrorDetails::Config {
                         message: format!(
-                            "Duplicate evaluator function name: `{}` already exists. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.",
-                            evaluation_function_name
+                            "Duplicate evaluator function name: `{evaluation_function_name}` already exists. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports."
                         ),
                     }
                     .into());
@@ -464,7 +463,7 @@ impl<'c> Config<'c> {
             for (evaluation_metric_name, evaluation_metric_config) in evaluation_metric_configs {
                 if config.metrics.contains_key(&evaluation_metric_name) {
                     return Err(ErrorDetails::Config {
-                        message: format!("Duplicate evaluator metric name: `{}` already exists. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.", evaluation_metric_name),
+                        message: format!("Duplicate evaluator metric name: `{evaluation_metric_name}` already exists. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports."),
                     }
                     .into());
                 }
@@ -504,10 +503,7 @@ impl<'c> Config<'c> {
         for metric_name in self.metrics.keys() {
             if metric_name == "comment" || metric_name == "demonstration" {
                 return Err(ErrorDetails::Config {
-                    message: format!(
-                        "Metric name '{}' is reserved and cannot be used",
-                        metric_name
-                    ),
+                    message: format!("Metric name '{metric_name}' is reserved and cannot be used"),
                 }
                 .into());
             }

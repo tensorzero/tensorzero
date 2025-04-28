@@ -46,7 +46,7 @@ impl ShorthandModelConfig for EmbeddingModelConfig {
             "dummy" => EmbeddingProviderConfig::Dummy(DummyProvider::new(model_name, None)?),
             _ => {
                 return Err(Error::new(ErrorDetails::Config {
-                    message: format!("Invalid provider type: {}", provider_type),
+                    message: format!("Invalid provider type: {provider_type}"),
                 }));
             }
         };
@@ -327,8 +327,7 @@ impl UninitializedEmbeddingProviderConfig {
             _ => {
                 return Err(Error::new(ErrorDetails::Config {
                     message: format!(
-                        "Unsupported provider config for embedding: {:?}",
-                        provider_config
+                        "Unsupported provider config for embedding: {provider_config:?}"
                     ),
                 }));
             }
