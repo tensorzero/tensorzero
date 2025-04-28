@@ -28,9 +28,6 @@ use std::{
 use tokio::signal;
 use tower_http::trace::TraceLayer;
 
-#[cfg(unix)]
-use std::time::Duration;
-
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
@@ -91,7 +88,7 @@ pub async fn shutdown_signal() {
             tracing::info!("Received SIGTERM signal");
         }
         _ = hangup => {
-            tokio::time::sleep(Duration::from_secs(1)).await;
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             tracing::info!("Received SIGHUP signal");
         }
     };
