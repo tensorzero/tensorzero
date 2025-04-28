@@ -40,12 +40,20 @@ async fn get_providers() -> E2ETestProviders {
         },
         E2ETestProvider {
             supports_batch_inference: false,
-            variant_name: "sglang-default".to_string(),
+            variant_name: "sglang-strict".to_string(),
             model_name: "HuggingFaceTB/SmolLM-1.7B-Instruct".to_string(),
             model_provider_name: "sglang".to_string(),
             credentials: HashMap::new(),
         },
     ];
+
+    let json_mode_off_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "sglang_json_mode_off".to_string(),
+        model_name: "HuggingFaceTB/SmolLM-1.7B-Instruct".to_string(),
+        model_provider_name: "sglang".to_string(),
+        credentials: HashMap::new(),
+    }];
 
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
@@ -60,8 +68,8 @@ async fn get_providers() -> E2ETestProviders {
         dynamic_tool_use_inference: vec![],
         parallel_tool_use_inference: vec![],
         json_mode_inference: json_providers.clone(),
+        json_mode_off_inference: json_mode_off_providers.clone(),
         image_inference: vec![],
-
         shorthand_inference: vec![],
     }
 }

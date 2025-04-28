@@ -4,6 +4,8 @@ This directory contains the code for the **[TensorZero Quick Start](https://www.
 
 ## Running the Example
 
+Before running the example, set the `OPENAI_API_KEY` environment variable to your OpenAI API key.
+
 ### Python
 
 1. Launch the TensorZero Gateway, the TensorZero UI, and a development ClickHouse database: `docker compose up`

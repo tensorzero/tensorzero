@@ -8,7 +8,6 @@ use serde::de::IntoDeserializer;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
 use std::borrow::Cow;
-use std::collections::HashMap;
 use std::io::Write;
 use std::pin::Pin;
 use std::sync::OnceLock;
@@ -43,6 +42,7 @@ use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use crate::inference::providers::helpers::inject_extra_request_data;
 
+use super::helpers::{parse_jsonl_batch_file, JsonlBatchFileInfo};
 use super::provider_trait::{TensorZeroEventError, WrappedProvider};
 
 lazy_static! {
@@ -784,8 +784,7 @@ pub fn stream_openai(
                         let data: Result<OpenAIChatChunk, Error> =
                             serde_json::from_str(&message.data).map_err(|e| Error::new(ErrorDetails::InferenceServer {
                                 message: format!(
-                                    "Error parsing chunk. Error: {}",
-                                    e,
+                                    "Error parsing chunk. Error: {e}",
                                 ),
                                 raw_request: None,
                                 raw_response: Some(message.data.clone()),
@@ -853,61 +852,16 @@ impl OpenAIProvider {
             ));
         }
 
-        let bytes = res.bytes().await.map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
-                message: format!(
-                    "Error reading batch results response for file {file_id}: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-                raw_request: None,
-                raw_response: None,
+        parse_jsonl_batch_file::<OpenAIBatchFileRow, _>(
+            res.bytes().await,
+            JsonlBatchFileInfo {
+                file_id: file_id.to_string(),
+                raw_request,
+                raw_response,
                 provider_type: PROVIDER_TYPE.to_string(),
-            })
-        })?;
-        let mut elements: HashMap<Uuid, ProviderBatchInferenceOutput> = HashMap::new();
-        let text = std::str::from_utf8(&bytes).map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
-                message: format!(
-                    "Error parsing batch results response for file {file_id}: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-                raw_request: None,
-                raw_response: None,
-                provider_type: PROVIDER_TYPE.to_string(),
-            })
-        })?;
-        for line in text.lines() {
-            let row = match serde_json::from_str::<OpenAIBatchFileRow>(line) {
-                Ok(row) => row,
-                Err(e) => {
-                    // Construct error for logging but don't return it
-                    let _ = Error::new(ErrorDetails::InferenceServer {
-                        message: format!(
-                            "Error parsing batch results row for file {file_id}: {}",
-                            DisplayOrDebugGateway::new(e)
-                        ),
-                        raw_request: None,
-                        raw_response: Some(line.to_string()),
-                        provider_type: PROVIDER_TYPE.to_string(),
-                    });
-                    continue;
-                }
-            };
-            let output = match ProviderBatchInferenceOutput::try_from(row) {
-                Ok(output) => output,
-                Err(_) => {
-                    // Construct error for logging but don't return it
-                    continue;
-                }
-            };
-            elements.insert(output.id, output);
-        }
-
-        Ok(ProviderBatchInferenceResponse {
-            elements,
-            raw_request,
-            raw_response,
-        })
+            },
+        )
+        .await
     }
 }
 
@@ -929,7 +883,7 @@ fn get_file_url(base_url: &Url, file_id: Option<&str>) -> Result<Url, Error> {
         url.set_path(&format!("{}/", url.path()));
     }
     let path = if let Some(id) = file_id {
-        format!("files/{}/content", id)
+        format!("files/{id}/content")
     } else {
         "files".to_string()
     };

@@ -191,6 +191,7 @@ fn prepare_llm_judge_input(
                 messages: vec![ClientInputMessage {
                     role: Role::User,
                     content: vec![ClientInputMessageContent::Text(TextKind::Arguments{
+                        #[allow(clippy::expect_used)]
                         arguments: json!({"input": serialized_input, "generated_output": generated_output, "reference_output": reference_output})
                             .as_object()
                             .expect("Arguments should be an object")

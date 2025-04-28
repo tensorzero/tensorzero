@@ -575,7 +575,7 @@ mod tests {
         "#;
 
         let mut temp_file = NamedTempFile::new().expect("Failed to create temporary file");
-        write!(temp_file, "{}", schema).expect("Failed to write schema to temporary file");
+        write!(temp_file, "{schema}").expect("Failed to write schema to temporary file");
 
         StaticJSONSchema::from_path(temp_file.path().to_owned(), PathBuf::new())
             .expect("Failed to create schema")
@@ -1437,8 +1437,7 @@ mod tests {
 
                 assert!(
                     diff <= tolerance,
-                    "Probability for variant {} is outside the acceptable range",
-                    variant_name
+                    "Probability for variant {variant_name} is outside the acceptable range"
                 );
             }
         }
@@ -1483,11 +1482,7 @@ mod tests {
         for (variant_name, count) in counts {
             assert!(
                 (count as i32 - expected_count as i32).abs() <= tolerance as i32,
-                "Variant {} was not sampled uniformly. Expected {} +/- {}, got {}",
-                variant_name,
-                expected_count,
-                tolerance,
-                count
+                "Variant {variant_name} was not sampled uniformly. Expected {expected_count} +/- {tolerance}, got {count}"
             );
         }
     }

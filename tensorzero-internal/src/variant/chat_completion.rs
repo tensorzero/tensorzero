@@ -178,7 +178,7 @@ impl ChatCompletionConfig {
                 .as_str()
                 .ok_or_else(|| Error::new(ErrorDetails::InvalidMessage {
                     message:
-                        format!("System message content {} is not a string but there is no variant template", system)
+                        format!("System message content {system} is not a string but there is no variant template")
                             .to_string(),
                 }))?
                 .to_string()),

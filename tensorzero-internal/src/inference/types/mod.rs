@@ -229,8 +229,7 @@ impl<'de> Deserialize<'de> for TextKind {
             }),
             "value" => Ok(TextKind::LegacyValue { value }),
             _ => Err(serde::de::Error::custom(format!(
-                "Unknown key '{}' in text content",
-                key
+                "Unknown key '{key}' in text content"
             ))),
         }
     }
@@ -1652,7 +1651,7 @@ pub fn serialize_or_log<T: Serialize>(value: &T) -> String {
         Ok(serialized) => serialized,
         Err(e) => {
             Error::new(ErrorDetails::Serialization {
-                message: format!("Failed to serialize value: {}", e),
+                message: format!("Failed to serialize value: {e}"),
             });
             String::new()
         }
@@ -2715,7 +2714,7 @@ mod tests {
             );
             assert_eq!(model_inference_result.raw_request, raw_request);
         } else {
-            panic!("Expected Ok(InferenceResult::Chat), got {:?}", result);
+            panic!("Expected Ok(InferenceResult::Chat), got {result:?}");
         }
 
         // Test Case 6: a JSON function with implicit tool call config

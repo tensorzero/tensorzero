@@ -169,7 +169,7 @@ pub enum InferenceOutput {
 impl std::fmt::Debug for InferenceOutput {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            InferenceOutput::NonStreaming(response) => write!(f, "NonStreaming({:?})", response),
+            InferenceOutput::NonStreaming(response) => write!(f, "NonStreaming({response:?})"),
             InferenceOutput::Streaming(_) => write!(f, "Streaming"),
         }
     }
@@ -227,7 +227,7 @@ pub async fn inference(
     // If the function has no variants, return an error
     if candidate_variant_names.is_empty() {
         return Err(ErrorDetails::InvalidFunctionVariants {
-            message: format!("Function `{}` has no variants", function_name),
+            message: format!("Function `{function_name}` has no variants"),
         }
         .into());
     }
@@ -674,7 +674,7 @@ fn prepare_serialized_events(
                 Ok(chunk) => {
                     serde_json::to_value(chunk).map_err(|e| {
                         Error::new(ErrorDetails::Inference {
-                            message: format!("Failed to convert chunk to JSON: {}", e),
+                            message: format!("Failed to convert chunk to JSON: {e}"),
                         })
                     })?
                 },
@@ -685,7 +685,7 @@ fn prepare_serialized_events(
             };
             yield Event::default().json_data(chunk_json).map_err(|e| {
                 Error::new(ErrorDetails::Inference {
-                    message: format!("Failed to convert Value to Event: {}", e),
+                    message: format!("Failed to convert Value to Event: {e}"),
                 })
             })
         }

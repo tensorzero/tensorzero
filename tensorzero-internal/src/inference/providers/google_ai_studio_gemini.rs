@@ -65,7 +65,7 @@ impl GoogleAIStudioGeminiProvider {
         ))
         .map_err(|e| {
             Error::new(ErrorDetails::Config {
-                message: format!("Failed to parse request URL: {}", e),
+                message: format!("Failed to parse request URL: {e}"),
             })
         })?;
         let streaming_request_url = Url::parse(&format!(
@@ -73,7 +73,7 @@ impl GoogleAIStudioGeminiProvider {
         ))
         .map_err(|e| {
             Error::new(ErrorDetails::Config {
-                message: format!("Failed to parse streaming request URL: {}", e),
+                message: format!("Failed to parse streaming request URL: {e}"),
             })
         })?;
         Ok(GoogleAIStudioGeminiProvider {
