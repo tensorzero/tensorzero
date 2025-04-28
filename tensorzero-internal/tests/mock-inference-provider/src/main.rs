@@ -1,5 +1,5 @@
 // This project is used only for testing, so it's fine if it panics
-#![allow(clippy::unwrap_used, clippy::panic, clippy::expect_used)]
+#![expect(clippy::unwrap_used, clippy::panic, clippy::expect_used)]
 
 mod error;
 mod fireworks;

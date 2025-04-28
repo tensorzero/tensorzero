@@ -1,4 +1,4 @@
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::print_stdout)]
+#![expect(clippy::unwrap_used, clippy::expect_used, clippy::print_stdout)]
 #[cfg(feature = "e2e_tests")]
 use super::escape_string_for_clickhouse_comparison;
 use super::ClickHouseConnectionInfo;

@@ -1,4 +1,4 @@
-#![allow(clippy::print_stdout)]
+#![expect(clippy::print_stdout)]
 
 use futures::StreamExt;
 use rand::Rng;

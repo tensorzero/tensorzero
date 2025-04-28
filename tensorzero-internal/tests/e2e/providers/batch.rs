@@ -1,4 +1,4 @@
-#![allow(clippy::print_stdout)]
+#![expect(clippy::print_stdout)]
 /// This file contains 3 types of test for batch inference:
 /// 1. Start a batch inference. Should do whatever is necessary for a provider to start a batch inference for a particular kind of inference
 ///    Should also set up bookkeeping so that we can poll for the batch inference to complete later on.

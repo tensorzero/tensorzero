@@ -1,6 +1,6 @@
 // This is an internal crate, so we're the only consumers of
 // traits with async fns for now.
-#![allow(async_fn_in_trait)]
+#![expect(async_fn_in_trait)]
 
 pub mod cache;
 pub mod clickhouse;
