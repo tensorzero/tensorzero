@@ -295,7 +295,7 @@ pub async fn update_datapoint_handler(
     };
     let function_data: WithFunctionName = serde_json::from_value(params.clone()).map_err(|e| {
         Error::new(ErrorDetails::InvalidRequest {
-            message: format!("Failed to deserialize `function_name``: {e}"),
+            message: format!("Failed to deserialize `function_name`: {e}"),
         })
     })?;
     let function_config =
