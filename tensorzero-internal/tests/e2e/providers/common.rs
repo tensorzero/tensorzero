@@ -6514,6 +6514,11 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
     if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
         return;
     }
+    // Groq does not support streaming in JSON mode
+    // (no reason given): https://console.groq.com/docs/text-chat#json-mode
+    if provider.model_provider_name == "groq" {
+        return;
+    }
 
     let episode_id = Uuid::now_v7();
     let extra_headers = get_extra_headers();
@@ -9317,8 +9322,12 @@ pub async fn check_dynamic_json_mode_inference_response(
 }
 
 pub async fn test_json_mode_streaming_inference_request_with_provider(provider: E2ETestProvider) {
-    if provider.variant_name.contains("tgi") || provider.variant_name.contains("cot") {
+    if provider.variant_name.contains("tgi")
+        || provider.variant_name.contains("cot")
+        || provider.model_provider_name == "groq"
+    {
         // TGI does not support streaming in JSON mode (because it doesn't support streaming tools)
+        // Groq does not support streaming in JSON mode (no reason given): https://console.groq.com/docs/text-chat#json-mode)
         return;
     }
     // OpenAI O1 doesn't support streaming responses
