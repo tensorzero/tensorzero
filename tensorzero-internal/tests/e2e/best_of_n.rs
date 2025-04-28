@@ -341,6 +341,9 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
                       "text": "You are an assistant tasked with re-ranking candidate answers to the following problem:\n------\nYou are a helpful and friendly assistant named AskJeeves\n------\nThe messages below are the conversation history between the user and the assistant along with a final message giving a set of candidate responses.\nPlease evaluate the following candidate responses and provide your reasoning along with the index of the best candidate in the following JSON format:\n{\n    \"thinking\": \"your reasoning here\",\n    \"answer_choice\": int  // Range: 0 to 1\n}\nIn the \"thinking\" block:\nFirst, you should analyze each response itself against the conversation history and determine if it is a good response or not.\nThen you should think out loud about which is best and most faithful to instructions.\nIn the \"answer_choice\" block: you should output the index of the best response."
                     }
                   ]
+                },
+                "labels": {
+                    "tensorzero::inference_id": inference_id.to_string(),
                 }
             });
             assert_eq!(raw_request, expected_request);
@@ -737,6 +740,9 @@ async fn e2e_test_best_of_n_json_real_judge() {
                     "text": "You are an assistant tasked with re-ranking candidate answers to the following problem:\n------\nYou are a helpful and friendly assistant named AskJeeves\n------\nThe messages below are the conversation history between the user and the assistant along with a final message giving a set of candidate responses.\nPlease evaluate the following candidate responses and provide your reasoning along with the index of the best candidate in the following JSON format:\n{\n    \"thinking\": \"your reasoning here\",\n    \"answer_choice\": int  // Range: 0 to 1\n}\nIn the \"thinking\" block:\nFirst, you should analyze each response itself against the conversation history and determine if it is a good response or not.\nThen you should think out loud about which is best and most faithful to instructions.\nIn the \"answer_choice\" block: you should output the index of the best response.",
                   }
                 ]
+              },
+              "labels": {
+                  "tensorzero::inference_id": inference_id.to_string(),
               }
             });
             assert_eq!(raw_request, expected_request);
@@ -1169,6 +1175,9 @@ async fn e2e_test_best_of_n_judge_extra_body() {
                       "text": "You are an assistant tasked with re-ranking candidate answers to the following problem:\n------\nYou are a helpful and friendly assistant named AskJeeves\n------\nThe messages below are the conversation history between the user and the assistant along with a final message giving a set of candidate responses.\nPlease evaluate the following candidate responses and provide your reasoning along with the index of the best candidate in the following JSON format:\n{\n    \"thinking\": \"your reasoning here\",\n    \"answer_choice\": int  // Range: 0 to 1\n}\nIn the \"thinking\" block:\nFirst, you should analyze each response itself against the conversation history and determine if it is a good response or not.\nThen you should think out loud about which is best and most faithful to instructions.\nIn the \"answer_choice\" block: you should output the index of the best response."
                     }
                   ]
+                },
+                "labels": {
+                    "tensorzero::inference_id": inference_id.to_string(),
                 }
             });
             assert_eq!(raw_request, expected_request);
