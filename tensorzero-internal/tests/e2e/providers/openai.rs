@@ -1,26 +1,17 @@
 #![allow(clippy::print_stdout)]
 use std::collections::HashMap;
 
-use reqwest::Client;
-use reqwest::StatusCode;
-use serde_json::json;
-use serde_json::Value;
-use tensorzero::ClientInput;
-use tensorzero::ClientInputMessage;
-use tensorzero::ClientInputMessageContent;
-use tensorzero_internal::cache::CacheEnabledMode;
-use tensorzero_internal::cache::CacheOptions;
+use reqwest::{Client, StatusCode};
+use serde_json::{json, Value};
+use tensorzero::{ClientInput, ClientInputMessage, ClientInputMessageContent};
+use tensorzero_internal::cache::{CacheEnabledMode, CacheOptions};
 use tensorzero_internal::config_parser::ProviderTypesConfig;
-use tensorzero_internal::embeddings::EmbeddingModelConfig;
-#[allow(unused)]
-use tensorzero_internal::embeddings::EmbeddingProvider;
-use tensorzero_internal::embeddings::UninitializedEmbeddingProviderConfig;
-use tensorzero_internal::endpoints::inference::InferenceClients;
-use tensorzero_internal::{
-    embeddings::{EmbeddingProviderConfig, EmbeddingRequest},
-    endpoints::inference::InferenceCredentials,
-    inference::types::{Latency, ModelInferenceRequestJsonMode},
+use tensorzero_internal::embeddings::{
+    EmbeddingModelConfig, EmbeddingProvider, EmbeddingProviderConfig, EmbeddingRequest,
+    UninitializedEmbeddingProviderConfig,
 };
+use tensorzero_internal::endpoints::inference::{InferenceClients, InferenceCredentials};
+use tensorzero_internal::inference::types::{Latency, ModelInferenceRequestJsonMode};
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;

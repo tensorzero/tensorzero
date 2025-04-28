@@ -33,7 +33,6 @@ pub async fn clickhouse_flush_async_insert(clickhouse: &ClickHouseConnectionInfo
     }
 }
 
-#[allow(dead_code)]
 pub async fn select_chat_datapoint_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     inference_id: Uuid,
@@ -53,7 +52,6 @@ pub async fn select_chat_datapoint_clickhouse(
     Some(json)
 }
 
-#[allow(dead_code)]
 pub async fn select_json_datapoint_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     inference_id: Uuid,

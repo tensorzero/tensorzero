@@ -31,7 +31,7 @@ use super::provider_trait::TensorZeroEventError;
 
 lazy_static! {
     static ref XAI_DEFAULT_BASE_URL: Url = {
-        #[allow(clippy::expect_used)]
+        #[expect(clippy::expect_used)]
         Url::parse("https://api.x.ai/v1").expect("Failed to parse XAI_DEFAULT_BASE_URL")
     };
 }

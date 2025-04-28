@@ -123,7 +123,6 @@ struct InferenceMetadata {
     pub tags: HashMap<String, String>,
     pub tool_config: Option<ToolCallConfig>,
     pub dynamic_output_schema: Option<DynamicJSONSchema>,
-    #[allow(dead_code)] // We may start exposing this in the response
     pub cached: bool,
     pub extra_body: UnfilteredInferenceExtraBody,
 }

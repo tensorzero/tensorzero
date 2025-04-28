@@ -35,7 +35,7 @@ use super::{
 
 lazy_static! {
     static ref MISTRAL_API_BASE: Url = {
-        #[allow(clippy::expect_used)]
+        #[expect(clippy::expect_used)]
         Url::parse("https://api.mistral.ai/v1/").expect("Failed to parse MISTRAL_API_BASE")
     };
 }

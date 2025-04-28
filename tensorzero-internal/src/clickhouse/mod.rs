@@ -48,7 +48,7 @@ impl ClickHouseConnectionInfo {
             })
         })?;
 
-        #[allow(unused_variables)]
+        #[cfg(not(feature = "e2e_tests"))]
         let database = validate_clickhouse_url_get_db_name(&database_url)?
             .unwrap_or_else(|| "default".to_string());
 
@@ -511,6 +511,7 @@ fn set_clickhouse_format_settings(database_url: &mut Url) {
     database_url.query_pairs_mut().finish();
 }
 
+#[cfg(any(not(feature = "e2e_tests"), test))]
 fn validate_clickhouse_url_get_db_name(url: &Url) -> Result<Option<String>, Error> {
     // Check the scheme
     match url.scheme() {

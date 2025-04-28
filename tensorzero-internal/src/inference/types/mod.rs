@@ -509,8 +509,7 @@ pub enum InferenceResult {
 #[derive(Clone, Debug)]
 pub struct ChatInferenceResult {
     pub inference_id: Uuid,
-    #[allow(dead_code)]
-    created: u64,
+    pub created: u64,
     pub content: Vec<ContentBlockChatOutput>,
     pub usage: Usage,
     pub model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
@@ -976,7 +975,7 @@ impl InferenceResult {
 }
 
 impl JsonInferenceResult {
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     pub fn new(
         inference_id: Uuid,
         raw: Option<String>,
@@ -1152,7 +1151,7 @@ impl JsonInferenceDatabaseInsert {
 
 // Function to get the current timestamp in seconds
 pub fn current_timestamp() -> u64 {
-    #[allow(clippy::expect_used)]
+    #[expect(clippy::expect_used)]
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("Time went backwards")

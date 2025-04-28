@@ -53,7 +53,7 @@ impl Default for StaticJSONSchema {
         let static_schema: &'static serde_json::Value = Box::leak(Box::new(empty_schema));
 
         // Compile the schema
-        #[allow(clippy::expect_used)]
+        #[expect(clippy::expect_used)]
         let compiled_schema =
             jsonschema::validator_for(static_schema).expect("Failed to compile empty schema");
 

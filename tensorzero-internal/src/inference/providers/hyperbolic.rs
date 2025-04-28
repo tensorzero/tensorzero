@@ -27,7 +27,7 @@ use super::provider_trait::{InferenceProvider, TensorZeroEventError};
 
 lazy_static! {
     static ref HYPERBOLIC_DEFAULT_BASE_URL: Url = {
-        #[allow(clippy::expect_used)]
+        #[expect(clippy::expect_used)]
         Url::parse("https://api.hyperbolic.xyz/v1/")
             .expect("Failed to parse HYPERBOLIC_DEFAULT_BASE_URL")
     };

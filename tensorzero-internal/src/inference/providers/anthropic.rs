@@ -39,7 +39,7 @@ use super::openai::convert_stream_error;
 
 lazy_static! {
     static ref ANTHROPIC_BASE_URL: Url = {
-        #[allow(clippy::expect_used)]
+        #[expect(clippy::expect_used)]
         Url::parse("https://api.anthropic.com/v1/messages")
             .expect("Failed to parse ANTHROPIC_BASE_URL")
     };

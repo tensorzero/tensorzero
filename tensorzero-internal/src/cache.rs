@@ -393,8 +393,7 @@ pub async fn cache_lookup_inner<T: CacheOutput + DeserializeOwned>(
     let short_cache_key = cache_key.get_short_key()?.to_string();
     let long_cache_key = cache_key.get_long_key();
     // The clickhouse query args look like rust format string args, but they're not.
-    #[allow(unknown_lints)]
-    #[allow(clippy::literal_string_with_formatting_args)]
+    #[expect(clippy::literal_string_with_formatting_args)]
     let query = if max_age_s.is_some() {
         r#"
             SELECT

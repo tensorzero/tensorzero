@@ -43,7 +43,7 @@ use super::{
 
 lazy_static! {
     static ref TOGETHER_API_BASE: Url = {
-        #[allow(clippy::expect_used)]
+        #[expect(clippy::expect_used)]
         Url::parse("https://api.together.xyz/v1").expect("Failed to parse TOGETHER_API_BASE")
     };
 }

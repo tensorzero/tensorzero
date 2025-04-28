@@ -160,7 +160,6 @@ struct RunEvaluatorParams<'a> {
 /// - Err(e): The evaluator failed to run due to some error (like the LLM Judge failed to infer).
 ///
 /// NOTE: Each evaluator we implement in the match statement below should follow this contract.
-#[allow(clippy::too_many_arguments)]
 async fn run_evaluator(params: RunEvaluatorParams<'_>) -> Result<EvaluatorResult> {
     let RunEvaluatorParams {
         evaluation_config,

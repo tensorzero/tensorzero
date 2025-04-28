@@ -609,7 +609,6 @@ mod tests {
                 Arc::new(StaticToolConfig {
                     name: "get_temperature".to_string(),
                     description: "Get the current temperature in a given location".to_string(),
-                    #[allow(clippy::expect_used)]
                     parameters: StaticJSONSchema::from_value(&json!({
                     "type": "object",
                     "properties": {
@@ -628,7 +627,6 @@ mod tests {
                     name: "query_articles".to_string(),
                     description: "Query articles from a database based on given criteria"
                         .to_string(),
-                    #[allow(clippy::expect_used)]
                     parameters: StaticJSONSchema::from_value(&json!({
                         "type": "object",
                         "properties": {

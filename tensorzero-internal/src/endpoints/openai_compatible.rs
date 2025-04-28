@@ -609,7 +609,6 @@ impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
 
 #[derive(Deserialize, Debug)]
 #[serde(tag = "type", deny_unknown_fields, rename_all = "snake_case")]
-#[allow(dead_code)]
 enum OpenAICompatibleContentBlock {
     Text(TextContent),
     ImageUrl { image_url: OpenAICompatibleImageUrl },
@@ -617,7 +616,6 @@ enum OpenAICompatibleContentBlock {
 
 #[derive(Deserialize, Debug)]
 #[serde(tag = "type", deny_unknown_fields, rename_all = "snake_case")]
-#[allow(dead_code)]
 struct OpenAICompatibleImageUrl {
     url: Url,
 }

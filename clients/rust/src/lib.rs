@@ -565,7 +565,7 @@ impl Client {
         if let Some(Err(_)) = first {
             // Discard the stream if it has an error
             let res = event_source.next().await;
-            #[allow(clippy::panic)]
+            #[expect(clippy::panic)]
             let Some(Err(e)) = res
             else {
                 panic!("Peeked error but got non-err {res:?}");

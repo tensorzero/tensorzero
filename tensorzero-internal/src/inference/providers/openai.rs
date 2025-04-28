@@ -47,7 +47,7 @@ use super::provider_trait::{TensorZeroEventError, WrappedProvider};
 
 lazy_static! {
     static ref OPENAI_DEFAULT_BASE_URL: Url = {
-        #[allow(clippy::expect_used)]
+        #[expect(clippy::expect_used)]
         Url::parse("https://api.openai.com/v1/").expect("Failed to parse OPENAI_DEFAULT_BASE_URL")
     };
 }

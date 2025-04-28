@@ -38,7 +38,7 @@ use super::openai::{
 
 lazy_static! {
     static ref DEEPSEEK_DEFAULT_BASE_URL: Url = {
-        #[allow(clippy::expect_used)]
+        #[expect(clippy::expect_used)]
         Url::parse("https://api.deepseek.com/v1")
             .expect("Failed to parse DEEPSEEK_DEFAULT_BASE_URL")
     };

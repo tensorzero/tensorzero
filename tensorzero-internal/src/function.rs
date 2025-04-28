@@ -162,7 +162,7 @@ impl FunctionConfig {
     }
 
     #[instrument(skip_all, fields(inference_id))]
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     pub async fn prepare_response<'a, 'request>(
         &self,
         inference_id: Uuid,
