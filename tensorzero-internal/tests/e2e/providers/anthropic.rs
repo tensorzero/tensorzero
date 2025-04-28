@@ -81,12 +81,20 @@ async fn get_providers() -> E2ETestProviders {
         },
         E2ETestProvider {
             supports_batch_inference: false,
-            variant_name: "anthropic-default".to_string(),
+            variant_name: "anthropic-strict".to_string(),
             model_name: "claude-3-haiku-20240307-anthropic".into(),
             model_provider_name: "anthropic".into(),
             credentials: HashMap::new(),
         },
     ];
+
+    let json_mode_off_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "anthropic_json_mode_off".to_string(),
+        model_name: "claude-3-haiku-20240307-anthropic".into(),
+        model_provider_name: "anthropic".into(),
+        credentials: HashMap::new(),
+    }];
 
     let shorthand_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
@@ -108,6 +116,7 @@ async fn get_providers() -> E2ETestProviders {
         dynamic_tool_use_inference: standard_providers.clone(),
         parallel_tool_use_inference: standard_providers.clone(),
         json_mode_inference: json_providers.clone(),
+        json_mode_off_inference: json_mode_off_providers.clone(),
         image_inference: image_providers,
 
         shorthand_inference: shorthand_providers.clone(),
