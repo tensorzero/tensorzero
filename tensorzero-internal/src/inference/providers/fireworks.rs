@@ -38,7 +38,7 @@ use super::{
 
 lazy_static! {
     static ref FIREWORKS_API_BASE: Url = {
-        #[allow(clippy::expect_used)]
+        #[expect(clippy::expect_used)]
         Url::parse("https://api.fireworks.ai/inference/v1/")
             .expect("Failed to parse FIREWORKS_API_BASE")
     };
@@ -159,6 +159,7 @@ impl InferenceProvider for FireworksProvider {
             )?;
         let headers = inject_extra_request_data(
             &request.extra_body,
+            &request.extra_headers,
             model_provider,
             model_name,
             &mut request_body,
@@ -263,6 +264,7 @@ impl InferenceProvider for FireworksProvider {
             )?;
         let headers = inject_extra_request_data(
             &request.extra_body,
+            &request.extra_headers,
             model_provider,
             model_name,
             &mut request_body,

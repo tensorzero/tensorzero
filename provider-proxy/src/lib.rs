@@ -1,7 +1,7 @@
 //! An HTTP/HTTPS proxy that caches non-error responses to disk.
 //! Heavily based on https://github.com/hatoo/http-mitm-proxy (MIT-licensed),
 //! with the openssl dependency and `default_client` removed.
-#![allow(clippy::panic, clippy::unwrap_used, clippy::expect_used)]
+#![expect(clippy::panic, clippy::unwrap_used, clippy::expect_used)]
 
 mod mitm_server;
 mod streaming_body_collector;

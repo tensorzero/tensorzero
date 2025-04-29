@@ -194,7 +194,7 @@ impl UnprocessedInferenceData {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments)]
 async fn query_curated_metric_data(
     clickhouse: &ClickHouseConnectionInfo,
     client: &Client,

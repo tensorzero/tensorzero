@@ -162,7 +162,7 @@ impl FunctionConfig {
     }
 
     #[instrument(skip_all, fields(inference_id))]
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     pub async fn prepare_response<'a, 'request>(
         &self,
         inference_id: Uuid,
@@ -1633,6 +1633,7 @@ mod tests {
             templates: &templates,
             dynamic_output_schema: None,
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
         let response = function_config
@@ -1949,6 +1950,7 @@ mod tests {
             templates: &templates,
             dynamic_output_schema: Some(&dynamic_output_schema),
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
         // Test with a correct content block

@@ -15,7 +15,7 @@ use crate::{
     },
     error::{Error, ErrorDetails},
     function::{FunctionConfig, FunctionConfigJson},
-    inference::types::extra_body::{ExtraBodyConfig, ExtraHeadersConfig},
+    inference::types::{extra_body::ExtraBodyConfig, extra_headers::ExtraHeadersConfig},
     jsonschema_util::StaticJSONSchema,
     tool::create_implicit_tool_call_config,
     variant::{
@@ -773,7 +773,7 @@ fn read_system_instructions<P1: AsRef<Path>, P2: AsRef<Path>>(
 /// In the code we already have a conversion from UnintializedLLMJudgeVariantConfig to VariantConfig.
 /// We want to make sure that there is an UninitializedLLMJudgeVariantConfig for each VariantConfig.
 /// This function should complain at compile time if we forget to update it when adding a new variant type.
-#[allow(dead_code)]
+#[expect(dead_code)]
 fn check_convert_variant_to_llm_judge_variant(
     variant: VariantConfig,
 ) -> Result<UninitializedLLMJudgeVariantConfig, Error> {
@@ -1516,11 +1516,9 @@ mod tests {
                         VariantConfig::ChatCompletion(cc_config) => {
                             assert_eq!(cc_config.weight, Some(1.0));
                         }
-                        #[allow(unreachable_patterns)] // Keep the pattern exhaustive
                         _ => panic!("Expected ChatCompletion variant config"),
                     }
                 }
-                #[allow(unreachable_patterns)] // Keep the pattern exhaustive
                 _ => panic!("Expected Json function config"),
             }
         }

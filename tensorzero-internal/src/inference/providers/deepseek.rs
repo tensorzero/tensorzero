@@ -38,7 +38,7 @@ use super::openai::{
 
 lazy_static! {
     static ref DEEPSEEK_DEFAULT_BASE_URL: Url = {
-        #[allow(clippy::expect_used)]
+        #[expect(clippy::expect_used)]
         Url::parse("https://api.deepseek.com/v1")
             .expect("Failed to parse DEEPSEEK_DEFAULT_BASE_URL")
     };
@@ -143,6 +143,7 @@ impl InferenceProvider for DeepSeekProvider {
             )?;
         let headers = inject_extra_request_data(
             &request.extra_body,
+            &request.extra_headers,
             model_provider,
             model_name,
             &mut request_body,
@@ -251,6 +252,7 @@ impl InferenceProvider for DeepSeekProvider {
             )?;
         let headers = inject_extra_request_data(
             &request.extra_body,
+            &request.extra_headers,
             model_provider,
             model_name,
             &mut request_body,

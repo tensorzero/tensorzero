@@ -503,7 +503,7 @@ struct Claims<'a> {
 
 impl<'a> Claims<'a> {
     fn new(iss: &'a str, sub: &'a str, aud: &'a str) -> Self {
-        #[allow(clippy::expect_used)]
+        #[expect(clippy::expect_used)]
         let current_time = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .expect("Time went backwards");
@@ -617,6 +617,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
             )?;
         let headers = inject_extra_request_data(
             &request.extra_body,
+            &request.extra_headers,
             model_provider,
             model_name,
             &mut request_body,
@@ -719,6 +720,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
             )?;
         let headers = inject_extra_request_data(
             &request.extra_body,
+            &request.extra_headers,
             model_provider,
             model_name,
             &mut request_body,
@@ -1401,7 +1403,6 @@ impl<'a> From<(&'a ToolChoice, &'a str)> for GCPVertexGeminiToolConfig<'a> {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 enum GCPVertexGeminiResponseMimeType {
     #[serde(rename = "text/plain")]
-    #[allow(dead_code)]
     TextPlain,
     #[serde(rename = "application/json")]
     ApplicationJson,

@@ -1,4 +1,4 @@
-#![allow(clippy::print_stdout)]
+#![expect(clippy::print_stdout)]
 use crate::common::get_gateway_endpoint;
 use crate::providers::common::E2ETestProvider;
 use futures::StreamExt;

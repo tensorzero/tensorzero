@@ -29,7 +29,7 @@ use super::{
     provider_trait::{InferenceProvider, WrappedProvider},
 };
 
-#[allow(unused)]
+#[expect(unused)]
 const PROVIDER_NAME: &str = "AWS Sagemaker";
 const PROVIDER_TYPE: &str = "aws_sagemaker";
 

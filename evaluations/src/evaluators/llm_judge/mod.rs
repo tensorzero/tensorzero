@@ -52,7 +52,6 @@ pub struct RunLLMJudgeEvaluatorParams<'a> {
     pub inference_cache: CacheEnabledMode,
 }
 
-#[allow(clippy::too_many_arguments)]
 pub async fn run_llm_judge_evaluator(
     params: RunLLMJudgeEvaluatorParams<'_>,
 ) -> Result<Option<LLMJudgeEvaluationResult>> {
@@ -113,6 +112,7 @@ pub async fn run_llm_judge_evaluator(
         credentials: HashMap::new(),
         cache_options: get_cache_options(inference_cache),
         extra_body: Default::default(),
+        extra_headers: Default::default(),
     };
     let result = clients.tensorzero_client.inference(params).await?;
     let response = match result {
@@ -190,7 +190,7 @@ fn prepare_llm_judge_input(
                 messages: vec![ClientInputMessage {
                     role: Role::User,
                     content: vec![ClientInputMessageContent::Text(TextKind::Arguments{
-                        #[allow(clippy::expect_used)]
+                        #[expect(clippy::expect_used)]
                         arguments: json!({"input": serialized_input, "generated_output": generated_output, "reference_output": reference_output})
                             .as_object()
                             .expect("Arguments should be an object")

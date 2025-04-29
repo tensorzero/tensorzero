@@ -8,9 +8,8 @@ use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels, InferenceParams};
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
-use crate::inference::types::extra_body::{
-    ExtraBodyConfig, ExtraHeadersConfig, FullExtraBodyConfig,
-};
+use crate::inference::types::extra_body::{ExtraBodyConfig, FullExtraBodyConfig};
+use crate::inference::types::extra_headers::{ExtraHeadersConfig, FullExtraHeadersConfig};
 use crate::inference::types::{
     batch::StartBatchModelInferenceWithMetadata, ContentBlock, InferenceResultStream,
     ModelInferenceRequest, RequestMessage, Role,
@@ -215,13 +214,21 @@ impl ChatCompletionConfig {
             );
 
         let extra_body = FullExtraBodyConfig {
-            variant_extra_headers: self.extra_headers.clone(),
             extra_body: self.extra_body.clone(),
             inference_extra_body: inference_config
                 .extra_body
                 .clone()
                 .filter(inference_config.variant_name),
         };
+
+        let extra_headers = FullExtraHeadersConfig {
+            variant_extra_headers: self.extra_headers.clone(),
+            inference_extra_headers: inference_config
+                .extra_headers
+                .clone()
+                .filter(inference_config.variant_name),
+        };
+
         prepare_model_inference_request(
             messages,
             system,
@@ -231,6 +238,7 @@ impl ChatCompletionConfig {
             inference_params,
             self.json_mode,
             extra_body,
+            extra_headers,
         )
     }
 }
@@ -941,6 +949,7 @@ mod tests {
                 episode_id: Uuid::now_v7(),
             },
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
         let models = ModelTable::default();
@@ -995,6 +1004,7 @@ mod tests {
                 episode_id: Uuid::now_v7(),
             },
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
         let result = chat_completion_config
@@ -1046,6 +1056,7 @@ mod tests {
                 episode_id: Uuid::now_v7(),
             },
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
         let err = chat_completion_config
@@ -1126,6 +1137,7 @@ mod tests {
                 episode_id: Uuid::now_v7(),
             },
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
         let result = chat_completion_config
@@ -1204,6 +1216,7 @@ mod tests {
                 episode_id: Uuid::now_v7(),
             },
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
         let result = chat_completion_config
@@ -1291,6 +1304,7 @@ mod tests {
                 episode_id: Uuid::now_v7(),
             },
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
         let inference_params = InferenceParams::default();
@@ -1352,6 +1366,7 @@ mod tests {
             variant_name: Some(""),
             dynamic_output_schema: None,
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
         let chat_completion_config = ChatCompletionConfig {
@@ -1462,6 +1477,7 @@ mod tests {
             variant_name: Some(""),
             dynamic_output_schema: Some(&output_schema),
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
         let chat_completion_config = ChatCompletionConfig {
@@ -1561,6 +1577,7 @@ mod tests {
             variant_name: Some(""),
             dynamic_output_schema: Some(&output_schema),
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
         let chat_completion_config = ChatCompletionConfig {
@@ -1737,6 +1754,7 @@ mod tests {
             function_name: "",
             variant_name: Some(""),
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
         let result = chat_completion_config
@@ -1801,6 +1819,7 @@ mod tests {
             variant_name: Some(""),
             dynamic_output_schema: None,
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
         let (mut stream, models_used) = chat_completion_config
@@ -1903,6 +1922,7 @@ mod tests {
             variant_name: Some(""),
             dynamic_output_schema: None,
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
         let model_request = chat_completion_config
@@ -2009,6 +2029,7 @@ mod tests {
             function_name: "",
             variant_name: Some(""),
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
         let mut inference_params = InferenceParams::default();
@@ -2088,6 +2109,7 @@ mod tests {
                 episode_id: Uuid::now_v7(),
             },
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
         let model_request = chat_completion_config

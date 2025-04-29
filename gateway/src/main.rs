@@ -51,8 +51,12 @@ struct Args {
 }
 
 async fn add_version_header(request: Request, next: Next) -> Response {
-    #[allow(unused_mut)]
+    #[cfg(not(feature = "e2e_tests"))]
+    let version = HeaderValue::from_static(TENSORZERO_VERSION);
+
+    #[cfg(feature = "e2e_tests")]
     let mut version = HeaderValue::from_static(TENSORZERO_VERSION);
+
     #[cfg(feature = "e2e_tests")]
     {
         if request
@@ -67,6 +71,7 @@ async fn add_version_header(request: Request, next: Next) -> Response {
             version = header_version.clone();
         }
     }
+
     let mut response = next.run(request).await;
     response
         .headers_mut()

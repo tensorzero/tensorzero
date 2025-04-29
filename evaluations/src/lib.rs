@@ -98,7 +98,6 @@ pub async fn run_evaluation(
         .clone();
     let EvaluationConfig::Static(static_evaluation_config) = &*evaluation_config;
     let function_config = config.get_function(&static_evaluation_config.function_name)?;
-    #[allow(unused)]
     let tensorzero_client = match args.gateway_url {
         Some(gateway_url) => {
             ClientBuilder::new(ClientBuilderMode::HTTPGateway { url: gateway_url })
@@ -382,6 +381,7 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
         include_original_response: false,
         internal: true,
         extra_body: Default::default(),
+        extra_headers: Default::default(),
     };
     let inference_result = clients.tensorzero_client.inference(params).await?;
     match inference_result {

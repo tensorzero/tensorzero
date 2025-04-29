@@ -1,5 +1,5 @@
-//! Code is from https://github.com/hatoo/http-mitm-proxy/blob/7c8c3bde77173af6385d5d0ffaea6105498df1ff/src/lib.rs (MIT-licensed)
-#![allow(clippy::panic, clippy::unwrap_used)]
+//! Code is based on https://github.com/hatoo/http-mitm-proxy/blob/7c8c3bde77173af6385d5d0ffaea6105498df1ff/src/lib.rs (MIT-licensed)
+#![expect(clippy::unwrap_used)]
 
 use crate::tls::{generate_cert, CertifiedKeyDer};
 use http_body_util::{combinators::BoxBody, BodyExt, Empty};

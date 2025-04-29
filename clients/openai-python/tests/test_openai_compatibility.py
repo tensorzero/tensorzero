@@ -19,6 +19,7 @@ uv run pytest
 ```
 """
 
+import asyncio
 import base64
 import json
 import os
@@ -220,11 +221,14 @@ async def test_async_inference_streaming_with_cache(async_client):
     assert final_chunk.usage.prompt_tokens == 10
     assert final_chunk.usage.completion_tokens == 16
 
+    # Wait for trailing cache write to ClickHouse
+    await asyncio.sleep(1)
+
     # Second request with cache
     stream = await async_client.chat.completions.create(
         extra_body={
             "tensorzero::episode_id": str(uuid7()),
-            "tensorzero::cache_options": {"max_age_s": 10, "enabled": "on"},
+            "tensorzero::cache_options": {"max_age_s": None, "enabled": "on"},
         },
         messages=messages,
         model="tensorzero::function_name::basic_test",

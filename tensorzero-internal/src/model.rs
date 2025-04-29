@@ -8,8 +8,7 @@ use std::time::Duration;
 use std::{env, fs};
 use strum::VariantNames;
 use tensorzero_derive::TensorZeroDeserialize;
-#[allow(unused_imports)]
-use tracing::{span, warn, Instrument, Level};
+use tracing::{span, Instrument, Level};
 use url::Url;
 
 use crate::cache::{
@@ -31,7 +30,8 @@ use crate::inference::types::batch::{
     BatchRequestRow, PollBatchInferenceResponse, StartBatchModelInferenceResponse,
     StartBatchProviderInferenceResponse,
 };
-use crate::inference::types::extra_body::{ExtraBodyConfig, ExtraHeadersConfig};
+use crate::inference::types::extra_body::ExtraBodyConfig;
+use crate::inference::types::extra_headers::ExtraHeadersConfig;
 use crate::inference::types::{
     current_timestamp, ContentBlock, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, RequestMessage, Usage,
@@ -509,12 +509,12 @@ pub struct ModelProviderRequestInfo {
 }
 
 #[derive(Debug)]
-#[allow(clippy::large_enum_variant)]
 pub enum ProviderConfig {
     Anthropic(AnthropicProvider),
     AWSBedrock(AWSBedrockProvider),
     AWSSagemaker(AWSSagemakerProvider),
     Azure(AzureProvider),
+    DeepSeek(DeepSeekProvider),
     Fireworks(FireworksProvider),
     GCPVertexAnthropic(GCPVertexAnthropicProvider),
     GCPVertexGemini(GCPVertexGeminiProvider),
@@ -522,12 +522,11 @@ pub enum ProviderConfig {
     Hyperbolic(HyperbolicProvider),
     Mistral(MistralProvider),
     OpenAI(OpenAIProvider),
+    SGLang(SGLangProvider),
+    TGI(TGIProvider),
     Together(TogetherProvider),
     VLLM(VLLMProvider),
     XAI(XAIProvider),
-    TGI(TGIProvider),
-    SGLang(SGLangProvider),
-    DeepSeek(DeepSeekProvider),
     #[cfg(any(test, feature = "e2e_tests"))]
     Dummy(DummyProvider),
 }
@@ -623,29 +622,27 @@ pub(super) enum UninitializedProviderConfig {
         #[serde(default = "crate::inference::providers::together::default_parse_think_blocks")]
         parse_think_blocks: bool,
     },
-    #[allow(clippy::upper_case_acronyms)]
+    #[expect(clippy::upper_case_acronyms)]
     VLLM {
         model_name: String,
         api_base: Url,
         api_key_location: Option<CredentialLocation>,
     },
-    #[allow(clippy::upper_case_acronyms)]
+    #[expect(clippy::upper_case_acronyms)]
     XAI {
         model_name: String,
         api_key_location: Option<CredentialLocation>,
     },
-    #[allow(clippy::upper_case_acronyms)]
+    #[expect(clippy::upper_case_acronyms)]
     TGI {
         api_base: Url,
         api_key_location: Option<CredentialLocation>,
     },
-    #[allow(clippy::upper_case_acronyms)]
     SGLang {
         model_name: String,
         api_base: Url,
         api_key_location: Option<CredentialLocation>,
     },
-    #[allow(clippy::upper_case_acronyms)]
     DeepSeek {
         model_name: String,
         api_key_location: Option<CredentialLocation>,
@@ -1252,7 +1249,7 @@ fn racy_get_or_try_init<T: Clone, E>(
 
 impl TryFrom<(CredentialLocation, &str)> for Credential {
     type Error = Error;
-    #[allow(unused_variables)]
+
     fn try_from(
         (location, provider_type): (CredentialLocation, &str),
     ) -> Result<Self, Self::Error> {
@@ -1263,7 +1260,7 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
                     if SKIP_CREDENTIAL_VALIDATION.is_set() {
                         #[cfg(any(test, feature = "e2e_tests"))]
                         {
-                            warn!(
+                            tracing::warn!(
                             "You are missing the credentials required for a model provider of type {}, so the associated tests will likely fail.",
                             provider_type
                         );
@@ -1284,7 +1281,7 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
                         if SKIP_CREDENTIAL_VALIDATION.is_set() {
                             #[cfg(any(test, feature = "e2e_tests"))]
                             {
-                                warn!(
+                                tracing::warn!(
                                 "Environment variable {} is required for a model provider of type {} but is missing, so the associated tests will likely fail.",
                                 env_key, provider_type
 
@@ -1307,7 +1304,7 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
                         if SKIP_CREDENTIAL_VALIDATION.is_set() {
                             #[cfg(any(test, feature = "e2e_tests"))]
                             {
-                                warn!(
+                                tracing::warn!(
                                 "Failed to read credentials file for a model provider of type {}, so the associated tests will likely fail: {}",
                                 provider_type, e
                             );
@@ -1329,7 +1326,7 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
                     if SKIP_CREDENTIAL_VALIDATION.is_set() {
                         #[cfg(any(test, feature = "e2e_tests"))]
                         {
-                            warn!(
+                            tracing::warn!(
                                 "Failed to read credentials file for a model provider of type {}, so the associated tests will likely fail: {}",
                             provider_type, e
                         );

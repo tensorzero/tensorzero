@@ -31,7 +31,7 @@ use super::provider_trait::TensorZeroEventError;
 
 lazy_static! {
     static ref XAI_DEFAULT_BASE_URL: Url = {
-        #[allow(clippy::expect_used)]
+        #[expect(clippy::expect_used)]
         Url::parse("https://api.x.ai/v1").expect("Failed to parse XAI_DEFAULT_BASE_URL")
     };
 }
@@ -137,6 +137,7 @@ impl InferenceProvider for XAIProvider {
             })?;
         let headers = inject_extra_request_data(
             &request.extra_body,
+            &request.extra_headers,
             model_provider,
             model_name,
             &mut request_body,
@@ -243,6 +244,7 @@ impl InferenceProvider for XAIProvider {
             })?;
         let headers = inject_extra_request_data(
             &request.extra_body,
+            &request.extra_headers,
             model_provider,
             model_name,
             &mut request_body,

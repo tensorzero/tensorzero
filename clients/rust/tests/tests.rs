@@ -1,5 +1,5 @@
 #![cfg(feature = "e2e_tests")]
-#![allow(clippy::panic, clippy::unwrap_used, clippy::expect_used)]
+#![expect(clippy::unwrap_used)]
 use serde_json::json;
 use tensorzero::{
     input_handling::resolved_input_to_client_input, ClientBuilder, ClientBuilderMode,

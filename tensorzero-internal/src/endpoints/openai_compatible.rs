@@ -31,6 +31,7 @@ use crate::endpoints::inference::{
 use crate::error::{Error, ErrorDetails};
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
+use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use crate::inference::types::{
     current_timestamp, ContentBlockChatOutput, ContentBlockChunk, FinishReason, Image, ImageKind,
     Input, InputMessage, InputMessageContent, Role, TextKind, Usage,
@@ -490,6 +491,7 @@ impl Params {
             include_original_response: false,
             // OpenAI compatible endpoint does not support 'extra_body'
             extra_body: UnfilteredInferenceExtraBody::default(),
+            extra_headers: UnfilteredInferenceExtraHeaders::default(),
         })
     }
 }
@@ -609,7 +611,6 @@ impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
 
 #[derive(Deserialize, Debug)]
 #[serde(tag = "type", deny_unknown_fields, rename_all = "snake_case")]
-#[allow(dead_code)]
 enum OpenAICompatibleContentBlock {
     Text(TextContent),
     ImageUrl { image_url: OpenAICompatibleImageUrl },
@@ -617,7 +618,6 @@ enum OpenAICompatibleContentBlock {
 
 #[derive(Deserialize, Debug)]
 #[serde(tag = "type", deny_unknown_fields, rename_all = "snake_case")]
-#[allow(dead_code)]
 struct OpenAICompatibleImageUrl {
     url: Url,
 }
