@@ -486,7 +486,7 @@ pub async fn create_datapoint_handler(
 ) -> Result<Json<CreateDatapointResponse>, Error> {
     validate_dataset_name(&path_params.dataset_name)?;
     let function_config = get_possibly_default_function(&params.function_name, &app_state.config)?;
-    todo!()
+    let num_datapoints = params.input.len();
 }
 
 #[derive(Debug, Deserialize)]
