@@ -142,8 +142,13 @@ async fn main() {
     // See `build_opentelemetry_layer` for the details of exactly what spans we export.
     if config.gateway.export.otlp.traces.enabled {
         if std::env::var("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT").is_err() {
-            tracing::error!("[gateway.export.otlp.traces] has `enabled = true`, but env var `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` is not set. Please set it to the OTLP endpoint (e.g. `http://localhost:4317`)");
-            std::process::exit(1);
+            // This makes it easier to run the gateway in local development and CI
+            if cfg!(feature = "e2e_tests") {
+                tracing::warn!("Running without explicit `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` env var in e2e tests mode")
+            } else {
+                tracing::error!("[gateway.export.otlp.traces] has `enabled = true`, but env var `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` is not set. Please set it to the OTLP endpoint (e.g. `http://localhost:4317`)");
+                std::process::exit(1);
+            }
         }
         otel_handle
             .enable_otel()

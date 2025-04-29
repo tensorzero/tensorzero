@@ -9,10 +9,11 @@ use opentelemetry_sdk::{
     trace::{SpanData, SpanExporter},
 };
 use tensorzero::{
-    observability::build_opentelemetry_layer, ClientInferenceParams, ClientInput,
-    ClientInputMessage, ClientInputMessageContent, InferenceOutput, Role,
+    ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
+    InferenceOutput, Role,
 };
 use tensorzero_internal::inference::types::TextKind;
+use tensorzero_internal::observability::build_opentelemetry_layer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::providers::common::make_embedded_gateway_no_config;
