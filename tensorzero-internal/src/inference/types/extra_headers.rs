@@ -17,7 +17,7 @@ pub struct ExtraHeader {
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(transparent)]
 pub struct UnfilteredInferenceExtraHeaders {
-    headers: Vec<InferenceExtraHeader>,
+    pub headers: Vec<InferenceExtraHeader>,
 }
 
 impl UnfilteredInferenceExtraHeaders {
