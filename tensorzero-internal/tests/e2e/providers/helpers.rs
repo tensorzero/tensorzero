@@ -23,6 +23,12 @@ pub fn get_extra_headers() -> UnfilteredInferenceExtraHeaders {
         name: "Modal-Key".to_string(),
         value: modal_key.clone(),
     });
+    extra_headers.push(InferenceExtraHeader::Provider {
+        model_provider_name: "tensorzero::model_name::google/gemma-3-1b-it::provider_name::sglang"
+            .to_string(),
+        name: "Modal-Key".to_string(),
+        value: modal_key.clone(),
+    });
     let modal_secret = env::var("MODAL_SECRET").unwrap();
     extra_headers.push(InferenceExtraHeader::Provider {
         model_provider_name: "tensorzero::model_name::smol-lm-instruct-vllm::provider_name::vllm"
@@ -32,6 +38,12 @@ pub fn get_extra_headers() -> UnfilteredInferenceExtraHeaders {
     });
     extra_headers.push(InferenceExtraHeader::Provider {
         model_provider_name: "tensorzero::model_name::smol-lm-instruct-vllm-dynamic::provider_name::vllm"
+            .to_string(),
+        name: "Modal-Secret".to_string(),
+        value: modal_secret.clone(),
+    });
+    extra_headers.push(InferenceExtraHeader::Provider {
+        model_provider_name: "tensorzero::model_name::google/gemma-3-1b-it::provider_name::sglang"
             .to_string(),
         name: "Modal-Secret".to_string(),
         value: modal_secret.clone(),

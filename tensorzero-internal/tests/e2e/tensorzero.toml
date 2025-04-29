@@ -278,13 +278,13 @@ routing = ["together"]
 type = "together"
 model_name = "meta-llama/Meta-Llama-3.1-405B-Instruct-Turbo"
 
-[models."HuggingFaceTB/SmolLM-1.7B-Instruct"]
+[models."google/gemma-3-1b-it"]
 routing = ["sglang"]
 
-[models."HuggingFaceTB/SmolLM-1.7B-Instruct".providers.sglang]
+[models."google/gemma-3-1b-it".providers.sglang]
 type = "sglang"
-model_name = "HuggingFaceTB/SmolLM-1.7B-Instruct"
-api_base = "https://s6o7i4kpd3a1em-80.proxy.runpod.net/v1/"
+model_name = "google/gemma-3-1b-it"
+api_base = "https://tensorzero--sglang-inference-sglang-inference.modal.run/v1/"
 
 [models."smol-lm-instruct-vllm"]
 routing = ["vllm"]
@@ -301,7 +301,6 @@ routing = ["vllm"]
 type = "vllm"
 model_name = "HuggingFaceTB/SmolLM-1.7B-Instruct"
 api_base = "https://tensorzero--vllm-inference-vllm-inference.modal.run/v1/"
-api_key_location = "dynamic::vllm_api_key"
 
 [models."open-mistral-nemo-2407"]
 routing = ["mistral"]
@@ -970,25 +969,16 @@ max_tokens = 100
 
 [functions.basic_test.variants.sglang]
 type = "chat_completion"
-model = "HuggingFaceTB/SmolLM-1.7B-Instruct"
+model = "google/gemma-3-1b-it"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
 [functions.basic_test.variants.sglang-extra-body]
 type = "chat_completion"
-model = "HuggingFaceTB/SmolLM-1.7B-Instruct"
+model = "google/gemma-3-1b-it"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 extra_body = [{ pointer = "/temperature", value = 0.123 }]
-
-[functions.basic_test.variants.sglang-extra-headers]
-type = "chat_completion"
-model = "HuggingFaceTB/SmolLM-1.7B-Instruct"
-system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-max_tokens = 100
-extra_headers = [
-    { name = "Authorization", value = "Bearer invalid_sglang_auth" },
-]
 
 [functions.basic_test.variants.vllm]
 type = "chat_completion"
@@ -1541,7 +1531,7 @@ max_tokens = 100
 
 [functions.json_success.variants.sglang]
 type = "chat_completion"
-model = "HuggingFaceTB/SmolLM-1.7B-Instruct"
+model = "google/gemma-3-1b-it"
 system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "on"
@@ -1549,7 +1539,7 @@ max_tokens = 100
 
 [functions.json_success.variants.sglang-strict]
 type = "chat_completion"
-model = "HuggingFaceTB/SmolLM-1.7B-Instruct"
+model = "google/gemma-3-1b-it"
 system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 max_tokens = 100
@@ -1751,7 +1741,7 @@ max_tokens = 100
 
 [functions.json_success.variants.sglang_json_mode_off]
 type = "chat_completion"
-model = "HuggingFaceTB/SmolLM-1.7B-Instruct"
+model = "google/gemma-3-1b-it"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "off"
@@ -2062,7 +2052,7 @@ json_mode = "strict"
 
 [functions.dynamic_json.variants.sglang]
 type = "chat_completion"
-model = "HuggingFaceTB/SmolLM-1.7B-Instruct"
+model = "google/gemma-3-1b-it"
 system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
 json_mode = "strict"
@@ -2070,7 +2060,7 @@ max_tokens = 100
 
 [functions.dynamic_json.variants.sglang-strict]
 type = "chat_completion"
-model = "HuggingFaceTB/SmolLM-1.7B-Instruct"
+model = "google/gemma-3-1b-it"
 system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
 max_tokens = 100
