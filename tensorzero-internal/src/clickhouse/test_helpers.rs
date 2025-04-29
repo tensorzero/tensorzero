@@ -105,7 +105,7 @@ pub async fn select_json_dataset_clickhouse(
     clickhouse_flush_async_insert(clickhouse_connection_info).await;
 
     let query = format!(
-        "SELECT * FROM JsonInferenceDatapoint FINAL WHERE dataset_name = '{dataset_name}' FORMAT JSONEachRow"
+        "SELECT * FROM JsonInferenceDatapoint FINAL WHERE dataset_name = '{dataset_name}' AND staled_at IS NULL FORMAT JSONEachRow"
     );
 
     let text = clickhouse_connection_info

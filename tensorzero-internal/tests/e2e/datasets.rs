@@ -6,7 +6,9 @@ use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use tensorzero::Role;
 use tensorzero_internal::{
-    clickhouse::test_helpers::{select_chat_dataset_clickhouse, stale_datapoint_clickhouse},
+    clickhouse::test_helpers::{
+        select_chat_dataset_clickhouse, select_json_dataset_clickhouse, stale_datapoint_clickhouse,
+    },
     endpoints::datasets::{DatapointKind, CLICKHOUSE_DATETIME_FORMAT},
     inference::types::{ContentBlockChatOutput, ResolvedInputMessageContent},
 };
@@ -180,7 +182,7 @@ async fn test_datapoint_insert_synthetic_chat() {
 }
 
 #[tokio::test]
-async fn test_post_delete_datapoint_chat() {
+async fn test_create_delete_datapoint_chat() {
     let clickhouse = get_clickhouse().await;
     let client = Client::new();
     let dataset_name = format!("test-dataset-{}", Uuid::now_v7());
@@ -833,6 +835,114 @@ async fn test_datapoint_insert_synthetic_json() {
       "source_inference_id": source_inference_id.to_string(),
     });
     assert_eq!(datapoint, expected);
+}
+
+#[tokio::test]
+async fn test_create_delete_datapoint_json() {
+    let clickhouse = get_clickhouse().await;
+    let client = Client::new();
+    let dataset_name = format!("test-dataset-{}", Uuid::now_v7());
+
+    let alternate_output_schema = json!({
+    "type": "object",
+    "properties": {
+        "response": {
+            "type": "string"
+        }
+    },
+    "required": ["response"],
+    "additionalProperties": false
+    });
+    let resp = client
+        .post(get_gateway_endpoint(&format!(
+            "/datasets/{dataset_name}/datapoints",
+        )))
+        .json(&json!({
+            "function_name": "json_success",
+            "input": [
+                {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "US"}}]}]},
+                {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "US"}}]}]},
+            ],
+            "output": [{"answer": "Hello"}, {"response": "Hello"}],
+            "output_schemas": [null, alternate_output_schema],
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    let status = resp.status();
+
+    assert!(status.is_success());
+
+    let datapoints = select_json_dataset_clickhouse(&clickhouse, &dataset_name)
+        .await
+        .unwrap();
+    assert_eq!(datapoints.len(), 2);
+
+    for datapoint in datapoints {
+        let pretty_datapoint = serde_json::to_string_pretty(&datapoint).unwrap();
+        println!("pretty_datapoint: {pretty_datapoint}");
+        // Verify the datapoint structure and content
+        assert_eq!(datapoint.dataset_name, dataset_name);
+        assert_eq!(datapoint.function_name, "json_success");
+        assert!(!datapoint.is_deleted);
+        assert!(datapoint.episode_id.is_none());
+        assert!(datapoint.tags.unwrap().is_empty());
+        assert_eq!(datapoint.auxiliary, "");
+        assert!(datapoint.staled_at.is_none());
+
+        // Verify input structure
+        let input = datapoint.input;
+        assert!(input.system.unwrap().get("assistant_name").is_some());
+        assert!(!input.messages.is_empty());
+        let first_message = input.messages[0].clone();
+        assert_eq!(first_message.role, Role::User);
+        let content = first_message.content;
+        assert!(!content.is_empty());
+        let first_content = content[0].clone();
+        assert!(matches!(
+            first_content,
+            ResolvedInputMessageContent::Text { .. }
+        ));
+        assert!(matches!(
+            first_content,
+            ResolvedInputMessageContent::Text { value: _, .. }
+        ));
+
+        // Get the output schema
+        let output_schema = datapoint.output_schema;
+        let output_schema_str = serde_json::to_string(&output_schema).unwrap();
+
+        // Verify output if present
+        if let Some(output) = datapoint.output {
+            if output_schema_str.contains("response") {
+                assert_eq!(output.raw, Some("{\"response\":\"Hello\"}".to_string()));
+                assert_eq!(output.parsed, Some(json!({"response": "Hello"})));
+            } else {
+                assert_eq!(output.raw, Some("{\"answer\":\"Hello\"}".to_string()));
+                assert_eq!(output.parsed, Some(json!({"answer": "Hello"})));
+            }
+        }
+
+        let datapoint_id = datapoint.id;
+        let resp = client
+            .delete(get_gateway_endpoint(&format!(
+                "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+            )))
+            .send()
+            .await
+            .unwrap();
+
+        let status = resp.status();
+        resp.text().await.unwrap();
+        assert_eq!(status, StatusCode::OK);
+    }
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    let datapoints = select_chat_dataset_clickhouse(&clickhouse, &dataset_name)
+        .await
+        .unwrap();
+    assert!(datapoints.is_empty());
 }
 
 #[tokio::test]

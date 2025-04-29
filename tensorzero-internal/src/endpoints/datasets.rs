@@ -441,6 +441,7 @@ pub async fn update_datapoint_handler(
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct CreateDatapointParams {
     // the function name
     pub function_name: String,
@@ -617,21 +618,25 @@ pub async fn create_datapoint(
                         &output,
                         dynamic_demonstration_info,
                     )
-                    .await?;
+                    .await
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::InvalidRequest {
+                            message: format!(
+                                "Failed to validate chat output for datapoint {i}: {e}"
+                            ),
+                        })
+                    })?;
                     let DemonstrationOutput::Json(output) = validated_output else {
                         return Err(Error::new(ErrorDetails::InternalError {
                             message: "Expected valid JSON output from validate_parse_demonstration"
                                 .to_string(),
                         }));
                     };
-                    let raw = serde_json::to_string(&output).map_err(|e| {
-                        Error::new(ErrorDetails::Serialization {
-                            message: format!("Failed to serialize JSON output: {e}"),
-                        })
-                    })?;
                     Some(JsonInferenceOutput {
-                        raw: Some(raw),
-                        parsed: Some(output),
+                        raw: output
+                            .get("raw")
+                            .and_then(|v| v.as_str().map(|s| s.to_string())),
+                        parsed: output.get("parsed").cloned(),
                     })
                 } else {
                     None
@@ -883,9 +888,12 @@ pub struct JsonInferenceDatapoint {
     pub function_name: String,
     pub id: Uuid,
     pub episode_id: Option<Uuid>,
+    #[serde(deserialize_with = "deserialize_json_string")]
     pub input: ResolvedInput,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(deserialize_with = "deserialize_optional_json_string")]
     pub output: Option<JsonInferenceOutput>,
+    #[serde(deserialize_with = "deserialize_json_string")]
     pub output_schema: serde_json::Value,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tags: Option<HashMap<String, String>>,
