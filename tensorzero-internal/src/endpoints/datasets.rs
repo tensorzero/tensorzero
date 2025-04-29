@@ -4,7 +4,9 @@ use axum::{
     extract::{Path, State},
     Json,
 };
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use uuid::Uuid;
 
 use crate::{
@@ -20,7 +22,6 @@ use crate::{
         ChatInferenceDatabaseInsert, ContentBlockChatOutput, FetchContext, Input,
         JsonInferenceDatabaseInsert, JsonInferenceOutput, ResolvedInput,
     },
-    jsonschema_util::DynamicJSONSchema,
     tool::{
         BatchDynamicToolParams, BatchDynamicToolParamsWithSize, DynamicToolParams,
         ToolCallConfigDatabaseInsert, ToolChoice,
@@ -205,7 +206,7 @@ async fn insert_from_existing(
                 source_inference_id: Some(existing.inference_id),
                 staled_at: None,
             };
-            let rows_written = put_deduped_json_datapoint(clickhouse, &datapoint).await?;
+            let rows_written = put_deduped_json_datapoints(clickhouse, &[datapoint]).await?;
             if rows_written == 0 {
                 return Err(Error::new(ErrorDetails::InvalidRequest {
                     message: "Datapoint with this source_inference_id already exists".to_string(),
@@ -427,7 +428,7 @@ pub async fn update_datapoint_handler(
                 staled_at: None,
             };
             let rows_written =
-                put_deduped_json_datapoint(&app_state.clickhouse_connection_info, &datapoint)
+                put_deduped_json_datapoints(&app_state.clickhouse_connection_info, &[datapoint])
                     .await?;
             if rows_written == 0 {
                 return Err(Error::new(ErrorDetails::InvalidRequest {
@@ -485,13 +486,31 @@ pub struct CreateDatapointPathParams {
 
 // The handler for the POST `/datasets/:dataset_name/datapoints` endpoint.
 /// This inserts a new datapoint into `ChatInferenceDatapoint`/`JsonInferenceDatapoint`/
+#[tracing::instrument(name = "create_datapoint_handler", skip(app_state))]
 pub async fn create_datapoint_handler(
     State(app_state): AppState,
     Path(path_params): Path<CreateDatapointPathParams>,
     StructuredJson(params): StructuredJson<CreateDatapointParams>,
 ) -> Result<(), Error> {
-    validate_dataset_name(&path_params.dataset_name)?;
-    let function_config = get_possibly_default_function(&params.function_name, &app_state.config)?;
+    create_datapoint(
+        path_params.dataset_name,
+        params,
+        &app_state.config,
+        &app_state.http_client,
+        &app_state.clickhouse_connection_info,
+    )
+    .await
+}
+
+pub async fn create_datapoint(
+    dataset_name: String,
+    params: CreateDatapointParams,
+    config: &Config<'_>,
+    http_client: &Client,
+    clickhouse: &ClickHouseConnectionInfo,
+) -> Result<(), Error> {
+    validate_dataset_name(&dataset_name)?;
+    let function_config = get_possibly_default_function(&params.function_name, config)?;
     let num_datapoints = params.input.len();
     if num_datapoints == 0 {
         return Err(Error::new(ErrorDetails::InvalidRequest {
@@ -516,20 +535,20 @@ pub async fn create_datapoint_handler(
 
     let batch_dynamic_tool_params: Vec<DynamicToolParams> =
         BatchDynamicToolParamsWithSize(params.dynamic_tool_params, num_datapoints).try_into()?;
-    let batch_dynamic_output_schemas: Vec<Option<DynamicJSONSchema>> =
+    let batch_dynamic_output_schemas: Vec<Option<Value>> =
         BatchOutputSchemasWithSize(params.output_schemas, num_datapoints).try_into()?;
 
     let tool_configs = batch_dynamic_tool_params
         .into_iter()
         .map(|dynamic_tool_params| {
-            function_config.prepare_tool_config(dynamic_tool_params, &app_state.config.tools)
+            function_config.prepare_tool_config(dynamic_tool_params, &config.tools)
         })
         .collect::<Result<Vec<_>, _>>()?;
     let fetch_context = FetchContext {
-        client: &app_state.http_client,
-        object_store_info: &app_state.config.object_store_info,
+        client: http_client,
+        object_store_info: &config.object_store_info,
     };
-    match *function_config {
+    match &*function_config {
         FunctionConfig::Chat(_) => {
             let mut datapoints = Vec::with_capacity(num_datapoints);
             // Validate all the datapoints, then write them to ClickHouse
@@ -552,7 +571,14 @@ pub async fn create_datapoint_handler(
                         })?,
                         dynamic_demonstration_info,
                     )
-                    .await?;
+                    .await
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::InvalidRequest {
+                            message: format!(
+                                "Failed to validate chat output for datapoint {i}: {e}"
+                            ),
+                        })
+                    })?;
                     let DemonstrationOutput::Chat(output) = validated_output else {
                         return Err(Error::new(ErrorDetails::InternalError {
                             message: "Expected chat output from validate_parse_demonstration"
@@ -569,7 +595,7 @@ pub async fn create_datapoint_handler(
                     .and_then(|tags| tags.get(i).cloned())
                     .flatten();
                 let datapoint = ChatInferenceDatapoint {
-                    dataset_name: path_params.dataset_name.clone(),
+                    dataset_name: dataset_name.clone(),
                     function_name: params.function_name.clone(),
                     id: Uuid::now_v7(),
                     episode_id: None,
@@ -584,11 +610,81 @@ pub async fn create_datapoint_handler(
                 };
                 datapoints.push(datapoint);
             }
-            put_deduped_chat_datapoints(&app_state.clickhouse_connection_info, &datapoints).await?;
+            // Actually write the datapoints to ClickHouse
+            put_deduped_chat_datapoints(clickhouse, &datapoints).await?;
             Ok(())
         }
-        FunctionConfig::Json(_) => {
-            todo!()
+        FunctionConfig::Json(json_function_config) => {
+            let mut datapoints = Vec::with_capacity(num_datapoints);
+            for (i, input) in params.input.into_iter().enumerate() {
+                let resolved_input = input.resolve(&fetch_context).await?;
+                let output_schema = batch_dynamic_output_schemas.get(i).ok_or_else(|| {
+                    Error::new(ErrorDetails::InvalidRequest {
+                        message: format!("Expected output schema or None for datapoint {i}"),
+                    })
+                })?;
+                let output_schema = output_schema
+                    .as_ref()
+                    .unwrap_or(json_function_config.output_schema.value);
+                let dynamic_demonstration_info =
+                    DynamicDemonstrationInfo::Json(output_schema.clone());
+                let output = if let Some(output) = batch_datapoint_output[i].clone() {
+                    let DatapointOutput::Json(output) = output else {
+                        return Err(Error::new(ErrorDetails::InvalidRequest {
+                            message: format!("Expected JSON output for datapoint {i}"),
+                        }));
+                    };
+                    let validated_output = validate_parse_demonstration(
+                        &function_config,
+                        &serde_json::to_value(output).map_err(|e| {
+                            Error::new(ErrorDetails::Serialization {
+                                message: format!("Failed to serialize JSON output: {e}"),
+                            })
+                        })?,
+                        dynamic_demonstration_info,
+                    )
+                    .await?;
+                    let DemonstrationOutput::Json(output) = validated_output else {
+                        return Err(Error::new(ErrorDetails::InternalError {
+                            message: "Expected valid JSON output from validate_parse_demonstration"
+                                .to_string(),
+                        }));
+                    };
+                    let raw = serde_json::to_string(&output).map_err(|e| {
+                        Error::new(ErrorDetails::Serialization {
+                            message: format!("Failed to serialize JSON output: {e}"),
+                        })
+                    })?;
+                    Some(JsonInferenceOutput {
+                        raw: Some(raw),
+                        parsed: Some(output),
+                    })
+                } else {
+                    None
+                };
+                let tags = params
+                    .tags
+                    .as_ref()
+                    .and_then(|tags| tags.get(i).cloned())
+                    .flatten();
+                let datapoint = JsonInferenceDatapoint {
+                    dataset_name: dataset_name.clone(),
+                    function_name: params.function_name.clone(),
+                    id: Uuid::now_v7(),
+                    episode_id: None,
+                    input: resolved_input,
+                    output,
+                    output_schema: output_schema.clone(),
+                    tags,
+                    auxiliary: "".to_string(),
+                    is_deleted: false,
+                    source_inference_id: None,
+                    staled_at: None,
+                };
+                datapoints.push(datapoint);
+            }
+            put_deduped_json_datapoints(clickhouse, &datapoints).await?;
+            Ok(())
         }
     }
 }
@@ -606,11 +702,11 @@ impl TryFrom<BatchDatapointOutputWithSize> for Vec<Option<DatapointOutput>> {
         if let Some(output) = value.output {
             let output_len = output.len();
             if output_len != value.size {
-                return Err(Error::new(ErrorDetails::InvalidRequest {
+                Err(Error::new(ErrorDetails::InvalidRequest {
                     message: format!(
                         "Output size ({output_len}) does not match number of datapoints ({size})",
                     ),
-                }));
+                }))
             } else {
                 Ok(output)
             }
@@ -996,15 +1092,20 @@ async fn put_deduped_chat_datapoints(
     Ok(result.metadata.written_rows)
 }
 
-async fn put_deduped_json_datapoint(
+async fn put_deduped_json_datapoints(
     clickhouse: &ClickHouseConnectionInfo,
-    datapoint: &JsonInferenceDatapoint,
+    datapoints: &[JsonInferenceDatapoint],
 ) -> Result<u64, Error> {
-    let serialized_datapoint = serde_json::to_string(datapoint).map_err(|e| {
-        Error::new(ErrorDetails::Serialization {
-            message: format!("Failed to serialize datapoint: {e}"),
+    let serialized_datapoints = datapoints
+        .iter()
+        .map(|datapoint| {
+            serde_json::to_string(datapoint).map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!("Failed to serialize datapoint: {e}"),
+                })
+            })
         })
-    })?;
+        .collect::<Result<Vec<_>, _>>()?;
 
     let query = r#"
         INSERT INTO JsonInferenceDatapoint
@@ -1047,7 +1148,7 @@ async fn put_deduped_json_datapoint(
         external_data_name: "new_data".to_string(),
         structure: "dataset_name LowCardinality(String), function_name LowCardinality(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), output_schema Nullable(String), tags Map(String, String), auxiliary String, is_deleted Bool, source_inference_id Nullable(UUID)".to_string(),
         format: "JSONEachRow".to_string(),
-        data: serialized_datapoint,
+        data: serialized_datapoints.join("\n"),
     };
     let result = clickhouse
         .run_query_with_external_data(external_data, query.to_string())
