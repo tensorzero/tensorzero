@@ -1,5 +1,5 @@
 #!/bin/bash
 
 set -euxo pipefail
-uv run maturin develop --uv --features e2e_tests
-uv run pytest -n auto $@
+# Avoid using 'uv run maturin develop', as this will build twice (once from uv when making the venv, and once from maturin)
+uv run --config-setting 'build-args=--profile=dev --features e2e_tests' pytest -n auto $@
