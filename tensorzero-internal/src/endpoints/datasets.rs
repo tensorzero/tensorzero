@@ -440,13 +440,6 @@ pub async fn update_datapoint_handler(
     Ok(Json(CreateDatapointResponse { id: path_params.id }))
 }
 
-#[derive(Clone, Debug, Deserialize)]
-#[serde(untagged)]
-pub enum DatapointOutput {
-    Json(JsonInferenceOutput),
-    Chat(Vec<ContentBlockChatOutput>),
-}
-
 #[derive(Debug, Deserialize)]
 pub struct CreateDatapointParams {
     // the function name
@@ -457,7 +450,7 @@ pub struct CreateDatapointParams {
     // This can be None globally or include nulls for datapoints that
     // should not have an output
     #[serde(default)]
-    pub output: Option<Vec<Option<DatapointOutput>>>,
+    pub output: Option<Vec<Option<Value>>>,
     // the tags for each datapoint
     #[serde(default)]
     pub tags: Option<BatchTags>,
@@ -527,7 +520,7 @@ pub async fn create_datapoint(
         })
     })?;
 
-    let batch_datapoint_output: Vec<Option<DatapointOutput>> = BatchDatapointOutputWithSize {
+    let batch_datapoint_output: Vec<Option<Value>> = BatchDatapointOutputWithSize {
         output: params.output,
         size: num_datapoints,
     }
@@ -537,7 +530,6 @@ pub async fn create_datapoint(
         BatchDynamicToolParamsWithSize(params.dynamic_tool_params, num_datapoints).try_into()?;
     let batch_dynamic_output_schemas: Vec<Option<Value>> =
         BatchOutputSchemasWithSize(params.output_schemas, num_datapoints).try_into()?;
-
     let tool_configs = batch_dynamic_tool_params
         .into_iter()
         .map(|dynamic_tool_params| {
@@ -557,18 +549,9 @@ pub async fn create_datapoint(
                 let dynamic_demonstration_info =
                     DynamicDemonstrationInfo::Chat(tool_configs[i].clone().unwrap_or_default());
                 let output = if let Some(output) = batch_datapoint_output[i].clone() {
-                    let DatapointOutput::Chat(output) = output else {
-                        return Err(Error::new(ErrorDetails::InvalidRequest {
-                            message: format!("Expected chat output for datapoint {i}"),
-                        }));
-                    };
                     let validated_output = validate_parse_demonstration(
                         &function_config,
-                        &serde_json::to_value(output).map_err(|e| {
-                            Error::new(ErrorDetails::Serialization {
-                                message: format!("Failed to serialize chat output: {e}"),
-                            })
-                        })?,
+                        &output,
                         dynamic_demonstration_info,
                     )
                     .await
@@ -629,18 +612,9 @@ pub async fn create_datapoint(
                 let dynamic_demonstration_info =
                     DynamicDemonstrationInfo::Json(output_schema.clone());
                 let output = if let Some(output) = batch_datapoint_output[i].clone() {
-                    let DatapointOutput::Json(output) = output else {
-                        return Err(Error::new(ErrorDetails::InvalidRequest {
-                            message: format!("Expected JSON output for datapoint {i}"),
-                        }));
-                    };
                     let validated_output = validate_parse_demonstration(
                         &function_config,
-                        &serde_json::to_value(output).map_err(|e| {
-                            Error::new(ErrorDetails::Serialization {
-                                message: format!("Failed to serialize JSON output: {e}"),
-                            })
-                        })?,
+                        &output,
                         dynamic_demonstration_info,
                     )
                     .await?;
@@ -695,6 +669,9 @@ pub struct DeleteDatapointPathParams {
     pub datapoint_id: Uuid,
 }
 
+/// The handler for the DELETE `/datasets/:dataset_name/datapoints/:datapoint_id` endpoint.
+/// This endpoint will delete the datapoint from the dataset.
+#[tracing::instrument(name = "delete_datapoint_handler", skip(app_state))]
 pub async fn delete_datapoint_handler(
     State(app_state): AppState,
     Path(path_params): Path<DeleteDatapointPathParams>,
@@ -756,11 +733,11 @@ pub async fn delete_datapoint(
 }
 
 pub struct BatchDatapointOutputWithSize {
-    output: Option<Vec<Option<DatapointOutput>>>,
+    output: Option<Vec<Option<Value>>>,
     size: usize,
 }
 
-impl TryFrom<BatchDatapointOutputWithSize> for Vec<Option<DatapointOutput>> {
+impl TryFrom<BatchDatapointOutputWithSize> for Vec<Option<Value>> {
     type Error = Error;
 
     fn try_from(value: BatchDatapointOutputWithSize) -> Result<Self, Self::Error> {
@@ -882,10 +859,13 @@ pub struct ChatInferenceDatapoint {
     pub function_name: String,
     pub id: Uuid,
     pub episode_id: Option<Uuid>,
+    #[serde(deserialize_with = "deserialize_json_string")]
     pub input: ResolvedInput,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(deserialize_with = "deserialize_optional_json_string")]
     pub output: Option<Vec<ContentBlockChatOutput>>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(deserialize_with = "deserialize_optional_json_string")]
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tags: Option<HashMap<String, String>>,

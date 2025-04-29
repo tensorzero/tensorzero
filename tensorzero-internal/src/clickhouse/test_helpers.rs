@@ -1,4 +1,6 @@
 #![expect(clippy::unwrap_used, clippy::expect_used, clippy::print_stdout)]
+use crate::endpoints::datasets::{ChatInferenceDatapoint, JsonInferenceDatapoint};
+
 #[cfg(feature = "e2e_tests")]
 use super::escape_string_for_clickhouse_comparison;
 use super::ClickHouseConnectionInfo;
@@ -69,6 +71,55 @@ pub async fn select_json_datapoint_clickhouse(
         .unwrap();
     let json: Value = serde_json::from_str(&text).ok()?;
     Some(json)
+}
+
+pub async fn select_chat_dataset_clickhouse(
+    clickhouse_connection_info: &ClickHouseConnectionInfo,
+    dataset_name: &str,
+) -> Option<Vec<ChatInferenceDatapoint>> {
+    #[cfg(feature = "e2e_tests")]
+    clickhouse_flush_async_insert(clickhouse_connection_info).await;
+
+    let query = format!(
+        "SELECT * FROM ChatInferenceDatapoint FINAL WHERE dataset_name = '{dataset_name}' AND staled_at IS NULL FORMAT JSONEachRow"
+    );
+
+    let text = clickhouse_connection_info
+        .run_query_synchronous(query, None)
+        .await
+        .unwrap();
+    let lines = text.lines();
+    let mut chat_rows: Vec<ChatInferenceDatapoint> = Vec::new();
+    for line in lines {
+        let chat_row: ChatInferenceDatapoint = serde_json::from_str(line).unwrap();
+        chat_rows.push(chat_row);
+    }
+    Some(chat_rows)
+}
+
+pub async fn select_json_dataset_clickhouse(
+    clickhouse_connection_info: &ClickHouseConnectionInfo,
+    dataset_name: &str,
+) -> Option<Vec<JsonInferenceDatapoint>> {
+    #[cfg(feature = "e2e_tests")]
+    clickhouse_flush_async_insert(clickhouse_connection_info).await;
+
+    let query = format!(
+        "SELECT * FROM JsonInferenceDatapoint FINAL WHERE dataset_name = '{dataset_name}' FORMAT JSONEachRow"
+    );
+
+    let text = clickhouse_connection_info
+        .run_query_synchronous(query, None)
+        .await
+        .unwrap();
+    let lines = text.lines();
+    let mut json_rows: Vec<JsonInferenceDatapoint> = Vec::new();
+    for line in lines {
+        let json_row: JsonInferenceDatapoint = serde_json::from_str(line).unwrap();
+        json_rows.push(json_row);
+    }
+
+    Some(json_rows)
 }
 
 pub async fn select_chat_inference_clickhouse(

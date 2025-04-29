@@ -4,9 +4,11 @@ use std::time::Duration;
 
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
+use tensorzero::Role;
 use tensorzero_internal::{
-    clickhouse::test_helpers::stale_datapoint_clickhouse,
+    clickhouse::test_helpers::{select_chat_dataset_clickhouse, stale_datapoint_clickhouse},
     endpoints::datasets::{DatapointKind, CLICKHOUSE_DATETIME_FORMAT},
+    inference::types::{ContentBlockChatOutput, ResolvedInputMessageContent},
 };
 use uuid::Uuid;
 
@@ -178,6 +180,177 @@ async fn test_datapoint_insert_synthetic_chat() {
 }
 
 #[tokio::test]
+async fn test_post_delete_datapoint_chat() {
+    let clickhouse = get_clickhouse().await;
+    let client = Client::new();
+    let dataset_name = format!("test-dataset-{}", Uuid::now_v7());
+    println!("dataset_name: {dataset_name}");
+
+    let additional_tools = json!([null, [{"description": "Get the current temperature in a given location",
+                "parameters": {
+                    "$schema": "http://json-schema.org/draft-07/schema#",
+                    "type": "object",
+                    "properties": {
+                        "location": {
+                            "type": "string",
+                            "description": "The location to get the temperature for (e.g. \"New York\")"
+                        },
+                        "units": {
+                            "type": "string",
+                            "description": "The units to get the temperature in (must be \"fahrenheit\" or \"celsius\")",
+                            "enum": ["fahrenheit", "celsius"]
+                        }
+                    },
+                    "required": ["location"],
+                    "additionalProperties": false
+                },
+                "name": "get_temperature",
+                "strict": false}], null]);
+    let tool_choice = json!([null, "auto", null]);
+
+    let resp = client
+        .post(get_gateway_endpoint(&format!(
+            "/datasets/{dataset_name}/datapoints",
+        )))
+        .json(&json!({
+            "function_name": "basic_test",
+            "input": [{"system": {"assistant_name": "foo"}, "messages": [{"role": "user", "content": [{"type": "text", "text": "bar"}]}]},
+            {
+                "system": {"assistant_name": "Dummy"},
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": "My synthetic input"}
+                        ]
+                    }
+                ]
+            },
+            {"system": {"assistant_name": "bar"}, "messages": [{"role": "user", "content": [{"type": "text", "text": "foo"}]}]},
+            ],
+            "output": [[{"type": "text", "text": "foobar"}],[
+                {"type": "tool_call", "name": "get_temperature", "arguments": {"location": "New York", "units": "fahrenheit"}}
+            ], null],
+            "additional_tools": additional_tools,
+            "tool_choice": tool_choice,
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    let status = resp.status();
+
+    assert_eq!(status, StatusCode::OK);
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    let datapoints = select_chat_dataset_clickhouse(&clickhouse, &dataset_name)
+        .await
+        .unwrap();
+    assert_eq!(datapoints.len(), 3);
+
+    for datapoint in datapoints {
+        let pretty_datapoint = serde_json::to_string_pretty(&datapoint).unwrap();
+        println!("pretty_datapoint: {pretty_datapoint}");
+        // Verify the datapoint structure and content
+        assert_eq!(datapoint.dataset_name, dataset_name);
+        assert_eq!(datapoint.function_name, "basic_test");
+        assert!(!datapoint.is_deleted);
+        assert!(datapoint.episode_id.is_none());
+        assert!(datapoint.tags.unwrap().is_empty());
+        assert_eq!(datapoint.auxiliary, "");
+        assert!(datapoint.staled_at.is_none());
+
+        let mut is_tool = false;
+        // Verify input structure
+        let input = datapoint.input;
+        assert!(input.system.unwrap().get("assistant_name").is_some());
+        assert!(!input.messages.is_empty());
+        let first_message = input.messages[0].clone();
+        assert_eq!(first_message.role, Role::User);
+        let content = first_message.content;
+        assert!(!content.is_empty());
+        let first_content = content[0].clone();
+        assert!(matches!(
+            first_content,
+            ResolvedInputMessageContent::Text { .. }
+        ));
+        assert!(matches!(
+            first_content,
+            ResolvedInputMessageContent::Text { value: _, .. }
+        ));
+
+        // Verify output if present
+        if let Some(output) = datapoint.output {
+            assert!(!output.is_empty());
+            let first_output = output[0].clone();
+            if matches!(first_output, ContentBlockChatOutput::Text { .. }) {
+                assert!(matches!(first_output, ContentBlockChatOutput::Text { .. }));
+            } else if matches!(first_output, ContentBlockChatOutput::ToolCall { .. }) {
+                assert!(matches!(
+                    first_output,
+                    ContentBlockChatOutput::ToolCall { .. }
+                ));
+                is_tool = true;
+            }
+        }
+
+        // Verify tool_params if present
+        if let Some(tool_params) = datapoint.tool_params {
+            assert!(is_tool);
+            let tools_available = tool_params.tools_available;
+            assert!(!tools_available.is_empty());
+            let first_tool = tools_available[0].clone();
+            assert_eq!(first_tool.name, "get_temperature");
+            assert_eq!(
+                first_tool.description,
+                "Get the current temperature in a given location"
+            );
+            assert_eq!(
+                first_tool.parameters,
+                json!({
+                    "$schema": "http://json-schema.org/draft-07/schema#",
+                    "type": "object",
+                    "properties": {
+                        "location": {
+                            "type": "string",
+                            "description": "The location to get the temperature for (e.g. \"New York\")"
+                        },
+                        "units": {
+                            "type": "string",
+                            "description": "The units to get the temperature in (must be \"fahrenheit\" or \"celsius\")",
+                            "enum": ["fahrenheit", "celsius"]
+                        }
+                    },
+                    "required": ["location"],
+                    "additionalProperties": false
+                })
+            );
+        } else {
+            assert!(!is_tool);
+        }
+
+        let datapoint_id = datapoint.id;
+        let resp = client
+            .delete(get_gateway_endpoint(&format!(
+                "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+            )))
+            .send()
+            .await
+            .unwrap();
+
+        let status = resp.status();
+        resp.text().await.unwrap();
+        assert_eq!(status, StatusCode::OK);
+    }
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    let datapoints = select_chat_dataset_clickhouse(&clickhouse, &dataset_name)
+        .await
+        .unwrap();
+    assert!(datapoints.is_empty());
+}
+
+#[tokio::test]
 async fn test_datapoint_insert_synthetic_chat_with_tools() {
     let clickhouse = get_clickhouse().await;
     let client = Client::new();
@@ -232,7 +405,7 @@ async fn test_datapoint_insert_synthetic_chat_with_tools() {
                 ]
             },
             "output": [
-                {"type": "tool_call", "name": "get_humidity", "arguments": {"location": "New York", "units": "fahrenheit"}}
+                {"type": "tool_call", "name": "get_temperature", "arguments": {"location": "New York", "units": "fahrenheit"}}
             ],
             "tool_params": tool_params,
         }))
