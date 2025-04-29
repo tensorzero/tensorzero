@@ -689,6 +689,72 @@ pub async fn create_datapoint(
     }
 }
 
+#[derive(Debug, Deserialize)]
+pub struct DeleteDatapointPathParams {
+    pub dataset_name: String,
+    pub datapoint_id: Uuid,
+}
+
+pub async fn delete_datapoint_handler(
+    State(app_state): AppState,
+    Path(path_params): Path<DeleteDatapointPathParams>,
+) -> Result<(), Error> {
+    delete_datapoint(
+        path_params.dataset_name,
+        path_params.datapoint_id,
+        &app_state.clickhouse_connection_info,
+    )
+    .await
+}
+pub async fn delete_datapoint(
+    dataset_name: String,
+    datapoint_id: Uuid,
+    clickhouse: &ClickHouseConnectionInfo,
+) -> Result<(), Error> {
+    // Since we don't know whether the datapoint is a chat or json datapoint, we can just stale both of these.
+    let json_delete_query = r#"
+    INSERT INTO JsonInferenceDatapoint
+    (dataset_name, function_name, id, episode_id, input, output, output_schema,
+     tags, auxiliary, is_deleted, source_inference_id, updated_at, staled_at)
+    SELECT dataset_name, function_name, id, episode_id, input, output, output_schema,
+           tags, auxiliary, is_deleted, source_inference_id, now64(), now64()
+    FROM JsonInferenceDatapoint
+    WHERE id = {datapoint_id: UUID} AND dataset_name = {dataset_name: String}
+"#;
+    let chat_delete_query = r#"
+    INSERT INTO ChatInferenceDatapoint
+    (dataset_name, function_name, id, episode_id, input, output, tool_params,
+     tags, auxiliary, is_deleted, source_inference_id, updated_at, staled_at)
+    SELECT dataset_name, function_name, id, episode_id, input, output, tool_params,
+           tags, auxiliary, is_deleted, source_inference_id, now64(), now64()
+    FROM ChatInferenceDatapoint
+    WHERE id = {datapoint_id: UUID} AND dataset_name = {dataset_name: String}
+"#;
+    let datapoint_id = datapoint_id.to_string();
+    let json_params = HashMap::from([
+        ("datapoint_id", datapoint_id.as_str()),
+        ("dataset_name", dataset_name.as_str()),
+    ]);
+
+    let chat_params = HashMap::from([
+        ("datapoint_id", datapoint_id.as_str()),
+        ("dataset_name", dataset_name.as_str()),
+    ]);
+
+    let json_future =
+        clickhouse.run_query_synchronous(json_delete_query.to_string(), Some(&json_params));
+
+    let chat_future =
+        clickhouse.run_query_synchronous(chat_delete_query.to_string(), Some(&chat_params));
+
+    let (json_result, chat_result) = tokio::join!(json_future, chat_future);
+
+    json_result?;
+    chat_result?;
+
+    Ok(())
+}
+
 pub struct BatchDatapointOutputWithSize {
     output: Option<Vec<Option<DatapointOutput>>>,
     size: usize,
