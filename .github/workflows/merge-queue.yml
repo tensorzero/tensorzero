@@ -138,10 +138,6 @@ jobs:
         if: always()
         run: cat provider_proxy_logs.txt
 
-      - name: Print vLLM modal logs
-        if: always()
-        run: cat vllm_modal_logs.txt
-
       - name: Upload provider-proxy cache
         if: ${{ false }} # Change to `if: ${{ always() }}` to start uploading the cache
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
