@@ -41,7 +41,7 @@ use super::openai::convert_stream_error;
 
 /// Implements a subset of the GCP Vertex Gemini API as documented [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/generateContent) for non-streaming
 /// and [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/streamGenerateContent) for streaming
-#[allow(unused)]
+#[expect(unused)]
 const PROVIDER_NAME: &str = "GCP Vertex Anthropic";
 const PROVIDER_TYPE: &str = "gcp_vertex_anthropic";
 

@@ -169,7 +169,7 @@ pub fn setup_http_client() -> Result<Client, Error> {
 }
 
 pub struct ShutdownHandle {
-    #[allow(dead_code)]
+    #[expect(dead_code)]
     sender: Sender<()>,
 }
 

@@ -1,4 +1,4 @@
-#![allow(clippy::print_stdout)]
+#![expect(clippy::print_stdout)]
 use std::{collections::HashMap, net::SocketAddr};
 
 use aws_config::Region;
@@ -100,7 +100,6 @@ pub async fn make_http_gateway() -> tensorzero::Client {
     .unwrap()
 }
 
-#[allow(dead_code)]
 pub async fn make_embedded_gateway() -> tensorzero::Client {
     let mut config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     config_path.push("tests/e2e/tensorzero.toml");
@@ -114,7 +113,6 @@ pub async fn make_embedded_gateway() -> tensorzero::Client {
     .unwrap()
 }
 
-#[allow(dead_code)]
 pub async fn make_embedded_gateway_no_config() -> tensorzero::Client {
     tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
         config_file: None,
@@ -126,7 +124,6 @@ pub async fn make_embedded_gateway_no_config() -> tensorzero::Client {
     .unwrap()
 }
 
-#[allow(dead_code)]
 pub async fn make_embedded_gateway_with_config(config: &str) -> tensorzero::Client {
     let tmp_config = tempfile::NamedTempFile::new().unwrap();
     std::fs::write(tmp_config.path(), config).unwrap();

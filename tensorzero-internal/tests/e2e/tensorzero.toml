@@ -301,7 +301,6 @@ routing = ["vllm"]
 type = "vllm"
 model_name = "HuggingFaceTB/SmolLM-1.7B-Instruct"
 api_base = "https://tensorzero--vllm-inference-vllm-inference.modal.run/v1/"
-api_key_location = "dynamic::vllm_api_key"
 
 [models."open-mistral-nemo-2407"]
 routing = ["mistral"]

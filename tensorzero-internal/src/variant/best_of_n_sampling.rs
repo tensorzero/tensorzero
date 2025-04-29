@@ -85,7 +85,7 @@ impl LoadableConfig<BestOfNSamplingConfig> for UninitializedBestOfNSamplingConfi
 
 lazy_static! {
     static ref EVALUATOR_OUTPUT_SCHEMA: StaticJSONSchema = {
-        #[allow(clippy::expect_used)]
+        #[expect(clippy::expect_used)]
         StaticJSONSchema::from_value(&json!({
             "type": "object",
             "properties": {

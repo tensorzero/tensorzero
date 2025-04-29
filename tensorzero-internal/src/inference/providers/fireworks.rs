@@ -38,7 +38,7 @@ use super::{
 
 lazy_static! {
     static ref FIREWORKS_API_BASE: Url = {
-        #[allow(clippy::expect_used)]
+        #[expect(clippy::expect_used)]
         Url::parse("https://api.fireworks.ai/inference/v1/")
             .expect("Failed to parse FIREWORKS_API_BASE")
     };
