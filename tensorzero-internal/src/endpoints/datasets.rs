@@ -14,11 +14,17 @@ use crate::{
     function::{FunctionConfig, FunctionConfigChat},
     gateway_util::{AppState, StructuredJson},
     inference::types::{
-        batch::{deserialize_json_string, deserialize_optional_json_string},
+        batch::{
+            deserialize_json_string, deserialize_optional_json_string, BatchOutputSchemasWithSize,
+        },
         ChatInferenceDatabaseInsert, ContentBlockChatOutput, FetchContext, Input,
         JsonInferenceDatabaseInsert, JsonInferenceOutput, ResolvedInput,
     },
-    tool::{BatchDynamicToolParams, ToolCallConfigDatabaseInsert, ToolChoice},
+    jsonschema_util::DynamicJSONSchema,
+    tool::{
+        BatchDynamicToolParams, BatchDynamicToolParamsWithSize, DynamicToolParams,
+        ToolCallConfigDatabaseInsert, ToolChoice,
+    },
     uuid_util::validate_tensorzero_uuid,
 };
 use tracing::instrument;
@@ -27,7 +33,7 @@ pub const CLICKHOUSE_DATETIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S%.6f";
 use super::{
     batch_inference::{BatchOutputSchemas, BatchTags},
     feedback::{validate_parse_demonstration, DemonstrationOutput, DynamicDemonstrationInfo},
-    inference::{InferenceOutput, DEFAULT_FUNCTION_NAME},
+    inference::DEFAULT_FUNCTION_NAME,
 };
 
 #[derive(Debug, Deserialize)]
@@ -236,7 +242,7 @@ async fn insert_from_existing(
                 source_inference_id: Some(existing.inference_id),
                 staled_at: None,
             };
-            let rows_written = put_deduped_chat_datapoint(clickhouse, &datapoint).await?;
+            let rows_written = put_deduped_chat_datapoints(clickhouse, &[datapoint]).await?;
             if rows_written == 0 {
                 return Err(Error::new(ErrorDetails::InvalidRequest {
                     message: "Datapoint with this source_inference_id already exists".to_string(),
@@ -358,7 +364,7 @@ pub async fn update_datapoint_handler(
                 staled_at: None,
             };
             let rows_written =
-                put_deduped_chat_datapoint(&app_state.clickhouse_connection_info, &datapoint)
+                put_deduped_chat_datapoints(&app_state.clickhouse_connection_info, &[datapoint])
                     .await?;
             if rows_written == 0 {
                 return Err(Error::new(ErrorDetails::InvalidRequest {
@@ -433,7 +439,7 @@ pub async fn update_datapoint_handler(
     Ok(Json(CreateDatapointResponse { id: path_params.id }))
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 #[serde(untagged)]
 pub enum DatapointOutput {
     Json(JsonInferenceOutput),
@@ -483,10 +489,139 @@ pub async fn create_datapoint_handler(
     State(app_state): AppState,
     Path(path_params): Path<CreateDatapointPathParams>,
     StructuredJson(params): StructuredJson<CreateDatapointParams>,
-) -> Result<Json<CreateDatapointResponse>, Error> {
+) -> Result<(), Error> {
     validate_dataset_name(&path_params.dataset_name)?;
     let function_config = get_possibly_default_function(&params.function_name, &app_state.config)?;
     let num_datapoints = params.input.len();
+    if num_datapoints == 0 {
+        return Err(Error::new(ErrorDetails::InvalidRequest {
+            message: "No inputs provided".to_string(),
+        }));
+    }
+    // Validate the inputs
+    params.input.iter().enumerate().try_for_each(|(i, input)| {
+        function_config.validate_input(input).map_err(|e| {
+            Error::new(ErrorDetails::BatchInputValidation {
+                index: i,
+                message: e.to_string(),
+            })
+        })
+    })?;
+
+    let batch_datapoint_output: Vec<Option<DatapointOutput>> = BatchDatapointOutputWithSize {
+        output: params.output,
+        size: num_datapoints,
+    }
+    .try_into()?;
+
+    let batch_dynamic_tool_params: Vec<DynamicToolParams> =
+        BatchDynamicToolParamsWithSize(params.dynamic_tool_params, num_datapoints).try_into()?;
+    let batch_dynamic_output_schemas: Vec<Option<DynamicJSONSchema>> =
+        BatchOutputSchemasWithSize(params.output_schemas, num_datapoints).try_into()?;
+
+    let tool_configs = batch_dynamic_tool_params
+        .into_iter()
+        .map(|dynamic_tool_params| {
+            function_config.prepare_tool_config(dynamic_tool_params, &app_state.config.tools)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let fetch_context = FetchContext {
+        client: &app_state.http_client,
+        object_store_info: &app_state.config.object_store_info,
+    };
+    match *function_config {
+        FunctionConfig::Chat(_) => {
+            let mut datapoints = Vec::with_capacity(num_datapoints);
+            // Validate all the datapoints, then write them to ClickHouse
+            for (i, input) in params.input.into_iter().enumerate() {
+                let resolved_input = input.resolve(&fetch_context).await?;
+                let dynamic_demonstration_info =
+                    DynamicDemonstrationInfo::Chat(tool_configs[i].clone().unwrap_or_default());
+                let output = if let Some(output) = batch_datapoint_output[i].clone() {
+                    let DatapointOutput::Chat(output) = output else {
+                        return Err(Error::new(ErrorDetails::InvalidRequest {
+                            message: format!("Expected chat output for datapoint {i}"),
+                        }));
+                    };
+                    let validated_output = validate_parse_demonstration(
+                        &function_config,
+                        &serde_json::to_value(output).map_err(|e| {
+                            Error::new(ErrorDetails::Serialization {
+                                message: format!("Failed to serialize chat output: {e}"),
+                            })
+                        })?,
+                        dynamic_demonstration_info,
+                    )
+                    .await?;
+                    let DemonstrationOutput::Chat(output) = validated_output else {
+                        return Err(Error::new(ErrorDetails::InternalError {
+                            message: "Expected chat output from validate_parse_demonstration"
+                                .to_string(),
+                        }));
+                    };
+                    Some(output)
+                } else {
+                    None
+                };
+                let tags = params
+                    .tags
+                    .as_ref()
+                    .and_then(|tags| tags.get(i).cloned())
+                    .flatten();
+                let datapoint = ChatInferenceDatapoint {
+                    dataset_name: path_params.dataset_name.clone(),
+                    function_name: params.function_name.clone(),
+                    id: Uuid::now_v7(),
+                    episode_id: None,
+                    input: resolved_input,
+                    output,
+                    tool_params: tool_configs[i].as_ref().map(|x| x.clone().into()),
+                    tags,
+                    auxiliary: "".to_string(),
+                    is_deleted: false,
+                    source_inference_id: None,
+                    staled_at: None,
+                };
+                datapoints.push(datapoint);
+            }
+            put_deduped_chat_datapoints(&app_state.clickhouse_connection_info, &datapoints).await?;
+            Ok(())
+        }
+        FunctionConfig::Json(_) => {
+            todo!()
+        }
+    }
+}
+
+pub struct BatchDatapointOutputWithSize {
+    output: Option<Vec<Option<DatapointOutput>>>,
+    size: usize,
+}
+
+impl TryFrom<BatchDatapointOutputWithSize> for Vec<Option<DatapointOutput>> {
+    type Error = Error;
+
+    fn try_from(value: BatchDatapointOutputWithSize) -> Result<Self, Self::Error> {
+        let size = value.size;
+        if let Some(output) = value.output {
+            let output_len = output.len();
+            if output_len != value.size {
+                return Err(Error::new(ErrorDetails::InvalidRequest {
+                    message: format!(
+                        "Output size ({output_len}) does not match number of datapoints ({size})",
+                    ),
+                }));
+            } else {
+                Ok(output)
+            }
+        } else {
+            let mut output = Vec::with_capacity(size);
+            for _ in 0..size {
+                output.push(None);
+            }
+            Ok(output)
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -797,15 +932,20 @@ fn validate_dataset_name(dataset_name: &str) -> Result<(), Error> {
 /// Puts a chat datapoint into ClickHouse but only
 /// if it doesn't have a source_inference_id that already exists for this dataset.
 /// Returns the number of rows written to ClickHouse
-async fn put_deduped_chat_datapoint(
+async fn put_deduped_chat_datapoints(
     clickhouse: &ClickHouseConnectionInfo,
-    datapoint: &ChatInferenceDatapoint,
+    datapoints: &[ChatInferenceDatapoint],
 ) -> Result<u64, Error> {
-    let serialized_datapoint = serde_json::to_string(datapoint).map_err(|e| {
-        Error::new(ErrorDetails::Serialization {
-            message: format!("Failed to serialize datapoint: {e}"),
+    let serialized_datapoints = datapoints
+        .iter()
+        .map(|datapoint| {
+            serde_json::to_string(datapoint).map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!("Failed to serialize datapoint: {e}"),
+                })
+            })
         })
-    })?;
+        .collect::<Result<Vec<_>, _>>()?;
 
     let query = r#"
     INSERT INTO ChatInferenceDatapoint
@@ -848,7 +988,7 @@ async fn put_deduped_chat_datapoint(
         external_data_name: "new_data".to_string(),
         structure: "dataset_name LowCardinality(String), function_name LowCardinality(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), tool_params String, tags Map(String, String), auxiliary String, is_deleted Bool, source_inference_id Nullable(UUID)".to_string(),
         format: "JSONEachRow".to_string(),
-        data: serialized_datapoint,
+        data: serialized_datapoints.join("\n"),
     };
     let result = clickhouse
         .run_query_with_external_data(external_data, query.to_string())
