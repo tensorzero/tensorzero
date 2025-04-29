@@ -15,7 +15,7 @@ pub fn validate_tensorzero_uuid(uuid: Uuid, kind: &str) -> Result<(), Error> {
     if version != 7 {
         return Err(ErrorDetails::InvalidTensorzeroUuid {
             kind: kind.to_string(),
-            message: format!("Version must be 7, got {}", version),
+            message: format!("Version must be 7, got {version}"),
         }
         .into());
     }

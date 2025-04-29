@@ -1,8 +1,8 @@
 use crate::inference::types::batch::deserialize_json_string;
 use crate::inference::types::batch::deserialize_optional_json_string;
 use derive_builder::Builder;
-use extra_body::FullExtraBodyConfig;
-use extra_body::UnfilteredInferenceExtraBody;
+use extra_body::{FullExtraBodyConfig, UnfilteredInferenceExtraBody};
+use extra_headers::{FullExtraHeadersConfig, UnfilteredInferenceExtraHeaders};
 use futures::stream::Peekable;
 use futures::Stream;
 use image::sanitize_raw_request;
@@ -40,6 +40,7 @@ use crate::{jsonschema_util::DynamicJSONSchema, tool::ToolCallConfigDatabaseInse
 
 pub mod batch;
 pub mod extra_body;
+pub mod extra_headers;
 pub mod image;
 pub mod resolved_input;
 pub mod storage;
@@ -228,8 +229,7 @@ impl<'de> Deserialize<'de> for TextKind {
             }),
             "value" => Ok(TextKind::LegacyValue { value }),
             _ => Err(serde::de::Error::custom(format!(
-                "Unknown key '{}' in text content",
-                key
+                "Unknown key '{key}' in text content"
             ))),
         }
     }
@@ -383,6 +383,7 @@ pub struct ModelInferenceRequest<'a> {
     pub function_type: FunctionType,
     pub output_schema: Option<&'a Value>,
     pub extra_body: FullExtraBodyConfig,
+    pub extra_headers: FullExtraHeadersConfig,
     /// Optional arbitrary data, only used when constructing the cache key.
     /// This is used by best_of_n/mixture_of_n to force different sub-variants
     /// to have different cache keys.
@@ -510,8 +511,7 @@ pub enum InferenceResult {
 #[derive(Clone, Debug)]
 pub struct ChatInferenceResult {
     pub inference_id: Uuid,
-    #[allow(dead_code)]
-    created: u64,
+    pub created: u64,
     pub content: Vec<ContentBlockChatOutput>,
     pub usage: Usage,
     pub model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
@@ -977,7 +977,7 @@ impl InferenceResult {
 }
 
 impl JsonInferenceResult {
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     pub fn new(
         inference_id: Uuid,
         raw: Option<String>,
@@ -1153,7 +1153,7 @@ impl JsonInferenceDatabaseInsert {
 
 // Function to get the current timestamp in seconds
 pub fn current_timestamp() -> u64 {
-    #[allow(clippy::expect_used)]
+    #[expect(clippy::expect_used)]
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("Time went backwards")
@@ -1310,6 +1310,7 @@ pub struct CollectChunksArgs<'a, 'b> {
     pub tool_config: Option<&'b ToolCallConfig>,
     pub cached: bool,
     pub extra_body: UnfilteredInferenceExtraBody,
+    pub extra_headers: UnfilteredInferenceExtraHeaders,
 }
 
 // Modify the collect_chunks function to accept CollectChunksArgs
@@ -1333,6 +1334,7 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
         tool_config,
         cached,
         extra_body,
+        extra_headers,
     } = args;
 
     // NOTE: We will eventually need this to be per-inference-response-type and sensitive to the type of variant and function being called.
@@ -1550,6 +1552,7 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
         templates,
         dynamic_output_schema: dynamic_output_schema.as_ref(),
         extra_body,
+        extra_headers,
         extra_cache_key: None,
     };
     function
@@ -1647,7 +1650,7 @@ pub fn serialize_or_log<T: Serialize>(value: &T) -> String {
         Ok(serialized) => serialized,
         Err(e) => {
             Error::new(ErrorDetails::Serialization {
-                message: format!("Failed to serialize value: {}", e),
+                message: format!("Failed to serialize value: {e}"),
             });
             String::new()
         }
@@ -2357,6 +2360,7 @@ mod tests {
             tool_config: None,
             cached: false,
             extra_body: Default::default(),
+            extra_headers: Default::default(),
         };
         let result = collect_chunks(collect_chunks_args).await;
         assert_eq!(
@@ -2420,6 +2424,7 @@ mod tests {
             tool_config: None,
             cached: false,
             extra_body: Default::default(),
+            extra_headers: Default::default(),
         };
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         let chat_result = match result {
@@ -2515,6 +2520,7 @@ mod tests {
             tool_config: None,
             cached: false,
             extra_body: Default::default(),
+            extra_headers: Default::default(),
         };
         let response = collect_chunks(collect_chunks_args).await.unwrap();
         match response {
@@ -2593,6 +2599,7 @@ mod tests {
             tool_config: None,
             cached: false,
             extra_body: Default::default(),
+            extra_headers: Default::default(),
         };
         let result = collect_chunks(collect_chunks_args).await;
         assert!(result.is_ok());
@@ -2673,6 +2680,7 @@ mod tests {
             tool_config: None,
             cached: false,
             extra_body: Default::default(),
+            extra_headers: Default::default(),
         };
         let result = collect_chunks(collect_chunks_args).await;
         if let Ok(InferenceResult::Chat(chat_response)) = result {
@@ -2705,7 +2713,7 @@ mod tests {
             );
             assert_eq!(model_inference_result.raw_request, raw_request);
         } else {
-            panic!("Expected Ok(InferenceResult::Chat), got {:?}", result);
+            panic!("Expected Ok(InferenceResult::Chat), got {result:?}");
         }
 
         // Test Case 6: a JSON function with implicit tool call config
@@ -2776,6 +2784,7 @@ mod tests {
             tool_config: None,
             cached: false,
             extra_body: Default::default(),
+            extra_headers: Default::default(),
         };
         let response = collect_chunks(collect_chunks_args).await.unwrap();
         match response {
@@ -2883,6 +2892,7 @@ mod tests {
             tool_config: None,
             cached: false,
             extra_body: Default::default(),
+            extra_headers: Default::default(),
         };
         let response = collect_chunks(collect_chunks_args).await.unwrap();
         match response {

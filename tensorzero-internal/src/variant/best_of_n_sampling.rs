@@ -14,6 +14,7 @@ use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels};
 use crate::error::ErrorDetails;
 use crate::inference::types::extra_body::FullExtraBodyConfig;
+use crate::inference::types::extra_headers::FullExtraHeadersConfig;
 use crate::inference::types::{
     batch::StartBatchModelInferenceWithMetadata, FunctionType, ModelInferenceRequest,
     ModelInferenceResponseWithMetadata, RequestMessage, Role, Usage,
@@ -84,7 +85,7 @@ impl LoadableConfig<BestOfNSamplingConfig> for UninitializedBestOfNSamplingConfi
 
 lazy_static! {
     static ref EVALUATOR_OUTPUT_SCHEMA: StaticJSONSchema = {
-        #[allow(clippy::expect_used)]
+        #[expect(clippy::expect_used)]
         StaticJSONSchema::from_value(&json!({
             "type": "object",
             "properties": {
@@ -669,9 +670,12 @@ impl EvaluatorConfig {
             .into());
         }
         let extra_body = FullExtraBodyConfig {
-            variant_extra_headers: self.inner.extra_headers.clone(),
             extra_body: self.inner.extra_body.clone(),
             inference_extra_body: Default::default(),
+        };
+        let extra_headers = FullExtraHeadersConfig {
+            variant_extra_headers: self.inner.extra_headers.clone(),
+            inference_extra_headers: Default::default(),
         };
         Ok((
             ModelInferenceRequest {
@@ -690,6 +694,7 @@ impl EvaluatorConfig {
                 function_type: FunctionType::Json,
                 output_schema: Some(EVALUATOR_OUTPUT_SCHEMA.value),
                 extra_body,
+                extra_headers,
                 extra_cache_key: inference_config.extra_cache_key.clone(),
             },
             skipped_indices,
@@ -1242,6 +1247,7 @@ mod tests {
             function_name: "",
             variant_name: Some(""),
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
 

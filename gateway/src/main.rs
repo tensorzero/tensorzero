@@ -11,7 +11,6 @@ use std::io::ErrorKind;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::Duration;
 use tokio::signal;
 
 use tensorzero_internal::clickhouse::ClickHouseConnectionInfo;
@@ -52,8 +51,12 @@ struct Args {
 }
 
 async fn add_version_header(request: Request, next: Next) -> Response {
-    #[allow(unused_mut)]
+    #[cfg(not(feature = "e2e_tests"))]
+    let version = HeaderValue::from_static(TENSORZERO_VERSION);
+
+    #[cfg(feature = "e2e_tests")]
     let mut version = HeaderValue::from_static(TENSORZERO_VERSION);
+
     #[cfg(feature = "e2e_tests")]
     {
         if request
@@ -68,6 +71,7 @@ async fn add_version_header(request: Request, next: Next) -> Response {
             version = header_version.clone();
         }
     }
+
     let mut response = next.run(request).await;
     response
         .headers_mut()
@@ -237,6 +241,9 @@ pub async fn shutdown_signal() {
             .await;
     };
 
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
     #[cfg(unix)]
     let hangup = async {
         signal::unix::signal(signal::unix::SignalKind::hangup())
@@ -244,6 +251,9 @@ pub async fn shutdown_signal() {
             .recv()
             .await;
     };
+
+    #[cfg(not(unix))]
+    let hangup = std::future::pending::<()>();
 
     tokio::select! {
         _ = ctrl_c => {
@@ -253,7 +263,7 @@ pub async fn shutdown_signal() {
             tracing::info!("Received SIGTERM signal");
         }
         _ = hangup => {
-            tokio::time::sleep(Duration::from_secs(1)).await;
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             tracing::info!("Received SIGHUP signal");
         }
     };

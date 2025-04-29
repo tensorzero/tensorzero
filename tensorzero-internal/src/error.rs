@@ -547,7 +547,7 @@ impl std::fmt::Display for ErrorDetails {
                     "All variants failed with errors: {}",
                     errors
                         .iter()
-                        .map(|(variant_name, error)| format!("{}: {}", variant_name, error))
+                        .map(|(variant_name, error)| format!("{variant_name}: {error}"))
                         .collect::<Vec<_>>()
                         .join("\n")
                 )
@@ -562,7 +562,7 @@ impl std::fmt::Display for ErrorDetails {
                 write!(f, "Invalid inference target: {message}")
             }
             ErrorDetails::BadImageFetch { url, message } => {
-                write!(f, "Error fetching image from {}: {message}", url)
+                write!(f, "Error fetching image from {url}: {message}")
             }
             ErrorDetails::ObjectStoreUnconfigured { block_type } => {
                 write!(f, "Object storage is not configured. You must configure `[object_storage]` before making requests containing a `{block_type}` content block")
@@ -583,59 +583,57 @@ impl std::fmt::Display for ErrorDetails {
                 )
             }
             ErrorDetails::ApiKeyMissing { provider_name } => {
-                write!(f, "API key missing for provider: {}", provider_name)
+                write!(f, "API key missing for provider: {provider_name}")
             }
             ErrorDetails::AppState { message } => {
-                write!(f, "Error initializing AppState: {}", message)
+                write!(f, "Error initializing AppState: {message}")
             }
             ErrorDetails::BadCredentialsPreInference { provider_name } => {
                 write!(
                     f,
-                    "Bad credentials at inference time for provider: {}. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new",
-                    provider_name
+                    "Bad credentials at inference time for provider: {provider_name}. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new"
                 )
             }
             ErrorDetails::BatchInputValidation { index, message } => {
-                write!(f, "Input at index {} failed validation: {}", index, message,)
+                write!(f, "Input at index {index} failed validation: {message}",)
             }
             ErrorDetails::BatchNotFound { id } => {
-                write!(f, "Batch request not found for id: {}", id)
+                write!(f, "Batch request not found for id: {id}")
             }
             ErrorDetails::Cache { message } => {
-                write!(f, "Error in cache: {}", message)
+                write!(f, "Error in cache: {message}")
             }
             ErrorDetails::ChannelWrite { message } => {
-                write!(f, "Error writing to channel: {}", message)
+                write!(f, "Error writing to channel: {message}")
             }
             ErrorDetails::ClickHouseConnection { message } => {
-                write!(f, "Error connecting to ClickHouse: {}", message)
+                write!(f, "Error connecting to ClickHouse: {message}")
             }
             ErrorDetails::ClickHouseDeserialization { message } => {
-                write!(f, "Error deserializing ClickHouse response: {}", message)
+                write!(f, "Error deserializing ClickHouse response: {message}")
             }
             ErrorDetails::ClickHouseMigration { id, message } => {
-                write!(f, "Error running ClickHouse migration {}: {}", id, message)
+                write!(f, "Error running ClickHouse migration {id}: {message}")
             }
             ErrorDetails::ClickHouseQuery { message } => {
-                write!(f, "Failed to run ClickHouse query: {}", message)
+                write!(f, "Failed to run ClickHouse query: {message}")
             }
             ErrorDetails::Config { message } => {
-                write!(f, "{}", message)
+                write!(f, "{message}")
             }
             ErrorDetails::DynamicJsonSchema { message } => {
                 write!(
                     f,
-                    "Error in compiling client-provided JSON schema: {}",
-                    message
+                    "Error in compiling client-provided JSON schema: {message}"
                 )
             }
             ErrorDetails::FileRead { message, file_path } => {
                 write!(f, "Error reading file {file_path}: {message}")
             }
             ErrorDetails::GCPCredentials { message } => {
-                write!(f, "Error in acquiring GCP credentials: {}", message)
+                write!(f, "Error in acquiring GCP credentials: {message}")
             }
-            ErrorDetails::Inference { message } => write!(f, "{}", message),
+            ErrorDetails::Inference { message } => write!(f, "{message}"),
             ErrorDetails::InferenceClient {
                 message,
                 provider_type,
@@ -652,23 +650,23 @@ impl std::fmt::Display for ErrorDetails {
                         message,
                         raw_request
                             .as_ref()
-                            .map_or("".to_string(), |r| format!("\nRaw request: {}", r)),
+                            .map_or("".to_string(), |r| format!("\nRaw request: {r}")),
                         raw_response
                             .as_ref()
-                            .map_or("".to_string(), |r| format!("\nRaw response: {}", r))
+                            .map_or("".to_string(), |r| format!("\nRaw response: {r}"))
                     )
                 } else {
                     write!(
                         f,
                         "Error{} from {} client: {}",
-                        status_code.map_or("".to_string(), |s| format!(" {}", s)),
+                        status_code.map_or("".to_string(), |s| format!(" {s}")),
                         provider_type,
                         message
                     )
                 }
             }
             ErrorDetails::InferenceNotFound { inference_id } => {
-                write!(f, "Inference not found for id: {}", inference_id)
+                write!(f, "Inference not found for id: {inference_id}")
             }
             ErrorDetails::InferenceServer {
                 message,
@@ -685,53 +683,50 @@ impl std::fmt::Display for ErrorDetails {
                         message,
                         raw_request
                             .as_ref()
-                            .map_or("".to_string(), |r| format!("\nRaw request: {}", r)),
+                            .map_or("".to_string(), |r| format!("\nRaw request: {r}")),
                         raw_response
                             .as_ref()
-                            .map_or("".to_string(), |r| format!("\nRaw response: {}", r))
+                            .map_or("".to_string(), |r| format!("\nRaw response: {r}"))
                     )
                 } else {
-                    write!(f, "Error from {} server: {}", provider_type, message)
+                    write!(f, "Error from {provider_type} server: {message}")
                 }
             }
             ErrorDetails::InferenceTimeout { variant_name } => {
-                write!(f, "Inference timed out for variant: {}", variant_name)
+                write!(f, "Inference timed out for variant: {variant_name}")
             }
             ErrorDetails::InputValidation { source } => {
-                write!(f, "Input validation failed with messages: {}", source)
+                write!(f, "Input validation failed with messages: {source}")
             }
             ErrorDetails::InternalError { message } => {
-                write!(f, "Internal error: {}", message)
+                write!(f, "Internal error: {message}")
             }
-            ErrorDetails::InvalidBaseUrl { message } => write!(
-                f,
-                "Invalid batch params retrieved from database: {}",
-                message
-            ),
-            ErrorDetails::InvalidBatchParams { message } => write!(f, "{}", message),
+            ErrorDetails::InvalidBaseUrl { message } => {
+                write!(f, "Invalid batch params retrieved from database: {message}")
+            }
+            ErrorDetails::InvalidBatchParams { message } => write!(f, "{message}"),
             ErrorDetails::InvalidCandidate {
                 variant_name,
                 message,
             } => {
                 write!(
                     f,
-                    "Invalid candidate variant as a component of variant {}: {}",
-                    variant_name, message
+                    "Invalid candidate variant as a component of variant {variant_name}: {message}"
                 )
             }
             ErrorDetails::InvalidDiclConfig { message } => {
-                write!(f, "Invalid dynamic in-context learning config: {}. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new", message)
+                write!(f, "Invalid dynamic in-context learning config: {message}. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new")
             }
             ErrorDetails::InvalidDatasetName { dataset_name } => {
-                write!(f, "Invalid dataset name: {}. Datasets cannot be named \"builder\" or begin with \"tensorzero::\"", dataset_name)
+                write!(f, "Invalid dataset name: {dataset_name}. Datasets cannot be named \"builder\" or begin with \"tensorzero::\"")
             }
-            ErrorDetails::InvalidFunctionVariants { message } => write!(f, "{}", message),
+            ErrorDetails::InvalidFunctionVariants { message } => write!(f, "{message}"),
             ErrorDetails::InvalidTensorzeroUuid { message, kind } => {
-                write!(f, "Invalid {kind} ID: {}", message)
+                write!(f, "Invalid {kind} ID: {message}")
             }
-            ErrorDetails::InvalidMessage { message } => write!(f, "{}", message),
+            ErrorDetails::InvalidMessage { message } => write!(f, "{message}"),
             ErrorDetails::InvalidModel { model_name } => {
-                write!(f, "Invalid model: {}", model_name)
+                write!(f, "Invalid model: {model_name}")
             }
             ErrorDetails::InvalidModelProvider {
                 model_name,
@@ -739,37 +734,38 @@ impl std::fmt::Display for ErrorDetails {
             } => {
                 write!(
                     f,
-                    "Invalid model provider: {} for model: {}",
-                    provider_name, model_name
+                    "Invalid model provider: {provider_name} for model: {model_name}"
                 )
             }
             ErrorDetails::InvalidOpenAICompatibleRequest { message } => write!(
                 f,
-                "Invalid request to OpenAI-compatible endpoint: {}",
-                message
+                "Invalid request to OpenAI-compatible endpoint: {message}"
             ),
-            ErrorDetails::InvalidProviderConfig { message } => write!(f, "{}", message),
-            ErrorDetails::InvalidRequest { message } => write!(f, "{}", message),
+            ErrorDetails::InvalidProviderConfig { message } => write!(f, "{message}"),
+            ErrorDetails::InvalidRequest { message } => write!(f, "{message}"),
             ErrorDetails::InvalidTemplatePath => {
                 write!(f, "Template path failed to convert to Rust string")
             }
-            ErrorDetails::InvalidTool { message } => write!(f, "{}", message),
+            ErrorDetails::InvalidTool { message } => write!(f, "{message}"),
             ErrorDetails::InvalidUuid { raw_uuid } => {
-                write!(f, "Failed to parse UUID as v7: {}", raw_uuid)
+                write!(f, "Failed to parse UUID as v7: {raw_uuid}")
             }
-            ErrorDetails::JsonRequest { message } => write!(f, "{}", message),
-            ErrorDetails::JsonSchema { message } => write!(f, "{}", message),
+            ErrorDetails::JsonRequest { message } => write!(f, "{message}"),
+            ErrorDetails::JsonSchema { message } => write!(f, "{message}"),
             ErrorDetails::JsonSchemaValidation {
                 messages,
                 data,
                 schema,
             } => {
                 write!(f, "JSON Schema validation failed:\n{}", messages.join("\n"))?;
-                write!(
-                    f,
-                    "\n\nData:\n{}",
-                    serde_json::to_string(data).map_err(|_| std::fmt::Error)?
-                )?;
+                // `debug` defaults to false so we don't log data by default
+                if *DEBUG.get().unwrap_or(&false) {
+                    write!(
+                        f,
+                        "\n\nData:\n{}",
+                        serde_json::to_string(data).map_err(|_| std::fmt::Error)?
+                    )?;
+                }
                 write!(
                     f,
                     "\n\nSchema:\n{}",
@@ -777,28 +773,27 @@ impl std::fmt::Display for ErrorDetails {
                 )
             }
             ErrorDetails::MiniJinjaEnvironment { message } => {
-                write!(f, "Error initializing MiniJinja environment: {}", message)
+                write!(f, "Error initializing MiniJinja environment: {message}")
             }
             ErrorDetails::MiniJinjaTemplate {
                 template_name,
                 message,
             } => {
-                write!(f, "Error rendering template {}: {}", template_name, message)
+                write!(f, "Error rendering template {template_name}: {message}")
             }
             ErrorDetails::MiniJinjaTemplateMissing { template_name } => {
-                write!(f, "Template not found: {}", template_name)
+                write!(f, "Template not found: {template_name}")
             }
             ErrorDetails::MiniJinjaTemplateRender {
                 template_name,
                 message,
             } => {
-                write!(f, "Error rendering template {}: {}", template_name, message)
+                write!(f, "Error rendering template {template_name}: {message}")
             }
             ErrorDetails::MissingBatchInferenceResponse { inference_id } => match inference_id {
                 Some(inference_id) => write!(
                     f,
-                    "Missing batch inference response for inference id: {}",
-                    inference_id
+                    "Missing batch inference response for inference id: {inference_id}"
                 ),
                 None => write!(f, "Missing batch inference response"),
             },
@@ -808,16 +803,16 @@ impl std::fmt::Display for ErrorDetails {
                     "All model providers failed to infer with errors: {}",
                     provider_errors
                         .iter()
-                        .map(|(provider_name, error)| format!("{}: {}", provider_name, error))
+                        .map(|(provider_name, error)| format!("{provider_name}: {error}"))
                         .collect::<Vec<_>>()
                         .join(", ")
                 )
             }
             ErrorDetails::ModelValidation { message } => {
-                write!(f, "Failed to validate model: {}", message)
+                write!(f, "Failed to validate model: {message}")
             }
             ErrorDetails::Observability { message } => {
-                write!(f, "{}", message)
+                write!(f, "{message}")
             }
             ErrorDetails::OutputParsing {
                 raw_output,
@@ -829,40 +824,37 @@ impl std::fmt::Display for ErrorDetails {
                 )
             }
             ErrorDetails::OutputValidation { source } => {
-                write!(f, "Output validation failed with messages: {}", source)
+                write!(f, "Output validation failed with messages: {source}")
             }
             ErrorDetails::ProviderNotFound { provider_name } => {
-                write!(f, "Provider not found: {}", provider_name)
+                write!(f, "Provider not found: {provider_name}")
             }
             ErrorDetails::StreamError { source } => {
                 write!(f, "Error in streaming response: {source}")
             }
-            ErrorDetails::Serialization { message } => write!(f, "{}", message),
-            ErrorDetails::TypeConversion { message } => write!(f, "{}", message),
-            ErrorDetails::ToolNotFound { name } => write!(f, "Tool not found: {}", name),
-            ErrorDetails::ToolNotLoaded { name } => write!(f, "Tool not loaded: {}", name),
+            ErrorDetails::Serialization { message } => write!(f, "{message}"),
+            ErrorDetails::TypeConversion { message } => write!(f, "{message}"),
+            ErrorDetails::ToolNotFound { name } => write!(f, "Tool not found: {name}"),
+            ErrorDetails::ToolNotLoaded { name } => write!(f, "Tool not loaded: {name}"),
             ErrorDetails::UnknownCandidate { name } => {
-                write!(f, "Unknown candidate variant: {}", name)
+                write!(f, "Unknown candidate variant: {name}")
             }
-            ErrorDetails::UnknownFunction { name } => write!(f, "Unknown function: {}", name),
-            ErrorDetails::UnknownModel { name } => write!(f, "Unknown model: {}", name),
-            ErrorDetails::UnknownTool { name } => write!(f, "Unknown tool: {}", name),
-            ErrorDetails::UnknownVariant { name } => write!(f, "Unknown variant: {}", name),
-            ErrorDetails::UnknownMetric { name } => write!(f, "Unknown metric: {}", name),
+            ErrorDetails::UnknownFunction { name } => write!(f, "Unknown function: {name}"),
+            ErrorDetails::UnknownModel { name } => write!(f, "Unknown model: {name}"),
+            ErrorDetails::UnknownTool { name } => write!(f, "Unknown tool: {name}"),
+            ErrorDetails::UnknownVariant { name } => write!(f, "Unknown variant: {name}"),
+            ErrorDetails::UnknownMetric { name } => write!(f, "Unknown metric: {name}"),
             ErrorDetails::UnsupportedModelProviderForBatchInference { provider_type } => {
                 write!(
                     f,
-                    "Unsupported model provider for batch inference: {}",
-                    provider_type
+                    "Unsupported model provider for batch inference: {provider_type}"
                 )
             }
             ErrorDetails::UnsupportedVariantForBatchInference { variant_name } => {
                 match variant_name {
-                    Some(variant_name) => write!(
-                        f,
-                        "Unsupported variant for batch inference: {}",
-                        variant_name
-                    ),
+                    Some(variant_name) => {
+                        write!(f, "Unsupported variant for batch inference: {variant_name}")
+                    }
                     None => write!(f, "Unsupported variant for batch inference"),
                 }
             }
@@ -873,14 +865,12 @@ impl std::fmt::Display for ErrorDetails {
                 if let Some(link) = issue_link {
                     write!(
                         f,
-                        "Unsupported variant for streaming inference of type {}. For more information, see: {}",
-                        variant_type, link
+                        "Unsupported variant for streaming inference of type {variant_type}. For more information, see: {link}"
                     )
                 } else {
                     write!(
                         f,
-                        "Unsupported variant for streaming inference of type {}",
-                        variant_type
+                        "Unsupported variant for streaming inference of type {variant_type}"
                     )
                 }
             }
@@ -893,10 +883,10 @@ impl std::fmt::Display for ErrorDetails {
                 write!(f, "Unsupported variant `{variant_name}` of type `{variant_type}` for function `{function_name}` of type `{function_type}`")
             }
             ErrorDetails::UuidInFuture { raw_uuid } => {
-                write!(f, "UUID is in the future: {}", raw_uuid)
+                write!(f, "UUID is in the future: {raw_uuid}")
             }
             ErrorDetails::RouteNotFound { path, method } => {
-                write!(f, "Route not found: {} {}", method, path)
+                write!(f, "Route not found: {method} {path}")
             }
         }
     }
