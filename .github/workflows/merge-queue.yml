@@ -43,11 +43,13 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      - name: Warm up vLLM modal instance
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Warm up modal instances
         run: |
           curl -H "Modal-Key: $MODAL_KEY" -H "Modal-Secret: $MODAL_SECRET" https://tensorzero--vllm-inference-vllm-inference.modal.run/docs > vllm_modal_logs.txt &
+          curl -H "Modal-Key: $MODAL_KEY" -H "Modal-Secret: $MODAL_SECRET" https://tensorzero--sglang-inference-sglang-inference.modal.run/ > sglang_modal_logs.txt &
 
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - name: Install Namespace CLI
         uses: namespacelabs/nscloud-setup@d1c625762f7c926a54bd39252efff0705fd11c64
 
@@ -141,6 +143,10 @@ jobs:
       - name: Print vLLM modal logs
         if: always()
         run: cat vllm_modal_logs.txt
+
+      - name: Print SGLang modal logs
+        if: always()
+        run: cat sglang_modal_logs.txt
 
       - name: Upload provider-proxy cache
         if: ${{ false }} # Change to `if: ${{ always() }}` to start uploading the cache
