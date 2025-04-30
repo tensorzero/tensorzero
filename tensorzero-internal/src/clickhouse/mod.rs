@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio::sync::RwLockWriteGuard;
+use tokio::sync::Semaphore;
 use url::Url;
 
 pub mod migration_manager;
@@ -27,6 +28,7 @@ pub enum ClickHouseConnectionInfo {
         database_url: SecretString,
         database: String,
         client: Client,
+        semaphore: Arc<Semaphore>,
     },
 }
 
@@ -72,6 +74,7 @@ impl ClickHouseConnectionInfo {
             database_url,
             database,
             client: Client::new(),
+            semaphore: Arc::new(Semaphore::new(64)),
         };
         // If the connection is unhealthy, we won't be able to run / check migrations. So we just fail here.
         connection_info.health().await?;
@@ -110,8 +113,14 @@ impl ClickHouseConnectionInfo {
             Self::Production {
                 database_url,
                 client,
+                semaphore,
                 ..
-            } => write_production(database_url, client, rows, table).await,
+            } => {
+                let _permit = semaphore.acquire().await.inspect_err(|e| {
+                    eprintln!("Failed to acquire semaphore permit: {e:?}");
+                });
+                write_production(database_url, client, rows, table).await
+            }
         }
     }
 

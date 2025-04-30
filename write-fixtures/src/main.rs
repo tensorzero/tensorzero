@@ -1,12 +1,12 @@
 #![expect(clippy::expect_used, clippy::print_stdout)]
 
-use std::{io::Write, path::PathBuf, sync::Arc};
+use std::{io::Write, path::PathBuf, sync::Arc, time::Duration};
 
 use tensorzero::{
     Client, ClientBuilder, ClientBuilderMode, ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent, ContentBlockChunk, InferenceOutput, InferenceResponseChunk, Role
 };
 use tensorzero_internal::inference::types::TextKind;
-use tokio::task::JoinSet;
+use tokio::{runtime::Runtime, task::JoinSet};
 use tokio_stream::StreamExt;
 
 use clap::Parser;
@@ -94,8 +94,7 @@ async fn run_inference(client: &Client, args: &Args) {
     }
 }
 
-#[tokio::main]
-async fn main() {
+async fn main_inner() {
     let subscriber = tracing_subscriber::FmtSubscriber::new();
     tracing::subscriber::set_global_default(subscriber).expect("Failed to initialize tracing");
 
@@ -124,7 +123,7 @@ async fn main() {
 
     let client = Arc::new(client);
 
-    let semaphore = Arc::new(tokio::sync::Semaphore::new(200));
+    let semaphore = Arc::new(tokio::sync::Semaphore::new(10));
     let mut join_set = JoinSet::new();
     for _ in 0..args.count {
         let args = args.clone();
@@ -149,4 +148,12 @@ async fn main() {
             None => break,
         }
     }
+}
+
+fn main() {
+    let runtime = Runtime::new().expect("Failed to create runtime");
+    runtime.block_on(main_inner());
+    println!("Shutting down");
+    drop(runtime);
+    println!("Done!");
 }

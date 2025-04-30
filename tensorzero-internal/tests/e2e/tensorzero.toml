@@ -15,7 +15,7 @@ enable_template_filesystem_access = true
 enabled = true
 
 [gateway.observability]
-async_writes = false
+async_writes = true
 
 [object_storage]
 type = "disabled"
