@@ -976,7 +976,7 @@ async fn test_create_delete_datapoint_json() {
     }
     tokio::time::sleep(Duration::from_millis(500)).await;
 
-    let datapoints = select_chat_dataset_clickhouse(&clickhouse, &dataset_name)
+    let datapoints = select_json_dataset_clickhouse(&clickhouse, &dataset_name)
         .await
         .unwrap();
     assert!(datapoints.is_empty());
