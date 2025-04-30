@@ -2378,6 +2378,12 @@ model = "llama3.1-405b-instruct-turbo-together"
 system_template = "../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
 max_tokens = 100
 
+[functions.weather_helper.variants.sglang]
+type = "chat_completion"
+model = "google/gemma-3-1b-it"
+system_template = "../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
+max_tokens = 100
+
 [functions.weather_helper.variants.xai]
 type = "chat_completion"
 model = "grok_2_1212"

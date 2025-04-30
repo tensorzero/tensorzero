@@ -3131,7 +3131,7 @@ pub async fn test_tool_use_tool_choice_auto_used_inference_request_with_provider
     provider: E2ETestProvider,
 ) {
     let episode_id = Uuid::now_v7();
-
+    let extra_headers = get_extra_headers();
     let payload = json!({
         "function_name": "weather_helper",
         "episode_id": episode_id,
@@ -3145,7 +3145,8 @@ pub async fn test_tool_use_tool_choice_auto_used_inference_request_with_provider
             ]},
         "stream": false,
         "variant_name": provider.variant_name,
-        "tags": {"test_type": "auto_used"}
+        "tags": {"test_type": "auto_used"},
+        "extra_headers": extra_headers.headers,
     });
 
     let response = Client::new()
@@ -3750,7 +3751,7 @@ pub async fn test_tool_use_tool_choice_auto_unused_inference_request_with_provid
     provider: E2ETestProvider,
 ) {
     let episode_id = Uuid::now_v7();
-
+    let extra_headers = get_extra_headers();
     let payload = json!({
         "function_name": "weather_helper",
         "episode_id": episode_id,
@@ -3764,6 +3765,7 @@ pub async fn test_tool_use_tool_choice_auto_unused_inference_request_with_provid
             ]},
         "stream": false,
         "variant_name": provider.variant_name,
+        "extra_headers": extra_headers.headers,
     });
 
     let response = Client::new()
@@ -4005,7 +4007,7 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
         return;
     }
     let episode_id = Uuid::now_v7();
-
+    let extra_headers = get_extra_headers();
     let payload = json!({
         "function_name": "weather_helper",
         "episode_id": episode_id,
@@ -4019,6 +4021,7 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
             ]},
         "stream": true,
         "variant_name": provider.variant_name,
+        "extra_headers": extra_headers.headers,
     });
 
     let mut event_source = Client::new()
@@ -4291,7 +4294,7 @@ pub async fn test_tool_use_tool_choice_required_inference_request_with_provider(
     }
 
     let episode_id = Uuid::now_v7();
-
+    let extra_headers = get_extra_headers();
     let payload = json!({
         "function_name": "weather_helper",
         "episode_id": episode_id,
@@ -4306,6 +4309,7 @@ pub async fn test_tool_use_tool_choice_required_inference_request_with_provider(
         "tool_choice": "required",
         "stream": false,
         "variant_name": provider.variant_name,
+        "extra_headers": extra_headers.headers,
     });
 
     let response = Client::new()
@@ -4575,7 +4579,7 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
     }
 
     let episode_id = Uuid::now_v7();
-
+    let extra_headers = get_extra_headers();
     let payload = json!({
         "function_name": "weather_helper",
         "episode_id": episode_id,
@@ -4590,6 +4594,7 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
         "tool_choice": "required",
         "stream": true,
         "variant_name": provider.variant_name,
+        "extra_headers": extra_headers.headers,
     });
 
     let mut event_source = Client::new()
@@ -4901,7 +4906,7 @@ pub async fn test_tool_use_tool_choice_none_inference_request_with_provider(
     }
 
     let episode_id = Uuid::now_v7();
-
+    let extra_headers = get_extra_headers();
     let payload = json!({
         "function_name": "weather_helper",
         "episode_id": episode_id,
@@ -4916,6 +4921,7 @@ pub async fn test_tool_use_tool_choice_none_inference_request_with_provider(
         "tool_choice": "none",
         "stream": false,
         "variant_name": provider.variant_name,
+        "extra_headers": extra_headers.headers,
     });
 
     let response = Client::new()
@@ -5150,6 +5156,7 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
         return;
     }
     let episode_id = Uuid::now_v7();
+    let extra_headers = get_extra_headers();
 
     let payload = json!({
         "function_name": "weather_helper",
@@ -5165,6 +5172,7 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
         "tool_choice": "none",
         "stream": true,
         "variant_name": provider.variant_name,
+        "extra_headers": extra_headers.headers,
     });
 
     let mut event_source = Client::new()
@@ -5448,6 +5456,8 @@ pub async fn test_tool_use_tool_choice_specific_inference_request_with_provider(
         return;
     }
 
+    let extra_headers = get_extra_headers();
+
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -5481,6 +5491,7 @@ pub async fn test_tool_use_tool_choice_specific_inference_request_with_provider(
         ],
         "stream": false,
         "variant_name": provider.variant_name,
+        "extra_headers": extra_headers.headers,
     });
 
     let response = Client::new()
@@ -5785,6 +5796,7 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
     }
 
     let episode_id = Uuid::now_v7();
+    let extra_headers = get_extra_headers();
 
     let payload = json!({
         "function_name": "weather_helper",
@@ -5817,6 +5829,7 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
         "tool_choice": {"specific": "self_destruct"},
         "stream": true,
         "variant_name": provider.variant_name,
+        "extra_headers": extra_headers.headers,
     });
 
     let mut event_source = Client::new()
@@ -6166,6 +6179,7 @@ pub async fn test_tool_use_allowed_tools_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
     let episode_id = Uuid::now_v7();
+    let extra_headers = get_extra_headers();
 
     let payload = json!({
         "function_name": "basic_test",
@@ -6182,6 +6196,7 @@ pub async fn test_tool_use_allowed_tools_inference_request_with_provider(
         "allowed_tools": ["get_humidity"],
         "stream": false,
         "variant_name": provider.variant_name,
+        "extra_headers": extra_headers.headers,
     });
 
     let response = Client::new()
@@ -6426,7 +6441,7 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
     }
 
     let episode_id = Uuid::now_v7();
-
+    let extra_headers = get_extra_headers();
     let payload = json!({
         "function_name": "basic_test",
         "episode_id": episode_id,
@@ -6442,6 +6457,7 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
         "allowed_tools": ["get_humidity"],
         "stream": true,
         "variant_name": provider.variant_name,
+        "extra_headers": extra_headers.headers,
     });
 
     let mut event_source = Client::new()
