@@ -1189,9 +1189,6 @@ pub(super) fn prepare_groq_tools<'a>(
     }
 }
 
-/// This function is complicated only by the fact that Groq and Azure require
-/// different instructions depending on the json mode and the content of the messages.
-///
 /// If ModelInferenceRequestJsonMode::On and the system message or instructions does not contain "JSON"
 /// the request will return an error.
 /// So, we need to format the instructions to include "Respond using JSON." if it doesn't already.
