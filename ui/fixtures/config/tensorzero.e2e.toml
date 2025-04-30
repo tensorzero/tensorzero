@@ -119,6 +119,20 @@ weight = 1
 model = "openai::gpt-4o-mini-2024-07-18"
 system_template = "functions/ask_question/baseline/system_template.minijinja"
 
+[functions.ask_question.variants."gpt-4.1-nano"]
+type = "chat_completion"
+weight = 0
+model = "openai::gpt-4.1-nano-2025-04-14"
+system_template = "functions/ask_question/baseline/system_template.minijinja"
+json_mode = "strict"
+
+[functions.ask_question.variants."gpt-4.1-mini"]
+type = "chat_completion"
+weight = 0
+model = "openai::gpt-4.1-mini-2025-04-14"
+system_template = "functions/ask_question/baseline/system_template.minijinja"
+json_mode = "strict"
+
 [functions.answer_question]
 type = "chat"
 system_schema = "functions/answer_question/system_schema.json"
