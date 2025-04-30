@@ -132,9 +132,9 @@ pub async fn test_capture_simple_inference_spans() {
     let [root_span] = spans.root_spans.as_slice() else {
         panic!("Expected one root span: {:#?}", spans.root_spans);
     };
-    // Since we're using the embedded gateway, the root span will be `function_call`
+    // Since we're using the embedded gateway, the root span will be `function_inference`
     // (we won't have a top-level HTTP span)
-    assert_eq!(root_span.name, "function_call");
+    assert_eq!(root_span.name, "function_inference");
     let root_attr_map = attrs_to_map(&root_span.attributes);
     assert_eq!(root_attr_map["model_name"], "dummy::good".into());
     assert_eq!(
