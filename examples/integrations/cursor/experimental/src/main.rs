@@ -170,7 +170,7 @@ async fn main() -> Result<()> {
             // TODO: Send a demonstration of the matching snippet if it's sufficiently good.
         }
     }
-    #[allow(clippy::print_stdout)]
+    #[expect(clippy::print_stdout)]
     {
         println!("Number of feedbacks sent: {num_feedbacks_sent}");
     }

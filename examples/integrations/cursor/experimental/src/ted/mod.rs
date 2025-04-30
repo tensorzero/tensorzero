@@ -86,7 +86,7 @@ impl<'tree> TsNodeWrapper<'tree> {
         let leaf_text = if node.child_count() == 0 {
             // I don't want to propagate non-UTF-8 errors
             // since that's just deeply wrong if we get here.
-            #[allow(clippy::unwrap_used)]
+            #[expect(clippy::unwrap_used)]
             Some(node.utf8_text(src).unwrap().to_string())
         } else {
             None
@@ -234,7 +234,7 @@ impl<'tree, L: Eq> Tree<'tree, L> {
     }
 
     /// Internal DP over *forests* needed for Zhang‑Shasha.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     fn forest_distance(
         k1: usize, // key‑root in `t1`
         k2: usize, // key‑root in `t2`
