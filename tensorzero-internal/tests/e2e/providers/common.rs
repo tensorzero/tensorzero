@@ -4343,9 +4343,11 @@ pub async fn test_tool_use_tool_choice_required_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
     // Azure, Together, and SGLang don't support `tool_choice: "required"`
+    // Groq says they support it, but it doesn't return the required tool as expected
     if provider.model_provider_name == "azure"
         || provider.model_provider_name == "together"
         || provider.model_provider_name == "sglang"
+        || provider.model_provider_name == "groq"
     {
         return;
     }
@@ -4626,9 +4628,11 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
     provider: E2ETestProvider,
 ) {
     // Azure, Together, and SGLang don't support `tool_choice: "required"`
+    // Groq says they support it, but it doesn't return the required tool as expected
     if provider.model_provider_name == "azure"
         || provider.model_provider_name == "together"
         || provider.model_provider_name == "sglang"
+        || provider.model_provider_name == "groq"
     {
         return;
     }
