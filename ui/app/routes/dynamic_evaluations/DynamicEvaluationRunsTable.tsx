@@ -11,24 +11,22 @@ import {
 import { formatDate } from "~/utils/date";
 import { FunctionLink } from "~/components/function/FunctionLink";
 import { VariantLink } from "~/components/function/variant/VariantLink";
-import type { EvaluationInfoResult } from "~/utils/clickhouse/evaluations";
+import type { DynamicEvaluationRun } from "~/utils/clickhouse/dynamic_evaluations";
 
-export default function EvaluationRunsTable({
+export default function DynamicEvaluationRunsTable({
   evaluationRuns,
 }: {
-  evaluationRuns: EvaluationInfoResult[];
+  evaluationRuns: DynamicEvaluationRun[];
 }) {
   return (
     <div>
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Run ID</TableHead>
             <TableHead>Name</TableHead>
-            <TableHead>Dataset</TableHead>
-            <TableHead>Function</TableHead>
-            <TableHead>Variant</TableHead>
-            <TableHead>Last Updated</TableHead>
+            <TableHead>ID</TableHead>
+            <TableHead>Project</TableHead>
+            <TableHead>Timestamp</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>

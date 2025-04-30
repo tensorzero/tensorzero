@@ -15,6 +15,7 @@ export async function getDynamicEvaluationRuns(
       variant_pins,
       tags,
       project_name,
+      formatDateTime(UUIDv7ToDateTime(uint_to_uuid(run_id_uint)), '%Y-%m-%dT%H:%i:%SZ') as timestamp
     FROM DynamicEvaluationRun
     ORDER BY run_id_uint DESC
     LIMIT {page_size:UInt64} OFFSET {offset:UInt64}

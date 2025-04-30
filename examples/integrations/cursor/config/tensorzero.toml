@@ -27,6 +27,11 @@ type = "chat_completion"
 model = "openai::o4-mini-2025-04-16"
 extra_body = [{ pointer = "/temperature", value = 1.0 }]
 
+[functions.cursorzero.variants.mercury_coder_small]
+weight = 1
+type = "chat_completion"
+model = "mercury_coder_small"
+
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                  METRICS                                   │
@@ -45,3 +50,12 @@ optimize = "max"
 # type = "boolean"
 # level = "inference"
 # optimize = "max"
+
+[models.mercury_coder_small]
+routing = ["inception"]
+
+[models.mercury_coder_small.providers.inception]
+type = "openai"
+api_base = "https://api.inceptionlabs.ai/v1"
+api_key_location = "env::INCEPTION_API_KEY"
+model_name = "mercury-coder-small"
