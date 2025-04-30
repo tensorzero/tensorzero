@@ -17,6 +17,12 @@ Now, you can use Cursor as you would normally but with the `tensorzero::function
 This will send all traffic through your local TensorZero gateway.
 Take a look at the server running on `http://localhost:6901` to see what your requests look like!
 
+## Intercepting requests for cursor tab:
+
+* Install mitmproxy, and install the root cert system-wide
+* Turn off HTTP2 in vscode settings (https://forum.cursor.com/t/add-authorized-certificates-to-cursor/21765)
+* Start cursor with the env vars 'http_proxy=http://localhost:8080' and 'https_proxy=http://localhost:8080'
+
 ## A haiku about this integration
 
 Cursor calls go through
