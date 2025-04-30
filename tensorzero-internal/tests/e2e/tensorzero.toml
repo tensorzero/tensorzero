@@ -566,6 +566,16 @@ temperature = 1.0
 max_tokens = 100
 seed = 69
 
+[functions.basic_test.variants.test2]
+type = "chat_completion"
+model = "test"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.basic_test.variants.error]
+type = "chat_completion"
+model = "error"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
 [functions.basic_test.variants.slow]
 type = "chat_completion"
 model = "slow"
