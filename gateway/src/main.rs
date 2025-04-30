@@ -178,11 +178,11 @@ async fn main() {
             delete(endpoints::datasets::delete_datapoint_handler),
         )
         .route(
-            "/internal/datasets/{dataset}/datapoints",
-            post(endpoints::datasets::create_datapoint_handler),
+            "/internal/datasets/{dataset_name}/datapoints",
+            post(endpoints::datasets::create_from_existing_datapoint_handler),
         )
         .route(
-            "/internal/datasets/{dataset}/datapoints/{id}",
+            "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
             put(endpoints::datasets::update_datapoint_handler),
         )
         .route(

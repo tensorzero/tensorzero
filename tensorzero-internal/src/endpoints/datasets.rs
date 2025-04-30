@@ -193,7 +193,7 @@ async fn insert_from_existing(
                 OutputKind::None => None,
             };
             let datapoint = JsonInferenceDatapoint {
-                dataset_name: path_params.dataset,
+                dataset_name: path_params.dataset_name,
                 function_name: inference.function_name,
                 id: datapoint_id,
                 episode_id: Some(inference.episode_id),
@@ -230,7 +230,7 @@ async fn insert_from_existing(
                 OutputKind::None => None,
             };
             let datapoint = ChatInferenceDatapoint {
-                dataset_name: path_params.dataset,
+                dataset_name: path_params.dataset_name,
                 function_name: inference.function_name,
                 id: datapoint_id,
                 episode_id: Some(inference.episode_id),
@@ -271,7 +271,7 @@ pub async fn create_from_existing_datapoint_handler(
     Path(path_params): Path<CreatePathParams>,
     StructuredJson(existing_inference): StructuredJson<ExistingInference>,
 ) -> Result<Json<CreateDatapointResponse>, Error> {
-    validate_dataset_name(&path_params.dataset)?;
+    validate_dataset_name(&path_params.dataset_name)?;
     let datapoint_id = insert_from_existing(
         &app_state.clickhouse_connection_info,
         path_params,
@@ -295,8 +295,8 @@ pub async fn update_datapoint_handler(
     // based on the type of the function looked up from the `function_name` key.
     StructuredJson(params): StructuredJson<serde_json::Value>,
 ) -> Result<Json<CreateDatapointResponse>, Error> {
-    validate_tensorzero_uuid(path_params.id, "Datapoint")?;
-    validate_dataset_name(&path_params.dataset)?;
+    validate_tensorzero_uuid(path_params.datapoint_id, "Datapoint")?;
+    validate_dataset_name(&path_params.dataset_name)?;
     let fetch_context = FetchContext {
         client: &app_state.http_client,
         object_store_info: &app_state.config.object_store_info,
@@ -351,9 +351,9 @@ pub async fn update_datapoint_handler(
             };
 
             let datapoint = ChatInferenceDatapoint {
-                dataset_name: path_params.dataset,
+                dataset_name: path_params.dataset_name,
                 function_name: chat.function_name,
-                id: path_params.id,
+                id: path_params.datapoint_id,
                 episode_id: None,
                 input: resolved_input,
                 output,
@@ -414,9 +414,9 @@ pub async fn update_datapoint_handler(
             };
 
             let datapoint = JsonInferenceDatapoint {
-                dataset_name: path_params.dataset,
+                dataset_name: path_params.dataset_name,
                 function_name: json.function_name,
-                id: path_params.id,
+                id: path_params.datapoint_id,
                 episode_id: None,
                 input: resolved_input,
                 output,
@@ -437,7 +437,9 @@ pub async fn update_datapoint_handler(
             }
         }
     }
-    Ok(Json(CreateDatapointResponse { id: path_params.id }))
+    Ok(Json(CreateDatapointResponse {
+        id: path_params.datapoint_id,
+    }))
 }
 
 #[derive(Debug, Deserialize)]
@@ -521,6 +523,7 @@ pub async fn create_datapoint(
         })
     })?;
 
+    // These validate that the other parameters are the same length as the input.
     let batch_datapoint_output: Vec<Option<Value>> = BatchDatapointOutputWithSize {
         output: params.output,
         size: num_datapoints,
@@ -544,7 +547,7 @@ pub async fn create_datapoint(
     match &*function_config {
         FunctionConfig::Chat(_) => {
             let mut datapoints = Vec::with_capacity(num_datapoints);
-            // Validate all the datapoints, then write them to ClickHouse
+            // Validate all the datapoints (output and tool params), then write them to ClickHouse
             for (i, input) in params.input.into_iter().enumerate() {
                 let resolved_input = input.resolve(&fetch_context).await?;
                 let dynamic_demonstration_info =
@@ -602,6 +605,7 @@ pub async fn create_datapoint(
             let mut datapoints = Vec::with_capacity(num_datapoints);
             for (i, input) in params.input.into_iter().enumerate() {
                 let resolved_input = input.resolve(&fetch_context).await?;
+                // Validate the outputs against the output schema
                 let output_schema = batch_dynamic_output_schemas.get(i).ok_or_else(|| {
                     Error::new(ErrorDetails::InvalidRequest {
                         message: format!("Expected output schema or None for datapoint {i}"),
@@ -662,6 +666,7 @@ pub async fn create_datapoint(
                 };
                 datapoints.push(datapoint);
             }
+            // Actually write the datapoints to ClickHouse
             put_deduped_json_datapoints(clickhouse, &datapoints).await?;
             Ok(())
         }
@@ -675,7 +680,7 @@ pub struct DeleteDatapointPathParams {
 }
 
 /// The handler for the DELETE `/datasets/:dataset_name/datapoints/:datapoint_id` endpoint.
-/// This endpoint will delete the datapoint from the dataset.
+/// This endpoint will stale the datapoint from the dataset (soft delete).
 #[tracing::instrument(name = "delete_datapoint_handler", skip(app_state))]
 pub async fn delete_datapoint_handler(
     State(app_state): AppState,
@@ -693,7 +698,8 @@ pub async fn delete_datapoint(
     datapoint_id: Uuid,
     clickhouse: &ClickHouseConnectionInfo,
 ) -> Result<(), Error> {
-    // Since we don't know whether the datapoint is a chat or json datapoint, we can just stale both of these.
+    // Since we don't know whether the datapoint is a chat or json datapoint, we just stale both of these.
+    // The INSERT INTO SELECT FROM will just not write anything if the datapoint doesn't exist.
     let json_delete_query = r#"
     INSERT INTO JsonInferenceDatapoint
     (dataset_name, function_name, id, episode_id, input, output, output_schema,
@@ -770,13 +776,13 @@ impl TryFrom<BatchDatapointOutputWithSize> for Vec<Option<Value>> {
 
 #[derive(Debug, Deserialize)]
 pub struct CreatePathParams {
-    pub dataset: String,
+    pub dataset_name: String,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct UpdatePathParams {
-    pub dataset: String,
-    pub id: Uuid,
+    pub dataset_name: String,
+    pub datapoint_id: Uuid,
 }
 
 #[derive(Debug, Deserialize)]

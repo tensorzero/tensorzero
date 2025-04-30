@@ -407,7 +407,7 @@ async fn test_datapoint_insert_synthetic_chat_with_tools() {
                 ]
             },
             "output": [
-                {"type": "tool_call", "name": "get_temperature", "arguments": {"location": "New York", "units": "fahrenheit"}}
+                {"type": "tool_call", "name": "get_humidity", "arguments": {"location": "New York", "units": "fahrenheit"}}
             ],
             "tool_params": tool_params,
         }))
@@ -943,6 +943,25 @@ async fn test_create_delete_datapoint_json() {
         .await
         .unwrap();
     assert!(datapoints.is_empty());
+}
+
+#[tokio::test]
+async fn test_delete_nonexistent_datapoint() {
+    let client = Client::new();
+    let dataset_name = format!("test-dataset-{}", Uuid::now_v7());
+    let datapoint_id = Uuid::now_v7();
+
+    let resp = client
+        .delete(get_gateway_endpoint(&format!(
+            "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+        )))
+        .send()
+        .await
+        .unwrap();
+
+    let status = resp.status();
+    // For now, we don't care if the datapoint doesn't exist.
+    assert_eq!(status, StatusCode::OK);
 }
 
 #[tokio::test]
