@@ -52,10 +52,7 @@ struct Args {
 }
 
 async fn add_version_header(request: Request, next: Next) -> Response {
-    #[cfg(not(feature = "e2e_tests"))]
-    let version = HeaderValue::from_static(TENSORZERO_VERSION);
-
-    #[cfg(feature = "e2e_tests")]
+    #[cfg_attr(not(feature = "e2e_tests"), expect(unused_mut))]
     let mut version = HeaderValue::from_static(TENSORZERO_VERSION);
 
     #[cfg(feature = "e2e_tests")]
