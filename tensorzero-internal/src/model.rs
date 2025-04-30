@@ -220,7 +220,7 @@ impl ModelConfig {
             Cow::Borrowed(request)
         }
     }
-    #[tracing::instrument(skip_all, fields(model_name = model_name, otel.name = "tensorzero_model_infer", stream = false))]
+    #[tracing::instrument(skip_all, fields(model_name = model_name, otel.name = "model_inference", stream = false))]
     pub async fn infer<'request>(
         &self,
         request: &'request ModelInferenceRequest<'request>,
@@ -298,7 +298,7 @@ impl ModelConfig {
         Err(err)
     }
 
-    #[tracing::instrument(skip_all, fields(model_name = model_name, otel.name = "tensorzero_model_infer", stream = true))]
+    #[tracing::instrument(skip_all, fields(model_name = model_name, otel.name = "model_inference", stream = true))]
     pub async fn infer_stream<'request>(
         &self,
         request: &'request ModelInferenceRequest<'request>,
@@ -870,7 +870,7 @@ impl UninitializedProviderConfig {
 }
 
 impl ModelProvider {
-    #[tracing::instrument(skip_all, fields(provider_name = &*self.name, otel.name = "tensorzero_model_provider_infer",
+    #[tracing::instrument(skip_all, fields(provider_name = &*self.name, otel.name = "model_provider_inference",
         gen_ai.operation.name = "chat",
         gen_ai.system = self.genai_system_name(),
         gen_ai.request.model = self.genai_model_name(),
@@ -934,7 +934,7 @@ impl ModelProvider {
         }
     }
 
-    #[tracing::instrument(skip_all, fields(provider_name = &*self.name, otel.name = "tensorzero_model_provider_infer",
+    #[tracing::instrument(skip_all, fields(provider_name = &*self.name, otel.name = "model_provider_inference",
         gen_ai.operation.name = "chat",
         gen_ai.system = self.genai_system_name(),
         gen_ai.request.model = self.genai_model_name(),

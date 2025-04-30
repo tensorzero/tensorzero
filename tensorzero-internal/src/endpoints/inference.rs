@@ -191,7 +191,7 @@ pub struct InferenceIds {
         variant_name,
         inference_id,
         episode_id,
-        otel.name = "tensorzero_function_call"
+        otel.name = "function_call"
     )
 )]
 pub async fn inference(

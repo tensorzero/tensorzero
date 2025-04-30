@@ -62,8 +62,8 @@ pub async fn test_jaeger_trace_export() {
     'outer: for resource_span in jaeger_traces["result"]["resourceSpans"].as_array().unwrap() {
         for scope_span in resource_span["scopeSpans"].as_array().unwrap() {
             for span in scope_span["spans"].as_array().unwrap() {
-                if span["name"] == "tensorzero_function_call" {
-                    println!("Found tensorzero_function_call span: {span:?}");
+                if span["name"] == "function_call" {
+                    println!("Found function_call span: {span:?}");
                     let attrs = span["attributes"].as_array().unwrap();
                     for attr in attrs {
                         if attr["key"].as_str().unwrap() == "inference_id" {
@@ -71,7 +71,7 @@ pub async fn test_jaeger_trace_export() {
                                 attr["value"]["stringValue"].as_str().unwrap();
                             if inference_id == inference_id_jaeger {
                                 if target_span.is_some() {
-                                    panic!("Found multiple tensorzero_function_call spans with inference id: {inference_id}");
+                                    panic!("Found multiple function_call spans with inference id: {inference_id}");
                                 } else {
                                     target_span = Some(span.clone());
                                     break 'outer;
@@ -86,10 +86,9 @@ pub async fn test_jaeger_trace_export() {
 
     // Just check one span - we already have more comprehensive tests that check the exact spans
     // send to the global `opentelemetry` exporter.
-    let function_call_span = target_span.expect(
-        "No tensorzero_function_call span found with matching inference_id: {inference_id}",
-    );
-    assert_eq!(function_call_span["name"], "tensorzero_function_call");
+    let function_call_span = target_span
+        .expect("No function_call span found with matching inference_id: {inference_id}");
+    assert_eq!(function_call_span["name"], "function_call");
     assert_eq!(function_call_span["kind"], 1);
     let attrs: HashMap<&str, serde_json::Value> = function_call_span["attributes"]
         .as_array()

@@ -132,9 +132,9 @@ pub async fn test_capture_simple_inference_spans() {
     let [root_span] = spans.root_spans.as_slice() else {
         panic!("Expected one root span: {:#?}", spans.root_spans);
     };
-    // Since we're using the embedded gateway, the root span will be `tensorzero_function_call`
+    // Since we're using the embedded gateway, the root span will be `function_call`
     // (we won't have a top-level HTTP span)
-    assert_eq!(root_span.name, "tensorzero_function_call");
+    assert_eq!(root_span.name, "function_call");
     let root_attr_map = attrs_to_map(&root_span.attributes);
     assert_eq!(root_attr_map["model_name"], "dummy::good".into());
     assert_eq!(
@@ -153,7 +153,7 @@ pub async fn test_capture_simple_inference_spans() {
         panic!("Expected one child span: {root_children:#?}");
     };
 
-    assert_eq!(variant_span.name, "tensorzero_variant_infer");
+    assert_eq!(variant_span.name, "variant_inference");
     let variant_attr_map = attrs_to_map(&variant_span.attributes);
     assert_eq!(
         variant_attr_map["function_name"],
@@ -167,7 +167,7 @@ pub async fn test_capture_simple_inference_spans() {
         panic!("Expected one child span: {variant_children:#?}");
     };
 
-    assert_eq!(model_span.name, "tensorzero_model_infer");
+    assert_eq!(model_span.name, "model_inference");
     let model_attr_map = attrs_to_map(&model_span.attributes);
     assert_eq!(model_attr_map["model_name"], "dummy::good".into());
     assert_eq!(model_attr_map["stream"], false.into());
@@ -176,7 +176,7 @@ pub async fn test_capture_simple_inference_spans() {
     let [model_provider_span] = model_children.as_slice() else {
         panic!("Expected one child span: {model_children:#?}");
     };
-    assert_eq!(model_provider_span.name, "tensorzero_model_provider_infer");
+    assert_eq!(model_provider_span.name, "model_provider_inference");
     let model_provider_attr_map = attrs_to_map(&model_provider_span.attributes);
     assert_eq!(model_provider_attr_map["provider_name"], "dummy".into());
     assert_eq!(

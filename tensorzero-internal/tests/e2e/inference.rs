@@ -1957,9 +1957,9 @@ async fn check_good_mixture_response(
     let [root_span] = spans.root_spans.as_slice() else {
         panic!("Expected one root span: {:#?}", spans.root_spans);
     };
-    // Since we're using the embedded gateway, the root span will be `tensorzero_function_call`
+    // Since we're using the embedded gateway, the root span will be `function_call`
     // (we won't have a top-level HTTP span)
-    assert_eq!(root_span.name, "tensorzero_function_call");
+    assert_eq!(root_span.name, "function_call");
     let root_attr_map = attrs_to_map(&root_span.attributes);
     assert_eq!(root_attr_map["function_name"], "mixture_of_n".into());
     assert_eq!(root_attr_map.get("model_name"), None);
@@ -1972,7 +1972,7 @@ async fn check_good_mixture_response(
         output.episode_id.to_string().into()
     );
     assert_eq!(root_attr_map["function_name"], "mixture_of_n".into());
-    // We didn't explicitly pin a variant in the inference request, so this is `None` in the top-level tensorzero_function_call span
+    // We didn't explicitly pin a variant in the inference request, so this is `None` in the top-level function_call span
     assert_eq!(root_attr_map.get("variant_name"), None);
 
     let root_children = &spans.span_children[&root_span.span_context.span_id()];
@@ -1980,7 +1980,7 @@ async fn check_good_mixture_response(
         panic!("Expected one child span: {root_children:#?}");
     };
 
-    assert_eq!(variant_span.name, "tensorzero_variant_infer");
+    assert_eq!(variant_span.name, "variant_inference");
     let variant_attr_map = attrs_to_map(&variant_span.attributes);
     assert_eq!(variant_attr_map["function_name"], "mixture_of_n".into());
     assert_eq!(
@@ -2006,7 +2006,7 @@ async fn check_good_mixture_response(
 
     check_dummy_model_span(model_span, &spans, "dummy::flaky_model", "flaky_model");
 
-    assert_eq!(variant0_span.name, "tensorzero_variant_infer");
+    assert_eq!(variant0_span.name, "variant_inference");
     let variant0_attr_map = attrs_to_map(&variant0_span.attributes);
     assert_eq!(variant0_attr_map["function_name"], "mixture_of_n".into());
     assert_eq!(variant0_attr_map["variant_name"], "variant0".into());
@@ -2018,7 +2018,7 @@ async fn check_good_mixture_response(
     };
     check_dummy_model_span(variant0_model_span, &spans, "dummy::test", "test");
 
-    assert_eq!(variant1_span.name, "tensorzero_variant_infer");
+    assert_eq!(variant1_span.name, "variant_inference");
     let variant1_attr_map = attrs_to_map(&variant1_span.attributes);
     assert_eq!(variant1_attr_map["function_name"], "mixture_of_n".into());
     assert_eq!(variant1_attr_map["variant_name"], "variant1".into());
@@ -2039,7 +2039,7 @@ fn check_dummy_model_span(
     model_name: &str,
     genai_model_name: &str,
 ) {
-    assert_eq!(model_span.name, "tensorzero_model_infer");
+    assert_eq!(model_span.name, "model_inference");
     let model_attr_map = attrs_to_map(&model_span.attributes);
     assert_eq!(model_attr_map["model_name"].as_str(), model_name);
     assert_eq!(model_attr_map["stream"], false.into());
@@ -2048,7 +2048,7 @@ fn check_dummy_model_span(
     let [model_provider_span] = model_children.as_slice() else {
         panic!("Expected one child span: {model_children:#?}");
     };
-    assert_eq!(model_provider_span.name, "tensorzero_model_provider_infer");
+    assert_eq!(model_provider_span.name, "model_provider_inference");
     let model_provider_attr_map = attrs_to_map(&model_provider_span.attributes);
     assert_eq!(model_provider_attr_map["provider_name"], "dummy".into());
     assert_eq!(
