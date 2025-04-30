@@ -1,5 +1,8 @@
 import { describe, test, expect } from "vitest";
-import { getDynamicEvaluationRuns } from "./dynamic_evaluations.server";
+import {
+  countTotalDynamicEvaluationRuns,
+  getDynamicEvaluationRuns,
+} from "./dynamic_evaluations.server";
 
 describe("getDynamicEvaluationRuns", () => {
   test("should return correct run infos for", async () => {
@@ -36,5 +39,12 @@ describe("getDynamicEvaluationRuns", () => {
         timestamp: "2025-04-30T18:47:25Z",
       },
     ]);
+  });
+});
+
+describe("countTotalDynamicEvaluationRuns", () => {
+  test("should return correct total number of runs", async () => {
+    const totalRuns = await countTotalDynamicEvaluationRuns();
+    expect(totalRuns).toBe(3);
   });
 });

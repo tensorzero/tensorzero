@@ -31,3 +31,12 @@ export async function getDynamicEvaluationRuns(
   const rows = await result.json<DynamicEvaluationRun[]>();
   return rows.map((row) => dynamicEvaluationRunSchema.parse(row));
 }
+
+export async function countTotalDynamicEvaluationRuns(): Promise<number> {
+  const query = `
+    SELECT toUInt32(count()) as count FROM DynamicEvaluationRun
+  `;
+  const result = await clickhouseClient.query({ query, format: "JSONEachRow" });
+  const rows = await result.json<{ count: number }>();
+  return rows[0].count;
+}
