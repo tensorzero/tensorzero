@@ -1,3 +1,4 @@
+gateway.debug = true
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                 FUNCTIONS                                  │
 # └────────────────────────────────────────────────────────────────────────────┘
@@ -20,20 +21,25 @@ weight = 1
 type = "chat_completion"
 model = "google_ai_studio_gemini::gemini-2.5-pro-preview-03-25"
 
+[functions.cursorzero.variants."o4-mini"]
+weight = 1
+type = "chat_completion"
+model = "openai::o4-mini-2025-04-16"
+extra_body = [{ pointer = "/temperature", value = 1.0 }]
+
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                  METRICS                                   │
 # └────────────────────────────────────────────────────────────────────────────┘
+[metrics.min_ted]
+type = "float"
+level = "inference"
+optimize = "min"
 
-# [metrics.exact_match]
-# type = "boolean"
-# level = "inference"
-# optimize = "max"
-
-# [metrics.jaccard_similarity]
-# type = "float"
-# level = "inference"
-# optimize = "max"
+[metrics.ted_ratio]
+type = "float"
+level = "inference"
+optimize = "max"
 
 # [metrics.valid_output]
 # type = "boolean"
