@@ -209,7 +209,12 @@ impl InferenceProvider for AzureProvider {
                     raw_response: None,
                 })
             })?;
-            Err(handle_openai_error(status, &response, PROVIDER_TYPE))
+            Err(handle_openai_error(
+                &serde_json::to_string(&request_body).unwrap_or_default(),
+                status,
+                &response,
+                PROVIDER_TYPE,
+            ))
         }
     }
 
