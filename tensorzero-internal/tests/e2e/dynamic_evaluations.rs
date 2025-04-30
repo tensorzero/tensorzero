@@ -255,6 +255,58 @@ async fn test_dynamic_evaluation_other_function() {
     assert_eq!(tags.get("foo").unwrap().as_str().unwrap(), "bar");
 }
 
+/// Test that the variant does not fall back in a dynamic evaluation run
+/// This should error
+#[tokio::test(flavor = "multi_thread")]
+async fn test_dynamic_evaluation_variant_error() {
+    let client = make_embedded_gateway().await;
+    let params = DynamicEvaluationRunParams {
+        variants: HashMap::from([("basic_test".to_string(), "error".to_string())]),
+        tags: HashMap::from([("foo".to_string(), "bar".to_string())]),
+        project_name: None,
+        display_name: None,
+    };
+    let result = client.dynamic_evaluation_run(params).await.unwrap();
+    let run_id = result.run_id;
+    let clickhouse = get_clickhouse().await;
+    let run_row = select_dynamic_evaluation_run_clickhouse(&clickhouse, run_id)
+        .await
+        .unwrap();
+    assert_eq!(run_row.project_name, None);
+    assert_eq!(run_row.run_display_name, None);
+    let episode_id = client
+        .dynamic_evaluation_run_episode(
+            run_id,
+            DynamicEvaluationRunEpisodeParams {
+                datapoint_name: None,
+                tags: HashMap::new(),
+            },
+        )
+        .await
+        .unwrap()
+        .episode_id;
+    // Run an inference with the episode_id given
+    let inference_params = ClientInferenceParams {
+        episode_id: Some(episode_id),
+        function_name: Some("basic_test".to_string()),
+        input: ClientInput {
+            system: Some(json!({
+                "assistant_name": "AskJeeves",
+            })),
+            messages: vec![ClientInputMessage {
+                role: Role::User,
+                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    text: "Please write me a sentence about Megumin making an explosion.".into(),
+                })],
+            }],
+        },
+        ..Default::default()
+    };
+    let response = client.inference(inference_params).await.unwrap_err();
+    println!("Response: {response:#?}");
+    assert!(response.to_string().contains("All variants failed"));
+}
+
 /// Test that the variant behavior is default if we pin a different variant name
 /// But the tags are applied
 #[tokio::test(flavor = "multi_thread")]

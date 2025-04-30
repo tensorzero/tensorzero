@@ -391,7 +391,6 @@ pub async fn select_dynamic_evaluation_run_clickhouse(
         FORMAT JSONEachRow",
     );
 
-    println!("Query: {query}");
     let text = clickhouse_connection_info
         .run_query_synchronous(query, None)
         .await
