@@ -3,8 +3,8 @@ import { z } from "zod";
 export const dynamicEvaluationRunSchema = z.object({
   name: z.string(),
   id: z.string().uuid(),
-  variant_pins: z.map(z.string(), z.string()),
-  tags: z.map(z.string(), z.string()),
+  variant_pins: z.record(z.string(), z.string()),
+  tags: z.record(z.string(), z.string()),
   project_name: z.string(),
 });
 
