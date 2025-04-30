@@ -353,6 +353,43 @@ async fn test_create_delete_datapoint_chat() {
 }
 
 #[tokio::test]
+async fn test_create_datapoint_chat_bad_request() {
+    let client = Client::new();
+    let dataset_name = format!("test-dataset-{}", Uuid::now_v7());
+    println!("dataset_name: {dataset_name}");
+
+    let resp = client
+        .post(get_gateway_endpoint(&format!(
+            "/datasets/{dataset_name}/datapoints",
+        )))
+        .json(&json!({
+            "function_name": "basic_test",
+            "input": [
+            {
+                "system": {"assistant_name": "Dummy"},
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": "My synthetic input"}
+                        ]
+                    }
+                ]
+            },
+            ],
+            "output": [[
+                {"type": "tool_call", "name": "get_temperature", "arguments": {"location": "New York", "units": "fahrenheit"}}
+            ] ],
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    let status = resp.status();
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
 async fn test_datapoint_insert_synthetic_chat_with_tools() {
     let clickhouse = get_clickhouse().await;
     let client = Client::new();
@@ -943,6 +980,31 @@ async fn test_create_delete_datapoint_json() {
         .await
         .unwrap();
     assert!(datapoints.is_empty());
+}
+
+#[tokio::test]
+async fn test_create_datapoint_json_bad_output() {
+    let client = Client::new();
+    let dataset_name = format!("test-dataset-{}", Uuid::now_v7());
+
+    let resp = client
+        .post(get_gateway_endpoint(&format!(
+            "/datasets/{dataset_name}/datapoints",
+        )))
+        .json(&json!({
+            "function_name": "json_success",
+            "input": [
+                {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "US"}}]}]},
+            ],
+            "output": [{"response": "Hello"}],
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    let status = resp.status();
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]
