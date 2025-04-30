@@ -14,6 +14,9 @@ enable_template_filesystem_access = true
 [gateway.export.otlp.traces]
 enabled = true
 
+[gateway.observability]
+async_writes = false
+
 [object_storage]
 type = "disabled"
 
