@@ -368,7 +368,8 @@ jobs:
         run: cat e2e_logs.txt
 
   ui-tests:
-    runs-on: ubuntu-latest
+    # We run on Namespace so that we have cache volumes for our s3-fixtures directory
+    runs-on: namespace-profile-tensorzero-2x8
     permissions:
       # Permission to checkout the repository
       contents: read
@@ -410,6 +411,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22.9.0"
+
+      - name: Cache s3-fixtures
+        uses: namespacelabs/nscloud-cache-action@v1
+        with:
+          path: |
+            ./ui/fixtures/s3-fixtures
 
       - name: Install wasm-pack
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
@@ -477,6 +484,12 @@ jobs:
       - name: Install dependencies
         working-directory: ui
         run: pnpm install --frozen-lockfile
+
+      - name: Cache s3-fixtures
+        uses: namespacelabs/nscloud-cache-action@v1
+        with:
+          path: |
+            ./ui/fixtures/s3-fixtures
 
       - name: Build ui container
         # Enable feedback in the UI for this job so the playwright tests can use it
