@@ -29,7 +29,7 @@ export const Chip: React.FC<ChipProps> = ({
   iconBg = "bg-none",
 }) => {
   const baseClasses =
-    "inline-flex items-center text-sm text-fg-primary py-1 px-2 gap-1.5 rounded-md";
+    "inline-flex items-center text-sm text-fg-primary py-1 px-2 gap-1.5 rounded-md whitespace-nowrap overflow-hidden";
   const hoverClasses = link ? "hover:bg-bg-hover cursor-pointer" : "";
   const fontClasses = font === "mono" ? "font-mono" : "font-sans";
   const combinedClasses = `${baseClasses} ${hoverClasses} ${fontClasses} ${className}`;
@@ -38,14 +38,16 @@ export const Chip: React.FC<ChipProps> = ({
     <>
       {icon && (
         <div
-          className={`${iconBg} ml-[-2px] flex size-5 items-center justify-center rounded-sm`}
+          className={`${iconBg} ml-[-2px] flex size-5 flex-shrink-0 items-center justify-center rounded-sm`}
         >
           {icon}
         </div>
       )}
-      <span className="text-fg-primary">{label}</span>
+      <span className="text-fg-primary truncate">{label}</span>
       {secondaryLabel && (
-        <span className="text-fg-tertiary pl-0.5">{secondaryLabel}</span>
+        <span className="text-fg-tertiary truncate pl-0.5">
+          {secondaryLabel}
+        </span>
       )}
     </>
   );

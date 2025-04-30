@@ -22,7 +22,7 @@ interface BasicInfoItemTitleProps {
 
 export function BasicInfoItemTitle({ children }: BasicInfoItemTitleProps) {
   return (
-    <div className="text-fg-secondary w-32 py-1 text-left text-sm">
+    <div className="text-fg-secondary w-32 min-w-32 py-1 text-left text-sm">
       {children}
     </div>
   );
