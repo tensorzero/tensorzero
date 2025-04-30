@@ -44,6 +44,7 @@ export default [
     "evaluations/:evaluation_name/:datapoint_id",
     "routes/evaluations/$evaluation_name/$datapoint_id/route.tsx",
   ),
+  route("dynamic_evaluations", "routes/dynamic_evaluations/route.tsx"),
   route(
     "observability/inferences",
     "routes/observability/inferences/route.tsx",
