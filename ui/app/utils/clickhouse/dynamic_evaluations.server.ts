@@ -2,7 +2,7 @@ import { clickhouseClient } from "./client.server";
 import {
   dynamicEvaluationRunSchema,
   type DynamicEvaluationRun,
-} from "./dynamic_evaluations.client";
+} from "./dynamic_evaluations";
 
 export async function getDynamicEvaluationRuns(
   page_size: number,
@@ -15,7 +15,7 @@ export async function getDynamicEvaluationRuns(
       variant_pins,
       tags,
       project_name,
-    FROM dynamic_evaluations
+    FROM DynamicEvaluationRun
     ORDER BY run_id_uint DESC
     LIMIT {page_size:UInt64} OFFSET {offset:UInt64}
     `;
