@@ -131,8 +131,8 @@ export default function BasicInfo({
                 label={cacheStatus === "FULL" ? "Cached" : "Partially Cached"}
                 tooltip={
                   cacheStatus === "FULL"
-                    ? "All model inferences were cached"
-                    : "Some model inferences were cached"
+                    ? "All model inferences were cached by TensorZero"
+                    : "Some model inferences were cached by TensorZero"
                 }
               />
             )}
