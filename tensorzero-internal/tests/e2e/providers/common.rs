@@ -6249,6 +6249,11 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
 pub async fn test_tool_use_allowed_tools_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    // Groq isn't respecting allowed_tools and will call brave_search instead of get_humidity, for example
+    if provider.model_provider_name == "groq" {
+        return;
+    }
+
     let episode_id = Uuid::now_v7();
     let extra_headers = get_extra_headers();
 
