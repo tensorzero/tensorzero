@@ -33,15 +33,12 @@ struct Args {
 
     /// Input to the function
     input: String,
+
+    #[arg(short, long)]
+    repeat: Option<usize>,
 }
 
-#[tokio::main]
-async fn main() {
-    let subscriber = tracing_subscriber::FmtSubscriber::new();
-    tracing::subscriber::set_global_default(subscriber).expect("Failed to initialize tracing");
-
-    let args = Args::parse();
-
+async fn run_inference(args: &Args) {
     let client = match (args.gateway_url, args.config_file) {
         (Some(gateway_url), None) => {
             ClientBuilder::new(ClientBuilderMode::HTTPGateway { url: gateway_url })
@@ -67,7 +64,7 @@ async fn main() {
 
     let res = client
         .inference(ClientInferenceParams {
-            function_name: Some(args.function_name),
+            function_name: Some(args.function_name.clone()),
             stream: Some(args.streaming),
             input: ClientInput {
                 messages: vec![ClientInputMessage {
@@ -113,4 +110,14 @@ async fn main() {
             println!();
         }
     }
+}
+
+#[tokio::main]
+async fn main() {
+    let subscriber = tracing_subscriber::FmtSubscriber::new();
+    tracing::subscriber::set_global_default(subscriber).expect("Failed to initialize tracing");
+
+    let args = Args::parse();
+
+    let count = args.repeat.unwrap_or(1);
 }

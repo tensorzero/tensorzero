@@ -48,6 +48,35 @@ use crate::{
 };
 
 #[tokio::test]
+async fn e2e_test_inference_loop() {
+    let payload = json!({
+        "function_name": "basic_test",
+        "episode_id": Uuid::now_v7(),
+        "input": {
+            "system": {"assistant_name": "AskJeeves"},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Hello, world!"
+                }
+            ]
+        },
+        "stream": false,
+        "dryrun": true,
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    // Check Response is OK, then fields in order
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
 async fn e2e_test_inference_dryrun() {
     let payload = json!({
         "function_name": "basic_test",
