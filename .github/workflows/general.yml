@@ -269,7 +269,7 @@ jobs:
 
       - name: Build minijinja WASM bindings
         working-directory: ui/app/utils/minijinja
-        run: wasm-pack build --features console_error_panic_hook
+        run: wasm-pack build --dev --features console_error_panic_hook
 
       - name: Run minijinja WASM tests
         working-directory: ui/app/utils/minijinja
