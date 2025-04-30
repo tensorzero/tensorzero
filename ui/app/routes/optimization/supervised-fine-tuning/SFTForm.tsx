@@ -58,7 +58,8 @@ export function SFTForm({
     metricName: metricName ?? undefined,
     threshold: threshold ?? undefined,
   });
-  const isCuratedInferenceCountLow = counts.curatedInferenceCount !== null && counts.curatedInferenceCount < 10;
+  const isCuratedInferenceCountLow =
+    counts.curatedInferenceCount !== null && counts.curatedInferenceCount < 10;
 
   // Use formFetcher for submission errors
   const errorsOnSubmit = formFetcher.data?.errors;
@@ -189,7 +190,10 @@ export function SFTForm({
             />
           </div>
 
-          <Button type="submit" disabled={submissionPhase !== "idle" || isCuratedInferenceCountLow}>
+          <Button
+            type="submit"
+            disabled={submissionPhase !== "idle" || isCuratedInferenceCountLow}
+          >
             {getButtonText()}
           </Button>
           {errorsOnSubmit && (
