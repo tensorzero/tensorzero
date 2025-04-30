@@ -37,36 +37,38 @@ Why?
 
 1. Create a `.env` file with your provider credentials. (See `.env.example` for reference.)
 2. Run `docker compose up` to start TensorZero.
-3. Install Codex:
+3. Install Codex: `npm i -g @openai/codex`
+4. Add the TensorZero Gateway to your Codex configuration (`~/.config/config.yaml` or `~/.codex/config.json`):
 
-   > At the time of writing, OpenAI has merged the required features for using multiple providers with Codex, but hasn't released a new version of Codex on `npm`, so you'll need to build it from source.
-   >
-   > If OpenAI makes a new release, you can skip this step and instead install Codex with `npm i -g @openai/codex`.
-
-   ```bash
-   # Clone the Codex repository
-   git clone https://github.com/openai/codex.git
-
-   # Install dependencies
-   cd codex/codex-cli
-
-   # Install the Codex dependencies
-   npm install
-
-   # Build Codex
-   npm run build
-
-   # Link the version of Codex you just built
-   npm link
+   ```yaml
+   model: "tensorzero::model_name::anthropic::claude-3-7-sonnet-20250219"
+   provider: tensorzero
+   providers:
+     tensorzero:
+       name: TensorZero
+       baseURL: http://localhost:3000/openai/v1
+       envKey: TENSORZERO_API_KEY # not used but required by Codex
+     # ... other providers ...
    ```
 
-4. Run Codex with TensorZero:
+   ```json
+   {
+     "model": "tensorzero::model_name::anthropic::claude-3-7-sonnet-20250219",
+     "provider": "tensorzero",
+     "providers": {
+       "tensorzero": {
+         "name": "TensorZero",
+         "baseURL": "http://localhost:3000/openai/v1",
+         "envKey": "TENSORZERO_API_KEY"
+       }
+     }
+   }
+   ```
+
+5. Run Codex with TensorZero:
    ```bash
-   OPENAI_BASE_URL="http://localhost:3000/openai/v1" \
-   OPENAI_API_KEY="not-used" \
-   codex \
-   -p tensorzero \
-   -m tensorzero::model_name::anthropic::claude-3-7-sonnet-20250219
+   TENSORZERO_API_KEY="not-used" codex
+   # or set the environment variable in your shell and just run `codex`
    ```
 
 You can replace `tensorzero::model_name::anthropic::claude-3-7-sonnet-20250219` with any other model supported by TensorZero, e.g. `tensorzero::model_name::mistral::open-mistral-nemo-2407`.

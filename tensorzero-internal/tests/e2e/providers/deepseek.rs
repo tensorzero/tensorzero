@@ -60,12 +60,20 @@ async fn get_providers() -> E2ETestProviders {
         },
         E2ETestProvider {
             supports_batch_inference: false,
-            variant_name: "deepseek-chat-default".to_string(),
+            variant_name: "deepseek-chat-strict".to_string(),
             model_name: "deepseek-chat".to_string(),
             model_provider_name: "deepseek".to_string(),
             credentials: credentials.clone(),
         },
     ];
+
+    let json_mode_off_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "deepseek_chat_json_mode_off".to_string(),
+        model_name: "deepseek-chat".to_string(),
+        model_provider_name: "deepseek".to_string(),
+        credentials: credentials.clone(),
+    }];
 
     let shorthand_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
@@ -87,6 +95,7 @@ async fn get_providers() -> E2ETestProviders {
         dynamic_tool_use_inference: vec![],
         parallel_tool_use_inference: vec![],
         json_mode_inference: json_providers.clone(),
+        json_mode_off_inference: json_mode_off_providers.clone(),
         image_inference: vec![],
 
         shorthand_inference: shorthand_providers.clone(),

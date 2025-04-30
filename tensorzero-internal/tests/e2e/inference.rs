@@ -1188,7 +1188,7 @@ async fn e2e_test_variant_failover() {
                     "messages": [
                     {
                         "role": "user",
-                        "content": [{"type": "text", "value": {"type": "tacos", "quantity": 13}}],
+                        "content": [{"type": "text", "arguments": {"type": "tacos", "quantity": 13}}],
                     }
                 ]},
             "stream": false,
@@ -1848,7 +1848,7 @@ model_name = "json"
     let good_response = gateway.inference(params.clone()).await.unwrap();
     let InferenceOutput::NonStreaming(InferenceResponse::Chat(good_response)) = good_response
     else {
-        panic!("Expected non-streaming response, got {:?}", good_response);
+        panic!("Expected non-streaming response, got {good_response:?}");
     };
 
     assert_eq!(
@@ -1859,7 +1859,7 @@ model_name = "json"
     // Second request to the flaky judge should fail
     let bad_response = gateway.inference(params).await.unwrap();
     let InferenceOutput::NonStreaming(InferenceResponse::Chat(bad_response)) = bad_response else {
-        panic!("Expected non-streaming response, got {:?}", bad_response);
+        panic!("Expected non-streaming response, got {bad_response:?}");
     };
 
     assert!(
@@ -1914,7 +1914,7 @@ model = "dummy::flaky_model"
     let good_response = gateway.inference(params.clone()).await.unwrap();
     let InferenceOutput::NonStreaming(InferenceResponse::Chat(good_response)) = good_response
     else {
-        panic!("Expected non-streaming response, got {:?}", good_response);
+        panic!("Expected non-streaming response, got {good_response:?}");
     };
 
     assert_eq!(
@@ -1925,7 +1925,7 @@ model = "dummy::flaky_model"
     // Second request to the flaky judge should fail
     let bad_response = gateway.inference(params).await.unwrap();
     let InferenceOutput::NonStreaming(InferenceResponse::Chat(bad_response)) = bad_response else {
-        panic!("Expected non-streaming response, got {:?}", bad_response);
+        panic!("Expected non-streaming response, got {bad_response:?}");
     };
 
     assert!(
@@ -2990,8 +2990,8 @@ async fn test_client_adjust_tool_call() {
     };
 
     bad_gateway.inference(params.clone()).await.unwrap_err();
-    let stringified_tool_call_args = r#"{"function_name":"basic_test","model_name":null,"episode_id":null,"input":{"messages":[{"role":"user","content":[{"type":"tool_call","name":"my_tool_call","arguments":"{\"location\":\"Brooklyn\",\"units\":\"celsius\"}","id":"my_id"}]}]},"stream":null,"params":{"chat_completion":{}},"variant_name":null,"dryrun":null,"internal":false,"tags":{},"allowed_tools":null,"additional_tools":null,"tool_choice":null,"parallel_tool_calls":null,"output_schema":null,"credentials":{},"cache_options":{"max_age_s":null,"enabled":"write_only"},"include_original_response":false,"extra_body":[]}"#;
-    let non_stringified_tool_call_args = r#"{"function_name":"basic_test","model_name":null,"episode_id":null,"input":{"messages":[{"role":"user","content":[{"type":"tool_call","name":"my_tool_call","arguments":{"location":"Brooklyn","units":"celsius"},"id":"my_id"}]}]},"stream":null,"params":{"chat_completion":{}},"variant_name":null,"dryrun":null,"internal":false,"tags":{},"allowed_tools":null,"additional_tools":null,"tool_choice":null,"parallel_tool_calls":null,"output_schema":null,"credentials":{},"cache_options":{"max_age_s":null,"enabled":"write_only"},"include_original_response":false,"extra_body":[]}"#;
+    let stringified_tool_call_args = r#"{"function_name":"basic_test","model_name":null,"episode_id":null,"input":{"messages":[{"role":"user","content":[{"type":"tool_call","name":"my_tool_call","arguments":"{\"location\":\"Brooklyn\",\"units\":\"celsius\"}","id":"my_id"}]}]},"stream":null,"params":{"chat_completion":{}},"variant_name":null,"dryrun":null,"internal":false,"tags":{},"allowed_tools":null,"additional_tools":null,"tool_choice":null,"parallel_tool_calls":null,"output_schema":null,"credentials":{},"cache_options":{"max_age_s":null,"enabled":"write_only"},"include_original_response":false,"extra_body":[],"extra_headers":[]}"#;
+    let non_stringified_tool_call_args = r#"{"function_name":"basic_test","model_name":null,"episode_id":null,"input":{"messages":[{"role":"user","content":[{"type":"tool_call","name":"my_tool_call","arguments":{"location":"Brooklyn","units":"celsius"},"id":"my_id"}]}]},"stream":null,"params":{"chat_completion":{}},"variant_name":null,"dryrun":null,"internal":false,"tags":{},"allowed_tools":null,"additional_tools":null,"tool_choice":null,"parallel_tool_calls":null,"output_schema":null,"credentials":{},"cache_options":{"max_age_s":null,"enabled":"write_only"},"include_original_response":false,"extra_body":[],"extra_headers":[]}"#;
 
     // With an invalid gateway url, we shouldn't get a version
     assert_eq!(bad_gateway.get_gateway_version().await, None);

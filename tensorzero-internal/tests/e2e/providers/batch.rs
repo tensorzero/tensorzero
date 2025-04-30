@@ -1,4 +1,4 @@
-#![allow(clippy::print_stdout)]
+#![expect(clippy::print_stdout)]
 /// This file contains 3 types of test for batch inference:
 /// 1. Start a batch inference. Should do whatever is necessary for a provider to start a batch inference for a particular kind of inference
 ///    Should also set up bookkeeping so that we can poll for the batch inference to complete later on.
@@ -510,12 +510,12 @@ async fn get_latest_batch_inference(
     let tags = tags.unwrap_or_default();
     let tag_conditions = tags
         .iter()
-        .map(|(k, v)| format!("tags['{}'] = '{}'", k, v))
+        .map(|(k, v)| format!("tags['{k}'] = '{v}'"))
         .collect::<Vec<_>>()
         .join(" AND ");
 
     let tag_filter = if !tags.is_empty() {
-        format!("AND bmi.{}", tag_conditions)
+        format!("AND bmi.{tag_conditions}")
     } else {
         String::new()
     };
@@ -536,15 +536,14 @@ async fn get_latest_batch_inference(
                 br.errors
             FROM BatchRequest br
             INNER JOIN BatchModelInference bmi ON br.batch_id = bmi.batch_id
-            WHERE br.function_name = '{}'
-                AND br.variant_name = '{}'
-                AND br.status = '{}'
-                {}
+            WHERE br.function_name = '{function_name}'
+                AND br.variant_name = '{variant_name}'
+                AND br.status = '{status}'
+                {tag_filter}
             ORDER BY br.timestamp DESC
             LIMIT 1
             FORMAT JSONEachRow
-        "#,
-        function_name, variant_name, status, tag_filter
+        "#
     );
     let response = clickhouse.run_query_synchronous(query, None).await.unwrap();
     if response.is_empty() {
@@ -559,8 +558,7 @@ async fn get_all_batch_inferences(
     batch_id: Uuid,
 ) -> Vec<BatchModelInferenceRow> {
     let query = format!(
-        "SELECT * FROM BatchModelInference WHERE batch_id = '{}' FORMAT JSONEachRow",
-        batch_id,
+        "SELECT * FROM BatchModelInference WHERE batch_id = '{batch_id}' FORMAT JSONEachRow",
     );
     let response = clickhouse.run_query_synchronous(query, None).await.unwrap();
     let rows = response
@@ -1822,7 +1820,7 @@ pub async fn test_poll_existing_tool_choice_batch_inference_request_with_provide
     match response_json.get("status").unwrap().as_str().unwrap() {
         "pending" => return,
         "completed" => (),
-        _ => panic!("Batch inference failed"),
+        status => panic!("Bad batch inference status: {status}"),
     }
     let returned_batch_id = response_json.get("batch_id").unwrap().as_str().unwrap();
     let returned_batch_id = Uuid::parse_str(returned_batch_id).unwrap();
@@ -2399,13 +2397,13 @@ pub async fn test_multi_turn_parallel_tool_use_batch_inference_request_with_prov
             "content": [
               {
                 "type": "tool_call",
-                "arguments": "{\"location\":\"Tokyo\",\"units\":\"fahrenheit\"}",
+                "arguments": {"location":"Tokyo","units":"fahrenheit"},
                 "id": "1234",
                 "name": "get_temperature"
               },
               {
                 "type": "tool_call",
-                "arguments": "{\"location\":\"Tokyo\"}",
+                "arguments": {"location":"Tokyo"},
                 "id": "5678",
                 "name": "get_humidity"
               }

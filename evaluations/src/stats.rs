@@ -104,7 +104,7 @@ impl EvaluationStats {
 // We allow large enum variants because
 // we expect the Success case way more often so it's ok to pay the cost
 // of a large enum here.
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum EvaluationUpdate {

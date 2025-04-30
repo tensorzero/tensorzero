@@ -140,7 +140,7 @@ async fn table_is_nonempty(
     table: &str,
     migration_id: &str,
 ) -> Result<bool, Error> {
-    let query = format!("SELECT COUNT() FROM {} FORMAT CSV", table);
+    let query = format!("SELECT COUNT() FROM {table} FORMAT CSV");
     let result = clickhouse.run_query_synchronous(query, None).await?;
     Ok(result.trim().parse::<i64>().map_err(|e| {
         Error::new(ErrorDetails::ClickHouseMigration {

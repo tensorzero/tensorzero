@@ -22,7 +22,7 @@ workspace = true
 async-stream = { workspace = true }
 async-trait = "0.1.86"
 aws-config = { version = "1.6", features = ["behavior-version-latest"] }
-aws-sdk-bedrockruntime = { version = "1.82.0", default-features = false, features = [
+aws-sdk-bedrockruntime = { version = "1.84.0", default-features = false, features = [
     "behavior-version-latest",
     "rt-tokio",
     "default-https-client",
@@ -83,7 +83,7 @@ url = { workspace = true, features = ["serde"] }
 uuid = { workspace = true }
 tensorzero-derive = { path = "../tensorzero-derive" }
 clap = { workspace = true }
-aws-sdk-sagemakerruntime = { version = "1.66.0", features = [
+aws-sdk-sagemakerruntime = { version = "1.67.0", features = [
     "behavior-version-latest",
     "rt-tokio",
     "default-https-client",
@@ -99,7 +99,7 @@ tracing-test = { workspace = true }
 tensorzero = { path = "../clients/rust" }
 paste = "1.0.15"
 base64 = "0.22.1"
-aws-sdk-s3 = { version = "1.82.0", default-features = false, features = [
+aws-sdk-s3 = { version = "1.83.0", default-features = false, features = [
     "behavior-version-latest",
     "sigv4a",
     "rt-tokio",

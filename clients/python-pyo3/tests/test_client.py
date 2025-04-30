@@ -2021,6 +2021,26 @@ def test_prepare_inference_request(sync_client: TensorZeroGateway):
     assert request["parallel_tool_calls"]
 
 
+def test_extra_headers_raw(sync_client: TensorZeroGateway):
+    with pytest.raises(TensorZeroError) as exc_info:
+        sync_client.inference(
+            function_name="basic_test",
+            variant_name="openai",
+            input={
+                "system": {"assistant_name": "Alfred Pennyworth"},
+                "messages": [{"role": "user", "content": "Write me a haiku"}],
+            },
+            extra_headers=[
+                {
+                    "variant_name": "openai",
+                    "name": "Authorization",
+                    "value": "fake_auth_token",
+                }
+            ],
+        )
+    assert "You didn't provide an API key" in str(exc_info.value)
+
+
 def test_extra_body_raw(sync_client: TensorZeroGateway):
     result = sync_client.inference(
         function_name="basic_test",

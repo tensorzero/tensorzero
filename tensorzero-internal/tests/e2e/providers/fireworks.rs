@@ -68,12 +68,20 @@ async fn get_providers() -> E2ETestProviders {
         },
         E2ETestProvider {
             supports_batch_inference: false,
-            variant_name: "fireworks-default".to_string(),
+            variant_name: "fireworks-strict".to_string(),
             model_name: "llama3.3-70b-instruct-fireworks".into(),
             model_provider_name: "fireworks".into(),
             credentials: HashMap::new(),
         },
     ];
+
+    let json_mode_off_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "fireworks_json_mode_off".to_string(),
+        model_name: "llama3.3-70b-instruct-fireworks".into(),
+        model_provider_name: "fireworks".into(),
+        credentials: HashMap::new(),
+    }];
 
     let shorthand_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
@@ -103,6 +111,7 @@ async fn get_providers() -> E2ETestProviders {
         dynamic_tool_use_inference: tool_providers.clone(),
         parallel_tool_use_inference: vec![],
         json_mode_inference: json_providers,
+        json_mode_off_inference: json_mode_off_providers.clone(),
         image_inference: vec![],
 
         shorthand_inference: shorthand_providers,

@@ -53,12 +53,20 @@ async fn get_providers() -> E2ETestProviders {
         },
         E2ETestProvider {
             supports_batch_inference: false,
-            variant_name: "together-default".to_string(),
+            variant_name: "together-strict".to_string(),
             model_name: "llama3.1-8b-instruct-together".into(),
             model_provider_name: "together".into(),
             credentials: HashMap::new(),
         },
     ];
+
+    let json_mode_off_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "together_json_mode_off".to_string(),
+        model_name: "llama3.1-8b-instruct-together".into(),
+        model_provider_name: "together".into(),
+        credentials: HashMap::new(),
+    }];
 
     let tool_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
@@ -96,6 +104,7 @@ async fn get_providers() -> E2ETestProviders {
         dynamic_tool_use_inference: tool_providers.clone(),
         parallel_tool_use_inference: tool_providers.clone(),
         json_mode_inference: json_providers.clone(),
+        json_mode_off_inference: json_mode_off_providers.clone(),
         image_inference: vec![],
 
         shorthand_inference: shorthand_providers.clone(),

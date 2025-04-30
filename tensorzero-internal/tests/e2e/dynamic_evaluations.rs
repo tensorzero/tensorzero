@@ -77,7 +77,7 @@ async fn test_dynamic_evaluation() {
             },
             tags: HashMap::from([
                 ("bop".to_string(), format!("bop_{i}")),
-                ("zoo".to_string(), format!("zoo_{i}")),
+                ("zoo".to_string(), format!("boo_{i}")),
             ]),
             ..Default::default()
         };
@@ -117,7 +117,7 @@ async fn test_dynamic_evaluation() {
         );
         assert_eq!(
             tags.get("zoo").unwrap().as_str().unwrap(),
-            format!("zoo_{i}")
+            format!("boo_{i}")
         );
         assert_eq!(
             tags.get("bop").unwrap().as_str().unwrap(),
@@ -255,7 +255,7 @@ async fn test_dynamic_evaluation_other_function() {
     assert_eq!(tags.get("foo").unwrap().as_str().unwrap(), "bar");
 }
 
-/// Test that the variant behavior is default if we use a different function name
+/// Test that the variant behavior is default if we pin a different variant name
 /// But the tags are applied
 #[tokio::test(flavor = "multi_thread")]
 async fn test_dynamic_evaluation_override_variant_tags() {

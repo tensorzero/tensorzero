@@ -454,12 +454,11 @@ pub async fn get_batch_request(
                         raw_response,
                         errors
                     FROM BatchRequest
-                    WHERE batch_id = '{}'
+                    WHERE batch_id = '{batch_id}'
                     ORDER BY timestamp DESC
                     LIMIT 1
                     FORMAT JSONEachRow
-                "#,
-                batch_id
+                "#
             );
             let response = clickhouse.run_query_synchronous(query, None).await?;
             if response.is_empty() {
@@ -867,6 +866,7 @@ pub async fn write_completed_batch_inference<'a>(
             },
             // Not currently supported as a batch inference parameter
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
         let inference_result = function
@@ -895,6 +895,7 @@ pub async fn write_completed_batch_inference<'a>(
             tags: HashMap::new(),
             // Not currently supported as a batch inference parameter
             extra_body: Default::default(),
+            extra_headers: Default::default(),
         };
         model_inference_rows_to_write.extend(inference_result.get_serialized_model_inferences());
         match inference_result {
@@ -935,10 +936,14 @@ pub async fn get_batch_inferences(
     batch_id: Uuid,
     inference_ids: &[Uuid],
 ) -> Result<Vec<BatchModelInferenceRow<'static>>, Error> {
+    // Guard against the provider not giving us any inference ids
+    if inference_ids.is_empty() {
+        return Ok(vec![]);
+    }
     let query = format!(
         "SELECT * FROM BatchModelInference WHERE batch_id = '{}' AND inference_id IN ({}) FORMAT JSONEachRow",
         batch_id,
-        inference_ids.iter().map(|id| format!("'{}'", id)).join(",")
+        inference_ids.iter().map(|id| format!("'{id}'")).join(",")
     );
     let response = clickhouse_connection_info
         .run_query_synchronous(query, None)
@@ -950,7 +955,7 @@ pub async fn get_batch_inferences(
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| {
             Error::new(ErrorDetails::Serialization {
-                message: format!("Failed to deserialize batch model inference row: {}", e),
+                message: format!("Failed to deserialize batch model inference row: {e}"),
             })
         })?;
     Ok(rows)

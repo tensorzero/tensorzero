@@ -48,7 +48,7 @@ impl ClickHouseConnectionInfo {
             })
         })?;
 
-        #[allow(unused_variables)]
+        #[cfg(not(feature = "e2e_tests"))]
         let database = validate_clickhouse_url_get_db_name(&database_url)?
             .unwrap_or_else(|| "default".to_string());
 
@@ -214,7 +214,7 @@ impl ClickHouseConnectionInfo {
                 // Add query parameters if provided
                 if let Some(params) = parameters {
                     for (key, value) in params {
-                        let param_key = format!("param_{}", key);
+                        let param_key = format!("param_{key}");
                         database_url
                             .query_pairs_mut()
                             .append_pair(&param_key, value);
@@ -307,17 +307,14 @@ impl ClickHouseConnectionInfo {
                 let metadata = if let Some(summary) = res.headers().get("x-clickhouse-summary") {
                     let summary_str = summary.to_str().map_err(|e| {
                         Error::new(ErrorDetails::ClickHouseQuery {
-                            message: format!("Failed to parse x-clickhouse-summary header: {}", e),
+                            message: format!("Failed to parse x-clickhouse-summary header: {e}"),
                         })
                     })?;
 
                     serde_json::from_str::<ClickHouseResponseMetadata>(summary_str).map_err(
                         |e| {
                             Error::new(ErrorDetails::ClickHouseQuery {
-                                message: format!(
-                                    "Failed to deserialize x-clickhouse-summary: {}",
-                                    e
-                                ),
+                                message: format!("Failed to deserialize x-clickhouse-summary: {e}"),
                             })
                         },
                     )?
@@ -363,7 +360,7 @@ impl ClickHouseConnectionInfo {
                         message: "Invalid ClickHouse database URL".to_string(),
                     })
                 })?;
-                let query = format!("CREATE DATABASE IF NOT EXISTS {}", database);
+                let query = format!("CREATE DATABASE IF NOT EXISTS {database}");
                 // In order to create the database, we need to remove the database query parameter from the URL
                 // Otherwise, ClickHouse will throw an error
                 let mut base_url = database_url.clone();
@@ -515,6 +512,7 @@ fn set_clickhouse_format_settings(database_url: &mut Url) {
     database_url.query_pairs_mut().finish();
 }
 
+#[cfg(any(not(feature = "e2e_tests"), test))]
 fn validate_clickhouse_url_get_db_name(url: &Url) -> Result<Option<String>, Error> {
     // Check the scheme
     match url.scheme() {

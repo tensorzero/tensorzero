@@ -1,23 +1,36 @@
 use std::borrow::Cow;
-use std::sync::OnceLock;
+use std::collections::HashMap;
+use std::io::Write;
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
+use axum::http;
 use futures::StreamExt;
 use itertools::Itertools;
 use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
+use object_store::gcp::{GcpCredential, GoogleCloudStorageBuilder};
+use object_store::{ObjectStore, StaticCredentialProvider};
 use reqwest::StatusCode;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
+use serde_json::value::RawValue;
 use serde_json::Value;
 use tokio::time::Instant;
+use url::Url;
 use uuid::Uuid;
 
 use crate::cache::ModelProviderRequest;
+use crate::config_parser::{
+    GCPBatchConfigCloudStorage, GCPBatchConfigType, GCPProviderTypeConfig, ProviderTypesConfig,
+};
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
-use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
+use crate::inference::types::batch::{
+    BatchRequestRow, BatchStatus, PollBatchInferenceResponse, ProviderBatchInferenceOutput,
+    ProviderBatchInferenceResponse,
+};
 use crate::inference::types::resolved_input::ImageWithPath;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, serialize_or_log, ModelInferenceRequest,
@@ -34,24 +47,144 @@ use crate::model::{
 };
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
-use super::helpers::inject_extra_request_data;
+use super::helpers::{inject_extra_request_data, parse_jsonl_batch_file, JsonlBatchFileInfo};
 use super::openai::convert_stream_error;
 
 const PROVIDER_NAME: &str = "GCP Vertex Gemini";
 const PROVIDER_TYPE: &str = "gcp_vertex_gemini";
 
+const INFERENCE_ID_LABEL: &str = "tensorzero::inference_id";
+
 /// Implements a subset of the GCP Vertex Gemini API as documented [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/generateContent) for non-streaming
 /// and [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/streamGenerateContent) for streaming
 #[derive(Debug)]
 pub struct GCPVertexGeminiProvider {
+    api_v1_base_url: Url,
     request_url: String,
     streaming_request_url: String,
     audience: String,
     credentials: GCPVertexCredentials,
     model_id: String,
+    batch_config: Option<BatchConfig>,
+}
+
+#[derive(Debug)]
+struct BatchConfig {
+    input_uri_prefix: String,
+    output_uri_prefix: String,
+    batch_request_url: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GCPVertexGeminiBatchRequest {
+    display_name: String,
+    model: String,
+    input_config: GCPVertexGeminiBatchRequestInputConfig,
+    output_config: GCPVertexGeminiBatchRequestOutputConfig,
+}
+
+#[derive(Serialize)]
+#[serde(tag = "predictionsFormat", rename_all = "camelCase")]
+enum GCPVertexGeminiBatchRequestOutputConfig {
+    #[serde(rename = "jsonl")]
+    Jsonl {
+        gcs_destination: GCPVertexGeminiGCSDestination,
+    },
+}
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GCPVertexGeminiGCSDestination {
+    output_uri_prefix: String,
+}
+
+#[derive(Serialize)]
+#[serde(tag = "instancesFormat", rename_all = "camelCase")]
+enum GCPVertexGeminiBatchRequestInputConfig {
+    #[serde(rename = "jsonl")]
+    Jsonl {
+        gcs_source: GCPVertexGeminiGCSSource,
+    },
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GCPVertexGeminiGCSSource {
+    uris: String,
 }
 
 static DEFAULT_CREDENTIALS: OnceLock<GCPVertexCredentials> = OnceLock::new();
+
+struct StoreAndPath {
+    store: Box<dyn ObjectStore>,
+    path: object_store::path::Path,
+}
+
+/// Joins a Google Cloud Storage directory path (with an optional trailing slash) with a file name.
+/// This is used to support both "gs://bucket/path" and "gs://bucket/path/" formats in tensorzero.toml
+fn join_cloud_paths(dir: &str, file: &str) -> String {
+    dir.strip_suffix("/").unwrap_or(dir).to_string() + "/" + file
+}
+
+/// Constructs a new `ObjectStore` instance for the bucket specified by `gs_url`
+/// with the provided credentials.
+/// We call this on each batch start/poll request, as we might be using dynamic credentials.
+fn make_gcp_object_store(
+    gs_url: &str,
+    credentials: &GCPVertexCredentials,
+    dynamic_api_keys: &InferenceCredentials,
+) -> Result<StoreAndPath, Error> {
+    let bucket_and_path = gs_url.strip_prefix("gs://").ok_or_else(|| {
+        Error::new(ErrorDetails::InternalError {
+            message: format!("Google Cloud Storage url does not start with 'gs://': {gs_url}"),
+        })
+    })?;
+    let (bucket, path) = bucket_and_path.split_once("/").ok_or_else(|| {
+        Error::new(ErrorDetails::InternalError {
+            message: format!("Google Cloud Storage url does not contain a bucket name: {gs_url}"),
+        })
+    })?;
+    let key = object_store::path::Path::parse(path).map_err(|e| {
+        Error::new(ErrorDetails::InternalError {
+            message: format!("Failed to parse Google Cloud Storage path: {e}"),
+        })
+    })?;
+
+    let mut builder = GoogleCloudStorageBuilder::default().with_bucket_name(bucket);
+
+    match credentials {
+        GCPVertexCredentials::Static { raw, parsed: _ } => {
+            builder = builder.with_service_account_key(raw.expose_secret())
+        }
+        GCPVertexCredentials::Dynamic(key_name) => {
+            let key = dynamic_api_keys.get(key_name).ok_or_else(|| {
+                Error::new(ErrorDetails::ApiKeyMissing {
+                    provider_name: PROVIDER_NAME.to_string(),
+                })
+            })?;
+            builder =
+                builder.with_credentials(Arc::new(StaticCredentialProvider::new(GcpCredential {
+                    bearer: key.expose_secret().to_string(),
+                })));
+        }
+        GCPVertexCredentials::None => {
+            return Err(Error::new(ErrorDetails::ApiKeyMissing {
+                provider_name: PROVIDER_NAME.to_string(),
+            }))
+        }
+    }
+
+    let store = builder.build().map_err(|e| {
+        Error::new(ErrorDetails::InternalError {
+            message: format!("Failed to create GCS object store: {e}"),
+        })
+    })?;
+
+    Ok(StoreAndPath {
+        store: Box::new(store),
+        path: key,
+    })
+}
 
 impl GCPVertexGeminiProvider {
     pub fn new(
@@ -59,6 +192,7 @@ impl GCPVertexGeminiProvider {
         location: String,
         project_id: String,
         api_key_location: Option<CredentialLocation>,
+        provider_types: &ProviderTypesConfig,
     ) -> Result<Self, Error> {
         let credentials = build_creds_caching_default_with_fn(
             api_key_location,
@@ -67,17 +201,88 @@ impl GCPVertexGeminiProvider {
             &DEFAULT_CREDENTIALS,
             |creds| GCPVertexCredentials::try_from((creds, PROVIDER_TYPE)),
         )?;
+        let api_v1_base_url = Url::parse(&format!(
+            "https://{location}-aiplatform.googleapis.com/v1/"
+        ))
+        .map_err(|e| {
+            Error::new(ErrorDetails::InternalError {
+                message: format!("Failed to parse base URL - this should never happen: {e}"),
+            })
+        })?;
         let request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model_id}:generateContent");
         let streaming_request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model_id}:streamGenerateContent?alt=sse");
         let audience = format!("https://{location}-aiplatform.googleapis.com/");
 
+        let batch_config = match &provider_types.gcp_vertex_gemini {
+            Some(GCPProviderTypeConfig { batch: Some(GCPBatchConfigType::CloudStorage(GCPBatchConfigCloudStorage {
+                input_uri_prefix,
+                output_uri_prefix,
+            }))}) => {
+                Some(BatchConfig {
+                    input_uri_prefix: input_uri_prefix.clone(),
+                    output_uri_prefix: output_uri_prefix.clone(),
+                    batch_request_url: format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/batchPredictionJobs"),
+                })
+            }
+            _ => None,
+        };
         Ok(GCPVertexGeminiProvider {
+            api_v1_base_url,
             request_url,
             streaming_request_url,
+            batch_config,
             audience,
             credentials,
             model_id,
         })
+    }
+
+    async fn collect_finished_batch(
+        &self,
+        output_data: GCPVertexBatchResponseOutputInfo,
+        raw_request: String,
+        raw_response: String,
+        api_key: &GCPVertexCredentials,
+        dynamic_api_keys: &InferenceCredentials,
+    ) -> Result<ProviderBatchInferenceResponse, Error> {
+        match output_data {
+            GCPVertexBatchResponseOutputInfo::Gcs {
+                gcs_output_directory,
+            } => {
+                // The Vertex Gemini batch job always seems to write to 'predictions.jsonl' in the output directory.
+                // Note that we use the path provided in the API response, which might be different from the
+                // `output_uri_prefix` path in our config (if it was changed after the job was created).
+                // For now, we use the same set of credentials for writing to Google Cloud Storage as we do for invoking
+                // the Vertex API. In the future, we may want to allow configuring a separate set of credentials.
+                let store_and_path = make_gcp_object_store(
+                    &join_cloud_paths(&gcs_output_directory, "predictions.jsonl"),
+                    api_key,
+                    dynamic_api_keys,
+                )?;
+                let data = store_and_path
+                    .store
+                    .get(&store_and_path.path)
+                    .await
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::InternalError {
+                            message: format!("Failed to get GCS object: {e}"),
+                        })
+                    })?
+                    .bytes()
+                    .await;
+
+                parse_jsonl_batch_file::<GCPVertexBatchResponseLine, _>(
+                    data,
+                    JsonlBatchFileInfo {
+                        provider_type: PROVIDER_TYPE.to_string(),
+                        raw_request,
+                        raw_response,
+                        file_id: store_and_path.path.to_string(),
+                    },
+                )
+                .await
+            }
+        }
     }
 }
 
@@ -87,7 +292,10 @@ pub fn default_api_key_location() -> CredentialLocation {
 
 #[derive(Clone, Debug)]
 pub enum GCPVertexCredentials {
-    Static(GCPServiceAccountCredentials),
+    Static {
+        parsed: GCPServiceAccountCredentials,
+        raw: SecretString,
+    },
     Dynamic(String),
     None,
 }
@@ -97,22 +305,139 @@ impl TryFrom<(Credential, &str)> for GCPVertexCredentials {
 
     fn try_from((credentials, model): (Credential, &str)) -> Result<Self, Error> {
         match credentials {
-            Credential::FileContents(file_content) => Ok(GCPVertexCredentials::Static(
-                GCPServiceAccountCredentials::from_json_str(file_content.expose_secret()).map_err(
-                    |e| {
-                        Error::new(ErrorDetails::GCPCredentials {
-                            message: format!("Failed to load GCP credentials: {}", e),
-                        })
-                    },
-                )?,
-            )),
+            Credential::FileContents(file_content) => Ok(GCPVertexCredentials::Static {
+                parsed: GCPServiceAccountCredentials::from_json_str(file_content.expose_secret())
+                    .map_err(|e| {
+                    Error::new(ErrorDetails::GCPCredentials {
+                        message: format!("Failed to load GCP credentials: {e}"),
+                    })
+                })?,
+                raw: file_content,
+            }),
             Credential::Dynamic(key_name) => Ok(GCPVertexCredentials::Dynamic(key_name)),
             Credential::Missing => Ok(GCPVertexCredentials::None),
             _ => Err(Error::new(ErrorDetails::GCPCredentials {
-                message: format!("Invalid credential_location for {} provider", model),
+                message: format!("Invalid credential_location for {model} provider"),
             }))?,
         }
     }
+}
+
+#[derive(Serialize)]
+struct GCPVertexBatchLine<'a> {
+    request: GCPVertexGeminiRequest<'a>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GCPVertexBatchResponse {
+    name: String,
+    state: GCPVertexJobState,
+    output_info: Option<GCPVertexBatchResponseOutputInfo>,
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum GCPVertexBatchResponseOutputInfo {
+    Gcs {
+        #[serde(rename = "gcsOutputDirectory")]
+        gcs_output_directory: String,
+    },
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GCPVertexGeminiRequestMinimal {
+    #[serde(default)]
+    labels: HashMap<String, String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GCPVertexBatchResponseLine {
+    request: Box<RawValue>,
+    response: GCPVertexGeminiResponse,
+}
+
+impl TryFrom<GCPVertexBatchResponseLine> for ProviderBatchInferenceOutput {
+    type Error = Error;
+
+    fn try_from(line: GCPVertexBatchResponseLine) -> Result<Self, Self::Error> {
+        let raw_request = line.request.to_string();
+        let request = GCPVertexGeminiRequestMinimal::deserialize(&*line.request).map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!("Error deserializing batch request: {e}"),
+            })
+        })?;
+        let raw_response = serde_json::to_string(&line.response).map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!("Error serializing batch response: {e}"),
+            })
+        })?;
+        let inference_id = request.labels.get(INFERENCE_ID_LABEL).ok_or_else(|| {
+            Error::new(ErrorDetails::InternalError {
+                message: format!("Missing {INFERENCE_ID_LABEL} label on GCP batch request"),
+            })
+        })?;
+
+        let usage = line
+            .response
+            .usage_metadata
+            .clone()
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::InferenceServer {
+                    message: "GCP Vertex Gemini batch response has no usage metadata".to_string(),
+                    raw_request: Some(raw_request.clone()),
+                    raw_response: Some(raw_response.clone()),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                })
+            })?
+            .into();
+
+        let (output, finish_reason) =
+            get_response_content(line.response, &raw_request, &raw_response)?;
+        Ok(ProviderBatchInferenceOutput {
+            id: Uuid::parse_str(inference_id).map_err(|e| {
+                Error::new(ErrorDetails::InternalError {
+                    message: format!("Invalid inference ID: {e}"),
+                })
+            })?,
+            output,
+            raw_response,
+            usage,
+            finish_reason,
+        })
+    }
+}
+
+#[derive(Clone, Copy, Debug, Deserialize)]
+enum GCPVertexJobState {
+    #[serde(rename = "JOB_STATE_UNSPECIFIED")]
+    Unspecified,
+    #[serde(rename = "JOB_STATE_QUEUED")]
+    Queued,
+    #[serde(rename = "JOB_STATE_PENDING")]
+    Pending,
+    #[serde(rename = "JOB_STATE_RUNNING")]
+    Running,
+    #[serde(rename = "JOB_STATE_SUCCEEDED")]
+    Succeeded,
+    #[serde(rename = "JOB_STATE_FAILED")]
+    Failed,
+    #[serde(rename = "JOB_STATE_CANCELING")]
+    Cancelling,
+    #[serde(rename = "JOB_STATE_CANCELLED")]
+    Cancelled,
+    #[serde(rename = "JOB_STATE_PAUSED")]
+    Paused,
+    #[serde(rename = "JOB_STATE_EXPIRED")]
+    Expired,
+    #[serde(rename = "JOB_STATE_UPDATING")]
+    Updating,
+    #[serde(rename = "JOB_STATE_PARTIALLY_SUCCEEDED")]
+    PartiallySucceeded,
+    #[serde(other)]
+    Unknown,
 }
 
 impl GCPVertexCredentials {
@@ -122,8 +447,8 @@ impl GCPVertexCredentials {
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<Cow<'a, SecretString>, Error> {
         match self {
-            GCPVertexCredentials::Static(credentials) => {
-                Ok(Cow::Owned(credentials.get_jwt_token(audience)?.into()))
+            GCPVertexCredentials::Static { parsed, raw: _ } => {
+                Ok(Cow::Owned(parsed.get_jwt_token(audience)?.into()))
             }
             GCPVertexCredentials::Dynamic(key_name) => Ok(Cow::Borrowed(
                 dynamic_api_keys.get(key_name).ok_or_else(|| {
@@ -139,6 +464,10 @@ impl GCPVertexCredentials {
     }
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+struct GCPVertexBatchParams {
+    job_url_suffix: String,
+}
 /// Auth
 ///
 /// We implement below the JWT request signing as documented [here](https://developers.google.com/identity/protocols/oauth2/service-account).
@@ -174,7 +503,7 @@ struct Claims<'a> {
 
 impl<'a> Claims<'a> {
     fn new(iss: &'a str, sub: &'a str, aud: &'a str) -> Self {
-        #[allow(clippy::expect_used)]
+        #[expect(clippy::expect_used)]
         let current_time = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .expect("Time went backwards");
@@ -288,6 +617,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
             )?;
         let headers = inject_extra_request_data(
             &request.extra_body,
+            &request.extra_headers,
             model_provider,
             model_name,
             &mut request_body,
@@ -357,7 +687,11 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                     raw_response: None,
                 })
             })?;
-            handle_gcp_vertex_gemini_error(response_code, error_body)
+            Err(handle_gcp_vertex_gemini_error(
+                serde_json::to_string(&request_body).unwrap_or_default(),
+                response_code,
+                error_body,
+            ))
         }
     }
 
@@ -386,6 +720,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
             )?;
         let headers = inject_extra_request_data(
             &request.extra_body,
+            &request.extra_headers,
             model_provider,
             model_name,
             &mut request_body,
@@ -426,26 +761,313 @@ impl InferenceProvider for GCPVertexGeminiProvider {
 
     async fn start_batch_inference<'a>(
         &'a self,
-        _requests: &'a [ModelInferenceRequest<'_>],
-        _client: &'a reqwest::Client,
-        _dynamic_api_keys: &'a InferenceCredentials,
+        requests: &'a [ModelInferenceRequest<'_>],
+        http_client: &'a reqwest::Client,
+        dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<StartBatchProviderInferenceResponse, Error> {
-        Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
-            provider_type: "GCP Vertex Gemini".to_string(),
+        let Some(batch_config) = &self.batch_config else {
+            return Err(ErrorDetails::Config {
+                message: "Missing config section: `[provider_types.gcp_vertex_gemini.batch]`"
+                    .to_string(),
+            }
+            .into());
+        };
+
+        let api_key = self
+            .credentials
+            .get_api_key(&self.audience, dynamic_api_keys)?;
+
+        let mut raw_requests = Vec::with_capacity(requests.len());
+        let mut jsonl_data = Vec::new();
+        for request in requests {
+            let body = GCPVertexGeminiRequest::new(request, &self.model_id)?;
+            let line =
+                serde_json::to_string(&GCPVertexBatchLine { request: body }).map_err(|e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!(
+                            "Error serializing request: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
+                    })
+                })?;
+
+            jsonl_data.write_all(line.as_bytes()).map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!("Error writing to JSONL: {}", DisplayOrDebugGateway::new(e)),
+                })
+            })?;
+            jsonl_data.write_all(b"\n").map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!("Error writing to JSONL: {}", DisplayOrDebugGateway::new(e)),
+                })
+            })?;
+            raw_requests.push(line);
         }
-        .into())
+
+        let batch_id = Uuid::now_v7();
+        let input_source_url = join_cloud_paths(
+            &batch_config.input_uri_prefix,
+            &format!("tensorzero-batch-input-{batch_id}.jsonl"),
+        );
+
+        // For now, we use the same set of credentials for writing to Google Cloud Storage as we do for invoking
+        // the Vertex API. In the future, we may want to allow configuring a separate set of credentials.
+        let store_and_path =
+            make_gcp_object_store(&input_source_url, &self.credentials, dynamic_api_keys)?;
+
+        store_and_path
+            .store
+            .put(&store_and_path.path, jsonl_data.into())
+            .await
+            .map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!(
+                        "Error uploading JSONL to object store: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
+                })
+            })?;
+
+        let request_body = GCPVertexGeminiBatchRequest {
+            display_name: format!("tensorzero-batch-{batch_id}"),
+            model: format!("publishers/google/models/{}", self.model_id.clone()),
+            input_config: GCPVertexGeminiBatchRequestInputConfig::Jsonl {
+                gcs_source: GCPVertexGeminiGCSSource {
+                    uris: input_source_url,
+                },
+            },
+            output_config: GCPVertexGeminiBatchRequestOutputConfig::Jsonl {
+                gcs_destination: GCPVertexGeminiGCSDestination {
+                    output_uri_prefix: join_cloud_paths(
+                        &batch_config.output_uri_prefix,
+                        &format!("tensorzero-batch-output-{batch_id}"),
+                    ),
+                },
+            },
+        };
+
+        let raw_request = serde_json::to_string(&request_body).map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!(
+                    "Error serializing request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
+            })
+        })?;
+
+        let res = http_client
+            .post(batch_config.batch_request_url.clone())
+            .bearer_auth(api_key.expose_secret())
+            .body(raw_request.clone())
+            .header(http::header::CONTENT_TYPE, "application/json")
+            .send()
+            .await
+            .map_err(|e| {
+                Error::new(ErrorDetails::InferenceClient {
+                    status_code: e.status(),
+                    message: format!("Error sending request: {}", DisplayOrDebugGateway::new(e)),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(raw_request.clone()),
+                    raw_response: None,
+                })
+            })?;
+
+        if !res.status().is_success() {
+            let response_code = res.status();
+            let error_body = res.text().await.map_err(|e| {
+                Error::new(ErrorDetails::InferenceServer {
+                    message: format!(
+                        "Error getting error response: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(raw_request.clone()),
+                    raw_response: None,
+                })
+            })?;
+            return Err(handle_gcp_vertex_gemini_error(
+                raw_request.clone(),
+                response_code,
+                error_body,
+            ));
+        }
+
+        let raw_response = res.text().await.map_err(|e| {
+            Error::new(ErrorDetails::InferenceServer {
+                message: format!(
+                    "Error retrieving batch response: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
+                raw_request: Some(raw_request.clone()),
+                raw_response: None,
+                provider_type: PROVIDER_TYPE.to_string(),
+            })
+        })?;
+
+        let response =
+            serde_json::from_str::<GCPVertexBatchResponse>(&raw_response).map_err(|e| {
+                Error::new(ErrorDetails::InferenceServer {
+                    message: format!("Error parsing JSON response: {e}: {raw_response}"),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(raw_request.clone()),
+                    raw_response: Some(raw_response.clone()),
+                })
+            })?;
+
+        let batch_params = GCPVertexBatchParams {
+            job_url_suffix: response.name,
+        };
+
+        Ok(StartBatchProviderInferenceResponse {
+            batch_id,
+            batch_params: serde_json::to_value(batch_params).map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!(
+                        "Error serializing batch params: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
+                })
+            })?,
+            raw_requests,
+            raw_request,
+            raw_response,
+            status: BatchStatus::Pending,
+            errors: Vec::new(),
+        })
     }
 
     async fn poll_batch_inference<'a>(
         &'a self,
-        _batch_request: &'a BatchRequestRow<'a>,
-        _http_client: &'a reqwest::Client,
-        _dynamic_api_keys: &'a InferenceCredentials,
+        batch_request: &'a BatchRequestRow<'a>,
+        http_client: &'a reqwest::Client,
+        dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<PollBatchInferenceResponse, Error> {
-        Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
-            provider_type: PROVIDER_TYPE.to_string(),
+        let api_key = self
+            .credentials
+            .get_api_key(&self.audience, dynamic_api_keys)?;
+
+        let batch_params: GCPVertexBatchParams = serde_json::from_value(
+            batch_request.batch_params.clone().into_owned(),
+        )
+        .map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!(
+                    "Error deserializing batch params: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
+            })
+        })?;
+
+        let job_poll_url = self
+            .api_v1_base_url
+            .join(&batch_params.job_url_suffix)
+            .map_err(|e| {
+                Error::new(ErrorDetails::InternalError {
+                    message: format!(
+                        "Failed to join batch job URL - this should never happen: {e}"
+                    ),
+                })
+            })?;
+
+        let raw_request = job_poll_url.to_string();
+
+        let res = http_client
+            .get(job_poll_url)
+            .bearer_auth(api_key.expose_secret())
+            .header(http::header::CONTENT_TYPE, "application/json")
+            .send()
+            .await
+            .map_err(|e| {
+                Error::new(ErrorDetails::InferenceClient {
+                    status_code: e.status(),
+                    message: format!("Error sending request: {}", DisplayOrDebugGateway::new(e)),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(raw_request.clone()),
+                    raw_response: None,
+                })
+            })?;
+
+        if !res.status().is_success() {
+            let response_code = res.status();
+            let error_body = res.text().await.map_err(|e| {
+                Error::new(ErrorDetails::InferenceServer {
+                    message: format!(
+                        "Error getting error response: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(raw_request.clone()),
+                    raw_response: None,
+                })
+            })?;
+            return Err(handle_gcp_vertex_gemini_error(
+                raw_request.clone(),
+                response_code,
+                error_body,
+            ));
         }
-        .into())
+        let raw_response = res.text().await.map_err(|e| {
+            Error::new(ErrorDetails::InferenceServer {
+                message: format!(
+                    "Error retrieving batch response: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
+                raw_request: Some(raw_request.clone()),
+                raw_response: None,
+                provider_type: PROVIDER_TYPE.to_string(),
+            })
+        })?;
+        let response =
+            serde_json::from_str::<GCPVertexBatchResponse>(&raw_response).map_err(|e| {
+                Error::new(ErrorDetails::InferenceServer {
+                    message: format!("Error parsing JSON response: {e}: {raw_response}"),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(raw_request.clone()),
+                    raw_response: Some(raw_response.clone()),
+                })
+            })?;
+        match response.state {
+            GCPVertexJobState::Pending
+            | GCPVertexJobState::Running
+            | GCPVertexJobState::Queued
+            | GCPVertexJobState::Paused
+            | GCPVertexJobState::Updating
+            | GCPVertexJobState::Unspecified => Ok(PollBatchInferenceResponse::Pending {
+                raw_request,
+                raw_response,
+            }),
+            GCPVertexJobState::Succeeded | GCPVertexJobState::PartiallySucceeded => {
+                let output_info = response.output_info.ok_or_else(|| {
+                    Error::new(ErrorDetails::InferenceServer {
+                        message: format!(
+                            "GCP Vertex Gemini batch response has no output info in state {:?}",
+                            response.state
+                        ),
+                        raw_request: Some(raw_request.clone()),
+                        raw_response: Some(raw_response.clone()),
+                        provider_type: PROVIDER_TYPE.to_string(),
+                    })
+                })?;
+                let batch_response = self
+                    .collect_finished_batch(
+                        output_info,
+                        raw_request,
+                        raw_response,
+                        &self.credentials,
+                        dynamic_api_keys,
+                    )
+                    .await?;
+                Ok(PollBatchInferenceResponse::Completed(batch_response))
+            }
+            GCPVertexJobState::Failed
+            | GCPVertexJobState::Cancelling
+            | GCPVertexJobState::Expired
+            | GCPVertexJobState::Cancelled
+            | GCPVertexJobState::Unknown => Ok(PollBatchInferenceResponse::Failed {
+                raw_request,
+                raw_response,
+            }),
+        }
     }
 }
 
@@ -778,10 +1400,9 @@ impl<'a> From<(&'a ToolChoice, &'a str)> for GCPVertexGeminiToolConfig<'a> {
     }
 }
 
-#[derive(Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 enum GCPVertexGeminiResponseMimeType {
     #[serde(rename = "text/plain")]
-    #[allow(dead_code)]
     TextPlain,
     #[serde(rename = "application/json")]
     ApplicationJson,
@@ -810,6 +1431,7 @@ struct GCPVertexGeminiRequest<'a> {
     tool_config: Option<GCPVertexGeminiToolConfig<'a>>,
     generation_config: Option<GCPVertexGeminiGenerationConfig<'a>>,
     system_instruction: Option<GCPVertexGeminiContent<'a>>,
+    labels: HashMap<String, String>,
     // TODO (if needed): [Safety Settings](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/SafetySetting)
 }
 
@@ -867,6 +1489,14 @@ impl<'a> GCPVertexGeminiRequest<'a> {
                 role: GCPVertexGeminiRole::Model,
                 parts: vec![FlattenUnknown::Normal(content)],
             }),
+            // We attach our custom tag so that we can identify the original inference when
+            // retrieving batch results.
+            labels: [(
+                INFERENCE_ID_LABEL.to_string(),
+                request.inference_id.to_string(),
+            )]
+            .into_iter()
+            .collect(),
         })
     }
 }
@@ -1029,7 +1659,7 @@ struct GCPVertexGeminiResponseCandidate {
     finish_reason: Option<GCPVertexGeminiFinishReason>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct GCPVertexGeminiUsageMetadata {
     prompt_token_count: Option<u32>,
@@ -1063,6 +1693,38 @@ struct GCPVertexGeminiResponseWithMetadata<'a> {
     generic_request: &'a ModelInferenceRequest<'a>,
 }
 
+fn get_response_content(
+    response: GCPVertexGeminiResponse,
+    raw_request: &str,
+    raw_response: &str,
+) -> Result<(Vec<ContentBlockOutput>, Option<FinishReason>), Error> {
+    // GCP Vertex Gemini response can contain multiple candidates and each of these can contain
+    // multiple content parts. We will only use the first candidate but handle all parts of the response therein.
+    let first_candidate = response.candidates.into_iter().next().ok_or_else(|| {
+        Error::new(ErrorDetails::InferenceServer {
+            message: "GCP Vertex Gemini response has no candidates".to_string(),
+            raw_request: Some(raw_request.to_string()),
+            raw_response: Some(raw_response.to_string()),
+            provider_type: PROVIDER_TYPE.to_string(),
+        })
+    })?;
+
+    let finish_reason = first_candidate
+        .finish_reason
+        .map(|finish_reason| finish_reason.into());
+
+    // GCP sometimes doesn't return content in the response (e.g. safety settings blocked the generation).
+    let content = match first_candidate.content {
+        Some(content) => content
+            .parts
+            .into_iter()
+            .map(|part| part.try_into())
+            .collect::<Result<Vec<ContentBlockOutput>, Error>>()?,
+        None => vec![],
+    };
+    Ok((content, finish_reason))
+}
+
 impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceResponse {
     type Error = Error;
     fn try_from(response: GCPVertexGeminiResponseWithMetadata<'a>) -> Result<Self, Self::Error> {
@@ -1074,29 +1736,9 @@ impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceR
             generic_request,
         } = response;
 
-        // GCP Vertex Gemini response can contain multiple candidates and each of these can contain
-        // multiple content parts. We will only use the first candidate but handle all parts of the response therein.
-        let first_candidate = response.candidates.into_iter().next().ok_or_else(|| {
-            Error::new(ErrorDetails::InferenceServer {
-                message: "GCP Vertex Gemini response has no candidates".to_string(),
-                raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
-                raw_response: Some(raw_response.clone()),
-                provider_type: PROVIDER_TYPE.to_string(),
-            })
-        })?;
-
-        // GCP sometimes doesn't return content in the response (e.g. safety settings blocked the generation).
-        let content: Vec<ContentBlockOutput> = match first_candidate.content {
-            Some(content) => content
-                .parts
-                .into_iter()
-                .map(|part| part.try_into())
-                .collect::<Result<Vec<ContentBlockOutput>, Error>>()?,
-            None => vec![],
-        };
-
         let usage = response
             .usage_metadata
+            .clone()
             .ok_or_else(|| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: "GCP Vertex Gemini non-streaming response has no usage metadata"
@@ -1118,6 +1760,8 @@ impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceR
         let system = generic_request.system.clone();
         let input_messages = generic_request.messages.clone();
 
+        let (content, finish_reason) = get_response_content(response, &raw_request, &raw_response)?;
+
         Ok(ProviderInferenceResponse::new(
             ProviderInferenceResponseArgs {
                 output: content,
@@ -1127,9 +1771,7 @@ impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceR
                 raw_response,
                 usage,
                 latency,
-                finish_reason: first_candidate
-                    .finish_reason
-                    .map(|finish_reason| finish_reason.into()),
+                finish_reason,
             },
         ))
     }
@@ -1188,28 +1830,29 @@ impl TryFrom<GCPVertexGeminiStreamResponseWithMetadata> for ProviderInferenceRes
 }
 
 fn handle_gcp_vertex_gemini_error(
+    raw_request: String,
     response_code: StatusCode,
     response_body: String,
-) -> Result<ProviderInferenceResponse, Error> {
+) -> Error {
     match response_code {
         StatusCode::UNAUTHORIZED
         | StatusCode::BAD_REQUEST
         | StatusCode::PAYLOAD_TOO_LARGE
-        | StatusCode::TOO_MANY_REQUESTS => Err(Error::new(ErrorDetails::InferenceClient {
+        | StatusCode::TOO_MANY_REQUESTS => Error::new(ErrorDetails::InferenceClient {
             message: response_body.clone(),
             status_code: Some(response_code),
-            raw_request: None,
+            raw_request: Some(raw_request),
             raw_response: Some(response_body.clone()),
             provider_type: PROVIDER_TYPE.to_string(),
-        })),
+        }),
         // StatusCode::NOT_FOUND | StatusCode::FORBIDDEN | StatusCode::INTERNAL_SERVER_ERROR | 529: Overloaded
         // These are all captured in _ since they have the same error behavior
-        _ => Err(Error::new(ErrorDetails::InferenceServer {
+        _ => Error::new(ErrorDetails::InferenceServer {
             message: response_body.clone(),
-            raw_request: None,
+            raw_request: Some(raw_request),
             raw_response: Some(response_body.clone()),
             provider_type: PROVIDER_TYPE.to_string(),
-        })),
+        }),
     }
 }
 
@@ -1671,6 +2314,7 @@ mod tests {
             tools: None,
             tool_config: None,
             system_instruction: None,
+            labels: HashMap::new(),
         };
         let raw_request = serde_json::to_string(&request_body).unwrap();
         let raw_response = "test response".to_string();
@@ -1757,6 +2401,7 @@ mod tests {
             tools: None,
             tool_config: None,
             system_instruction: None,
+            labels: HashMap::new(),
         };
         let raw_request = serde_json::to_string(&request_body).unwrap();
         let response_with_latency = GCPVertexGeminiResponseWithMetadata {
@@ -1848,6 +2493,7 @@ mod tests {
             tools: None,
             tool_config: None,
             system_instruction: None,
+            labels: HashMap::new(),
         };
         let raw_request = serde_json::to_string(&request_body).unwrap();
         let response_with_latency = GCPVertexGeminiResponseWithMetadata {
@@ -2151,7 +2797,7 @@ mod tests {
         }"#;
         let generic = Credential::FileContents(SecretString::from(json_content));
         let creds = GCPVertexCredentials::try_from((generic, "GCPVertexGemini")).unwrap();
-        assert!(matches!(creds, GCPVertexCredentials::Static(_)));
+        assert!(matches!(creds, GCPVertexCredentials::Static { .. }));
 
         // Test Dynamic credential
         let generic = Credential::Dynamic("key_name".to_string());

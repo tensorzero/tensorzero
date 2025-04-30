@@ -53,7 +53,7 @@ impl Default for StaticJSONSchema {
         let static_schema: &'static serde_json::Value = Box::leak(Box::new(empty_schema));
 
         // Compile the schema
-        #[allow(clippy::expect_used)]
+        #[expect(clippy::expect_used)]
         let compiled_schema =
             jsonschema::validator_for(static_schema).expect("Failed to compile empty schema");
 
@@ -96,7 +96,7 @@ impl StaticJSONSchema {
         let schema_boxed: &'static serde_json::Value = Box::leak(Box::new(value.clone()));
         let compiled_schema = jsonschema::validator_for(schema_boxed).map_err(|e| {
             Error::new(ErrorDetails::JsonSchema {
-                message: format!("Failed to compile JSON Schema: {}", e),
+                message: format!("Failed to compile JSON Schema: {e}"),
             })
         })?;
         Ok(Self {
@@ -184,7 +184,7 @@ impl DynamicJSONSchema {
                     .await
                     .map_err(|e| {
                         Error::new(ErrorDetails::JsonSchema {
-                            message: format!("Task join error in DynamicJSONSchema: {}", e),
+                            message: format!("Task join error in DynamicJSONSchema: {e}"),
                         })
                     })?
                 }
@@ -224,7 +224,7 @@ mod tests {
         "#;
 
         let mut temp_file = NamedTempFile::new().expect("Failed to create temporary file");
-        write!(temp_file, "{}", schema).expect("Failed to write schema to temporary file");
+        write!(temp_file, "{schema}").expect("Failed to write schema to temporary file");
 
         let schema = StaticJSONSchema::from_path(temp_file.path().to_owned(), PathBuf::from(""))
             .expect("Failed to load schema");
@@ -268,7 +268,7 @@ mod tests {
         "#;
 
         let mut temp_file = NamedTempFile::new().expect("Failed to create temporary file");
-        write!(temp_file, "{}", invalid_schema)
+        write!(temp_file, "{invalid_schema}")
             .expect("Failed to write invalid schema to temporary file");
 
         let result = StaticJSONSchema::from_path(temp_file.path().to_owned(), PathBuf::from(""));

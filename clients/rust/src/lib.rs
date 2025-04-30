@@ -60,7 +60,7 @@ impl Debug for ClientMode {
                 gateway: _,
                 timeout,
             } => {
-                write!(f, "EmbeddedGateway {{ timeout: {:?} }}", timeout)
+                write!(f, "EmbeddedGateway {{ timeout: {timeout:?} }}")
             }
         }
     }
@@ -350,8 +350,7 @@ impl Client {
                         source: tensorzero_internal::error::Error::new(
                             ErrorDetails::InvalidBaseUrl {
                                 message: format!(
-                                    "Failed to join base URL with /feedback endpoint: {}",
-                                    e
+                                    "Failed to join base URL with /feedback endpoint: {e}"
                                 ),
                             },
                         )
@@ -395,8 +394,7 @@ impl Client {
                             source: tensorzero_internal::error::Error::new(
                                 ErrorDetails::InvalidBaseUrl {
                                     message: format!(
-                                        "Failed to join base URL with /inference endpoint: {}",
-                                        e
+                                        "Failed to join base URL with /inference endpoint: {e}"
                                     ),
                                 },
                             )
@@ -471,8 +469,7 @@ impl Client {
                         source: tensorzero_internal::error::Error::new(
                             ErrorDetails::InvalidBaseUrl {
                                 message: format!(
-                                    "Failed to join base URL with /internal/object_storage endpoint: {}",
-                                    e
+                                    "Failed to join base URL with /internal/object_storage endpoint: {e}"
                                 ),
                             },
                         )
@@ -482,7 +479,7 @@ impl Client {
                     serde_json::to_string(&storage_path).map_err(|e| TensorZeroError::Other {
                         source: tensorzero_internal::error::Error::new(
                             ErrorDetails::Serialization {
-                                message: format!("Failed to serialize storage path: {}", e),
+                                message: format!("Failed to serialize storage path: {e}"),
                             },
                         )
                         .into(),
@@ -515,7 +512,7 @@ impl Client {
             ClientMode::HTTPGateway(client) => {
                 let url = client.base_url.join("dynamic_evaluation_run").map_err(|e| TensorZeroError::Other {
                     source: tensorzero_internal::error::Error::new(ErrorDetails::InvalidBaseUrl {
-                        message: format!("Failed to join base URL with /dynamic_evaluation_run endpoint: {}", e),
+                        message: format!("Failed to join base URL with /dynamic_evaluation_run endpoint: {e}"),
                     })
                     .into(),
                 })?;
@@ -543,9 +540,9 @@ impl Client {
     ) -> Result<DynamicEvaluationRunEpisodeResponse, TensorZeroError> {
         match &self.mode {
             ClientMode::HTTPGateway(client) => {
-                let url = client.base_url.join(&format!("dynamic_evaluation_run/{}/episode", run_id)).map_err(|e| TensorZeroError::Other {
+                let url = client.base_url.join(&format!("dynamic_evaluation_run/{run_id}/episode")).map_err(|e| TensorZeroError::Other {
                     source: tensorzero_internal::error::Error::new(ErrorDetails::InvalidBaseUrl {
-                        message: format!("Failed to join base URL with /dynamic_evaluation_run/{}/episode endpoint: {}", run_id, e),
+                        message: format!("Failed to join base URL with /dynamic_evaluation_run/{run_id}/episode endpoint: {e}"),
                     })
                     .into(),
                 })?;
@@ -635,7 +632,7 @@ impl Client {
         if let Some(Err(_)) = first {
             // Discard the stream if it has an error
             let res = event_source.next().await;
-            #[allow(clippy::panic)]
+            #[expect(clippy::panic)]
             let Some(Err(e)) = res
             else {
                 panic!("Peeked error but got non-err {res:?}");
