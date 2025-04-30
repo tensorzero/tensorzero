@@ -116,6 +116,10 @@ impl DeepSeekProvider {
             credentials: provider_credentials,
         })
     }
+
+    pub fn model_name(&self) -> &str {
+        &self.model_name
+    }
 }
 
 impl InferenceProvider for DeepSeekProvider {

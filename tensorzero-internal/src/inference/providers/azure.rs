@@ -60,6 +60,10 @@ impl AzureProvider {
             credentials,
         })
     }
+
+    pub fn deployment_id(&self) -> &str {
+        &self.deployment_id
+    }
 }
 
 #[derive(Clone, Debug, Deserialize)]

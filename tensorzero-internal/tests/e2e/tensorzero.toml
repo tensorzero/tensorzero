@@ -11,6 +11,9 @@ bind_address = "0.0.0.0:3000"
 debug = true
 enable_template_filesystem_access = true
 
+[gateway.export.otlp.traces]
+enabled = true
+
 [object_storage]
 type = "disabled"
 

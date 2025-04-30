@@ -64,6 +64,10 @@ impl HyperbolicProvider {
             credentials,
         })
     }
+
+    pub fn model_name(&self) -> &str {
+        &self.model_name
+    }
 }
 
 #[derive(Clone, Debug)]

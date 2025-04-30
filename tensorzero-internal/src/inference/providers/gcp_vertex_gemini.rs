@@ -237,6 +237,10 @@ impl GCPVertexGeminiProvider {
         })
     }
 
+    pub fn model_id(&self) -> &str {
+        &self.model_id
+    }
+
     async fn collect_finished_batch(
         &self,
         output_data: GCPVertexBatchResponseOutputInfo,

@@ -74,6 +74,10 @@ impl FireworksProvider {
             parse_think_blocks,
         })
     }
+
+    pub fn model_name(&self) -> &str {
+        &self.model_name
+    }
 }
 
 pub fn default_parse_think_blocks() -> bool {
