@@ -1,5 +1,5 @@
 // This project is used only for testing, so it's fine if it panics
-#![allow(clippy::unwrap_used, clippy::panic, clippy::expect_used)]
+#![expect(clippy::unwrap_used, clippy::panic, clippy::expect_used)]
 
 mod error;
 mod fireworks;
@@ -24,7 +24,6 @@ use std::{
     collections::HashMap,
     net::SocketAddr,
     sync::{Mutex, OnceLock},
-    time::Duration,
 };
 use tokio::signal;
 use tower_http::trace::TraceLayer;
@@ -67,6 +66,9 @@ pub async fn shutdown_signal() {
             .await;
     };
 
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
     #[cfg(unix)]
     let hangup = async {
         signal::unix::signal(signal::unix::SignalKind::hangup())
@@ -74,6 +76,9 @@ pub async fn shutdown_signal() {
             .recv()
             .await;
     };
+
+    #[cfg(not(unix))]
+    let hangup = std::future::pending::<()>();
 
     tokio::select! {
         _ = ctrl_c => {
@@ -83,7 +88,7 @@ pub async fn shutdown_signal() {
             tracing::info!("Received SIGTERM signal");
         }
         _ = hangup => {
-            tokio::time::sleep(Duration::from_secs(1)).await;
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             tracing::info!("Received SIGHUP signal");
         }
     };

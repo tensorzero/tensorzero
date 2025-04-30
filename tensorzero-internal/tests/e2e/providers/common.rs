@@ -1,4 +1,4 @@
-#![allow(clippy::print_stdout)]
+#![expect(clippy::print_stdout)]
 use std::{collections::HashMap, net::SocketAddr};
 
 use aws_config::Region;
@@ -47,6 +47,8 @@ use tensorzero_internal::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_inference_tags_clickhouse,
     select_json_inference_clickhouse, select_model_inference_clickhouse, CLICKHOUSE_URL,
 };
+
+use super::helpers::get_extra_headers;
 
 #[derive(Clone, Debug)]
 pub struct E2ETestProvider {
@@ -98,7 +100,6 @@ pub async fn make_http_gateway() -> tensorzero::Client {
     .unwrap()
 }
 
-#[allow(dead_code)]
 pub async fn make_embedded_gateway() -> tensorzero::Client {
     let mut config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     config_path.push("tests/e2e/tensorzero.toml");
@@ -112,7 +113,6 @@ pub async fn make_embedded_gateway() -> tensorzero::Client {
     .unwrap()
 }
 
-#[allow(dead_code)]
 pub async fn make_embedded_gateway_no_config() -> tensorzero::Client {
     tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
         config_file: None,
@@ -124,7 +124,6 @@ pub async fn make_embedded_gateway_no_config() -> tensorzero::Client {
     .unwrap()
 }
 
-#[allow(dead_code)]
 pub async fn make_embedded_gateway_with_config(config: &str) -> tensorzero::Client {
     let tmp_config = tempfile::NamedTempFile::new().unwrap();
     std::fs::write(tmp_config.path(), config).unwrap();
@@ -857,7 +856,7 @@ pub async fn test_url_image_inference_with_provider_and_store(
 
     // The '_shutdown_sender' will wake up the receiver on drop
     let (server_addr, _shutdown_sender) = make_temp_image_server().await;
-    let image_url = Url::parse(&format!("http://{}/ferris.png", server_addr)).unwrap();
+    let image_url = Url::parse(&format!("http://{server_addr}/ferris.png")).unwrap();
 
     let client = make_embedded_gateway_with_config(config_toml).await;
 
@@ -884,6 +883,7 @@ pub async fn test_url_image_inference_with_provider_and_store(
                     enabled: CacheEnabledMode::On,
                     max_age_s: Some(10),
                 },
+                extra_headers: get_extra_headers(),
                 ..Default::default()
             })
             .await
@@ -975,7 +975,7 @@ pub async fn test_extra_body_with_provider(provider: E2ETestProvider) {
 
 pub async fn test_extra_body_with_provider_and_stream(provider: &E2ETestProvider, stream: bool) {
     let episode_id = Uuid::now_v7();
-
+    let extra_headers = get_extra_headers();
     let payload = json!({
         "function_name": "basic_test",
         "variant_name": provider.variant_name,
@@ -996,6 +996,7 @@ pub async fn test_extra_body_with_provider_and_stream(provider: &E2ETestProvider
             ]},
         "stream": stream,
         "tags": {"foo": "bar"},
+        "extra_headers": extra_headers.headers,
     });
 
     let inference_id = if stream {
@@ -1165,7 +1166,7 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
             }
         ])
     };
-
+    let extra_headers = get_extra_headers();
     let payload = json!({
         "function_name": "basic_test",
         "variant_name": provider.variant_name,
@@ -1187,6 +1188,7 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
         "extra_body": extra_body,
         "stream": stream,
         "tags": {"foo": "bar"},
+        "extra_headers": extra_headers.headers,
     });
 
     let inference_id = if stream {
@@ -1328,6 +1330,7 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
     stream: bool,
 ) {
     // Inject randomness to prevent this from being cached, since provider-proxy will ignore the (invalid) auth header
+    let extra_headers = get_extra_headers();
     let payload = json!({
         "function_name": "basic_test",
         "variant_name": provider.variant_name,
@@ -1341,6 +1344,7 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
                 }
             ]},
         "stream": stream,
+        "extra_headers": extra_headers.headers,
     });
 
     let response = Client::new()
@@ -1479,7 +1483,7 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
 
 pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
-
+    let extra_headers = get_extra_headers();
     let payload = json!({
         "function_name": "basic_test",
         "variant_name": provider.variant_name,
@@ -1495,6 +1499,7 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
             ]},
         "stream": false,
         "tags": {"foo": "bar"},
+        "extra_headers": extra_headers.headers,
     });
 
     let response = Client::new()
@@ -1530,7 +1535,8 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
             ]},
         "stream": false,
         "tags": {"foo": "bar"},
-        "cache_options": {"enabled": "on", "lookback_s": 10}
+        "cache_options": {"enabled": "on", "lookback_s": 10},
+        "extra_headers": extra_headers.headers,
     });
 
     let response = Client::new()
@@ -2272,6 +2278,7 @@ pub async fn check_simple_image_inference_response(
 
 pub async fn test_streaming_invalid_request_with_provider(provider: E2ETestProvider) {
     // A top_p of -100 and temperature of -100 should produce errors on all providers
+    let extra_headers = get_extra_headers();
     let payload = json!({
         "function_name": "basic_test",
         "variant_name": provider.variant_name,
@@ -2297,7 +2304,8 @@ pub async fn test_streaming_invalid_request_with_provider(provider: E2ETestProvi
                 "pointer": "/messages/0/content",
                 "value": 123,
             },
-        ]
+        ],
+        "extra_headers": extra_headers.headers,
     });
 
     let mut event_source = Client::new()
@@ -2351,6 +2359,7 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     tag_value: &str,
     check_cache: bool,
 ) -> String {
+    let extra_headers = get_extra_headers();
     let payload = json!({
         "function_name": "basic_test",
         "variant_name": provider.variant_name,
@@ -2366,7 +2375,8 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
             ]},
         "stream": true,
         "tags": {"key": tag_value},
-        "cache_options": {"enabled": "on", "lookback_s": 10}
+        "cache_options": {"enabled": "on", "lookback_s": 10},
+        "extra_headers": extra_headers.headers,
     });
 
     let mut event_source = Client::new()
@@ -2622,7 +2632,7 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
 
 pub async fn test_inference_params_inference_request_with_provider(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
-
+    let extra_headers = get_extra_headers();
     let payload = json!({
         "function_name": "basic_test",
         "variant_name": provider.variant_name,
@@ -2648,6 +2658,7 @@ pub async fn test_inference_params_inference_request_with_provider(provider: E2E
         },
         "stream": false,
         "credentials": provider.credentials,
+        "extra_headers": extra_headers.headers,
     });
 
     let response = Client::new()
@@ -2859,7 +2870,7 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
     let episode_id = Uuid::now_v7();
-
+    let extra_headers = get_extra_headers();
     let payload = json!({
         "function_name": "basic_test",
         "variant_name": provider.variant_name,
@@ -2885,6 +2896,7 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
         },
         "stream": true,
         "credentials": provider.credentials,
+        "extra_headers": extra_headers.headers,
     });
 
     let mut event_source = Client::new()
@@ -3493,7 +3505,7 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
                     // We mostly care about the tool call, so we'll ignore the text.
                 }
                 _ => {
-                    panic!("Unexpected block type: {}", block_type);
+                    panic!("Unexpected block type: {block_type}");
                 }
             }
         }
@@ -3978,7 +3990,7 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
     match first {
         ContentBlock::Text(_text) => {}
         _ => {
-            panic!("Expected a text block, got {:?}", first);
+            panic!("Expected a text block, got {first:?}");
         }
     }
 }
@@ -4066,7 +4078,7 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
                     full_text.push_str(block.get("text").unwrap().as_str().unwrap());
                 }
                 _ => {
-                    panic!("Unexpected block type: {}", block_type);
+                    panic!("Unexpected block type: {block_type}");
                 }
             }
         }
@@ -4265,7 +4277,7 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
     match first {
         ContentBlock::Text(_text) => {}
         _ => {
-            panic!("Expected a text block, got {:?}", first);
+            panic!("Expected a text block, got {first:?}");
         }
     }
 }
@@ -4652,7 +4664,7 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
                     // We mostly care about the tool call, so we'll ignore the text.
                 }
                 _ => {
-                    panic!("Unexpected block type: {}", block_type);
+                    panic!("Unexpected block type: {block_type}");
                 }
             }
         }
@@ -5116,7 +5128,7 @@ pub async fn check_tool_use_tool_choice_none_inference_response(
     match first {
         ContentBlock::Text(_text) => {}
         _ => {
-            panic!("Expected a text block, got {:?}", first);
+            panic!("Expected a text block, got {first:?}");
         }
     }
 }
@@ -5212,7 +5224,7 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
                     full_text.push_str(block.get("text").unwrap().as_str().unwrap());
                 }
                 _ => {
-                    panic!("Unexpected block type: {}", block_type);
+                    panic!("Unexpected block type: {block_type}");
                 }
             }
         }
@@ -5412,7 +5424,7 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
     match first {
         ContentBlock::Text(_text) => {}
         _ => {
-            panic!("Expected a text block, got {:?}", first);
+            panic!("Expected a text block, got {first:?}");
         }
     }
 }
@@ -5879,7 +5891,7 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
                     // We mostly care about the tool call, so we'll ignore the text.
                 }
                 _ => {
-                    panic!("Unexpected block type: {}", block_type);
+                    panic!("Unexpected block type: {block_type}");
                 }
             }
         }
@@ -6504,7 +6516,7 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
                     // We mostly care about the tool call, so we'll ignore the text.
                 }
                 _ => {
-                    panic!("Unexpected block type: {}", block_type);
+                    panic!("Unexpected block type: {block_type}");
                 }
             }
         }
@@ -7004,7 +7016,7 @@ pub async fn check_tool_use_multi_turn_inference_response(
             assert!(text.text.to_lowercase().contains("tokyo"));
         }
         _ => {
-            panic!("Expected a text block, got {:?}", first);
+            panic!("Expected a text block, got {first:?}");
         }
     }
 }
@@ -7323,7 +7335,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
             assert!(text.text.to_lowercase().contains("tokyo"));
         }
         _ => {
-            panic!("Expected a text block, got {:?}", first);
+            panic!("Expected a text block, got {first:?}");
         }
     }
 }
@@ -7743,7 +7755,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
                     // We mostly care about the tool call, so we'll ignore the text.
                 }
                 _ => {
-                    panic!("Unexpected block type: {}", block_type);
+                    panic!("Unexpected block type: {block_type}");
                 }
             }
         }
@@ -8304,7 +8316,7 @@ pub async fn check_parallel_tool_use_inference_response(
                 serde_json::from_str::<Value>(&tool_call.arguments).unwrap();
             }
             _ => {
-                panic!("Expected a tool call, got {:?}", block);
+                panic!("Expected a tool call, got {block:?}");
             }
         }
     }
@@ -8407,7 +8419,7 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
                             get_humidity_arguments.push_str(chunk_arguments);
                         }
                         _ => {
-                            panic!("Unexpected tool name: {}", tool_name);
+                            panic!("Unexpected tool name: {tool_name}");
                         }
                     }
                 }
@@ -8417,7 +8429,7 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
                     // We mostly care about the tool call, so we'll ignore the text.
                 }
                 _ => {
-                    panic!("Unexpected block type: {}", block_type);
+                    panic!("Unexpected block type: {block_type}");
                 }
             }
         }
@@ -8708,7 +8720,7 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
                 serde_json::from_str::<Value>(&tool_call.arguments).unwrap();
             }
             _ => {
-                panic!("Expected a tool call, got {:?}", block);
+                panic!("Expected a tool call, got {block:?}");
             }
         }
     }
@@ -8718,7 +8730,7 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
 
 pub async fn test_json_mode_inference_request_with_provider(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
-
+    let extra_headers = get_extra_headers();
     let payload = json!({
         "function_name": "json_success",
         "variant_name": provider.variant_name,
@@ -8733,6 +8745,7 @@ pub async fn test_json_mode_inference_request_with_provider(provider: E2ETestPro
                 }
             ]},
         "stream": false,
+        "extra_headers": extra_headers.headers,
     });
 
     let response = Client::new()
@@ -8948,6 +8961,7 @@ pub async fn check_json_mode_inference_response(
 
 pub async fn test_dynamic_json_mode_inference_request_with_provider(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
+    let extra_headers = get_extra_headers();
     let output_schema = json!({
       "type": "object",
       "properties": {
@@ -8975,6 +8989,7 @@ pub async fn test_dynamic_json_mode_inference_request_with_provider(provider: E2
             ]},
         "stream": false,
         "output_schema": output_schema.clone(),
+        "extra_headers": extra_headers.headers,
     });
 
     let response = Client::new()
@@ -9199,7 +9214,7 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
         return;
     }
     let episode_id = Uuid::now_v7();
-
+    let extra_headers = get_extra_headers();
     let payload = json!({
         "function_name": "json_success",
         "variant_name": provider.variant_name,
@@ -9210,10 +9225,11 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
                "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": {"country": "Japan"}}]
+                    "content": [{"type": "text", "arguments": {"country": "Japan"}}]
                 }
             ]},
         "stream": true,
+        "extra_headers": extra_headers.headers,
     });
 
     let mut event_source = Client::new()
@@ -9465,6 +9481,7 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
     }
 
     let episode_id = Uuid::now_v7();
+    let extra_headers = get_extra_headers();
 
     let payload = json!({
         "function_name": "basic_test",
@@ -9485,7 +9502,8 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
             "chat_completion": {
                 "max_tokens": 1
             }
-        }
+        },
+        "extra_headers": extra_headers.headers,
     });
     if provider.variant_name.contains("openai") && provider.variant_name.contains("o1") {
         // Can't pin a single token for o1
@@ -9530,7 +9548,8 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
             "chat_completion": {
                 "max_tokens": 1
             }
-        }
+        },
+        "extra_headers": extra_headers.headers,
     });
 
     let response = Client::new()
@@ -9998,7 +10017,7 @@ pub async fn check_multi_turn_parallel_tool_use_inference_response(
                 );
             }
             _ => {
-                panic!("Expected a tool call, got {:?}", tool_result);
+                panic!("Expected a tool call, got {tool_result:?}");
             }
         }
     }
@@ -10012,7 +10031,7 @@ pub async fn check_multi_turn_parallel_tool_use_inference_response(
             assert!(text.text.to_lowercase().contains("30"));
         }
         _ => {
-            panic!("Expected a text block, got {:?}", output_content);
+            panic!("Expected a text block, got {output_content:?}");
         }
     }
 }
@@ -10184,7 +10203,7 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
                     output_content.push_str(block.get("text").unwrap().as_str().unwrap());
                 }
                 _ => {
-                    panic!("Unexpected block type: {}", block_type);
+                    panic!("Unexpected block type: {block_type}");
                 }
             }
         }
@@ -10333,7 +10352,7 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
                 );
             }
             _ => {
-                panic!("Expected a tool call, got {:?}", tool_result);
+                panic!("Expected a tool call, got {tool_result:?}");
             }
         }
     }
@@ -10347,13 +10366,14 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
             assert!(text.text.to_lowercase().contains("30"));
         }
         _ => {
-            panic!("Expected a text block, got {:?}", output_content);
+            panic!("Expected a text block, got {output_content:?}");
         }
     }
 }
 
 pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
+    let extra_headers = get_extra_headers();
 
     let payload = json!({
         "function_name": "json_success",
@@ -10375,6 +10395,7 @@ pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETes
             }
         },
         "stream": false,
+        "extra_headers": extra_headers.headers,
     });
 
     let response = Client::new()

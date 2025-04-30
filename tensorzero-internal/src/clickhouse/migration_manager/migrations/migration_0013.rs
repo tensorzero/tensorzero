@@ -35,7 +35,7 @@ impl Migration for Migration0013<'_> {
             if !check_table_exists(self.clickhouse, table, "0013").await? {
                 return Err(ErrorDetails::ClickHouseMigration {
                     id: "0013".to_string(),
-                    message: format!("Table {} does not exist", table),
+                    message: format!("Table {table} does not exist"),
                 }
                 .into());
             }
@@ -246,8 +246,7 @@ impl Migration for Migration0013<'_> {
                     'chat' AS function_type
                 FROM ChatInference
                 {view_where_clause};
-            "#,
-            view_where_clause = view_where_clause
+            "#
         );
         let _ = self.clickhouse.run_query_synchronous(query, None).await?;
 
@@ -265,8 +264,7 @@ impl Migration for Migration0013<'_> {
                     'json' AS function_type
                 FROM JsonInference
                 {view_where_clause};
-            "#,
-            view_where_clause = view_where_clause
+            "#
         );
         let _ = self.clickhouse.run_query_synchronous(query, None).await?;
 
@@ -285,8 +283,7 @@ impl Migration for Migration0013<'_> {
                     'chat' as function_type
                 FROM ChatInference
                 {view_where_clause};
-            "#,
-            view_where_clause = view_where_clause
+            "#
         );
         let _ = self.clickhouse.run_query_synchronous(query, None).await?;
 
@@ -305,8 +302,7 @@ impl Migration for Migration0013<'_> {
                     'json' as function_type
                 FROM JsonInference
                 {view_where_clause};
-            "#,
-            view_where_clause = view_where_clause
+            "#
         );
         let _ = self.clickhouse.run_query_synchronous(query, None).await?;
 

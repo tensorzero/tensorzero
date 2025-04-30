@@ -35,7 +35,7 @@ use crate::inference::types::{FinishReason, ProviderInferenceResponseArgs};
 use crate::model::ModelProvider;
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
-#[allow(unused)]
+#[expect(unused)]
 const PROVIDER_NAME: &str = "AWS Bedrock";
 const PROVIDER_TYPE: &str = "aws_bedrock";
 
@@ -808,7 +808,7 @@ fn serialize_aws_bedrock_struct<T: std::fmt::Debug>(output: &T) -> Result<String
     serde_json::to_string(&serde_json::json!({"debug": format!("{:?}", output)})).map_err(|e| {
         Error::new(ErrorDetails::InferenceServer {
             raw_request: None,
-            raw_response: Some(format!("{:?}", output)),
+            raw_response: Some(format!("{output:?}")),
             message: format!(
                 "Error parsing response from AWS Bedrock: {}",
                 DisplayOrDebugGateway::new(e)

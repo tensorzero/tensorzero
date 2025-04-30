@@ -29,7 +29,7 @@ impl Migration for Migration0009<'_> {
             if !check_table_exists(self.clickhouse, table, "0009").await? {
                 return Err(ErrorDetails::ClickHouseMigration {
                     id: "0009".to_string(),
-                    message: format!("Table {} does not exist", table),
+                    message: format!("Table {table} does not exist"),
                 }
                 .into());
             }
@@ -107,8 +107,7 @@ impl Migration for Migration0009<'_> {
                     tags
                 FROM BooleanMetricFeedback
                 {view_where_clause};
-            "#,
-            view_where_clause = view_where_clause
+            "#
         );
         let _ = self.clickhouse.run_query_synchronous(query, None).await?;
 
@@ -144,8 +143,7 @@ impl Migration for Migration0009<'_> {
                     tags
                 FROM CommentFeedback
                 {view_where_clause};
-            "#,
-            view_where_clause = view_where_clause
+            "#
         );
         let _ = self.clickhouse.run_query_synchronous(query, None).await?;
 
@@ -179,8 +177,7 @@ impl Migration for Migration0009<'_> {
                     tags
                 FROM DemonstrationFeedback
                 {view_where_clause};
-            "#,
-            view_where_clause = view_where_clause
+            "#
         );
         let _ = self.clickhouse.run_query_synchronous(query, None).await?;
 
@@ -221,8 +218,7 @@ impl Migration for Migration0009<'_> {
                    tags
                FROM FloatMetricFeedback
                {view_where_clause};
-           "#,
-            view_where_clause = view_where_clause
+           "#
         );
         let _ = self.clickhouse.run_query_synchronous(query, None).await?;
 
@@ -242,8 +238,7 @@ impl Migration for Migration0009<'_> {
                         tags
                     FROM BooleanMetricFeedback
                     WHERE UUIDv7ToDateTime(id) < toDateTime(toUnixTimestamp({view_timestamp}));
-                "#,
-                    view_timestamp = view_timestamp
+                "#
                 );
                 self.clickhouse.run_query_synchronous(query, None).await
             };
@@ -260,8 +255,7 @@ impl Migration for Migration0009<'_> {
                         tags
                     FROM CommentFeedback
                     WHERE UUIDv7ToDateTime(id) < toDateTime(toUnixTimestamp({view_timestamp}));
-                "#,
-                    view_timestamp = view_timestamp
+                "#
                 );
                 self.clickhouse.run_query_synchronous(query, None).await
             };
@@ -277,8 +271,7 @@ impl Migration for Migration0009<'_> {
                         tags
                     FROM DemonstrationFeedback
                     WHERE UUIDv7ToDateTime(id) < toDateTime(toUnixTimestamp({view_timestamp}));
-                "#,
-                    view_timestamp = view_timestamp
+                "#
                 );
                 self.clickhouse.run_query_synchronous(query, None).await
             };
@@ -295,8 +288,7 @@ impl Migration for Migration0009<'_> {
                         tags
                     FROM FloatMetricFeedback
                     WHERE UUIDv7ToDateTime(id) < toDateTime(toUnixTimestamp({view_timestamp}));
-                "#,
-                    view_timestamp = view_timestamp
+                "#
                 );
                 self.clickhouse.run_query_synchronous(query, None).await
             };

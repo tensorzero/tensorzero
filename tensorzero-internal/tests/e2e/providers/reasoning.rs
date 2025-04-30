@@ -1,4 +1,4 @@
-#![allow(clippy::print_stdout)]
+#![expect(clippy::print_stdout)]
 use crate::common::get_gateway_endpoint;
 use crate::providers::common::E2ETestProvider;
 use futures::StreamExt;
@@ -78,7 +78,7 @@ pub async fn test_reasoning_inference_request_simple_with_provider(provider: E2E
             "thought" => {
                 found_thought = true;
             }
-            _ => panic!("Unexpected content block type: {}", block_type),
+            _ => panic!("Unexpected content block type: {block_type}"),
         }
     }
 
@@ -147,7 +147,7 @@ pub async fn test_reasoning_inference_request_simple_with_provider(provider: E2E
             "thought" => {
                 found_thought = true;
             }
-            _ => panic!("Unexpected content block type: {}", block_type),
+            _ => panic!("Unexpected content block type: {block_type}"),
         }
     }
 
@@ -409,7 +409,7 @@ pub async fn test_streaming_reasoning_inference_request_simple_with_provider(
                 found_thought = true;
                 clickhouse_thought = block.get("text").unwrap().as_str().unwrap().to_string();
             }
-            _ => panic!("Unexpected content block type: {}", block_type),
+            _ => panic!("Unexpected content block type: {block_type}"),
         }
     }
 
@@ -749,7 +749,7 @@ pub async fn test_streaming_reasoning_inference_request_with_provider_json_mode(
                "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": {"country": "Japan"}}]
+                    "content": [{"type": "text", "arguments": {"country": "Japan"}}]
                 }
             ]},
         "stream": true,
