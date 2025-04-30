@@ -317,12 +317,12 @@ type = "mistral"
 model_name = "open-mistral-nemo-2407"
 api_key_location = "dynamic::mistral_api_key"
 
-[models.o1-mini]
+[models.o4-mini]
 routing = ["openai"]
 
-[models.o1-mini.providers.openai]
+[models.o4-mini.providers.openai]
 type = "openai"
-model_name = "o1-mini"
+model_name = "o4-mini"
 
 [models.o3-mini]
 routing = ["openai"]
@@ -896,9 +896,9 @@ model = "openai::gpt-4o-mini-2024-07-18"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
-[functions.basic_test.variants.o1-mini]
+[functions.basic_test.variants.o4-mini]
 type = "chat_completion"
-model = "o1-mini"
+model = "o4-mini"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 
 [functions.basic_test.variants.o3-mini]
