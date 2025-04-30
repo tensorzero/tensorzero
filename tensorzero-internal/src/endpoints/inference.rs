@@ -41,10 +41,10 @@ use crate::inference::types::{
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::model::ModelTable;
 use crate::tool::{DynamicToolParams, ToolCallConfig, ToolChoice};
-use crate::uuid_util::validate_tensorzero_uuid;
 use crate::variant::chat_completion::ChatCompletionConfig;
 use crate::variant::{InferenceConfig, JsonMode, Variant, VariantConfig};
 
+use super::dynamic_evaluation_run::validate_inference_episode_id_and_apply_dynamic_evaluation_run;
 use super::validate_tags;
 
 /// The expected payload is a JSON object with the following fields:
@@ -217,6 +217,7 @@ pub async fn inference(
     let start_time = Instant::now();
     let inference_id = Uuid::now_v7();
     span.record("inference_id", inference_id.to_string());
+    validate_tags(&params.tags, params.internal)?;
 
     if params.include_original_response && params.stream.unwrap_or(false) {
         return Err(ErrorDetails::InvalidRequest {
@@ -228,10 +229,17 @@ pub async fn inference(
 
     // Retrieve or generate the episode ID
     let episode_id = params.episode_id.unwrap_or(Uuid::now_v7());
-    validate_tensorzero_uuid(episode_id, "Episode")?;
+    let mut params = params;
+    validate_inference_episode_id_and_apply_dynamic_evaluation_run(
+        episode_id,
+        params.function_name.as_ref(),
+        &mut params.variant_name,
+        &mut params.tags,
+        &clickhouse_connection_info,
+    )
+    .await?;
     tracing::Span::current().record("episode_id", episode_id.to_string());
 
-    validate_tags(&params.tags, params.internal)?;
     let (function, function_name) = find_function(&params, &config)?;
     // Collect the function variant names as a Vec<&str>
     let mut candidate_variant_names: Vec<&str> =

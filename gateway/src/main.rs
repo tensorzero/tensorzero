@@ -213,6 +213,14 @@ async fn main() {
             get(endpoints::object_storage::get_object_handler),
         )
         .route(
+            "/dynamic_evaluation_run",
+            post(endpoints::dynamic_evaluation_run::dynamic_evaluation_run_handler),
+        )
+        .route(
+            "/dynamic_evaluation_run/{run_id}/episode",
+            post(endpoints::dynamic_evaluation_run::dynamic_evaluation_run_episode_handler),
+        )
+        .route(
             "/metrics",
             get(move || std::future::ready(metrics_handle.render())),
         )
