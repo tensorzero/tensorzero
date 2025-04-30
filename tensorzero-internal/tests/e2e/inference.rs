@@ -1959,7 +1959,7 @@ async fn check_good_mixture_response(
     };
     // Since we're using the embedded gateway, the root span will be `function_call`
     // (we won't have a top-level HTTP span)
-    assert_eq!(root_span.name, "function_call");
+    assert_eq!(root_span.name, "function_inference");
     let root_attr_map = attrs_to_map(&root_span.attributes);
     assert_eq!(root_attr_map["function_name"], "mixture_of_n".into());
     assert_eq!(root_attr_map.get("model_name"), None);
