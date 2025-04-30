@@ -2446,7 +2446,6 @@ tool_choice.specific = "get_temperature"
 type = "chat_completion"
 model = "test"
 
-
 [functions.best_of_n]
 type = "chat"
 system_schema = "../../fixtures/config/functions/basic_test/system_schema.json"
