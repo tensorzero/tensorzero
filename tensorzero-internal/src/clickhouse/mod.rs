@@ -5,6 +5,7 @@ use secrecy::{ExposeSecret, SecretString};
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::HashMap;
+use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio::sync::RwLockWriteGuard;
@@ -116,9 +117,11 @@ impl ClickHouseConnectionInfo {
                 semaphore,
                 ..
             } => {
+                /*static PERMIT_COUNT: AtomicUsize = AtomicUsize::new(0);
                 let _permit = semaphore.acquire().await.inspect_err(|e| {
                     eprintln!("Failed to acquire semaphore permit: {e:?}");
                 });
+                eprintln!("Got permit: {}", PERMIT_COUNT.fetch_add(1, std::sync::atomic::Ordering::SeqCst));*/
                 write_production(database_url, client, rows, table).await
             }
         }

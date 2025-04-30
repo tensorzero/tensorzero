@@ -3,7 +3,9 @@
 use std::{io::Write, path::PathBuf, sync::Arc, time::Duration};
 
 use tensorzero::{
-    Client, ClientBuilder, ClientBuilderMode, ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent, ContentBlockChunk, InferenceOutput, InferenceResponseChunk, Role
+    Client, ClientBuilder, ClientBuilderMode, ClientInferenceParams, ClientInput,
+    ClientInputMessage, ClientInputMessageContent, ContentBlockChunk, InferenceOutput,
+    InferenceResponseChunk, Role,
 };
 use tensorzero_internal::inference::types::TextKind;
 use tokio::{runtime::Runtime, task::JoinSet};
@@ -123,19 +125,24 @@ async fn main_inner() {
 
     let client = Arc::new(client);
 
-    let semaphore = Arc::new(tokio::sync::Semaphore::new(10));
+    let semaphore = Arc::new(tokio::sync::Semaphore::new(1000));
     let mut join_set = JoinSet::new();
+    let mut pbar = tqdm::pbar(Some(args.count));
     for _ in 0..args.count {
         let args = args.clone();
-        let semaphore = semaphore.clone();
+        let permit = semaphore.clone().acquire_owned().await.unwrap();
         let client = client.clone();
         join_set.spawn(async move {
-            let _permit = semaphore.acquire().await.unwrap();
+            let _permit = permit;
             run_inference(&client, &args).await;
         });
+        pbar.update(1).unwrap();
     }
+    pbar.close().unwrap();
 
+    eprintln!("Joining tasks:");
     let mut pbar = tqdm::pbar(Some(args.count));
+
     loop {
         match join_set.join_next().await {
             Some(Ok(_)) => {
@@ -153,7 +160,13 @@ async fn main_inner() {
 fn main() {
     let runtime = Runtime::new().expect("Failed to create runtime");
     runtime.block_on(main_inner());
-    println!("Shutting down");
-    drop(runtime);
+    loop {
+        let active_tasks = runtime.metrics().num_alive_tasks();
+        println!("Active tasks: {}", active_tasks);
+        if runtime.metrics().num_alive_tasks() == 0 {
+            break;
+        }
+        std::thread::sleep(Duration::from_secs(1));
+    }
     println!("Done!");
 }
