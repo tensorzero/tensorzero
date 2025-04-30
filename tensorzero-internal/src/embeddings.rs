@@ -6,7 +6,9 @@ use crate::cache::{
     embedding_cache_lookup, start_cache_write, CacheData, EmbeddingCacheData,
     EmbeddingModelProviderRequest,
 };
+use crate::config_parser::ProviderTypesConfig;
 use crate::endpoints::inference::InferenceClients;
+use crate::model::UninitializedProviderConfig;
 use crate::model_table::BaseModelTable;
 use crate::model_table::ShorthandModelConfig;
 use crate::{
@@ -44,7 +46,7 @@ impl ShorthandModelConfig for EmbeddingModelConfig {
             "dummy" => EmbeddingProviderConfig::Dummy(DummyProvider::new(model_name, None)?),
             _ => {
                 return Err(Error::new(ErrorDetails::Config {
-                    message: format!("Invalid provider type: {}", provider_type),
+                    message: format!("Invalid provider type: {provider_type}"),
                 }));
             }
         };
@@ -63,6 +65,29 @@ impl ShorthandModelConfig for EmbeddingModelConfig {
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct UninitializedEmbeddingModelConfig {
+    pub routing: Vec<Arc<str>>,
+    pub providers: HashMap<Arc<str>, UninitializedEmbeddingProviderConfig>,
+}
+
+impl UninitializedEmbeddingModelConfig {
+    pub fn load(self, provider_types: &ProviderTypesConfig) -> Result<EmbeddingModelConfig, Error> {
+        let providers = self
+            .providers
+            .into_iter()
+            .map(|(name, config)| {
+                let provider_config = config.load(provider_types)?;
+                Ok((name, provider_config))
+            })
+            .collect::<Result<HashMap<_, _>, Error>>()?;
+        Ok(EmbeddingModelConfig {
+            routing: self.routing,
+            providers,
+        })
+    }
+}
+
+#[derive(Debug)]
 pub struct EmbeddingModelConfig {
     pub routing: Vec<Arc<str>>,
     pub providers: HashMap<Arc<str>, EmbeddingProviderConfig>,
@@ -285,20 +310,26 @@ pub enum EmbeddingProviderConfig {
     Dummy(DummyProvider),
 }
 
-impl<'de> Deserialize<'de> for EmbeddingProviderConfig {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let provider_config = ProviderConfig::deserialize(deserializer)?;
+#[derive(Debug, Deserialize)]
+pub struct UninitializedEmbeddingProviderConfig {
+    #[serde(flatten)]
+    config: UninitializedProviderConfig,
+}
 
+impl UninitializedEmbeddingProviderConfig {
+    pub fn load(
+        self,
+        provider_types: &ProviderTypesConfig,
+    ) -> Result<EmbeddingProviderConfig, Error> {
+        let provider_config = self.config.load(provider_types)?;
         Ok(match provider_config {
             ProviderConfig::OpenAI(provider) => EmbeddingProviderConfig::OpenAI(provider),
             _ => {
-                return Err(serde::de::Error::custom(format!(
-                    "Unsupported provider config: {:?}",
-                    provider_config
-                )));
+                return Err(Error::new(ErrorDetails::Config {
+                    message: format!(
+                        "Unsupported provider config for embedding: {provider_config:?}"
+                    ),
+                }));
             }
         })
     }

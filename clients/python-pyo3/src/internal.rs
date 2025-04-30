@@ -39,8 +39,7 @@ pub fn get_template_config(
         })?;
     let VariantConfig::ChatCompletion(config) = variant_config else {
         return Err(PyValueError::new_err(format!(
-            "Variant {} is not a ChatCompletion variant",
-            variant_name
+            "Variant {variant_name} is not a ChatCompletion variant"
         )));
     };
     let template_env = PyDict::new(py);
@@ -70,7 +69,7 @@ pub async fn get_curated_inferences(
         .map_err(|e| TensorZeroError::Other { source: e.into() })?;
 
     let limit_clause = max_samples
-        .map(|s| format!("LIMIT {}", s))
+        .map(|s| format!("LIMIT {s}"))
         .unwrap_or_default();
 
     let inference_table_name = match &**function_config {
@@ -195,7 +194,7 @@ impl UnprocessedInferenceData {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments)]
 async fn query_curated_metric_data(
     clickhouse: &ClickHouseConnectionInfo,
     client: &Client,
@@ -220,12 +219,12 @@ async fn query_curated_metric_data(
                     MetricConfigOptimize::Max => 1,
                     MetricConfigOptimize::Min => 0,
                 };
-                value_condition = format!("AND value = {}", value);
+                value_condition = format!("AND value = {value}");
             }
             MetricConfigType::Float => {
                 if threshold.is_some() {
                     let operator = get_comparison_operator(optimize);
-                    value_condition = format!("AND value {} {{threshold:Float}}", operator);
+                    value_condition = format!("AND value {operator} {{threshold:Float}}");
                 }
             }
         }
@@ -360,7 +359,7 @@ async fn query_demonstration_data(
 
 fn get_limit_clause(max_samples: Option<u64>) -> String {
     max_samples
-        .map(|s| format!("LIMIT {}", s))
+        .map(|s| format!("LIMIT {s}"))
         .unwrap_or_default()
 }
 

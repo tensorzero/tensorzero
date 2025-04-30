@@ -15,7 +15,7 @@ pub fn validate_tensorzero_uuid(uuid: Uuid, kind: &str) -> Result<(), Error> {
     if version != 7 {
         return Err(ErrorDetails::InvalidTensorzeroUuid {
             kind: kind.to_string(),
-            message: format!("Version must be 7, got {}", version),
+            message: format!("Version must be 7, got {version}"),
         }
         .into());
     }
@@ -96,7 +96,7 @@ pub const DYNAMIC_EVALUATION_THRESHOLD: Timestamp = Timestamp::from_unix_time(
 );
 
 pub fn generate_dynamic_evaluation_run_episode_id() -> Uuid {
-    #[allow(clippy::expect_used)]
+    #[expect(clippy::expect_used)]
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("Time went backwards");
@@ -221,9 +221,7 @@ mod tests {
         let margin = 5; // 5 seconds margin
         assert!(
             seconds >= expected_approx_time - margin && seconds <= expected_approx_time + margin,
-            "Expected timestamp around {}, got {}",
-            expected_approx_time,
-            seconds
+            "Expected timestamp around {expected_approx_time}, got {seconds}"
         );
 
         // Generate two UUIDs and ensure they're different

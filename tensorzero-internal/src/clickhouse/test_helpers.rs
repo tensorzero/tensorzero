@@ -1,4 +1,4 @@
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::print_stdout)]
+#![expect(clippy::unwrap_used, clippy::expect_used, clippy::print_stdout)]
 use crate::endpoints::dynamic_evaluation_run::{
     DynamicEvaluationRunEpisodeRow, DynamicEvaluationRunRow,
 };
@@ -37,7 +37,6 @@ pub async fn clickhouse_flush_async_insert(clickhouse: &ClickHouseConnectionInfo
     }
 }
 
-#[allow(dead_code)]
 pub async fn select_chat_datapoint_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     inference_id: Uuid,
@@ -46,8 +45,7 @@ pub async fn select_chat_datapoint_clickhouse(
     clickhouse_flush_async_insert(clickhouse_connection_info).await;
 
     let query = format!(
-        "SELECT * FROM ChatInferenceDatapoint WHERE id = '{}' LIMIT 1 FORMAT JSONEachRow",
-        inference_id
+        "SELECT * FROM ChatInferenceDatapoint WHERE id = '{inference_id}' LIMIT 1 FORMAT JSONEachRow"
     );
 
     let text = clickhouse_connection_info
@@ -58,7 +56,6 @@ pub async fn select_chat_datapoint_clickhouse(
     Some(json)
 }
 
-#[allow(dead_code)]
 pub async fn select_json_datapoint_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     inference_id: Uuid,
@@ -67,8 +64,7 @@ pub async fn select_json_datapoint_clickhouse(
     clickhouse_flush_async_insert(clickhouse_connection_info).await;
 
     let query = format!(
-        "SELECT * FROM JsonInferenceDatapoint WHERE id = '{}' LIMIT 1 FORMAT JSONEachRow",
-        inference_id
+        "SELECT * FROM JsonInferenceDatapoint WHERE id = '{inference_id}' LIMIT 1 FORMAT JSONEachRow"
     );
 
     let text = clickhouse_connection_info
@@ -87,8 +83,7 @@ pub async fn select_chat_inference_clickhouse(
     clickhouse_flush_async_insert(clickhouse_connection_info).await;
 
     let query = format!(
-        "SELECT * FROM ChatInference WHERE id = '{}' LIMIT 1 FORMAT JSONEachRow",
-        inference_id
+        "SELECT * FROM ChatInference WHERE id = '{inference_id}' LIMIT 1 FORMAT JSONEachRow"
     );
 
     let text = clickhouse_connection_info
@@ -108,8 +103,7 @@ pub async fn select_json_inference_clickhouse(
 
     // We limit to 1 in case there are duplicate entries (can be caused by a race condition in polling batch inferences)
     let query = format!(
-        "SELECT * FROM JsonInference WHERE id = '{}' LIMIT 1 FORMAT JSONEachRow",
-        inference_id
+        "SELECT * FROM JsonInference WHERE id = '{inference_id}' LIMIT 1 FORMAT JSONEachRow"
     );
 
     let text = clickhouse_connection_info
@@ -129,8 +123,7 @@ pub async fn select_model_inference_clickhouse(
 
     // We limit to 1 in case there are duplicate entries (can be caused by a race condition in polling batch inferences)
     let query = format!(
-        "SELECT * FROM ModelInference WHERE inference_id = '{}' LIMIT 1 FORMAT JSONEachRow",
-        inference_id
+        "SELECT * FROM ModelInference WHERE inference_id = '{inference_id}' LIMIT 1 FORMAT JSONEachRow"
     );
 
     let text = clickhouse_connection_info
@@ -150,8 +143,7 @@ pub async fn select_model_inferences_clickhouse(
 
     // We limit to 1 in case there are duplicate entries (can be caused by a race condition in polling batch inferences)
     let query = format!(
-        "SELECT * FROM ModelInference WHERE inference_id = '{}' FORMAT JSONEachRow",
-        inference_id
+        "SELECT * FROM ModelInference WHERE inference_id = '{inference_id}' FORMAT JSONEachRow"
     );
 
     let text = clickhouse_connection_info
@@ -181,8 +173,7 @@ pub async fn select_inference_tags_clickhouse(
     clickhouse_flush_async_insert(clickhouse_connection_info).await;
 
     let query = format!(
-        "SELECT * FROM InferenceTag WHERE function_name = '{}' AND key = '{}' AND value = '{}' AND inference_id = '{}' FORMAT JSONEachRow",
-        function_name, tag_key, tag_value, inference_id
+        "SELECT * FROM InferenceTag WHERE function_name = '{function_name}' AND key = '{tag_key}' AND value = '{tag_value}' AND inference_id = '{inference_id}' FORMAT JSONEachRow"
     );
 
     let text = clickhouse_connection_info
@@ -202,9 +193,8 @@ pub async fn select_batch_model_inference_clickhouse(
         SELECT bmi.*
         FROM BatchModelInference bmi
         INNER JOIN BatchIdByInferenceId bid ON bmi.inference_id = bid.inference_id
-        WHERE bid.inference_id = '{}'
-        FORMAT JSONEachRow"#,
-        inference_id
+        WHERE bid.inference_id = '{inference_id}'
+        FORMAT JSONEachRow"#
     );
 
     let text = clickhouse_connection_info
@@ -222,9 +212,8 @@ pub async fn select_batch_model_inferences_clickhouse(
         r#"
         SELECT bmi.*
         FROM BatchModelInference bmi
-        WHERE bmi.batch_id = '{}'
-        FORMAT JSONEachRow"#,
-        batch_id
+        WHERE bmi.batch_id = '{batch_id}'
+        FORMAT JSONEachRow"#
     );
 
     let text = clickhouse_connection_info
@@ -244,8 +233,7 @@ pub async fn select_latest_batch_request_clickhouse(
     batch_id: Uuid,
 ) -> Option<Value> {
     let query = format!(
-        "SELECT * FROM BatchRequest WHERE batch_id = '{}' ORDER BY timestamp DESC LIMIT 1 FORMAT JSONEachRow",
-        batch_id
+        "SELECT * FROM BatchRequest WHERE batch_id = '{batch_id}' ORDER BY timestamp DESC LIMIT 1 FORMAT JSONEachRow"
     );
 
     let text = clickhouse_connection_info
@@ -264,10 +252,7 @@ pub async fn select_feedback_clickhouse(
 ) -> Option<Value> {
     clickhouse_flush_async_insert(clickhouse_connection_info).await;
 
-    let query = format!(
-        "SELECT * FROM {} WHERE id = '{}' FORMAT JSONEachRow",
-        table_name, feedback_id
-    );
+    let query = format!("SELECT * FROM {table_name} WHERE id = '{feedback_id}' FORMAT JSONEachRow");
 
     let text = clickhouse_connection_info
         .run_query_synchronous(query, None)
@@ -287,14 +272,12 @@ pub async fn select_feedback_by_target_id_clickhouse(
     let query = match metric_name {
         Some(metric_name) => {
             format!(
-                "SELECT * FROM {} WHERE target_id = '{}' AND metric_name = '{}' FORMAT JSONEachRow",
-                table_name, target_id, metric_name
+                "SELECT * FROM {table_name} WHERE target_id = '{target_id}' AND metric_name = '{metric_name}' FORMAT JSONEachRow"
             )
         }
-        None => format!(
-            "SELECT * FROM {} WHERE target_id = '{}' FORMAT JSONEachRow",
-            table_name, target_id
-        ),
+        None => {
+            format!("SELECT * FROM {table_name} WHERE target_id = '{target_id}' FORMAT JSONEachRow")
+        }
     };
 
     let text = clickhouse_connection_info
@@ -342,8 +325,7 @@ pub async fn stale_datapoint_clickhouse(
             now64() as staled_at,
             now64() as updated_at
         FROM ChatInferenceDatapoint FINAL
-        WHERE id = '{}'",
-        datapoint_id
+        WHERE id = '{datapoint_id}'"
     );
 
     // Execute the query and ignore errors (in case the datapoint doesn't exist in this table)
@@ -383,8 +365,7 @@ pub async fn stale_datapoint_clickhouse(
             now64() as staled_at,
             now64() as updated_at
         FROM JsonInferenceDatapoint FINAL
-        WHERE id = '{}'",
-        datapoint_id
+        WHERE id = '{datapoint_id}'"
     );
 
     clickhouse_flush_async_insert(clickhouse_connection_info).await;
@@ -406,12 +387,10 @@ pub async fn select_dynamic_evaluation_run_clickhouse(
             project_name,
             run_display_name
         FROM DynamicEvaluationRun
-        WHERE run_id_uint = toUInt128(toUUID('{}'))
+        WHERE run_id_uint = toUInt128(toUUID('{run_id}'))
         FORMAT JSONEachRow",
-        run_id
     );
 
-    println!("Query: {query}");
     let text = clickhouse_connection_info
         .run_query_synchronous(query, None)
         .await
@@ -426,8 +405,7 @@ pub async fn select_dynamic_evaluation_run_episode_clickhouse(
     episode_id: Uuid,
 ) -> Option<DynamicEvaluationRunEpisodeRow> {
     let query = format!(
-        "SELECT run_id, uint_to_uuid(episode_id_uint) as episode_id, variant_pins, datapoint_name, tags FROM DynamicEvaluationRunEpisode WHERE run_id = '{}' AND episode_id_uint = toUInt128(toUUID('{}')) FORMAT JSONEachRow",
-        run_id, episode_id
+        "SELECT run_id, uint_to_uuid(episode_id_uint) as episode_id, variant_pins, datapoint_name, tags FROM DynamicEvaluationRunEpisode WHERE run_id = '{run_id}' AND episode_id_uint = toUInt128(toUUID('{episode_id}')) FORMAT JSONEachRow",
     );
 
     let text = clickhouse_connection_info
@@ -447,8 +425,7 @@ pub async fn select_feedback_tags_clickhouse(
     clickhouse_flush_async_insert(clickhouse_connection_info).await;
 
     let query = format!(
-            "SELECT * FROM FeedbackTag WHERE metric_name = '{}' AND key = '{}' AND value = '{}' FORMAT JSONEachRow",
-            metric_name, tag_key, tag_value
+            "SELECT * FROM FeedbackTag WHERE metric_name = '{metric_name}' AND key = '{tag_key}' AND value = '{tag_value}' FORMAT JSONEachRow"
         );
 
     let text = clickhouse_connection_info

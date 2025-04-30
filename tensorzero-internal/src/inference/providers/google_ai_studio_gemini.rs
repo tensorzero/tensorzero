@@ -41,6 +41,7 @@ const PROVIDER_TYPE: &str = "google_ai_studio_gemini";
 /// Implements a subset of the Google AI Studio Gemini API as documented [here](https://ai.google.dev/gemini-api/docs/text-generation?lang=rest)
 #[derive(Debug)]
 pub struct GoogleAIStudioGeminiProvider {
+    model_name: String,
     request_url: Url,
     streaming_request_url: Url,
     credentials: GoogleAIStudioCredentials,
@@ -65,7 +66,7 @@ impl GoogleAIStudioGeminiProvider {
         ))
         .map_err(|e| {
             Error::new(ErrorDetails::Config {
-                message: format!("Failed to parse request URL: {}", e),
+                message: format!("Failed to parse request URL: {e}"),
             })
         })?;
         let streaming_request_url = Url::parse(&format!(
@@ -73,14 +74,19 @@ impl GoogleAIStudioGeminiProvider {
         ))
         .map_err(|e| {
             Error::new(ErrorDetails::Config {
-                message: format!("Failed to parse streaming request URL: {}", e),
+                message: format!("Failed to parse streaming request URL: {e}"),
             })
         })?;
         Ok(GoogleAIStudioGeminiProvider {
+            model_name,
             request_url,
             streaming_request_url,
             credentials,
         })
+    }
+
+    pub fn model_name(&self) -> &str {
+        &self.model_name
     }
 }
 
@@ -156,6 +162,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
         })?;
         let headers = inject_extra_request_data(
             &request.extra_body,
+            &request.extra_headers,
             model_provider,
             model_name,
             &mut request_body,
@@ -254,6 +261,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
         })?;
         let headers = inject_extra_request_data(
             &request.extra_body,
+            &request.extra_headers,
             model_provider,
             model_name,
             &mut request_body,
@@ -613,7 +621,7 @@ impl<'a> From<&'a ToolChoice> for GoogleAIStudioGeminiToolConfig<'a> {
 #[derive(Debug, PartialEq, Serialize)]
 enum GeminiResponseMimeType {
     #[serde(rename = "text/plain")]
-    #[allow(dead_code)]
+    #[expect(dead_code)]
     TextPlain,
     #[serde(rename = "application/json")]
     ApplicationJson,

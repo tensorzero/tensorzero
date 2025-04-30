@@ -35,6 +35,8 @@ services:
       - ${ENV_FILE:-.env}
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    ports:
+      - "6900:3000"
     depends_on:
       clickhouse:
         condition: service_healthy
@@ -63,8 +65,6 @@ services:
 
   nginx:
     image: nginx:alpine
-    ports:
-      - "6900:80"
     volumes:
 
       - ./nginx/nginx.conf.template:/etc/nginx/nginx.conf.template
@@ -75,3 +75,15 @@ services:
     depends_on:
       gateway:
         condition: service_healthy
+
+  ngrok:
+    image: ngrok/ngrok:latest
+    depends_on:
+      nginx:
+        condition: service_started
+    environment:
+      # Make sure NGROK_AUTHTOKEN is set in your environment or .env file
+      - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
+    command: http nginx:80
+    ports:
+      - "4040:4040" # ngrok port exposed to local machine on 4040

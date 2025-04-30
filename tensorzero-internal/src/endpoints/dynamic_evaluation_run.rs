@@ -143,8 +143,7 @@ fn validate_variant_pins(
             .ok_or_else(|| {
                 Error::new(ErrorDetails::InvalidRequest {
                     message: format!(
-                        "Variant {} for function {} not found.",
-                        variant_name, function_name
+                        "Variant {variant_name} for function {function_name} not found.",
                     ),
                 })
             })?;

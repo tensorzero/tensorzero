@@ -126,6 +126,18 @@ jobs:
           working-directory: clients/python-pyo3
           args: --find-interpreter
 
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
+        with:
+          cache-provider: "buildjet"
+          save-if: ${{ github.event_name == 'merge_group' }}
+      - name: Build Rust
+        run: cargo build --workspace
+
   validate:
     runs-on: namespace-profile-tensorzero-8x16
 
@@ -192,14 +204,7 @@ jobs:
           uvx ruff@0.9.0 check --output-format=github --extend-select I .
           uvx ruff@0.9.0 format --check .
 
-      - name: "TensorZero PyO3 Client: Build"
-        uses: PyO3/maturin-action@b3709a81b3e175ce3ede866725776fee42465311
-        with:
-          working-directory: clients/python-pyo3
-          args: --find-interpreter
-          container: off
-
-      - name: "Python: Pyo3 Client: Install dependencies"
+      - name: "Python: Pyo3 Client: Build and install dependencies"
         working-directory: clients/python-pyo3
         run: |
           uv venv
@@ -264,7 +269,7 @@ jobs:
 
       - name: Build minijinja WASM bindings
         working-directory: ui/app/utils/minijinja
-        run: wasm-pack build --features console_error_panic_hook
+        run: wasm-pack build --dev --features console_error_panic_hook
 
       - name: Run minijinja WASM tests
         working-directory: ui/app/utils/minijinja
@@ -537,6 +542,7 @@ jobs:
         clickhouse-tests-cloud,
         check-docker-compose,
         check-pyo3-build,
+        build-windows,
         validate,
         clickhouse-tests,
         ui-tests,

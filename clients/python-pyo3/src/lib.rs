@@ -29,7 +29,8 @@ use tensorzero_internal::{
     endpoints::dynamic_evaluation_run::DynamicEvaluationRunEpisodeParams,
     gateway_util::ShutdownHandle,
     inference::types::{
-        extra_body::UnfilteredInferenceExtraBody, image::serialize_with_image_data,
+        extra_body::UnfilteredInferenceExtraBody, extra_headers::UnfilteredInferenceExtraHeaders,
+        image::serialize_with_image_data,
     },
 };
 use tensorzero_rust::{
@@ -51,7 +52,9 @@ pub(crate) static TENSORZERO_INTERNAL_ERROR: GILOnceCell<Py<PyAny>> = GILOnceCel
 
 #[pymodule]
 fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    tensorzero_rust::observability::setup_logs(false, LogFormat::Pretty);
+    // Otel is disabled for now in the Python client until we decide how it should be configured
+    let _enable_otel = tensorzero_rust::observability::setup_logs(false, LogFormat::Pretty)
+        .map_err(|e| convert_error(m.py(), TensorZeroError::Other { source: e.into() }))?;
     m.add_class::<BaseTensorZeroGateway>()?;
     m.add_class::<AsyncTensorZeroGateway>()?;
     m.add_class::<TensorZeroGateway>()?;
@@ -74,7 +77,6 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
 struct LocalHttpGateway {
     #[pyo3(get)]
     base_url: String,
-    #[allow(dead_code)]
     shutdown_handle: Option<ShutdownHandle>,
 }
 
@@ -101,7 +103,7 @@ fn _start_http_gateway(
         )
         .await?;
         Ok(LocalHttpGateway {
-            base_url: format!("http://{}/openai/v1", addr),
+            base_url: format!("http://{addr}/openai/v1"),
             shutdown_handle: Some(handle),
         })
     };
@@ -226,8 +228,8 @@ impl BaseTensorZeroGateway {
         })
     }
 
-    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None))]
-    #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None))]
+    #[expect(clippy::too_many_arguments)]
     fn _prepare_inference_request(
         this: PyRef<'_, Self>,
         input: Bound<'_, PyDict>,
@@ -248,6 +250,7 @@ impl BaseTensorZeroGateway {
         credentials: Option<HashMap<String, ClientSecretString>>,
         cache_options: Option<&Bound<'_, PyDict>>,
         extra_body: Option<&Bound<'_, PyList>>,
+        extra_headers: Option<&Bound<'_, PyList>>,
     ) -> PyResult<Py<PyAny>> {
         let params = BaseTensorZeroGateway::prepare_inference_params(
             this.py(),
@@ -269,6 +272,7 @@ impl BaseTensorZeroGateway {
             credentials,
             cache_options,
             extra_body,
+            extra_headers,
         )?;
         serialize_to_dict(this.py(), params)
     }
@@ -298,7 +302,7 @@ where
 }
 
 impl BaseTensorZeroGateway {
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     fn prepare_feedback_params(
         py: Python<'_>,
         metric_name: String,
@@ -324,7 +328,7 @@ impl BaseTensorZeroGateway {
         })
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     fn prepare_inference_params(
         py: Python<'_>,
         input: Bound<'_, PyDict>,
@@ -345,6 +349,7 @@ impl BaseTensorZeroGateway {
         credentials: Option<HashMap<String, ClientSecretString>>,
         cache_options: Option<&Bound<'_, PyDict>>,
         extra_body: Option<&Bound<'_, PyList>>,
+        extra_headers: Option<&Bound<'_, PyList>>,
     ) -> PyResult<ClientInferenceParams> {
         let episode_id = episode_id
             .map(|id| python_uuid_to_uuid("episode_id", id))
@@ -400,6 +405,13 @@ impl BaseTensorZeroGateway {
             Default::default()
         };
 
+        let extra_headers: UnfilteredInferenceExtraHeaders =
+            if let Some(extra_headers) = extra_headers {
+                deserialize_from_pyobj(py, extra_headers)?
+            } else {
+                Default::default()
+            };
+
         let input: ClientInput = deserialize_from_pyobj(py, &input)?;
 
         Ok(ClientInferenceParams {
@@ -425,6 +437,7 @@ impl BaseTensorZeroGateway {
             // This is currently unsupported in the Python client
             include_original_response: false,
             extra_body,
+            extra_headers,
         })
     }
 }
@@ -495,7 +508,7 @@ impl TensorZeroGateway {
     ///
     /// :param base_url: The base URL of the TensorZero gateway. Example: "http://localhost:3000"
     /// :param timeout: The timeout for the HTTP client in seconds. If not provided, no timeout will be set.
-    #[allow(unused_variables)]
+    #[expect(unused_variables)]
     #[pyo3(signature = (base_url, *, timeout=None))]
     fn __init__(this: Py<Self>, base_url: &str, timeout: Option<f64>) -> Py<Self> {
         // The actual logic is in the 'new' method - this method just exists to generate a docstring
@@ -579,7 +592,7 @@ impl TensorZeroGateway {
     /// :param dryrun: If true, the feedback request will be executed but won't be stored to the database (i.e. no-op).
     /// :param tags: If set, adds tags to the feedback request.
     /// :return: {"feedback_id": str}
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     fn feedback(
         this: PyRef<'_, Self>,
         py: Python<'_>,
@@ -612,8 +625,8 @@ impl TensorZeroGateway {
         }
     }
 
-    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None))]
-    #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None))]
+    #[expect(clippy::too_many_arguments)]
     /// Make a request to the /inference endpoint.
     ///
     /// :param function_name: The name of the function to call
@@ -643,6 +656,7 @@ impl TensorZeroGateway {
     /// :param cache_options: If set, overrides the cache options for the inference request.
     ///                      Structure: {"max_age_s": Optional[int], "enabled": "on" | "off" | "read_only" | "write_only"}
     /// :param extra_body: If set, injects extra fields into the provider request body.
+    /// :param extra_headers: If set, injects extra fields into the provider request headers.
     /// :return: If stream is false, returns an InferenceResponse.
     ///          If stream is true, returns a geerator that yields InferenceChunks as they come in.
     fn inference(
@@ -666,6 +680,7 @@ impl TensorZeroGateway {
         credentials: Option<HashMap<String, ClientSecretString>>,
         cache_options: Option<&Bound<'_, PyDict>>,
         extra_body: Option<&Bound<'_, PyList>>,
+        extra_headers: Option<&Bound<'_, PyList>>,
     ) -> PyResult<Py<PyAny>> {
         let fut =
             this.as_super()
@@ -690,6 +705,7 @@ impl TensorZeroGateway {
                     credentials,
                     cache_options,
                     extra_body,
+                    extra_headers,
                 )?);
 
         // We're in the synchronous `TensorZeroGateway` class, so we need to block on the Rust future,
@@ -851,7 +867,7 @@ impl AsyncTensorZeroGateway {
     ///
     /// :param base_url: The base URL of the TensorZero gateway. Example: "http://localhost:3000"
     /// :param timeout: The timeout for the HTTP client in seconds. If not provided, no timeout will be set.
-    #[allow(unused_variables)]
+    #[expect(unused_variables)]
     #[pyo3(signature = (base_url, *, timeout=None))]
     fn __init__(this: Py<Self>, base_url: &str, timeout: Option<f64>) -> Py<Self> {
         // The actual logic is in the 'new' method - this method just exists to generate a docstring
@@ -947,8 +963,8 @@ impl AsyncTensorZeroGateway {
         }
     }
 
-    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None,tags=None, credentials=None, cache_options=None, extra_body=None))]
-    #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None,tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None))]
+    #[expect(clippy::too_many_arguments)]
     /// Make a request to the /inference endpoint.
     ///
     /// :param function_name: The name of the function to call
@@ -978,6 +994,7 @@ impl AsyncTensorZeroGateway {
     /// :param cache_options: If set, overrides the cache options for the inference request.
     ///                      Structure: {"max_age_s": Optional[int], "enabled": "on" | "off" | "read_only" | "write_only"}
     /// :param extra_body: If set, injects extra fields into the provider request body.
+    /// :param extra_headers: If set, injects extra fields into the provider request headers.
     /// :return: If stream is false, returns an InferenceResponse.
     ///          If stream is true, returns an async generator that yields InferenceChunks as they come in.
     fn inference<'a>(
@@ -1001,6 +1018,7 @@ impl AsyncTensorZeroGateway {
         credentials: Option<HashMap<String, ClientSecretString>>,
         cache_options: Option<&Bound<'_, PyDict>>,
         extra_body: Option<&Bound<'_, PyList>>,
+        extra_headers: Option<&Bound<'_, PyList>>,
     ) -> PyResult<Bound<'a, PyAny>> {
         let params = BaseTensorZeroGateway::prepare_inference_params(
             py,
@@ -1022,6 +1040,7 @@ impl AsyncTensorZeroGateway {
             credentials,
             cache_options,
             extra_body,
+            extra_headers,
         )?;
         let client = this.as_super().client.clone();
         // See `AsyncStreamWrapper::__anext__` for more details about `future_into_py`
@@ -1058,7 +1077,7 @@ impl AsyncTensorZeroGateway {
     /// :param dryrun: If true, the feedback request will be executed but won't be stored to the database (i.e. no-op).
     /// :param tags: If set, adds tags to the feedback request.
     /// :return: {"feedback_id": str}
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     fn feedback<'a>(
         this: PyRef<'a, Self>,
         metric_name: String,
@@ -1220,7 +1239,7 @@ impl AsyncTensorZeroGateway {
     }
 }
 
-#[allow(unknown_lints)]
+#[expect(unknown_lints)]
 // This lint currently does nothing on stable, but let's include it
 // so that it will start working automatically when it's stabilized
 #[deny(non_exhaustive_omitted_patterns)]

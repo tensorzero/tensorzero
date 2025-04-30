@@ -57,6 +57,10 @@ impl VLLMProvider {
             credentials,
         })
     }
+
+    pub fn model_name(&self) -> &str {
+        &self.model_name
+    }
 }
 
 fn default_api_key_location() -> CredentialLocation {
@@ -133,6 +137,7 @@ impl InferenceProvider for VLLMProvider {
         })?;
         let headers = inject_extra_request_data(
             &request.extra_body,
+            &request.extra_headers,
             model_provider,
             model_name,
             &mut request_body,
@@ -230,6 +235,7 @@ impl InferenceProvider for VLLMProvider {
         })?;
         let headers = inject_extra_request_data(
             &request.extra_body,
+            &request.extra_headers,
             model_provider,
             model_name,
             &mut request_body,

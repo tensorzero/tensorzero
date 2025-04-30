@@ -43,7 +43,7 @@ use super::{
 
 lazy_static! {
     static ref TOGETHER_API_BASE: Url = {
-        #[allow(clippy::expect_used)]
+        #[expect(clippy::expect_used)]
         Url::parse("https://api.together.xyz/v1").expect("Failed to parse TOGETHER_API_BASE")
     };
 }
@@ -81,6 +81,10 @@ impl TogetherProvider {
             credentials,
             parse_think_blocks,
         })
+    }
+
+    pub fn model_name(&self) -> &str {
+        &self.model_name
     }
 }
 
@@ -156,6 +160,7 @@ impl InferenceProvider for TogetherProvider {
             )?;
         let headers = inject_extra_request_data(
             &request.extra_body,
+            &request.extra_headers,
             model_provider,
             model_name,
             &mut request_body,
@@ -257,6 +262,7 @@ impl InferenceProvider for TogetherProvider {
             )?;
         let headers = inject_extra_request_data(
             &request.extra_body,
+            &request.extra_headers,
             model_provider,
             model_name,
             &mut request_body,
@@ -626,7 +632,7 @@ fn stream_together(
                         }
                         let data: Result<TogetherChatChunk, Error> =
                             serde_json::from_str(&message.data).map_err(|e| Error::new(ErrorDetails::InferenceServer {
-                                message: format!("Error parsing chunk. Error: {}", e),
+                                message: format!("Error parsing chunk. Error: {e}"),
                                 raw_request: None,
                                 raw_response: Some(message.data.clone()),
                                 provider_type: PROVIDER_TYPE.to_string(),
