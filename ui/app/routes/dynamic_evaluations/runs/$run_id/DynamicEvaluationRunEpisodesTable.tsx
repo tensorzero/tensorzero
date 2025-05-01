@@ -149,7 +149,7 @@ function MetricHeader({
           <div className="flex cursor-help flex-col items-center">
             <div className="font-mono">{metricName}</div>
             {metricStats && metricConfig && (
-              <div className="text-muted-foreground mt-1 text-xs">
+              <div className="text-muted-foreground mt-2 text-xs">
                 <span>
                   {formatMetricSummaryValue(
                     metricStats.avg_metric,
