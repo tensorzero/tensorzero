@@ -12,34 +12,34 @@ describe("getDynamicEvaluationRuns", () => {
     const runInfos = await getDynamicEvaluationRuns(10, 0);
     expect(runInfos).toMatchObject([
       {
-        id: "0196880d-5d16-7b20-98a0-6570b7ca246d",
-        name: "gpt-4.1-nano",
-        project_name: "21_questions",
-        tags: {},
-        variant_pins: {
-          ask_question: "gpt-4.1-nano",
-        },
-        timestamp: "2025-04-30T18:54:59Z",
-      },
-      {
-        id: "0196880a-d42c-79e1-b2e1-f16e45477db5",
+        id: "01968d08-3198-7e82-b3c8-e228f8ddc779",
         name: "gpt-4.1-mini",
         project_name: "21_questions",
-        tags: {},
+        tags: { foo: "bar" },
+        timestamp: "2025-05-01T18:07:26Z",
         variant_pins: {
           ask_question: "gpt-4.1-mini",
         },
-        timestamp: "2025-04-30T18:52:13Z",
       },
       {
-        id: "01968806-6f22-77d1-bfd6-6f83df00b5ad",
+        id: "01968d05-d734-7751-ab33-75dd8b3fb4a3",
         name: "baseline",
         project_name: "21_questions",
-        tags: {},
+        tags: { foo: "bar" },
+        timestamp: "2025-05-01T18:04:52Z",
         variant_pins: {
           ask_question: "baseline",
         },
-        timestamp: "2025-04-30T18:47:25Z",
+      },
+      {
+        id: "01968d04-142c-7e53-8ea7-3a3255b518dc",
+        name: "gpt-4.1-nano",
+        project_name: "21_questions",
+        tags: { foo: "bar" },
+        timestamp: "2025-05-01T18:02:56Z",
+        variant_pins: {
+          ask_question: "gpt-4.1-nano",
+        },
       },
     ]);
   });
@@ -48,18 +48,18 @@ describe("getDynamicEvaluationRuns", () => {
     const runInfos = await getDynamicEvaluationRuns(
       10,
       0,
-      "01968806-6f22-77d1-bfd6-6f83df00b5ad",
+      "01968d04-142c-7e53-8ea7-3a3255b518dc",
     );
     expect(runInfos).toMatchObject([
       {
-        id: "01968806-6f22-77d1-bfd6-6f83df00b5ad",
-        name: "baseline",
+        id: "01968d04-142c-7e53-8ea7-3a3255b518dc",
+        name: "gpt-4.1-nano",
         project_name: "21_questions",
         tags: {},
+        timestamp: "2025-05-01T18:02:56Z",
         variant_pins: {
-          ask_question: "baseline",
+          ask_question: "gpt-4.1-nano",
         },
-        timestamp: "2025-04-30T18:47:25Z",
       },
     ]);
   });
@@ -77,44 +77,44 @@ describe("getDynamicEvaluationRunEpisodesByRunId", () => {
     const episodes = await getDynamicEvaluationRunEpisodesByRunIdWithFeedback(
       3,
       0,
-      "01968806-6f22-77d1-bfd6-6f83df00b5ad",
+      "01968d04-142c-7e53-8ea7-3a3255b518dc",
     );
     expect(episodes).toMatchObject([
       {
-        episode_id: "0aaed679-0f4e-7195-a053-b3a411eb9a8a",
-        timestamp: "2299-12-31T23:34:05Z",
-        run_id: "01968806-6f22-77d1-bfd6-6f83df00b5ad",
+        episode_id: "0aaedb76-b457-7c86-8a61-2ffa01519447",
+        timestamp: "2025-05-01T18:02:57Z",
+        run_id: "01968d04-142c-7e53-8ea7-3a3255b518dc",
         tags: {
           "tensorzero::dynamic_evaluation_run_id":
-            "01968806-6f22-77d1-bfd6-6f83df00b5ad",
+            "01968d04-142c-7e53-8ea7-3a3255b518dc",
         },
         task_name: null,
-        feedback_metric_names: ["solved"],
-        feedback_values: ["false"],
+        feedback_metric_names: ["elapsed_ms", "goated", "solved"],
+        feedback_values: ["106165", "true", "false"],
       },
       {
-        episode_id: "0aaed679-0f42-7be6-a24c-a9950960e062",
-        timestamp: "2299-12-31T23:34:05Z",
-        run_id: "01968806-6f22-77d1-bfd6-6f83df00b5ad",
+        episode_id: "0aaedb76-b457-7b77-ba8e-e395ed2f2218",
+        timestamp: "2025-05-01T18:02:56Z",
+        run_id: "01968d04-142c-7e53-8ea7-3a3255b518dc",
         tags: {
           "tensorzero::dynamic_evaluation_run_id":
-            "01968806-6f22-77d1-bfd6-6f83df00b5ad",
+            "01968d04-142c-7e53-8ea7-3a3255b518dc",
         },
         task_name: null,
-        feedback_metric_names: ["solved"],
-        feedback_values: ["true"],
+        feedback_metric_names: ["elapsed_ms", "solved"],
+        feedback_values: ["46032.402", "true"],
       },
       {
-        episode_id: "0aaed679-0f44-7650-8f7c-c4f00b0ac4bb",
-        timestamp: "2299-12-31T23:34:05Z",
-        run_id: "01968806-6f22-77d1-bfd6-6f83df00b5ad",
+        episode_id: "0aaedb76-b457-7eae-aa62-145b73aa3e24",
+        timestamp: "2025-05-01T18:02:56Z",
+        run_id: "01968d04-142c-7e53-8ea7-3a3255b518dc",
         tags: {
           "tensorzero::dynamic_evaluation_run_id":
-            "01968806-6f22-77d1-bfd6-6f83df00b5ad",
+            "01968d04-142c-7e53-8ea7-3a3255b518dc",
         },
         task_name: null,
-        feedback_metric_names: ["solved"],
-        feedback_values: ["true"],
+        feedback_metric_names: ["elapsed_ms", "solved"],
+        feedback_values: ["105946.19", "false"],
       },
     ]);
     // TODO: add multiple (ragged) metrics, test that this is sorted by metric name
@@ -124,44 +124,44 @@ describe("getDynamicEvaluationRunEpisodesByRunId", () => {
     const episodes = await getDynamicEvaluationRunEpisodesByRunIdWithFeedback(
       3,
       5,
-      "01968806-6f22-77d1-bfd6-6f83df00b5ad",
+      "01968d04-142c-7e53-8ea7-3a3255b518dc",
     );
     expect(episodes).toMatchObject([
       {
-        episode_id: "0aaed679-0f41-7e7a-a1e5-f7dab7f084f3",
-        feedback_metric_names: ["solved"],
-        feedback_values: ["false"],
-        run_id: "01968806-6f22-77d1-bfd6-6f83df00b5ad",
+        episode_id: "0aaedb76-b456-70ef-b2ab-f844a165a25c",
+        feedback_metric_names: ["elapsed_ms", "solved"],
+        feedback_values: ["111887.65", "false"],
+        run_id: "01968d04-142c-7e53-8ea7-3a3255b518dc",
         tags: {
           "tensorzero::dynamic_evaluation_run_id":
-            "01968806-6f22-77d1-bfd6-6f83df00b5ad",
+            "01968d04-142c-7e53-8ea7-3a3255b518dc",
         },
         task_name: null,
-        timestamp: "2025-04-30T18:47:25Z",
+        timestamp: "2025-05-01T18:02:57Z",
       },
       {
-        episode_id: "0aaed679-0f41-7ecf-b19b-6312e4b684c4",
-        feedback_metric_names: ["solved"],
-        feedback_values: ["true"],
-        run_id: "01968806-6f22-77d1-bfd6-6f83df00b5ad",
+        episode_id: "0aaedb76-b452-7495-8b91-21df3115432d",
+        feedback_metric_names: ["elapsed_ms", "solved"],
+        feedback_values: ["86833.17", "true"],
+        run_id: "01968d04-142c-7e53-8ea7-3a3255b518dc",
         tags: {
           "tensorzero::dynamic_evaluation_run_id":
-            "01968806-6f22-77d1-bfd6-6f83df00b5ad",
+            "01968d04-142c-7e53-8ea7-3a3255b518dc",
         },
         task_name: null,
-        timestamp: "2025-04-30T18:47:25Z",
+        timestamp: "2025-05-01T18:02:56Z",
       },
       {
-        episode_id: "0aaed679-0f42-7033-a589-bfb6bcb13f83",
-        feedback_metric_names: ["solved"],
-        feedback_values: ["false"],
-        run_id: "01968806-6f22-77d1-bfd6-6f83df00b5ad",
+        episode_id: "0aaedb76-b44e-7d60-a4f9-ad631caa4404",
+        feedback_metric_names: ["elapsed_ms", "solved"],
+        feedback_values: ["105674.7", "false"],
+        run_id: "01968d04-142c-7e53-8ea7-3a3255b518dc",
         tags: {
           "tensorzero::dynamic_evaluation_run_id":
-            "01968806-6f22-77d1-bfd6-6f83df00b5ad",
+            "01968d04-142c-7e53-8ea7-3a3255b518dc",
         },
         task_name: null,
-        timestamp: "2025-04-30T18:47:25Z",
+        timestamp: "2025-05-01T18:02:56Z",
       },
     ]);
   });
@@ -170,15 +170,29 @@ describe("getDynamicEvaluationRunEpisodesByRunId", () => {
 describe("getDynamicEvaluationRunStatisticsByMetricName", () => {
   test("should return correct statistics for a given run id", async () => {
     const statistics = await getDynamicEvaluationRunStatisticsByMetricName(
-      "01968806-6f22-77d1-bfd6-6f83df00b5ad",
+      "01968d04-142c-7e53-8ea7-3a3255b518dc",
     );
     expect(statistics).toMatchObject([
       {
+        avg_metric: 91678.72114158163,
+        ci_error: 5895.3442187499995,
+        count: 49,
+        metric_name: "elapsed_ms",
+        stdev: 21054.80078125,
+      },
+      {
+        avg_metric: 1,
+        ci_error: null,
+        count: 1,
+        metric_name: "goated",
+        stdev: null,
+      },
+      {
+        avg_metric: 0.4489795918367347,
+        ci_error: 0.14071247279470286,
+        count: 49,
         metric_name: "solved",
-        count: 50,
-        avg_metric: 0.48,
-        stdev: 0.5046720495044484,
-        ci_error: 0.13988795516412414,
+        stdev: 0.5025445456953674,
       },
     ]);
   });
@@ -187,7 +201,7 @@ describe("getDynamicEvaluationRunStatisticsByMetricName", () => {
 describe("countDynamicEvaluationRunEpisodes", () => {
   test("should return correct number of episodes for a given run id", async () => {
     const count = await countDynamicEvaluationRunEpisodes(
-      "01968806-6f22-77d1-bfd6-6f83df00b5ad",
+      "01968d04-142c-7e53-8ea7-3a3255b518dc",
     );
     expect(count).toBe(50);
   });

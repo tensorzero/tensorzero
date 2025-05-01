@@ -216,6 +216,16 @@ type = "float"
 level = "episode"
 optimize = "min"
 
+[metrics.elapsed_ms]
+type = "float"
+level = "episode"
+optimize = "min"
+
+[metrics.goated]
+type = "boolean"
+level = "episode"
+optimize = "max"
+
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                  EVALUATIONS                               │
 # └────────────────────────────────────────────────────────────────────────────┘

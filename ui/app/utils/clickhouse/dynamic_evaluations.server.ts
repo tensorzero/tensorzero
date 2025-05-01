@@ -195,6 +195,7 @@ export async function getDynamicEvaluationRunStatisticsByMetricName(
     )
     ${metric_name ? `AND metric_name = {metric_name:String}` : ""}
     GROUP BY metric_name
+    ORDER BY metric_name ASC
   `;
   const result = await clickhouseClient.query({
     query,

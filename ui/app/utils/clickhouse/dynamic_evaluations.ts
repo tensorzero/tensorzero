@@ -35,8 +35,8 @@ export const dynamicEvaluationRunStatisticsByMetricNameSchema = z.object({
   metric_name: z.string(),
   count: z.number(),
   avg_metric: z.number(),
-  stdev: z.number(),
-  ci_error: z.number(),
+  stdev: z.number().nullable(),
+  ci_error: z.number().nullable(),
 });
 
 export type DynamicEvaluationRunStatisticsByMetricName = z.infer<
