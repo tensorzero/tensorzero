@@ -113,7 +113,6 @@ export function SubNavBreadcrumbs() {
       ) {
         breadcrumbs.push({
           label: "Runs",
-          href: "/dynamic_evaluations/runs",
         });
         continue;
       }
@@ -211,11 +210,16 @@ export function SubNavBreadcrumbs() {
           <BreadcrumbItem key={idx}>
             {idx === breadcrumbs.length - 1 ? (
               <BreadcrumbPage>{bc.label}</BreadcrumbPage>
-            ) : (
+            ) : bc.href ? (
               <>
                 <BreadcrumbLink asChild>
-                  <Link to={bc.href || "#"}>{bc.label}</Link>
+                  <Link to={bc.href}>{bc.label}</Link>
                 </BreadcrumbLink>
+                <BreadcrumbSeparator />
+              </>
+            ) : (
+              <>
+                <span>{bc.label}</span>
                 <BreadcrumbSeparator />
               </>
             )}
