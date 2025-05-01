@@ -201,10 +201,10 @@ def content_block_to_openai_message(
     content: Dict, role: Literal["user", "assistant"], env: Environment
 ) -> ChatCompletionMessageParam:
     if content["type"] == "text":
-        # This looks dumb but PyRight doesn't infer the types correctly without the if/else...
+        # This looks dumb but PyRight doesn't infer the types correctly without the if/else...?
         if role == "user":
             return {
-                "role": "user",
+                "role": role,
                 "content": render_message(content, role, env),
             }
         else:
@@ -251,7 +251,7 @@ def content_block_to_openai_message(
             ],
         }
     elif content["type"] == "raw_text":
-        # This looks dumb but PyRight doesn't infer the types correctly without the if/else...
+        # This looks dumb but PyRight doesn't infer the types correctly without the if/else...?
         if role == "user":
             return {
                 "role": role,
