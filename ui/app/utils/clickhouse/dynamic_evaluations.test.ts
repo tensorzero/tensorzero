@@ -1,6 +1,6 @@
 import { describe, test, expect } from "vitest";
 import {
-  countTotalDynamicEvaluationRuns,
+  countTotalDynamicEvaluationRuns as countDynamicEvaluationRuns,
   getDynamicEvaluationRuns,
 } from "./dynamic_evaluations.server";
 
@@ -42,9 +42,9 @@ describe("getDynamicEvaluationRuns", () => {
   });
 });
 
-describe("countTotalDynamicEvaluationRuns", () => {
+describe("countDynamicEvaluationRuns", () => {
   test("should return correct total number of runs", async () => {
-    const totalRuns = await countTotalDynamicEvaluationRuns();
+    const totalRuns = await countDynamicEvaluationRuns();
     expect(totalRuns).toBe(3);
   });
 });

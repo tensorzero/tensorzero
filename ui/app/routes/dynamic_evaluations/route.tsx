@@ -1,5 +1,5 @@
 import type { Route } from "./+types/route";
-import { isRouteErrorResponse, redirect, useNavigate } from "react-router";
+import { isRouteErrorResponse, useNavigate } from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
 import {
   PageHeader,
@@ -7,71 +7,34 @@ import {
   SectionLayout,
 } from "~/components/layout/PageLayout";
 import {
-  countTotalEvaluationRuns,
-  getEvaluationRunInfo,
-} from "~/utils/clickhouse/evaluations.server";
+  getDynamicEvaluationRuns,
+  countTotalDynamicEvaluationRuns,
+} from "~/utils/clickhouse/dynamic_evaluations.server";
 import DynamicEvaluationRunsTable from "./DynamicEvaluationRunsTable";
-import { useState } from "react";
-import { runEvaluation } from "~/utils/evaluations.server";
-import { getDatasetCounts } from "~/utils/clickhouse/datasets.server";
 
 export async function loader({ request }: Route.LoaderArgs) {
-  const totalEvaluationRuns = await countTotalEvaluationRuns();
   const url = new URL(request.url);
   const searchParams = new URLSearchParams(url.search);
   const offset = parseInt(searchParams.get("offset") || "0");
   const pageSize = parseInt(searchParams.get("pageSize") || "15");
-  const [evaluationRuns, datasetCounts] = await Promise.all([
-    getEvaluationRunInfo(pageSize, offset),
-    getDatasetCounts(),
+  const [evaluationRuns, count] = await Promise.all([
+    getDynamicEvaluationRuns(pageSize, offset),
+    countTotalDynamicEvaluationRuns(),
   ]);
-  const dataset_names = datasetCounts.map((dataset) => dataset.dataset_name);
 
   return {
-    totalEvaluationRuns,
     evaluationRuns,
-    dataset_names,
+    count,
     offset,
     pageSize,
   };
-}
-
-export async function action({ request }: Route.ActionArgs) {
-  const formData = await request.formData();
-  const evaluation_name = formData.get("evaluation_name");
-  const dataset_name = formData.get("dataset_name");
-  const variant_name = formData.get("variant_name");
-  const concurrency_limit = formData.get("concurrency_limit");
-  let evaluation_start_info;
-  try {
-    evaluation_start_info = await runEvaluation(
-      evaluation_name as string,
-      dataset_name as string,
-      variant_name as string,
-      parseInt(concurrency_limit as string),
-    );
-  } catch (error) {
-    console.error("Error starting evaluation:", error);
-    throw new Response(`Failed to start evaluation: ${error}`, {
-      status: 500,
-    });
-  }
-  return redirect(
-    `/evaluations/${evaluation_name}?evaluation_run_ids=${evaluation_start_info.evaluation_run_id}`,
-  );
 }
 
 export default function EvaluationSummaryPage({
   loaderData,
 }: Route.ComponentProps) {
   const navigate = useNavigate();
-  const {
-    totalEvaluationRuns,
-    evaluationRuns,
-    offset,
-    pageSize,
-    dataset_names,
-  } = loaderData;
+  const { evaluationRuns, count, offset, pageSize } = loaderData;
 
   const handleNextPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
@@ -83,29 +46,19 @@ export default function EvaluationSummaryPage({
     searchParams.set("offset", String(offset - pageSize));
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
-  const [launchEvaluationModalIsOpen, setLaunchEvaluationModalIsOpen] =
-    useState(false);
 
   return (
     <PageLayout>
-      <PageHeader heading="Evaluation Runs" count={totalEvaluationRuns} />
+      <PageHeader heading="Evaluation Runs" count={count} />
       <SectionLayout>
-        <EvaluationsActions
-          onNewRun={() => setLaunchEvaluationModalIsOpen(true)}
-        />
-        <EvaluationRunsTable evaluationRuns={evaluationRuns} />
+        <DynamicEvaluationRunsTable dynamicEvaluationRuns={evaluationRuns} />
         <PageButtons
           onPreviousPage={handlePreviousPage}
           onNextPage={handleNextPage}
           disablePrevious={offset <= 0}
-          disableNext={offset + pageSize >= totalEvaluationRuns}
+          disableNext={offset + pageSize >= count}
         />
       </SectionLayout>
-      <LaunchEvaluationModal
-        isOpen={launchEvaluationModalIsOpen}
-        onClose={() => setLaunchEvaluationModalIsOpen(false)}
-        dataset_names={dataset_names}
-      />
     </PageLayout>
   );
 }
