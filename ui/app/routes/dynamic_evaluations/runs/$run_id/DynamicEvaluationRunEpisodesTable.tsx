@@ -19,6 +19,7 @@ import { useConfig } from "~/context/config";
 import { formatMetricSummaryValue } from "~/utils/config/metric";
 import { TableItemShortUuid } from "~/components/ui/TableItems";
 import KVChip from "~/components/ui/KVChip";
+import MetricValue from "~/components/metric/MetricValue";
 
 export default function DynamicEvaluationRunEpisodesTable({
   episodes,
@@ -37,6 +38,7 @@ export default function DynamicEvaluationRunEpisodesTable({
 
   // Convert to sorted array for consistent column order
   const uniqueMetricNames = Array.from(allMetricNames).sort();
+  const config = useConfig();
 
   return (
     <div>
@@ -96,15 +98,26 @@ export default function DynamicEvaluationRunEpisodesTable({
                     metricIndex !== -1
                       ? episode.feedback_values[metricIndex]
                       : null;
+                  const metricConfig = config.metrics[metricName];
                   return (
                     <TableCell key={metricName} className="text-center">
-                      <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300">
+                      <div className="flex justify-center">
                         {metricValue !== null ? (
-                          metricValue
+                          <MetricValue
+                            value={metricValue}
+                            metricType={metricConfig.type}
+                            optimize={
+                              metricConfig.type === "float" ||
+                              metricConfig.type === "boolean"
+                                ? metricConfig.optimize
+                                : undefined
+                            }
+                            cutoff={undefined}
+                          />
                         ) : (
                           <span className="text-gray-400">-</span>
                         )}
-                      </code>
+                      </div>
                     </TableCell>
                   );
                 })}

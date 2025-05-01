@@ -44,9 +44,7 @@ import {
   useColorAssigner,
   ColorAssignerProvider,
 } from "~/hooks/evaluations/ColorAssigner";
-import MetricValue, {
-  isCutoffFailed,
-} from "~/components/evaluations/MetricValue";
+import MetricValue, { isCutoffFailed } from "~/components/metric/MetricValue";
 import EvaluationFeedbackEditor from "~/components/evaluations/EvaluationFeedbackEditor";
 
 // Enhanced TruncatedText component that can handle complex structures
@@ -520,7 +518,12 @@ export function EvaluationTable({
                                         <MetricValue
                                           value={metricValue.value}
                                           metricType={metricType}
-                                          evaluatorConfig={evaluatorConfig}
+                                          optimize={
+                                            evaluatorConfig.type === "llm_judge"
+                                              ? evaluatorConfig.optimize
+                                              : undefined
+                                          }
+                                          cutoff={evaluatorConfig.cutoff}
                                         />
                                         {/* Make feedback editor appear on hover */}
                                         {evaluationType === "llm_judge" && (
@@ -667,14 +670,19 @@ const EvaluatorProperties = ({
               stat.evaluation_run_id,
               false,
             ); // Pass 'false' to get non-hover version
-
+            const failed =
+              evaluatorConfig.type === "llm_judge" && evaluatorConfig.cutoff
+                ? isCutoffFailed(
+                    stat.mean_metric,
+                    evaluatorConfig.optimize,
+                    evaluatorConfig.cutoff,
+                  )
+                : false;
             return (
               <div
                 key={stat.evaluation_run_id}
                 className={`mt-1 flex items-center justify-center gap-1.5 ${
-                  isCutoffFailed(stat.mean_metric, evaluatorConfig)
-                    ? "text-red-700"
-                    : ""
+                  failed ? "text-red-700" : ""
                 }`}
               >
                 <div
