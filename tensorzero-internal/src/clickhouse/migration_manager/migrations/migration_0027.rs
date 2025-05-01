@@ -5,10 +5,10 @@ use crate::clickhouse::migration_manager::migration_trait::Migration;
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::error::{Error, ErrorDetails};
 
-/// This migration adds the `DynamicEvalutionRunByProjectName` table and the
-/// `DynamicEvalutionRunByProjectNameView` materialized view.
+/// This migration adds the `DynamicEvaluationRunByProjectName` table and the
+/// `DynamicEvaluationRunByProjectNameView` materialized view.
 /// These support consumption of dynamic evaluations indexed by project name.
-/// The `DynamicEvalutionRunByProjectName` table contains the same data as the
+/// The `DynamicEvaluationRunByProjectName` table contains the same data as the
 /// `DynamicEvaluationRun` table with different indexing.
 pub struct Migration0027<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
@@ -31,16 +31,17 @@ impl Migration for Migration0027<'_> {
 
     async fn should_apply(&self) -> Result<bool, Error> {
         let dynamic_evaluation_run_by_project_name_table_exists =
-            check_table_exists(self.clickhouse, "DynamicEvalutionRunByProjectName", "0027").await?;
+            check_table_exists(self.clickhouse, "DynamicEvaluationRunByProjectName", "0027")
+                .await?;
         let dynamic_evaluation_run_by_project_name_view_exists = check_table_exists(
             self.clickhouse,
-            "DynamicEvalutionRunByProjectNameView",
+            "DynamicEvaluationRunByProjectNameView",
             "0027",
         )
         .await?;
 
         Ok(!dynamic_evaluation_run_by_project_name_table_exists
-            && !dynamic_evaluation_run_by_project_name_view_exists)
+            || !dynamic_evaluation_run_by_project_name_view_exists)
     }
 
     async fn apply(&self) -> Result<(), Error> {
@@ -63,8 +64,8 @@ impl Migration for Migration0027<'_> {
             .await?;
 
         let query = r#"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS DynamicEvalutionRunByProjectNameView
-                TO DynamicEvalutionRunByProjectName
+            CREATE MATERIALIZED VIEW IF NOT EXISTS DynamicEvaluationRunByProjectNameView
+                TO DynamicEvaluationRunByProjectName
                 AS
                 SELECT * FROM DynamicEvaluationRun
                 ORDER BY project_name, run_id_uint;
@@ -80,9 +81,9 @@ impl Migration for Migration0027<'_> {
     fn rollback_instructions(&self) -> String {
         "\
         -- Drop the materialized view\n\
-        DROP MATERIALIZED VIEW IF EXISTS DynamicEvalutionRunByProjectNameView;\n\
-        -- Drop the `DynamicEvalutionRunByProjectName` table\n\
-        DROP TABLE IF EXISTS DynamicEvalutionRunByProjectName;
+        DROP MATERIALIZED VIEW IF EXISTS DynamicEvaluationRunByProjectNameView;\n\
+        -- Drop the `DynamicEvaluationRunByProjectName` table\n\
+        DROP TABLE IF EXISTS DynamicEvaluationRunByProjectName;
         "
         .to_string()
     }

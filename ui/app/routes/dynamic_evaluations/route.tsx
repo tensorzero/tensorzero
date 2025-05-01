@@ -4,29 +4,46 @@ import PageButtons from "~/components/utils/PageButtons";
 import {
   PageHeader,
   PageLayout,
+  SectionHeader,
   SectionLayout,
 } from "~/components/layout/PageLayout";
 import {
   getDynamicEvaluationRuns,
   countDynamicEvaluationRuns,
+  getDynamicEvaluationProjects,
+  countDynamicEvaluationProjects,
 } from "~/utils/clickhouse/dynamic_evaluations.server";
 import DynamicEvaluationRunsTable from "./DynamicEvaluationRunsTable";
+import DynamicEvaluationProjectsTable from "./DynamicEvaluationProjectsTable";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const searchParams = new URLSearchParams(url.search);
-  const offset = parseInt(searchParams.get("offset") || "0");
-  const pageSize = parseInt(searchParams.get("pageSize") || "15");
-  const [dynamicEvaluationRuns, count] = await Promise.all([
-    getDynamicEvaluationRuns(pageSize, offset),
+  const runOffset = parseInt(searchParams.get("runOffset") || "0");
+  const runPageSize = parseInt(searchParams.get("runPageSize") || "15");
+  const projectOffset = parseInt(searchParams.get("projectOffset") || "0");
+  const projectPageSize = parseInt(searchParams.get("projectPageSize") || "15");
+  const [
+    dynamicEvaluationRuns,
+    count,
+    dynamicEvaluationProjects,
+    projectCount,
+  ] = await Promise.all([
+    getDynamicEvaluationRuns(runPageSize, runOffset),
     countDynamicEvaluationRuns(),
+    getDynamicEvaluationProjects(projectPageSize, projectOffset),
+    countDynamicEvaluationProjects(),
   ]);
 
   return {
     dynamicEvaluationRuns,
     count,
-    offset,
-    pageSize,
+    dynamicEvaluationProjects,
+    projectCount,
+    runOffset,
+    runPageSize,
+    projectOffset,
+    projectPageSize,
   };
 }
 
@@ -34,31 +51,64 @@ export default function EvaluationSummaryPage({
   loaderData,
 }: Route.ComponentProps) {
   const navigate = useNavigate();
-  const { dynamicEvaluationRuns, count, offset, pageSize } = loaderData;
-
-  const handleNextPage = () => {
+  const {
+    dynamicEvaluationRuns,
+    count,
+    dynamicEvaluationProjects,
+    projectCount,
+    runOffset,
+    runPageSize,
+    projectOffset,
+    projectPageSize,
+  } = loaderData;
+  const handleNextRunPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("offset", String(offset + pageSize));
+    searchParams.set("runOffset", String(runOffset + runPageSize));
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
-  const handlePreviousPage = () => {
+  const handlePreviousRunPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("offset", String(offset - pageSize));
+    searchParams.set("runOffset", String(runOffset - runPageSize));
+    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+  };
+
+  const handleNextProjectPage = () => {
+    const searchParams = new URLSearchParams(window.location.search);
+    searchParams.set("projectOffset", String(projectOffset + projectPageSize));
+    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+  };
+
+  const handlePreviousProjectPage = () => {
+    const searchParams = new URLSearchParams(window.location.search);
+    searchParams.set("projectOffset", String(projectOffset - projectPageSize));
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
 
   return (
     <PageLayout>
-      <PageHeader heading="Evaluation Runs" count={count} />
+      <PageHeader heading="Dynamic Evaluations" />
       <SectionLayout>
+        <SectionHeader heading="Projects" count={projectCount} />
+        <DynamicEvaluationProjectsTable
+          dynamicEvaluationProjects={dynamicEvaluationProjects}
+        />
+        <PageButtons
+          onPreviousPage={handlePreviousProjectPage}
+          onNextPage={handleNextProjectPage}
+          disablePrevious={projectOffset <= 0}
+          disableNext={projectOffset + projectPageSize >= projectCount}
+        />
+      </SectionLayout>
+      <SectionLayout>
+        <SectionHeader heading="Evaluation Runs" count={count} />
         <DynamicEvaluationRunsTable
           dynamicEvaluationRuns={dynamicEvaluationRuns}
         />
         <PageButtons
-          onPreviousPage={handlePreviousPage}
-          onNextPage={handleNextPage}
-          disablePrevious={offset <= 0}
-          disableNext={offset + pageSize >= count}
+          onPreviousPage={handlePreviousRunPage}
+          onNextPage={handleNextRunPage}
+          disablePrevious={runOffset <= 0}
+          disableNext={runOffset + runPageSize >= count}
         />
       </SectionLayout>
     </PageLayout>

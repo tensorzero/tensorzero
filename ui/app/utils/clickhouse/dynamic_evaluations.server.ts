@@ -1,8 +1,10 @@
 import { clickhouseClient } from "./client.server";
 import {
+  dynamicEvaluationProjectSchema,
   dynamicEvaluationRunEpisodeWithFeedbackSchema,
   dynamicEvaluationRunSchema,
   dynamicEvaluationRunStatisticsByMetricNameSchema,
+  type DynamicEvaluationProject,
   type DynamicEvaluationRun,
   type DynamicEvaluationRunEpisodeWithFeedback,
   type DynamicEvaluationRunStatisticsByMetricName,
@@ -225,13 +227,37 @@ export async function countDynamicEvaluationRunEpisodes(
   return rows[0].count;
 }
 
-export async function getDynamicEvaluationRunProjects(
+export async function getDynamicEvaluationProjects(
   page_size: number,
   offset: number,
-): Promise<DynamicEvaluationRunProject[]> {
+): Promise<DynamicEvaluationProject[]> {
   const query = `
     SELECT
-      project_name,
-      toUInt32(count()) as count
+      project_name as name,
+      toUInt32(count()) as count,
+      formatDateTime(max(updated_at), '%Y-%m-%dT%H:%i:%SZ')  as last_updated
+    FROM DynamicEvaluationRunByProjectName
+    GROUP BY project_name
+    ORDER BY last_updated DESC
+    LIMIT {page_size:UInt64}
+    OFFSET {offset:UInt64}
   `;
+  const result = await clickhouseClient.query({
+    query,
+    format: "JSONEachRow",
+    query_params: { page_size, offset },
+  });
+  const rows = await result.json<DynamicEvaluationProject[]>();
+  return rows.map((row) => dynamicEvaluationProjectSchema.parse(row));
+}
+
+export async function countDynamicEvaluationProjects(): Promise<number> {
+  const query = `
+  SELECT toUInt32(countDistinct(project_name)) AS count
+  FROM DynamicEvaluationRunByProjectName
+  WHERE project_name IS NOT NULL
+`;
+  const result = await clickhouseClient.query({ query, format: "JSONEachRow" });
+  const rows = await result.json<{ count: number }>();
+  return rows[0].count;
 }

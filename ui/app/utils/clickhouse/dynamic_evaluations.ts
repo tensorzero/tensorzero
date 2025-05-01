@@ -42,3 +42,13 @@ export const dynamicEvaluationRunStatisticsByMetricNameSchema = z.object({
 export type DynamicEvaluationRunStatisticsByMetricName = z.infer<
   typeof dynamicEvaluationRunStatisticsByMetricNameSchema
 >;
+
+export const dynamicEvaluationProjectSchema = z.object({
+  name: z.string(),
+  count: z.number(),
+  last_updated: z.string().datetime(),
+});
+
+export type DynamicEvaluationProject = z.infer<
+  typeof dynamicEvaluationProjectSchema
+>;

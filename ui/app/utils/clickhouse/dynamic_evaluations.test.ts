@@ -1,7 +1,9 @@
 import { describe, test, expect } from "vitest";
 import {
+  countDynamicEvaluationProjects,
   countDynamicEvaluationRunEpisodes,
   countDynamicEvaluationRuns as countDynamicEvaluationRuns,
+  getDynamicEvaluationProjects,
   getDynamicEvaluationRunEpisodesByRunIdWithFeedback,
   getDynamicEvaluationRuns,
   getDynamicEvaluationRunStatisticsByMetricName,
@@ -204,5 +206,25 @@ describe("countDynamicEvaluationRunEpisodes", () => {
       "01968d04-142c-7e53-8ea7-3a3255b518dc",
     );
     expect(count).toBe(50);
+  });
+});
+
+describe("getDynamicEvaluationProjects", () => {
+  test("should return correct projects", async () => {
+    const projects = await getDynamicEvaluationProjects(10, 0);
+    expect(projects).toMatchObject([
+      {
+        count: 3,
+        last_updated: "2025-05-01T18:07:26Z",
+        project_name: "21_questions",
+      },
+    ]);
+  });
+});
+
+describe("countDynamicEvaluationProjects", () => {
+  test("should return correct number of projects", async () => {
+    const count = await countDynamicEvaluationProjects();
+    expect(count).toBe(1);
   });
 });
