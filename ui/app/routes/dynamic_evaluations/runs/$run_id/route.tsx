@@ -8,9 +8,9 @@ import {
 } from "~/components/layout/PageLayout";
 import {
   getDynamicEvaluationRuns,
-  countDynamicEvaluationRuns,
   getDynamicEvaluationRunEpisodesByRunIdWithFeedback,
   getDynamicEvaluationRunStatisticsByMetricName,
+  countDynamicEvaluationRunEpisodes,
 } from "~/utils/clickhouse/dynamic_evaluations.server";
 import BasicInfo from "./DynamicEvaluationRunBasicInfo";
 import DynamicEvaluationRunEpisodesTable from "./DynamicEvaluationRunEpisodesTable";
@@ -33,7 +33,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       offset,
       run_id,
     ),
-    countDynamicEvaluationRuns(),
+    countDynamicEvaluationRunEpisodes(run_id),
     getDynamicEvaluationRunStatisticsByMetricName(run_id),
   ]);
   if (dynamicEvaluationRuns.length != 1) {

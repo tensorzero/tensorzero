@@ -1,5 +1,6 @@
 import { describe, test, expect } from "vitest";
 import {
+  countDynamicEvaluationRunEpisodes,
   countDynamicEvaluationRuns as countDynamicEvaluationRuns,
   getDynamicEvaluationRunEpisodesByRunIdWithFeedback,
   getDynamicEvaluationRuns,
@@ -135,5 +136,14 @@ describe("getDynamicEvaluationRunStatisticsByMetricName", () => {
         ci_error: 0.13988795516412414,
       },
     ]);
+  });
+});
+
+describe("countDynamicEvaluationRunEpisodes", () => {
+  test("should return correct number of episodes for a given run id", async () => {
+    const count = await countDynamicEvaluationRunEpisodes(
+      "01968806-6f22-77d1-bfd6-6f83df00b5ad",
+    );
+    expect(count).toBe(50);
   });
 });
