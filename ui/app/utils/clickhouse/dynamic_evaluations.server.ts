@@ -67,7 +67,7 @@ export async function getDynamicEvaluationRunEpisodesByRunIdWithFeedback(
           episode_id_uint,
           run_id_uint,
           tags,
-          datapoint_name
+          datapoint_name as task_name
         FROM DynamicEvaluationRunEpisodeByRunId
         WHERE toUInt128(toUUID({run_id:String})) = run_id_uint
         ORDER BY episode_id_uint DESC
@@ -112,7 +112,7 @@ export async function getDynamicEvaluationRunEpisodesByRunIdWithFeedback(
       ) AS timestamp,
       uint_to_uuid(e.run_id_uint) AS run_id,
       e.tags,
-      e.datapoint_name,
+      e.task_name,
       -- 1) pack into [(name,value),…]
       -- 2) arraySort by name
       -- 3) arrayMap to pull out names
@@ -140,7 +140,7 @@ export async function getDynamicEvaluationRunEpisodesByRunIdWithFeedback(
       e.episode_id_uint,
       e.run_id_uint,
       e.tags,
-      e.datapoint_name
+      e.task_name
   `;
   const result = await clickhouseClient.query({
     query,

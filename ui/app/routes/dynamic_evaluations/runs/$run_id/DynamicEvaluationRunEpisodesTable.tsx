@@ -65,7 +65,7 @@ export default function DynamicEvaluationRunEpisodesTable({
                 </TableCell>
                 <TableCell>
                   <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300">
-                    {episode.datapoint_name ?? ""}
+                    {episode.task_name ?? ""}
                   </code>
                 </TableCell>
                 {uniqueMetricNames.map((metricName) => {

@@ -19,7 +19,7 @@ export const dynamicEvaluationRunEpisodeWithFeedbackSchema = z
     timestamp: z.string().datetime(),
     run_id: z.string().uuid(),
     tags: z.record(z.string(), z.string()),
-    datapoint_name: z.string().nullable(),
+    task_name: z.string().nullable(),
     // The feedback is given as arrays feedback_metric_names and feedback_values.
     // The arrays are sorted by the metric name.
     feedback_metric_names: z.array(z.string()),

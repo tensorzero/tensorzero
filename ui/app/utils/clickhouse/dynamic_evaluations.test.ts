@@ -88,7 +88,7 @@ describe("getDynamicEvaluationRunEpisodesByRunId", () => {
           "tensorzero::dynamic_evaluation_run_id":
             "01968806-6f22-77d1-bfd6-6f83df00b5ad",
         },
-        datapoint_name: null,
+        task_name: null,
         feedback_metric_names: ["solved"],
         feedback_values: ["false"],
       },
@@ -100,7 +100,7 @@ describe("getDynamicEvaluationRunEpisodesByRunId", () => {
           "tensorzero::dynamic_evaluation_run_id":
             "01968806-6f22-77d1-bfd6-6f83df00b5ad",
         },
-        datapoint_name: null,
+        task_name: null,
         feedback_metric_names: ["solved"],
         feedback_values: ["true"],
       },
@@ -112,7 +112,7 @@ describe("getDynamicEvaluationRunEpisodesByRunId", () => {
           "tensorzero::dynamic_evaluation_run_id":
             "01968806-6f22-77d1-bfd6-6f83df00b5ad",
         },
-        datapoint_name: null,
+        task_name: null,
         feedback_metric_names: ["solved"],
         feedback_values: ["true"],
       },
