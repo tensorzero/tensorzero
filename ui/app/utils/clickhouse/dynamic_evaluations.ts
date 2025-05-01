@@ -13,14 +13,18 @@ export const dynamicEvaluationRunSchema = z
 
 export type DynamicEvaluationRun = z.infer<typeof dynamicEvaluationRunSchema>;
 
-export const dynamicEvaluationRunEpisodeSchema = z.object({
-  episode_id: z.string().uuid(),
-  timestamp: z.string().datetime(),
-  run_id: z.string().uuid(),
-  tags: z.record(z.string(), z.string()),
-  datapoint_name: z.string().nullable(),
-});
+export const dynamicEvaluationRunEpisodeWithFeedbackSchema = z
+  .object({
+    episode_id: z.string().uuid(),
+    timestamp: z.string().datetime(),
+    run_id: z.string().uuid(),
+    tags: z.record(z.string(), z.string()),
+    datapoint_name: z.string().nullable(),
+    feedback_metric_names: z.array(z.string()),
+    feedback_values: z.array(z.string()),
+  })
+  .strict();
 
-export type DynamicEvaluationRunEpisode = z.infer<
-  typeof dynamicEvaluationRunEpisodeSchema
+export type DynamicEvaluationRunEpisodeWithFeedback = z.infer<
+  typeof dynamicEvaluationRunEpisodeWithFeedbackSchema
 >;

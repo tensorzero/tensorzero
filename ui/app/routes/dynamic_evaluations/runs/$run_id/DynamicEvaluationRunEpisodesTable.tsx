@@ -8,13 +8,13 @@ import {
   TableEmptyState,
 } from "~/components/ui/table";
 import { formatDate } from "~/utils/date";
-import type { DynamicEvaluationRunEpisode } from "~/utils/clickhouse/dynamic_evaluations";
+import type { DynamicEvaluationRunEpisodeWithFeedback } from "~/utils/clickhouse/dynamic_evaluations";
 import { Link } from "react-router";
 
 export default function DynamicEvaluationRunEpisodesTable({
   episodes,
 }: {
-  episodes: DynamicEvaluationRunEpisode[];
+  episodes: DynamicEvaluationRunEpisodeWithFeedback[];
 }) {
   return (
     <div>

@@ -1,7 +1,7 @@
 import { describe, test, expect } from "vitest";
 import {
   countDynamicEvaluationRuns as countDynamicEvaluationRuns,
-  getDynamicEvaluationRunEpisodesByRunId,
+  getDynamicEvaluationRunEpisodesByRunIdWithFeedback,
   getDynamicEvaluationRuns,
 } from "./dynamic_evaluations.server";
 
@@ -72,7 +72,7 @@ describe("countDynamicEvaluationRuns", () => {
 
 describe("getDynamicEvaluationRunEpisodesByRunId", () => {
   test("should return correct episodes for a given run id", async () => {
-    const episodes = await getDynamicEvaluationRunEpisodesByRunId(
+    const episodes = await getDynamicEvaluationRunEpisodesByRunIdWithFeedback(
       3,
       0,
       "01968806-6f22-77d1-bfd6-6f83df00b5ad",
@@ -87,16 +87,8 @@ describe("getDynamicEvaluationRunEpisodesByRunId", () => {
             "01968806-6f22-77d1-bfd6-6f83df00b5ad",
         },
         datapoint_name: null,
-      },
-      {
-        episode_id: "0aaed679-0f44-7650-8f7c-c4f00b0ac4bb",
-        timestamp: "2299-12-31T23:34:05Z",
-        run_id: "01968806-6f22-77d1-bfd6-6f83df00b5ad",
-        tags: {
-          "tensorzero::dynamic_evaluation_run_id":
-            "01968806-6f22-77d1-bfd6-6f83df00b5ad",
-        },
-        datapoint_name: null,
+        feedback_metric_names: ["solved"],
+        feedback_values: ["false"],
       },
       {
         episode_id: "0aaed679-0f42-7be6-a24c-a9950960e062",
@@ -107,7 +99,22 @@ describe("getDynamicEvaluationRunEpisodesByRunId", () => {
             "01968806-6f22-77d1-bfd6-6f83df00b5ad",
         },
         datapoint_name: null,
+        feedback_metric_names: ["solved"],
+        feedback_values: ["true"],
+      },
+      {
+        episode_id: "0aaed679-0f44-7650-8f7c-c4f00b0ac4bb",
+        timestamp: "2299-12-31T23:34:05Z",
+        run_id: "01968806-6f22-77d1-bfd6-6f83df00b5ad",
+        tags: {
+          "tensorzero::dynamic_evaluation_run_id":
+            "01968806-6f22-77d1-bfd6-6f83df00b5ad",
+        },
+        datapoint_name: null,
+        feedback_metric_names: ["solved"],
+        feedback_values: ["true"],
       },
     ]);
+    // TODO: add multiple (ragged) metrics, test that this is sorted by metric name
   });
 });

@@ -9,7 +9,7 @@ import {
 import {
   getDynamicEvaluationRuns,
   countDynamicEvaluationRuns,
-  getDynamicEvaluationRunEpisodesByRunId,
+  getDynamicEvaluationRunEpisodesByRunIdWithFeedback,
 } from "~/utils/clickhouse/dynamic_evaluations.server";
 import BasicInfo from "./DynamicEvaluationRunBasicInfo";
 import DynamicEvaluationRunEpisodesTable from "./DynamicEvaluationRunEpisodesTable";
@@ -23,7 +23,11 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const [dynamicEvaluationRuns, dynamicEvaluationRunEpisodes, count] =
     await Promise.all([
       getDynamicEvaluationRuns(pageSize, offset, run_id),
-      getDynamicEvaluationRunEpisodesByRunId(pageSize, offset, run_id),
+      getDynamicEvaluationRunEpisodesByRunIdWithFeedback(
+        pageSize,
+        offset,
+        run_id,
+      ),
       countDynamicEvaluationRuns(),
     ]);
   if (dynamicEvaluationRuns.length != 1) {
