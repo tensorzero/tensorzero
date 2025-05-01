@@ -107,7 +107,7 @@ export default function InputSnippet({ input }: InputSnippetProps) {
         <div>
           <SnippetHeading heading="System" />
           <SnippetContent>
-            <SnippetMessage variant="default">
+            <SnippetMessage>
               {typeof input.system === "object" ? (
                 <CodeMessage
                   content={JSON.stringify(input.system, null, 2)}
