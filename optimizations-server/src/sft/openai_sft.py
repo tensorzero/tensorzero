@@ -197,12 +197,21 @@ def tensorzero_inference_to_openai_messages(
     return messages
 
 
-def content_block_to_openai_message(content: Dict, role: str, env: Any) -> Dict:
+def content_block_to_openai_message(
+    content: Dict, role: Literal["user", "assistant"], env: Environment
+) -> ChatCompletionMessageParam:
     if content["type"] == "text":
-        return {
-            "role": role,
-            "content": render_message(content, role, env),
-        }
+        # This looks dumb but PyRight doesn't infer the types correctly without the if/else...
+        if role == "user":
+            return {
+                "role": "user",
+                "content": render_message(content, role, env),
+            }
+        else:
+            return {
+                "role": role,
+                "content": render_message(content, role, env),
+            }
     elif content["type"] == "tool_call":
         return {
             "role": "assistant",
@@ -226,8 +235,12 @@ def content_block_to_openai_message(content: Dict, role: str, env: Any) -> Dict:
     elif content["type"] == "image":
         mime_type = content["image"]["mime_type"]
         data = content["image"]["data"]
+
+        if role != "user":
+            raise ValidationError(f"Image content must be user role, found: {role}")
+
         return {
-            "role": role,
+            "role": "user",
             "content": [
                 {
                     "type": "image_url",
@@ -238,10 +251,17 @@ def content_block_to_openai_message(content: Dict, role: str, env: Any) -> Dict:
             ],
         }
     elif content["type"] == "raw_text":
-        return {
-            "role": role,
-            "content": content["value"],
-        }
+        # This looks dumb but PyRight doesn't infer the types correctly without the if/else...
+        if role == "user":
+            return {
+                "role": role,
+                "content": content["value"],
+            }
+        else:
+            return {
+                "role": role,
+                "content": content["value"],
+            }
     else:
         raise ValidationError(f"Unsupported content type: {content['type']}")
 
