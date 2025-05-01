@@ -21,8 +21,7 @@ import (
 	"encoding/json"
 	"os"
 	"testing"
-
-	// "time"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/openai/openai-go"
@@ -104,4 +103,111 @@ func TestBasicInference(t *testing.T) {
 	// TODO: [test_async_basic_inference]
 	// TODO: [test_async_basic_inference_json_schema]
 	// TODO: [test_async_inference_cache]
+}
+
+func TestStreamingInference(t *testing.T) {
+	t.Run("it should handle streaming inference", func(t *testing.T) {
+		startTime := time.Now()
+		episodeID, _ := uuid.NewV7()
+		expectedText := []string{
+			"Wally,",
+			" the",
+			" golden",
+			" retriever,",
+			" wagged",
+			" his",
+			" tail",
+			" excitedly",
+			" as",
+			" he",
+			" devoured",
+			" a",
+			" slice",
+			" of",
+			" cheese",
+			" pizza.",
+		}
+		messages := []openai.ChatCompletionMessageParamUnion{
+			{OfSystem: OldFormatSystemMessageWithAssistant(t, "Alfred Pennyworth")},
+			openai.UserMessage("Hello"),
+		}
+
+		req := &openai.ChatCompletionNewParams{
+			Model:    "tensorzero::function_name::basic_test",
+			Messages: messages,
+			Seed:     openai.Int(69),
+			StreamOptions: openai.ChatCompletionStreamOptionsParam{
+				IncludeUsage: openai.Bool(true),
+			},
+			MaxTokens: openai.Int(300),
+		}
+		addEpisodeIDToRequest(t, req, episodeID)
+
+		stream := client.Chat.Completions.NewStreaming(ctx, *req)
+		require.NotNil(t, stream, "Streaming response should not be nil")
+
+		var firstChunkDuration time.Duration // Variable to store the duration of the first chunk
+
+		// Collecting all chunks
+		var allChunks []openai.ChatCompletionChunk
+		for stream.Next() {
+			chunk := stream.Current()
+			allChunks = append(allChunks, chunk)
+
+			if firstChunkDuration == 0 {
+				firstChunkDuration = time.Since(startTime)
+			}
+		}
+		require.NoError(t, stream.Err(), "Stream encountered an error")
+		require.NotEmpty(t, allChunks, "No chunks were received")
+
+		// Validate chunk duration
+		lastChunkDuration := time.Since(startTime) - firstChunkDuration
+		assert.Greater(t, lastChunkDuration.Seconds(), firstChunkDuration.Seconds()+0.1,
+			"Last chunk duration should be greater than first chunk duration")
+
+		// Validate the stop chunk
+		stopChunk := allChunks[len(allChunks)-2]
+		assert.Empty(t, stopChunk.Choices[0].Delta.Content)
+		assert.Equal(t, stopChunk.Choices[0].FinishReason, "stop")
+
+		// Validate the Completion chunk
+		completionChunk := allChunks[len(allChunks)-1]
+		assert.Equal(t, int64(10), completionChunk.Usage.PromptTokens)
+		assert.Equal(t, int64(16), completionChunk.Usage.CompletionTokens)
+		assert.Equal(t, int64(26), completionChunk.Usage.TotalTokens)
+
+		textIndex := 0
+		// Validate the chunk Content
+		for i := 0; i < len(allChunks)-2; i++ {
+			chunk := allChunks[i]
+			if len(chunk.Choices) == 0 {
+				continue
+			}
+
+			assert.Equal(t, "tensorzero::function_name::basic_test::variant_name::test", chunk.Model, "Model mismatch")
+			//Validating the episode ID
+			if extra, ok := chunk.JSON.ExtraFields["tensorzero::episode_id"]; ok {
+				var actualEpisode string
+				err := json.Unmarshal([]byte(extra.Raw()), &actualEpisode)
+				require.NoError(t, err, "Failed to parse episode_id from chunk extras")
+				assert.Equal(t, episodeID.String(), actualEpisode, "Episode ID mismatch")
+			}
+
+			// Validating the content
+			content := chunk.Choices[0].Delta.Content
+			if content != "" {
+				assert.Equal(t, expectedText[i], content,
+					"Content mismatch at index %d: expected '%s', got '%s'", i, expectedText[i], content)
+				textIndex++ // inside the scope, not to increment for empty content
+			}
+		}
+		assert.Equal(t, len(expectedText), textIndex, "Not all expected texts were matched")
+	})
+	// TODO: [test_async_inference_streaming_with_cache]
+	// TODO: [test_async_inference_streaming_nonexistent_function]
+	// TODO: [test_async_inference_streaming_missing_function]
+	// TODO: [test_async_inference_streaming_missing_model]
+	// TODO: [test_async_inference_streaming_malformed_function]
+	// TODO: [test_async_inference_streaming_malformed_input]
 }
