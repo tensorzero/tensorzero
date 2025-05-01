@@ -16,6 +16,18 @@ export default function DynamicEvaluationRunEpisodesTable({
 }: {
   episodes: DynamicEvaluationRunEpisodeWithFeedback[];
 }) {
+  // Extract all unique metric names from all episodes
+  const allMetricNames = new Set<string>();
+  episodes.forEach((episode) => {
+    episode.feedback_metric_names.forEach((metricName) => {
+      allMetricNames.add(metricName);
+    });
+  });
+
+  // Convert to sorted array for consistent column order
+  const uniqueMetricNames = Array.from(allMetricNames).sort();
+  console.log(uniqueMetricNames);
+
   return (
     <div>
       <Table>
@@ -25,6 +37,10 @@ export default function DynamicEvaluationRunEpisodesTable({
             <TableHead>Timestamp</TableHead>
             <TableHead>Tags</TableHead>
             <TableHead>Datapoint Name</TableHead>
+            {/* Add dynamic columns for each metric */}
+            {uniqueMetricNames.map((metricName) => (
+              <TableHead key={metricName}>{metricName}</TableHead>
+            ))}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -50,11 +66,29 @@ export default function DynamicEvaluationRunEpisodesTable({
                 </TableCell>
                 <TableCell>
                   <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300">
-                    {episode.datapoint_name ?? (
-                      <span className="text-gray-400">null</span>
-                    )}
+                    {episode.datapoint_name ?? ""}
                   </code>
                 </TableCell>
+                {uniqueMetricNames.map((metricName) => {
+                  const metricIndex =
+                    episode.feedback_metric_names.indexOf(metricName);
+                  const metricValue =
+                    metricIndex !== -1
+                      ? episode.feedback_values[metricIndex]
+                      : null;
+
+                  return (
+                    <TableCell key={metricName}>
+                      <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300">
+                        {metricValue !== null ? (
+                          metricValue
+                        ) : (
+                          <span className="text-gray-400">-</span>
+                        )}
+                      </code>
+                    </TableCell>
+                  );
+                })}
               </TableRow>
             ))
           )}
