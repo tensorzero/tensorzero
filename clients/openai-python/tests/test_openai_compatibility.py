@@ -774,6 +774,75 @@ async def test_async_json_invalid_system(async_client):
         in str(exc_info.value)
     )
 
+@pytest.mark.asyncio
+async def test_async_extra_headers_param(async_client):
+    messages = [
+        {"role": "user", "content": "Hello, world!"},
+    ]
+    result = await async_client.chat.completions.create(
+        extra_body={
+            "tensorzero::extra_headers": [
+                {
+                    "model_provider_name": "tensorzero::model_name::dummy::echo_extra_info::provider_name::dummy",
+                    "name": "x-my-extra-header",
+                    "value": "my-extra-header-value",
+                },
+            ]
+        },
+        messages=messages,
+        model="tensorzero::model_name::dummy::echo_extra_info",
+    )
+    assert result.model == "tensorzero::model_name::dummy::echo_extra_info"
+    assert json.loads(result.choices[0].message.content) == {
+        "extra_body": {"inference_extra_body": []},
+        "extra_headers": {
+            "inference_extra_headers": [
+                {
+                    "model_provider_name": "tensorzero::model_name::dummy::echo_extra_info::provider_name::dummy",
+                    "name": "x-my-extra-header",
+                    "value": "my-extra-header-value",
+                }
+            ],
+            "variant_extra_headers": None,
+        },
+    }
+
+
+@pytest.mark.asyncio
+async def test_async_extra_body_param(async_client):
+    messages = [
+        {"role": "user", "content": "Hello, world!"},
+    ]
+    result = await async_client.chat.completions.create(
+        extra_body={
+            "tensorzero::extra_body": [
+                {
+                    "model_provider_name": "tensorzero::model_name::dummy::echo_extra_info::provider_name::dummy",
+                    "pointer": "/thinking",
+                    "value": {
+                        "type": "enabled",
+                        "budget_tokens": 1024,
+                    },
+                },
+            ]
+        },
+        messages=messages,
+        model="tensorzero::model_name::dummy::echo_extra_info",
+    )
+    assert result.model == "tensorzero::model_name::dummy::echo_extra_info"
+    assert json.loads(result.choices[0].message.content) == {
+        "extra_body": {
+            "inference_extra_body": [
+                {
+                    "model_provider_name": "tensorzero::model_name::dummy::echo_extra_info::provider_name::dummy",
+                    "pointer": "/thinking",
+                    "value": {"type": "enabled", "budget_tokens": 1024},
+                }
+            ]
+        },
+        "extra_headers": {"variant_extra_headers": None, "inference_extra_headers": []},
+    }
+
 
 @pytest.mark.asyncio
 async def test_async_json_failure(async_client):
