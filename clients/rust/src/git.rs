@@ -11,6 +11,8 @@ pub struct GitInfo {
     pub origin: Option<String>,
     pub untracked_files: bool,
     pub modified_files: bool,
+    pub author: Option<String>,
+    pub author_email: Option<String>,
 }
 
 impl GitInfo {
@@ -34,6 +36,10 @@ impl GitInfo {
             .ok()
             .and_then(|c| c.get_string("remote.origin.url").ok())
             .map(|s| s.to_string());
+
+        // Get author and email
+        let author = commit.author().name().map(|s| s.to_string());
+        let author_email = commit.author().email().map(|s| s.to_string());
 
         // Check for untracked and modified files
         let statuses = repo.statuses(Some(
@@ -76,6 +82,8 @@ impl GitInfo {
             origin,
             untracked_files,
             modified_files,
+            author,
+            author_email,
         })
     }
 
@@ -90,6 +98,12 @@ impl GitInfo {
         }
         if let Some(origin) = self.origin {
             tags.insert("tensorzero::git_origin".to_string(), origin);
+        }
+        if let Some(author) = self.author {
+            tags.insert("tensorzero::git_author".to_string(), author);
+        }
+        if let Some(author_email) = self.author_email {
+            tags.insert("tensorzero::git_author_email".to_string(), author_email);
         }
         tags.insert(
             "tensorzero::git_untracked_files".to_string(),
@@ -122,6 +136,8 @@ mod tests {
         assert!(tags.contains_key("tensorzero::git_commit_message"));
         assert!(tags.contains_key("tensorzero::git_branch"));
         assert!(tags.contains_key("tensorzero::git_origin"));
+        assert!(tags.contains_key("tensorzero::git_author"));
+        assert!(tags.contains_key("tensorzero::git_author_email"));
         assert!(tags.contains_key("tensorzero::git_untracked_files"));
         assert!(tags.contains_key("tensorzero::git_modified_files"));
     }
