@@ -24,6 +24,7 @@ use uuid::{Timestamp, Uuid};
 async fn test_dynamic_evaluation() {
     let client = make_http_gateway().await;
     let params = DynamicEvaluationRunParams {
+        internal: false,
         variants: HashMap::from([("basic_test".to_string(), "test2".to_string())]),
         tags: HashMap::from([
             ("foo".to_string(), "bar".to_string()),
@@ -130,6 +131,15 @@ async fn test_dynamic_evaluation() {
                 .unwrap(),
             run_id.to_string()
         );
+        // Check for some git tags too
+        tags.get("tensorzero::git_commit_hash")
+            .unwrap()
+            .as_str()
+            .unwrap();
+        tags.get("tensorzero::git_branch")
+            .unwrap()
+            .as_str()
+            .unwrap();
         let episode_row =
             select_dynamic_evaluation_run_episode_clickhouse(&clickhouse, run_id, episode_id)
                 .await
@@ -143,18 +153,22 @@ async fn test_dynamic_evaluation() {
             episode_row.datapoint_name,
             Some(format!("test_datapoint_{i}"))
         );
-        assert_eq!(
-            episode_row.tags,
-            HashMap::from([
-                ("foo".to_string(), "bar".to_string()),
-                ("baz".to_string(), format!("baz_{i}")),
-                ("zoo".to_string(), format!("zoo_{i}")),
-                (
-                    "tensorzero::dynamic_evaluation_run_id".to_string(),
-                    run_id.to_string()
-                ),
-            ])
-        );
+        let expected_tags = HashMap::from([
+            ("foo".to_string(), "bar".to_string()),
+            ("baz".to_string(), format!("baz_{i}")),
+            ("zoo".to_string(), format!("zoo_{i}")),
+            (
+                "tensorzero::dynamic_evaluation_run_id".to_string(),
+                run_id.to_string(),
+            ),
+        ]);
+        for (k, v) in &expected_tags {
+            assert_eq!(
+                episode_row.tags.get(k),
+                Some(v),
+                "Tag {k:?} missing or incorrect"
+            );
+        }
         // Send feedback for the dynamic evaluation run episode
         let feedback_params = FeedbackParams {
             episode_id: Some(episode_id),
@@ -179,6 +193,7 @@ async fn test_dynamic_evaluation_nonexistent_function() {
         tags: HashMap::from([("foo".to_string(), "bar".to_string())]),
         project_name: None,
         display_name: None,
+        internal: false,
     };
     let result = client.dynamic_evaluation_run(params).await.unwrap_err();
     println!("Result: {result:#?}");
@@ -197,6 +212,7 @@ async fn test_dynamic_evaluation_other_function() {
         tags: HashMap::from([("foo".to_string(), "bar".to_string())]),
         project_name: None,
         display_name: None,
+        internal: false,
     };
     let result = client.dynamic_evaluation_run(params).await.unwrap();
     let run_id = result.run_id;
@@ -265,6 +281,7 @@ async fn test_dynamic_evaluation_variant_error() {
         tags: HashMap::from([("foo".to_string(), "bar".to_string())]),
         project_name: None,
         display_name: None,
+        internal: false,
     };
     let result = client.dynamic_evaluation_run(params).await.unwrap();
     let run_id = result.run_id;
@@ -313,6 +330,7 @@ async fn test_dynamic_evaluation_variant_error() {
 async fn test_dynamic_evaluation_override_variant_tags() {
     let client = make_embedded_gateway().await;
     let params = DynamicEvaluationRunParams {
+        internal: false,
         variants: HashMap::from([("basic_test".to_string(), "error".to_string())]),
         tags: HashMap::from([("foo".to_string(), "bar".to_string())]),
         project_name: None,
@@ -413,4 +431,20 @@ async fn test_bad_dynamic_evaluation_run() {
     assert!(response
         .to_string()
         .contains("Dynamic evaluation run not found"));
+}
+
+#[tokio::test]
+async fn test_dynamic_evaluation_tag_validation() {
+    let client = make_http_gateway().await;
+    let params = DynamicEvaluationRunParams {
+        internal: false,
+        variants: HashMap::from([("basic_test".to_string(), "test2".to_string())]),
+        tags: HashMap::from([("tensorzero::foo".to_string(), "bar".to_string())]),
+        project_name: Some("test_project".to_string()),
+        display_name: Some("test_display_name".to_string()),
+    };
+    let dynamic_evaluation_info = client.dynamic_evaluation_run(params).await.unwrap_err();
+    assert!(dynamic_evaluation_info
+        .to_string()
+        .contains("Tag name cannot start with 'tensorzero::'"));
 }
