@@ -46,6 +46,10 @@ export default [
   ),
   route("dynamic_evaluations", "routes/dynamic_evaluations/route.tsx"),
   route(
+    "dynamic_evaluations/runs/:run_id",
+    "routes/dynamic_evaluations/runs/$run_id/route.tsx",
+  ),
+  route(
     "observability/inferences",
     "routes/observability/inferences/route.tsx",
   ),

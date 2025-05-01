@@ -30,7 +30,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
 }
 
-export default function EvaluationSummaryPage({
+export default function DynamicEvaluationRunsPage({
   loaderData,
 }: Route.ComponentProps) {
   const navigate = useNavigate();

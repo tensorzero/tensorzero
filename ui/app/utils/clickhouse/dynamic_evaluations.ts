@@ -12,3 +12,15 @@ export const dynamicEvaluationRunSchema = z
   .strict();
 
 export type DynamicEvaluationRun = z.infer<typeof dynamicEvaluationRunSchema>;
+
+export const dynamicEvaluationRunEpisodeSchema = z.object({
+  episode_id: z.string().uuid(),
+  timestamp: z.string().datetime(),
+  run_id: z.string().uuid(),
+  tags: z.record(z.string(), z.string()),
+  datapoint_name: z.string().nullable(),
+});
+
+export type DynamicEvaluationRunEpisode = z.infer<
+  typeof dynamicEvaluationRunEpisodeSchema
+>;

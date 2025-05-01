@@ -1,12 +1,15 @@
 import { clickhouseClient } from "./client.server";
 import {
+  dynamicEvaluationRunEpisodeSchema,
   dynamicEvaluationRunSchema,
   type DynamicEvaluationRun,
+  type DynamicEvaluationRunEpisode,
 } from "./dynamic_evaluations";
 
 export async function getDynamicEvaluationRuns(
   page_size: number,
   offset: number,
+  run_id?: string,
 ): Promise<DynamicEvaluationRun[]> {
   const query = `
     SELECT
@@ -17,6 +20,7 @@ export async function getDynamicEvaluationRuns(
       project_name,
       formatDateTime(UUIDv7ToDateTime(uint_to_uuid(run_id_uint)), '%Y-%m-%dT%H:%i:%SZ') as timestamp
     FROM DynamicEvaluationRun
+    ${run_id ? `WHERE toUInt128(toUUID({run_id:String})) = run_id_uint` : ""}
     ORDER BY run_id_uint DESC
     LIMIT {page_size:UInt64} OFFSET {offset:UInt64}
     `;
@@ -26,6 +30,7 @@ export async function getDynamicEvaluationRuns(
     query_params: {
       page_size: page_size,
       offset: offset,
+      run_id: run_id,
     },
   });
   const rows = await result.json<DynamicEvaluationRun[]>();
@@ -39,4 +44,32 @@ export async function countTotalDynamicEvaluationRuns(): Promise<number> {
   const result = await clickhouseClient.query({ query, format: "JSONEachRow" });
   const rows = await result.json<{ count: number }>();
   return rows[0].count;
+}
+
+export async function getDynamicEvaluationRunEpisodesByRunId(
+  page_size: number,
+  offset: number,
+  run_id: string,
+): Promise<DynamicEvaluationRunEpisode[]> {
+  const query = `
+    SELECT
+      uint_to_uuid(episode_id_uint) as episode_id,
+      formatDateTime(UUIDv7ToDateTime(uint_to_uuid(episode_id_uint)), '%Y-%m-%dT%H:%i:%SZ') as timestamp,
+      uint_to_uuid(run_id_uint) as run_id,
+      tags,
+      datapoint_name,
+    FROM DynamicEvaluationRunEpisodeByRunId
+    WHERE toUInt128(toUUID({run_id:String})) = run_id_uint
+    ORDER BY episode_id_uint DESC
+    LIMIT {page_size:UInt64} OFFSET {offset:UInt64}
+  `;
+  const result = await clickhouseClient.query({
+    query,
+
+    format: "JSONEachRow",
+    query_params: { page_size, offset, run_id },
+  });
+
+  const rows = await result.json<DynamicEvaluationRunEpisode[]>();
+  return rows.map((row) => dynamicEvaluationRunEpisodeSchema.parse(row));
 }
