@@ -7,7 +7,10 @@ import {
 import Chip from "~/components/ui/Chip";
 import { Calendar } from "~/components/icons/Icons";
 import { formatDateWithSeconds, getTimestampTooltipData } from "~/utils/date";
-import type { DynamicEvaluationRun } from "~/utils/clickhouse/dynamic_evaluations";
+import type {
+  DynamicEvaluationRun,
+  DynamicEvaluationRunStatisticsByMetricName,
+} from "~/utils/clickhouse/dynamic_evaluations";
 import { Link } from "react-router";
 
 // Create timestamp tooltip component
@@ -27,11 +30,13 @@ const createTimestampTooltip = (timestamp: string | number | Date) => {
 interface BasicInfoProps {
   dynamicEvaluationRun: DynamicEvaluationRun;
   count: number;
+  statistics: DynamicEvaluationRunStatisticsByMetricName[];
 }
 
 export default function BasicInfo({
   dynamicEvaluationRun,
   count,
+  statistics,
 }: BasicInfoProps) {
   // Create timestamp tooltip
   const timestampTooltip = createTimestampTooltip(
@@ -108,6 +113,28 @@ export default function BasicInfo({
         <BasicInfoItemTitle>Episodes</BasicInfoItemTitle>
         <BasicInfoItemContent>
           <Chip label={`${count}`} font="mono" />
+        </BasicInfoItemContent>
+      </BasicInfoItem>
+
+      <BasicInfoItem>
+        <BasicInfoItemTitle>Statistics</BasicInfoItemTitle>
+        <BasicInfoItemContent>
+          <div className="flex flex-col gap-1">
+            {statistics.map((stat) => (
+              <div key={stat.metric_name}>
+                <span className="font-semibold">{stat.metric_name}: </span>
+                <span>
+                  {stat.avg_metric.toFixed(3)} ± {stat.ci_error.toFixed(3)} (n=
+                  {stat.count})
+                </span>
+              </div>
+            ))}
+            {statistics.length === 0 && (
+              <span className="text-xs text-gray-500">
+                No statistics available.
+              </span>
+            )}
+          </div>
         </BasicInfoItemContent>
       </BasicInfoItem>
 

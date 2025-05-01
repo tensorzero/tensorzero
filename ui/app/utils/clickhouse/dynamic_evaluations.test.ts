@@ -3,6 +3,7 @@ import {
   countDynamicEvaluationRuns as countDynamicEvaluationRuns,
   getDynamicEvaluationRunEpisodesByRunIdWithFeedback,
   getDynamicEvaluationRuns,
+  getDynamicEvaluationRunStatisticsByMetricName,
 } from "./dynamic_evaluations.server";
 
 describe("getDynamicEvaluationRuns", () => {
@@ -117,5 +118,22 @@ describe("getDynamicEvaluationRunEpisodesByRunId", () => {
     ]);
     // TODO: add multiple (ragged) metrics, test that this is sorted by metric name
     // also test examples with no feedback and make sure the arrays are empty
+  });
+});
+
+describe("getDynamicEvaluationRunStatisticsByMetricName", () => {
+  test("should return correct statistics for a given run id", async () => {
+    const statistics = await getDynamicEvaluationRunStatisticsByMetricName(
+      "01968806-6f22-77d1-bfd6-6f83df00b5ad",
+    );
+    expect(statistics).toMatchObject([
+      {
+        metric_name: "solved",
+        count: 50,
+        avg_metric: 0.48,
+        stdev: 0.5046720495044484,
+        ci_error: 0.13988795516412414,
+      },
+    ]);
   });
 });

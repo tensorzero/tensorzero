@@ -10,6 +10,7 @@ import {
   getDynamicEvaluationRuns,
   countDynamicEvaluationRuns,
   getDynamicEvaluationRunEpisodesByRunIdWithFeedback,
+  getDynamicEvaluationRunStatisticsByMetricName,
 } from "~/utils/clickhouse/dynamic_evaluations.server";
 import BasicInfo from "./DynamicEvaluationRunBasicInfo";
 import DynamicEvaluationRunEpisodesTable from "./DynamicEvaluationRunEpisodesTable";
@@ -20,16 +21,21 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const searchParams = new URLSearchParams(url.search);
   const offset = parseInt(searchParams.get("offset") || "0");
   const pageSize = parseInt(searchParams.get("pageSize") || "15");
-  const [dynamicEvaluationRuns, dynamicEvaluationRunEpisodes, count] =
-    await Promise.all([
-      getDynamicEvaluationRuns(pageSize, offset, run_id),
-      getDynamicEvaluationRunEpisodesByRunIdWithFeedback(
-        pageSize,
-        offset,
-        run_id,
-      ),
-      countDynamicEvaluationRuns(),
-    ]);
+  const [
+    dynamicEvaluationRuns,
+    dynamicEvaluationRunEpisodes,
+    count,
+    statistics,
+  ] = await Promise.all([
+    getDynamicEvaluationRuns(pageSize, offset, run_id),
+    getDynamicEvaluationRunEpisodesByRunIdWithFeedback(
+      pageSize,
+      offset,
+      run_id,
+    ),
+    countDynamicEvaluationRuns(),
+    getDynamicEvaluationRunStatisticsByMetricName(run_id),
+  ]);
   if (dynamicEvaluationRuns.length != 1) {
     throw new Error(
       `Expected exactly one dynamic evaluation run, got ${dynamicEvaluationRuns.length}`,
@@ -39,6 +45,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   return {
     dynamicEvaluationRun,
     dynamicEvaluationRunEpisodes,
+    statistics,
     count,
     offset,
     pageSize,
@@ -52,6 +59,7 @@ export default function DynamicEvaluationRunSummaryPage({
   const {
     dynamicEvaluationRun,
     dynamicEvaluationRunEpisodes,
+    statistics,
     count,
     offset,
     pageSize,
@@ -71,7 +79,11 @@ export default function DynamicEvaluationRunSummaryPage({
   return (
     <PageLayout>
       <PageHeader heading={`Dynamic Evaluation Run `} />
-      <BasicInfo dynamicEvaluationRun={dynamicEvaluationRun} count={count} />
+      <BasicInfo
+        dynamicEvaluationRun={dynamicEvaluationRun}
+        count={count}
+        statistics={statistics}
+      />
       <SectionLayout>
         <DynamicEvaluationRunEpisodesTable
           episodes={dynamicEvaluationRunEpisodes}

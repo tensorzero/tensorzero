@@ -30,3 +30,15 @@ export const dynamicEvaluationRunEpisodeWithFeedbackSchema = z
 export type DynamicEvaluationRunEpisodeWithFeedback = z.infer<
   typeof dynamicEvaluationRunEpisodeWithFeedbackSchema
 >;
+
+export const dynamicEvaluationRunStatisticsByMetricNameSchema = z.object({
+  metric_name: z.string(),
+  count: z.number(),
+  avg_metric: z.number(),
+  stdev: z.number(),
+  ci_error: z.number(),
+});
+
+export type DynamicEvaluationRunStatisticsByMetricName = z.infer<
+  typeof dynamicEvaluationRunStatisticsByMetricNameSchema
+>;

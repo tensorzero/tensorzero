@@ -2,8 +2,10 @@ import { clickhouseClient } from "./client.server";
 import {
   dynamicEvaluationRunEpisodeWithFeedbackSchema,
   dynamicEvaluationRunSchema,
+  dynamicEvaluationRunStatisticsByMetricNameSchema,
   type DynamicEvaluationRun,
   type DynamicEvaluationRunEpisodeWithFeedback,
+  type DynamicEvaluationRunStatisticsByMetricName,
 } from "./dynamic_evaluations";
 
 export async function getDynamicEvaluationRuns(
@@ -148,5 +150,59 @@ export async function getDynamicEvaluationRunEpisodesByRunIdWithFeedback(
   const rows = await result.json<DynamicEvaluationRunEpisodeWithFeedback[]>();
   return rows.map((row) =>
     dynamicEvaluationRunEpisodeWithFeedbackSchema.parse(row),
+  );
+}
+
+export async function getDynamicEvaluationRunStatisticsByMetricName(
+  run_id: string,
+  metric_name?: string,
+): Promise<DynamicEvaluationRunStatisticsByMetricName[]> {
+  const query = `
+    WITH
+       episodes AS (
+        SELECT
+          episode_id_uint,
+          run_id_uint,
+          tags,
+          datapoint_name
+        FROM DynamicEvaluationRunEpisodeByRunId
+        WHERE toUInt128(toUUID({run_id:String})) = run_id_uint
+        ORDER BY episode_id_uint DESC
+      )
+    SELECT
+      metric_name,
+      toUInt32(count()) as count,
+      avg(value) as avg_metric,
+      stddevSamp(value) as stdev,
+      1.96 * (stddevSamp(value) / sqrt(count())) AS ci_error
+    FROM FloatMetricFeedbackByTargetId
+    WHERE target_id IN (
+      SELECT uint_to_uuid(episode_id_uint) FROM episodes
+    )
+    ${metric_name ? `AND metric_name = {metric_name:String}` : ""}
+    GROUP BY metric_name
+    UNION ALL
+    SELECT
+      metric_name,
+      toUInt32(count()) as count,
+      avg(value) as avg_metric,
+      stddevSamp(value) as stdev,
+      1.96 * (stddevSamp(value) / sqrt(count())) AS ci_error
+    FROM BooleanMetricFeedbackByTargetId
+    WHERE target_id IN (
+      SELECT uint_to_uuid(episode_id_uint) FROM episodes
+    )
+    ${metric_name ? `AND metric_name = {metric_name:String}` : ""}
+    GROUP BY metric_name
+  `;
+  const result = await clickhouseClient.query({
+    query,
+    format: "JSONEachRow",
+    query_params: { run_id, metric_name },
+  });
+  const rows =
+    await result.json<DynamicEvaluationRunStatisticsByMetricName[]>();
+  return rows.map((row) =>
+    dynamicEvaluationRunStatisticsByMetricNameSchema.parse(row),
   );
 }
