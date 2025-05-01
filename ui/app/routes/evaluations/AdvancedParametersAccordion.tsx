@@ -36,7 +36,7 @@ export function AdvancedParametersAccordion({
         </AccordionTrigger>
         <AccordionContent>
           <div className="space-y-6 px-3 pt-3">
-            <Label>Caching</Label>
+            <Label>Inference Cache</Label>
             <RadioGroup
               value={inference_cache}
               onValueChange={setInferenceCache}
