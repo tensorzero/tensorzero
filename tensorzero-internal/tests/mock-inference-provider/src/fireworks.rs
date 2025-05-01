@@ -264,7 +264,7 @@ pub async fn create_deployed_model(
 }
 
 #[derive(Deserialize)]
-#[allow(dead_code)]
+#[expect(dead_code)]
 pub struct DeployedModelParams {
     account_id: String,
     model_id: String,

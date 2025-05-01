@@ -1,8 +1,8 @@
 import { z } from "zod";
 import type { FunctionConfig, JSONSchema } from "./function";
+import { specificToolChoiceSchema } from "./function";
 import { RawVariantConfigSchema } from "./variant.server";
 import { ChatCompletionConfigSchema, type VariantConfig } from "./variant";
-import { specificToolChoiceSchema } from "./function";
 import path from "path";
 import fs from "fs";
 import { getUsedVariants } from "../clickhouse/function";

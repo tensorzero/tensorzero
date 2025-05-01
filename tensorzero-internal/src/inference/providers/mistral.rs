@@ -35,7 +35,7 @@ use super::{
 
 lazy_static! {
     static ref MISTRAL_API_BASE: Url = {
-        #[allow(clippy::expect_used)]
+        #[expect(clippy::expect_used)]
         Url::parse("https://api.mistral.ai/v1/").expect("Failed to parse MISTRAL_API_BASE")
     };
 }
@@ -70,6 +70,10 @@ impl MistralProvider {
             model_name,
             credentials,
         })
+    }
+
+    pub fn model_name(&self) -> &str {
+        &self.model_name
     }
 }
 
@@ -141,6 +145,7 @@ impl InferenceProvider for MistralProvider {
             })?;
         let headers = inject_extra_request_data(
             &request.extra_body,
+            &request.extra_headers,
             model_provider,
             model_name,
             &mut request_body,
@@ -244,6 +249,7 @@ impl InferenceProvider for MistralProvider {
             })?;
         let headers = inject_extra_request_data(
             &request.extra_body,
+            &request.extra_headers,
             model_provider,
             model_name,
             &mut request_body,

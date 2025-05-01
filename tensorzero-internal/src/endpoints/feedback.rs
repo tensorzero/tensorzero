@@ -232,10 +232,7 @@ fn get_feedback_metadata<'a>(
         MetricConfigLevel::Episode => episode_id,
     }
     .ok_or_else(|| ErrorDetails::InvalidRequest {
-        message: format!(
-            r#"Correct ID was not provided for feedback level "{}"."#,
-            feedback_level
-        ),
+        message: format!(r#"Correct ID was not provided for feedback level "{feedback_level}"."#),
     })?;
     Ok(FeedbackMetadata {
         r#type: feedback_type,
@@ -300,7 +297,7 @@ async fn write_demonstration(
         validate_parse_demonstration(function_config, value, dynamic_demonstration_info).await?;
     let string_value = serde_json::to_string(&parsed_value).map_err(|e| {
         Error::new(ErrorDetails::InvalidRequest {
-            message: format!("Failed to serialize parsed value to json: {}", e),
+            message: format!("Failed to serialize parsed value to json: {e}"),
         })
     })?;
     let payload = json!({"inference_id": inference_id, "value": string_value, "id": feedback_id, "tags": tags});
@@ -395,7 +392,9 @@ async fn throttled_get_function_name(
     target_id: &Uuid,
 ) -> Result<String, Error> {
     // Compute how long ago the target_id was created.
-    let elapsed = uuid_elapsed(target_id)?;
+    // Some UUIDs are in the future, e.g. for dynamic evaluation runs.
+    // In this case we should be conservative and assume no time has passed.
+    let elapsed = uuid_elapsed(target_id).unwrap_or(Duration::from_secs(0));
 
     // Calculate the remaining cooldown (which may be zero) and ensure we wait at least FEEDBACK_MINIMUM_WAIT_TIME.
     let wait_time = max(
@@ -457,8 +456,7 @@ async fn get_function_name(
         MetricConfigLevel::Episode => "episode_id_uint",
     };
     let query = format!(
-        "SELECT function_name FROM {} FINAL WHERE {} = toUInt128(toUUID('{}'))",
-        table_name, identifier_key, target_id
+        "SELECT function_name FROM {table_name} FINAL WHERE {identifier_key} = toUInt128(toUUID('{target_id}'))"
     );
     let function_name = connection_info
         .run_query_synchronous(query, None)
@@ -487,10 +485,7 @@ impl TryFrom<DemonstrationToolCall> for ToolCall {
             name: value.name,
             arguments: serde_json::to_string(&value.arguments).map_err(|e| {
                 Error::new(ErrorDetails::InvalidRequest {
-                    message: format!(
-                        "Failed to serialize demonstration tool call arguments: {}",
-                        e
-                    ),
+                    message: format!("Failed to serialize demonstration tool call arguments: {e}"),
                 })
             })?,
             id: "".to_string(),
@@ -548,7 +543,7 @@ pub async fn validate_parse_demonstration(
                         serde_json::from_value::<DemonstrationContentBlock>(block.clone()).map_err(
                             |e| {
                                 Error::new(ErrorDetails::InvalidRequest {
-                                    message: format!("Invalid demonstration content block: {}", e),
+                                    message: format!("Invalid demonstration content block: {e}"),
                                 })
                             },
                         )
@@ -593,14 +588,13 @@ pub async fn validate_parse_demonstration(
                 .map_err(|e| {
                     Error::new(ErrorDetails::InvalidRequest {
                         message: format!(
-                            "Demonstration does not fit function output schema: {}",
-                            e
+                            "Demonstration does not fit function output schema: {e}"
                         ),
                     })
                 })?;
             let raw = serde_json::to_string(value).map_err(|e| {
                 Error::new(ErrorDetails::InvalidRequest {
-                    message: format!("Failed to serialize demonstration to json: {}", e),
+                    message: format!("Failed to serialize demonstration to json: {e}"),
                 })
             })?;
             let json_inference_response = json!({"raw": raw, "parsed": value});
@@ -652,7 +646,7 @@ async fn get_dynamic_demonstration_info(
             let tool_params_result =
                 serde_json::from_str::<ToolParamsResult>(&result).map_err(|e| {
                     Error::new(ErrorDetails::ClickHouseQuery {
-                        message: format!("Failed to parse demonstration result: {}", e),
+                        message: format!("Failed to parse demonstration result: {e}"),
                     })
                 })?;
 
@@ -678,7 +672,7 @@ async fn get_dynamic_demonstration_info(
                 .await?;
             let result_value = serde_json::from_str::<Value>(&result).map_err(|e| {
                 Error::new(ErrorDetails::ClickHouseQuery {
-                    message: format!("Failed to parse demonstration result: {}", e),
+                    message: format!("Failed to parse demonstration result: {e}"),
                 })
             })?;
             let output_schema_str = result_value
@@ -694,7 +688,7 @@ async fn get_dynamic_demonstration_info(
             let mut output_schema =
                 serde_json::from_str::<Value>(output_schema_str).map_err(|e| {
                     Error::new(ErrorDetails::ClickHouseQuery {
-                        message: format!("Failed to parse output schema: {}", e),
+                        message: format!("Failed to parse output schema: {e}"),
                     })
                 })?;
             if function_name.starts_with("tensorzero::llm_judge") {

@@ -60,6 +60,10 @@ impl AzureProvider {
             credentials,
         })
     }
+
+    pub fn deployment_id(&self) -> &str {
+        &self.deployment_id
+    }
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -133,6 +137,7 @@ impl InferenceProvider for AzureProvider {
         })?;
         let headers = inject_extra_request_data(
             &request.extra_body,
+            &request.extra_headers,
             model_provider,
             model_name,
             &mut request_body,
@@ -204,7 +209,12 @@ impl InferenceProvider for AzureProvider {
                     raw_response: None,
                 })
             })?;
-            Err(handle_openai_error(status, &response, PROVIDER_TYPE))
+            Err(handle_openai_error(
+                &serde_json::to_string(&request_body).unwrap_or_default(),
+                status,
+                &response,
+                PROVIDER_TYPE,
+            ))
         }
     }
 
@@ -229,6 +239,7 @@ impl InferenceProvider for AzureProvider {
         })?;
         let headers = inject_extra_request_data(
             &request.extra_body,
+            &request.extra_headers,
             model_provider,
             model_name,
             &mut request_body,

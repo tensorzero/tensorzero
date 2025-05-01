@@ -1,5 +1,3 @@
-#![allow(clippy::print_stdout)]
-
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;

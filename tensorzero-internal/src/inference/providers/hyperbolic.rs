@@ -27,7 +27,7 @@ use super::provider_trait::{InferenceProvider, TensorZeroEventError};
 
 lazy_static! {
     static ref HYPERBOLIC_DEFAULT_BASE_URL: Url = {
-        #[allow(clippy::expect_used)]
+        #[expect(clippy::expect_used)]
         Url::parse("https://api.hyperbolic.xyz/v1/")
             .expect("Failed to parse HYPERBOLIC_DEFAULT_BASE_URL")
     };
@@ -63,6 +63,10 @@ impl HyperbolicProvider {
             model_name,
             credentials,
         })
+    }
+
+    pub fn model_name(&self) -> &str {
+        &self.model_name
     }
 }
 
@@ -135,6 +139,7 @@ impl InferenceProvider for HyperbolicProvider {
             )?;
         let headers = inject_extra_request_data(
             &request.extra_body,
+            &request.extra_headers,
             model_provider,
             model_name,
             &mut request_body,
@@ -203,6 +208,7 @@ impl InferenceProvider for HyperbolicProvider {
             .try_into()?)
         } else {
             Err(handle_openai_error(
+                &serde_json::to_string(&request_body).unwrap_or_default(),
                 res.status(),
                 &res.text().await.map_err(|e| {
                     Error::new(ErrorDetails::InferenceServer {
@@ -244,6 +250,7 @@ impl InferenceProvider for HyperbolicProvider {
             )?;
         let headers = inject_extra_request_data(
             &request.extra_body,
+            &request.extra_headers,
             model_provider,
             model_name,
             &mut request_body,
