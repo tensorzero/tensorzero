@@ -118,7 +118,7 @@ export async function getDynamicEvaluationRunEpisodesByRunIdWithFeedback(
         t -> t.1,
         arraySort(
           (t) -> t.1,
-          groupArray((f.metric_name, f.value))
+          groupArrayIf((f.metric_name, f.value), f.metric_name != '')
         )
       ) AS feedback_metric_names,
 
@@ -127,7 +127,7 @@ export async function getDynamicEvaluationRunEpisodesByRunIdWithFeedback(
         t -> t.2,
         arraySort(
           (t) -> t.1,
-          groupArray((f.metric_name, f.value))
+          groupArrayIf((f.metric_name, f.value), f.metric_name != '')
         )
       ) AS feedback_values
 

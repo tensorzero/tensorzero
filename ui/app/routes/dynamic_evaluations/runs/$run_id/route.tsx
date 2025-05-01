@@ -36,7 +36,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     );
   }
   const dynamicEvaluationRun = dynamicEvaluationRuns[0];
-  console.log(dynamicEvaluationRunEpisodes);
   return {
     dynamicEvaluationRun,
     dynamicEvaluationRunEpisodes,
