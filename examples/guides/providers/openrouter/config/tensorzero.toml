@@ -1,0 +1,13 @@
+[models.claude_sonnet_openrouter]
+routing = ["openrouter"]
+
+[models.claude_sonnet_openrouter.providers.openrouter]
+type = "openrouter"
+model_name = "anthropic/claude-3.7-sonnet"
+
+[functions.my_function_name]
+type = "chat"
+
+[functions.my_function_name.variants.my_variant_name]
+type = "chat_completion"
+model = "claude_sonnet_openrouter"
