@@ -5549,7 +5549,7 @@ dependencies = [
 
 [[package]]
 name = "write-fixtures"
-version = "2025.4.7"
+version = "2025.4.8"
 dependencies = [
  "clap",
  "futures",

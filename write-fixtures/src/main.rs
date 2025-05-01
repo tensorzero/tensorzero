@@ -38,6 +38,9 @@ struct Args {
 
     #[arg(long)]
     count: usize,
+
+    #[arg(long)]
+    max_inflight: usize,
 }
 
 async fn run_inference(client: &Client, args: &Args) {
@@ -125,36 +128,25 @@ async fn main_inner() {
 
     let client = Arc::new(client);
 
-    let semaphore = Arc::new(tokio::sync::Semaphore::new(1000));
     let mut join_set = JoinSet::new();
     let mut pbar = tqdm::pbar(Some(args.count));
+    let max_inflight = args.max_inflight;
     for _ in 0..args.count {
         let args = args.clone();
-        let permit = semaphore.clone().acquire_owned().await.unwrap();
         let client = client.clone();
         join_set.spawn(async move {
-            let _permit = permit;
             run_inference(&client, &args).await;
         });
+        if join_set.len() >= max_inflight {
+            join_set.join_next().await.unwrap().unwrap();
+        }
         pbar.update(1).unwrap();
     }
     pbar.close().unwrap();
 
-    eprintln!("Joining tasks:");
-    let mut pbar = tqdm::pbar(Some(args.count));
-
-    loop {
-        match join_set.join_next().await {
-            Some(Ok(_)) => {
-                pbar.update(1).unwrap();
-            }
-            Some(Err(e)) => {
-                tracing::error!("Error when running inference: {:?}", e);
-                pbar.update(1).unwrap();
-            }
-            None => break,
-        }
-    }
+    eprintln!("Finishing {} tasks:", join_set.len());
+    join_set.join_all().await;
+    println!("Done!");
 }
 
 fn main() {

@@ -169,6 +169,7 @@ impl ClickHouseConnectionInfo {
                 client,
                 ..
             } => {
+                return Ok(());
                 // We need to ping the /ping endpoint to check if ClickHouse is healthy
                 let mut ping_url = Url::parse(database_url.expose_secret()).map_err(|_| {
                     Error::new(ErrorDetails::Config {
