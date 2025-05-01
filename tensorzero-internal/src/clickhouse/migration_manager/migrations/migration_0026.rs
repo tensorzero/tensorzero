@@ -42,6 +42,7 @@ impl Migration for Migration0026<'_> {
             "0026",
         )
         .await?;
+
         Ok(!dynamic_evaluation_run_episode_by_run_id_table_exists
             || !dynamic_evaluation_run_episode_by_run_id_view_exists)
     }
