@@ -224,3 +224,14 @@ export async function countDynamicEvaluationRunEpisodes(
   const rows = await result.json<{ count: number }>();
   return rows[0].count;
 }
+
+export async function getDynamicEvaluationRunProjects(
+  page_size: number,
+  offset: number,
+): Promise<DynamicEvaluationRunProject[]> {
+  const query = `
+    SELECT
+      project_name,
+      toUInt32(count()) as count
+  `;
+}
