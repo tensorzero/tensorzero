@@ -8,7 +8,6 @@ use serde::de::IntoDeserializer;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
 use std::borrow::Cow;
-use std::collections::HashMap;
 use std::io::Write;
 use std::pin::Pin;
 use std::sync::OnceLock;
@@ -43,11 +42,12 @@ use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use crate::inference::providers::helpers::inject_extra_request_data;
 
+use super::helpers::{parse_jsonl_batch_file, JsonlBatchFileInfo};
 use super::provider_trait::{TensorZeroEventError, WrappedProvider};
 
 lazy_static! {
     static ref OPENAI_DEFAULT_BASE_URL: Url = {
-        #[allow(clippy::expect_used)]
+        #[expect(clippy::expect_used)]
         Url::parse("https://api.openai.com/v1/").expect("Failed to parse OPENAI_DEFAULT_BASE_URL")
     };
 }
@@ -85,6 +85,10 @@ impl OpenAIProvider {
             api_base,
             credentials,
         })
+    }
+
+    pub fn model_name(&self) -> &str {
+        &self.model_name
     }
 }
 
@@ -206,14 +210,14 @@ impl InferenceProvider for OpenAIProvider {
         let mut request_body = self.make_body(request)?;
         let headers = inject_extra_request_data(
             &request.request.extra_body,
+            &request.request.extra_headers,
             model_provider,
             request.model_name,
             &mut request_body,
         )?;
 
-        let mut request_builder = http_client
-            .post(request_url)
-            .header("Content-Type", "application/json");
+        let mut request_builder = http_client.post(request_url);
+
         if let Some(api_key) = api_key {
             request_builder = request_builder.bearer_auth(api_key.expose_secret());
         }
@@ -284,6 +288,7 @@ impl InferenceProvider for OpenAIProvider {
             .try_into()?)
         } else {
             Err(handle_openai_error(
+                &raw_request.clone(),
                 res.status(),
                 &res.text().await.map_err(|e| {
                     Error::new(ErrorDetails::InferenceServer {
@@ -323,6 +328,7 @@ impl InferenceProvider for OpenAIProvider {
             })?;
         let headers = inject_extra_request_data(
             &request.extra_body,
+            &request.extra_headers,
             model_provider,
             model_name,
             &mut request_body,
@@ -719,6 +725,7 @@ impl EmbeddingProvider for OpenAIProvider {
             .try_into()?)
         } else {
             Err(handle_openai_error(
+                &serde_json::to_string(&request_body).unwrap_or_default(),
                 res.status(),
                 &res.text().await.map_err(|e| {
                     Error::new(ErrorDetails::InferenceServer {
@@ -782,8 +789,7 @@ pub fn stream_openai(
                         let data: Result<OpenAIChatChunk, Error> =
                             serde_json::from_str(&message.data).map_err(|e| Error::new(ErrorDetails::InferenceServer {
                                 message: format!(
-                                    "Error parsing chunk. Error: {}",
-                                    e,
+                                    "Error parsing chunk. Error: {e}",
                                 ),
                                 raw_request: None,
                                 raw_response: Some(message.data.clone()),
@@ -835,6 +841,7 @@ impl OpenAIProvider {
 
         if res.status() != StatusCode::OK {
             return Err(handle_openai_error(
+                &raw_request,
                 res.status(),
                 &res.text().await.map_err(|e| {
                     Error::new(ErrorDetails::InferenceServer {
@@ -851,61 +858,16 @@ impl OpenAIProvider {
             ));
         }
 
-        let bytes = res.bytes().await.map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
-                message: format!(
-                    "Error reading batch results response for file {file_id}: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-                raw_request: None,
-                raw_response: None,
+        parse_jsonl_batch_file::<OpenAIBatchFileRow, _>(
+            res.bytes().await,
+            JsonlBatchFileInfo {
+                file_id: file_id.to_string(),
+                raw_request,
+                raw_response,
                 provider_type: PROVIDER_TYPE.to_string(),
-            })
-        })?;
-        let mut elements: HashMap<Uuid, ProviderBatchInferenceOutput> = HashMap::new();
-        let text = std::str::from_utf8(&bytes).map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
-                message: format!(
-                    "Error parsing batch results response for file {file_id}: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-                raw_request: None,
-                raw_response: None,
-                provider_type: PROVIDER_TYPE.to_string(),
-            })
-        })?;
-        for line in text.lines() {
-            let row = match serde_json::from_str::<OpenAIBatchFileRow>(line) {
-                Ok(row) => row,
-                Err(e) => {
-                    // Construct error for logging but don't return it
-                    let _ = Error::new(ErrorDetails::InferenceServer {
-                        message: format!(
-                            "Error parsing batch results row for file {file_id}: {}",
-                            DisplayOrDebugGateway::new(e)
-                        ),
-                        raw_request: None,
-                        raw_response: Some(line.to_string()),
-                        provider_type: PROVIDER_TYPE.to_string(),
-                    });
-                    continue;
-                }
-            };
-            let output = match ProviderBatchInferenceOutput::try_from(row) {
-                Ok(output) => output,
-                Err(_) => {
-                    // Construct error for logging but don't return it
-                    continue;
-                }
-            };
-            elements.insert(output.id, output);
-        }
-
-        Ok(ProviderBatchInferenceResponse {
-            elements,
-            raw_request,
-            raw_response,
-        })
+            },
+        )
+        .await
     }
 }
 
@@ -927,7 +889,7 @@ fn get_file_url(base_url: &Url, file_id: Option<&str>) -> Result<Url, Error> {
         url.set_path(&format!("{}/", url.path()));
     }
     let path = if let Some(id) = file_id {
-        format!("files/{}/content", id)
+        format!("files/{id}/content")
     } else {
         "files".to_string()
     };
@@ -963,6 +925,7 @@ fn get_embedding_url(base_url: &Url) -> Result<Url, Error> {
 }
 
 pub(super) fn handle_openai_error(
+    raw_request: &str,
     response_code: StatusCode,
     response_body: &str,
     provider_type: &str,
@@ -974,14 +937,14 @@ pub(super) fn handle_openai_error(
         | StatusCode::TOO_MANY_REQUESTS => ErrorDetails::InferenceClient {
             status_code: Some(response_code),
             message: response_body.to_string(),
-            raw_request: None,
+            raw_request: Some(raw_request.to_string()),
             raw_response: Some(response_body.to_string()),
             provider_type: provider_type.to_string(),
         }
         .into(),
         _ => ErrorDetails::InferenceServer {
             message: response_body.to_string(),
-            raw_request: None,
+            raw_request: Some(raw_request.to_string()),
             raw_response: Some(response_body.to_string()),
             provider_type: provider_type.to_string(),
         }
@@ -2300,6 +2263,7 @@ mod tests {
 
         // Test unauthorized error
         let unauthorized = handle_openai_error(
+            "Request Body",
             StatusCode::UNAUTHORIZED,
             "Unauthorized access",
             PROVIDER_TYPE,
@@ -2317,13 +2281,17 @@ mod tests {
             assert_eq!(message, "Unauthorized access");
             assert_eq!(*status_code, Some(StatusCode::UNAUTHORIZED));
             assert_eq!(provider, PROVIDER_TYPE);
-            assert_eq!(*raw_request, None);
+            assert_eq!(*raw_request, Some("Request Body".to_string()));
             assert_eq!(*raw_response, Some("Unauthorized access".to_string()));
         }
 
         // Test forbidden error
-        let forbidden =
-            handle_openai_error(StatusCode::FORBIDDEN, "Forbidden access", PROVIDER_TYPE);
+        let forbidden = handle_openai_error(
+            "Request Body",
+            StatusCode::FORBIDDEN,
+            "Forbidden access",
+            PROVIDER_TYPE,
+        );
         let details = forbidden.get_details();
         assert!(matches!(details, ErrorDetails::InferenceClient { .. }));
         if let ErrorDetails::InferenceClient {
@@ -2337,12 +2305,13 @@ mod tests {
             assert_eq!(message, "Forbidden access");
             assert_eq!(*status_code, Some(StatusCode::FORBIDDEN));
             assert_eq!(provider, PROVIDER_TYPE);
-            assert_eq!(*raw_request, None);
+            assert_eq!(*raw_request, Some("Request Body".to_string()));
             assert_eq!(*raw_response, Some("Forbidden access".to_string()));
         }
 
         // Test rate limit error
         let rate_limit = handle_openai_error(
+            "Request Body",
             StatusCode::TOO_MANY_REQUESTS,
             "Rate limit exceeded",
             PROVIDER_TYPE,
@@ -2360,12 +2329,13 @@ mod tests {
             assert_eq!(message, "Rate limit exceeded");
             assert_eq!(*status_code, Some(StatusCode::TOO_MANY_REQUESTS));
             assert_eq!(provider, PROVIDER_TYPE);
-            assert_eq!(*raw_request, None);
+            assert_eq!(*raw_request, Some("Request Body".to_string()));
             assert_eq!(*raw_response, Some("Rate limit exceeded".to_string()));
         }
 
         // Test server error
         let server_error = handle_openai_error(
+            "Request Body",
             StatusCode::INTERNAL_SERVER_ERROR,
             "Server error",
             PROVIDER_TYPE,
@@ -2381,7 +2351,7 @@ mod tests {
         {
             assert_eq!(message, "Server error");
             assert_eq!(provider, PROVIDER_TYPE);
-            assert_eq!(*raw_request, None);
+            assert_eq!(*raw_request, Some("Request Body".to_string()));
             assert_eq!(*raw_response, Some("Server error".to_string()));
         }
     }

@@ -31,6 +31,7 @@ use crate::endpoints::inference::{
 use crate::error::{Error, ErrorDetails};
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
+use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use crate::inference::types::{
     current_timestamp, ContentBlockChatOutput, ContentBlockChunk, FinishReason, Image, ImageKind,
     Input, InputMessage, InputMessageContent, Role, TextKind, Usage,
@@ -72,8 +73,7 @@ pub async fn inference_handler(
     // (We run this disambiguation deep in the `inference` call below but we don't get the decision out, so we duplicate it here)
     let response_model_prefix = match (&params.function_name, &params.model_name) {
         (Some(function_name), None) => Ok::<String, Error>(format!(
-            "tensorzero::function_name::{}::variant_name::",
-            function_name,
+            "tensorzero::function_name::{function_name}::variant_name::",
         )),
         (None, Some(_model_name)) => Ok("tensorzero::model_name::".to_string()),
         (Some(_), Some(_)) => Err(ErrorDetails::InvalidInferenceTarget {
@@ -307,6 +307,7 @@ struct OpenAICompatibleResponse {
     created: u32,
     model: String,
     system_fingerprint: String,
+    service_tier: String,
     object: String,
     usage: OpenAICompatibleUsage,
 }
@@ -490,6 +491,7 @@ impl Params {
             include_original_response: false,
             // OpenAI compatible endpoint does not support 'extra_body'
             extra_body: UnfilteredInferenceExtraBody::default(),
+            extra_headers: UnfilteredInferenceExtraHeaders::default(),
         })
     }
 }
@@ -609,7 +611,6 @@ impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
 
 #[derive(Deserialize, Debug)]
 #[serde(tag = "type", deny_unknown_fields, rename_all = "snake_case")]
-#[allow(dead_code)]
 enum OpenAICompatibleContentBlock {
     Text(TextContent),
     ImageUrl { image_url: OpenAICompatibleImageUrl },
@@ -617,7 +618,6 @@ enum OpenAICompatibleContentBlock {
 
 #[derive(Deserialize, Debug)]
 #[serde(tag = "type", deny_unknown_fields, rename_all = "snake_case")]
-#[allow(dead_code)]
 struct OpenAICompatibleImageUrl {
     url: Url,
 }
@@ -759,6 +759,7 @@ impl From<(InferenceResponse, String)> for OpenAICompatibleResponse {
                     }],
                     created: current_timestamp() as u32,
                     model: format!("{response_model_prefix}{}", response.variant_name),
+                    service_tier: "".to_string(),
                     system_fingerprint: "".to_string(),
                     object: "chat.completion".to_string(),
                     usage: response.usage.into(),
@@ -779,6 +780,7 @@ impl From<(InferenceResponse, String)> for OpenAICompatibleResponse {
                 created: current_timestamp() as u32,
                 model: format!("{response_model_prefix}{}", response.variant_name),
                 system_fingerprint: "".to_string(),
+                service_tier: "".to_string(),
                 object: "chat.completion".to_string(),
                 usage: OpenAICompatibleUsage {
                     prompt_tokens: response.usage.input_tokens,
@@ -1020,7 +1022,7 @@ fn prepare_serialized_openai_compatible_events(
             for chunk in openai_compatible_chunks {
                 let mut chunk_json = serde_json::to_value(chunk).map_err(|e| {
                     Error::new(ErrorDetails::Inference {
-                        message: format!("Failed to convert chunk to JSON: {}", e),
+                        message: format!("Failed to convert chunk to JSON: {e}"),
                     })
                 })?;
                 if is_first_chunk {
@@ -1031,7 +1033,7 @@ fn prepare_serialized_openai_compatible_events(
 
                 yield Event::default().json_data(chunk_json).map_err(|e| {
                     Error::new(ErrorDetails::Inference {
-                        message: format!("Failed to convert Value to Event: {}", e),
+                        message: format!("Failed to convert Value to Event: {e}"),
                     })
                 })
             }
@@ -1057,7 +1059,7 @@ fn prepare_serialized_openai_compatible_events(
                 episode_id: episode_id.to_string(),
                 choices: vec![],
                 created: current_timestamp() as u32,
-                model: format!("{response_model_prefix}{}", variant_name),
+                model: format!("{response_model_prefix}{variant_name}"),
                 system_fingerprint: "".to_string(),
                 object: "chat.completion.chunk".to_string(),
                 service_tier: "".to_string(),
@@ -1071,7 +1073,7 @@ fn prepare_serialized_openai_compatible_events(
                 usage_chunk)
                 .map_err(|e| {
                     Error::new(ErrorDetails::Inference {
-                        message: format!("Failed to convert usage chunk to JSON: {}", e),
+                        message: format!("Failed to convert usage chunk to JSON: {e}"),
                     })
                 });
         }

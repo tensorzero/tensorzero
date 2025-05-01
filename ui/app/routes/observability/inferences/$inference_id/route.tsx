@@ -11,6 +11,7 @@ import {
 import type { Route } from "./+types/route";
 import {
   data,
+  Form,
   isRouteErrorResponse,
   Link,
   redirect,
@@ -38,7 +39,6 @@ import {
   SectionLayout,
   SectionsGroup,
 } from "~/components/layout/PageLayout";
-import { InferenceActions } from "./InferenceActions";
 import { getDatasetCounts } from "~/utils/clickhouse/datasets.server";
 import { Toaster } from "~/components/ui/toaster";
 import { useToast } from "~/hooks/use-toast";
@@ -46,6 +46,15 @@ import {
   prepareInferenceActionRequest,
   useInferenceActionFetcher,
 } from "~/routes/api/tensorzero/inference.utils";
+import { ActionBar } from "~/components/layout/ActionBar";
+import { TryWithVariantButton } from "~/components/inference/TryWithVariantButton";
+import { AddToDatasetButton } from "./AddToDatasetButton";
+import { HumanFeedbackButton } from "~/components/feedback/HumanFeedbackButton";
+import { HumanFeedbackModal } from "~/components/feedback/HumanFeedbackModal";
+import { HumanFeedbackForm } from "~/components/feedback/HumanFeedbackForm";
+
+const FF_ENABLE_FEEDBACK =
+  import.meta.env.VITE_TENSORZERO_UI_FF_ENABLE_FEEDBACK === "1";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { inference_id } = params;
@@ -167,6 +176,8 @@ async function addToDataset(formData: FormData) {
   }
 }
 
+type ModalType = "human-feedback" | "variant-response" | null;
+
 export default function InferencePage({ loaderData }: Route.ComponentProps) {
   const {
     inference,
@@ -178,7 +189,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
     newFeedbackId,
   } = loaderData;
   const navigate = useNavigate();
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [openModal, setOpenModal] = useState<ModalType | null>(null);
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
 
   const topFeedback = feedback[0] as { id: string } | undefined;
@@ -248,14 +259,14 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
   const variantSource = "inference";
   const variantInferenceIsLoading =
     // only concerned with rendering loading state when the modal is open
-    isModalOpen &&
+    openModal === "variant-response" &&
     (variantInferenceFetcher.state === "submitting" ||
       variantInferenceFetcher.state === "loading");
 
   const { submit } = variantInferenceFetcher;
   const onVariantSelect = (variant: string) => {
     setSelectedVariant(variant);
-    setIsModalOpen(true);
+    setOpenModal("variant-response");
     const request = prepareInferenceActionRequest({
       resource: inference,
       source: variantSource,
@@ -263,11 +274,6 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
     });
     // TODO: handle JSON.stringify error
     submit({ data: JSON.stringify(request) });
-  };
-
-  const handleModalClose = () => {
-    setIsModalOpen(false);
-    setSelectedVariant(null);
   };
 
   return (
@@ -286,16 +292,35 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
           </div>
         )}
 
-        <InferenceActions
-          variants={variants}
-          onVariantSelect={onVariantSelect}
-          variantInferenceIsLoading={variantInferenceIsLoading}
-          dataset_counts={dataset_counts}
-          onDatasetSelect={handleAddToDataset}
-          hasDemonstration={hasDemonstration}
-          inferenceOutput={inference.output}
-          inferenceId={inference.id}
-        />
+        <ActionBar>
+          <TryWithVariantButton
+            variants={variants}
+            onVariantSelect={onVariantSelect}
+            isLoading={variantInferenceIsLoading}
+          />
+          <AddToDatasetButton
+            dataset_counts={dataset_counts}
+            onDatasetSelect={handleAddToDataset}
+            hasDemonstration={hasDemonstration}
+          />
+          {FF_ENABLE_FEEDBACK && (
+            <HumanFeedbackModal
+              onOpenChange={(open) =>
+                setOpenModal(open ? "human-feedback" : null)
+              }
+              isOpen={openModal === "human-feedback"}
+              trigger={<HumanFeedbackButton />}
+            >
+              <Form method="post" onSubmit={() => setOpenModal(null)}>
+                <input type="hidden" name="_action" value="addFeedback" />
+                <HumanFeedbackForm
+                  inferenceId={inference.id}
+                  inferenceOutput={inference.output}
+                />
+              </Form>
+            </HumanFeedbackModal>
+          )}
+        </ActionBar>
       </PageHeader>
 
       <SectionsGroup>
@@ -362,12 +387,15 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
 
       {selectedVariant && (
         <VariantResponseModal
-          isOpen={isModalOpen}
+          isOpen={openModal === "variant-response"}
           isLoading={variantInferenceIsLoading}
           error={variantInferenceFetcher.error?.message}
           variantResponse={variantInferenceFetcher.data?.info ?? null}
           rawResponse={variantInferenceFetcher.data?.raw ?? null}
-          onClose={handleModalClose}
+          onClose={() => {
+            setOpenModal(null);
+            setSelectedVariant(null);
+          }}
           item={inference}
           inferenceUsage={getTotalInferenceUsage(model_inferences)}
           selectedVariant={selectedVariant}
@@ -427,14 +455,14 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   const { heading, message } = getUserFacingError(error);
   return (
     <div className="flex flex-col items-center justify-center md:h-full">
-      <div className="mt-8 flex flex-col items-center justify-center gap-2 rounded-xl border border-red-500 bg-red-50 p-6 md:mt-0">
+      <div className="mt-8 flex flex-col items-center justify-center gap-2 rounded-xl bg-red-50 p-6 md:mt-0">
         <h1 className="text-2xl font-bold">{heading}</h1>
         {typeof message === "string" ? <p>{message}</p> : message}
         <Link
           to={`/observability/inferences`}
-          className="font-bold text-red-900 hover:text-red-800 hover:underline"
+          className="font-bold text-red-800 hover:text-red-600"
         >
-          Go back
+          Go back &rarr;
         </Link>
       </div>
     </div>

@@ -41,12 +41,13 @@ use super::openai::convert_stream_error;
 
 /// Implements a subset of the GCP Vertex Gemini API as documented [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/generateContent) for non-streaming
 /// and [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/streamGenerateContent) for streaming
-#[allow(unused)]
+#[expect(unused)]
 const PROVIDER_NAME: &str = "GCP Vertex Anthropic";
 const PROVIDER_TYPE: &str = "gcp_vertex_anthropic";
 
 #[derive(Debug)]
 pub struct GCPVertexAnthropicProvider {
+    model_id: String,
     request_url: String,
     streaming_request_url: String,
     audience: String,
@@ -74,11 +75,16 @@ impl GCPVertexAnthropicProvider {
         let audience = format!("https://{location}-aiplatform.googleapis.com/");
 
         Ok(GCPVertexAnthropicProvider {
+            model_id,
             request_url,
             streaming_request_url,
             audience,
             credentials,
         })
+    }
+
+    pub fn model_id(&self) -> &str {
+        &self.model_id
     }
 }
 
@@ -108,6 +114,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
         })?;
         let headers = inject_extra_request_data(
             &request.extra_body,
+            &request.extra_headers,
             model_provider,
             model_name,
             &mut request_body,
@@ -204,6 +211,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
         })?;
         let headers = inject_extra_request_data(
             &request.extra_body,
+            &request.extra_headers,
             model_provider,
             model_name,
             &mut request_body,

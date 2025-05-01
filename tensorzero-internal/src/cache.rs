@@ -393,8 +393,6 @@ pub async fn cache_lookup_inner<T: CacheOutput + DeserializeOwned>(
     let short_cache_key = cache_key.get_short_key()?.to_string();
     let long_cache_key = cache_key.get_long_key();
     // The clickhouse query args look like rust format string args, but they're not.
-    #[allow(unknown_lints)]
-    #[allow(clippy::literal_string_with_formatting_args)]
     let query = if max_age_s.is_some() {
         r#"
             SELECT
@@ -481,6 +479,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
         let model_provider_request = ModelProviderRequest {
@@ -505,6 +504,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
         let model_provider_request = ModelProviderRequest {
@@ -531,6 +531,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
         let model_provider_request = ModelProviderRequest {

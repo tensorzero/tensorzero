@@ -197,7 +197,7 @@ def parse_inference_response(data: Dict[str, Any]) -> InferenceResponse:
             finish_reason=finish_reason_enum,
         )
     elif "output" in data and isinstance(data["output"], dict):
-        output: Dict[str, Any] = data["output"]
+        output = t.cast(Dict[str, Any], data["output"])
         finish_reason = data.get("finish_reason")
         finish_reason_enum = FinishReason(finish_reason) if finish_reason else None
 
@@ -380,3 +380,25 @@ class TensorZeroError(BaseTensorZeroError):
 
     def __str__(self) -> str:
         return f"TensorZeroError (status code {self.status_code}): {self.text}"
+
+
+@dataclass
+class DynamicEvaluationRunResponse:
+    run_id: UUID
+
+
+def parse_dynamic_evaluation_run_response(
+    data: Dict[str, Any],
+) -> DynamicEvaluationRunResponse:
+    return DynamicEvaluationRunResponse(run_id=UUID(data["run_id"]))
+
+
+@dataclass
+class DynamicEvaluationRunEpisodeResponse:
+    episode_id: UUID
+
+
+def parse_dynamic_evaluation_run_episode_response(
+    data: Dict[str, Any],
+) -> DynamicEvaluationRunEpisodeResponse:
+    return DynamicEvaluationRunEpisodeResponse(episode_id=UUID(data["episode_id"]))
