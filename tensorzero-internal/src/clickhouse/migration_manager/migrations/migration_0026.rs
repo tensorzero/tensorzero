@@ -5,10 +5,10 @@ use crate::clickhouse::migration_manager::migration_trait::Migration;
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::error::{Error, ErrorDetails};
 
-/// This migration adds the `DynamicRunEpisodeByRunId` table and the
-/// `DynamicRunEpisodeByRunIdView` materialized view.
+/// This migration adds the `DynamicEvaluationRunEpisodeByRunId` table and the
+/// `DynamicEvaluationRunEpisodeByRunIdView` materialized view.
 /// These support consumption of dynamic evaluations indexed by run id.
-/// The `DynamicRunEpisodeByRunId` table contains the same data as the
+/// The `DynamicEvaluationRunEpisodeByRunId` table contains the same data as the
 /// `DynamicEvaluationRunEpisode` table with different indexing.
 pub struct Migration0026<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
