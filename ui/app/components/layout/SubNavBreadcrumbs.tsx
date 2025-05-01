@@ -89,55 +89,83 @@ export function SubNavBreadcrumbs() {
       return [{ label: "Dashboard" }];
     }
 
-    // Process each path segment
     for (let i = 0; i < pathSegments.length; i++) {
       const segment = pathSegments[i];
 
-      // Skip excluded segments
+      // 1) Dynamic Evaluations root
+      if (segment === "dynamic_evaluations") {
+        breadcrumbs.push({
+          label: "Dynamic Evaluations",
+          href: "/dynamic_evaluations",
+        });
+        // if that's the only segment, we can return immediately
+        if (pathSegments.length === 1) {
+          return breadcrumbs;
+        }
+        continue;
+      }
+
+      // 2) Runs list under dynamic_evaluations
+      if (
+        segment === "runs" &&
+        i > 0 &&
+        pathSegments[i - 1] === "dynamic_evaluations"
+      ) {
+        breadcrumbs.push({
+          label: "Runs",
+          href: "/dynamic_evaluations/runs",
+        });
+        continue;
+      }
+
+      // 3) A specific run ID under /dynamic_evaluations/runs/:id
+      if (
+        i > 1 &&
+        pathSegments[i - 2] === "dynamic_evaluations" &&
+        pathSegments[i - 1] === "runs"
+      ) {
+        breadcrumbs.push({
+          label: segment, // the UUID
+          href: `/dynamic_evaluations/runs/${segment}`,
+        });
+        continue;
+      }
+
+      // Skip any globally excluded segments
       if (breadcrumbConfig.excludeSegments.includes(segment)) {
         continue;
       }
 
-      // Check for special path handling
+      // Handle existing specialPaths, IDs, datasets, evaluations, etc...
       if (breadcrumbConfig.specialPaths[segment]) {
-        const specialSegment = breadcrumbConfig.specialPaths[segment](
-          pathSegments,
-          i,
-        );
-        if (specialSegment) {
-          breadcrumbs.push(specialSegment);
+        const special = breadcrumbConfig.specialPaths[segment](pathSegments, i);
+        if (special) {
+          breadcrumbs.push(special);
         }
         continue;
       }
 
-      // Handle IDs and names (segments that follow a known parent)
+      // ID handling for functions/inferences/episodes
       if (i > 0) {
-        const prevSegment = pathSegments[i - 1];
+        const prev = pathSegments[i - 1];
 
-        if (["functions", "inferences", "episodes"].includes(prevSegment)) {
+        if (["functions", "inferences", "episodes"].includes(prev)) {
           breadcrumbs.push({
             label: segment,
-            href: `/observability/${prevSegment}/${segment}`,
+            href: `/observability/${prev}/${segment}`,
           });
           continue;
         }
 
-        if (prevSegment === "datasets") {
-          if (segment === "builder") {
-            breadcrumbs.push({
-              label: "Builder",
-              href: `/datasets/builder`,
-            });
-          } else {
-            breadcrumbs.push({
-              label: segment,
-              href: `/datasets/${segment}`,
-            });
-          }
+        if (prev === "datasets") {
+          breadcrumbs.push({
+            label: segment === "builder" ? "Builder" : segment,
+            href: `/datasets/${segment}`,
+          });
           continue;
         }
 
-        if (prevSegment === "evaluations") {
+        if (prev === "evaluations") {
           breadcrumbs.push({
             label: segment,
             href: `/evaluations/${segment}`,
@@ -145,17 +173,17 @@ export function SubNavBreadcrumbs() {
           continue;
         }
 
-        // Add handler for datapoint IDs within evaluations
+        // fallback for datapoint IDs in evaluations
         if (i > 1 && pathSegments[i - 2] === "evaluations") {
           breadcrumbs.push({
-            label: `${segment}`,
+            label: segment,
             href: `/evaluations/${pathSegments[i - 1]}/${segment}`,
           });
           continue;
         }
       }
 
-      // Add standard breadcrumb if not handled by special cases
+      // Default label/href via customLabels
       if (breadcrumbConfig.customLabels[segment]) {
         const category =
           segment === "supervised-fine-tuning"
@@ -163,6 +191,7 @@ export function SubNavBreadcrumbs() {
             : segment === "datasets" || segment === "evaluations"
               ? ""
               : "observability";
+
         breadcrumbs.push({
           label: breadcrumbConfig.customLabels[segment],
           href: `/${category}${category ? "/" : ""}${segment}`,
@@ -178,14 +207,14 @@ export function SubNavBreadcrumbs() {
   return (
     <Breadcrumb>
       <BreadcrumbList>
-        {breadcrumbs.map((breadcrumb, index) => (
-          <BreadcrumbItem key={index}>
-            {index === breadcrumbs.length - 1 ? (
-              <BreadcrumbPage>{breadcrumb.label}</BreadcrumbPage>
+        {breadcrumbs.map((bc, idx) => (
+          <BreadcrumbItem key={idx}>
+            {idx === breadcrumbs.length - 1 ? (
+              <BreadcrumbPage>{bc.label}</BreadcrumbPage>
             ) : (
               <>
                 <BreadcrumbLink asChild>
-                  <Link to={breadcrumb.href || "#"}>{breadcrumb.label}</Link>
+                  <Link to={bc.href || "#"}>{bc.label}</Link>
                 </BreadcrumbLink>
                 <BreadcrumbSeparator />
               </>

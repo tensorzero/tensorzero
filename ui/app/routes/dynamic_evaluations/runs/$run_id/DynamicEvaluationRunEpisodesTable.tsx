@@ -26,7 +26,6 @@ export default function DynamicEvaluationRunEpisodesTable({
 
   // Convert to sorted array for consistent column order
   const uniqueMetricNames = Array.from(allMetricNames).sort();
-  console.log(uniqueMetricNames);
 
   return (
     <div>
