@@ -39,7 +39,7 @@ use super::openai::convert_stream_error;
 
 lazy_static! {
     static ref ANTHROPIC_BASE_URL: Url = {
-        #[allow(clippy::expect_used)]
+        #[expect(clippy::expect_used)]
         Url::parse("https://api.anthropic.com/v1/messages")
             .expect("Failed to parse ANTHROPIC_BASE_URL")
     };
@@ -75,6 +75,10 @@ impl AnthropicProvider {
             model_name,
             credentials,
         })
+    }
+
+    pub fn model_name(&self) -> &str {
+        &self.model_name
     }
 }
 
@@ -149,6 +153,7 @@ impl InferenceProvider for AnthropicProvider {
             )?;
         let headers = inject_extra_request_data(
             &request.extra_body,
+            &request.extra_headers,
             model_provider,
             tensorzero_model_name,
             &mut request_body,
@@ -264,6 +269,7 @@ impl InferenceProvider for AnthropicProvider {
             )?;
         let headers = inject_extra_request_data(
             &request.extra_body,
+            &request.extra_headers,
             model_provider,
             model_name,
             &mut request_body,
@@ -497,15 +503,15 @@ enum AnthropicMessageContent<'a> {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
-struct AnthropicImageSource {
-    r#type: AnthropicImageType,
-    media_type: ImageKind,
-    data: String,
+pub struct AnthropicImageSource {
+    pub r#type: AnthropicImageType,
+    pub media_type: ImageKind,
+    pub data: String,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
-enum AnthropicImageType {
+pub enum AnthropicImageType {
     Base64,
 }
 

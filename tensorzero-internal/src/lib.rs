@@ -1,6 +1,6 @@
 // This is an internal crate, so we're the only consumers of
 // traits with async fns for now.
-#![allow(async_fn_in_trait)]
+#![expect(async_fn_in_trait)]
 
 pub mod cache;
 pub mod clickhouse;
@@ -21,3 +21,8 @@ mod testing;
 pub mod tool; // types and methods for working with TensorZero tools
 mod uuid_util; // utilities for working with UUIDs
 pub mod variant; // types and methods for working with TensorZero variants
+
+pub mod built_info {
+    #![expect(clippy::allow_attributes)]
+    include!(concat!(env!("OUT_DIR"), "/built.rs"));
+}

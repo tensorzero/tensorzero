@@ -22,7 +22,7 @@ use crate::Clients;
 
 #[derive(Debug)]
 pub struct LLMJudgeEvaluationResult {
-    pub inference_id: Uuid,
+    pub evaluator_inference_id: Uuid,
     pub value: Value,
     pub human_feedback: bool,
 }
@@ -52,7 +52,6 @@ pub struct RunLLMJudgeEvaluatorParams<'a> {
     pub inference_cache: CacheEnabledMode,
 }
 
-#[allow(clippy::too_many_arguments)]
 pub async fn run_llm_judge_evaluator(
     params: RunLLMJudgeEvaluatorParams<'_>,
 ) -> Result<Option<LLMJudgeEvaluationResult>> {
@@ -76,8 +75,8 @@ pub async fn run_llm_judge_evaluator(
     .await?
     {
         return Ok(Some(LLMJudgeEvaluationResult {
-            inference_id: inference_response.inference_id(),
-            value: human_feedback,
+            evaluator_inference_id: human_feedback.evaluator_inference_id,
+            value: human_feedback.value,
             human_feedback: true,
         }));
     }
@@ -113,6 +112,7 @@ pub async fn run_llm_judge_evaluator(
         credentials: HashMap::new(),
         cache_options: get_cache_options(inference_cache),
         extra_body: Default::default(),
+        extra_headers: Default::default(),
     };
     let result = clients.tensorzero_client.inference(params).await?;
     let response = match result {
@@ -121,7 +121,7 @@ pub async fn run_llm_judge_evaluator(
             bail!("Streaming not supported for LLM judge evaluations. This is a bug, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.")
         }
     };
-    let inference_id = response.inference_id();
+    let evaluator_inference_id = response.inference_id();
     let output = match response {
         InferenceResponse::Chat(..) => {
             bail!("Chat output not supported for LLM judge evaluations. This is a bug, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.")
@@ -141,7 +141,7 @@ pub async fn run_llm_judge_evaluator(
     };
     match value {
         Some(value) => Ok(Some(LLMJudgeEvaluationResult {
-            inference_id,
+            evaluator_inference_id,
             value,
             human_feedback: false,
         })),
@@ -190,6 +190,7 @@ fn prepare_llm_judge_input(
                 messages: vec![ClientInputMessage {
                     role: Role::User,
                     content: vec![ClientInputMessageContent::Text(TextKind::Arguments{
+                        #[expect(clippy::expect_used)]
                         arguments: json!({"input": serialized_input, "generated_output": generated_output, "reference_output": reference_output})
                             .as_object()
                             .expect("Arguments should be an object")

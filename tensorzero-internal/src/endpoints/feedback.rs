@@ -21,7 +21,7 @@ use crate::inference::types::batch::deserialize_optional_json_string;
 use crate::inference::types::{
     parse_chat_output, ContentBlockChatOutput, ContentBlockOutput, Text,
 };
-use crate::jsonschema_util::JSONSchemaFromPath;
+use crate::jsonschema_util::StaticJSONSchema;
 use crate::tool::{ToolCall, ToolCallConfig, ToolCallConfigDatabaseInsert};
 use crate::uuid_util::uuid_elapsed;
 
@@ -107,6 +107,7 @@ pub async fn feedback(
     params: Params,
 ) -> Result<Json<FeedbackResponse>, Error> {
     validate_tags(&params.tags, params.internal)?;
+    validate_feedback_specific_tags(&params.tags)?;
     // Get the metric config or return an error if it doesn't exist
     let feedback_metadata = get_feedback_metadata(
         &config,
@@ -231,10 +232,7 @@ fn get_feedback_metadata<'a>(
         MetricConfigLevel::Episode => episode_id,
     }
     .ok_or_else(|| ErrorDetails::InvalidRequest {
-        message: format!(
-            r#"Correct ID was not provided for feedback level "{}"."#,
-            feedback_level
-        ),
+        message: format!(r#"Correct ID was not provided for feedback level "{feedback_level}"."#),
     })?;
     Ok(FeedbackMetadata {
         r#type: feedback_type,
@@ -299,7 +297,7 @@ async fn write_demonstration(
         validate_parse_demonstration(function_config, value, dynamic_demonstration_info).await?;
     let string_value = serde_json::to_string(&parsed_value).map_err(|e| {
         Error::new(ErrorDetails::InvalidRequest {
-            message: format!("Failed to serialize parsed value to json: {}", e),
+            message: format!("Failed to serialize parsed value to json: {e}"),
         })
     })?;
     let payload = json!({"inference_id": inference_id, "value": string_value, "id": feedback_id, "tags": tags});
@@ -394,7 +392,9 @@ async fn throttled_get_function_name(
     target_id: &Uuid,
 ) -> Result<String, Error> {
     // Compute how long ago the target_id was created.
-    let elapsed = uuid_elapsed(target_id)?;
+    // Some UUIDs are in the future, e.g. for dynamic evaluation runs.
+    // In this case we should be conservative and assume no time has passed.
+    let elapsed = uuid_elapsed(target_id).unwrap_or(Duration::from_secs(0));
 
     // Calculate the remaining cooldown (which may be zero) and ensure we wait at least FEEDBACK_MINIMUM_WAIT_TIME.
     let wait_time = max(
@@ -456,8 +456,7 @@ async fn get_function_name(
         MetricConfigLevel::Episode => "episode_id_uint",
     };
     let query = format!(
-        "SELECT function_name FROM {} FINAL WHERE {} = toUInt128(toUUID('{}'))",
-        table_name, identifier_key, target_id
+        "SELECT function_name FROM {table_name} FINAL WHERE {identifier_key} = toUInt128(toUUID('{target_id}'))"
     );
     let function_name = connection_info
         .run_query_synchronous(query, None)
@@ -486,10 +485,7 @@ impl TryFrom<DemonstrationToolCall> for ToolCall {
             name: value.name,
             arguments: serde_json::to_string(&value.arguments).map_err(|e| {
                 Error::new(ErrorDetails::InvalidRequest {
-                    message: format!(
-                        "Failed to serialize demonstration tool call arguments: {}",
-                        e
-                    ),
+                    message: format!("Failed to serialize demonstration tool call arguments: {e}"),
                 })
             })?,
             id: "".to_string(),
@@ -547,7 +543,7 @@ pub async fn validate_parse_demonstration(
                         serde_json::from_value::<DemonstrationContentBlock>(block.clone()).map_err(
                             |e| {
                                 Error::new(ErrorDetails::InvalidRequest {
-                                    message: format!("Invalid demonstration content block: {}", e),
+                                    message: format!("Invalid demonstration content block: {e}"),
                                 })
                             },
                         )
@@ -587,19 +583,18 @@ pub async fn validate_parse_demonstration(
         }
         (FunctionConfig::Json(_), DynamicDemonstrationInfo::Json(output_schema)) => {
             // For json functions, the value should be a valid json object.
-            JSONSchemaFromPath::from_value(&output_schema)?
+            StaticJSONSchema::from_value(&output_schema)?
                 .validate(value)
                 .map_err(|e| {
                     Error::new(ErrorDetails::InvalidRequest {
                         message: format!(
-                            "Demonstration does not fit function output schema: {}",
-                            e
+                            "Demonstration does not fit function output schema: {e}"
                         ),
                     })
                 })?;
             let raw = serde_json::to_string(value).map_err(|e| {
                 Error::new(ErrorDetails::InvalidRequest {
-                    message: format!("Failed to serialize demonstration to json: {}", e),
+                    message: format!("Failed to serialize demonstration to json: {e}"),
                 })
             })?;
             let json_inference_response = json!({"raw": raw, "parsed": value});
@@ -651,7 +646,7 @@ async fn get_dynamic_demonstration_info(
             let tool_params_result =
                 serde_json::from_str::<ToolParamsResult>(&result).map_err(|e| {
                     Error::new(ErrorDetails::ClickHouseQuery {
-                        message: format!("Failed to parse demonstration result: {}", e),
+                        message: format!("Failed to parse demonstration result: {e}"),
                     })
                 })?;
 
@@ -677,7 +672,7 @@ async fn get_dynamic_demonstration_info(
                 .await?;
             let result_value = serde_json::from_str::<Value>(&result).map_err(|e| {
                 Error::new(ErrorDetails::ClickHouseQuery {
-                    message: format!("Failed to parse demonstration result: {}", e),
+                    message: format!("Failed to parse demonstration result: {e}"),
                 })
             })?;
             let output_schema_str = result_value
@@ -693,7 +688,7 @@ async fn get_dynamic_demonstration_info(
             let mut output_schema =
                 serde_json::from_str::<Value>(output_schema_str).map_err(|e| {
                     Error::new(ErrorDetails::ClickHouseQuery {
-                        message: format!("Failed to parse output schema: {}", e),
+                        message: format!("Failed to parse output schema: {e}"),
                     })
                 })?;
             if function_name.starts_with("tensorzero::llm_judge") {
@@ -791,6 +786,18 @@ fn handle_llm_judge_output_schema(output_schema: Value) -> Value {
     }
 }
 
+fn validate_feedback_specific_tags(tags: &HashMap<String, String>) -> Result<(), Error> {
+    if tags.contains_key("tensorzero::datapoint_id")
+        && tags.contains_key("tensorzero::human_feedback")
+        && !tags.contains_key("tensorzero::evaluator_inference_id")
+    {
+        return Err(Error::new(ErrorDetails::InvalidRequest {
+            message: "tensorzero::evaluator_inference_id is required when tensorzero::datapoint_id and tensorzero::human_feedback are provided".to_string(),
+        }));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -799,7 +806,7 @@ mod tests {
 
     use crate::config_parser::{Config, MetricConfig, MetricConfigOptimize};
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
-    use crate::jsonschema_util::JSONSchemaFromPath;
+    use crate::jsonschema_util::StaticJSONSchema;
     use crate::testing::get_unit_test_app_state_data;
     use crate::tool::{StaticToolConfig, ToolCallOutput, ToolChoice, ToolConfig};
 
@@ -1165,7 +1172,7 @@ mod tests {
         let weather_tool_config_static = StaticToolConfig {
             name: "get_temperature".to_string(),
             description: "Get the current temperature in a given location".to_string(),
-            parameters: JSONSchemaFromPath::from_value(&json!({
+            parameters: StaticJSONSchema::from_value(&json!({
                 "type": "object",
                 "properties": {
                     "location": {"type": "string"},
@@ -1315,7 +1322,7 @@ mod tests {
             system_schema: None,
             user_schema: None,
             assistant_schema: None,
-            output_schema: JSONSchemaFromPath::from_value(&output_schema).unwrap(),
+            output_schema: StaticJSONSchema::from_value(&output_schema).unwrap(),
             implicit_tool_call_config,
             description: None,
         })));
@@ -1386,5 +1393,46 @@ mod tests {
                 message: "The DynamicDemonstrationInfo does not match the function type. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.".to_string()
             }
         );
+    }
+
+    #[test]
+    fn test_validate_feedback_specific_tags() {
+        // Case 1: Empty tags should be valid
+        let tags = HashMap::new();
+        assert!(validate_feedback_specific_tags(&tags).is_ok());
+
+        // Case 2: Tags with only datapoint_id should be valid
+        let mut tags = HashMap::new();
+        tags.insert("tensorzero::datapoint_id".to_string(), "123".to_string());
+        assert!(validate_feedback_specific_tags(&tags).is_ok());
+
+        // Case 3: Tags with only human_feedback should be valid
+        let mut tags = HashMap::new();
+        tags.insert("tensorzero::human_feedback".to_string(), "true".to_string());
+        assert!(validate_feedback_specific_tags(&tags).is_ok());
+
+        // Case 4: Tags with datapoint_id and human_feedback but without evaluator_inference_id should be invalid
+        let mut tags = HashMap::new();
+        tags.insert("tensorzero::datapoint_id".to_string(), "123".to_string());
+        tags.insert("tensorzero::human_feedback".to_string(), "true".to_string());
+        assert!(validate_feedback_specific_tags(&tags).is_err());
+        let err = validate_feedback_specific_tags(&tags).unwrap_err();
+        let details = err.get_owned_details();
+        assert_eq!(
+            details,
+            ErrorDetails::InvalidRequest {
+                message: "tensorzero::evaluator_inference_id is required when tensorzero::datapoint_id and tensorzero::human_feedback are provided".to_string(),
+            }
+        );
+
+        // Case 5: Tags with all three required keys should be valid
+        let mut tags = HashMap::new();
+        tags.insert("tensorzero::datapoint_id".to_string(), "123".to_string());
+        tags.insert("tensorzero::human_feedback".to_string(), "true".to_string());
+        tags.insert(
+            "tensorzero::evaluator_inference_id".to_string(),
+            "456".to_string(),
+        );
+        assert!(validate_feedback_specific_tags(&tags).is_ok());
     }
 }

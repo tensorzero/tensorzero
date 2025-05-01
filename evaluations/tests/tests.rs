@@ -10,7 +10,9 @@ use evaluations::{Clients, ThrottledTensorZeroClient};
 use serde_json::json;
 use tensorzero::input_handling::resolved_input_to_client_input;
 use tensorzero_internal::cache::CacheEnabledMode;
-use tensorzero_internal::clickhouse::test_helpers::select_model_inferences_clickhouse;
+use tensorzero_internal::clickhouse::test_helpers::{
+    select_human_static_evaluation_feedback_clickhouse, select_model_inferences_clickhouse,
+};
 use tensorzero_internal::endpoints::datasets::Datapoint;
 use tensorzero_internal::evaluations::{LLMJudgeConfig, LLMJudgeInputFormat, LLMJudgeOutputType};
 use tensorzero_internal::function::{FunctionConfig, FunctionConfigJson};
@@ -71,6 +73,7 @@ async fn run_evaluations_json() {
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
+        // This test relies on the cache (see below), so we need to enable it
         inference_cache: CacheEnabledMode::On,
     };
 
@@ -83,6 +86,7 @@ async fn run_evaluations_json() {
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
     let mut parsed_output = Vec::new();
     let mut total_sports = 0;
+    let mut evaluator_inference_ids = HashMap::new();
     for line in output_lines {
         let parsed: EvaluationUpdate =
             serde_json::from_str(line).expect("Each line should be valid JSON");
@@ -185,9 +189,10 @@ async fn run_evaluations_json() {
             feedback["tags"]["tensorzero::evaluation_run_id"],
             evaluation_run_id.to_string()
         );
+        let datapoint_id = parsed.datapoint.id();
         assert_eq!(
             feedback["tags"]["tensorzero::datapoint_id"],
-            parsed.datapoint.id().to_string()
+            datapoint_id.to_string()
         );
         assert_eq!(
             feedback["tags"]["tensorzero::evaluator_name"],
@@ -206,12 +211,15 @@ async fn run_evaluations_json() {
                 .unwrap(),
         )
         .unwrap();
+        evaluator_inference_ids.insert(parsed.datapoint.id(), evaluator_inference_id);
+        // The evaluator inference id should not be the same as the inference id
+        assert_ne!(evaluator_inference_id, inference_id);
         // Send human feedback to the evaluator and overwrite the existing feedback
+        let metric_name =
+            "tensorzero::evaluation_name::entity_extraction::evaluator_name::count_sports";
         let human_feedback_payload = FeedbackParams {
             inference_id: Some(inference_id),
-            metric_name:
-                "tensorzero::evaluation_name::entity_extraction::evaluator_name::count_sports"
-                    .to_string(),
+            metric_name: metric_name.to_string(),
             value: json!(0),
             internal: true,
             tags: HashMap::from([
@@ -220,6 +228,10 @@ async fn run_evaluations_json() {
                     parsed.datapoint.id().to_string(),
                 ),
                 ("tensorzero::human_feedback".to_string(), "true".to_string()),
+                (
+                    "tensorzero::evaluator_inference_id".to_string(),
+                    evaluator_inference_id.to_string(),
+                ),
             ]),
             dryrun: Some(false),
             episode_id: None,
@@ -238,6 +250,22 @@ async fn run_evaluations_json() {
         );
         total_sports += feedback["value"].as_f64().unwrap() as u32;
         parsed_output.push(parsed);
+        // Sleep for 500ms to make sure the feedback is recorded
+        sleep(Duration::from_millis(500)).await;
+
+        let human_feedback = select_human_static_evaluation_feedback_clickhouse(
+            &clickhouse,
+            metric_name,
+            datapoint_id,
+            serde_json::to_string(&clickhouse_output).unwrap().as_str(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(human_feedback.value, "0");
+        assert_eq!(
+            human_feedback.evaluator_inference_id,
+            Some(evaluator_inference_id)
+        );
     }
     assert_eq!(parsed_output.len(), 6);
     assert_eq!(total_sports, 3);
@@ -280,7 +308,11 @@ async fn run_evaluations_json() {
         .unwrap();
         assert_eq!(
             clickhouse_feedback["tags"]["tensorzero::derived_from_human_feedback"],
-            "true"
+            "true",
+        );
+        assert_eq!(
+            clickhouse_feedback["tags"]["tensorzero::evaluator_inference_id"],
+            evaluator_inference_ids[&parsed.datapoint.id()].to_string()
         );
     }
     assert_eq!(total_sports, 0);
@@ -311,7 +343,7 @@ async fn run_exact_match_evaluation_chat() {
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
-        inference_cache: CacheEnabledMode::On,
+        inference_cache: CacheEnabledMode::Off,
     };
 
     let mut output = Vec::new();
@@ -552,6 +584,10 @@ async fn run_llm_judge_evaluation_chat() {
             tags: HashMap::from([
                 ("tensorzero::datapoint_id".to_string(), parsed.datapoint.id().to_string()),
                 ("tensorzero::human_feedback".to_string(), "true".to_string()),
+                (
+                    "tensorzero::evaluator_inference_id".to_string(),
+                    evaluator_inference_id.to_string(),
+                ),
             ]),
             dryrun: Some(false),
             episode_id: None,
@@ -857,7 +893,7 @@ async fn check_invalid_image_evaluation() {
         variant_name: "honest_answer".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
-        inference_cache: CacheEnabledMode::On,
+        inference_cache: CacheEnabledMode::Off,
     };
 
     let mut output = Vec::new();
@@ -956,7 +992,7 @@ async fn run_llm_judge_evaluation_chat_pretty() {
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Pretty,
-        inference_cache: CacheEnabledMode::On,
+        inference_cache: CacheEnabledMode::Off,
     };
 
     let mut output = Vec::new();
@@ -997,7 +1033,7 @@ async fn run_llm_judge_evaluation_json_pretty() {
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Pretty,
-        inference_cache: CacheEnabledMode::On,
+        inference_cache: CacheEnabledMode::Off,
     };
 
     let mut output = Vec::new();
@@ -1151,7 +1187,7 @@ async fn run_evaluations_errors() {
         variant_name: "dummy_error".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
-        inference_cache: CacheEnabledMode::On,
+        inference_cache: CacheEnabledMode::Off,
     };
 
     let mut output = Vec::new();
@@ -1257,7 +1293,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         evaluator_name: "happy_bool",
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
-        inference_cache: CacheEnabledMode::On,
+        inference_cache: CacheEnabledMode::Off,
     })
     .await
     .unwrap()
@@ -1273,7 +1309,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         evaluator_name: "sad_bool",
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
-        inference_cache: CacheEnabledMode::On,
+        inference_cache: CacheEnabledMode::Off,
     })
     .await
     .unwrap()
@@ -1289,7 +1325,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         evaluator_name: "zero",
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
-        inference_cache: CacheEnabledMode::On,
+        inference_cache: CacheEnabledMode::Off,
     })
     .await
     .unwrap()
@@ -1305,7 +1341,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         evaluator_name: "one",
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
-        inference_cache: CacheEnabledMode::On,
+        inference_cache: CacheEnabledMode::Off,
     })
     .await
     .unwrap()
@@ -1345,7 +1381,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         evaluator_name: "happy_bool",
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
-        inference_cache: CacheEnabledMode::On,
+        inference_cache: CacheEnabledMode::Off,
     })
     .await
     .unwrap();
@@ -1424,7 +1460,7 @@ async fn test_run_llm_judge_evaluator_json() {
         evaluator_name: "happy_bool",
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
-        inference_cache: CacheEnabledMode::On,
+        inference_cache: CacheEnabledMode::Off,
     })
     .await
     .unwrap()
@@ -1440,7 +1476,7 @@ async fn test_run_llm_judge_evaluator_json() {
         evaluator_name: "sad_bool",
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
-        inference_cache: CacheEnabledMode::On,
+        inference_cache: CacheEnabledMode::Off,
     })
     .await
     .unwrap()
@@ -1456,7 +1492,7 @@ async fn test_run_llm_judge_evaluator_json() {
         evaluator_name: "zero",
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
-        inference_cache: CacheEnabledMode::On,
+        inference_cache: CacheEnabledMode::Off,
     })
     .await
     .unwrap()
@@ -1472,7 +1508,7 @@ async fn test_run_llm_judge_evaluator_json() {
         evaluator_name: "one",
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
-        inference_cache: CacheEnabledMode::On,
+        inference_cache: CacheEnabledMode::Off,
     })
     .await
     .unwrap()
@@ -1512,7 +1548,7 @@ async fn test_run_llm_judge_evaluator_json() {
         evaluator_name: "happy_bool",
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
-        inference_cache: CacheEnabledMode::On,
+        inference_cache: CacheEnabledMode::Off,
     })
     .await
     .unwrap();
@@ -1544,7 +1580,7 @@ async fn run_evaluations_best_of_3() {
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
-        inference_cache: CacheEnabledMode::On,
+        inference_cache: CacheEnabledMode::Off,
     };
 
     let mut output = Vec::new();
@@ -1729,7 +1765,7 @@ async fn run_evaluations_mixture_of_3() {
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
-        inference_cache: CacheEnabledMode::On,
+        inference_cache: CacheEnabledMode::Off,
     };
 
     let mut output = Vec::new();
@@ -1917,7 +1953,7 @@ async fn run_evaluations_dicl() {
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
-        inference_cache: CacheEnabledMode::On,
+        inference_cache: CacheEnabledMode::Off,
     };
 
     let mut output = Vec::new();

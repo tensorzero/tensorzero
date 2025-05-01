@@ -9,8 +9,8 @@ use crate::config_parser::LoadableConfig;
 use crate::config_parser::PathWithContents;
 use crate::embeddings::{EmbeddingModelTable, EmbeddingResponseWithMetadata};
 use crate::endpoints::inference::InferenceModels;
-use crate::inference::types::extra_body::ExtraHeadersConfig;
 use crate::inference::types::extra_body::{ExtraBodyConfig, FullExtraBodyConfig};
+use crate::inference::types::extra_headers::{ExtraHeadersConfig, FullExtraHeadersConfig};
 use crate::inference::types::ContentBlock;
 use crate::inference::types::ResolvedInput;
 use crate::inference::types::ResolvedInputMessageContent;
@@ -314,8 +314,7 @@ impl DiclConfig {
         let serialized_input = serde_json::to_string(&input).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!(
-                    "Error in serializing Input in dynamic in-context learning variant: {}",
-                    e
+                    "Error in serializing Input in dynamic in-context learning variant: {e}"
                 ),
             })
         })?;
@@ -374,7 +373,7 @@ impl DiclConfig {
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| {
                 Error::new(ErrorDetails::Serialization {
-                    message: format!("Failed to parse raw examples: {}", e),
+                    message: format!("Failed to parse raw examples: {e}"),
                 })
             })?;
 
@@ -411,8 +410,7 @@ impl DiclConfig {
                 .map_err(|e| {
                     Error::new(ErrorDetails::Serialization {
                         message: format!(
-                            "Error in serializing Input in dynamic in-context learning variant: {}",
-                            e
+                            "Error in serializing Input in dynamic in-context learning variant: {e}"
                         ),
                     })
                 })?
@@ -445,8 +443,7 @@ impl DiclConfig {
             .map_err(|e| {
                 Error::new(ErrorDetails::Serialization {
                     message: format!(
-                        "Error in serializing Input in dynamic in-context learning variant: {}",
-                        e
+                        "Error in serializing Input in dynamic in-context learning variant: {e}"
                     ),
                 })
             })?
@@ -521,8 +518,14 @@ impl DiclConfig {
         }
         let extra_body = FullExtraBodyConfig {
             extra_body: self.extra_body.clone(),
-            variant_extra_headers: self.extra_headers.clone(),
             inference_extra_body: Default::default(),
+        };
+        let extra_headers = FullExtraHeadersConfig {
+            variant_extra_headers: self.extra_headers.clone(),
+            inference_extra_headers: inference_config
+                .extra_headers
+                .clone()
+                .filter(inference_config.variant_name),
         };
         prepare_model_inference_request(
             messages,
@@ -533,6 +536,7 @@ impl DiclConfig {
             inference_params,
             self.json_mode,
             extra_body,
+            extra_headers,
         )
     }
 }
@@ -549,7 +553,7 @@ fn parse_raw_examples(
         // Parse the `input` string into `Input`
         let input: ResolvedInput = serde_json::from_str(&raw_example.input).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
-                message: format!("Failed to parse `input`: {}", e),
+                message: format!("Failed to parse `input`: {e}"),
             })
         })?;
 
@@ -571,8 +575,7 @@ fn parse_raw_examples(
                         .map_err(|e| {
                             Error::new(ErrorDetails::Serialization {
                                 message: format!(
-                                    "Failed to parse `output` in example `{:?}`: {}",
-                                    raw_example, e
+                                    "Failed to parse `output` in example `{raw_example:?}`: {e}"
                                 ),
                             })
                         })?;
@@ -584,8 +587,7 @@ fn parse_raw_examples(
                     .map_err(|e| {
                         Error::new(ErrorDetails::Serialization {
                             message: format!(
-                                "Failed to parse `output` in example `{:?}`: {}",
-                                raw_example, e
+                                "Failed to parse `output` in example `{raw_example:?}`: {e}"
                             ),
                         })
                     })?;
@@ -611,7 +613,7 @@ impl LoadableConfig<DiclConfig> for UninitializedDiclConfig {
                 let path = base_path.as_ref().join(path);
                 fs::read_to_string(path).map_err(|e| {
                     Error::new(ErrorDetails::Config {
-                        message: format!("Failed to read system instructions: {}", e),
+                        message: format!("Failed to read system instructions: {e}"),
                     })
                 })?
             }

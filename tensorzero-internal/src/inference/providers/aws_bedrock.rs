@@ -35,7 +35,7 @@ use crate::inference::types::{FinishReason, ProviderInferenceResponseArgs};
 use crate::model::ModelProvider;
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
-#[allow(unused)]
+#[expect(unused)]
 const PROVIDER_NAME: &str = "AWS Bedrock";
 const PROVIDER_TYPE: &str = "aws_bedrock";
 
@@ -44,6 +44,7 @@ const PROVIDER_TYPE: &str = "aws_bedrock";
 pub struct AWSBedrockProvider {
     model_id: String,
     client: aws_sdk_bedrockruntime::Client,
+    base_config: aws_sdk_bedrockruntime::config::Builder,
 }
 
 impl AWSBedrockProvider {
@@ -51,7 +52,15 @@ impl AWSBedrockProvider {
         let config = aws_common::config_with_region(PROVIDER_TYPE, region).await?;
         let client = aws_sdk_bedrockruntime::Client::new(&config);
 
-        Ok(Self { model_id, client })
+        Ok(Self {
+            model_id,
+            client,
+            base_config: aws_sdk_bedrockruntime::config::Builder::from(&config),
+        })
+    }
+
+    pub fn model_id(&self) -> &str {
+        &self.model_id
     }
 }
 
@@ -63,7 +72,7 @@ impl InferenceProvider for AWSBedrockProvider {
             provider_name: _,
             model_name,
         }: ModelProviderRequest<'a>,
-        _http_client: &'a reqwest::Client,
+        http_client: &'a reqwest::Client,
         _dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
@@ -145,9 +154,14 @@ impl InferenceProvider for AWSBedrockProvider {
             get_raw_request,
         } = build_interceptor(request, model_provider, model_name.to_string());
 
+        let new_config = self
+            .base_config
+            .clone()
+            .http_client(super::aws_http_client::Client::new(http_client.clone()));
         let start_time = Instant::now();
         let output = bedrock_request
             .customize()
+            .config_override(new_config)
             .interceptor(interceptor)
             .send()
             .await
@@ -189,7 +203,7 @@ impl InferenceProvider for AWSBedrockProvider {
             provider_name: _,
             model_name,
         }: ModelProviderRequest<'a>,
-        _http_client: &'a reqwest::Client,
+        http_client: &'a reqwest::Client,
         _dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
@@ -267,10 +281,15 @@ impl InferenceProvider for AWSBedrockProvider {
             interceptor,
             get_raw_request,
         } = build_interceptor(request, model_provider, model_name.to_string());
+        let new_config = self
+            .base_config
+            .clone()
+            .http_client(super::aws_http_client::Client::new(http_client.clone()));
 
         let start_time = Instant::now();
         let stream = bedrock_request
             .customize()
+            .config_override(new_config)
             .interceptor(interceptor)
             .send()
             .await
@@ -793,7 +812,7 @@ fn serialize_aws_bedrock_struct<T: std::fmt::Debug>(output: &T) -> Result<String
     serde_json::to_string(&serde_json::json!({"debug": format!("{:?}", output)})).map_err(|e| {
         Error::new(ErrorDetails::InferenceServer {
             raw_request: None,
-            raw_response: Some(format!("{:?}", output)),
+            raw_response: Some(format!("{output:?}")),
             message: format!(
                 "Error parsing response from AWS Bedrock: {}",
                 DisplayOrDebugGateway::new(e)

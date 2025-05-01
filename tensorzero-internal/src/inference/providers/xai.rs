@@ -31,7 +31,7 @@ use super::provider_trait::TensorZeroEventError;
 
 lazy_static! {
     static ref XAI_DEFAULT_BASE_URL: Url = {
-        #[allow(clippy::expect_used)]
+        #[expect(clippy::expect_used)]
         Url::parse("https://api.x.ai/v1").expect("Failed to parse XAI_DEFAULT_BASE_URL")
     };
 }
@@ -67,6 +67,10 @@ impl XAIProvider {
             model_name,
             credentials,
         })
+    }
+
+    pub fn model_name(&self) -> &str {
+        &self.model_name
     }
 }
 
@@ -137,6 +141,7 @@ impl InferenceProvider for XAIProvider {
             })?;
         let headers = inject_extra_request_data(
             &request.extra_body,
+            &request.extra_headers,
             model_provider,
             model_name,
             &mut request_body,
@@ -217,7 +222,12 @@ impl InferenceProvider for XAIProvider {
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
-            Err(handle_openai_error(status, &response, PROVIDER_TYPE))
+            Err(handle_openai_error(
+                &serde_json::to_string(&request_body).unwrap_or_default(),
+                status,
+                &response,
+                PROVIDER_TYPE,
+            ))
         }
     }
 
@@ -243,6 +253,7 @@ impl InferenceProvider for XAIProvider {
             })?;
         let headers = inject_extra_request_data(
             &request.extra_body,
+            &request.extra_headers,
             model_provider,
             model_name,
             &mut request_body,
@@ -372,10 +383,7 @@ impl<'a> XAIRequest<'a> {
             false => None,
         };
 
-        let response_format = Some(XAIResponseFormat::new(
-            &request.json_mode,
-            request.output_schema,
-        ));
+        let response_format = XAIResponseFormat::new(&request.json_mode, request.output_schema);
 
         let messages = prepare_openai_messages(request)?;
 
@@ -411,16 +419,20 @@ enum XAIResponseFormat {
 }
 
 impl XAIResponseFormat {
-    fn new(json_mode: &ModelInferenceRequestJsonMode, output_schema: Option<&Value>) -> Self {
+    fn new(
+        json_mode: &ModelInferenceRequestJsonMode,
+        output_schema: Option<&Value>,
+    ) -> Option<Self> {
         match json_mode {
-            ModelInferenceRequestJsonMode::On => XAIResponseFormat::JsonObject,
-            ModelInferenceRequestJsonMode::Off => XAIResponseFormat::Text,
+            ModelInferenceRequestJsonMode::On => Some(XAIResponseFormat::JsonObject),
+            // For now, we never explicitly send `XAIResponseFormat::Text`
+            ModelInferenceRequestJsonMode::Off => None,
             ModelInferenceRequestJsonMode::Strict => match output_schema {
                 Some(schema) => {
                     let json_schema = json!({"name": "response", "strict": true, "schema": schema});
-                    XAIResponseFormat::JsonSchema { json_schema }
+                    Some(XAIResponseFormat::JsonSchema { json_schema })
                 }
-                None => XAIResponseFormat::JsonObject,
+                None => Some(XAIResponseFormat::JsonObject),
             },
         }
     }

@@ -15,11 +15,12 @@ use crate::{
     },
     error::{Error, ErrorDetails},
     function::{FunctionConfig, FunctionConfigJson},
-    inference::types::extra_body::{ExtraBodyConfig, ExtraHeadersConfig},
-    jsonschema_util::JSONSchemaFromPath,
+    inference::types::{extra_body::ExtraBodyConfig, extra_headers::ExtraHeadersConfig},
+    jsonschema_util::StaticJSONSchema,
     tool::create_implicit_tool_call_config,
     variant::{
         best_of_n_sampling::{BestOfNSamplingConfig, EvaluatorConfig as OnlineEvaluatorConfig},
+        chain_of_thought::ChainOfThoughtConfig,
         chat_completion::ChatCompletionConfig,
         dicl::DiclConfig,
         mixture_of_n::{FuserConfig, MixtureOfNConfig},
@@ -128,17 +129,11 @@ impl From<LLMJudgeOptimize> for MetricConfigOptimize {
 }
 
 pub fn get_llm_judge_function_name(evaluation_name: &str, evaluator_name: &str) -> String {
-    format!(
-        "tensorzero::llm_judge::{}::{}",
-        evaluation_name, evaluator_name
-    )
+    format!("tensorzero::llm_judge::{evaluation_name}::{evaluator_name}")
 }
 
 pub fn get_evaluator_metric_name(evaluation_name: &str, evaluator_name: &str) -> String {
-    format!(
-        "tensorzero::evaluation_name::{}::evaluator_name::{}",
-        evaluation_name, evaluator_name
-    )
+    format!("tensorzero::evaluation_name::{evaluation_name}::evaluator_name::{evaluator_name}")
 }
 
 #[derive(Debug, TensorZeroDeserialize)]
@@ -355,6 +350,9 @@ impl UninitializedEvaluatorConfig {
                         VariantConfig::Dicl(variant) => {
                             variant.weight = Some(1.0);
                         }
+                        VariantConfig::ChainOfThought(variant) => {
+                            variant.inner.weight = Some(1.0);
+                        }
                     };
                 }
                 let user_schema_value: Option<serde_json::Value> = match params.input_format {
@@ -376,14 +374,14 @@ impl UninitializedEvaluatorConfig {
                             message: format!("Failed to parse LLM judge output schema: {e}. This should never happen, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports."),
                         })
                     })?;
-                let output_schema = JSONSchemaFromPath::from_value(&output_schema_value)?;
+                let output_schema = StaticJSONSchema::from_value(&output_schema_value)?;
                 let implicit_tool_call_config =
                     create_implicit_tool_call_config(output_schema.clone());
                 let function_config = FunctionConfig::Json(FunctionConfigJson {
                     variants,
                     system_schema: None,
                     user_schema: user_schema_value
-                        .map(|v| JSONSchemaFromPath::from_value(&v))
+                        .map(|v| StaticJSONSchema::from_value(&v))
                         .transpose()?,
                     assistant_schema: None,
                     output_schema,
@@ -421,6 +419,8 @@ enum UninitializedLLMJudgeVariantConfig {
     MixtureOfNSampling(UninitializedLLMJudgeMixtureOfNVariantConfig),
     #[serde(rename = "experimental_dynamic_in_context_learning")]
     Dicl(UninitializedLLMJudgeDiclVariantConfig),
+    #[serde(rename = "experimental_chain_of_thought")]
+    ChainOfThought(UninitializedLLMJudgeChainOfThoughtVariantConfig),
 }
 
 #[derive(Debug, Deserialize)]
@@ -443,6 +443,57 @@ struct UninitializedLLMJudgeChatCompletionVariantConfig {
     extra_body: Option<ExtraBodyConfig>,
     #[serde(default)]
     extra_headers: Option<ExtraHeadersConfig>,
+}
+
+/// Converts a chat completion judge variant config to a chat completion config.
+/// This is factored out so that both the chain of thought and chat completion judges
+/// can use the same implementation.
+fn convert_chat_completion_judge_to_variant<P: AsRef<Path>>(
+    base_path: &P,
+    evaluation_name: &str,
+    evaluator_name: &str,
+    variant_name: &str,
+    input_format: &LLMJudgeInputFormat,
+    params: UninitializedLLMJudgeChatCompletionVariantConfig,
+) -> Result<ChatCompletionConfig, Error> {
+    let system_instructions = read_system_instructions(params.system_instructions, base_path)?;
+    let templated_system_instructions = format!(
+        include_str!("llm_judge_system_instructions.txt"),
+        system_instructions = system_instructions,
+    );
+    let system_template_path =
+        get_template_path(evaluation_name, evaluator_name, variant_name, "system");
+    let system_template = PathWithContents {
+        // Not a real path but this is used as the handle everywhere as the content is already provided below
+        path: system_template_path.clone(),
+        contents: templated_system_instructions,
+    };
+    let user_template_path =
+        get_template_path(evaluation_name, evaluator_name, variant_name, "user");
+    let user_template = match input_format {
+        LLMJudgeInputFormat::Serialized => Some(PathWithContents {
+            path: user_template_path.clone(),
+            contents: include_str!("llm_judge_user_template.minijinja").to_string(),
+        }),
+        LLMJudgeInputFormat::Messages => None,
+    };
+    Ok(ChatCompletionConfig {
+        weight: get_weight(params.active),
+        model: params.model,
+        system_template: Some(system_template),
+        user_template,
+        assistant_template: None,
+        temperature: params.temperature,
+        top_p: params.top_p,
+        max_tokens: params.max_tokens,
+        presence_penalty: params.presence_penalty,
+        frequency_penalty: params.frequency_penalty,
+        seed: params.seed,
+        json_mode: Some(params.json_mode),
+        retries: params.retries,
+        extra_body: params.extra_body,
+        extra_headers: params.extra_headers,
+    })
 }
 
 fn default_timeout() -> f64 {
@@ -494,6 +545,12 @@ struct UninitializedLLMJudgeDiclVariantConfig {
     extra_headers: Option<ExtraHeadersConfig>,
 }
 
+#[derive(Debug, Deserialize)]
+struct UninitializedLLMJudgeChainOfThoughtVariantConfig {
+    #[serde(flatten)]
+    inner: UninitializedLLMJudgeChatCompletionVariantConfig,
+}
+
 fn get_template_path(
     evaluation_name: &str,
     evaluator_name: &str,
@@ -528,47 +585,16 @@ impl UninitializedLLMJudgeVariantConfig {
         variant_name: &str,
     ) -> Result<VariantConfig, Error> {
         match self {
-            UninitializedLLMJudgeVariantConfig::ChatCompletion(params) => {
-                let system_instructions =
-                    read_system_instructions(params.system_instructions, base_path)?;
-                let templated_system_instructions = format!(
-                    include_str!("llm_judge_system_instructions.txt"),
-                    system_instructions = system_instructions,
-                );
-                let system_template_path =
-                    get_template_path(evaluation_name, evaluator_name, variant_name, "system");
-                let system_template = PathWithContents {
-                    // Not a real path but this is used as the handle everywhere as the content is already provided below
-                    path: system_template_path.clone(),
-                    contents: templated_system_instructions,
-                };
-                let user_template_path =
-                    get_template_path(evaluation_name, evaluator_name, variant_name, "user");
-                let user_template = match input_format {
-                    LLMJudgeInputFormat::Serialized => Some(PathWithContents {
-                        path: user_template_path.clone(),
-                        contents: include_str!("llm_judge_user_template.minijinja").to_string(),
-                    }),
-                    LLMJudgeInputFormat::Messages => None,
-                };
-                Ok(VariantConfig::ChatCompletion(ChatCompletionConfig {
-                    weight: get_weight(params.active),
-                    model: params.model,
-                    system_template: Some(system_template),
-                    user_template,
-                    assistant_template: None,
-                    temperature: params.temperature,
-                    top_p: params.top_p,
-                    max_tokens: params.max_tokens,
-                    presence_penalty: params.presence_penalty,
-                    frequency_penalty: params.frequency_penalty,
-                    seed: params.seed,
-                    json_mode: Some(params.json_mode),
-                    retries: params.retries,
-                    extra_body: params.extra_body,
-                    extra_headers: params.extra_headers,
-                }))
-            }
+            UninitializedLLMJudgeVariantConfig::ChatCompletion(params) => Ok(
+                VariantConfig::ChatCompletion(convert_chat_completion_judge_to_variant(
+                    base_path,
+                    evaluation_name,
+                    evaluator_name,
+                    variant_name,
+                    input_format,
+                    params,
+                )?),
+            ),
             UninitializedLLMJudgeVariantConfig::BestOfNSampling(params) => {
                 let evaluator_system_instructions =
                     read_system_instructions(params.evaluator.system_instructions, base_path)?;
@@ -705,6 +731,18 @@ impl UninitializedLLMJudgeVariantConfig {
                     retries: params.retries,
                 }))
             }
+            UninitializedLLMJudgeVariantConfig::ChainOfThought(params) => {
+                Ok(VariantConfig::ChainOfThought(ChainOfThoughtConfig {
+                    inner: convert_chat_completion_judge_to_variant(
+                        base_path,
+                        evaluation_name,
+                        evaluator_name,
+                        variant_name,
+                        input_format,
+                        params.inner,
+                    )?,
+                }))
+            }
         }
     }
 }
@@ -735,7 +773,7 @@ fn read_system_instructions<P1: AsRef<Path>, P2: AsRef<Path>>(
 /// In the code we already have a conversion from UnintializedLLMJudgeVariantConfig to VariantConfig.
 /// We want to make sure that there is an UninitializedLLMJudgeVariantConfig for each VariantConfig.
 /// This function should complain at compile time if we forget to update it when adding a new variant type.
-#[allow(dead_code)]
+#[expect(dead_code)]
 fn check_convert_variant_to_llm_judge_variant(
     variant: VariantConfig,
 ) -> Result<UninitializedLLMJudgeVariantConfig, Error> {
@@ -826,6 +864,27 @@ fn check_convert_variant_to_llm_judge_variant(
                 retries: variant.retries,
             },
         )),
+        VariantConfig::ChainOfThought(variant) => {
+            Ok(UninitializedLLMJudgeVariantConfig::ChainOfThought(
+                UninitializedLLMJudgeChainOfThoughtVariantConfig {
+                    inner: UninitializedLLMJudgeChatCompletionVariantConfig {
+                        active: Some(false),
+                        model: variant.inner.model,
+                        system_instructions: PathBuf::from(""),
+                        temperature: variant.inner.temperature,
+                        top_p: variant.inner.top_p,
+                        max_tokens: variant.inner.max_tokens,
+                        presence_penalty: variant.inner.presence_penalty,
+                        frequency_penalty: variant.inner.frequency_penalty,
+                        seed: variant.inner.seed,
+                        json_mode: JsonMode::Off,
+                        retries: variant.inner.retries,
+                        extra_body: variant.inner.extra_body,
+                        extra_headers: variant.inner.extra_headers,
+                    },
+                },
+            ))
+        }
     }
 }
 
@@ -1457,11 +1516,9 @@ mod tests {
                         VariantConfig::ChatCompletion(cc_config) => {
                             assert_eq!(cc_config.weight, Some(1.0));
                         }
-                        #[allow(unreachable_patterns)] // Keep the pattern exhaustive
                         _ => panic!("Expected ChatCompletion variant config"),
                     }
                 }
-                #[allow(unreachable_patterns)] // Keep the pattern exhaustive
                 _ => panic!("Expected Json function config"),
             }
         }
@@ -1524,7 +1581,7 @@ mod tests {
     }
 
     // Helper functions for tests
-    fn create_test_schema() -> JSONSchemaFromPath {
+    fn create_test_schema() -> StaticJSONSchema {
         let schema_value = serde_json::json!({
             "type": "object",
             "properties": {
@@ -1534,6 +1591,6 @@ mod tests {
             },
             "required": ["result"]
         });
-        JSONSchemaFromPath::from_value(&schema_value).unwrap()
+        StaticJSONSchema::from_value(&schema_value).unwrap()
     }
 }

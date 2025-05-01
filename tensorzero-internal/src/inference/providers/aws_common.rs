@@ -11,7 +11,10 @@ use reqwest::StatusCode;
 
 use crate::{
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
-    inference::types::{extra_body::FullExtraBodyConfig, ModelInferenceRequest},
+    inference::types::{
+        extra_body::FullExtraBodyConfig, extra_headers::FullExtraHeadersConfig,
+        ModelInferenceRequest,
+    },
     model::{ModelProvider, ModelProviderRequestInfo},
 };
 
@@ -52,6 +55,7 @@ pub struct TensorZeroInterceptor {
     /// After the request is executed, we use this to retrieve the raw request.
     raw_request: Arc<Mutex<Option<String>>>,
     extra_body: FullExtraBodyConfig,
+    extra_headers: FullExtraHeadersConfig,
     model_provider_info: ModelProviderRequestInfo,
     model_name: String,
 }
@@ -89,10 +93,16 @@ impl Intercept for TensorZeroInterceptor {
         })?;
         let headers = inject_extra_request_data(
             &self.extra_body,
+            &self.extra_headers,
             self.model_provider_info.clone(),
             &self.model_name,
             &mut body_json,
         )?;
+        // Get a consistent order for use with the provider-proxy cache
+        if cfg!(feature = "e2e_tests") {
+            body_json.sort_all_objects();
+        }
+
         let raw_request = serde_json::to_string(&body_json).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!(
@@ -142,10 +152,12 @@ pub fn build_interceptor(
 ) -> InterceptorAndRawBody<impl Fn() -> Result<String, Error>> {
     let raw_request = Arc::new(Mutex::new(None));
     let extra_body = request.extra_body.clone();
+    let extra_headers = request.extra_headers.clone();
 
     let interceptor = TensorZeroInterceptor {
         raw_request: raw_request.clone(),
         extra_body,
+        extra_headers,
         model_provider_info: model_provider.into(),
         model_name,
     };

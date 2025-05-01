@@ -18,7 +18,7 @@ export const SFTFormValuesSchema = z.object({
     .max(100, "Validation split percent must be less than 100"),
   maxSamples: z
     .number()
-    .min(10, "Max samples must be greater than 10")
+    .min(10, "You need at least 10 curated inferences to fine-tune a model")
     .optional(),
   threshold: z.number(),
   jobId: z.string().nonempty("Job ID is required"),

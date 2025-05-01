@@ -28,22 +28,23 @@ use crate::function::FunctionConfig;
 use crate::function::{sample_variant, FunctionConfigChat};
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
+use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use crate::inference::types::resolved_input::ImageWithPath;
 use crate::inference::types::storage::StoragePath;
 use crate::inference::types::{
     collect_chunks, Base64Image, ChatInferenceDatabaseInsert, CollectChunksArgs,
     ContentBlockChatOutput, ContentBlockChunk, FetchContext, FinishReason, InferenceResult,
-    InferenceResultChunk, InferenceResultStream, Input, JsonInferenceDatabaseInsert,
-    JsonInferenceOutput, ModelInferenceResponseWithMetadata, RequestMessage, ResolvedInput,
-    ResolvedInputMessageContent, Usage,
+    InferenceResultChunk, InferenceResultStream, Input, InternalJsonInferenceOutput,
+    JsonInferenceDatabaseInsert, JsonInferenceOutput, ModelInferenceResponseWithMetadata,
+    RequestMessage, ResolvedInput, ResolvedInputMessageContent, Usage,
 };
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::model::ModelTable;
 use crate::tool::{DynamicToolParams, ToolCallConfig, ToolChoice};
-use crate::uuid_util::validate_tensorzero_uuid;
 use crate::variant::chat_completion::ChatCompletionConfig;
 use crate::variant::{InferenceConfig, JsonMode, Variant, VariantConfig};
 
+use super::dynamic_evaluation_run::validate_inference_episode_id_and_apply_dynamic_evaluation_run;
 use super::validate_tags;
 
 /// The expected payload is a JSON object with the following fields:
@@ -102,6 +103,8 @@ pub struct Params {
     pub include_original_response: bool,
     #[serde(default)]
     pub extra_body: UnfilteredInferenceExtraBody,
+    #[serde(default)]
+    pub extra_headers: UnfilteredInferenceExtraHeaders,
 }
 
 #[derive(Clone, Debug)]
@@ -123,9 +126,9 @@ struct InferenceMetadata {
     pub tags: HashMap<String, String>,
     pub tool_config: Option<ToolCallConfig>,
     pub dynamic_output_schema: Option<DynamicJSONSchema>,
-    #[allow(dead_code)] // We may start exposing this in the response
     pub cached: bool,
     pub extra_body: UnfilteredInferenceExtraBody,
+    pub extra_headers: UnfilteredInferenceExtraHeaders,
 }
 
 pub type InferenceCredentials = HashMap<String, SecretString>;
@@ -165,7 +168,7 @@ pub enum InferenceOutput {
 impl std::fmt::Debug for InferenceOutput {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            InferenceOutput::NonStreaming(response) => write!(f, "NonStreaming({:?})", response),
+            InferenceOutput::NonStreaming(response) => write!(f, "NonStreaming({response:?})"),
             InferenceOutput::Streaming(_) => write!(f, "Streaming"),
         }
     }
@@ -183,11 +186,12 @@ pub struct InferenceIds {
     name="inference",
     skip(config, http_client, clickhouse_connection_info, params),
     fields(
-        function_name = ?params.function_name,
-        model_name = ?params.model_name,
-        variant_name = ?params.variant_name,
+        function_name,
+        model_name,
+        variant_name,
         inference_id,
         episode_id,
+        otel.name = "function_inference"
     )
 )]
 pub async fn inference(
@@ -196,10 +200,24 @@ pub async fn inference(
     clickhouse_connection_info: ClickHouseConnectionInfo,
     params: Params,
 ) -> Result<InferenceOutput, Error> {
+    let span = tracing::Span::current();
+    if let Some(function_name) = &params.function_name {
+        span.record("function_name", function_name);
+    }
+    if let Some(model_name) = &params.model_name {
+        span.record("model_name", model_name);
+    }
+    if let Some(variant_name) = &params.variant_name {
+        span.record("variant_name", variant_name);
+    }
+    if let Some(episode_id) = &params.episode_id {
+        span.record("episode_id", episode_id.to_string());
+    }
     // To be used for the Inference table processing_time measurements
     let start_time = Instant::now();
     let inference_id = Uuid::now_v7();
-    tracing::Span::current().record("inference_id", inference_id.to_string());
+    span.record("inference_id", inference_id.to_string());
+    validate_tags(&params.tags, params.internal)?;
 
     if params.include_original_response && params.stream.unwrap_or(false) {
         return Err(ErrorDetails::InvalidRequest {
@@ -211,10 +229,17 @@ pub async fn inference(
 
     // Retrieve or generate the episode ID
     let episode_id = params.episode_id.unwrap_or(Uuid::now_v7());
-    validate_tensorzero_uuid(episode_id, "Episode")?;
+    let mut params = params;
+    validate_inference_episode_id_and_apply_dynamic_evaluation_run(
+        episode_id,
+        params.function_name.as_ref(),
+        &mut params.variant_name,
+        &mut params.tags,
+        &clickhouse_connection_info,
+    )
+    .await?;
     tracing::Span::current().record("episode_id", episode_id.to_string());
 
-    validate_tags(&params.tags, params.internal)?;
     let (function, function_name) = find_function(&params, &config)?;
     // Collect the function variant names as a Vec<&str>
     let mut candidate_variant_names: Vec<&str> =
@@ -223,7 +248,7 @@ pub async fn inference(
     // If the function has no variants, return an error
     if candidate_variant_names.is_empty() {
         return Err(ErrorDetails::InvalidFunctionVariants {
-            message: format!("Function `{}` has no variants", function_name),
+            message: format!("Function `{function_name}` has no variants"),
         }
         .into());
     }
@@ -293,6 +318,7 @@ pub async fn inference(
         },
         extra_cache_key: None,
         extra_body: Default::default(),
+        extra_headers: Default::default(),
     };
     let inference_clients = InferenceClients {
         http_client,
@@ -325,6 +351,7 @@ pub async fn inference(
 
         inference_config.variant_name = Some(variant_name);
         inference_config.extra_body = params.extra_body.clone();
+        inference_config.extra_headers = params.extra_headers.clone();
         if stream {
             let result = variant
                 .infer_stream(
@@ -353,6 +380,7 @@ pub async fn inference(
             };
 
             let extra_body = inference_config.extra_body.clone();
+            let extra_headers = inference_config.extra_headers.clone();
 
             // Create InferenceMetadata for a streaming inference
             let inference_metadata = InferenceMetadata {
@@ -375,6 +403,7 @@ pub async fn inference(
                 dynamic_output_schema: output_schema,
                 cached: model_used_info.cached,
                 extra_body,
+                extra_headers,
             };
 
             let stream = create_stream(
@@ -414,6 +443,7 @@ pub async fn inference(
             if !dryrun {
                 // Spawn a thread for a trailing write to ClickHouse so that it doesn't block the response
                 let extra_body = inference_config.extra_body.clone();
+                let extra_headers = inference_config.extra_headers.clone();
                 let result_to_write = result.clone();
                 let write_metadata = InferenceDatabaseInsertMetadata {
                     function_name: function_name.to_string(),
@@ -423,6 +453,7 @@ pub async fn inference(
                     processing_time: Some(start_time.elapsed()),
                     tags: params.tags,
                     extra_body,
+                    extra_headers,
                 };
 
                 let async_writes = config.gateway.observability.async_writes;
@@ -507,7 +538,7 @@ fn find_function(params: &Params, config: &Config) -> Result<(Arc<FunctionConfig
                     user_schema: None,
                     assistant_schema: None,
                     tools: vec![],
-                    tool_choice: ToolChoice::None,
+                    tool_choice: ToolChoice::Auto,
                     parallel_tool_calls: None,
                     description: None,
                 })),
@@ -573,6 +604,7 @@ fn create_stream(
                 dynamic_output_schema,
                 cached,
                 extra_body,
+                extra_headers,
             } = metadata;
 
             let config = config.clone();
@@ -597,6 +629,7 @@ fn create_stream(
                     tool_config: tool_config.as_ref(),
                     cached,
                     extra_body: extra_body.clone(),
+                    extra_headers: extra_headers.clone(),
                 };
                 let inference_response: Result<InferenceResult, Error> =
                     collect_chunks(collect_chunks_args).await;
@@ -614,6 +647,7 @@ fn create_stream(
                         processing_time: Some(start_time.elapsed()),
                         tags,
                         extra_body,
+                        extra_headers,
                     };
                     let config = config.clone();
 
@@ -661,7 +695,7 @@ fn prepare_serialized_events(
                 Ok(chunk) => {
                     serde_json::to_value(chunk).map_err(|e| {
                         Error::new(ErrorDetails::Inference {
-                            message: format!("Failed to convert chunk to JSON: {}", e),
+                            message: format!("Failed to convert chunk to JSON: {e}"),
                         })
                     })?
                 },
@@ -672,7 +706,7 @@ fn prepare_serialized_events(
             };
             yield Event::default().json_data(chunk_json).map_err(|e| {
                 Error::new(ErrorDetails::Inference {
-                    message: format!("Failed to convert Value to Event: {}", e),
+                    message: format!("Failed to convert Value to Event: {e}"),
                 })
             })
         }
@@ -689,6 +723,7 @@ pub struct InferenceDatabaseInsertMetadata {
     pub processing_time: Option<Duration>,
     pub tags: HashMap<String, String>,
     pub extra_body: UnfilteredInferenceExtraBody,
+    pub extra_headers: UnfilteredInferenceExtraHeaders,
 }
 
 async fn write_image(
@@ -839,15 +874,19 @@ impl InferenceResponse {
                 original_response: result.original_response,
                 finish_reason: result.finish_reason,
             }),
-            InferenceResult::Json(result) => InferenceResponse::Json(JsonInferenceResponse {
-                inference_id: result.inference_id,
-                episode_id,
-                variant_name,
-                output: result.output,
-                usage: result.usage,
-                original_response: result.original_response,
-                finish_reason: result.finish_reason,
-            }),
+            InferenceResult::Json(result) => {
+                let InternalJsonInferenceOutput { raw, parsed, .. } = result.output;
+                let output = JsonInferenceOutput { raw, parsed };
+                InferenceResponse::Json(JsonInferenceResponse {
+                    inference_id: result.inference_id,
+                    episode_id,
+                    variant_name,
+                    output,
+                    usage: result.usage,
+                    original_response: result.original_response,
+                    finish_reason: result.finish_reason,
+                })
+            }
         }
     }
 
@@ -931,6 +970,11 @@ pub struct JsonInferenceResponseChunk {
     pub finish_reason: Option<FinishReason>,
 }
 
+const ZERO_USAGE: Usage = Usage {
+    input_tokens: 0,
+    output_tokens: 0,
+};
+
 impl InferenceResponseChunk {
     fn new(
         inference_result: InferenceResultChunk,
@@ -946,7 +990,13 @@ impl InferenceResponseChunk {
                     episode_id,
                     variant_name,
                     content: result.content,
-                    usage: if cached { None } else { result.usage },
+                    // Token usage is intended to represent 'billed tokens',
+                    // so set it to zero if the result is cached
+                    usage: if cached {
+                        Some(ZERO_USAGE)
+                    } else {
+                        result.usage
+                    },
                     finish_reason: result.finish_reason,
                 })
             }
@@ -959,11 +1009,38 @@ impl InferenceResponseChunk {
                     episode_id,
                     variant_name,
                     raw: result.raw.unwrap_or_default(),
-                    usage: if cached { None } else { result.usage },
+                    // Token usage is intended to represent 'billed tokens',
+                    // so set it to zero if the result is cached
+                    usage: if cached {
+                        Some(ZERO_USAGE)
+                    } else {
+                        result.usage
+                    },
                     finish_reason: result.finish_reason,
                 })
             }
         })
+    }
+
+    pub fn episode_id(&self) -> Uuid {
+        match self {
+            InferenceResponseChunk::Chat(c) => c.episode_id,
+            InferenceResponseChunk::Json(j) => j.episode_id,
+        }
+    }
+
+    pub fn inference_id(&self) -> Uuid {
+        match self {
+            InferenceResponseChunk::Chat(c) => c.inference_id,
+            InferenceResponseChunk::Json(j) => j.inference_id,
+        }
+    }
+
+    pub fn variant_name(&self) -> &str {
+        match self {
+            InferenceResponseChunk::Chat(c) => &c.variant_name,
+            InferenceResponseChunk::Json(j) => &j.variant_name,
+        }
     }
 }
 
@@ -1090,6 +1167,7 @@ mod tests {
             dynamic_output_schema: None,
             cached: false,
             extra_body: Default::default(),
+            extra_headers: Default::default(),
         };
 
         let result = prepare_response_chunk(&inference_metadata, chunk).unwrap();
@@ -1144,6 +1222,7 @@ mod tests {
             dynamic_output_schema: None,
             cached: false,
             extra_body: Default::default(),
+            extra_headers: Default::default(),
         };
 
         let result = prepare_response_chunk(&inference_metadata, chunk).unwrap();

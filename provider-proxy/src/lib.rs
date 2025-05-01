@@ -1,7 +1,7 @@
 //! An HTTP/HTTPS proxy that caches non-error responses to disk.
 //! Heavily based on https://github.com/hatoo/http-mitm-proxy (MIT-licensed),
 //! with the openssl dependency and `default_client` removed.
-#![allow(clippy::panic, clippy::unwrap_used, clippy::expect_used)]
+#![expect(clippy::panic, clippy::unwrap_used, clippy::expect_used)]
 
 mod mitm_server;
 mod streaming_body_collector;
@@ -21,6 +21,7 @@ use http_body_util::{combinators::BoxBody, BodyExt, Full};
 use hyper::service::service_fn;
 use mitm_server::MitmProxy;
 use moka::sync::Cache;
+use serde::Serialize;
 use sha2::{Digest, Sha256};
 use streaming_body_collector::StreamingBodyCollector;
 use tokio::sync::oneshot;
@@ -63,9 +64,18 @@ fn save_cache_body(
 ) -> Result<(), anyhow::Error> {
     let path_str = path.to_string_lossy().into_owned();
     tracing::info!(path = path_str, "Finished processing request");
-    let body_str = String::from_utf8(body.to_vec())
-        .with_context(|| format!("Failed to convert body to string for path {path_str}"))?;
-    let mut reconstructed = hyper::Response::from_parts(parts, body_str);
+
+    #[derive(Serialize)]
+    #[serde(untagged)]
+    enum BodyKind {
+        Bytes(Bytes),
+        String(String),
+    }
+
+    let mut reconstructed = match String::from_utf8(body.to_vec()) {
+        Ok(body_str) => hyper::Response::from_parts(parts, BodyKind::String(body_str)),
+        Err(_) => hyper::Response::from_parts(parts, BodyKind::Bytes(body.into())),
+    };
     reconstructed.extensions_mut().clear();
     let json_response =
         http_serde_ext::response::serialize(&reconstructed, serde_json::value::Serializer)
@@ -120,6 +130,25 @@ async fn check_cache<
                 request.headers_mut().insert(
                     "Authorization",
                     HeaderValue::from_static("Bearer TENSORZERO_PROVIDER_PROXY_TOKEN"),
+                );
+                sanitized_header = true;
+            }
+        }
+    }
+    if args.sanitize_aws_sigv4 {
+        let header_names = [
+            "authorization",
+            "x-amz-date",
+            "amz-sdk-invocation-id",
+            "user-agent",
+            "x-amz-user-agent",
+            "amz-sdk-request",
+        ];
+        for header_name in &header_names {
+            if request.headers().contains_key(*header_name) {
+                request.headers_mut().insert(
+                    *header_name,
+                    HeaderValue::from_static("TENSORZERO_PROVIDER_PROXY_TOKEN"),
                 );
                 sanitized_header = true;
             }
@@ -226,6 +255,8 @@ pub struct Args {
     /// when constructing a cache key.
     #[arg(long, default_value = "true")]
     pub sanitize_bearer_auth: bool,
+    #[arg(long, default_value = "true")]
+    pub sanitize_aws_sigv4: bool,
     /// Whether to write to the cache when a cache miss occurs.
     /// If false, the proxy will still read existing entries from the cache, but not write new ones.
     #[arg(long, action = ArgAction::Set, default_value_t = true, num_args = 1)]

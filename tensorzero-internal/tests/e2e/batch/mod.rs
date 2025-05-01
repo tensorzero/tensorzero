@@ -1,5 +1,3 @@
-#![allow(clippy::print_stdout)]
-
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -23,7 +21,7 @@ use tensorzero_internal::inference::types::batch::{
 use tensorzero_internal::inference::types::{
     ContentBlockChatOutput, FinishReason, JsonInferenceOutput, ResolvedInput, Usage,
 };
-use tensorzero_internal::jsonschema_util::JSONSchemaFromPath;
+use tensorzero_internal::jsonschema_util::StaticJSONSchema;
 use tokio::time::{sleep, Duration};
 use uuid::Uuid;
 
@@ -517,7 +515,7 @@ async fn test_write_read_completed_batch_inference_json() {
         status,
         errors: vec![],
     });
-    let output_schema = JSONSchemaFromPath::from_value(&json!({
+    let output_schema = StaticJSONSchema::from_value(&json!({
         "type": "object",
         "properties": {
             "answer": {

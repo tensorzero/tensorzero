@@ -38,7 +38,7 @@ use super::openai::{
 
 lazy_static! {
     static ref DEEPSEEK_DEFAULT_BASE_URL: Url = {
-        #[allow(clippy::expect_used)]
+        #[expect(clippy::expect_used)]
         Url::parse("https://api.deepseek.com/v1")
             .expect("Failed to parse DEEPSEEK_DEFAULT_BASE_URL")
     };
@@ -116,6 +116,10 @@ impl DeepSeekProvider {
             credentials: provider_credentials,
         })
     }
+
+    pub fn model_name(&self) -> &str {
+        &self.model_name
+    }
 }
 
 impl InferenceProvider for DeepSeekProvider {
@@ -143,6 +147,7 @@ impl InferenceProvider for DeepSeekProvider {
             )?;
         let headers = inject_extra_request_data(
             &request.extra_body,
+            &request.extra_headers,
             model_provider,
             model_name,
             &mut request_body,
@@ -223,7 +228,12 @@ impl InferenceProvider for DeepSeekProvider {
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
-            Err(handle_openai_error(status, &response, PROVIDER_TYPE))
+            Err(handle_openai_error(
+                &serde_json::to_string(&request_body).unwrap_or_default(),
+                status,
+                &response,
+                PROVIDER_TYPE,
+            ))
         }
     }
 
@@ -251,6 +261,7 @@ impl InferenceProvider for DeepSeekProvider {
             )?;
         let headers = inject_extra_request_data(
             &request.extra_body,
+            &request.extra_headers,
             model_provider,
             model_name,
             &mut request_body,
@@ -325,11 +336,12 @@ enum DeepSeekResponseFormat {
 }
 
 impl DeepSeekResponseFormat {
-    fn new(json_mode: &ModelInferenceRequestJsonMode) -> Self {
+    fn new(json_mode: &ModelInferenceRequestJsonMode) -> Option<Self> {
         match json_mode {
-            ModelInferenceRequestJsonMode::On => DeepSeekResponseFormat::JsonObject,
-            ModelInferenceRequestJsonMode::Off => DeepSeekResponseFormat::Text,
-            ModelInferenceRequestJsonMode::Strict => DeepSeekResponseFormat::JsonObject,
+            ModelInferenceRequestJsonMode::On => Some(DeepSeekResponseFormat::JsonObject),
+            // For now, we never explicitly send `DeepSeekResponseFormat::Text`
+            ModelInferenceRequestJsonMode::Off => None,
+            ModelInferenceRequestJsonMode::Strict => Some(DeepSeekResponseFormat::JsonObject),
         }
     }
 }
@@ -389,7 +401,7 @@ impl<'a> DeepSeekRequest<'a> {
             tracing::warn!("DeepSeek provider does not support strict JSON mode. Downgrading to normal JSON mode.");
         }
 
-        let response_format = Some(DeepSeekResponseFormat::new(&request.json_mode));
+        let response_format = DeepSeekResponseFormat::new(&request.json_mode);
 
         // NOTE: as mentioned by the DeepSeek team here: https://github.com/deepseek-ai/DeepSeek-R1?tab=readme-ov-file#usage-recommendations
         // the R1 series of models does not perform well with the system prompt. As we move towards first-class support for reasoning models we should check
@@ -437,8 +449,7 @@ fn stream_deepseek(
                         let data: Result<DeepSeekChatChunk, Error> =
                             serde_json::from_str(&message.data).map_err(|e| Error::new(ErrorDetails::InferenceServer {
                                 message: format!(
-                                    "Error parsing chunk. Error: {}",
-                                    e,
+                                    "Error parsing chunk. Error: {e}",
                                 ),
                                 raw_request: None,
                                 raw_response: Some(message.data.clone()),

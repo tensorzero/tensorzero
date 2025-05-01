@@ -19,6 +19,7 @@ uv run pytest
 ```
 """
 
+import asyncio
 import base64
 import json
 import os
@@ -178,6 +179,7 @@ async def test_async_inference_streaming_with_cache(async_client):
         messages=messages,
         model="tensorzero::function_name::basic_test",
         stream=True,
+        stream_options={"include_usage": True},
         seed=69,
     )
 
@@ -211,21 +213,27 @@ async def test_async_inference_streaming_with_cache(async_client):
             assert chunk.choices[0].delta.content == expected_text[i]
             content += chunk.choices[0].delta.content
 
-    # Check final chunk has usage stats
+    # Check second-to-last chunk has correct finish reason
+    stop_chunk = chunks[-2]
+    assert stop_chunk.choices[0].finish_reason == "stop"
+
     final_chunk = chunks[-1]
-    assert final_chunk.choices[0].finish_reason == "stop"
     assert final_chunk.usage.prompt_tokens == 10
     assert final_chunk.usage.completion_tokens == 16
+
+    # Wait for trailing cache write to ClickHouse
+    await asyncio.sleep(1)
 
     # Second request with cache
     stream = await async_client.chat.completions.create(
         extra_body={
             "tensorzero::episode_id": str(uuid7()),
-            "tensorzero::cache_options": {"max_age_s": 10, "enabled": "on"},
+            "tensorzero::cache_options": {"max_age_s": None, "enabled": "on"},
         },
         messages=messages,
         model="tensorzero::function_name::basic_test",
         stream=True,
+        stream_options={"include_usage": True},
         seed=69,
     )
 
@@ -242,16 +250,18 @@ async def test_async_inference_streaming_with_cache(async_client):
 
     assert content == cached_content
 
-    # Check final chunk has the correct finish reason
-    final_cached_chunk = cached_chunks[-1]
-    assert final_cached_chunk.choices[0].finish_reason == "stop"
+    # Check second-to-last chunk has the correct finish reason
+    print("Chunks: ", cached_chunks)
+    finish_chunk = cached_chunks[-2]
+    assert finish_chunk.choices[0].finish_reason == "stop"
 
-    # In streaming mode, the cached response might not include usage statistics
+    final_cached_chunk = cached_chunks[-1]
+
+    # In streaming mode, the cached response will not include usage statistics
     # This is still correct behavior as no tokens were used
-    if final_cached_chunk.usage is not None:
-        assert final_cached_chunk.usage.prompt_tokens == 0  # should be cached
-        assert final_cached_chunk.usage.completion_tokens == 0  # should be cached
-        assert final_cached_chunk.usage.total_tokens == 0  # should be cached
+    assert final_cached_chunk.usage.prompt_tokens == 0  # should be cached
+    assert final_cached_chunk.usage.completion_tokens == 0  # should be cached
+    assert final_cached_chunk.usage.total_tokens == 0  # should be cached
 
 
 @pytest.mark.asyncio
@@ -266,6 +276,7 @@ async def test_async_inference_streaming(async_client):
         messages=messages,
         model="tensorzero::function_name::basic_test",
         stream=True,
+        stream_options={"include_usage": True},
         max_tokens=300,
         seed=69,
     )
@@ -307,16 +318,20 @@ async def test_async_inference_streaming(async_client):
         assert (
             chunk.model == "tensorzero::function_name::basic_test::variant_name::test"
         )
-        if i + 1 < len(chunks):
+        if i + 2 < len(chunks):
             assert len(chunk.choices) == 1
             assert chunk.choices[0].delta.content == expected_text[i]
             assert chunk.choices[0].finish_reason is None
-        else:
-            assert chunk.choices[0].delta.content is None
-            assert chunk.usage.prompt_tokens == 10
-            assert chunk.usage.completion_tokens == 16
-            assert chunk.usage.total_tokens == 26
-            assert chunk.choices[0].finish_reason == "stop"
+
+    stop_chunk = chunks[-2]
+    assert stop_chunk.choices[0].finish_reason == "stop"
+    assert stop_chunk.choices[0].delta.content is None
+
+    final_chunk = chunks[-1]
+    assert len(final_chunk.choices) == 0
+    assert final_chunk.usage.prompt_tokens == 10
+    assert final_chunk.usage.completion_tokens == 16
+    assert final_chunk.usage.total_tokens == 26
 
 
 @pytest.mark.asyncio
@@ -533,9 +548,9 @@ async def test_async_tool_call_streaming(async_client):
             assert tool_call.function.arguments == expected_text[i]
         else:
             assert chunk.choices[0].delta.content is None
-            assert len(chunk.choices[0].delta.tool_calls) == 0
-            assert chunk.usage.prompt_tokens == 10
-            assert chunk.usage.completion_tokens == 5
+            assert chunk.choices[0].delta.tool_calls is None
+            # We did not send 'include_usage'
+            assert chunk.usage is None
             assert chunk.choices[0].finish_reason == "tool_calls"
 
 
@@ -588,8 +603,8 @@ async def test_async_json_streaming(async_client):
             assert chunk.choices[0].delta.content == expected_text[i]
         else:
             assert len(chunk.choices[0].delta.content) == 0
-            assert chunk.usage.prompt_tokens == 10
-            assert chunk.usage.completion_tokens == 16
+            # We did not send 'include_usage'
+            assert chunk.usage is None
 
 
 @pytest.mark.asyncio

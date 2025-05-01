@@ -1,7 +1,6 @@
 use futures::StreamExt;
 use reqwest::Client;
 use secrecy::SecretString;
-use serde::de::Error as SerdeError;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::{Arc, OnceLock};
@@ -9,15 +8,14 @@ use std::time::Duration;
 use std::{env, fs};
 use strum::VariantNames;
 use tensorzero_derive::TensorZeroDeserialize;
-#[allow(unused_imports)]
-use tracing::{span, warn, Instrument, Level};
+use tracing::{span, Instrument, Level};
 use url::Url;
 
 use crate::cache::{
     cache_lookup, cache_lookup_streaming, start_cache_write, start_cache_write_streaming,
     CacheData, ModelProviderRequest, NonStreamingCacheData, StreamingCacheData,
 };
-use crate::config_parser::SKIP_CREDENTIAL_VALIDATION;
+use crate::config_parser::{ProviderTypesConfig, SKIP_CREDENTIAL_VALIDATION};
 use crate::endpoints::inference::InferenceClients;
 use crate::inference::providers::aws_sagemaker::AWSSagemakerProvider;
 #[cfg(any(test, feature = "e2e_tests"))]
@@ -32,7 +30,8 @@ use crate::inference::types::batch::{
     BatchRequestRow, PollBatchInferenceResponse, StartBatchModelInferenceResponse,
     StartBatchProviderInferenceResponse,
 };
-use crate::inference::types::extra_body::{ExtraBodyConfig, ExtraHeadersConfig};
+use crate::inference::types::extra_body::ExtraBodyConfig;
+use crate::inference::types::extra_headers::ExtraHeadersConfig;
 use crate::inference::types::{
     current_timestamp, ContentBlock, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, RequestMessage, Usage,
@@ -55,39 +54,52 @@ use crate::{
 };
 use serde::Deserialize;
 
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Debug)]
 pub struct ModelConfig {
     pub routing: Vec<Arc<str>>, // [provider name A, provider name B, ...]
-    #[serde(deserialize_with = "deserialize_model_providers")]
     pub providers: HashMap<Arc<str>, ModelProvider>, // provider name => provider config
 }
 
-// We want `ModelProvider` to know its own name (from the 'providers' config section).
-// We first deserialize to `HashMap<Arc<str>, UninitializedModelProvider>`, and then
-// build `ModelProvider`s using the name keys from the map.
-pub fn deserialize_model_providers<'de, D>(
-    deserializer: D,
-) -> Result<HashMap<Arc<str>, ModelProvider>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    let providers: HashMap<Arc<str>, UninitializedModelProvider> =
-        HashMap::deserialize(deserializer)?;
-    Ok(providers
-        .into_iter()
-        .map(|(name, provider)| {
-            (
-                name.clone(),
-                ModelProvider {
-                    name,
-                    config: provider.config,
-                    extra_body: provider.extra_body,
-                    extra_headers: provider.extra_headers,
-                },
-            )
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct UninitializedModelConfig {
+    pub routing: Vec<Arc<str>>, // [provider name A, provider name B, ...]
+    pub providers: HashMap<Arc<str>, UninitializedModelProvider>, // provider name => provider config
+}
+
+impl UninitializedModelConfig {
+    pub fn load(
+        self,
+        model_name: &str,
+        provider_types: &ProviderTypesConfig,
+    ) -> Result<ModelConfig, Error> {
+        // We want `ModelProvider` to know its own name (from the 'providers' config section).
+        // We first deserialize to `HashMap<Arc<str>, UninitializedModelProvider>`, and then
+        // build `ModelProvider`s using the name keys from the map.
+        let providers = self
+            .providers
+            .into_iter()
+            .map(|(name, provider)| {
+                Ok((
+                    name.clone(),
+                    ModelProvider {
+                        name: name.clone(),
+                        config: provider.config.load(provider_types).map_err(|e| {
+                            Error::new(ErrorDetails::Config {
+                                message: format!("models.{model_name}.providers.{name}: {e}"),
+                            })
+                        })?,
+                        extra_body: provider.extra_body,
+                        extra_headers: provider.extra_headers,
+                    },
+                ))
+            })
+            .collect::<Result<HashMap<_, _>, Error>>()?;
+        Ok(ModelConfig {
+            routing: self.routing,
+            providers,
         })
-        .collect())
+    }
 }
 
 pub struct StreamResponse {
@@ -208,6 +220,7 @@ impl ModelConfig {
             Cow::Borrowed(request)
         }
     }
+    #[tracing::instrument(skip_all, fields(model_name = model_name, otel.name = "model_inference", stream = false))]
     pub async fn infer<'request>(
         &self,
         request: &'request ModelInferenceRequest<'request>,
@@ -285,6 +298,7 @@ impl ModelConfig {
         Err(err)
     }
 
+    #[tracing::instrument(skip_all, fields(model_name = model_name, otel.name = "model_inference", stream = true))]
     pub async fn infer_stream<'request>(
         &self,
         request: &'request ModelInferenceRequest<'request>,
@@ -464,9 +478,9 @@ fn consolidate_usage(chunks: &[ProviderInferenceResponseChunk]) -> Usage {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct UninitializedModelProvider {
+pub(crate) struct UninitializedModelProvider {
     #[serde(flatten)]
-    pub config: ProviderConfig,
+    pub config: UninitializedProviderConfig,
     pub extra_body: Option<ExtraBodyConfig>,
     pub extra_headers: Option<ExtraHeadersConfig>,
 }
@@ -477,6 +491,60 @@ pub struct ModelProvider {
     pub config: ProviderConfig,
     pub extra_headers: Option<ExtraHeadersConfig>,
     pub extra_body: Option<ExtraBodyConfig>,
+}
+
+impl ModelProvider {
+    /// The name to report in the OTEL `gen_ai.system` attribute
+    fn genai_system_name(&self) -> &'static str {
+        match &self.config {
+            ProviderConfig::Anthropic(_) => "anthropic",
+            ProviderConfig::AWSBedrock(_) => "aws_bedrock",
+            ProviderConfig::AWSSagemaker(_) => "aws_sagemaker",
+            ProviderConfig::Azure(_) => "azure",
+            ProviderConfig::Fireworks(_) => "fireworks",
+            ProviderConfig::GCPVertexAnthropic(_) => "gcp_vertex_anthropic",
+            ProviderConfig::GCPVertexGemini(_) => "gcp_vertex_gemini",
+            ProviderConfig::GoogleAIStudioGemini(_) => "google_ai_studio_gemini",
+            ProviderConfig::Hyperbolic(_) => "hyperbolic",
+            ProviderConfig::Mistral(_) => "mistral",
+            ProviderConfig::OpenAI(_) => "openai",
+            ProviderConfig::Together(_) => "together",
+            ProviderConfig::VLLM(_) => "vllm",
+            ProviderConfig::XAI(_) => "xai",
+            ProviderConfig::TGI(_) => "tgi",
+            ProviderConfig::SGLang(_) => "sglang",
+            ProviderConfig::DeepSeek(_) => "deepseek",
+            #[cfg(any(test, feature = "e2e_tests"))]
+            ProviderConfig::Dummy(_) => "dummy",
+        }
+    }
+
+    /// The model name to report in the OTEL `gen_ai.request.model` attribute
+    fn genai_model_name(&self) -> Option<&str> {
+        match &self.config {
+            ProviderConfig::Anthropic(provider) => Some(provider.model_name()),
+            ProviderConfig::AWSBedrock(provider) => Some(provider.model_id()),
+            // SageMaker doesn't have a meaningful model name concept, as we just invoke an endpoint
+            ProviderConfig::AWSSagemaker(_) => None,
+            ProviderConfig::Azure(provider) => Some(provider.deployment_id()),
+            ProviderConfig::Fireworks(provider) => Some(provider.model_name()),
+            ProviderConfig::GCPVertexAnthropic(provider) => Some(provider.model_id()),
+            ProviderConfig::GCPVertexGemini(provider) => Some(provider.model_id()),
+            ProviderConfig::GoogleAIStudioGemini(provider) => Some(provider.model_name()),
+            ProviderConfig::Hyperbolic(provider) => Some(provider.model_name()),
+            ProviderConfig::Mistral(provider) => Some(provider.model_name()),
+            ProviderConfig::OpenAI(provider) => Some(provider.model_name()),
+            ProviderConfig::Together(provider) => Some(provider.model_name()),
+            ProviderConfig::VLLM(provider) => Some(provider.model_name()),
+            ProviderConfig::XAI(provider) => Some(provider.model_name()),
+            // TGI doesn't have a meaningful model name
+            ProviderConfig::TGI(_) => None,
+            ProviderConfig::SGLang(provider) => Some(provider.model_name()),
+            ProviderConfig::DeepSeek(provider) => Some(provider.model_name()),
+            #[cfg(any(test, feature = "e2e_tests"))]
+            ProviderConfig::Dummy(provider) => Some(provider.model_name()),
+        }
+    }
 }
 
 impl From<&ModelProvider> for ModelProviderRequestInfo {
@@ -502,6 +570,7 @@ pub enum ProviderConfig {
     AWSBedrock(AWSBedrockProvider),
     AWSSagemaker(AWSSagemakerProvider),
     Azure(AzureProvider),
+    DeepSeek(DeepSeekProvider),
     Fireworks(FireworksProvider),
     GCPVertexAnthropic(GCPVertexAnthropicProvider),
     GCPVertexGemini(GCPVertexGeminiProvider),
@@ -509,35 +578,30 @@ pub enum ProviderConfig {
     Hyperbolic(HyperbolicProvider),
     Mistral(MistralProvider),
     OpenAI(OpenAIProvider),
+    SGLang(SGLangProvider),
+    TGI(TGIProvider),
     Together(TogetherProvider),
     VLLM(VLLMProvider),
     XAI(XAIProvider),
-    TGI(TGIProvider),
-    SGLang(SGLangProvider),
-    DeepSeek(DeepSeekProvider),
     #[cfg(any(test, feature = "e2e_tests"))]
     Dummy(DummyProvider),
 }
 
 /// Contains all providers which implement `SelfHostedProvider` - these providers
 /// can be used as the target provider hosted by AWS Sagemaker
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 #[serde(rename_all = "lowercase")]
 #[serde(deny_unknown_fields)]
 pub enum HostedProviderKind {
     OpenAI,
 }
 
-/// Helper struct for deserializing the ProviderConfig.
-/// This is necessary because we want to load environment variables as we deserialize
-/// and we need to be able to deserialize the correct one based on the "type" field.
-/// Use the ProviderConfig struct for all post-initialization logic.
-#[derive(TensorZeroDeserialize, VariantNames)]
+#[derive(Debug, TensorZeroDeserialize, VariantNames)]
 #[strum(serialize_all = "lowercase")]
 #[serde(tag = "type")]
 #[serde(rename_all = "lowercase")]
 #[serde(deny_unknown_fields)]
-pub(super) enum ProviderConfigHelper {
+pub(super) enum UninitializedProviderConfig {
     Anthropic {
         model_name: String,
         api_key_location: Option<CredentialLocation>,
@@ -614,29 +678,27 @@ pub(super) enum ProviderConfigHelper {
         #[serde(default = "crate::inference::providers::together::default_parse_think_blocks")]
         parse_think_blocks: bool,
     },
-    #[allow(clippy::upper_case_acronyms)]
+    #[expect(clippy::upper_case_acronyms)]
     VLLM {
         model_name: String,
         api_base: Url,
         api_key_location: Option<CredentialLocation>,
     },
-    #[allow(clippy::upper_case_acronyms)]
+    #[expect(clippy::upper_case_acronyms)]
     XAI {
         model_name: String,
         api_key_location: Option<CredentialLocation>,
     },
-    #[allow(clippy::upper_case_acronyms)]
+    #[expect(clippy::upper_case_acronyms)]
     TGI {
         api_base: Url,
         api_key_location: Option<CredentialLocation>,
     },
-    #[allow(clippy::upper_case_acronyms)]
     SGLang {
         model_name: String,
         api_base: Url,
         api_key_location: Option<CredentialLocation>,
     },
-    #[allow(clippy::upper_case_acronyms)]
     DeepSeek {
         model_name: String,
         api_key_location: Option<CredentialLocation>,
@@ -648,28 +710,21 @@ pub(super) enum ProviderConfigHelper {
     },
 }
 
-impl<'de> Deserialize<'de> for ProviderConfig {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let helper = ProviderConfigHelper::deserialize(deserializer)?;
-        Ok(match helper {
-            ProviderConfigHelper::Anthropic {
+impl UninitializedProviderConfig {
+    pub fn load(self, provider_types: &ProviderTypesConfig) -> Result<ProviderConfig, Error> {
+        Ok(match self {
+            UninitializedProviderConfig::Anthropic {
                 model_name,
                 api_key_location,
-            } => ProviderConfig::Anthropic(
-                AnthropicProvider::new(model_name, api_key_location)
-                    .map_err(|e| D::Error::custom(e.to_string()))?,
-            ),
-            ProviderConfigHelper::AWSBedrock {
+            } => ProviderConfig::Anthropic(AnthropicProvider::new(model_name, api_key_location)?),
+            UninitializedProviderConfig::AWSBedrock {
                 model_id,
                 region,
                 allow_auto_detect_region,
             } => {
                 let region = region.map(aws_types::region::Region::new);
                 if region.is_none() && !allow_auto_detect_region {
-                    return Err(D::Error::custom("AWS bedrock provider requires a region to be provided, or `allow_auto_detect_region = true`."));
+                    return Err(Error::new(ErrorDetails::Config { message: "AWS bedrock provider requires a region to be provided, or `allow_auto_detect_region = true`.".to_string() }));
                 }
 
                 // NB: We need to make an async call here to initialize the AWS Bedrock client.
@@ -677,16 +732,11 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 let provider = tokio::task::block_in_place(move || {
                     tokio::runtime::Handle::current()
                         .block_on(async { AWSBedrockProvider::new(model_id, region).await })
-                        .map_err(|e| {
-                            serde::de::Error::custom(format!(
-                                "Failed to initialize AWS Bedrock provider: {e}"
-                            ))
-                        })
                 })?;
 
                 ProviderConfig::AWSBedrock(provider)
             }
-            ProviderConfigHelper::AWSSagemaker {
+            UninitializedProviderConfig::AWSSagemaker {
                 endpoint_name,
                 region,
                 allow_auto_detect_region,
@@ -695,153 +745,136 @@ impl<'de> Deserialize<'de> for ProviderConfig {
             } => {
                 let region = region.map(aws_types::region::Region::new);
                 if region.is_none() && !allow_auto_detect_region {
-                    return Err(D::Error::custom("AWS Sagemaker provider requires a region to be provided, or `allow_auto_detect_region = true`."));
+                    return Err(Error::new(ErrorDetails::Config { message: "AWS Sagemaker provider requires a region to be provided, or `allow_auto_detect_region = true`.".to_string() }));
                 }
 
                 let self_hosted = match hosted_provider {
                     HostedProviderKind::OpenAI => {
-                        OpenAIProvider::new(model_name, None, Some(CredentialLocation::None))
-                            .map_err(|e| D::Error::custom(e.to_string()))?
+                        OpenAIProvider::new(model_name, None, Some(CredentialLocation::None))?
                     }
                 };
                 // NB: We need to make an async call here to initialize the AWS Sagemaker client.
 
                 let provider = tokio::task::block_in_place(move || {
-                    tokio::runtime::Handle::current()
-                        .block_on(async {
-                            AWSSagemakerProvider::new(endpoint_name, Box::new(self_hosted), region)
-                                .await
-                        })
-                        .map_err(|e| {
-                            serde::de::Error::custom(format!(
-                                "Failed to initialize AWS Sagemaker provider: {e}"
-                            ))
-                        })
+                    tokio::runtime::Handle::current().block_on(async {
+                        AWSSagemakerProvider::new(endpoint_name, Box::new(self_hosted), region)
+                            .await
+                    })
                 })?;
 
                 ProviderConfig::AWSSagemaker(provider)
             }
-            ProviderConfigHelper::Azure {
+            UninitializedProviderConfig::Azure {
                 deployment_id,
                 endpoint,
                 api_key_location,
-            } => ProviderConfig::Azure(
-                AzureProvider::new(deployment_id, endpoint, api_key_location)
-                    .map_err(|e| D::Error::custom(e.to_string()))?,
-            ),
-            ProviderConfigHelper::Fireworks {
+            } => ProviderConfig::Azure(AzureProvider::new(
+                deployment_id,
+                endpoint,
+                api_key_location,
+            )?),
+            UninitializedProviderConfig::Fireworks {
                 model_name,
                 api_key_location,
                 parse_think_blocks,
-            } => ProviderConfig::Fireworks(
-                FireworksProvider::new(model_name, api_key_location, parse_think_blocks)
-                    .map_err(|e| D::Error::custom(e.to_string()))?,
-            ),
-            ProviderConfigHelper::GCPVertexAnthropic {
+            } => ProviderConfig::Fireworks(FireworksProvider::new(
+                model_name,
+                api_key_location,
+                parse_think_blocks,
+            )?),
+            UninitializedProviderConfig::GCPVertexAnthropic {
                 model_id,
                 location,
                 project_id,
                 credential_location: api_key_location,
-            } => ProviderConfig::GCPVertexAnthropic(
-                GCPVertexAnthropicProvider::new(model_id, location, project_id, api_key_location)
-                    .map_err(|e| D::Error::custom(e.to_string()))?,
-            ),
-            ProviderConfigHelper::GCPVertexGemini {
+            } => ProviderConfig::GCPVertexAnthropic(GCPVertexAnthropicProvider::new(
+                model_id,
+                location,
+                project_id,
+                api_key_location,
+            )?),
+            UninitializedProviderConfig::GCPVertexGemini {
                 model_id,
                 location,
                 project_id,
                 credential_location: api_key_location,
-            } => ProviderConfig::GCPVertexGemini(
-                GCPVertexGeminiProvider::new(model_id, location, project_id, api_key_location)
-                    .map_err(|e| D::Error::custom(e.to_string()))?,
-            ),
-            ProviderConfigHelper::GoogleAIStudioGemini {
+            } => ProviderConfig::GCPVertexGemini(GCPVertexGeminiProvider::new(
+                model_id,
+                location,
+                project_id,
+                api_key_location,
+                provider_types,
+            )?),
+            UninitializedProviderConfig::GoogleAIStudioGemini {
                 model_name,
                 api_key_location,
-            } => ProviderConfig::GoogleAIStudioGemini(
-                GoogleAIStudioGeminiProvider::new(model_name, api_key_location)
-                    .map_err(|e| D::Error::custom(e.to_string()))?,
-            ),
-            ProviderConfigHelper::Hyperbolic {
+            } => ProviderConfig::GoogleAIStudioGemini(GoogleAIStudioGeminiProvider::new(
                 model_name,
                 api_key_location,
-            } => ProviderConfig::Hyperbolic(
-                HyperbolicProvider::new(model_name, api_key_location)
-                    .map_err(|e| D::Error::custom(e.to_string()))?,
-            ),
-            ProviderConfigHelper::Mistral {
+            )?),
+            UninitializedProviderConfig::Hyperbolic {
                 model_name,
                 api_key_location,
-            } => ProviderConfig::Mistral(
-                MistralProvider::new(model_name, api_key_location)
-                    .map_err(|e| D::Error::custom(e.to_string()))?,
-            ),
-            ProviderConfigHelper::OpenAI {
+            } => ProviderConfig::Hyperbolic(HyperbolicProvider::new(model_name, api_key_location)?),
+            UninitializedProviderConfig::Mistral {
+                model_name,
+                api_key_location,
+            } => ProviderConfig::Mistral(MistralProvider::new(model_name, api_key_location)?),
+            UninitializedProviderConfig::OpenAI {
                 model_name,
                 api_base,
                 api_key_location,
-            } => ProviderConfig::OpenAI(
-                OpenAIProvider::new(model_name, api_base, api_key_location)
-                    .map_err(|e| D::Error::custom(e.to_string()))?,
-            ),
-            ProviderConfigHelper::Together {
+            } => {
+                ProviderConfig::OpenAI(OpenAIProvider::new(model_name, api_base, api_key_location)?)
+            }
+            UninitializedProviderConfig::Together {
                 model_name,
                 api_key_location,
                 parse_think_blocks,
-            } => ProviderConfig::Together(
-                TogetherProvider::new(model_name, api_key_location, parse_think_blocks)
-                    .map_err(|e| D::Error::custom(e.to_string()))?,
-            ),
-            ProviderConfigHelper::VLLM {
+            } => ProviderConfig::Together(TogetherProvider::new(
+                model_name,
+                api_key_location,
+                parse_think_blocks,
+            )?),
+            UninitializedProviderConfig::VLLM {
                 model_name,
                 api_base,
                 api_key_location,
-            } => ProviderConfig::VLLM(
-                VLLMProvider::new(model_name, api_base, api_key_location)
-                    .map_err(|e| D::Error::custom(e.to_string()))?,
-            ),
-            ProviderConfigHelper::XAI {
+            } => ProviderConfig::VLLM(VLLMProvider::new(model_name, api_base, api_key_location)?),
+            UninitializedProviderConfig::XAI {
                 model_name,
                 api_key_location,
-            } => ProviderConfig::XAI(
-                XAIProvider::new(model_name, api_key_location)
-                    .map_err(|e| D::Error::custom(e.to_string()))?,
-            ),
-            ProviderConfigHelper::SGLang {
+            } => ProviderConfig::XAI(XAIProvider::new(model_name, api_key_location)?),
+            UninitializedProviderConfig::SGLang {
                 model_name,
                 api_base,
                 api_key_location,
-            } => ProviderConfig::SGLang(
-                SGLangProvider::new(model_name, api_base, api_key_location)
-                    .map_err(|e| D::Error::custom(e.to_string()))?,
-            ),
-            ProviderConfigHelper::TGI {
+            } => {
+                ProviderConfig::SGLang(SGLangProvider::new(model_name, api_base, api_key_location)?)
+            }
+            UninitializedProviderConfig::TGI {
                 api_base,
                 api_key_location,
-            } => ProviderConfig::TGI(
-                TGIProvider::new(api_base, api_key_location)
-                    .map_err(|e| D::Error::custom(e.to_string()))?,
-            ),
-            ProviderConfigHelper::DeepSeek {
+            } => ProviderConfig::TGI(TGIProvider::new(api_base, api_key_location)?),
+            UninitializedProviderConfig::DeepSeek {
                 model_name,
                 api_key_location,
-            } => ProviderConfig::DeepSeek(
-                DeepSeekProvider::new(model_name, api_key_location)
-                    .map_err(|e| D::Error::custom(e.to_string()))?,
-            ),
+            } => ProviderConfig::DeepSeek(DeepSeekProvider::new(model_name, api_key_location)?),
             #[cfg(any(test, feature = "e2e_tests"))]
-            ProviderConfigHelper::Dummy {
+            UninitializedProviderConfig::Dummy {
                 model_name,
                 api_key_location,
-            } => ProviderConfig::Dummy(
-                DummyProvider::new(model_name, api_key_location)
-                    .map_err(|e| D::Error::custom(e.to_string()))?,
-            ),
+            } => ProviderConfig::Dummy(DummyProvider::new(model_name, api_key_location)?),
         })
     }
 }
 
 impl ModelProvider {
+    #[tracing::instrument(skip_all, fields(provider_name = &*self.name, otel.name = "model_provider_inference",
+        gen_ai.operation.name = "chat",
+        gen_ai.system = self.genai_system_name(),
+        gen_ai.request.model = self.genai_model_name(),
+    stream = false))]
     async fn infer(
         &self,
         request: ModelProviderRequest<'_>,
@@ -901,6 +934,11 @@ impl ModelProvider {
         }
     }
 
+    #[tracing::instrument(skip_all, fields(provider_name = &*self.name, otel.name = "model_provider_inference",
+        gen_ai.operation.name = "chat",
+        gen_ai.system = self.genai_system_name(),
+        gen_ai.request.model = self.genai_model_name(),
+    stream = true))]
     async fn infer_stream(
         &self,
         request: ModelProviderRequest<'_>,
@@ -1169,6 +1207,7 @@ impl ModelProvider {
     }
 }
 
+#[derive(Debug)]
 pub enum CredentialLocation {
     /// Environment variable containing the actual credential
     Env(String),
@@ -1199,8 +1238,7 @@ impl<'de> Deserialize<'de> for CredentialLocation {
             Ok(CredentialLocation::None)
         } else {
             Err(serde::de::Error::custom(format!(
-                "Invalid ApiKeyLocation format: {}",
-                s
+                "Invalid ApiKeyLocation format: {s}"
             )))
         }
     }
@@ -1277,7 +1315,7 @@ fn racy_get_or_try_init<T: Clone, E>(
 
 impl TryFrom<(CredentialLocation, &str)> for Credential {
     type Error = Error;
-    #[allow(unused_variables)]
+
     fn try_from(
         (location, provider_type): (CredentialLocation, &str),
     ) -> Result<Self, Self::Error> {
@@ -1288,7 +1326,7 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
                     if SKIP_CREDENTIAL_VALIDATION.is_set() {
                         #[cfg(any(test, feature = "e2e_tests"))]
                         {
-                            warn!(
+                            tracing::warn!(
                             "You are missing the credentials required for a model provider of type {}, so the associated tests will likely fail.",
                             provider_type
                         );
@@ -1309,7 +1347,7 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
                         if SKIP_CREDENTIAL_VALIDATION.is_set() {
                             #[cfg(any(test, feature = "e2e_tests"))]
                             {
-                                warn!(
+                                tracing::warn!(
                                 "Environment variable {} is required for a model provider of type {} but is missing, so the associated tests will likely fail.",
                                 env_key, provider_type
 
@@ -1319,8 +1357,7 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
                         } else {
                             return Err(Error::new(ErrorDetails::ApiKeyMissing {
                                 provider_name: format!(
-                                    "{}: Environment variable {} for credentials path is missing",
-                                    provider_type, env_key
+                                    "{provider_type}: Environment variable {env_key} for credentials path is missing"
                                 ),
                             }));
                         }
@@ -1333,7 +1370,7 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
                         if SKIP_CREDENTIAL_VALIDATION.is_set() {
                             #[cfg(any(test, feature = "e2e_tests"))]
                             {
-                                warn!(
+                                tracing::warn!(
                                 "Failed to read credentials file for a model provider of type {}, so the associated tests will likely fail: {}",
                                 provider_type, e
                             );
@@ -1342,8 +1379,7 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
                         } else {
                             Err(Error::new(ErrorDetails::ApiKeyMissing {
                                 provider_name: format!(
-                                    "{}: Failed to read credentials file - {}",
-                                    provider_type, e
+                                    "{provider_type}: Failed to read credentials file - {e}"
                                 ),
                             }))
                         }
@@ -1356,7 +1392,7 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
                     if SKIP_CREDENTIAL_VALIDATION.is_set() {
                         #[cfg(any(test, feature = "e2e_tests"))]
                         {
-                            warn!(
+                            tracing::warn!(
                                 "Failed to read credentials file for a model provider of type {}, so the associated tests will likely fail: {}",
                             provider_type, e
                         );
@@ -1365,8 +1401,7 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
                     } else {
                         Err(Error::new(ErrorDetails::ApiKeyMissing {
                             provider_name: format!(
-                                "{}: Failed to read credentials file - {}",
-                                provider_type, e
+                                "{provider_type}: Failed to read credentials file - {e}"
                             ),
                         }))
                     }
@@ -1422,7 +1457,7 @@ impl ShorthandModelConfig for ModelConfig {
             "dummy" => ProviderConfig::Dummy(DummyProvider::new(model_name, None)?),
             _ => {
                 return Err(ErrorDetails::Config {
-                    message: format!("Invalid provider type: {}", provider_type),
+                    message: format!("Invalid provider type: {provider_type}"),
                 }
                 .into());
             }
@@ -2246,8 +2281,7 @@ mod tests {
         for &shorthand in SHORTHAND_MODEL_PREFIXES {
             assert!(
                 RESERVED_MODEL_PREFIXES.contains(&shorthand.to_string()),
-                "Shorthand prefix '{}' is not in RESERVED_MODEL_PREFIXES",
-                shorthand
+                "Shorthand prefix '{shorthand}' is not in RESERVED_MODEL_PREFIXES"
             );
         }
     }

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { FunctionConfig, JSONSchema } from "./function";
+import { specificToolChoiceSchema } from "./function";
 import { RawVariantConfigSchema } from "./variant.server";
 import { ChatCompletionConfigSchema, type VariantConfig } from "./variant";
 import path from "path";
@@ -20,10 +21,16 @@ const rawBaseConfigSchema = z.object({
 export const RawFunctionConfigChatSchema = rawBaseConfigSchema.extend({
   type: z.literal("chat"),
   tools: z.array(z.string()).default([]),
-  tool_choice: z.enum(["none", "auto", "any"]).default("none"), // Assuming these are the ToolChoice variants
+  tool_choice: z
+    .union([
+      z.literal("none"),
+      z.literal("auto"),
+      z.literal("required"),
+      specificToolChoiceSchema,
+    ])
+    .default("none"),
   parallel_tool_calls: z.boolean().default(false),
 });
-
 // Schema for FunctionConfigJson
 export const RawFunctionConfigJsonSchema = rawBaseConfigSchema.extend({
   type: z.literal("json"),

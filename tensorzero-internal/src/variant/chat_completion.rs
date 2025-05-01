@@ -8,9 +8,8 @@ use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels, InferenceParams};
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
-use crate::inference::types::extra_body::{
-    ExtraBodyConfig, ExtraHeadersConfig, FullExtraBodyConfig,
-};
+use crate::inference::types::extra_body::{ExtraBodyConfig, FullExtraBodyConfig};
+use crate::inference::types::extra_headers::{ExtraHeadersConfig, FullExtraHeadersConfig};
 use crate::inference::types::{
     batch::StartBatchModelInferenceWithMetadata, ContentBlock, InferenceResultStream,
     ModelInferenceRequest, RequestMessage, Role,
@@ -18,7 +17,7 @@ use crate::inference::types::{
 use crate::inference::types::{
     InferenceResult, ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent,
 };
-use crate::jsonschema_util::JSONSchemaFromPath;
+use crate::jsonschema_util::StaticJSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
 use crate::variant::JsonMode;
@@ -179,7 +178,7 @@ impl ChatCompletionConfig {
                 .as_str()
                 .ok_or_else(|| Error::new(ErrorDetails::InvalidMessage {
                     message:
-                        format!("System message content {} is not a string but there is no variant template", system)
+                        format!("System message content {system} is not a string but there is no variant template")
                             .to_string(),
                 }))?
                 .to_string()),
@@ -215,13 +214,21 @@ impl ChatCompletionConfig {
             );
 
         let extra_body = FullExtraBodyConfig {
-            variant_extra_headers: self.extra_headers.clone(),
             extra_body: self.extra_body.clone(),
             inference_extra_body: inference_config
                 .extra_body
                 .clone()
                 .filter(inference_config.variant_name),
         };
+
+        let extra_headers = FullExtraHeadersConfig {
+            variant_extra_headers: self.extra_headers.clone(),
+            inference_extra_headers: inference_config
+                .extra_headers
+                .clone()
+                .filter(inference_config.variant_name),
+        };
+
         prepare_model_inference_request(
             messages,
             system,
@@ -231,6 +238,7 @@ impl ChatCompletionConfig {
             inference_params,
             self.json_mode,
             extra_body,
+            extra_headers,
         )
     }
 }
@@ -434,7 +442,7 @@ impl Variant for ChatCompletionConfig {
 }
 
 pub fn validate_template_and_schema(
-    schema: Option<&JSONSchemaFromPath>,
+    schema: Option<&StaticJSONSchema>,
     template: Option<&PathBuf>,
     templates: &TemplateConfig,
 ) -> Result<(), Error> {
@@ -483,7 +491,7 @@ mod tests {
     use crate::inference::types::{
         ContentBlockChatOutput, InferenceResultChunk, ModelInferenceRequestJsonMode, Usage,
     };
-    use crate::jsonschema_util::{DynamicJSONSchema, JSONSchemaFromPath};
+    use crate::jsonschema_util::{DynamicJSONSchema, StaticJSONSchema};
     use crate::minijinja_util::tests::get_test_template_config;
     use crate::model::{ModelConfig, ModelProvider, ProviderConfig};
     use crate::tool::{ToolCallConfig, ToolChoice};
@@ -941,6 +949,7 @@ mod tests {
                 episode_id: Uuid::now_v7(),
             },
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
         let models = ModelTable::default();
@@ -995,6 +1004,7 @@ mod tests {
                 episode_id: Uuid::now_v7(),
             },
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
         let result = chat_completion_config
@@ -1046,6 +1056,7 @@ mod tests {
                 episode_id: Uuid::now_v7(),
             },
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
         let err = chat_completion_config
@@ -1126,6 +1137,7 @@ mod tests {
                 episode_id: Uuid::now_v7(),
             },
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
         let result = chat_completion_config
@@ -1204,6 +1216,7 @@ mod tests {
                 episode_id: Uuid::now_v7(),
             },
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
         let result = chat_completion_config
@@ -1270,7 +1283,7 @@ mod tests {
             "additionalProperties": false
         });
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
-        let output_schema = JSONSchemaFromPath::from_value(&output_schema).unwrap();
+        let output_schema = StaticJSONSchema::from_value(&output_schema).unwrap();
         let json_function_config = FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             assistant_schema: None,
@@ -1291,6 +1304,7 @@ mod tests {
                 episode_id: Uuid::now_v7(),
             },
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
         let inference_params = InferenceParams::default();
@@ -1352,6 +1366,7 @@ mod tests {
             variant_name: Some(""),
             dynamic_output_schema: None,
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
         let chat_completion_config = ChatCompletionConfig {
@@ -1420,7 +1435,7 @@ mod tests {
         let implicit_tool_call_config =
             ToolCallConfig::implicit_from_value(&hardcoded_output_schema);
         let hardcoded_output_schema =
-            JSONSchemaFromPath::from_value(&hardcoded_output_schema).unwrap();
+            StaticJSONSchema::from_value(&hardcoded_output_schema).unwrap();
         let json_function_config = FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             assistant_schema: None,
@@ -1462,6 +1477,7 @@ mod tests {
             variant_name: Some(""),
             dynamic_output_schema: Some(&output_schema),
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
         let chat_completion_config = ChatCompletionConfig {
@@ -1529,7 +1545,7 @@ mod tests {
         let implicit_tool_call_config =
             ToolCallConfig::implicit_from_value(&hardcoded_output_schema);
         let hardcoded_output_schema =
-            JSONSchemaFromPath::from_value(&hardcoded_output_schema).unwrap();
+            StaticJSONSchema::from_value(&hardcoded_output_schema).unwrap();
         let json_function_config = FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             assistant_schema: None,
@@ -1561,6 +1577,7 @@ mod tests {
             variant_name: Some(""),
             dynamic_output_schema: Some(&output_schema),
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
         let chat_completion_config = ChatCompletionConfig {
@@ -1737,6 +1754,7 @@ mod tests {
             function_name: "",
             variant_name: Some(""),
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
         let result = chat_completion_config
@@ -1801,6 +1819,7 @@ mod tests {
             variant_name: Some(""),
             dynamic_output_schema: None,
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
         let (mut stream, models_used) = chat_completion_config
@@ -1903,6 +1922,7 @@ mod tests {
             variant_name: Some(""),
             dynamic_output_schema: None,
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
         let model_request = chat_completion_config
@@ -1990,7 +2010,7 @@ mod tests {
             system_schema: None,
             user_schema: None,
             assistant_schema: None,
-            output_schema: JSONSchemaFromPath::from_value(&output_schema_value).unwrap(),
+            output_schema: StaticJSONSchema::from_value(&output_schema_value).unwrap(),
             implicit_tool_call_config: ToolCallConfig {
                 tools_available: vec![],
                 tool_choice: ToolChoice::Auto,
@@ -2009,6 +2029,7 @@ mod tests {
             function_name: "",
             variant_name: Some(""),
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
         let mut inference_params = InferenceParams::default();
@@ -2088,6 +2109,7 @@ mod tests {
                 episode_id: Uuid::now_v7(),
             },
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
         let model_request = chat_completion_config
@@ -2115,7 +2137,7 @@ mod tests {
     #[test]
     fn test_validate_template_and_schema_both_some() {
         let templates = get_test_template_config();
-        let schema = JSONSchemaFromPath::new(
+        let schema = StaticJSONSchema::from_path(
             PathBuf::from("fixtures/config/functions/templates_with_variables/system_schema.json"),
             PathBuf::new(),
         )
@@ -2153,7 +2175,7 @@ mod tests {
     #[test]
     fn test_validate_template_and_schema_schema_some_template_none() {
         let templates = get_test_template_config(); // Default TemplateConfig
-        let schema = JSONSchemaFromPath::new(
+        let schema = StaticJSONSchema::from_path(
             PathBuf::from("fixtures/config/functions/templates_with_variables/system_schema.json"),
             PathBuf::new(),
         )

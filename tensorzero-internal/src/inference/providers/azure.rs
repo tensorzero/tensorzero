@@ -60,6 +60,10 @@ impl AzureProvider {
             credentials,
         })
     }
+
+    pub fn deployment_id(&self) -> &str {
+        &self.deployment_id
+    }
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -133,6 +137,7 @@ impl InferenceProvider for AzureProvider {
         })?;
         let headers = inject_extra_request_data(
             &request.extra_body,
+            &request.extra_headers,
             model_provider,
             model_name,
             &mut request_body,
@@ -204,7 +209,12 @@ impl InferenceProvider for AzureProvider {
                     raw_response: None,
                 })
             })?;
-            Err(handle_openai_error(status, &response, PROVIDER_TYPE))
+            Err(handle_openai_error(
+                &serde_json::to_string(&request_body).unwrap_or_default(),
+                status,
+                &response,
+                PROVIDER_TYPE,
+            ))
         }
     }
 
@@ -229,6 +239,7 @@ impl InferenceProvider for AzureProvider {
         })?;
         let headers = inject_extra_request_data(
             &request.extra_body,
+            &request.extra_headers,
             model_provider,
             model_name,
             &mut request_body,
@@ -376,7 +387,8 @@ struct AzureRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     seed: Option<u32>,
     stream: bool,
-    response_format: AzureResponseFormat,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    response_format: Option<AzureResponseFormat>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<Vec<OpenAITool<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -417,19 +429,23 @@ pub enum AzureResponseFormat {
 }
 
 impl AzureResponseFormat {
-    fn new(json_mode: &ModelInferenceRequestJsonMode, output_schema: Option<&Value>) -> Self {
+    fn new(
+        json_mode: &ModelInferenceRequestJsonMode,
+        output_schema: Option<&Value>,
+    ) -> Option<Self> {
         // Note: Some models on Azure won't support strict JSON mode.
         // Azure will 400 if you try to use it for those.
         // See these docs: https://learn.microsoft.com/en-us/azure/ai-services/openai/how-to/structured-outputs
         match json_mode {
-            ModelInferenceRequestJsonMode::On => AzureResponseFormat::JsonObject,
-            ModelInferenceRequestJsonMode::Off => AzureResponseFormat::Text,
+            ModelInferenceRequestJsonMode::On => Some(AzureResponseFormat::JsonObject),
+            // For now, we never explicitly send `AzureResponseFormat::Text`
+            ModelInferenceRequestJsonMode::Off => None,
             ModelInferenceRequestJsonMode::Strict => match output_schema {
                 Some(schema) => {
                     let json_schema = json!({"name": "response", "strict": true, "schema": schema});
-                    AzureResponseFormat::JsonSchema { json_schema }
+                    Some(AzureResponseFormat::JsonSchema { json_schema })
                 }
-                None => AzureResponseFormat::JsonObject,
+                None => Some(AzureResponseFormat::JsonObject),
             },
         }
     }
@@ -564,7 +580,7 @@ mod tests {
         assert_eq!(azure_request.max_tokens, Some(100));
         assert!(!azure_request.stream);
         assert_eq!(azure_request.seed, Some(69));
-        assert_eq!(azure_request.response_format, AzureResponseFormat::Text);
+        assert_eq!(azure_request.response_format, None);
         assert!(azure_request.tools.is_some());
         let tools = azure_request.tools.as_ref().unwrap();
         assert_eq!(tools.len(), 1);
@@ -615,7 +631,7 @@ mod tests {
         assert_eq!(azure_request.seed, Some(69));
         assert_eq!(
             azure_request.response_format,
-            AzureResponseFormat::JsonObject
+            Some(AzureResponseFormat::JsonObject)
         );
         assert!(azure_request.tools.is_some());
         let tools = azure_request.tools.as_ref().unwrap();

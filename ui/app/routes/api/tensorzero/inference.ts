@@ -1,4 +1,4 @@
-import type { ActionFunctionArgs } from "react-router";
+import { ZodError } from "zod";
 import { InferenceRequestSchema } from "~/utils/tensorzero";
 import { tensorZeroClient } from "~/utils/tensorzero.server";
 import type {
@@ -6,27 +6,56 @@ import type {
   ResolvedInput,
   ResolvedInputMessageContent,
 } from "~/utils/clickhouse/common";
-import type { Input as TensorZeroInput } from "~/utils/tensorzero";
+import type {
+  InferenceResponse,
+  Input as TensorZeroInput,
+} from "~/utils/tensorzero";
 import type { ResolvedInputMessage } from "~/utils/clickhouse/common";
 import type { InputMessage as TensorZeroMessage } from "~/utils/tensorzero";
 import type { InputMessageContent as TensorZeroContent } from "~/utils/tensorzero";
 import type { ImageContent as TensorZeroImage } from "~/utils/tensorzero";
+import { JSONParseError } from "~/utils/common";
+import type { Route } from "./+types/inference";
 
-export async function action({
-  request,
-}: ActionFunctionArgs): Promise<Response> {
+export async function action({ request }: Route.ActionArgs): Promise<Response> {
   const formData = await request.formData();
-  const rawData = JSON.parse(formData.get("data") as string);
-  const result = InferenceRequestSchema.safeParse(rawData);
-  if (!result.success) {
-    return Response.json({ error: result.error.issues }, { status: 400 });
+  try {
+    const inference = await handleInferenceAction(formData.get("data"));
+    return Response.json(inference);
+  } catch (error) {
+    if (error instanceof JSONParseError) {
+      return Response.json(
+        { error: "Error parsing request data" },
+        { status: 400 },
+      );
+    }
+    if (error instanceof ZodError) {
+      return Response.json({ error: error.issues }, { status: 400 });
+    }
+    return Response.json({ error: "Server error" }, { status: 500 });
+  }
+}
+
+async function handleInferenceAction(
+  payload: unknown,
+): Promise<InferenceResponse> {
+  if (typeof payload === "string") {
+    try {
+      payload = JSON.parse(payload);
+    } catch {
+      throw new JSONParseError("Error parsing request data");
+    }
   }
 
-  const inference = await tensorZeroClient.inference({
+  const result = InferenceRequestSchema.safeParse(payload);
+  if (!result.success) {
+    throw result.error;
+  }
+
+  return await tensorZeroClient.inference({
     ...result.data,
     stream: false,
   });
-  return Response.json(inference);
 }
 
 export function resolvedInputToTensorZeroInput(

@@ -9,17 +9,18 @@ use std::sync::Arc;
 use tensorzero_derive::TensorZeroDeserialize;
 use tracing::instrument;
 
-use crate::embeddings::EmbeddingModelTable;
+use crate::embeddings::{EmbeddingModelTable, UninitializedEmbeddingModelConfig};
 use crate::error::{Error, ErrorDetails};
 use crate::evaluations::{EvaluationConfig, UninitializedEvaluationConfig};
 use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
 use crate::inference::types::storage::StorageKind;
-use crate::jsonschema_util::JSONSchemaFromPath;
+use crate::jsonschema_util::StaticJSONSchema;
 use crate::minijinja_util::TemplateConfig;
-use crate::model::{ModelConfig, ModelTable};
+use crate::model::{ModelConfig, ModelTable, UninitializedModelConfig};
 use crate::model_table::{CowNoClone, ShorthandModelConfig};
 use crate::tool::{create_implicit_tool_call_config, StaticToolConfig, ToolChoice};
 use crate::variant::best_of_n_sampling::UninitializedBestOfNSamplingConfig;
+use crate::variant::chain_of_thought::UninitializedChainOfThoughtConfig;
 use crate::variant::chat_completion::UninitializedChatCompletionConfig;
 use crate::variant::dicl::UninitializedDiclConfig;
 use crate::variant::mixture_of_n::UninitializedMixtureOfNConfig;
@@ -39,6 +40,7 @@ pub struct Config<'c> {
     pub evaluations: HashMap<String, Arc<EvaluationConfig>>, // evaluation name => evaluation config
     pub templates: TemplateConfig<'c>,
     pub object_store_info: Option<ObjectStoreInfo>,
+    pub provider_types: ProviderTypesConfig,
 }
 
 #[derive(Debug, Default)]
@@ -49,6 +51,30 @@ pub struct GatewayConfig {
     /// If `true`, allow minijinja to read from the filesystem (within the tree of the config file) for '{% include %}'
     /// Defaults to `false`
     pub enable_template_filesystem_access: bool,
+    pub export: ExportConfig,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct GCPProviderTypeConfig {
+    #[serde(default)]
+    pub batch: Option<GCPBatchConfigType>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(tag = "storage_type", rename_all = "snake_case")]
+pub enum GCPBatchConfigType {
+    // In the future, we'll want to allow explicitly setting 'none' at the model provider level,
+    // to override the global provider-types batch config.
+    None,
+    CloudStorage(GCPBatchConfigCloudStorage),
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct GCPBatchConfigCloudStorage {
+    pub input_uri_prefix: String,
+    pub output_uri_prefix: String,
 }
 
 #[derive(Clone, Debug)]
@@ -192,6 +218,8 @@ pub struct UninitializedGatewayConfig {
     pub debug: bool,
     #[serde(default)]
     pub enable_template_filesystem_access: bool,
+    #[serde(default)]
+    pub export: ExportConfig,
 }
 
 impl TryFrom<UninitializedGatewayConfig> for GatewayConfig {
@@ -217,6 +245,7 @@ impl TryFrom<UninitializedGatewayConfig> for GatewayConfig {
                 enabled,
                 async_writes: config.observability.async_writes,
             },
+            export: config.export,
             debug: config.debug,
             enable_template_filesystem_access: config.enable_template_filesystem_access,
         })
@@ -230,6 +259,25 @@ pub struct ObservabilityConfig {
     pub enabled: Option<bool>,
     #[serde(default)]
     pub async_writes: bool,
+}
+
+#[derive(Debug, Default, Deserialize, PartialEq)]
+pub struct ExportConfig {
+    #[serde(default)]
+    pub otlp: OtlpConfig,
+}
+
+#[derive(Debug, Default, Deserialize, PartialEq)]
+pub struct OtlpConfig {
+    #[serde(default)]
+    pub traces: OtlpTracesConfig,
+}
+
+#[derive(Debug, Default, Deserialize, PartialEq)]
+pub struct OtlpTracesConfig {
+    /// Enable OpenTelemetry traces export to the configured OTLP endpoint (configured via OTLP environment variables)
+    #[serde(default)]
+    pub enabled: bool,
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
@@ -342,18 +390,47 @@ impl<'c> Config<'c> {
             })
             .collect::<Result<HashMap<String, Arc<StaticToolConfig>>, Error>>()?;
 
+        let models = uninitialized_config
+            .models
+            .into_iter()
+            .map(|(name, config)| {
+                config
+                    .load(&name, &uninitialized_config.provider_types)
+                    .map(|c| (name, c))
+            })
+            .collect::<Result<HashMap<_, _>, _>>()?;
+
+        let embedding_models = uninitialized_config
+            .embedding_models
+            .into_iter()
+            .map(|(name, config)| {
+                config
+                    .load(&uninitialized_config.provider_types)
+                    .map(|c| (name, c))
+            })
+            .collect::<Result<HashMap<_, _>, _>>()?;
+
         let object_store_info = ObjectStoreInfo::new(uninitialized_config.object_storage)?;
 
         let mut config = Config {
             gateway,
-            models: uninitialized_config.models,
-            embedding_models: uninitialized_config.embedding_models,
+            models: models.try_into().map_err(|e| {
+                Error::new(ErrorDetails::Config {
+                    message: format!("Failed to load models: {e}"),
+                })
+            })?,
+            embedding_models: embedding_models.try_into().map_err(|e| {
+                Error::new(ErrorDetails::Config {
+                    message: format!("Failed to load embedding models: {e}"),
+                })
+            })?,
             functions,
             metrics: uninitialized_config.metrics,
             tools,
             evaluations: HashMap::new(),
             templates,
             object_store_info,
+            provider_types: uninitialized_config.provider_types,
         };
 
         // Initialize the templates
@@ -382,8 +459,7 @@ impl<'c> Config<'c> {
                 if config.functions.contains_key(&evaluation_function_name) {
                     return Err(ErrorDetails::Config {
                         message: format!(
-                            "Duplicate evaluator function name: `{}` already exists. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.",
-                            evaluation_function_name
+                            "Duplicate evaluator function name: `{evaluation_function_name}` already exists. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports."
                         ),
                     }
                     .into());
@@ -410,7 +486,7 @@ impl<'c> Config<'c> {
             for (evaluation_metric_name, evaluation_metric_config) in evaluation_metric_configs {
                 if config.metrics.contains_key(&evaluation_metric_name) {
                     return Err(ErrorDetails::Config {
-                        message: format!("Duplicate evaluator metric name: `{}` already exists. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.", evaluation_metric_name),
+                        message: format!("Duplicate evaluator metric name: `{evaluation_metric_name}` already exists. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports."),
                     }
                     .into());
                 }
@@ -450,10 +526,7 @@ impl<'c> Config<'c> {
         for metric_name in self.metrics.keys() {
             if metric_name == "comment" || metric_name == "demonstration" {
                 return Err(ErrorDetails::Config {
-                    message: format!(
-                        "Metric name '{}' is reserved and cannot be used",
-                        metric_name
-                    ),
+                    message: format!("Metric name '{metric_name}' is reserved and cannot be used"),
                 }
                 .into());
             }
@@ -585,9 +658,9 @@ pub trait LoadableConfig<T> {
 struct UninitializedConfig {
     pub gateway: Option<UninitializedGatewayConfig>,
     #[serde(default)]
-    pub models: ModelTable, // model name => model config
+    pub models: HashMap<Arc<str>, UninitializedModelConfig>, // model name => model config
     #[serde(default)]
-    pub embedding_models: EmbeddingModelTable, // embedding model name => embedding model config
+    pub embedding_models: HashMap<Arc<str>, UninitializedEmbeddingModelConfig>, // embedding model name => embedding model config
     #[serde(default)]
     pub functions: HashMap<String, UninitializedFunctionConfig>, // function name => function config
     #[serde(default)]
@@ -595,8 +668,17 @@ struct UninitializedConfig {
     #[serde(default)]
     pub tools: HashMap<String, UninitializedToolConfig>, // tool name => tool config
     #[serde(default)]
-    pub evaluations: HashMap<String, UninitializedEvaluationConfig>, // evaluation name => evaluation config
+    pub evaluations: HashMap<String, UninitializedEvaluationConfig>, // evaluation name => evaluation
+    #[serde(default)]
+    pub provider_types: ProviderTypesConfig, // global configuration for all model providers of a particular type
     pub object_storage: Option<StorageKind>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProviderTypesConfig {
+    #[serde(default)]
+    pub gcp_vertex_gemini: Option<GCPProviderTypeConfig>,
 }
 
 impl UninitializedConfig {
@@ -691,15 +773,15 @@ impl UninitializedFunctionConfig {
             UninitializedFunctionConfig::Chat(params) => {
                 let system_schema = params
                     .system_schema
-                    .map(|path| JSONSchemaFromPath::new(path, base_path.as_ref()))
+                    .map(|path| StaticJSONSchema::from_path(path, base_path.as_ref()))
                     .transpose()?;
                 let user_schema = params
                     .user_schema
-                    .map(|path| JSONSchemaFromPath::new(path, base_path.as_ref()))
+                    .map(|path| StaticJSONSchema::from_path(path, base_path.as_ref()))
                     .transpose()?;
                 let assistant_schema = params
                     .assistant_schema
-                    .map(|path| JSONSchemaFromPath::new(path, base_path.as_ref()))
+                    .map(|path| StaticJSONSchema::from_path(path, base_path.as_ref()))
                     .transpose()?;
                 let variants = params
                     .variants
@@ -732,19 +814,19 @@ impl UninitializedFunctionConfig {
             UninitializedFunctionConfig::Json(params) => {
                 let system_schema = params
                     .system_schema
-                    .map(|path| JSONSchemaFromPath::new(path, base_path.as_ref()))
+                    .map(|path| StaticJSONSchema::from_path(path, base_path.as_ref()))
                     .transpose()?;
                 let user_schema = params
                     .user_schema
-                    .map(|path| JSONSchemaFromPath::new(path, base_path.as_ref()))
+                    .map(|path| StaticJSONSchema::from_path(path, base_path.as_ref()))
                     .transpose()?;
                 let assistant_schema = params
                     .assistant_schema
-                    .map(|path| JSONSchemaFromPath::new(path, base_path.as_ref()))
+                    .map(|path| StaticJSONSchema::from_path(path, base_path.as_ref()))
                     .transpose()?;
                 let output_schema = match params.output_schema {
-                    Some(path) => JSONSchemaFromPath::new(path, base_path.as_ref())?,
-                    None => JSONSchemaFromPath::default(),
+                    Some(path) => StaticJSONSchema::from_path(path, base_path.as_ref())?,
+                    None => StaticJSONSchema::default(),
                 };
                 let implicit_tool_call_config =
                     create_implicit_tool_call_config(output_schema.clone());
@@ -774,6 +856,11 @@ impl UninitializedFunctionConfig {
                         }
                         VariantConfig::Dicl(best_of_n_config) => {
                             if best_of_n_config.json_mode.is_none() {
+                                warn_variant = Some(name.clone());
+                            }
+                        }
+                        VariantConfig::ChainOfThought(chain_of_thought_config) => {
+                            if chain_of_thought_config.inner.json_mode.is_none() {
                                 warn_variant = Some(name.clone());
                             }
                         }
@@ -808,6 +895,8 @@ pub enum UninitializedVariantConfig {
     Dicl(UninitializedDiclConfig),
     #[serde(rename = "experimental_mixture_of_n")]
     MixtureOfN(UninitializedMixtureOfNConfig),
+    #[serde(rename = "experimental_chain_of_thought")]
+    ChainOfThought(UninitializedChainOfThoughtConfig),
 }
 
 impl UninitializedVariantConfig {
@@ -824,6 +913,9 @@ impl UninitializedVariantConfig {
             }
             UninitializedVariantConfig::MixtureOfN(params) => {
                 Ok(VariantConfig::MixtureOfN(params.load(base_path)?))
+            }
+            UninitializedVariantConfig::ChainOfThought(params) => {
+                Ok(VariantConfig::ChainOfThought(params.load(base_path)?))
             }
         }
     }
@@ -843,7 +935,7 @@ impl UninitializedToolConfig {
         base_path: P,
         name: String,
     ) -> Result<StaticToolConfig, Error> {
-        let parameters = JSONSchemaFromPath::new(self.parameters, base_path.as_ref())?;
+        let parameters = StaticJSONSchema::from_path(self.parameters, base_path.as_ref())?;
         Ok(StaticToolConfig {
             name,
             description: self.description,
@@ -1412,7 +1504,7 @@ mod tests {
             FunctionConfig::Json(json_config) => &json_config.output_schema,
             _ => panic!("Expected a JSON function"),
         };
-        assert_eq!(output_schema, &JSONSchemaFromPath::default());
+        assert_eq!(output_schema, &StaticJSONSchema::default());
         assert_eq!(output_schema.value, &serde_json::json!({}));
     }
 
@@ -1888,7 +1980,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             Error::new(ErrorDetails::Config {
-                message: "models: Model name 'tensorzero::bad_model' contains a reserved prefix"
+                message: "Failed to load models: Model name 'tensorzero::bad_model' contains a reserved prefix"
                     .to_string()
             })
         );
@@ -1916,7 +2008,7 @@ mod tests {
                 result.unwrap_err(),
                 Error::new(ErrorDetails::Config {
                     message:
-                        "embedding_models: Embedding model name 'tensorzero::bad_embedding_model' contains a reserved prefix"
+                        "Failed to load embedding models: Embedding model name 'tensorzero::bad_embedding_model' contains a reserved prefix"
                             .to_string()
                 })
             );
