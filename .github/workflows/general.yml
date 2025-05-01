@@ -254,6 +254,11 @@ jobs:
         run: |
           uv run pyright
 
+      - name: "Python: Optimizations Server: pyright"
+        working-directory: optimizations-server
+        run: |
+          uv run pyright
+
       - name: "Node.js: OpenAI Client: lint"
         working-directory: clients/openai-node
         run: |
