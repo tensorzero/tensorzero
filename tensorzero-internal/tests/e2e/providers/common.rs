@@ -5515,11 +5515,12 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
 pub async fn test_tool_use_tool_choice_specific_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    // GCP Vertex AI, Mistral, and Together don't support ToolChoice::Specific.
+    // GCP Vertex AI, Groq, Mistral, and Together don't support ToolChoice::Specific.
     // (Together AI claims to support it, but we can't get it to behave strictly.)
     // In those cases, we use ToolChoice::Any with a single tool under the hood.
     // Even then, they seem to hallucinate a new tool.
     if provider.model_provider_name.contains("gcp_vertex")
+        || provider.model_provider_name == "groq"
         || provider.model_provider_name == "mistral"
         || provider.model_provider_name == "together"
     {
