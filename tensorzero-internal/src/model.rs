@@ -220,6 +220,7 @@ impl ModelConfig {
             Cow::Borrowed(request)
         }
     }
+    #[tracing::instrument(skip_all, fields(model_name = model_name, otel.name = "model_inference", stream = false))]
     pub async fn infer<'request>(
         &self,
         request: &'request ModelInferenceRequest<'request>,
@@ -297,6 +298,7 @@ impl ModelConfig {
         Err(err)
     }
 
+    #[tracing::instrument(skip_all, fields(model_name = model_name, otel.name = "model_inference", stream = true))]
     pub async fn infer_stream<'request>(
         &self,
         request: &'request ModelInferenceRequest<'request>,
@@ -489,6 +491,60 @@ pub struct ModelProvider {
     pub config: ProviderConfig,
     pub extra_headers: Option<ExtraHeadersConfig>,
     pub extra_body: Option<ExtraBodyConfig>,
+}
+
+impl ModelProvider {
+    /// The name to report in the OTEL `gen_ai.system` attribute
+    fn genai_system_name(&self) -> &'static str {
+        match &self.config {
+            ProviderConfig::Anthropic(_) => "anthropic",
+            ProviderConfig::AWSBedrock(_) => "aws_bedrock",
+            ProviderConfig::AWSSagemaker(_) => "aws_sagemaker",
+            ProviderConfig::Azure(_) => "azure",
+            ProviderConfig::Fireworks(_) => "fireworks",
+            ProviderConfig::GCPVertexAnthropic(_) => "gcp_vertex_anthropic",
+            ProviderConfig::GCPVertexGemini(_) => "gcp_vertex_gemini",
+            ProviderConfig::GoogleAIStudioGemini(_) => "google_ai_studio_gemini",
+            ProviderConfig::Hyperbolic(_) => "hyperbolic",
+            ProviderConfig::Mistral(_) => "mistral",
+            ProviderConfig::OpenAI(_) => "openai",
+            ProviderConfig::Together(_) => "together",
+            ProviderConfig::VLLM(_) => "vllm",
+            ProviderConfig::XAI(_) => "xai",
+            ProviderConfig::TGI(_) => "tgi",
+            ProviderConfig::SGLang(_) => "sglang",
+            ProviderConfig::DeepSeek(_) => "deepseek",
+            #[cfg(any(test, feature = "e2e_tests"))]
+            ProviderConfig::Dummy(_) => "dummy",
+        }
+    }
+
+    /// The model name to report in the OTEL `gen_ai.request.model` attribute
+    fn genai_model_name(&self) -> Option<&str> {
+        match &self.config {
+            ProviderConfig::Anthropic(provider) => Some(provider.model_name()),
+            ProviderConfig::AWSBedrock(provider) => Some(provider.model_id()),
+            // SageMaker doesn't have a meaningful model name concept, as we just invoke an endpoint
+            ProviderConfig::AWSSagemaker(_) => None,
+            ProviderConfig::Azure(provider) => Some(provider.deployment_id()),
+            ProviderConfig::Fireworks(provider) => Some(provider.model_name()),
+            ProviderConfig::GCPVertexAnthropic(provider) => Some(provider.model_id()),
+            ProviderConfig::GCPVertexGemini(provider) => Some(provider.model_id()),
+            ProviderConfig::GoogleAIStudioGemini(provider) => Some(provider.model_name()),
+            ProviderConfig::Hyperbolic(provider) => Some(provider.model_name()),
+            ProviderConfig::Mistral(provider) => Some(provider.model_name()),
+            ProviderConfig::OpenAI(provider) => Some(provider.model_name()),
+            ProviderConfig::Together(provider) => Some(provider.model_name()),
+            ProviderConfig::VLLM(provider) => Some(provider.model_name()),
+            ProviderConfig::XAI(provider) => Some(provider.model_name()),
+            // TGI doesn't have a meaningful model name
+            ProviderConfig::TGI(_) => None,
+            ProviderConfig::SGLang(provider) => Some(provider.model_name()),
+            ProviderConfig::DeepSeek(provider) => Some(provider.model_name()),
+            #[cfg(any(test, feature = "e2e_tests"))]
+            ProviderConfig::Dummy(provider) => Some(provider.model_name()),
+        }
+    }
 }
 
 impl From<&ModelProvider> for ModelProviderRequestInfo {
@@ -814,6 +870,11 @@ impl UninitializedProviderConfig {
 }
 
 impl ModelProvider {
+    #[tracing::instrument(skip_all, fields(provider_name = &*self.name, otel.name = "model_provider_inference",
+        gen_ai.operation.name = "chat",
+        gen_ai.system = self.genai_system_name(),
+        gen_ai.request.model = self.genai_model_name(),
+    stream = false))]
     async fn infer(
         &self,
         request: ModelProviderRequest<'_>,
@@ -873,6 +934,11 @@ impl ModelProvider {
         }
     }
 
+    #[tracing::instrument(skip_all, fields(provider_name = &*self.name, otel.name = "model_provider_inference",
+        gen_ai.operation.name = "chat",
+        gen_ai.system = self.genai_system_name(),
+        gen_ai.request.model = self.genai_model_name(),
+    stream = true))]
     async fn infer_stream(
         &self,
         request: ModelProviderRequest<'_>,

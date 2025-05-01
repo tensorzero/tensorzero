@@ -21,10 +21,12 @@ use pyo3::{
     IntoPyObjectExt,
 };
 use python_helpers::{
-    deserialize_from_pyobj, parse_feedback_response, parse_inference_chunk,
+    deserialize_from_pyobj, parse_dynamic_evaluation_run_episode_response,
+    parse_dynamic_evaluation_run_response, parse_feedback_response, parse_inference_chunk,
     parse_inference_response, parse_tool, python_uuid_to_uuid, serialize_to_dict,
 };
 use tensorzero_internal::{
+    endpoints::dynamic_evaluation_run::DynamicEvaluationRunEpisodeParams,
     gateway_util::ShutdownHandle,
     inference::types::{
         extra_body::UnfilteredInferenceExtraBody, extra_headers::UnfilteredInferenceExtraHeaders,
@@ -33,8 +35,9 @@ use tensorzero_internal::{
 };
 use tensorzero_rust::{
     err_to_http, observability::LogFormat, CacheParamsOptions, Client, ClientBuilder,
-    ClientBuilderMode, ClientInferenceParams, ClientInput, ClientSecretString, DynamicToolParams,
-    FeedbackParams, InferenceOutput, InferenceParams, InferenceStream, TensorZeroError, Tool,
+    ClientBuilderMode, ClientInferenceParams, ClientInput, ClientSecretString,
+    DynamicEvaluationRunParams, DynamicToolParams, FeedbackParams, InferenceOutput,
+    InferenceParams, InferenceStream, TensorZeroError, Tool,
 };
 use tokio::sync::Mutex;
 use url::Url;
@@ -49,7 +52,9 @@ pub(crate) static TENSORZERO_INTERNAL_ERROR: GILOnceCell<Py<PyAny>> = GILOnceCel
 
 #[pymodule]
 fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    tensorzero_rust::observability::setup_logs(false, LogFormat::Pretty);
+    // Otel is disabled for now in the Python client until we decide how it should be configured
+    let _enable_otel = tensorzero_rust::observability::setup_logs(false, LogFormat::Pretty)
+        .map_err(|e| convert_error(m.py(), TensorZeroError::Other { source: e.into() }))?;
     m.add_class::<BaseTensorZeroGateway>()?;
     m.add_class::<AsyncTensorZeroGateway>()?;
     m.add_class::<TensorZeroGateway>()?;
@@ -311,8 +316,12 @@ impl BaseTensorZeroGateway {
         Ok(FeedbackParams {
             metric_name,
             value: deserialize_from_pyobj(py, &value)?,
-            episode_id: python_uuid_to_uuid("episode_id", episode_id)?,
-            inference_id: python_uuid_to_uuid("inference_id", inference_id)?,
+            episode_id: episode_id
+                .map(|id| python_uuid_to_uuid("episode_id", id))
+                .transpose()?,
+            inference_id: inference_id
+                .map(|id| python_uuid_to_uuid("inference_id", id))
+                .transpose()?,
             dryrun,
             tags: tags.unwrap_or_default(),
             internal,
@@ -342,7 +351,9 @@ impl BaseTensorZeroGateway {
         extra_body: Option<&Bound<'_, PyList>>,
         extra_headers: Option<&Bound<'_, PyList>>,
     ) -> PyResult<ClientInferenceParams> {
-        let episode_id = python_uuid_to_uuid("episode_id", episode_id)?;
+        let episode_id = episode_id
+            .map(|id| python_uuid_to_uuid("episode_id", id))
+            .transpose()?;
 
         let params: Option<InferenceParams> = if let Some(params) = params {
             deserialize_from_pyobj(py, params)?
@@ -710,6 +721,64 @@ impl TensorZeroGateway {
             .unbind()),
         }
     }
+
+    /// Make a request to the /dynamic_evaluation_run endpoint.
+    ///
+    /// :param variants: A dictionary mapping function names to pinned variant names.
+    /// :param tags: A dictionary containing tags that should be applied to every inference in the dynamic evaluation run.
+    /// :param project_name: (Optional) The name of the project to associate with the dynamic evaluation run.
+    /// :param run_display_name: (Optional) The display name of the dynamic evaluation run.
+    /// :return: A `DynamicEvaluationRunResponse` object.
+    #[pyo3(signature = (*, variants, tags=None, project_name=None, display_name=None))]
+    fn dynamic_evaluation_run(
+        this: PyRef<'_, Self>,
+        variants: HashMap<String, String>,
+        tags: Option<HashMap<String, String>>,
+        project_name: Option<String>,
+        display_name: Option<String>,
+    ) -> PyResult<Py<PyAny>> {
+        let client = this.as_super().client.clone();
+        let params = DynamicEvaluationRunParams {
+            variants,
+            tags: tags.unwrap_or_default(),
+            project_name,
+            display_name,
+        };
+        let fut = client.dynamic_evaluation_run(params);
+
+        let resp = tokio_block_on_without_gil(this.py(), fut);
+        match resp {
+            Ok(resp) => parse_dynamic_evaluation_run_response(this.py(), resp),
+            Err(e) => Err(convert_error(this.py(), e)),
+        }
+    }
+
+    /// Make a request to the /dynamic_evaluation_run_episode endpoint.
+    ///
+    /// :param run_id: The run ID to use for the dynamic evaluation run.
+    /// :param datapoint_name: The name of the datapoint to use for the dynamic evaluation run.
+    /// :param tags: A dictionary of tags to add to the dynamic evaluation run.
+    /// :return: A `DynamicEvaluationRunEpisodeResponse` object.
+    #[pyo3(signature = (*, run_id, datapoint_name=None, tags=None))]
+    fn dynamic_evaluation_run_episode(
+        this: PyRef<'_, Self>,
+        run_id: Bound<'_, PyAny>,
+        datapoint_name: Option<String>,
+        tags: Option<HashMap<String, String>>,
+    ) -> PyResult<Py<PyAny>> {
+        let run_id = python_uuid_to_uuid("run_id", run_id)?;
+        let client = this.as_super().client.clone();
+        let params = DynamicEvaluationRunEpisodeParams {
+            datapoint_name,
+            tags: tags.unwrap_or_default(),
+        };
+        let fut = client.dynamic_evaluation_run_episode(run_id, params);
+        let resp = tokio_block_on_without_gil(this.py(), fut);
+        match resp {
+            Ok(resp) => parse_dynamic_evaluation_run_episode_response(this.py(), resp),
+            Err(e) => Err(convert_error(this.py(), e)),
+        }
+    }
 }
 
 #[pyclass(extends=BaseTensorZeroGateway)]
@@ -1037,6 +1106,67 @@ impl AsyncTensorZeroGateway {
             // so we need the GIL
             Python::with_gil(|py| match res {
                 Ok(resp) => Ok(parse_feedback_response(py, resp)?.into_any()),
+                Err(e) => Err(convert_error(py, e)),
+            })
+        })
+    }
+
+    /// Make a request to the /dynamic_evaluation_run endpoint.
+    ///
+    /// :param variants: A dictionary mapping function names to pinned variant names.
+    /// :param tags: A dictionary containing tags that should be applied to every inference in the dynamic evaluation run.
+    /// :param project_name: (Optional) The name of the project to associate with the dynamic evaluation run.
+    /// :param run_display_name: (Optional) The display name of the dynamic evaluation run.
+    /// :return: A `DynamicEvaluationRunResponse` object.
+    #[pyo3(signature = (*, variants, tags=None, project_name=None, display_name=None))]
+    fn dynamic_evaluation_run(
+        this: PyRef<'_, Self>,
+        variants: HashMap<String, String>,
+        tags: Option<HashMap<String, String>>,
+        project_name: Option<String>,
+        display_name: Option<String>,
+    ) -> PyResult<Bound<'_, PyAny>> {
+        let client = this.as_super().client.clone();
+        let params = DynamicEvaluationRunParams {
+            variants,
+            tags: tags.unwrap_or_default(),
+            project_name,
+            display_name,
+        };
+
+        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
+            let res = client.dynamic_evaluation_run(params).await;
+            Python::with_gil(|py| match res {
+                Ok(resp) => parse_dynamic_evaluation_run_response(py, resp),
+                Err(e) => Err(convert_error(py, e)),
+            })
+        })
+    }
+
+    /// Make a request to the /dynamic_evaluation_run_episode endpoint.
+    ///
+    /// :param run_id: The run ID to use for the dynamic evaluation run.
+    /// :param datapoint_name: The name of the datapoint to use for the dynamic evaluation run.
+    /// :param tags: A dictionary of tags to add to the dynamic evaluation run.
+    /// :return: A `DynamicEvaluationRunEpisodeResponse` object.
+    #[pyo3(signature = (*, run_id, datapoint_name=None, tags=None))]
+    fn dynamic_evaluation_run_episode<'a>(
+        this: PyRef<'a, Self>,
+        run_id: Bound<'_, PyAny>,
+        datapoint_name: Option<String>,
+        tags: Option<HashMap<String, String>>,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        let run_id = python_uuid_to_uuid("run_id", run_id)?;
+        let client = this.as_super().client.clone();
+        let params = DynamicEvaluationRunEpisodeParams {
+            datapoint_name,
+            tags: tags.unwrap_or_default(),
+        };
+
+        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
+            let res = client.dynamic_evaluation_run_episode(run_id, params).await;
+            Python::with_gil(|py| match res {
+                Ok(resp) => parse_dynamic_evaluation_run_episode_response(py, resp),
                 Err(e) => Err(convert_error(py, e)),
             })
         })

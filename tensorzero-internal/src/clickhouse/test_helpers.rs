@@ -1,8 +1,11 @@
 #![expect(clippy::unwrap_used, clippy::expect_used, clippy::print_stdout)]
 use crate::endpoints::datasets::{ChatInferenceDatapoint, JsonInferenceDatapoint};
+use crate::endpoints::dynamic_evaluation_run::{
+    DynamicEvaluationRunEpisodeRow, DynamicEvaluationRunRow,
+};
 
 #[cfg(feature = "e2e_tests")]
-use super::escape_string_for_clickhouse_comparison;
+use super::escape_string_for_clickhouse_literal;
 use super::ClickHouseConnectionInfo;
 use serde::Deserialize;
 use serde_json::Value;
@@ -422,6 +425,46 @@ pub async fn stale_datapoint_clickhouse(
         .await;
 }
 
+pub async fn select_dynamic_evaluation_run_clickhouse(
+    clickhouse_connection_info: &ClickHouseConnectionInfo,
+    run_id: Uuid,
+) -> Option<DynamicEvaluationRunRow> {
+    let query = format!(
+        "SELECT
+            uint_to_uuid(run_id_uint) as run_id,
+            variant_pins,
+            tags,
+            project_name,
+            run_display_name
+        FROM DynamicEvaluationRun
+        WHERE run_id_uint = toUInt128(toUUID('{run_id}'))
+        FORMAT JSONEachRow",
+    );
+
+    let text = clickhouse_connection_info
+        .run_query_synchronous(query, None)
+        .await
+        .unwrap();
+
+    Some(serde_json::from_str(&text).unwrap())
+}
+
+pub async fn select_dynamic_evaluation_run_episode_clickhouse(
+    clickhouse_connection_info: &ClickHouseConnectionInfo,
+    run_id: Uuid,
+    episode_id: Uuid,
+) -> Option<DynamicEvaluationRunEpisodeRow> {
+    let query = format!(
+        "SELECT run_id, uint_to_uuid(episode_id_uint) as episode_id, variant_pins, datapoint_name, tags FROM DynamicEvaluationRunEpisode WHERE run_id = '{run_id}' AND episode_id_uint = toUInt128(toUUID('{episode_id}')) FORMAT JSONEachRow",
+    );
+
+    let text = clickhouse_connection_info
+        .run_query_synchronous(query, None)
+        .await
+        .unwrap();
+    Some(serde_json::from_str(&text).unwrap())
+}
+
 #[cfg(feature = "e2e_tests")]
 pub async fn select_feedback_tags_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
@@ -461,7 +504,7 @@ pub async fn select_human_static_evaluation_feedback_clickhouse(
     output: &str,
 ) -> Option<StaticEvaluationHumanFeedback> {
     let datapoint_id_str = datapoint_id.to_string();
-    let escaped_output = escape_string_for_clickhouse_comparison(output);
+    let escaped_output = escape_string_for_clickhouse_literal(output);
     let params = HashMap::from([
         ("metric_name", metric_name),
         ("datapoint_id", &datapoint_id_str),

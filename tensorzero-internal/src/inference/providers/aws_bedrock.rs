@@ -58,6 +58,10 @@ impl AWSBedrockProvider {
             base_config: aws_sdk_bedrockruntime::config::Builder::from(&config),
         })
     }
+
+    pub fn model_id(&self) -> &str {
+        &self.model_id
+    }
 }
 
 impl InferenceProvider for AWSBedrockProvider {

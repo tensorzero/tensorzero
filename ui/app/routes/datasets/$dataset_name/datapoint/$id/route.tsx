@@ -106,11 +106,7 @@ export async function action({ request }: ActionFunctionArgs) {
     try {
       // For future reference:
       // These two calls would be a transaction but ClickHouse doesn't support
-      await staleDatapoint(
-        parsedFormData.dataset_name,
-        parsedFormData.id,
-        functionType,
-      );
+
       const datapoint = {
         function_name: parsedFormData.function_name,
         input: transformedInput,
@@ -136,6 +132,11 @@ export async function action({ request }: ActionFunctionArgs) {
         uuid(),
         datapoint,
         formData.get("inputChanged") === "true",
+      );
+      await staleDatapoint(
+        parsedFormData.dataset_name,
+        parsedFormData.id,
+        functionType,
       );
 
       return redirect(

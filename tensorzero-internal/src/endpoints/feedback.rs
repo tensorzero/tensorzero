@@ -392,7 +392,9 @@ async fn throttled_get_function_name(
     target_id: &Uuid,
 ) -> Result<String, Error> {
     // Compute how long ago the target_id was created.
-    let elapsed = uuid_elapsed(target_id)?;
+    // Some UUIDs are in the future, e.g. for dynamic evaluation runs.
+    // In this case we should be conservative and assume no time has passed.
+    let elapsed = uuid_elapsed(target_id).unwrap_or(Duration::from_secs(0));
 
     // Calculate the remaining cooldown (which may be zero) and ensure we wait at least FEEDBACK_MINIMUM_WAIT_TIME.
     let wait_time = max(

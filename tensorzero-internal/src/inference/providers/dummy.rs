@@ -55,6 +55,10 @@ impl DummyProvider {
             })),
         }
     }
+
+    pub fn model_name(&self) -> &str {
+        &self.model_name
+    }
 }
 
 fn default_api_key_location() -> CredentialLocation {
