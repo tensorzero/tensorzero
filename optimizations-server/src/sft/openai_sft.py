@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Literal, Optional, Union
 
 from minijinja import Environment
 from openai import AsyncOpenAI
+from openai.types.chat import ChatCompletionMessageParam
 from openai.types.fine_tuning import FineTuningJob
 from tensorzero import AsyncTensorZeroGateway
 from tensorzero.internal_optimizations_server_types import Sample
@@ -166,7 +167,7 @@ class OpenAISFTJob(BaseSFTJob):
 
 def tensorzero_inference_to_openai_messages(
     sample: Sample, env: Environment
-) -> List[Dict]:
+) -> List[ChatCompletionMessageParam]:
     messages = []
     system = try_template_system(sample, env)
     if system:
@@ -247,8 +248,8 @@ def content_block_to_openai_message(content: Dict, role: str, env: Any) -> Dict:
 
 def validate_and_convert_messages(
     inferences: List[Sample],
-    template_env: Any,
-) -> List[List[Dict]]:
+    template_env: Environment,
+) -> List[List[ChatCompletionMessageParam]]:
     all_messages = []
 
     for inference in inferences:
@@ -295,8 +296,10 @@ async def start_sft_openai(
     encoding = get_encoding_for_model(model_name)
 
     analysis = analyze_dataset(train_messages_for_analysis, model_name, encoding)
+
     # Prepare analysis data
-    first_example_messages = []
+    first_example_messages: List[ChatCompletionMessageParam] = []
+
     if train_messages_for_analysis and train_messages_for_analysis[0].get("messages"):
         first_example_messages = [
             {"role": msg.get("role", ""), "content": msg.get("content", "")}
@@ -360,7 +363,9 @@ async def start_sft_openai(
     )
 
 
-async def upload_examples_to_openai(samples: List[List[Dict[str, Any]]]) -> str:
+async def upload_examples_to_openai(
+    samples: List[List[ChatCompletionMessageParam]],
+) -> str:
     """
     Uploads examples to OpenAI by creating a file.
 
@@ -382,7 +387,7 @@ async def upload_examples_to_openai(samples: List[List[Dict[str, Any]]]) -> str:
 
 async def create_openai_fine_tuning_job(
     model: str, train_file_id: str, val_file_id: Optional[str] = None
-) -> Any:
+) -> FineTuningJob:
     """
     Create a fine-tuning job with OpenAI.
 

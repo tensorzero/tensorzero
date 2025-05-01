@@ -15,6 +15,7 @@ from .types import InferenceInput
 # TODO: we should try to specialize the types of `Any` as much as possible
 
 
+# This is an inference row in the database
 class Sample(TypedDict):
     input: Required[InferenceInput]
     output: Required[Any]
