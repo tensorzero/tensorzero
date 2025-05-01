@@ -26,7 +26,7 @@ import logging
 import os
 import typing as t
 from enum import Enum
-from typing import Any, Dict, List, Literal, Optional, Union
+from typing import Any, Dict, List, Literal, Optional, Union, cast
 
 import httpx
 from minijinja import Environment
@@ -36,6 +36,7 @@ from typing_extensions import TypedDict
 from uuid_utils import uuid7
 
 from ..rendering import get_template_env
+from ..types import Sample
 
 # Import modules from equivalent Python packages
 from .common import BaseSFTJob, FineTuningRequest, render_message, try_template_system
@@ -163,6 +164,10 @@ class FireworksSFTJob(BaseSFTJob):
             threshold=data.threshold,
             max_samples=data.maxSamples,
         )
+
+        # TODO: we should avoid this by moving the types to the client
+        curated_inferences = cast(List[Sample], curated_inferences)
+
         if not curated_inferences or len(curated_inferences) == 0:
             raise ValueError("No curated inferences found")
 
@@ -385,7 +390,7 @@ def get_deployment_status(deploy_model_response: Dict[str, Any]) -> str:
 
 async def start_sft_fireworks(
     model_name: str,
-    inferences: List[Dict[str, Any]],
+    inferences: List[Sample],
     validation_split_percent: float,
     template_env: Environment,
     request: FineTuningRequest,
@@ -415,7 +420,7 @@ async def start_sft_fireworks(
 
 
 def tensorzero_inference_to_fireworks_messages(
-    sample: Dict[str, t.Any], env: Environment
+    sample: Sample, env: Environment
 ) -> FireworksExample:
     """Convert a TensorZero inference to Fireworks messages format"""
     messages = []
@@ -424,7 +429,7 @@ def tensorzero_inference_to_fireworks_messages(
         messages.append(system)
 
     # Handle input messages
-    for message in sample["input"]["messages"]:
+    for message in sample["input"].get("messages", []):
         for content in message["content"]:
             if content["type"] == "text":
                 messages.append(

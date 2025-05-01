@@ -1,9 +1,8 @@
 import asyncio
 import json
 import os
-import typing as t
 import warnings
-from typing import Any, Dict, List, Literal, Optional, Union
+from typing import Any, Dict, List, Literal, Optional, Union, cast
 
 from minijinja import Environment
 from openai import AsyncOpenAI
@@ -12,6 +11,7 @@ from tensorzero.tensorzero import AsyncTensorZeroGateway
 from typing_extensions import TypedDict
 
 from ..rendering import get_template_env
+from ..types import Sample
 from .common import (
     BaseSFTJob,
     FineTuningRequest,
@@ -70,6 +70,10 @@ class OpenAISFTJob(BaseSFTJob):
             threshold=data.threshold,
             max_samples=data.maxSamples,
         )
+
+        # TODO: we should avoid this by moving the types to the client
+        curated_inferences = cast(List[Sample], curated_inferences)
+
         if not curated_inferences or len(curated_inferences) == 0:
             raise ValueError("No curated inferences found")
 
@@ -164,14 +168,14 @@ class OpenAISFTJob(BaseSFTJob):
 
 
 def tensorzero_inference_to_openai_messages(
-    sample: Dict[str, t.Any], env: Environment
+    sample: Sample, env: Environment
 ) -> List[Dict]:
     messages = []
     system = try_template_system(sample, env)
     if system:
         messages.append(system)
 
-    for message in sample["input"]["messages"]:
+    for message in sample["input"].get("messages", []):
         for content in message["content"]:
             rendered_message = content_block_to_openai_message(
                 content, message["role"], env
@@ -245,7 +249,7 @@ def content_block_to_openai_message(content: Dict, role: str, env: Any) -> Dict:
 
 
 def validate_and_convert_messages(
-    inferences: List[Dict],
+    inferences: List[Sample],
     template_env: Any,
 ) -> List[List[Dict]]:
     all_messages = []
@@ -259,7 +263,7 @@ def validate_and_convert_messages(
 
 async def start_sft_openai(
     model_name: str,
-    inferences: List[Dict[str, Any]],
+    inferences: List[Sample],
     validation_split_percent: float,
     template_env: Environment,
     request: FineTuningRequest,

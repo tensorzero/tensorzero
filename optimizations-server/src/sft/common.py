@@ -7,6 +7,8 @@ from minijinja import Environment, TemplateError
 from pydantic import BaseModel, Field
 from typing_extensions import TypedDict
 
+from ..types import Sample, System
+
 
 class Model(BaseModel):
     displayName: str
@@ -64,13 +66,21 @@ def render_message(content: t.Dict[str, Any], role: str, env: Environment) -> st
 
 
 def try_template_system(
-    sample: t.Dict[str, t.Any], env: Environment
+    sample: Sample, env: Environment
 ) -> t.Optional[t.Dict[str, str]]:
-    system = sample["input"].get("system")
-    if system is not None:
-        # TODO - add a 'has_template' to the minijinja python bindings
+    system: t.Optional[System] = sample["input"].get("system")
+
+    if system is None:
+        return None
+    elif isinstance(system, str):
+        return {
+            "role": "system",
+            "content": system,
+        }
+    else:
+        # TODO: add a 'has_template' to the minijinja python bindings
         try:
-            # TODO - better error message when 'system' is a string and we have a template
+            # TODO: better error message when 'system' is a string and we have a template
             rendered_system = env.render_template("system", **system)
             return {
                 "role": "system",
