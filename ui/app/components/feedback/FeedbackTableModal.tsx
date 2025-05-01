@@ -10,7 +10,8 @@ import {
   SnippetContent,
   SnippetMessage,
 } from "~/components/layout/SnippetLayout";
-import { CodeMessage, TextMessage } from "~/components/layout/SnippetContent";
+import { TextMessage } from "~/components/layout/SnippetContent";
+import Output from "~/components/inference/NewOutput";
 
 interface FeedbackTableModalProps {
   feedback: FeedbackRow;
@@ -45,19 +46,26 @@ export function DemonstrationModal({ feedback }: FeedbackTableModalProps) {
     return <div>Invalid demonstration feedback</div>;
   }
 
+  // Try to parse the demonstration value as JSON for the parsed property
+  let parsedValue = null;
+  try {
+    parsedValue = JSON.parse(feedback.value);
+  } catch {
+    // If parsing fails, keep parsedValue as null
+  }
+
   return (
     <PageLayout>
       <PageHeader label="Demonstration" name={feedback.id} />
 
       <SectionsGroup>
         <SectionLayout>
-          <SnippetLayout>
-            <SnippetContent maxHeight="Content">
-              <SnippetMessage>
-                <CodeMessage showLineNumbers content={feedback.value} />
-              </SnippetMessage>
-            </SnippetContent>
-          </SnippetLayout>
+          <Output
+            output={{
+              raw: feedback.value,
+              parsed: parsedValue,
+            }}
+          />
         </SectionLayout>
       </SectionsGroup>
     </PageLayout>
