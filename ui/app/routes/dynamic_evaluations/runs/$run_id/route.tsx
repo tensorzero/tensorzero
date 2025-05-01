@@ -79,14 +79,11 @@ export default function DynamicEvaluationRunSummaryPage({
   return (
     <PageLayout>
       <PageHeader heading={`Dynamic Evaluation Run `} />
-      <BasicInfo
-        dynamicEvaluationRun={dynamicEvaluationRun}
-        count={count}
-        statistics={statistics}
-      />
+      <BasicInfo dynamicEvaluationRun={dynamicEvaluationRun} count={count} />
       <SectionLayout>
         <DynamicEvaluationRunEpisodesTable
           episodes={dynamicEvaluationRunEpisodes}
+          statistics={statistics}
         />
         <PageButtons
           onPreviousPage={handlePreviousPage}

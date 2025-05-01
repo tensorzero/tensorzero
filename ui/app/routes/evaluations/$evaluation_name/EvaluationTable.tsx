@@ -35,7 +35,10 @@ import OutputComponent from "~/components/inference/Output";
 import "./tooltip-styles.css";
 import { useConfig } from "~/context/config";
 import { getEvaluatorMetricName } from "~/utils/clickhouse/evaluations";
-import type { MetricConfig } from "~/utils/config/metric";
+import {
+  formatMetricSummaryValue,
+  type MetricConfig,
+} from "~/utils/config/metric";
 import { type EvaluatorConfig } from "~/utils/config/evaluations";
 import {
   useColorAssigner,
@@ -678,11 +681,15 @@ const EvaluatorProperties = ({
                   className={`h-2 w-2 rounded-full ${variantColorClass} shrink-0`}
                 ></div>
                 <span>
-                  {formatSummaryValue(stat.mean_metric, metricConfig)}
+                  {formatMetricSummaryValue(stat.mean_metric, metricConfig)}
                   {stat.stderr_metric ? (
                     <>
                       {" "}
-                      ± {formatSummaryValue(stat.stderr_metric, metricConfig)}
+                      ±{" "}
+                      {formatMetricSummaryValue(
+                        stat.stderr_metric,
+                        metricConfig,
+                      )}
                     </>
                   ) : null}{" "}
                   (n={stat.datapoint_count})
@@ -694,13 +701,4 @@ const EvaluatorProperties = ({
       )}
     </div>
   );
-};
-
-const formatSummaryValue = (value: number, metricConfig: MetricConfig) => {
-  if (metricConfig.type === "boolean") {
-    return `${Math.round(value * 100)}%`;
-  } else if (metricConfig.type === "float") {
-    return value.toFixed(2);
-  }
-  return value;
 };

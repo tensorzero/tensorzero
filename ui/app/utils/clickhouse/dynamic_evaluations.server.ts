@@ -67,6 +67,7 @@ export async function getDynamicEvaluationRunEpisodesByRunIdWithFeedback(
           episode_id_uint,
           run_id_uint,
           tags,
+          updated_at,
           datapoint_name as task_name
         FROM DynamicEvaluationRunEpisodeByRunId
         WHERE toUInt128(toUUID({run_id:String})) = run_id_uint
@@ -107,7 +108,7 @@ export async function getDynamicEvaluationRunEpisodesByRunIdWithFeedback(
     SELECT
       uint_to_uuid(e.episode_id_uint) AS episode_id,
       formatDateTime(
-        UUIDv7ToDateTime(uint_to_uuid(e.episode_id_uint)),
+        min(e.updated_at), -- when did the episode start?
         '%Y-%m-%dT%H:%i:%SZ'
       ) AS timestamp,
       uint_to_uuid(e.run_id_uint) AS run_id,

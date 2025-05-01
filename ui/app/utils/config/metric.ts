@@ -87,3 +87,15 @@ export function filterStaticEvaluationMetrics(
     }),
   );
 }
+
+export const formatMetricSummaryValue = (
+  value: number,
+  metricConfig: MetricConfig,
+) => {
+  if (metricConfig.type === "boolean") {
+    return `${Math.round(value * 100)}%`;
+  } else if (metricConfig.type === "float") {
+    return value.toFixed(2);
+  }
+  return value;
+};
