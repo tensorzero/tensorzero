@@ -58,6 +58,7 @@ async def evaluate_variant_pins(
 async def evaluate_question(
     t0: AsyncTensorZeroGateway, semaphore: Semaphore, question: dict, run_id: str
 ):
+    # TODO(Viraj): add a task_name here
     episode_info = await t0.dynamic_evaluation_run_episode(run_id=run_id)
     episode_id = episode_info.episode_id
     ai_answer, t = await ask_question(
