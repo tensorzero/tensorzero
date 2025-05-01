@@ -5873,6 +5873,13 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
     let episode_id = Uuid::now_v7();
     let extra_headers = get_extra_headers();
 
+    // Groq tool requests aren't always sent with the correct schema
+    let prompt: String = if provider.model_provider_name == "groq" {
+        "What is the temperature like in Tokyo (in Celsius)? Use the `get_temperature` tool. Ensure that the request to the tool is sent with the correct json schema.".into()
+    } else {
+        "What is the temperature like in Tokyo (in Celsius)? Use the `get_temperature` tool.".into()
+    };
+
     let payload = json!({
         "function_name": "weather_helper",
         "episode_id": episode_id,
@@ -5881,7 +5888,7 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
             "messages": [
                 {
                     "role": "user",
-                    "content": "What is the temperature like in Tokyo (in Celsius)? Use the `get_temperature` tool."
+                    "content": prompt,
                 }
             ]},
         "additional_tools": [
@@ -6033,6 +6040,7 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
 
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+
     let correct_input: Value = json!(
         {
             "system": {
@@ -6041,11 +6049,12 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "What is the temperature like in Tokyo (in Celsius)? Use the `get_temperature` tool."}]
+                    "content": [{"type": "text", "value": prompt}]
                 }
             ]
         }
     );
+
     assert_eq!(input, correct_input);
 
     let output_clickhouse: Vec<Value> =
@@ -6218,11 +6227,7 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
     let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
     let expected_input_messages = vec![RequestMessage {
         role: Role::User,
-        content: vec![
-            "What is the temperature like in Tokyo (in Celsius)? Use the `get_temperature` tool."
-                .to_string()
-                .into(),
-        ],
+        content: vec![prompt.into()],
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
