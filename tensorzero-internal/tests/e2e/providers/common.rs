@@ -3411,6 +3411,11 @@ pub async fn check_tool_use_tool_choice_auto_used_inference_response(
 pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    // Together doesn't correctly produce streaming tool call chunks (it produces text chunks with the raw tool call).
+    if provider.model_provider_name == "together" {
+        return;
+    }
+
     // OpenAI O1 doesn't support streaming responses
     if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
         return;
@@ -6420,6 +6425,10 @@ pub async fn check_tool_use_tool_choice_allowed_tools_inference_response(
 pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    // Together doesn't correctly produce streaming tool call chunks (it produces text chunks with the raw tool call).
+    if provider.model_provider_name == "together" {
+        return;
+    }
     // OpenAI O1 doesn't support streaming responses
     if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
         return;
@@ -8327,6 +8336,11 @@ pub async fn check_parallel_tool_use_inference_response(
 pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    // Together doesn't correctly produce streaming tool call chunks (it produces text chunks with the raw tool call).
+    if provider.model_provider_name == "together" {
+        return;
+    }
+
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -10373,6 +10387,7 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
 
 pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
+    let extra_headers = get_extra_headers();
 
     let payload = json!({
         "function_name": "json_success",
@@ -10394,6 +10409,7 @@ pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETes
             }
         },
         "stream": false,
+        "extra_headers": extra_headers.headers,
     });
 
     let response = Client::new()

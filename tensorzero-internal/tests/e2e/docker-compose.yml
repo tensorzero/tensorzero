@@ -36,3 +36,16 @@ services:
       start_period: 30s
       start_interval: 1s
       timeout: 1s
+
+  jaeger:
+    image: jaegertracing/jaeger:2.5.0
+    volumes:
+      - ./jaeger-config.yaml:/jaeger/config.yaml
+    #command: --set=extensions.jaeger_storage.backends.some_store.memory.max_traces=1
+    command: --config /jaeger/config.yaml
+    ports:
+      - 16686:16686 # Browser UI
+      - 4317:4317
+      - 4318:4318
+      - 5778:5778
+      - 9411:9411

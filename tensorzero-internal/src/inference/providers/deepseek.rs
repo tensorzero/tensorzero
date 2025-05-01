@@ -116,6 +116,10 @@ impl DeepSeekProvider {
             credentials: provider_credentials,
         })
     }
+
+    pub fn model_name(&self) -> &str {
+        &self.model_name
+    }
 }
 
 impl InferenceProvider for DeepSeekProvider {
@@ -224,7 +228,12 @@ impl InferenceProvider for DeepSeekProvider {
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
-            Err(handle_openai_error(status, &response, PROVIDER_TYPE))
+            Err(handle_openai_error(
+                &serde_json::to_string(&request_body).unwrap_or_default(),
+                status,
+                &response,
+                PROVIDER_TYPE,
+            ))
         }
     }
 

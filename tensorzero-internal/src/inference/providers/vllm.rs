@@ -57,6 +57,10 @@ impl VLLMProvider {
             credentials,
         })
     }
+
+    pub fn model_name(&self) -> &str {
+        &self.model_name
+    }
 }
 
 fn default_api_key_location() -> CredentialLocation {
@@ -205,7 +209,12 @@ impl InferenceProvider for VLLMProvider {
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
-            Err(handle_openai_error(status, &raw_response, PROVIDER_TYPE))
+            Err(handle_openai_error(
+                &serde_json::to_string(&request_body).unwrap_or_default(),
+                status,
+                &raw_response,
+                PROVIDER_TYPE,
+            ))
         }
     }
 

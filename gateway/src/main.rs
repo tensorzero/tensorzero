@@ -4,6 +4,7 @@ use axum::middleware::Next;
 use axum::response::Response;
 use axum::routing::{get, post, put};
 use axum::Router;
+use axum_tracing_opentelemetry::middleware::{OtelAxumLayer, OtelInResponseLayer};
 use clap::Parser;
 use mimalloc::MiMalloc;
 use std::fmt::Display;
@@ -51,10 +52,7 @@ struct Args {
 }
 
 async fn add_version_header(request: Request, next: Next) -> Response {
-    #[cfg(not(feature = "e2e_tests"))]
-    let version = HeaderValue::from_static(TENSORZERO_VERSION);
-
-    #[cfg(feature = "e2e_tests")]
+    #[cfg_attr(not(feature = "e2e_tests"), expect(unused_mut))]
     let mut version = HeaderValue::from_static(TENSORZERO_VERSION);
 
     #[cfg(feature = "e2e_tests")]
@@ -82,8 +80,10 @@ async fn add_version_header(request: Request, next: Next) -> Response {
 #[tokio::main]
 async fn main() {
     let args = Args::parse();
-    // Set up logs and metrics
-    observability::setup_logs(true, args.log_format);
+    // Set up logs and metrics immediately, so that we can use `tracing`.
+    // OTLP will be enabled based on the config file
+    let otel_handle =
+        observability::setup_logs(true, args.log_format).expect_pretty("Failed to set up logs");
 
     let git_sha = tensorzero_internal::built_info::GIT_COMMIT_HASH_SHORT.unwrap_or("unknown");
 
@@ -129,6 +129,30 @@ async fn main() {
         Arc::new(Config::default())
     };
 
+    // Note - we only enable OTLP after config file parsing/loading is complete,
+    // so that the config file can control whether OTLP is enabled or not.
+    // This means that any tracing spans created before this point will not be exported to OTLP.
+    // For now, this is fine, as we only ever export spans for inference/batch/feedback requests,
+    // which cannot have occurred up until this point.
+    // If we ever want to emit earlier OTLP spans, we'll need to come up with a different way
+    // of doing OTLP initialization (e.g. buffer spans, and submit them once we know if OTLP should be enabled).
+    // See `build_opentelemetry_layer` for the details of exactly what spans we export.
+    if config.gateway.export.otlp.traces.enabled {
+        if std::env::var("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT").is_err() {
+            // This makes it easier to run the gateway in local development and CI
+            if cfg!(feature = "e2e_tests") {
+                tracing::warn!("Running without explicit `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` env var in e2e tests mode")
+            } else {
+                tracing::error!("[gateway.export.otlp.traces] has `enabled = true`, but env var `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` is not set. Please set it to the OTLP endpoint (e.g. `http://localhost:4317`)");
+                std::process::exit(1);
+            }
+        }
+        otel_handle
+            .enable_otel()
+            .expect_pretty("Failed to enable OpenTelemetry");
+        tracing::info!("Enabled OpenTelemetry OTLP export");
+    }
+
     // Initialize AppState
     let app_state = gateway_util::AppStateData::new(config.clone())
         .await
@@ -167,6 +191,10 @@ async fn main() {
             post(endpoints::openai_compatible::inference_handler),
         )
         .route("/feedback", post(endpoints::feedback::feedback_handler))
+        // Everything above these two layers has OpenTelemetry tracing enabled
+        .layer(OtelInResponseLayer)
+        .layer(OtelAxumLayer::default())
+        // Everything below the Otel layers does not have OpenTelemetry tracing enabled
         .route("/status", get(endpoints::status::status_handler))
         .route("/health", get(endpoints::status::health_handler))
         .route(
@@ -180,6 +208,14 @@ async fn main() {
         .route(
             "/internal/object_storage",
             get(endpoints::object_storage::get_object_handler),
+        )
+        .route(
+            "/dynamic_evaluation_run",
+            post(endpoints::dynamic_evaluation_run::dynamic_evaluation_run_handler),
+        )
+        .route(
+            "/dynamic_evaluation_run/{run_id}/episode",
+            post(endpoints::dynamic_evaluation_run::dynamic_evaluation_run_episode_handler),
         )
         .route(
             "/metrics",

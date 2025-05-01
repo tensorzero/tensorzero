@@ -38,6 +38,7 @@ from pytest import FixtureRequest
 from tensorzero import (
     AsyncTensorZeroGateway,
     ChatInferenceResponse,
+    DynamicEvaluationRunResponse,
     FeedbackResponse,
     FinishReason,
     ImageBase64,
@@ -2766,6 +2767,71 @@ def test_content_block_text_init_validation():
     text = Text(type="text", arguments=arguments)
     assert text.text is None
     assert text.arguments == arguments
+
+
+def test_sync_dynamic_evaluation_run(sync_client: TensorZeroGateway):
+    response = sync_client.dynamic_evaluation_run(
+        variants={"basic_test": "test2"},
+        tags={"foo": "bar"},
+    )
+    assert isinstance(response, DynamicEvaluationRunResponse)
+    run_id = response.run_id
+    assert isinstance(run_id, UUID)
+    assert run_id is not None
+
+    # Get the episode id
+    episode_id = sync_client.dynamic_evaluation_run_episode(
+        run_id=run_id,
+        datapoint_name="basic_test",
+    ).episode_id
+
+    inference_response = sync_client.inference(
+        function_name="basic_test",
+        episode_id=episode_id,
+        input={
+            "messages": [{"role": "user", "content": "Hello, world!"}],
+            "system": {"assistant_name": "Dr. Mehta"},
+        },
+    )
+    assert isinstance(inference_response, ChatInferenceResponse)
+    first_content_block = inference_response.content[0]
+    assert isinstance(first_content_block, Text)
+    assert first_content_block.text is not None
+    assert first_content_block.text.startswith("Megumin")
+    assert inference_response.variant_name == "test2"
+
+
+@pytest.mark.asyncio
+async def test_async_dynamic_evaluation_run(async_client: AsyncTensorZeroGateway):
+    response = await async_client.dynamic_evaluation_run(
+        variants={"basic_test": "test2"},
+        tags={"foo": "bar"},
+    )
+    assert isinstance(response, DynamicEvaluationRunResponse)
+    run_id = response.run_id
+    assert isinstance(run_id, UUID)
+    assert run_id is not None
+
+    # Get the episode id
+    episode_response = await async_client.dynamic_evaluation_run_episode(
+        run_id=run_id,
+        datapoint_name="basic_test",
+    )
+    episode_id = episode_response.episode_id
+    inference_response = await async_client.inference(
+        function_name="basic_test",
+        episode_id=episode_id,
+        input={
+            "messages": [{"role": "user", "content": "Hello, world!"}],
+            "system": {"assistant_name": "Dr. Mehta"},
+        },
+    )
+    assert isinstance(inference_response, ChatInferenceResponse)
+    first_content_block = inference_response.content[0]
+    assert isinstance(first_content_block, Text)
+    assert first_content_block.text is not None
+    assert first_content_block.text.startswith("Megumin")
+    assert inference_response.variant_name == "test2"
 
 
 def test_sync_chat_function_null_response(sync_client: TensorZeroGateway):

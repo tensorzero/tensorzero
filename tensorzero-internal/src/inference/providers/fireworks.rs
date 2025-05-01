@@ -74,6 +74,10 @@ impl FireworksProvider {
             parse_think_blocks,
         })
     }
+
+    pub fn model_name(&self) -> &str {
+        &self.model_name
+    }
 }
 
 pub fn default_parse_think_blocks() -> bool {
@@ -223,6 +227,7 @@ impl InferenceProvider for FireworksProvider {
             .try_into()?)
         } else {
             Err(handle_openai_error(
+                &serde_json::to_string(&request_body).unwrap_or_default(),
                 res.status(),
                 &res.text().await.map_err(|e| {
                     Error::new(ErrorDetails::InferenceServer {

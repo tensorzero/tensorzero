@@ -51,6 +51,7 @@ pub struct GatewayConfig {
     /// If `true`, allow minijinja to read from the filesystem (within the tree of the config file) for '{% include %}'
     /// Defaults to `false`
     pub enable_template_filesystem_access: bool,
+    pub export: ExportConfig,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -217,6 +218,8 @@ pub struct UninitializedGatewayConfig {
     pub debug: bool,
     #[serde(default)]
     pub enable_template_filesystem_access: bool,
+    #[serde(default)]
+    pub export: ExportConfig,
 }
 
 impl TryFrom<UninitializedGatewayConfig> for GatewayConfig {
@@ -242,6 +245,7 @@ impl TryFrom<UninitializedGatewayConfig> for GatewayConfig {
                 enabled,
                 async_writes: config.observability.async_writes,
             },
+            export: config.export,
             debug: config.debug,
             enable_template_filesystem_access: config.enable_template_filesystem_access,
         })
@@ -255,6 +259,25 @@ pub struct ObservabilityConfig {
     pub enabled: Option<bool>,
     #[serde(default)]
     pub async_writes: bool,
+}
+
+#[derive(Debug, Default, Deserialize, PartialEq)]
+pub struct ExportConfig {
+    #[serde(default)]
+    pub otlp: OtlpConfig,
+}
+
+#[derive(Debug, Default, Deserialize, PartialEq)]
+pub struct OtlpConfig {
+    #[serde(default)]
+    pub traces: OtlpTracesConfig,
+}
+
+#[derive(Debug, Default, Deserialize, PartialEq)]
+pub struct OtlpTracesConfig {
+    /// Enable OpenTelemetry traces export to the configured OTLP endpoint (configured via OTLP environment variables)
+    #[serde(default)]
+    pub enabled: bool,
 }
 
 #[derive(Debug, Deserialize, PartialEq)]

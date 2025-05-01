@@ -357,7 +357,7 @@ async fn test_default_function_model_name_shorthand() {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
-        "model_name": "openai::o1-mini",
+        "model_name": "openai::o4-mini",
         "episode_id": episode_id,
         "input": {
             "messages": [
@@ -432,7 +432,7 @@ async fn test_default_function_model_name_shorthand() {
     assert_eq!(retrieved_episode_id, episode_id);
     // Check the variant name
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, "openai::o1-mini");
+    assert_eq!(variant_name, "openai::o4-mini");
     // Check the processing time
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
     assert!(processing_time_ms > 0);
@@ -445,7 +445,7 @@ async fn test_default_function_model_name_shorthand() {
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, "openai::o1-mini");
+    assert_eq!(model_name, "openai::o4-mini");
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, "openai");
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
@@ -471,7 +471,7 @@ async fn test_default_function_model_name_non_shorthand() {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
-        "model_name": "o1-mini",
+        "model_name": "o4-mini",
         "episode_id": episode_id,
         "input": {
             "messages": [
@@ -546,7 +546,7 @@ async fn test_default_function_model_name_non_shorthand() {
     assert_eq!(retrieved_episode_id, episode_id);
     // Check the variant name
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, "o1-mini");
+    assert_eq!(variant_name, "o4-mini");
     // Check the processing time
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
     assert!(processing_time_ms > 0);
@@ -559,7 +559,7 @@ async fn test_default_function_model_name_non_shorthand() {
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, "o1-mini");
+    assert_eq!(model_name, "o4-mini");
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, "openai");
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
@@ -835,13 +835,13 @@ async fn test_chat_function_json_override_with_mode(json_mode: ModelInferenceReq
 }
 
 #[tokio::test]
-async fn test_o1_mini_inference() {
+async fn test_o4_mini_inference() {
     let client = Client::new();
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
         "function_name": "basic_test",
-        "variant_name": "o1-mini",
+        "variant_name": "o4-mini",
         "episode_id": episode_id,
         "input":
             {"system": {"assistant_name": "AskJeeves"},
@@ -916,7 +916,7 @@ async fn test_o1_mini_inference() {
     assert_eq!(retrieved_episode_id, episode_id);
     // Check the variant name
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, "o1-mini");
+    assert_eq!(variant_name, "o4-mini");
     // Check the processing time
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
     assert!(processing_time_ms > 0);
@@ -929,7 +929,7 @@ async fn test_o1_mini_inference() {
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, "o1-mini");
+    assert_eq!(model_name, "o4-mini");
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, "openai");
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
@@ -1335,7 +1335,7 @@ async fn test_content_block_text_field() {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
-        "model_name": "openai::o1-mini",
+        "model_name": "openai::o4-mini",
         "episode_id": episode_id,
         "input": {
             "messages": [
@@ -1410,7 +1410,7 @@ async fn test_content_block_text_field() {
     assert_eq!(retrieved_episode_id, episode_id);
     // Check the variant name
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, "openai::o1-mini");
+    assert_eq!(variant_name, "openai::o4-mini");
     // Check the processing time
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
     assert!(processing_time_ms > 0);
@@ -1423,7 +1423,7 @@ async fn test_content_block_text_field() {
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, "openai::o1-mini");
+    assert_eq!(model_name, "openai::o4-mini");
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, "openai");
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
