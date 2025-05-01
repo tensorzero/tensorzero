@@ -8,7 +8,7 @@ from minijinja import Environment
 from openai import AsyncOpenAI
 from openai.types.fine_tuning import FineTuningJob
 from tensorzero import AsyncTensorZeroGateway
-from tensorzero.optimizations_server_types import Sample
+from tensorzero.internal_optimizations_server_types import Sample
 from typing_extensions import TypedDict
 
 from ..rendering import get_template_env

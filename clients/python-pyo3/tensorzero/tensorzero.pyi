@@ -14,7 +14,7 @@ from uuid import UUID
 
 import uuid_utils
 
-import tensorzero.optimizations_server_types as ost
+import tensorzero.internal_optimizations_server_types as ost
 from tensorzero import (
     DynamicEvaluationRunEpisodeResponse,
     DynamicEvaluationRunResponse,
