@@ -1,5 +1,5 @@
 import type { ParsedModelInferenceRow } from "~/utils/clickhouse/inference";
-import ModelInput from "~/components/model/ModelInput";
+import InputSnippet from "~/components/inference/InputSnippet";
 import {
   BasicInfoLayout,
   BasicInfoItem,
@@ -109,9 +109,11 @@ export function ModelInferenceItem({ inference }: ModelInferenceItemProps) {
       <SectionsGroup>
         <SectionLayout>
           <SectionHeader heading="Input" />
-          <ModelInput
-            input_messages={inference.input_messages}
-            system={inference.system}
+          <InputSnippet
+            input={{
+              system: inference.system,
+              messages: inference.input_messages,
+            }}
           />
         </SectionLayout>
 
