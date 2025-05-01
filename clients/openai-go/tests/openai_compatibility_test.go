@@ -167,6 +167,7 @@ func TestStreamingInference(t *testing.T) {
 			"Last chunk duration should be greater than first chunk duration")
 
 		// Validate the stop chunk
+		require.GreaterOrEqual(t, len(allChunks), 2, "Expected at least two chunks, but got fewer")
 		stopChunk := allChunks[len(allChunks)-2]
 		assert.Empty(t, stopChunk.Choices[0].Delta.Content)
 		assert.Equal(t, stopChunk.Choices[0].FinishReason, "stop")
