@@ -8,7 +8,7 @@ import Chip from "~/components/ui/Chip";
 import { Calendar } from "~/components/icons/Icons";
 import { formatDateWithSeconds, getTimestampTooltipData } from "~/utils/date";
 import type { DynamicEvaluationRun } from "~/utils/clickhouse/dynamic_evaluations";
-import { Link } from "react-router";
+import KVChip from "~/components/ui/KVChip";
 
 // Create timestamp tooltip component
 const createTimestampTooltip = (timestamp: string | number | Date) => {
@@ -70,24 +70,13 @@ export default function BasicInfo({
         <BasicInfoItemContent>
           <div className="flex flex-wrap gap-1">
             {Object.entries(dynamicEvaluationRun.variant_pins).map(([k, v]) => (
-              <div
+              <KVChip
                 key={k}
-                className="flex items-center gap-1 rounded bg-gray-100 px-2 py-0.5 font-mono text-xs"
-              >
-                <Link
-                  to={`/observability/functions/${k}`}
-                  className="text-blue-600 hover:underline"
-                >
-                  {k}
-                </Link>
-                <span>:</span>
-                <Link
-                  to={`/observability/functions/${k}/variants/${v}`}
-                  className="text-blue-600 hover:underline"
-                >
-                  {v}
-                </Link>
-              </div>
+                k={k}
+                v={v}
+                k_href={`/observability/functions/${k}`}
+                v_href={`/observability/functions/${k}/variants/${v}`}
+              />
             ))}
           </div>
         </BasicInfoItemContent>
@@ -98,14 +87,14 @@ export default function BasicInfo({
         <BasicInfoItemContent>
           <div className="flex flex-wrap gap-1">
             {Object.entries(dynamicEvaluationRun.tags).map(([k, v]) => (
-              <Chip key={k} label={`${k}: ${v}`} font="mono" />
+              <KVChip key={k} k={k} v={v} />
             ))}
           </div>
         </BasicInfoItemContent>
       </BasicInfoItem>
 
       <BasicInfoItem>
-        <BasicInfoItemTitle>Episodes</BasicInfoItemTitle>
+        <BasicInfoItemTitle>Episode Count</BasicInfoItemTitle>
         <BasicInfoItemContent>
           <Chip label={`${count}`} font="mono" />
         </BasicInfoItemContent>

@@ -18,6 +18,7 @@ import { TooltipProvider } from "~/components/ui/tooltip";
 import { useConfig } from "~/context/config";
 import { formatMetricSummaryValue } from "~/utils/config/metric";
 import { TableItemShortUuid } from "~/components/ui/TableItems";
+import KVChip from "~/components/ui/KVChip";
 
 export default function DynamicEvaluationRunEpisodesTable({
   episodes,
@@ -80,9 +81,11 @@ export default function DynamicEvaluationRunEpisodesTable({
                       return "-";
                     }
                     return (
-                      <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300">
-                        {filteredTags.map(([k, v]) => `${k}: ${v}`).join(", ")}
-                      </code>
+                      <div className="flex flex-wrap gap-1">
+                        {filteredTags.map(([k, v]) => (
+                          <KVChip key={k} k={k} v={v} />
+                        ))}
+                      </div>
                     );
                   })()}
                 </TableCell>

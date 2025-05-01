@@ -10,7 +10,7 @@ export default function MetricValue({
 }: {
   value: string;
   metricType: "boolean" | "float" | "comment" | "demonstration";
-  evaluatorConfig: EvaluatorConfig;
+  evaluatorConfig?: EvaluatorConfig;
   className?: string;
 }): React.ReactElement {
   if (metricType === "boolean") {
@@ -36,7 +36,9 @@ export default function MetricValue({
     const numValue = parseFloat(value);
     if (!isNaN(numValue)) {
       // Check if value fails the cutoff criteria
-      const failsCutoff = isCutoffFailed(numValue, evaluatorConfig);
+      const failsCutoff = evaluatorConfig
+        ? isCutoffFailed(numValue, evaluatorConfig)
+        : false;
       return (
         <span
           className={`whitespace-nowrap ${failsCutoff ? "text-red-700" : "text-gray-700"} ${className}`}
