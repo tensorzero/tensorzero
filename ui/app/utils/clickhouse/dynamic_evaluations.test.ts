@@ -1,6 +1,6 @@
 import { describe, test, expect } from "vitest";
 import {
-  countTotalDynamicEvaluationRuns as countDynamicEvaluationRuns,
+  countDynamicEvaluationRuns as countDynamicEvaluationRuns,
   getDynamicEvaluationRunEpisodesByRunId,
   getDynamicEvaluationRuns,
 } from "./dynamic_evaluations.server";

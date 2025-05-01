@@ -9,32 +9,49 @@ import {
 import {
   getDynamicEvaluationRuns,
   countDynamicEvaluationRuns,
+  getDynamicEvaluationRunEpisodesByRunId,
 } from "~/utils/clickhouse/dynamic_evaluations.server";
-import DynamicEvaluationRunsTable from "./DynamicEvaluationRunsTable";
+import BasicInfo from "./DynamicEvaluationRunBasicInfo";
+import DynamicEvaluationRunEpisodesTable from "./DynamicEvaluationRunEpisodesTable";
 
-export async function loader({ request }: Route.LoaderArgs) {
+export async function loader({ request, params }: Route.LoaderArgs) {
   const url = new URL(request.url);
+  const run_id = params.run_id;
   const searchParams = new URLSearchParams(url.search);
   const offset = parseInt(searchParams.get("offset") || "0");
   const pageSize = parseInt(searchParams.get("pageSize") || "15");
-  const [dynamicEvaluationRuns, count] = await Promise.all([
-    getDynamicEvaluationRuns(pageSize, offset),
-    countDynamicEvaluationRuns(),
-  ]);
-
+  const [dynamicEvaluationRuns, dynamicEvaluationRunEpisodes, count] =
+    await Promise.all([
+      getDynamicEvaluationRuns(pageSize, offset, run_id),
+      getDynamicEvaluationRunEpisodesByRunId(pageSize, offset, run_id),
+      countDynamicEvaluationRuns(),
+    ]);
+  if (dynamicEvaluationRuns.length != 1) {
+    throw new Error(
+      `Expected exactly one dynamic evaluation run, got ${dynamicEvaluationRuns.length}`,
+    );
+  }
+  const dynamicEvaluationRun = dynamicEvaluationRuns[0];
   return {
-    dynamicEvaluationRuns,
+    dynamicEvaluationRun,
+    dynamicEvaluationRunEpisodes,
     count,
     offset,
     pageSize,
   };
 }
 
-export default function EvaluationSummaryPage({
+export default function DynamicEvaluationRunSummaryPage({
   loaderData,
 }: Route.ComponentProps) {
   const navigate = useNavigate();
-  const { dynamicEvaluationRuns, count, offset, pageSize } = loaderData;
+  const {
+    dynamicEvaluationRun,
+    dynamicEvaluationRunEpisodes,
+    count,
+    offset,
+    pageSize,
+  } = loaderData;
 
   const handleNextPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
@@ -49,10 +66,11 @@ export default function EvaluationSummaryPage({
 
   return (
     <PageLayout>
-      <PageHeader heading="Evaluation Runs" count={count} />
+      <PageHeader heading={`Dynamic Evaluation Run `} />
+      <BasicInfo dynamicEvaluationRun={dynamicEvaluationRun} count={count} />
       <SectionLayout>
-        <DynamicEvaluationRunsTable
-          dynamicEvaluationRuns={dynamicEvaluationRuns}
+        <DynamicEvaluationRunEpisodesTable
+          episodes={dynamicEvaluationRunEpisodes}
         />
         <PageButtons
           onPreviousPage={handlePreviousPage}

@@ -28,16 +28,16 @@ export async function getDynamicEvaluationRuns(
     query,
     format: "JSONEachRow",
     query_params: {
-      page_size: page_size,
-      offset: offset,
-      run_id: run_id,
+      page_size,
+      offset,
+      run_id,
     },
   });
   const rows = await result.json<DynamicEvaluationRun[]>();
   return rows.map((row) => dynamicEvaluationRunSchema.parse(row));
 }
 
-export async function countTotalDynamicEvaluationRuns(): Promise<number> {
+export async function countDynamicEvaluationRuns(): Promise<number> {
   const query = `
     SELECT toUInt32(count()) as count FROM DynamicEvaluationRun
   `;
@@ -72,4 +72,19 @@ export async function getDynamicEvaluationRunEpisodesByRunId(
 
   const rows = await result.json<DynamicEvaluationRunEpisode[]>();
   return rows.map((row) => dynamicEvaluationRunEpisodeSchema.parse(row));
+}
+
+export async function countDynamicEvaluationRunEpisodesByRunId(
+  run_id: string,
+): Promise<number> {
+  const query = `SELECT toUInt32(count()) as count
+                  FROM DynamicEvaluationRunEpisodeByRunId
+                  WHERE toUInt128(toUUID({run_id:String})) = run_id_uint`;
+  const result = await clickhouseClient.query({
+    query,
+    format: "JSONEachRow",
+    query_params: { run_id },
+  });
+  const rows = await result.json<{ count: number }>();
+  return rows[0].count;
 }

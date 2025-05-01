@@ -35,18 +35,23 @@ export default function DynamicEvaluationRunsTable({
               <TableRow key={run.id}>
                 <TableCell className="max-w-[200px]">
                   <Link
-                    to={`/evaluations/${run.name}?evaluation_run_ids=${run.id}`}
+                    to={`/dynamic_evaluations/runs/${run.id}`}
+                    className="block no-underline"
+                  >
+                    <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
+                      {run.name}
+                    </code>
+                  </Link>
+                </TableCell>
+                <TableCell className="max-w-[200px]">
+                  <Link
+                    to={`/dynamic_evaluations/runs/${run.id}`}
                     className="block no-underline"
                   >
                     <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
                       {run.id}
                     </code>
                   </Link>
-                </TableCell>
-                <TableCell className="max-w-[200px]">
-                  <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
-                    {run.name}
-                  </code>
                 </TableCell>
                 <TableCell>
                   <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
