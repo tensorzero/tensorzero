@@ -35,7 +35,7 @@ export default function DynamicEvaluationRunEpisodesTable({
             <TableHead>Episode ID</TableHead>
             <TableHead>Timestamp</TableHead>
             <TableHead>Tags</TableHead>
-            <TableHead>Datapoint Name</TableHead>
+            <TableHead>Task Name</TableHead>
             {/* Add dynamic columns for each metric */}
             {uniqueMetricNames.map((metricName) => (
               <TableHead key={metricName}>{metricName}</TableHead>
