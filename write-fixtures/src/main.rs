@@ -8,7 +8,7 @@ use tensorzero::{
     InferenceResponseChunk, Role,
 };
 use tensorzero_internal::inference::types::TextKind;
-use tokio::{runtime::Runtime, task::JoinSet};
+use tokio::{runtime::Runtime, sync::Semaphore, task::JoinSet};
 use tokio_stream::StreamExt;
 
 use clap::Parser;
@@ -51,7 +51,7 @@ struct Args {
 async fn run_inference(client: &Client, args: &Args) {
     let input = args.input.clone();
 
-    let res = client
+    let res: InferenceOutput = client
         .inference(ClientInferenceParams {
             function_name: Some(args.function_name.clone()),
             variant_name: args.variant_name.clone(),
@@ -134,25 +134,21 @@ async fn main_inner() {
 
     let client = Arc::new(client);
 
-    let mut join_set = JoinSet::new();
     let mut pbar = tqdm::pbar(Some(args.count));
     let max_inflight = args.max_inflight;
+    let semaphore = Arc::new(Semaphore::new(max_inflight));
     for _ in 0..args.count {
         let args = args.clone();
         let client = client.clone();
-        join_set.spawn(async move {
+        let permit = semaphore.clone().acquire_owned().await.unwrap();
+        tokio::spawn(async move {
+            let permit = permit;
             run_inference(&client, &args).await;
+            drop(permit);
         });
-        if join_set.len() >= max_inflight {
-            join_set.join_next().await.unwrap().unwrap();
-        }
         pbar.update(1).unwrap();
     }
     pbar.close().unwrap();
-
-    eprintln!("Finishing {} tasks:", join_set.len());
-    join_set.join_all().await;
-    println!("Done!");
 }
 
 fn main() {

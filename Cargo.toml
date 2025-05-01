@@ -64,6 +64,10 @@ uninlined_format_args = "deny"
 unreachable = "deny"
 unwrap_used = "deny"
 
+[profile.release-debug]
+inherits = "release"
+debug = true
+
 [profile.performance]
 inherits = "release"
 lto = "fat"
