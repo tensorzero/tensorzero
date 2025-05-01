@@ -521,7 +521,7 @@ export function EvaluationTable({
                                           optimize={
                                             evaluatorConfig.type === "llm_judge"
                                               ? evaluatorConfig.optimize
-                                              : undefined
+                                              : "max"
                                           }
                                           cutoff={evaluatorConfig.cutoff}
                                         />

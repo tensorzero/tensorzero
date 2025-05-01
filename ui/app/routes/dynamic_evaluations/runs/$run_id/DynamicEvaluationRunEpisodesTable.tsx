@@ -99,20 +99,20 @@ export default function DynamicEvaluationRunEpisodesTable({
                       ? episode.feedback_values[metricIndex]
                       : null;
                   const metricConfig = config.metrics[metricName];
+                  const metricType = metricConfig.type;
                   return (
                     <TableCell key={metricName} className="text-center">
                       <div className="flex justify-center">
                         {metricValue !== null ? (
                           <MetricValue
                             value={metricValue}
-                            metricType={metricConfig.type}
+                            metricType={metricType}
                             optimize={
-                              metricConfig.type === "float" ||
-                              metricConfig.type === "boolean"
+                              metricType === "float" || metricType === "boolean"
                                 ? metricConfig.optimize
-                                : undefined
+                                : "max" // Default to max for non-float/boolean metrics (this won't matter for comments/demonstrations)
                             }
-                            cutoff={undefined}
+                            cutoff={metricType === "boolean" ? 0.5 : undefined}
                           />
                         ) : (
                           <span className="text-gray-400">-</span>
