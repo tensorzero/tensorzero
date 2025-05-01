@@ -774,6 +774,7 @@ async def test_async_json_invalid_system(async_client):
         in str(exc_info.value)
     )
 
+
 @pytest.mark.asyncio
 async def test_async_extra_headers_param(async_client):
     messages = [
