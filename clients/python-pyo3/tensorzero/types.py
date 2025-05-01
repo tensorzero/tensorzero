@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Literal, Optional, Union
 from uuid import UUID
 
 import httpx
-from typing_extensions import TypedDict
+from typing_extensions import NotRequired, TypedDict
 
 
 # Helper used to serialize Python objects to JSON, which may contain dataclasses like `Text`
@@ -175,9 +175,12 @@ class Message(TypedDict):
     content: Any
 
 
+System = str | Dict[str, Any]
+
+
 class InferenceInput(TypedDict):
-    messages: List[Message]
-    system: Optional[Union[str, Dict[str, Any]]]
+    messages: NotRequired[List[Message]]
+    system: NotRequired[System]
 
 
 InferenceResponse = Union[ChatInferenceResponse, JsonInferenceResponse]
