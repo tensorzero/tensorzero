@@ -120,6 +120,51 @@ describe("getDynamicEvaluationRunEpisodesByRunId", () => {
     // TODO: add multiple (ragged) metrics, test that this is sorted by metric name
     // also test examples with no feedback and make sure the arrays are empty
   });
+  test("should return correct episodes for a given run id", async () => {
+    const episodes = await getDynamicEvaluationRunEpisodesByRunIdWithFeedback(
+      3,
+      5,
+      "01968806-6f22-77d1-bfd6-6f83df00b5ad",
+    );
+    expect(episodes).toMatchObject([
+      {
+        episode_id: "0aaed679-0f41-7e7a-a1e5-f7dab7f084f3",
+        feedback_metric_names: ["solved"],
+        feedback_values: ["false"],
+        run_id: "01968806-6f22-77d1-bfd6-6f83df00b5ad",
+        tags: {
+          "tensorzero::dynamic_evaluation_run_id":
+            "01968806-6f22-77d1-bfd6-6f83df00b5ad",
+        },
+        task_name: null,
+        timestamp: "2025-04-30T18:47:25Z",
+      },
+      {
+        episode_id: "0aaed679-0f41-7ecf-b19b-6312e4b684c4",
+        feedback_metric_names: ["solved"],
+        feedback_values: ["true"],
+        run_id: "01968806-6f22-77d1-bfd6-6f83df00b5ad",
+        tags: {
+          "tensorzero::dynamic_evaluation_run_id":
+            "01968806-6f22-77d1-bfd6-6f83df00b5ad",
+        },
+        task_name: null,
+        timestamp: "2025-04-30T18:47:25Z",
+      },
+      {
+        episode_id: "0aaed679-0f42-7033-a589-bfb6bcb13f83",
+        feedback_metric_names: ["solved"],
+        feedback_values: ["false"],
+        run_id: "01968806-6f22-77d1-bfd6-6f83df00b5ad",
+        tags: {
+          "tensorzero::dynamic_evaluation_run_id":
+            "01968806-6f22-77d1-bfd6-6f83df00b5ad",
+        },
+        task_name: null,
+        timestamp: "2025-04-30T18:47:25Z",
+      },
+    ]);
+  });
 });
 
 describe("getDynamicEvaluationRunStatisticsByMetricName", () => {

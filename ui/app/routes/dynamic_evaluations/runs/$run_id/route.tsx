@@ -27,7 +27,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     count,
     statistics,
   ] = await Promise.all([
-    getDynamicEvaluationRuns(pageSize, offset, run_id),
+    getDynamicEvaluationRuns(5, 0, run_id),
     getDynamicEvaluationRunEpisodesByRunIdWithFeedback(
       pageSize,
       offset,
