@@ -1,3 +1,9 @@
+# IMPORTANT:
+#
+# This file is not part of the public API of the tensorzero package.
+# The types in this file are unstable and subject to change at any time.
+
+
 from typing import Any, List
 
 from typing_extensions import NotRequired, Required, TypedDict
