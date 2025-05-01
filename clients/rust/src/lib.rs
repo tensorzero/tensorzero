@@ -2,6 +2,7 @@ use std::{
     cmp::Ordering, env, fmt::Display, future::Future, path::PathBuf, sync::Arc, time::Duration,
 };
 
+use git::GitInfo;
 use reqwest::header::HeaderMap;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use serde_json::Value;
@@ -22,6 +23,7 @@ use uuid::Uuid;
 
 mod client_inference_params;
 mod client_input;
+mod git;
 pub mod input_handling;
 
 pub use client_inference_params::{ClientInferenceParams, ClientSecretString};
@@ -127,6 +129,11 @@ pub enum TensorZeroError {
     },
     #[error("HTTP Error: request timed out")]
     RequestTimeout,
+    #[error("Failed to get git info: {source}")]
+    Git {
+        #[source]
+        source: git2::Error,
+    },
 }
 
 #[derive(Debug, Error)]
@@ -506,8 +513,12 @@ impl Client {
 
     pub async fn dynamic_evaluation_run(
         &self,
-        params: DynamicEvaluationRunParams,
+        mut params: DynamicEvaluationRunParams,
     ) -> Result<DynamicEvaluationRunResponse, TensorZeroError> {
+        // Apply the git information to the tags so it gets stored for our dynamic evaluation run
+        if let Ok(git_info) = GitInfo::new() {
+            params.tags.extend(git_info.into_tags());
+        }
         match &self.mode {
             ClientMode::HTTPGateway(client) => {
                 let url = client.base_url.join("dynamic_evaluation_run").map_err(|e| TensorZeroError::Other {
