@@ -14,6 +14,7 @@ from uuid import UUID
 
 import uuid_utils
 
+import tensorzero.optimizations_server_types as ost
 from tensorzero import (
     DynamicEvaluationRunEpisodeResponse,
     DynamicEvaluationRunResponse,
@@ -383,7 +384,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         metric_name: Optional[str] = None,
         threshold: Optional[float] = None,
         max_samples: Optional[int] = None,
-    ) -> List[Dict[str, Any]]: ...
+    ) -> List[ost.Sample]: ...
     def _internal_get_template_config(
         self, *, function_name: str, variant_name: str
     ) -> Dict[str, Any]: ...

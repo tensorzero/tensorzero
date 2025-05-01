@@ -26,17 +26,17 @@ import logging
 import os
 import typing as t
 from enum import Enum
-from typing import Any, Dict, List, Literal, Optional, Union, cast
+from typing import Any, Dict, List, Literal, Optional, Union
 
 import httpx
 from minijinja import Environment
 from pydantic import BaseModel, ConfigDict
 from tensorzero import AsyncTensorZeroGateway
+from tensorzero.optimizations_server_types import Sample
 from typing_extensions import TypedDict
 from uuid_utils import uuid7
 
 from ..rendering import get_template_env
-from ..types import Sample
 
 # Import modules from equivalent Python packages
 from .common import BaseSFTJob, FineTuningRequest, render_message, try_template_system
@@ -164,9 +164,6 @@ class FireworksSFTJob(BaseSFTJob):
             threshold=data.threshold,
             max_samples=data.maxSamples,
         )
-
-        # TODO: we should avoid this by moving the types to the client
-        curated_inferences = cast(List[Sample], curated_inferences)
 
         if not curated_inferences or len(curated_inferences) == 0:
             raise ValueError("No curated inferences found")

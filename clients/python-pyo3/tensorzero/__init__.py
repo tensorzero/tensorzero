@@ -40,8 +40,8 @@ __all__ = [
     "BaseTensorZeroGateway",
     "ChatInferenceResponse",
     "ContentBlock",
-    "DynamicEvaluationRunResponse",
     "DynamicEvaluationRunEpisodeResponse",
+    "DynamicEvaluationRunResponse",
     "ExtraBody",
     "FeedbackResponse",
     "FinishReason",
@@ -53,6 +53,7 @@ __all__ = [
     "JsonInferenceOutput",
     "JsonInferenceResponse",
     "Message",
+    "patch_openai_client",
     "RawText",
     "TensorZeroError",
     "TensorZeroGateway",
@@ -64,7 +65,6 @@ __all__ = [
     "ToolCallChunk",
     "ToolResult",
     "Usage",
-    "patch_openai_client",
 ]
 
 T = t.TypeVar("T", bound=t.Any)

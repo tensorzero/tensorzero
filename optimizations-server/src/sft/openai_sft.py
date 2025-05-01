@@ -2,16 +2,16 @@ import asyncio
 import json
 import os
 import warnings
-from typing import Any, Dict, List, Literal, Optional, Union, cast
+from typing import Any, Dict, List, Literal, Optional, Union
 
 from minijinja import Environment
 from openai import AsyncOpenAI
 from openai.types.fine_tuning import FineTuningJob
-from tensorzero.tensorzero import AsyncTensorZeroGateway
+from tensorzero import AsyncTensorZeroGateway
+from tensorzero.optimizations_server_types import Sample
 from typing_extensions import TypedDict
 
 from ..rendering import get_template_env
-from ..types import Sample
 from .common import (
     BaseSFTJob,
     FineTuningRequest,
@@ -70,9 +70,6 @@ class OpenAISFTJob(BaseSFTJob):
             threshold=data.threshold,
             max_samples=data.maxSamples,
         )
-
-        # TODO: we should avoid this by moving the types to the client
-        curated_inferences = cast(List[Sample], curated_inferences)
 
         if not curated_inferences or len(curated_inferences) == 0:
             raise ValueError("No curated inferences found")
