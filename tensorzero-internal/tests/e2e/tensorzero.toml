@@ -572,6 +572,12 @@ temperature = 1.0
 max_tokens = 100
 seed = 69
 
+[functions.basic_test.variants.random_answer]
+type = "chat_completion"
+weight = 0
+model = "dummy::random_answer"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
 [functions.basic_test.variants.test2]
 type = "chat_completion"
 model = "test"

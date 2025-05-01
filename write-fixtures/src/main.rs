@@ -13,6 +13,7 @@ use tokio_stream::StreamExt;
 
 use clap::Parser;
 use url::Url;
+use uuid::Uuid;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -33,6 +34,10 @@ struct Args {
     #[arg(short, long)]
     function_name: String,
 
+    /// Name of the variant to call
+    #[arg(short, long)]
+    variant_name: Option<String>,
+
     /// Input to the function
     input: String,
 
@@ -49,6 +54,7 @@ async fn run_inference(client: &Client, args: &Args) {
     let res = client
         .inference(ClientInferenceParams {
             function_name: Some(args.function_name.clone()),
+            variant_name: args.variant_name.clone(),
             stream: Some(args.streaming),
             input: ClientInput {
                 system: Some(serde_json::json!({
@@ -57,7 +63,7 @@ async fn run_inference(client: &Client, args: &Args) {
                 messages: vec![ClientInputMessage {
                     role: Role::User,
                     content: vec![ClientInputMessageContent::Text(TextKind::Text {
-                        text: input,
+                        text: format!("{input} : Random {}", Uuid::now_v7()),
                     })],
                 }],
                 ..Default::default()
