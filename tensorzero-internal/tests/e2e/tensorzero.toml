@@ -11,6 +11,9 @@ bind_address = "0.0.0.0:3000"
 debug = true
 enable_template_filesystem_access = true
 
+[gateway.export.otlp.traces]
+enabled = true
+
 [object_storage]
 type = "disabled"
 
@@ -2442,7 +2445,6 @@ tool_choice.specific = "get_temperature"
 [functions.specific_tool.variants.variant]
 type = "chat_completion"
 model = "test"
-
 
 [functions.best_of_n]
 type = "chat"

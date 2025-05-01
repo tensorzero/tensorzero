@@ -16,6 +16,7 @@ tokio = { workspace = true }
 mimalloc = "0.1.45"
 clap = { workspace = true }
 serde = { workspace = true }
+axum-tracing-opentelemetry = "0.28.0"
 
 [lints]
 workspace = true

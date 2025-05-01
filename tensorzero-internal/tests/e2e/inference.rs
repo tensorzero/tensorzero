@@ -1,7 +1,14 @@
-use crate::providers::common::{make_embedded_gateway_with_config, FERRIS_PNG};
+use crate::{
+    otel::{
+        attrs_to_map, build_span_map, install_capturing_otel_exporter, CapturingOtelExporter,
+        SpanMap,
+    },
+    providers::common::{make_embedded_gateway_with_config, FERRIS_PNG},
+};
 use axum::http::HeaderValue;
 use base64::prelude::*;
 use futures::StreamExt;
+use opentelemetry_sdk::trace::SpanData;
 use reqwest::{Client, StatusCode};
 use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{json, Value};
@@ -10,6 +17,7 @@ use tensorzero::{
     ClientInputMessageContent, InferenceOutput, InferenceResponse,
 };
 use tensorzero_internal::{
+    endpoints::inference::ChatInferenceResponse,
     inference::{
         providers::dummy::{
             DUMMY_BAD_TOOL_RESPONSE, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW,
@@ -1870,6 +1878,7 @@ model_name = "json"
 
 #[tokio::test]
 async fn test_original_response_mixture_of_n_flaky_fuser() {
+    let exporter = install_capturing_otel_exporter();
     // We use an embedded client so that we can control the number of
     // requests to the flaky judge.
     let gateway = make_embedded_gateway_with_config(
@@ -1918,9 +1927,11 @@ model = "dummy::flaky_model"
     };
 
     assert_eq!(
-        good_response.original_response.unwrap(),
+        good_response.original_response.as_ref().unwrap(),
         DUMMY_INFER_RESPONSE_RAW,
     );
+
+    check_good_mixture_response(exporter, good_response).await;
 
     // Second request to the flaky judge should fail
     let bad_response = gateway.inference(params).await.unwrap();
@@ -1934,6 +1945,129 @@ model = "dummy::flaky_model"
     );
 
     // Don't check ClickHouse, as we do that in lots of other tests.
+}
+
+async fn check_good_mixture_response(
+    exporter: CapturingOtelExporter,
+    output: ChatInferenceResponse,
+) {
+    let all_spans = exporter.take_spans();
+    let num_spans = all_spans.len();
+    let spans = build_span_map(all_spans);
+    let [root_span] = spans.root_spans.as_slice() else {
+        panic!("Expected one root span: {:#?}", spans.root_spans);
+    };
+    // Since we're using the embedded gateway, the root span will be `function_call`
+    // (we won't have a top-level HTTP span)
+    assert_eq!(root_span.name, "function_inference");
+    let root_attr_map = attrs_to_map(&root_span.attributes);
+    assert_eq!(root_attr_map["function_name"], "mixture_of_n".into());
+    assert_eq!(root_attr_map.get("model_name"), None);
+    assert_eq!(
+        root_attr_map["inference_id"],
+        output.inference_id.to_string().into()
+    );
+    assert_eq!(
+        root_attr_map["episode_id"],
+        output.episode_id.to_string().into()
+    );
+    assert_eq!(root_attr_map["function_name"], "mixture_of_n".into());
+    // We didn't explicitly pin a variant in the inference request, so this is `None` in the top-level function_call span
+    assert_eq!(root_attr_map.get("variant_name"), None);
+
+    let root_children = &spans.span_children[&root_span.span_context.span_id()];
+    let [variant_span] = root_children.as_slice() else {
+        panic!("Expected one child span: {root_children:#?}");
+    };
+
+    assert_eq!(variant_span.name, "variant_inference");
+    let variant_attr_map = attrs_to_map(&variant_span.attributes);
+    assert_eq!(variant_attr_map["function_name"], "mixture_of_n".into());
+    assert_eq!(
+        variant_attr_map["variant_name"],
+        "mixture_of_n_variant".into()
+    );
+    assert_eq!(variant_attr_map["stream"], false.into());
+
+    let mut variant_children = spans.span_children[&variant_span.span_context.span_id()].clone();
+    variant_children.sort_by_key(|s| {
+        s.attributes.iter().find_map(|k| {
+            if k.key.as_str() == "variant_name" {
+                Some(k.value.as_str().to_string())
+            } else {
+                None
+            }
+        })
+    });
+
+    let [model_span, variant0_span, variant1_span] = variant_children.as_slice() else {
+        panic!("Expected three child spans: {variant_children:#?}");
+    };
+
+    check_dummy_model_span(model_span, &spans, "dummy::flaky_model", "flaky_model");
+
+    assert_eq!(variant0_span.name, "variant_inference");
+    let variant0_attr_map = attrs_to_map(&variant0_span.attributes);
+    assert_eq!(variant0_attr_map["function_name"], "mixture_of_n".into());
+    assert_eq!(variant0_attr_map["variant_name"], "variant0".into());
+    assert_eq!(variant0_attr_map["stream"], false.into());
+
+    let variant0_children = &spans.span_children[&variant0_span.span_context.span_id()];
+    let [variant0_model_span] = variant0_children.as_slice() else {
+        panic!("Expected one child span: {variant0_children:#?}");
+    };
+    check_dummy_model_span(variant0_model_span, &spans, "dummy::test", "test");
+
+    assert_eq!(variant1_span.name, "variant_inference");
+    let variant1_attr_map = attrs_to_map(&variant1_span.attributes);
+    assert_eq!(variant1_attr_map["function_name"], "mixture_of_n".into());
+    assert_eq!(variant1_attr_map["variant_name"], "variant1".into());
+    assert_eq!(variant1_attr_map["stream"], false.into());
+
+    let variant1_children = &spans.span_children[&variant1_span.span_context.span_id()];
+    let [variant1_model_span] = variant1_children.as_slice() else {
+        panic!("Expected one child span: {variant1_children:#?}");
+    };
+    check_dummy_model_span(variant1_model_span, &spans, "dummy::alternate", "alternate");
+
+    assert_eq!(num_spans, 10);
+}
+
+fn check_dummy_model_span(
+    model_span: &SpanData,
+    spans: &SpanMap,
+    model_name: &str,
+    genai_model_name: &str,
+) {
+    assert_eq!(model_span.name, "model_inference");
+    let model_attr_map = attrs_to_map(&model_span.attributes);
+    assert_eq!(model_attr_map["model_name"].as_str(), model_name);
+    assert_eq!(model_attr_map["stream"], false.into());
+
+    let model_children = &spans.span_children[&model_span.span_context.span_id()];
+    let [model_provider_span] = model_children.as_slice() else {
+        panic!("Expected one child span: {model_children:#?}");
+    };
+    assert_eq!(model_provider_span.name, "model_provider_inference");
+    let model_provider_attr_map = attrs_to_map(&model_provider_span.attributes);
+    assert_eq!(model_provider_attr_map["provider_name"], "dummy".into());
+    assert_eq!(
+        model_provider_attr_map["gen_ai.operation.name"],
+        "chat".into()
+    );
+    assert_eq!(model_provider_attr_map["gen_ai.system"], "dummy".into());
+    assert_eq!(
+        model_provider_attr_map["gen_ai.request.model"].as_str(),
+        genai_model_name
+    );
+    assert_eq!(model_attr_map["stream"], false.into());
+
+    assert_eq!(
+        spans
+            .span_children
+            .get(&model_provider_span.span_context.span_id()),
+        None
+    );
 }
 
 #[tokio::test]
