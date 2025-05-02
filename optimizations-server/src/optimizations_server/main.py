@@ -5,9 +5,9 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from tensorzero import AsyncTensorZeroGateway
 
-from .sft.common import FineTuningRequest
-from .sft.fireworks_sft import FireworksSFTJob
-from .sft.openai_sft import BaseSFTJob, OpenAISFTJob
+from optimizations_server.sft.common import FineTuningRequest
+from optimizations_server.sft.fireworks_sft import FireworksSFTJob
+from optimizations_server.sft.openai_sft import BaseSFTJob, OpenAISFTJob
 
 CONFIG_PATH = os.environ.get("TENSORZERO_UI_CONFIG_PATH", "config/tensorzero.toml")
 CLICKHOUSE_URL = os.environ["TENSORZERO_CLICKHOUSE_URL"]
