@@ -1431,7 +1431,10 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
         }
         "hyperbolic" => {
             assert!(
-                res["error"].as_str().unwrap().contains("Bad Request")
+                res["error"]
+                    .as_str()
+                    .unwrap()
+                    .contains("Could not validate credentials")
                     || res["error"].as_str().unwrap().contains("401 Unauthorized"),
                 "Unexpected error: {res}"
             );

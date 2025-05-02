@@ -8,9 +8,8 @@ import {
   TableEmptyState,
 } from "~/components/ui/table";
 import type { InferenceByIdRow } from "~/utils/clickhouse/inference";
-import { formatDate } from "~/utils/date";
 import { Link } from "react-router";
-
+import { TableItemTime } from "~/components/ui/TableItems";
 export default function VariantInferenceTable({
   inferences,
 }: {
@@ -51,7 +50,9 @@ export default function VariantInferenceTable({
                   </code>
                 </Link>
               </TableCell>
-              <TableCell>{formatDate(new Date(inference.timestamp))}</TableCell>
+              <TableCell>
+                <TableItemTime timestamp={inference.timestamp} />
+              </TableCell>
             </TableRow>
           ))
         )}

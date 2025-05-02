@@ -8,10 +8,10 @@ import {
   TableRow,
   TableEmptyState,
 } from "~/components/ui/table";
-import { formatDate } from "~/utils/date";
 import { FunctionLink } from "~/components/function/FunctionLink";
 import { VariantLink } from "~/components/function/variant/VariantLink";
 import type { EvaluationInfoResult } from "~/utils/clickhouse/evaluations";
+import { TableItemTime } from "~/components/ui/TableItems";
 
 export default function EvaluationRunsTable({
   evaluationRuns,
@@ -88,7 +88,9 @@ export default function EvaluationRunsTable({
                   </VariantLink>
                 </TableCell>
                 <TableCell>
-                  {formatDate(new Date(evaluationRun.last_inference_timestamp))}
+                  <TableItemTime
+                    timestamp={evaluationRun.last_inference_timestamp}
+                  />
                 </TableCell>
               </TableRow>
             ))
