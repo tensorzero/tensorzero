@@ -16,6 +16,7 @@ pub mod helpers_thinking_block;
 pub mod hyperbolic;
 pub mod mistral;
 pub mod openai;
+pub mod openrouter;
 pub mod provider_trait;
 pub mod sglang;
 #[cfg(test)]
