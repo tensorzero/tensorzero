@@ -19,3 +19,4 @@ from .types import InferenceInput
 class Sample(TypedDict):
     input: Required[InferenceInput]
     output: Required[Any]
+    # non-exhaustive
