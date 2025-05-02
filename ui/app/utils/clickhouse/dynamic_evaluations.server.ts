@@ -14,6 +14,7 @@ export async function getDynamicEvaluationRuns(
   page_size: number,
   offset: number,
   run_id?: string,
+  project_name?: string,
 ): Promise<DynamicEvaluationRun[]> {
   const query = `
     SELECT
@@ -25,6 +26,7 @@ export async function getDynamicEvaluationRuns(
       formatDateTime(UUIDv7ToDateTime(uint_to_uuid(run_id_uint)), '%Y-%m-%dT%H:%i:%SZ') as timestamp
     FROM DynamicEvaluationRun
     ${run_id ? `WHERE toUInt128(toUUID({run_id:String})) = run_id_uint` : ""}
+    ${project_name ? `WHERE project_name = {project_name:String}` : ""}
     ORDER BY run_id_uint DESC
     LIMIT {page_size:UInt64} OFFSET {offset:UInt64}
     `;
@@ -35,8 +37,48 @@ export async function getDynamicEvaluationRuns(
       page_size,
       offset,
       run_id,
+      project_name,
     },
   });
+  const rows = await result.json<DynamicEvaluationRun[]>();
+  return rows.map((row) => dynamicEvaluationRunSchema.parse(row));
+}
+
+export async function getDynamicEvaluationRunsByIds(
+  run_ids: string[], // one or more UUIDv7 strings
+  project_name?: string, // optional extra filter
+): Promise<DynamicEvaluationRun[]> {
+  if (run_ids.length === 0) return []; // nothing to fetch
+
+  const query = `
+    SELECT
+      run_display_name AS name,
+      uint_to_uuid(run_id_uint) AS id,
+      variant_pins,
+      tags,
+      project_name,
+      formatDateTime(
+        UUIDv7ToDateTime(uint_to_uuid(run_id_uint)),
+        '%Y-%m-%dT%H:%i:%SZ'
+      ) AS timestamp
+    FROM DynamicEvaluationRun
+    WHERE run_id_uint IN (
+      /* turn the parameter array of UUID strings into a real table
+         expression of UInt128 values so the IN predicate is valid */
+      SELECT arrayJoin(
+        arrayMap(x -> toUInt128(toUUID(x)), {run_ids:Array(String)})
+      )
+    )
+    ${project_name ? "AND project_name = {project_name:String}" : ""}
+    ORDER BY run_id_uint DESC
+  `;
+
+  const result = await clickhouseClient.query({
+    query,
+    format: "JSONEachRow",
+    query_params: { run_ids, project_name },
+  });
+
   const rows = await result.json<DynamicEvaluationRun[]>();
   return rows.map((row) => dynamicEvaluationRunSchema.parse(row));
 }
@@ -260,4 +302,54 @@ export async function countDynamicEvaluationProjects(): Promise<number> {
   const result = await clickhouseClient.query({ query, format: "JSONEachRow" });
   const rows = await result.json<{ count: number }>();
   return rows[0].count;
+}
+
+export async function searchDynamicEvaluationRuns(
+  page_size: number,
+  offset: number,
+  project_name?: string,
+  search_query?: string,
+): Promise<DynamicEvaluationRun[]> {
+  // 1) Build an array of individual predicates
+  const predicates: string[] = [];
+
+  if (project_name) {
+    predicates.push(`project_name = {project_name:String}`);
+  }
+
+  if (search_query) {
+    predicates.push(`(
+      positionCaseInsensitive(run_display_name, {search_query:String}) > 0
+      OR positionCaseInsensitive(toString(uint_to_uuid(run_id_uint)), {search_query:String}) > 0
+    )`);
+  }
+
+  // 2) If we have any predicates, join them with " AND " and prefix with WHERE
+  const whereClause = predicates.length
+    ? `WHERE ${predicates.join(" AND ")}`
+    : "";
+
+  // 3) Plug the one WHERE (or nothing) into your template
+  const query = `
+    SELECT
+      run_display_name as name,
+      uint_to_uuid(run_id_uint) as id,
+      variant_pins,
+      tags,
+      project_name,
+      formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') as timestamp
+    FROM DynamicEvaluationRun
+    ${whereClause}
+    ORDER BY updated_at DESC
+    LIMIT {page_size:UInt64}
+    OFFSET {offset:UInt64}
+  `;
+
+  const result = await clickhouseClient.query({
+    query,
+    format: "JSONEachRow",
+    query_params: { project_name, search_query, page_size, offset },
+  });
+  const rows = await result.json<DynamicEvaluationRun[]>();
+  return rows.map((row) => dynamicEvaluationRunSchema.parse(row));
 }

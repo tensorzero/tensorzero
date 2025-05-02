@@ -6,7 +6,9 @@ import {
   getDynamicEvaluationProjects,
   getDynamicEvaluationRunEpisodesByRunIdWithFeedback,
   getDynamicEvaluationRuns,
+  getDynamicEvaluationRunsByIds,
   getDynamicEvaluationRunStatisticsByMetricName,
+  searchDynamicEvaluationRuns,
 } from "./dynamic_evaluations.server";
 
 describe("getDynamicEvaluationRuns", () => {
@@ -61,6 +63,83 @@ describe("getDynamicEvaluationRuns", () => {
         timestamp: "2025-05-01T18:02:56Z",
         variant_pins: {
           ask_question: "gpt-4.1-nano",
+        },
+      },
+    ]);
+  });
+
+  test("should return correct run infos for a given project name", async () => {
+    const runInfos = await getDynamicEvaluationRuns(
+      10,
+      0,
+      undefined,
+      "21_questions",
+    );
+    expect(runInfos).toMatchObject([
+      {
+        id: "01968d08-3198-7e82-b3c8-e228f8ddc779",
+        name: "gpt-4.1-mini",
+        project_name: "21_questions",
+        tags: { foo: "bar" },
+        timestamp: "2025-05-01T18:07:26Z",
+        variant_pins: {
+          answer_question: "baseline",
+          ask_question: "gpt-4.1-mini",
+        },
+      },
+      {
+        id: "01968d05-d734-7751-ab33-75dd8b3fb4a3",
+        name: "baseline",
+        project_name: "21_questions",
+        tags: { foo: "bar" },
+        timestamp: "2025-05-01T18:04:52Z",
+        variant_pins: {
+          answer_question: "baseline",
+          ask_question: "baseline",
+        },
+      },
+      {
+        id: "01968d04-142c-7e53-8ea7-3a3255b518dc",
+        name: "gpt-4.1-nano",
+        project_name: "21_questions",
+        tags: { foo: "bar" },
+        timestamp: "2025-05-01T18:02:56Z",
+        variant_pins: {
+          answer_question: "baseline",
+          ask_question: "gpt-4.1-nano",
+        },
+      },
+    ]);
+  });
+});
+
+describe("getDynamicEvaluationRunsByIds", () => {
+  test("should return correct run infos for a given run id", async () => {
+    const runInfos = await getDynamicEvaluationRunsByIds([
+      "01968d04-142c-7e53-8ea7-3a3255b518dc",
+      "01968d05-d734-7751-ab33-75dd8b3fb4a3",
+    ]);
+    expect(runInfos).toMatchObject([
+      {
+        id: "01968d05-d734-7751-ab33-75dd8b3fb4a3",
+        name: "baseline",
+        project_name: "21_questions",
+        tags: { foo: "bar" },
+        timestamp: "2025-05-01T18:04:52Z",
+        variant_pins: {
+          answer_question: "baseline",
+          ask_question: "baseline",
+        },
+      },
+      {
+        id: "01968d04-142c-7e53-8ea7-3a3255b518dc",
+        name: "gpt-4.1-nano",
+        project_name: "21_questions",
+        tags: { foo: "bar" },
+        timestamp: "2025-05-01T18:02:56Z",
+        variant_pins: {
+          ask_question: "gpt-4.1-nano",
+          answer_question: "baseline",
         },
       },
     ]);
@@ -216,7 +295,7 @@ describe("getDynamicEvaluationProjects", () => {
       {
         count: 3,
         last_updated: "2025-05-01T18:07:26Z",
-        project_name: "21_questions",
+        name: "21_questions",
       },
     ]);
   });
@@ -226,5 +305,55 @@ describe("countDynamicEvaluationProjects", () => {
   test("should return correct number of projects", async () => {
     const count = await countDynamicEvaluationProjects();
     expect(count).toBe(1);
+  });
+});
+
+describe("searchDynamicEvaluationRuns", () => {
+  test("should return correct runs by display name with project name set", async () => {
+    const runs = await searchDynamicEvaluationRuns(
+      10,
+      0,
+      "21_questions",
+      "gpt",
+    );
+    expect(runs).toMatchObject([
+      {
+        id: "01968d08-3198-7e82-b3c8-e228f8ddc779",
+        name: "gpt-4.1-mini",
+        project_name: "21_questions",
+        tags: { foo: "bar" },
+        timestamp: "2025-05-01T18:07:26Z",
+        variant_pins: {
+          ask_question: "gpt-4.1-mini",
+          answer_question: "baseline",
+        },
+      },
+      {
+        id: "01968d04-142c-7e53-8ea7-3a3255b518dc",
+        name: "gpt-4.1-nano",
+        project_name: "21_questions",
+        tags: { foo: "bar" },
+        timestamp: "2025-05-01T18:02:56Z",
+        variant_pins: {
+          answer_question: "baseline",
+          ask_question: "gpt-4.1-nano",
+        },
+      },
+    ]);
+  });
+
+  test("should return correct runs by run id without project name set", async () => {
+    const runs = await searchDynamicEvaluationRuns(
+      10,
+      0,
+      undefined,
+      "01968d04-142c-7e53-8ea7-3a3255b518dc",
+    );
+    expect(runs).toMatchObject([
+      {
+        id: "01968d04-142c-7e53-8ea7-3a3255b518dc",
+        name: "gpt-4.1-nano",
+      },
+    ]);
   });
 });
