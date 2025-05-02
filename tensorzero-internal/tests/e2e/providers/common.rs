@@ -4008,6 +4008,11 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
 pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    // Together doesn't correctly produce streaming tool call chunks (it produces text chunks with the raw tool call).
+    if provider.model_provider_name == "together" {
+        return;
+    }
+
     // OpenAI O1 doesn't support streaming responses
     if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
         return;
@@ -7036,6 +7041,11 @@ pub async fn check_tool_use_multi_turn_inference_response(
 pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    // Together doesn't correctly produce streaming tool call chunks (it produces text chunks with the raw tool call).
+    if provider.model_provider_name == "together" {
+        return;
+    }
+
     // NOTE: The xAI API returns an error for multi-turn tool use when the assistant message only has tool_calls but no content.
     // The xAI team has acknowledged the issue and is working on a fix.
     // We skip this test for xAI until the fix is deployed.
