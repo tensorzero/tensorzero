@@ -83,24 +83,76 @@ func TestBasicInference(t *testing.T) {
 			Messages:    messages,
 			Temperature: openai.Float(0.4),
 		}
-		addEpisodeIDToRequest(t, req, episodeID)
+		req.WithExtraFields(map[string]any{
+			"episode_id": episodeID.String(), //old format
+		})
 
 		// Send API request
 		resp, err := client.Chat.Completions.New(ctx, *req)
 		require.NoError(t, err, "API request failed")
 
-		// Validate response fields
+		// If episode_id is passed in the old format,
+		// verify its presence in the response extras and ensure it's a valid UUID,
+		// without checking the exact value.
+		rawEpisodeID, ok := resp.JSON.ExtraFields["episode_id"]
+		require.True(t, ok, "Response does not contain an episode_id")
 		var responseEpisodeID string
-		json.Unmarshal([]byte(resp.JSON.ExtraFields["episode_id"].Raw()), &responseEpisodeID)
-		assert.Equal(t, episodeID.String(), responseEpisodeID)
+		err = json.Unmarshal([]byte(rawEpisodeID.Raw()), &responseEpisodeID)
+		require.NoError(t, err, "Failed to parse episode_id from response extras")
+		_, err = uuid.Parse(responseEpisodeID)
+		require.NoError(t, err, "Response episode_id is not a valid UUID")
+
+		// Validate response fields
 		assert.Equal(t, `Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.`,
 			resp.Choices[0].Message.Content)
+
+		// Validate Usage
 		assert.Equal(t, int64(10), resp.Usage.PromptTokens)
 		assert.Equal(t, int64(10), resp.Usage.CompletionTokens)
 		assert.Equal(t, int64(20), resp.Usage.TotalTokens)
 		assert.Equal(t, "stop", resp.Choices[0].FinishReason)
 	})
 	// TODO: [test_async_basic_inference]
+	t.Run("Basic Inference", func(t *testing.T) {
+		episodeID, _ := uuid.NewV7()
+
+		messages := []openai.ChatCompletionMessageParamUnion{
+			{OfSystem: OldFormatSystemMessageWithAssistant(t, "Alfred Pennyworth")},
+			openai.UserMessage("Hello"),
+		}
+
+		req := &openai.ChatCompletionNewParams{
+			Model:       "tensorzero::function_name::basic_test",
+			Messages:    messages,
+			Temperature: openai.Float(0.4),
+		}
+		addEpisodeIDToRequest(t, req, episodeID)
+
+		// Send API request
+		resp, err := client.Chat.Completions.New(ctx, *req)
+		require.NoError(t, err, "API request failed")
+
+		// Validate episode id
+		if extra, ok := resp.JSON.ExtraFields["episode_id"]; ok {
+			var responseEpisodeID string
+			err := json.Unmarshal([]byte(extra.Raw()), &responseEpisodeID)
+			require.NoError(t, err, "Failed to parse episode_id")
+			assert.Equal(t, episodeID.String(), responseEpisodeID)
+		} else {
+			t.Errorf("Key 'tensorzero::episode_id' not found in response extras")
+		}
+
+		// Validate response fields
+		assert.Equal(t, `Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.`,
+			resp.Choices[0].Message.Content)
+
+		// Validate Usage
+		assert.Equal(t, int64(10), resp.Usage.PromptTokens)
+		assert.Equal(t, int64(10), resp.Usage.CompletionTokens)
+		assert.Equal(t, int64(20), resp.Usage.TotalTokens)
+		assert.Equal(t, "stop", resp.Choices[0].FinishReason)
+
+	})
 	// TODO: [test_async_basic_inference_json_schema]
 	// TODO: [test_async_inference_cache]
 }
@@ -188,11 +240,13 @@ func TestStreamingInference(t *testing.T) {
 
 			assert.Equal(t, "tensorzero::function_name::basic_test::variant_name::test", chunk.Model, "Model mismatch")
 			//Validating the episode ID
-			if extra, ok := chunk.JSON.ExtraFields["tensorzero::episode_id"]; ok {
-				var actualEpisode string
-				err := json.Unmarshal([]byte(extra.Raw()), &actualEpisode)
+			if extra, ok := chunk.JSON.ExtraFields["episode_id"]; ok {
+				var responseEpisodeID string
+				err := json.Unmarshal([]byte(extra.Raw()), &responseEpisodeID)
 				require.NoError(t, err, "Failed to parse episode_id from chunk extras")
-				assert.Equal(t, episodeID.String(), actualEpisode, "Episode ID mismatch")
+				assert.Equal(t, episodeID.String(), responseEpisodeID, "Episode ID mismatch")
+			} else {
+				t.Errorf("Key 'tensorzero::episode_id' not found in response extras")
 			}
 
 			// Validating the content
