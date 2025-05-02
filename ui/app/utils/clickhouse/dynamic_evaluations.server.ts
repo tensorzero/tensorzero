@@ -353,3 +353,115 @@ export async function searchDynamicEvaluationRuns(
   const rows = await result.json<DynamicEvaluationRun[]>();
   return rows.map((row) => dynamicEvaluationRunSchema.parse(row));
 }
+
+export async function getDynamicEvaluationRunByDatapointName(
+  runIds: string[],
+  page_size: number,
+  offset: number,
+): Promise<DynamicEvaluationRun[]> {
+  const query = `
+    WITH
+      episodes AS (
+        SELECT
+          episode_id_uint,
+          run_id_uint,
+          tags,
+          updated_at,
+          datapoint_name as task_name
+        FROM DynamicEvaluationRunEpisodeByRunId
+        WHERE run_id_uint IN (
+          SELECT arrayJoin(arrayMap(x -> toUInt128(toUUID(x)), {runIds:Array(String)}))
+        )
+      ),
+      feedback_union AS (
+        SELECT
+          target_id,
+          metric_name,
+          argMax(toString(value), toUInt128(id)) AS value
+        FROM FloatMetricFeedbackByTargetId
+        WHERE target_id IN (
+          SELECT uint_to_uuid(episode_id_uint) FROM episodes
+        )
+        GROUP BY target_id, metric_name
+        UNION ALL
+        SELECT
+          target_id,
+          metric_name,
+          argMax(toString(value), toUInt128(id)) AS value
+        FROM BooleanMetricFeedbackByTargetId
+        WHERE target_id IN (
+          SELECT uint_to_uuid(episode_id_uint) FROM episodes
+        )
+        GROUP BY target_id, metric_name
+        UNION ALL
+        SELECT
+          target_id,
+          'comment' AS metric_name,
+          value
+        FROM CommentFeedbackByTargetId
+        WHERE target_id IN (
+          SELECT uint_to_uuid(episode_id_uint) FROM episodes
+        )
+      ),
+    grouped AS (
+      SELECT
+          -- If task_name is NULL, group by episode_id_uint to treat each as singleton
+          -- Else use the task_name
+          ifNull(task_name, concat('NULL_EPISODE_', toString(episode_id_uint))) as group_key,
+          any(task_name) as task_name,
+          max(updated_at) as max_updated_at,
+          any(episode_id_uint) as episode_id_uint,
+          any(run_id_uint) as run_id_uint,
+          any(tags) as tags
+        FROM episodes
+        GROUP BY group_key
+      )
+    )
+    SELECT
+      uint_to_uuid(e.episode_id_uint) AS episode_id,
+      formatDateTime(
+        min(e.updated_at), -- when did the episode start?
+        '%Y-%m-%dT%H:%i:%SZ'
+      ) AS timestamp,
+      uint_to_uuid(e.run_id_uint) AS run_id,
+      e.tags,
+      e.task_name,
+      -- 1) pack into [(name,value),…]
+      -- 2) arraySort by name
+      -- 3) arrayMap to pull out names
+      arrayMap(
+        t -> t.1,
+        arraySort(
+          (t) -> t.1,
+          groupArrayIf((f.metric_name, f.value), f.metric_name != '')
+        )
+      ) AS feedback_metric_names,
+
+      -- same 3-step, but pull out values
+      arrayMap(
+        t -> t.2,
+        arraySort(
+          (t) -> t.1,
+          groupArrayIf((f.metric_name, f.value), f.metric_name != '')
+        )
+      ) AS feedback_values
+
+    FROM episodes AS e
+    LEFT JOIN feedback_union AS f
+      ON f.target_id = uint_to_uuid(e.episode_id_uint)
+    GROUP BY
+      e.episode_id_uint,
+      e.run_id_uint,
+      e.tags,
+      e.task_name
+  `;
+  const result = await clickhouseClient.query({
+    query,
+    format: "JSONEachRow",
+    query_params: { page_size, offset, runIds },
+  });
+  const rows = await result.json<DynamicEvaluationRunEpisodeWithFeedback[]>();
+  return rows.map((row) =>
+    dynamicEvaluationRunEpisodeWithFeedbackSchema.parse(row),
+  );
+}
