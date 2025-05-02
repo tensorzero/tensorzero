@@ -447,6 +447,11 @@ jobs:
           TENSORZERO_GATEWAY_URL: http://localhost:3000
         run: pnpm test
 
+      - name: Print ui tests logs
+        if: always()
+        working-directory: ui
+        run: docker compose -f fixtures/docker-compose.yml logs -t
+
   ui-tests-e2e:
     runs-on: namespace-profile-tensorzero-8x16
     # We currently only run this job when we have secrets available, since we need to use an S3 object_store

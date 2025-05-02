@@ -54,9 +54,11 @@ services:
       timeout: 1s
 
   fixtures:
-    image: clickhouse/clickhouse-server:24.12-alpine
+    build:
+      dockerfile: Dockerfile
     volumes:
       - .:/fixtures:ro
+      - ~/.aws:/root/.aws
     environment:
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
       CLICKHOUSE_HOST: clickhouse
