@@ -13,6 +13,8 @@ function getEvaluationsPath(): string {
   return process.env.TENSORZERO_EVALUATIONS_PATH || "evaluations";
 }
 
+export type InferenceCacheSetting = "on" | "off" | "read_only" | "write_only";
+
 function getGatewayURL(): string {
   const gatewayURL = process.env.TENSORZERO_GATEWAY_URL;
   // This error is thrown on startup in tensorzero.server.ts
@@ -47,6 +49,7 @@ export function runEvaluation(
   datasetName: string,
   variantName: string,
   concurrency: number,
+  inferenceCache: InferenceCacheSetting,
 ): Promise<EvaluationStartInfo> {
   const evaluationsPath = getEvaluationsPath();
   const gatewayURL = getGatewayURL();
@@ -70,6 +73,8 @@ export function runEvaluation(
     concurrency.toString(),
     "--format",
     "jsonl",
+    "--inference-cache",
+    inferenceCache,
   ];
 
   return new Promise<EvaluationStartInfo>((resolve, reject) => {

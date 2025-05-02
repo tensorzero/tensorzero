@@ -14,7 +14,10 @@ import EvaluationRunsTable from "./EvaluationRunsTable";
 import { useState } from "react";
 import { EvaluationsActions } from "./EvaluationsActions";
 import LaunchEvaluationModal from "./LaunchEvaluationModal";
-import { runEvaluation } from "~/utils/evaluations.server";
+import {
+  runEvaluation,
+  type InferenceCacheSetting,
+} from "~/utils/evaluations.server";
 import { getDatasetCounts } from "~/utils/clickhouse/datasets.server";
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -44,6 +47,7 @@ export async function action({ request }: Route.ActionArgs) {
   const dataset_name = formData.get("dataset_name");
   const variant_name = formData.get("variant_name");
   const concurrency_limit = formData.get("concurrency_limit");
+  const inference_cache = formData.get("inference_cache");
   let evaluation_start_info;
   try {
     evaluation_start_info = await runEvaluation(
@@ -51,6 +55,7 @@ export async function action({ request }: Route.ActionArgs) {
       dataset_name as string,
       variant_name as string,
       parseInt(concurrency_limit as string),
+      inference_cache as InferenceCacheSetting,
     );
   } catch (error) {
     console.error("Error starting evaluation:", error);
