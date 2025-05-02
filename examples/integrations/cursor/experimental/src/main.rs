@@ -170,17 +170,6 @@ async fn main() -> Result<()> {
                     dryrun: None,
                 })
                 .await?;
-            client
-                .feedback(FeedbackParams {
-                    inference_id: Some(inference_id),
-                    metric_name: "ted_ratio".to_string(),
-                    value: json!(best_ted_info.ted_ratio),
-                    tags: HashMap::new(),
-                    episode_id: None,
-                    internal: false,
-                    dryrun: None,
-                })
-                .await?;
 
             if let Some(min_ted_source) = &best_ted_info.min_ted_source {
                 client
@@ -229,7 +218,6 @@ async fn main() -> Result<()> {
                     .await?;
             }
             num_feedbacks_sent += 1;
-            // TODO: Send a demonstration of the matching snippet if it's sufficiently good.
         }
     }
     #[expect(clippy::print_stdout)]
