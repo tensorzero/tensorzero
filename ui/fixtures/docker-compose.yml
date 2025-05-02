@@ -57,7 +57,7 @@ services:
     build:
       dockerfile: Dockerfile
     volumes:
-      - .:/fixtures:ro
+      - .:/fixtures
       - ~/.aws:/root/.aws
     environment:
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
