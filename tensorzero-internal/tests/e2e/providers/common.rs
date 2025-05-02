@@ -1431,7 +1431,10 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
         }
         "hyperbolic" => {
             assert!(
-                res["error"].as_str().unwrap().contains("Bad Request")
+                res["error"]
+                    .as_str()
+                    .unwrap()
+                    .contains("Could not validate credentials")
                     || res["error"].as_str().unwrap().contains("401 Unauthorized"),
                 "Unexpected error: {res}"
             );
@@ -3412,6 +3415,11 @@ pub async fn check_tool_use_tool_choice_auto_used_inference_response(
 pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    // Together doesn't correctly produce streaming tool call chunks (it produces text chunks with the raw tool call).
+    if provider.model_provider_name == "together" {
+        return;
+    }
+
     // OpenAI O1 doesn't support streaming responses
     if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
         return;
@@ -6435,6 +6443,10 @@ pub async fn check_tool_use_tool_choice_allowed_tools_inference_response(
 pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    // Together doesn't correctly produce streaming tool call chunks (it produces text chunks with the raw tool call).
+    if provider.model_provider_name == "together" {
+        return;
+    }
     // OpenAI O1 doesn't support streaming responses
     if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
         return;
@@ -8343,6 +8355,11 @@ pub async fn check_parallel_tool_use_inference_response(
 pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    // Together doesn't correctly produce streaming tool call chunks (it produces text chunks with the raw tool call).
+    if provider.model_provider_name == "together" {
+        return;
+    }
+
     let episode_id = Uuid::now_v7();
 
     let payload = json!({

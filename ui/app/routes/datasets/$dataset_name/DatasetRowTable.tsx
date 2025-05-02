@@ -7,11 +7,11 @@ import {
   TableRow,
   TableEmptyState,
 } from "~/components/ui/table";
-import { formatDate } from "~/utils/date";
 import type { DatasetDetailRow } from "~/utils/clickhouse/datasets";
 import { Badge } from "~/components/ui/badge";
 import { Link } from "react-router";
 import { FunctionLink } from "~/components/function/FunctionLink";
+import { TableItemTime } from "~/components/ui/TableItems";
 
 export default function DatasetRowTable({
   rows,
@@ -68,7 +68,9 @@ export default function DatasetRowTable({
                     </code>
                   </FunctionLink>
                 </TableCell>
-                <TableCell>{formatDate(new Date(row.updated_at))}</TableCell>
+                <TableCell>
+                  <TableItemTime timestamp={row.updated_at} />
+                </TableCell>
               </TableRow>
             ))
           )}

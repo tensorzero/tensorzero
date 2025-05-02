@@ -11,6 +11,9 @@ bind_address = "0.0.0.0:3000"
 debug = true
 enable_template_filesystem_access = true
 
+[gateway.export.otlp.traces]
+enabled = true
+
 [object_storage]
 type = "disabled"
 
@@ -317,12 +320,12 @@ type = "mistral"
 model_name = "open-mistral-nemo-2407"
 api_key_location = "dynamic::mistral_api_key"
 
-[models.o1-mini]
+[models.o4-mini]
 routing = ["openai"]
 
-[models.o1-mini.providers.openai]
+[models.o4-mini.providers.openai]
 type = "openai"
-model_name = "o1-mini"
+model_name = "o4-mini"
 
 [models.o3-mini]
 routing = ["openai"]
@@ -565,6 +568,16 @@ system_template = "../../fixtures/config/functions/basic_test/prompt/system_temp
 temperature = 1.0
 max_tokens = 100
 seed = 69
+
+[functions.basic_test.variants.test2]
+type = "chat_completion"
+model = "test"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.basic_test.variants.error]
+type = "chat_completion"
+model = "error"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 
 [functions.basic_test.variants.slow]
 type = "chat_completion"
@@ -896,9 +909,9 @@ model = "openai::gpt-4o-mini-2024-07-18"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
-[functions.basic_test.variants.o1-mini]
+[functions.basic_test.variants.o4-mini]
 type = "chat_completion"
-model = "o1-mini"
+model = "o4-mini"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 
 [functions.basic_test.variants.o3-mini]
@@ -2438,7 +2451,6 @@ tool_choice.specific = "get_temperature"
 [functions.specific_tool.variants.variant]
 type = "chat_completion"
 model = "test"
-
 
 [functions.best_of_n]
 type = "chat"

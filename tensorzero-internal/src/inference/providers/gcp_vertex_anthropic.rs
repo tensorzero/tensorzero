@@ -47,6 +47,7 @@ const PROVIDER_TYPE: &str = "gcp_vertex_anthropic";
 
 #[derive(Debug)]
 pub struct GCPVertexAnthropicProvider {
+    model_id: String,
     request_url: String,
     streaming_request_url: String,
     audience: String,
@@ -74,11 +75,16 @@ impl GCPVertexAnthropicProvider {
         let audience = format!("https://{location}-aiplatform.googleapis.com/");
 
         Ok(GCPVertexAnthropicProvider {
+            model_id,
             request_url,
             streaming_request_url,
             audience,
             credentials,
         })
+    }
+
+    pub fn model_id(&self) -> &str {
+        &self.model_id
     }
 }
 
@@ -226,8 +232,8 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
             .post(&self.streaming_request_url)
             .bearer_auth(api_key.expose_secret())
             .header("content-type", "application/json")
-            .headers(headers)
             .json(&request_body)
+            .headers(headers)
             .eventsource()
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {

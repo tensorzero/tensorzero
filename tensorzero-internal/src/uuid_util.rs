@@ -1,5 +1,5 @@
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use uuid::Uuid;
+use uuid::{Timestamp, Uuid};
 
 use crate::{
     error::{Error, ErrorDetails},
@@ -56,7 +56,8 @@ pub fn uuid_elapsed(uuid: &Uuid) -> Result<Duration, Error> {
     let (seconds, subsec_nanos) = uuid
         .get_timestamp()
         .ok_or_else(|| {
-            Error::new(ErrorDetails::InvalidUuid {
+            // Since this can be OK (e.g. for dynamic evaluation runs), we don't log here.
+            Error::new_without_logging(ErrorDetails::InvalidUuid {
                 raw_uuid: uuid.to_string(),
             })
         })?
@@ -79,11 +80,58 @@ pub fn uuid_elapsed(uuid: &Uuid) -> Result<Duration, Error> {
     Ok(elapsed)
 }
 
+/// The offset for generation of dynamic evaluation run IDs.
+const DYNAMIC_EVALUATION_OFFSET_S: u64 = 10_000_000_000;
+/// It is ten billion seconds (~317 years)
+pub const DYNAMIC_EVALUATION_OFFSET: Duration = Duration::from_secs(DYNAMIC_EVALUATION_OFFSET_S);
+
+/// The threshold for generation of dynamic evaluation run IDs.
+/// This will seed the UUIDv7 with current time + 10 billion seconds.
+/// We ignore nanoseconds, sequence number, and usable bits.
+pub const DYNAMIC_EVALUATION_THRESHOLD: Timestamp = Timestamp::from_unix_time(
+    DYNAMIC_EVALUATION_OFFSET_S,
+    0, // ns
+    0, // seq
+    0, // bits
+);
+
+pub fn generate_dynamic_evaluation_run_episode_id() -> Uuid {
+    #[expect(clippy::expect_used)]
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("Time went backwards");
+    let now_plus_offset = now + DYNAMIC_EVALUATION_OFFSET;
+    let timestamp = Timestamp::from_unix_time(
+        now_plus_offset.as_secs(),
+        now_plus_offset.subsec_nanos(),
+        0, // counter
+        0, // usable_counter_bits
+    );
+    Uuid::new_v7(timestamp)
+}
+
+/// Compares two UUID timestamps to determine if the first one is earlier than the second.
+///
+/// # Arguments
+///
+/// * `early` - The timestamp expected to be earlier
+/// * `late` - The timestamp expected to be later
+///
+/// # Returns
+///
+/// * `true` if `early` is chronologically before `late`
+/// * `false` otherwise
+pub fn compare_timestamps(early: Timestamp, late: Timestamp) -> bool {
+    let (early_s, early_ns) = early.to_unix();
+    let (late_s, late_ns) = late.to_unix();
+    early_s < late_s || (early_s == late_s && early_ns < late_ns)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use uuid::timestamp::context::NoContext;
-    use uuid::{uuid, Timestamp};
+    use uuid::uuid;
 
     #[test]
     fn test_validate_episode_id() {
@@ -149,5 +197,67 @@ mod tests {
                 raw_uuid: future_uuid.to_string(),
             }
         );
+    }
+
+    #[test]
+    fn test_generate_dynamic_evaluation_run_episode_id() {
+        let dynamic_id = generate_dynamic_evaluation_run_episode_id();
+
+        // Verify it's a v7 UUID
+        assert_eq!(dynamic_id.get_version_num(), 7);
+
+        // Extract the timestamp and verify it's in the expected range
+        let timestamp_info = dynamic_id.get_timestamp().expect("Should have timestamp");
+        let (seconds, _) = timestamp_info.to_unix();
+
+        // Current timestamp plus the offset
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("Time went backwards")
+            .as_secs();
+        let expected_approx_time = now + DYNAMIC_EVALUATION_OFFSET_S;
+
+        // Allow small difference due to execution time
+        let margin = 5; // 5 seconds margin
+        assert!(
+            seconds >= expected_approx_time - margin && seconds <= expected_approx_time + margin,
+            "Expected timestamp around {expected_approx_time}, got {seconds}"
+        );
+
+        // Generate two UUIDs and ensure they're different
+        let id1 = generate_dynamic_evaluation_run_episode_id();
+        let id2 = generate_dynamic_evaluation_run_episode_id();
+        assert_ne!(id1, id2, "Generated UUIDs should be unique");
+    }
+
+    #[test]
+    fn test_compare_timestamps() {
+        use uuid::NoContext;
+        use uuid::Timestamp;
+
+        // Case 1: First timestamp is before the second timestamp
+        let timestamp1 = Timestamp::from_unix(NoContext, 1000, 0);
+        let timestamp2 = Timestamp::from_unix(NoContext, 2000, 0);
+        assert!(compare_timestamps(timestamp1, timestamp2));
+
+        // Case 2: First timestamp is equal to the second timestamp
+        let timestamp3 = Timestamp::from_unix(NoContext, 3000, 0);
+        let timestamp4 = Timestamp::from_unix(NoContext, 3000, 0);
+        assert!(!compare_timestamps(timestamp3, timestamp4));
+
+        // Case 3: First timestamp is after the second timestamp
+        let timestamp5 = Timestamp::from_unix(NoContext, 5000, 0);
+        let timestamp6 = Timestamp::from_unix(NoContext, 4000, 0);
+        assert!(!compare_timestamps(timestamp5, timestamp6));
+
+        // Case 4: Subsecond precision comparison
+        let timestamp7 = Timestamp::from_unix(NoContext, 6000, 499);
+        let timestamp8 = Timestamp::from_unix(NoContext, 6000, 500);
+        assert!(compare_timestamps(timestamp7, timestamp8));
+
+        // Case 5: Subsecond precision equal
+        let timestamp9 = Timestamp::from_unix(NoContext, 7000, 500);
+        let timestamp10 = Timestamp::from_unix(NoContext, 7000, 500);
+        assert!(!compare_timestamps(timestamp9, timestamp10));
     }
 }

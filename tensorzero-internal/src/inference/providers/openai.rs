@@ -86,6 +86,10 @@ impl OpenAIProvider {
             credentials,
         })
     }
+
+    pub fn model_name(&self) -> &str {
+        &self.model_name
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -212,9 +216,8 @@ impl InferenceProvider for OpenAIProvider {
             &mut request_body,
         )?;
 
-        let mut request_builder = http_client
-            .post(request_url)
-            .header("Content-Type", "application/json");
+        let mut request_builder = http_client.post(request_url);
+
         if let Some(api_key) = api_key {
             request_builder = request_builder.bearer_auth(api_key.expose_secret());
         }
@@ -285,6 +288,7 @@ impl InferenceProvider for OpenAIProvider {
             .try_into()?)
         } else {
             Err(handle_openai_error(
+                &raw_request.clone(),
                 res.status(),
                 &res.text().await.map_err(|e| {
                     Error::new(ErrorDetails::InferenceServer {
@@ -342,13 +346,15 @@ impl InferenceProvider for OpenAIProvider {
         let start_time = Instant::now();
         let mut request_builder = http_client
             .post(request_url)
-            .header("Content-Type", "application/json")
-            .headers(headers);
+            .header("Content-Type", "application/json");
         if let Some(api_key) = api_key {
             request_builder = request_builder.bearer_auth(api_key.expose_secret());
         }
         let event_source = request_builder
             .json(&request_body)
+            // Important - the 'headers' call should come just before we sent the request with '.eventsource()',
+            // so that users can override any of the headers that we set.
+            .headers(headers)
             .eventsource()
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
@@ -721,6 +727,7 @@ impl EmbeddingProvider for OpenAIProvider {
             .try_into()?)
         } else {
             Err(handle_openai_error(
+                &serde_json::to_string(&request_body).unwrap_or_default(),
                 res.status(),
                 &res.text().await.map_err(|e| {
                     Error::new(ErrorDetails::InferenceServer {
@@ -836,6 +843,7 @@ impl OpenAIProvider {
 
         if res.status() != StatusCode::OK {
             return Err(handle_openai_error(
+                &raw_request,
                 res.status(),
                 &res.text().await.map_err(|e| {
                     Error::new(ErrorDetails::InferenceServer {
@@ -919,6 +927,7 @@ fn get_embedding_url(base_url: &Url) -> Result<Url, Error> {
 }
 
 pub(super) fn handle_openai_error(
+    raw_request: &str,
     response_code: StatusCode,
     response_body: &str,
     provider_type: &str,
@@ -930,14 +939,14 @@ pub(super) fn handle_openai_error(
         | StatusCode::TOO_MANY_REQUESTS => ErrorDetails::InferenceClient {
             status_code: Some(response_code),
             message: response_body.to_string(),
-            raw_request: None,
+            raw_request: Some(raw_request.to_string()),
             raw_response: Some(response_body.to_string()),
             provider_type: provider_type.to_string(),
         }
         .into(),
         _ => ErrorDetails::InferenceServer {
             message: response_body.to_string(),
-            raw_request: None,
+            raw_request: Some(raw_request.to_string()),
             raw_response: Some(response_body.to_string()),
             provider_type: provider_type.to_string(),
         }
@@ -2256,6 +2265,7 @@ mod tests {
 
         // Test unauthorized error
         let unauthorized = handle_openai_error(
+            "Request Body",
             StatusCode::UNAUTHORIZED,
             "Unauthorized access",
             PROVIDER_TYPE,
@@ -2273,13 +2283,17 @@ mod tests {
             assert_eq!(message, "Unauthorized access");
             assert_eq!(*status_code, Some(StatusCode::UNAUTHORIZED));
             assert_eq!(provider, PROVIDER_TYPE);
-            assert_eq!(*raw_request, None);
+            assert_eq!(*raw_request, Some("Request Body".to_string()));
             assert_eq!(*raw_response, Some("Unauthorized access".to_string()));
         }
 
         // Test forbidden error
-        let forbidden =
-            handle_openai_error(StatusCode::FORBIDDEN, "Forbidden access", PROVIDER_TYPE);
+        let forbidden = handle_openai_error(
+            "Request Body",
+            StatusCode::FORBIDDEN,
+            "Forbidden access",
+            PROVIDER_TYPE,
+        );
         let details = forbidden.get_details();
         assert!(matches!(details, ErrorDetails::InferenceClient { .. }));
         if let ErrorDetails::InferenceClient {
@@ -2293,12 +2307,13 @@ mod tests {
             assert_eq!(message, "Forbidden access");
             assert_eq!(*status_code, Some(StatusCode::FORBIDDEN));
             assert_eq!(provider, PROVIDER_TYPE);
-            assert_eq!(*raw_request, None);
+            assert_eq!(*raw_request, Some("Request Body".to_string()));
             assert_eq!(*raw_response, Some("Forbidden access".to_string()));
         }
 
         // Test rate limit error
         let rate_limit = handle_openai_error(
+            "Request Body",
             StatusCode::TOO_MANY_REQUESTS,
             "Rate limit exceeded",
             PROVIDER_TYPE,
@@ -2316,12 +2331,13 @@ mod tests {
             assert_eq!(message, "Rate limit exceeded");
             assert_eq!(*status_code, Some(StatusCode::TOO_MANY_REQUESTS));
             assert_eq!(provider, PROVIDER_TYPE);
-            assert_eq!(*raw_request, None);
+            assert_eq!(*raw_request, Some("Request Body".to_string()));
             assert_eq!(*raw_response, Some("Rate limit exceeded".to_string()));
         }
 
         // Test server error
         let server_error = handle_openai_error(
+            "Request Body",
             StatusCode::INTERNAL_SERVER_ERROR,
             "Server error",
             PROVIDER_TYPE,
@@ -2337,7 +2353,7 @@ mod tests {
         {
             assert_eq!(message, "Server error");
             assert_eq!(provider, PROVIDER_TYPE);
-            assert_eq!(*raw_request, None);
+            assert_eq!(*raw_request, Some("Request Body".to_string()));
             assert_eq!(*raw_response, Some("Server error".to_string()));
         }
     }
