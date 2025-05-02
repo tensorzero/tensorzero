@@ -5,15 +5,13 @@ on:
     types: [created]
   pull_request_target:
     types: [opened, closed, synchronize]
-  push:
-    branches: ["gb/cla"]
 
 jobs:
   CLAAssistant:
     runs-on: ubuntu-latest
     steps:
       - name: "CLA Assistant"
-        if: (github.event.comment.body == 'recheck' || github.event.comment.body == 'I have read the Contributor License Agreement (CLA) and hereby sign the CLA.') || github.event_name == 'pull_request_target' || github.event_name == 'push'
+        if: (github.event.comment.body == 'recheck' || github.event.comment.body == 'I have read the Contributor License Agreement (CLA) and hereby sign the CLA.') || github.event_name == 'pull_request_target'
         uses: contributor-assistant/github-action@ca4a40a7d1004f18d9960b404b97e5f30a505a08
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
