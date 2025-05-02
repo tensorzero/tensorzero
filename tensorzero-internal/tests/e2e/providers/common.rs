@@ -1455,6 +1455,17 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
                 "Unexpected error: {res}"
             );
         }
+        "openrouter" => {
+            assert!(
+                res["error"].as_str().unwrap().contains("400 Bad Request")
+                    || res["error"].as_str().unwrap().contains("Invalid API Key")
+                    || res["error"]
+                        .as_str()
+                        .unwrap()
+                        .contains("No auth credentials found"),
+                "Unexpected error: {res}"
+            );
+        }
         "sglang" | "tgi" => {
             assert!(
                 res["error"]

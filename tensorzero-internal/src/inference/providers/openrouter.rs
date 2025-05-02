@@ -3322,7 +3322,7 @@ mod tests {
     fn test_openrouter_api_base() {
         assert_eq!(
             OPENROUTER_DEFAULT_BASE_URL.as_str(),
-            "https://openrouter.ai/api/v1/"
+            "https://openrouter.ai/api/v1"
         );
     }
 
