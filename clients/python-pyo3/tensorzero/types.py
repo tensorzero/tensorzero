@@ -1,10 +1,9 @@
-import typing as t
 import warnings
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
 from json import JSONEncoder
-from typing import Any, Dict, List, Literal, Optional, Union
+from typing import Any, Dict, List, Literal, Optional, Union, cast
 from uuid import UUID
 
 import httpx
@@ -175,7 +174,7 @@ class Message(TypedDict):
     content: Any
 
 
-System = str | Dict[str, Any]
+System = Union[str, Dict[str, Any]]
 
 
 class InferenceInput(TypedDict):
@@ -200,7 +199,7 @@ def parse_inference_response(data: Dict[str, Any]) -> InferenceResponse:
             finish_reason=finish_reason_enum,
         )
     elif "output" in data and isinstance(data["output"], dict):
-        output = t.cast(Dict[str, Any], data["output"])
+        output = cast(Dict[str, Any], data["output"])
         finish_reason = data.get("finish_reason")
         finish_reason_enum = FinishReason(finish_reason) if finish_reason else None
 
@@ -292,13 +291,13 @@ InferenceChunk = Union[ChatChunk, JsonChunk]
 class VariantExtraBody(TypedDict):
     variant_name: str
     pointer: str
-    value: t.Any
+    value: Any
 
 
 class ProviderExtraBody(TypedDict):
     model_provider_name: str
     pointer: str
-    value: t.Any
+    value: Any
 
 
 ExtraBody = Union[VariantExtraBody, ProviderExtraBody]
@@ -367,7 +366,7 @@ class TensorZeroInternalError(BaseTensorZeroError):
 
 
 class TensorZeroError(BaseTensorZeroError):
-    def __init__(self, status_code: int, text: t.Optional[str]):
+    def __init__(self, status_code: int, text: Optional[str]):
         self.text = text
         self.status_code = status_code
         self._response = httpx.Response(status_code=status_code, text=text)
