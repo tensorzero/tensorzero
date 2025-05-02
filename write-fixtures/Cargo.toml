@@ -16,6 +16,7 @@ tokio = { workspace = true }
 futures = { workspace = true }
 tqdm = "0.7.0"
 uuid.workspace = true
+console-subscriber = "0.4.1"
 
 [lints]
 workspace = true

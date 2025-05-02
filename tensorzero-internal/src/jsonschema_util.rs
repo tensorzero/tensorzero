@@ -107,7 +107,7 @@ impl StaticJSONSchema {
 
     pub fn validate(&self, instance: &serde_json::Value) -> Result<(), Error> {
         self.compiled.validate(instance).map_err(|e| {
-            Error::new(ErrorDetails::JsonSchemaValidation {
+            Error::new( ErrorDetails::JsonSchemaValidation {
                 messages: vec![e.to_string()],
                 data: Box::new(instance.clone()),
                 schema: Box::new(self.value.clone()),
@@ -172,6 +172,7 @@ impl DynamicJSONSchema {
         self.compiled_schema
             .get_or_try_init(|| {
                 let schema = self.value.clone();
+                eprintln!("Compiling schema: {}", schema);
                 async {
                     // Use a blocking task, since `jsonschema::validator_for` is cpu-bound
                     tokio::task::spawn_blocking(move || {

@@ -472,6 +472,9 @@ async fn write_production(
         FORMAT JSONEachRow\n\
         {rows_json}"
     );
+    
+    //println!("Query: {}", query);
+    //std::process::exit(0);
 
     let response = client
         .post(database_url.expose_secret())

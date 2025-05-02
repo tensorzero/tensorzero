@@ -49,7 +49,7 @@ struct Args {
 }
 
 async fn run_inference(client: &Client, args: &Args) {
-    let input = args.input.clone();
+    let input = &args.input;
 
     let res: InferenceOutput = client
         .inference(ClientInferenceParams {
@@ -106,8 +106,9 @@ async fn run_inference(client: &Client, args: &Args) {
 }
 
 async fn main_inner() {
-    let subscriber = tracing_subscriber::FmtSubscriber::new();
-    tracing::subscriber::set_global_default(subscriber).expect("Failed to initialize tracing");
+    console_subscriber::init();
+    //let subscriber = tracing_subscriber::FmtSubscriber::new();
+   // tracing::subscriber::set_global_default(subscriber).expect("Failed to initialize tracing");
 
     let args = Arc::new(Args::parse());
 
@@ -137,7 +138,8 @@ async fn main_inner() {
     let mut pbar = tqdm::pbar(Some(args.count));
     let max_inflight = args.max_inflight;
     let semaphore = Arc::new(Semaphore::new(max_inflight));
-    for _ in 0..args.count {
+    let handle = tokio::runtime::Handle::current();
+    for i in 0..args.count {
         let args = args.clone();
         let client = client.clone();
         let permit = semaphore.clone().acquire_owned().await.unwrap();
@@ -147,6 +149,9 @@ async fn main_inner() {
             drop(permit);
         });
         pbar.update(1).unwrap();
+        /*if i % 20000 == 0 {
+            tracing::info!("Running tasks: {}", handle.metrics().num_alive_tasks());
+        }*/
     }
     pbar.close().unwrap();
 }
