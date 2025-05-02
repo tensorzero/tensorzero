@@ -1,7 +1,7 @@
 import { PageHeader, SectionLayout } from "~/components/layout/PageLayout";
 import { PageLayout } from "~/components/layout/PageLayout";
 import type { Route } from "./+types/route";
-import { DynamicEvalRunSelector } from "~/components/dynamic_evaluations/DynamicEvalRunSelector";
+import { DynamicEvalRunSelector } from "~/routes/dynamic_evaluations/projects/$project_name/DynamicEvalRunSelector";
 import {
   getDynamicEvaluationRunsByIds,
   getDynamicEvaluationRunStatisticsByMetricName,

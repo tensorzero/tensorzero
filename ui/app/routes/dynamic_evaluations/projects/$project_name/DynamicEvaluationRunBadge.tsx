@@ -3,8 +3,8 @@ import {
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from "../ui/tooltip";
-import { Badge } from "../ui/badge";
+} from "../../../../components/ui/tooltip";
+import { Badge } from "../../../../components/ui/badge";
 import { X } from "lucide-react";
 import { formatDate } from "~/utils/date";
 import type { DynamicEvaluationRun } from "~/utils/clickhouse/dynamic_evaluations";
