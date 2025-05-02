@@ -175,8 +175,8 @@ impl InferenceProvider for FireworksProvider {
             .post(request_url)
             .header("Content-Type", "application/json")
             .bearer_auth(api_key.expose_secret())
-            .headers(headers)
             .json(&request_body)
+            .headers(headers)
             .send()
             .await
             .map_err(|e| {

@@ -7,9 +7,9 @@ import {
   TableRow,
   TableEmptyState,
 } from "~/components/ui/table";
-import { formatDate } from "~/utils/date";
 import type { DatasetCountInfo } from "~/utils/clickhouse/datasets";
 import { Link } from "react-router";
+import { TableItemTime } from "~/components/ui/TableItems";
 
 export default function DatasetTable({
   counts,
@@ -44,7 +44,7 @@ export default function DatasetTable({
                 </TableCell>
                 <TableCell className="max-w-[200px]">{count.count}</TableCell>
                 <TableCell>
-                  {formatDate(new Date(count.last_updated))}
+                  <TableItemTime timestamp={count.last_updated} />
                 </TableCell>
               </TableRow>
             ))

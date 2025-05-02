@@ -252,6 +252,10 @@ pub struct OpenAICompatibleParams {
     tensorzero_episode_id: Option<Uuid>,
     #[serde(rename = "tensorzero::cache_options")]
     tensorzero_cache_options: Option<CacheParamsOptions>,
+    #[serde(default, rename = "tensorzero::extra_body")]
+    tensorzero_extra_body: UnfilteredInferenceExtraBody,
+    #[serde(default, rename = "tensorzero::extra_headers")]
+    tensorzero_extra_headers: UnfilteredInferenceExtraHeaders,
     #[serde(flatten)]
     unknown_fields: HashMap<String, Value>,
 }
@@ -489,9 +493,8 @@ impl Params {
             tags: HashMap::new(),
             // OpenAI compatible endpoint does not support 'include_original_response'
             include_original_response: false,
-            // OpenAI compatible endpoint does not support 'extra_body'
-            extra_body: UnfilteredInferenceExtraBody::default(),
-            extra_headers: UnfilteredInferenceExtraHeaders::default(),
+            extra_body: openai_compatible_params.tensorzero_extra_body,
+            extra_headers: openai_compatible_params.tensorzero_extra_headers,
         })
     }
 }
@@ -1142,6 +1145,8 @@ mod tests {
                 tensorzero_variant_name: None,
                 tensorzero_dryrun: None,
                 tensorzero_cache_options: None,
+                tensorzero_extra_body: UnfilteredInferenceExtraBody::default(),
+                tensorzero_extra_headers: UnfilteredInferenceExtraHeaders::default(),
                 unknown_fields: Default::default(),
                 stream_options: None,
             },
@@ -1606,6 +1611,8 @@ mod tests {
                 tensorzero_dryrun: None,
                 tensorzero_episode_id: None,
                 tensorzero_cache_options: None,
+                tensorzero_extra_body: UnfilteredInferenceExtraBody::default(),
+                tensorzero_extra_headers: UnfilteredInferenceExtraHeaders::default(),
                 unknown_fields: Default::default(),
                 stream_options: None,
             },
@@ -1640,6 +1647,8 @@ mod tests {
                     max_age_s: Some(3600),
                     enabled: CacheEnabledMode::On,
                 }),
+                tensorzero_extra_body: UnfilteredInferenceExtraBody::default(),
+                tensorzero_extra_headers: UnfilteredInferenceExtraHeaders::default(),
                 unknown_fields: Default::default(),
                 stream_options: None,
             },
@@ -1680,6 +1689,8 @@ mod tests {
                     max_age_s: Some(3600),
                     enabled: CacheEnabledMode::On,
                 }),
+                tensorzero_extra_body: UnfilteredInferenceExtraBody::default(),
+                tensorzero_extra_headers: UnfilteredInferenceExtraHeaders::default(),
                 unknown_fields: Default::default(),
                 stream_options: None,
             },
@@ -1720,6 +1731,8 @@ mod tests {
                     max_age_s: None,
                     enabled: CacheEnabledMode::WriteOnly,
                 }),
+                tensorzero_extra_body: UnfilteredInferenceExtraBody::default(),
+                tensorzero_extra_headers: UnfilteredInferenceExtraHeaders::default(),
                 unknown_fields: Default::default(),
                 stream_options: None,
             },
