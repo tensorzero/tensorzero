@@ -6,18 +6,27 @@ on:
   pull_request_target:
     types: [opened, closed, synchronize]
 
+permissions:
+  actions: write
+  contents: write
+  pull-requests: write
+  statuses: write
+
 jobs:
   CLAAssistant:
     runs-on: ubuntu-latest
     steps:
       - name: "CLA Assistant"
-        if: (github.event.comment.body == 'recheck' || github.event.comment.body == 'I have read the Contributor License Agreement (CLA) and hereby sign the CLA.') || github.event_name == 'pull_request_target'
+        if: |
+          github.event.comment.body == 'recheck' ||
+          github.event.comment.body == 'I have read the Contributor License Agreement (CLA) and hereby sign the CLA.' ||
+          github.event_name == 'pull_request_target'
         uses: contributor-assistant/github-action@ca4a40a7d1004f18d9960b404b97e5f30a505a08
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           path-to-signatures: "ci/cla-signatures.json"
           path-to-document: "https://github.com/tensorzero/tensorzero/blob/main/CLA.md"
-          branch: "main"
+          branch: "cla-signatures"
           allowlist: dependabot
           custom-pr-sign-comment: "I have read the Contributor License Agreement (CLA) and hereby sign the CLA."
