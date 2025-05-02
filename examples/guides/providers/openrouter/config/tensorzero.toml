@@ -1,13 +1,13 @@
-[models.claude_sonnet_openrouter]
+[models.gpt_4_1_mini]
 routing = ["openrouter"]
 
-[models.claude_sonnet_openrouter.providers.openrouter]
+[models.gpt_4_1_mini.providers.openrouter]
 type = "openrouter"
-model_name = "anthropic/claude-3.7-sonnet"
+model_name = "openai/gpt-4.1-mini"
 
 [functions.my_function_name]
 type = "chat"
 
 [functions.my_function_name.variants.my_variant_name]
 type = "chat_completion"
-model = "claude_sonnet_openrouter"
+model = "gpt_4_1_mini"
