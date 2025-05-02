@@ -43,6 +43,14 @@ filter = 'binary(e2e) and test(providers::fireworks::)'
 test-group = 'e2e_fireworks'
 
 [[profile.default.overrides]]
+filter = 'binary(e2e) and test(providers::vllm::)'
+slow-timeout = { period = "60s", terminate-after = 2 }
+
+[[profile.default.overrides]]
+filter = 'binary(e2e) and test(providers::sglang::)'
+slow-timeout = { period = "60s", terminate-after = 2 }
+
+[[profile.default.overrides]]
 filter = 'test(test_concurrent_clickhouse_migrations)'
 # the test fails if migrations > 60s so we can kill it at 65
 slow-timeout = { period = "65s" }
