@@ -46,14 +46,15 @@ use super::helpers::{parse_jsonl_batch_file, JsonlBatchFileInfo};
 use super::provider_trait::{TensorZeroEventError, WrappedProvider};
 
 lazy_static! {
-    static ref OPENAI_DEFAULT_BASE_URL: Url = {
+    static ref OPENROUTER_DEFAULT_BASE_URL: Url = {
         #[expect(clippy::expect_used)]
-        Url::parse("https://api.openai.com/v1/").expect("Failed to parse OPENAI_DEFAULT_BASE_URL")
+        Url::parse("https://openrouter.ai/api/v1")
+            .expect("Failed to parse OPENROUTER_DEFAULT_BASE_URL")
     };
 }
 
 fn default_api_key_location() -> CredentialLocation {
-    CredentialLocation::Env("OPENAI_API_KEY".to_string())
+    CredentialLocation::Env("OPENROUTER_API_KEY".to_string())
 }
 
 const PROVIDER_NAME: &str = "OpenAI";
@@ -204,7 +205,11 @@ impl InferenceProvider for OpenAIProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_url = get_chat_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
+        let request_url = get_chat_url(
+            self.api_base
+                .as_ref()
+                .unwrap_or(&OPENROUTER_DEFAULT_BASE_URL),
+        )?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let mut request_body = self.make_body(request)?;
@@ -341,7 +346,11 @@ impl InferenceProvider for OpenAIProvider {
                 ),
             })
         })?;
-        let request_url = get_chat_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
+        let request_url = get_chat_url(
+            self.api_base
+                .as_ref()
+                .unwrap_or(&OPENROUTER_DEFAULT_BASE_URL),
+        )?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let mut request_builder = http_client
@@ -391,7 +400,9 @@ impl InferenceProvider for OpenAIProvider {
     ) -> Result<StartBatchProviderInferenceResponse, Error> {
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let request_url = get_file_url(
-            self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL),
+            self.api_base
+                .as_ref()
+                .unwrap_or(&OPENROUTER_DEFAULT_BASE_URL),
             None,
         )?;
         let mut batch_requests = Vec::with_capacity(requests.len());
@@ -479,8 +490,11 @@ impl InferenceProvider for OpenAIProvider {
         let file_id = response.id;
         let batch_request = OpenAIBatchRequest::new(&file_id);
         let raw_request = serde_json::to_string(&batch_request).map_err(|_| Error::new(ErrorDetails::Serialization { message: "Error serializing OpenAI batch request. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string() }))?;
-        let request_url =
-            get_batch_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
+        let request_url = get_batch_url(
+            self.api_base
+                .as_ref()
+                .unwrap_or(&OPENROUTER_DEFAULT_BASE_URL),
+        )?;
         let mut request_builder = client.post(request_url);
         if let Some(api_key) = api_key {
             request_builder = request_builder.bearer_auth(api_key.expose_secret());
@@ -569,8 +583,11 @@ impl InferenceProvider for OpenAIProvider {
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<PollBatchInferenceResponse, Error> {
         let batch_params = OpenAIBatchParams::from_ref(&batch_request.batch_params)?;
-        let mut request_url =
-            get_batch_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
+        let mut request_url = get_batch_url(
+            self.api_base
+                .as_ref()
+                .unwrap_or(&OPENROUTER_DEFAULT_BASE_URL),
+        )?;
         request_url
             .path_segments_mut()
             .map_err(|_| {
@@ -664,8 +681,11 @@ impl EmbeddingProvider for OpenAIProvider {
     ) -> Result<EmbeddingProviderResponse, Error> {
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let request_body = OpenAIEmbeddingRequest::new(&self.model_name, &request.input);
-        let request_url =
-            get_embedding_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
+        let request_url = get_embedding_url(
+            self.api_base
+                .as_ref()
+                .unwrap_or(&OPENROUTER_DEFAULT_BASE_URL),
+        )?;
         let start_time = Instant::now();
         let mut request_builder = client
             .post(request_url)
@@ -822,7 +842,9 @@ impl OpenAIProvider {
         raw_response: String,
     ) -> Result<ProviderBatchInferenceResponse, Error> {
         let file_url = get_file_url(
-            self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL),
+            self.api_base
+                .as_ref()
+                .unwrap_or(&OPENROUTER_DEFAULT_BASE_URL),
             Some(file_id),
         )?;
         let api_key = self.credentials.get_api_key(credentials)?;
@@ -3281,8 +3303,8 @@ mod tests {
     #[test]
     fn test_openai_api_base() {
         assert_eq!(
-            OPENAI_DEFAULT_BASE_URL.as_str(),
-            "https://api.openai.com/v1/"
+            OPENROUTER_DEFAULT_BASE_URL.as_str(),
+            "https://openrouter.ai/api/v1/"
         );
     }
 
@@ -3468,21 +3490,21 @@ mod tests {
         use url::Url;
 
         // Test Case 1: Base URL without trailing slash
-        let base_url = Url::parse("https://api.openai.com/v1").unwrap();
+        let base_url = Url::parse("https://openrouter.ai/api/v1").unwrap();
         let file_id = Some("file123");
         let result = get_file_url(&base_url, file_id).unwrap();
         assert_eq!(
             result.as_str(),
-            "https://api.openai.com/v1/files/file123/content"
+            "https://openrouter.ai/api/v1/files/file123/content"
         );
 
         // Test Case 2: Base URL with trailing slash
-        let base_url = Url::parse("https://api.openai.com/v1/").unwrap();
+        let base_url = Url::parse("https://openrouter.ai/api/v1/").unwrap();
         let file_id = Some("file456");
         let result = get_file_url(&base_url, file_id).unwrap();
         assert_eq!(
             result.as_str(),
-            "https://api.openai.com/v1/files/file456/content"
+            "https://openrouter.ai/api/v1/files/file456/content"
         );
 
         // Test Case 3: Base URL with custom domain
@@ -3495,14 +3517,14 @@ mod tests {
         );
 
         // Test Case 4: Base URL without trailing slash, no file ID
-        let base_url = Url::parse("https://api.openai.com/v1").unwrap();
+        let base_url = Url::parse("https://openrouter.ai/api/v1").unwrap();
         let result = get_file_url(&base_url, None).unwrap();
-        assert_eq!(result.as_str(), "https://api.openai.com/v1/files");
+        assert_eq!(result.as_str(), "https://openrouter.ai/api/v1/files");
 
         // Test Case 5: Base URL with trailing slash, no file ID
-        let base_url = Url::parse("https://api.openai.com/v1/").unwrap();
+        let base_url = Url::parse("https://openrouter.ai/api/v1/").unwrap();
         let result = get_file_url(&base_url, None).unwrap();
-        assert_eq!(result.as_str(), "https://api.openai.com/v1/files");
+        assert_eq!(result.as_str(), "https://openrouter.ai/api/v1/files");
 
         // Test Case 6: Custom domain base URL, no file ID
         let base_url = Url::parse("https://custom-openai.example.com").unwrap();
