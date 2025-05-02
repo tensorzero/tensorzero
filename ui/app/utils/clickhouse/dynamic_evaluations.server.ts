@@ -415,7 +415,8 @@ export async function getDynamicEvaluationRunByDatapointName(
           any(tags) as tags
         FROM episodes
         GROUP BY group_key
-      )
+        LIMIT {page_size:UInt64}
+        OFFSET {offset:UInt64}
     )
     SELECT
       uint_to_uuid(e.episode_id_uint) AS episode_id,
@@ -455,12 +456,15 @@ export async function getDynamicEvaluationRunByDatapointName(
       e.tags,
       e.task_name
   `;
+  // TODO: this query is WRONG. I need to add a way to group the final result by the group_key
+  // and handle this properly.
   const result = await clickhouseClient.query({
     query,
     format: "JSONEachRow",
     query_params: { page_size, offset, runIds },
   });
   const rows = await result.json<DynamicEvaluationRunEpisodeWithFeedback[]>();
+  console.log(rows);
   return rows.map((row) =>
     dynamicEvaluationRunEpisodeWithFeedbackSchema.parse(row),
   );

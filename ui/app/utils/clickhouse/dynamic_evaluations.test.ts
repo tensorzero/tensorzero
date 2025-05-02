@@ -4,6 +4,7 @@ import {
   countDynamicEvaluationRunEpisodes,
   countDynamicEvaluationRuns as countDynamicEvaluationRuns,
   getDynamicEvaluationProjects,
+  getDynamicEvaluationRunByDatapointName,
   getDynamicEvaluationRunEpisodesByRunIdWithFeedback,
   getDynamicEvaluationRuns,
   getDynamicEvaluationRunsByIds,
@@ -350,6 +351,26 @@ describe("searchDynamicEvaluationRuns", () => {
       "01968d04-142c-7e53-8ea7-3a3255b518dc",
     );
     expect(runs).toMatchObject([
+      {
+        id: "01968d04-142c-7e53-8ea7-3a3255b518dc",
+        name: "gpt-4.1-nano",
+      },
+    ]);
+  });
+});
+
+describe("getDynamicEvaluationRunByDatapointName", () => {
+  test("should return correct run by datapoint name", async () => {
+    const runs = await getDynamicEvaluationRunByDatapointName(
+      ["01968d04-142c-7e53-8ea7-3a3255b518dc"],
+      10,
+      0,
+    );
+    expect(runs).toMatchObject([
+      {
+        id: "01968d04-142c-7e53-8ea7-3a3255b518dc",
+        name: "gpt-4.1-nano",
+      },
       {
         id: "01968d04-142c-7e53-8ea7-3a3255b518dc",
         name: "gpt-4.1-nano",
