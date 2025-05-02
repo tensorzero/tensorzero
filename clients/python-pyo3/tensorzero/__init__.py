@@ -23,6 +23,7 @@ from .types import (
     JsonInferenceResponse,
     Message,
     RawText,
+    System,
     TensorZeroError,
     TensorZeroInternalError,
     Text,
@@ -40,8 +41,8 @@ __all__ = [
     "BaseTensorZeroGateway",
     "ChatInferenceResponse",
     "ContentBlock",
-    "DynamicEvaluationRunResponse",
     "DynamicEvaluationRunEpisodeResponse",
+    "DynamicEvaluationRunResponse",
     "ExtraBody",
     "FeedbackResponse",
     "FinishReason",
@@ -53,7 +54,9 @@ __all__ = [
     "JsonInferenceOutput",
     "JsonInferenceResponse",
     "Message",
+    "patch_openai_client",
     "RawText",
+    "System",
     "TensorZeroError",
     "TensorZeroGateway",
     "TensorZeroInternalError",
@@ -64,7 +67,6 @@ __all__ = [
     "ToolCallChunk",
     "ToolResult",
     "Usage",
-    "patch_openai_client",
 ]
 
 T = t.TypeVar("T", bound=t.Any)
