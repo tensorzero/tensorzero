@@ -4,7 +4,7 @@ import {
   countDynamicEvaluationRunEpisodes,
   countDynamicEvaluationRuns as countDynamicEvaluationRuns,
   getDynamicEvaluationProjects,
-  getDynamicEvaluationRunByDatapointName,
+  getDynamicEvaluationRunEpisodesByTaskName,
   getDynamicEvaluationRunEpisodesByRunIdWithFeedback,
   getDynamicEvaluationRuns,
   getDynamicEvaluationRunsByIds,
@@ -361,7 +361,7 @@ describe("searchDynamicEvaluationRuns", () => {
 
 describe("getDynamicEvaluationRunByDatapointName", () => {
   test("should return correct run by datapoint name", async () => {
-    const runs = await getDynamicEvaluationRunByDatapointName(
+    const runs = await getDynamicEvaluationRunEpisodesByTaskName(
       ["01968d04-142c-7e53-8ea7-3a3255b518dc"],
       2,
       0,

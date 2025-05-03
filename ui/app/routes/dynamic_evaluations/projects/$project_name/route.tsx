@@ -3,6 +3,7 @@ import { PageLayout } from "~/components/layout/PageLayout";
 import type { Route } from "./+types/route";
 import { DynamicEvalRunSelector } from "~/routes/dynamic_evaluations/projects/$project_name/DynamicEvalRunSelector";
 import {
+  getDynamicEvaluationRunEpisodesByTaskName,
   getDynamicEvaluationRunsByIds,
   getDynamicEvaluationRunStatisticsByMetricName,
 } from "~/utils/clickhouse/dynamic_evaluations.server";
@@ -13,8 +14,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const projectName = params.project_name;
   const url = new URL(request.url);
   const searchParams = new URLSearchParams(url.search);
-  //   const offset = parseInt(searchParams.get("offset") || "0");
-  //   const pageSize = parseInt(searchParams.get("pageSize") || "15");
+  const pageSize = parseInt(searchParams.get("pageSize") || "15");
+  const offset = parseInt(searchParams.get("offset") || "0");
   const runIds = searchParams.get("run_ids")?.split(",") || [];
 
   const runStats: Record<string, DynamicEvaluationRunStatisticsByMetricName[]> =
@@ -29,10 +30,16 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     // Create promise for fetching run info
     const runInfosPromise = getDynamicEvaluationRunsByIds(runIds, projectName);
 
+    const episodeInfoPromise = getDynamicEvaluationRunEpisodesByTaskName(
+      runIds,
+      pageSize,
+      offset,
+    );
     // Run all promises concurrently
-    const [statsResults, runInfos] = await Promise.all([
+    const [statsResults, runInfos, episodeInfo] = await Promise.all([
       Promise.all(statsPromises), // Wait for all stats promises
       runInfosPromise, // Wait for run info promise
+      episodeInfoPromise,
     ]);
 
     // Construct the runStats object from the results
@@ -44,6 +51,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       projectName,
       runInfos,
       runStats, // Return runStats
+      episodeInfo,
     };
   } else {
     // Handle the case where there are no runIds
@@ -51,6 +59,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       projectName,
       runInfos: [],
       runStats: {}, // Return empty runStats
+      episodeInfo: [],
     };
   }
 }
@@ -58,7 +67,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 export default function DynamicEvaluationProjectPage({
   loaderData,
 }: Route.ComponentProps) {
-  const { projectName, runInfos, runStats } = loaderData;
+  const { projectName, runInfos, runStats, episodeInfo } = loaderData;
   const selectedRunIds = runInfos.map((run) => run.id);
 
   return (

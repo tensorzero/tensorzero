@@ -366,7 +366,7 @@ type DynamicEvaluationRunEpisodeWithFeedbackAndGroupKey =
  *
  * The returned list is sorted by the timestamp of the episode.
  */
-export async function getDynamicEvaluationRunByDatapointName(
+export async function getDynamicEvaluationRunEpisodesByTaskName(
   runIds: string[],
   page_size: number,
   offset: number,
