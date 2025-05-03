@@ -392,10 +392,11 @@ export async function getDynamicEvaluationRunEpisodesByTaskName(
       -- 2) pick out the distinct group_keys, page them
       group_keys AS (
         SELECT
-          ifNull(task_name, concat('NULL_EPISODE_', toString(episode_id_uint))) AS group_key
+          ifNull(task_name, concat('NULL_EPISODE_', toString(episode_id_uint))) AS group_key,
+          max(updated_at) as last_updated
         FROM episodes_raw
         GROUP BY group_key
-        ORDER BY group_key
+        ORDER BY last_updated DESC
         LIMIT {page_size:UInt64}
         OFFSET {offset:UInt64}
       ),
@@ -442,7 +443,7 @@ export async function getDynamicEvaluationRunEpisodesByTaskName(
       )
 
     SELECT
-      e.group_key,
+      e.group_key as group_key,
       uint_to_uuid(e.episode_id_uint) AS episode_id,
       formatDateTime(min(e.updated_at), '%Y-%m-%dT%H:%i:%SZ') AS timestamp,
       uint_to_uuid(e.run_id_uint) AS run_id,
@@ -459,6 +460,8 @@ export async function getDynamicEvaluationRunEpisodesByTaskName(
         )
       ) AS feedback_values
     FROM episodes AS e
+    -- rejoin the group_keys CTE to get the last_updated timestamp
+    JOIN group_keys AS g USING group_key
     LEFT JOIN feedback_union AS f
       ON f.target_id = uint_to_uuid(e.episode_id_uint)
     GROUP BY
@@ -468,6 +471,7 @@ export async function getDynamicEvaluationRunEpisodesByTaskName(
       e.tags,
       e.task_name
     ORDER BY
+      max(g.last_updated) DESC,
       e.group_key,
       e.episode_id_uint
   `;

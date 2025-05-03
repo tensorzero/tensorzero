@@ -19,7 +19,7 @@ import {
 
 import { EvalRunSelector } from "~/components/evaluations/EvalRunSelector";
 import type {
-  EvaluationRunInfo,
+  EvaluationRunInfo as DynamicEvaluationRun,
   EvaluationStatistics,
   ParsedEvaluationResult,
 } from "~/utils/clickhouse/evaluations";
@@ -46,6 +46,7 @@ import {
 } from "~/hooks/evaluations/ColorAssigner";
 import MetricValue, { isCutoffFailed } from "~/components/metric/MetricValue";
 import EvaluationFeedbackEditor from "~/components/evaluations/EvaluationFeedbackEditor";
+import type { DynamicEvaluationRunEpisodeWithFeedback } from "~/utils/clickhouse/dynamic_evaluations";
 
 // Enhanced TruncatedText component that can handle complex structures
 const TruncatedContent = ({
@@ -235,9 +236,9 @@ const VariantCircle = ({
   );
 };
 
-interface EvaluationTableProps {
-  selected_evaluation_run_infos: EvaluationRunInfo[];
-  evaluation_results: ParsedEvaluationResult[];
+interface DynamicEvaluationProjectResultsTableProps {
+  selected_run_infos: DynamicEvaluationRun[];
+  evaluation_results: DynamicEvaluationRunEpisodeWithFeedback[][];
   evaluation_statistics: EvaluationStatistics[];
   evaluator_names: string[];
   evaluation_name: string;
@@ -250,13 +251,13 @@ interface MetricValueInfo {
 }
 
 export function DynamicEvaluationProjectResultsTable({
-  selected_evaluation_run_infos,
+  selected_run_infos,
   evaluation_results,
   evaluation_statistics,
   evaluator_names,
   evaluation_name,
-}: EvaluationTableProps) {
-  const selectedRunIds = selected_evaluation_run_infos.map(
+}: DynamicEvaluationProjectResultsTableProps) {
+  const selectedRunIds = selected_run_infos.map(
     (info) => info.evaluation_run_id,
   );
 
