@@ -11,7 +11,8 @@ import {
   SnippetMessage,
 } from "~/components/layout/SnippetLayout";
 import { TextMessage } from "~/components/layout/SnippetContent";
-import Output from "~/components/inference/NewOutput";
+import { parseInferenceOutput } from "~/utils/clickhouse/inference";
+import NewOutput from "~/components/inference/NewOutput";
 
 interface FeedbackTableModalProps {
   feedback: FeedbackRow;
@@ -47,12 +48,7 @@ export function DemonstrationModal({ feedback }: FeedbackTableModalProps) {
   }
 
   // Try to parse the demonstration value as JSON for the parsed property
-  let parsedValue = null;
-  try {
-    parsedValue = JSON.parse(feedback.value);
-  } catch {
-    // If parsing fails, keep parsedValue as null
-  }
+  const parsedOutput = parseInferenceOutput(feedback.value);
 
   return (
     <PageLayout>
@@ -60,12 +56,7 @@ export function DemonstrationModal({ feedback }: FeedbackTableModalProps) {
 
       <SectionsGroup>
         <SectionLayout>
-          <Output
-            output={{
-              raw: feedback.value,
-              parsed: parsedValue,
-            }}
-          />
+          <NewOutput output={parsedOutput} />
         </SectionLayout>
       </SectionsGroup>
     </PageLayout>
