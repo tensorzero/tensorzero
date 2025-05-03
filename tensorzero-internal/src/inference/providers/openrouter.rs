@@ -57,13 +57,6 @@ fn default_api_key_location() -> CredentialLocation {
     CredentialLocation::Env("OPENROUTER_API_KEY".to_string())
 }
 
-/// Adds TensorZero-specific headers to OpenRouter requests
-fn add_openrouter_headers(builder: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
-    builder
-        .header("X-Title", "TensorZero")
-        .header("HTTP-Referer", "https://www.tensorzero.com/")
-}
-
 const PROVIDER_NAME: &str = "OpenRouter";
 const PROVIDER_TYPE: &str = "openrouter";
 
@@ -212,6 +205,7 @@ impl InferenceProvider for OpenRouterProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
+        println!("Starting inference");
         let request_url = get_chat_url(
             self.api_base
                 .as_ref()
@@ -233,7 +227,6 @@ impl InferenceProvider for OpenRouterProvider {
         if let Some(api_key) = api_key {
             request_builder = request_builder.bearer_auth(api_key.expose_secret());
         }
-        request_builder = add_openrouter_headers(request_builder);
 
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
@@ -247,6 +240,8 @@ impl InferenceProvider for OpenRouterProvider {
         let res = request_builder
             .body(raw_request.clone())
             .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .header("X-Title", "TensorZero")
+            .header("HTTP-Referer", "https://www.tensorzero.com/")
             .headers(headers)
             .send()
             .await
@@ -369,9 +364,11 @@ impl InferenceProvider for OpenRouterProvider {
         if let Some(api_key) = api_key {
             request_builder = request_builder.bearer_auth(api_key.expose_secret());
         }
-        request_builder = add_openrouter_headers(request_builder);
+
         let event_source = request_builder
             .json(&request_body)
+            .header("X-Title", "TensorZero")
+            .header("HTTP-Referer", "https://www.tensorzero.com/")
             // Important - the 'headers' call should come just before we sent the request with '.eventsource()',
             // so that users can override any of the headers that we set.
             .headers(headers)
@@ -467,20 +464,25 @@ impl InferenceProvider for OpenRouterProvider {
         if let Some(api_key) = api_key {
             request_builder = request_builder.bearer_auth(api_key.expose_secret());
         }
-        request_builder = add_openrouter_headers(request_builder);
         // Actually upload the file to OpenRouter
-        let res = request_builder.multipart(form).send().await.map_err(|e| {
-            Error::new(ErrorDetails::InferenceClient {
-                status_code: e.status(),
-                message: format!(
-                    "Error sending request to OpenRouter: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-                provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: None,
-                raw_response: None,
-            })
-        })?;
+        let res = request_builder
+            .header("X-Title", "TensorZero")
+            .header("HTTP-Referer", "https://www.tensorzero.com/")
+            .multipart(form)
+            .send()
+            .await
+            .map_err(|e| {
+                Error::new(ErrorDetails::InferenceClient {
+                    status_code: e.status(),
+                    message: format!(
+                        "Error sending request to OpenRouter: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: None,
+                    raw_response: None,
+                })
+            })?;
         let text = res.text().await.map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
                 message: format!(
@@ -512,9 +514,10 @@ impl InferenceProvider for OpenRouterProvider {
         if let Some(api_key) = api_key {
             request_builder = request_builder.bearer_auth(api_key.expose_secret());
         }
-        request_builder = add_openrouter_headers(request_builder);
         // Now let's actually start the batch inference
         let res = request_builder
+            .header("X-Title", "TensorZero")
+            .header("HTTP-Referer", "https://www.tensorzero.com/")
             .json(&batch_request)
             .send()
             .await
@@ -614,11 +617,12 @@ impl InferenceProvider for OpenRouterProvider {
         let raw_request = request_url.to_string();
         let mut request_builder = http_client
             .get(request_url)
-            .header("Content-Type", "application/json");
+            .header("Content-Type", "application/json")
+            .header("X-Title", "TensorZero")
+            .header("HTTP-Referer", "https://www.tensorzero.com/");
         if let Some(api_key) = api_key {
             request_builder = request_builder.bearer_auth(api_key.expose_secret());
         }
-        request_builder = add_openrouter_headers(request_builder);
         let res = request_builder.send().await.map_err(|e| {
             Error::new(ErrorDetails::InferenceClient {
                 status_code: e.status(),
@@ -704,7 +708,9 @@ impl EmbeddingProvider for OpenRouterProvider {
         let start_time = Instant::now();
         let mut request_builder = client
             .post(request_url)
-            .header("Content-Type", "application/json");
+            .header("Content-Type", "application/json")
+            .header("X-Title", "TensorZero")
+            .header("HTTP-Referer", "https://www.tensorzero.com/");
         if let Some(api_key) = api_key {
             request_builder = request_builder.bearer_auth(api_key.expose_secret());
         }
@@ -3641,28 +3647,6 @@ mod tests {
         assert_eq!(
             serialized,
             r#"{"content":[{"type":"text","text":"My first message"},{"type":"text","text":"My second message"}]}"#
-        );
-    }
-
-    #[test]
-    fn test_add_openrouter_headers() {
-        let client = reqwest::Client::new();
-        let builder = client.post("http://example.com");
-        let builder = super::add_openrouter_headers(builder);
-
-        // Extract the headers for inspection
-        let request = builder.build().unwrap();
-        let headers = request.headers();
-
-        assert_eq!(
-            headers.get("X-Title").map(|v| v.to_str().unwrap()),
-            Some("TensorZero"),
-            "X-Title header should be present and set to 'TensorZero'"
-        );
-        assert_eq!(
-            headers.get("HTTP-Referer").map(|v| v.to_str().unwrap()),
-            Some("https://www.tensorzero.com/"),
-            "HTTP-Referer header should be present and set to 'https://www.tensorzero.com/'"
         );
     }
 }
