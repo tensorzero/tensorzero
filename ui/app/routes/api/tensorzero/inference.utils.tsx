@@ -6,7 +6,7 @@ import type {
   JsonInferenceOutput,
 } from "~/utils/clickhouse/common";
 import type { InferenceUsage } from "~/utils/clickhouse/helpers";
-import type { ParsedInferenceRow } from "~/utils/clickhouse/inference";
+import type { ParsedInferenceRow } from "~/utils/clickhouse/inference.server";
 import type { ParsedDatasetRow } from "~/utils/clickhouse/datasets";
 import type { InferenceResponse } from "~/utils/tensorzero";
 import { resolvedInputToTensorZeroInput } from "./inference";

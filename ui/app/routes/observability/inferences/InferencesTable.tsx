@@ -1,4 +1,4 @@
-import type { InferenceByIdRow } from "~/utils/clickhouse/inference";
+import type { InferenceByIdRow } from "~/utils/clickhouse/inference.server";
 import {
   Table,
   TableBody,

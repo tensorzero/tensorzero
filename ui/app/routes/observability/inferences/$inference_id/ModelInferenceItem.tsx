@@ -1,4 +1,4 @@
-import type { ParsedModelInferenceRow } from "~/utils/clickhouse/inference";
+import type { ParsedModelInferenceRow } from "~/utils/clickhouse/inference.server";
 import InputSnippet from "~/components/inference/InputSnippet";
 import {
   BasicInfoLayout,

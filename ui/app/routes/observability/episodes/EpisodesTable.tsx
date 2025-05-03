@@ -8,7 +8,7 @@ import {
   TableRow,
   TableEmptyState,
 } from "~/components/ui/table";
-import type { EpisodeByIdRow } from "~/utils/clickhouse/inference";
+import type { EpisodeByIdRow } from "~/utils/clickhouse/inference.server";
 
 export default function EpisodesTable({
   episodes,

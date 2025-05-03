@@ -1,7 +1,7 @@
 import {
   queryInferenceById,
   queryModelInferencesByInferenceId,
-} from "~/utils/clickhouse/inference";
+} from "~/utils/clickhouse/inference.server";
 import {
   pollForFeedbackItem,
   queryDemonstrationFeedbackByInferenceId,

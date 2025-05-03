@@ -2,7 +2,7 @@ import {
   countInferencesForEpisode,
   queryInferenceTableBoundsByEpisodeId,
   queryInferenceTableByEpisodeId,
-} from "~/utils/clickhouse/inference";
+} from "~/utils/clickhouse/inference.server";
 import {
   countFeedbackByTargetId,
   pollForFeedbackItem,

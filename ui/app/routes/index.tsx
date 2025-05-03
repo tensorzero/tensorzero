@@ -17,7 +17,7 @@ import {
 import {
   countInferencesByFunction,
   countEpisodes,
-} from "~/utils/clickhouse/inference";
+} from "~/utils/clickhouse/inference.server";
 import { getConfig } from "~/utils/config/index.server";
 import { getDatasetCounts } from "~/utils/clickhouse/datasets.server";
 import { countTotalEvaluationRuns } from "~/utils/clickhouse/evaluations.server";

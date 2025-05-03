@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { FeedbackRow } from "./feedback";
-import type { ParsedModelInferenceRow } from "./inference";
+import type { ParsedModelInferenceRow } from "./inference.server";
 
 // Since demonstrations and comments do not have a metric_name, we need to
 // infer the metric name from the structure of the feedback row

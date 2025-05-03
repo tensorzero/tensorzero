@@ -8,7 +8,7 @@ import {
 import { Loader2, ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Separator } from "~/components/ui/separator";
-import type { ParsedInferenceRow } from "~/utils/clickhouse/inference";
+import type { ParsedInferenceRow } from "~/utils/clickhouse/inference.server";
 import type { ParsedDatasetRow } from "~/utils/clickhouse/datasets";
 import type { InferenceUsage } from "~/utils/clickhouse/helpers";
 import NewOutput from "~/components/inference/NewOutput";
