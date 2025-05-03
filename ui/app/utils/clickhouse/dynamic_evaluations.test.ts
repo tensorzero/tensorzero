@@ -363,18 +363,42 @@ describe("getDynamicEvaluationRunByDatapointName", () => {
   test("should return correct run by datapoint name", async () => {
     const runs = await getDynamicEvaluationRunByDatapointName(
       ["01968d04-142c-7e53-8ea7-3a3255b518dc"],
-      10,
+      2,
       0,
     );
     expect(runs).toMatchObject([
-      {
-        id: "01968d04-142c-7e53-8ea7-3a3255b518dc",
-        name: "gpt-4.1-nano",
-      },
-      {
-        id: "01968d04-142c-7e53-8ea7-3a3255b518dc",
-        name: "gpt-4.1-nano",
-      },
+      [
+        {
+          episode_id: "0aaedb76-b438-71c1-ac32-f9665c158906",
+          feedback_metric_names: ["elapsed_ms", "solved"],
+          feedback_values: ["41195.914", "true"],
+          run_id: "01968d04-142c-7e53-8ea7-3a3255b518dc",
+          tags: {
+            baz: "bat",
+            foo: "bar",
+            "tensorzero::dynamic_evaluation_run_id":
+              "01968d04-142c-7e53-8ea7-3a3255b518dc",
+          },
+          task_name: null,
+          timestamp: "2025-05-01T18:02:56Z",
+        },
+      ],
+      [
+        {
+          episode_id: "0aaedb76-b43b-78ef-a923-7910b66a0cd3",
+          feedback_metric_names: ["elapsed_ms", "solved"],
+          feedback_values: ["115427.766", "false"],
+          run_id: "01968d04-142c-7e53-8ea7-3a3255b518dc",
+          tags: {
+            baz: "bat",
+            foo: "bar",
+            "tensorzero::dynamic_evaluation_run_id":
+              "01968d04-142c-7e53-8ea7-3a3255b518dc",
+          },
+          task_name: null,
+          timestamp: "2025-05-01T18:02:56Z",
+        },
+      ],
     ]);
   });
 });

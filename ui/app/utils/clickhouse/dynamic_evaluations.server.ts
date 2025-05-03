@@ -354,118 +354,141 @@ export async function searchDynamicEvaluationRuns(
   return rows.map((row) => dynamicEvaluationRunSchema.parse(row));
 }
 
+type DynamicEvaluationRunEpisodeWithFeedbackAndGroupKey =
+  DynamicEvaluationRunEpisodeWithFeedback & {
+    group_key: string;
+  };
+
+/**
+ * Returns a list of episodes that were part of some set of dynamic evluation runs,
+ * grouped into sublists that all have the same task_name.
+ * If the task_name is NULL, the episode is grouped into a sublist by itself.
+ *
+ * The returned list is sorted by the timestamp of the episode.
+ */
 export async function getDynamicEvaluationRunByDatapointName(
   runIds: string[],
   page_size: number,
   offset: number,
-): Promise<DynamicEvaluationRun[]> {
+): Promise<DynamicEvaluationRunEpisodeWithFeedback[][]> {
   const query = `
     WITH
-      episodes AS (
+      -- 1) pull all episodes for these runIds
+      episodes_raw AS (
         SELECT
           episode_id_uint,
           run_id_uint,
           tags,
           updated_at,
-          datapoint_name as task_name
+          datapoint_name AS task_name
         FROM DynamicEvaluationRunEpisodeByRunId
         WHERE run_id_uint IN (
-          SELECT arrayJoin(arrayMap(x -> toUInt128(toUUID(x)), {runIds:Array(String)}))
+          SELECT arrayJoin(
+            arrayMap(x -> toUInt128(toUUID(x)), {runIds:Array(String)})
+          )
         )
       ),
-      feedback_union AS (
+
+      -- 2) pick out the distinct group_keys, page them
+      group_keys AS (
         SELECT
-          target_id,
-          metric_name,
-          argMax(toString(value), toUInt128(id)) AS value
+          ifNull(task_name, concat('NULL_EPISODE_', toString(episode_id_uint))) AS group_key
+        FROM episodes_raw
+        GROUP BY group_key
+        ORDER BY group_key
+        LIMIT {page_size:UInt64}
+        OFFSET {offset:UInt64}
+      ),
+
+      -- 3) only keep episodes whose group_key made the cut
+      episodes AS (
+        SELECT
+          *,
+          ifNull(task_name, concat('NULL_EPISODE_', toString(episode_id_uint))) AS group_key
+        FROM episodes_raw
+        WHERE ifNull(task_name, concat('NULL_EPISODE_', toString(episode_id_uint)))
+          IN (SELECT group_key FROM group_keys)
+      ),
+
+      -- 4) gather feedback just for those episodes
+      feedback_union AS (
+        SELECT target_id, metric_name,
+               argMax(toString(value), toUInt128(id)) AS value
         FROM FloatMetricFeedbackByTargetId
         WHERE target_id IN (
           SELECT uint_to_uuid(episode_id_uint) FROM episodes
         )
         GROUP BY target_id, metric_name
+
         UNION ALL
-        SELECT
-          target_id,
-          metric_name,
-          argMax(toString(value), toUInt128(id)) AS value
+
+        SELECT target_id, metric_name,
+               argMax(toString(value), toUInt128(id)) AS value
         FROM BooleanMetricFeedbackByTargetId
         WHERE target_id IN (
           SELECT uint_to_uuid(episode_id_uint) FROM episodes
         )
         GROUP BY target_id, metric_name
+
         UNION ALL
-        SELECT
-          target_id,
-          'comment' AS metric_name,
-          value
+
+        SELECT target_id,
+               'comment' AS metric_name,
+               value
         FROM CommentFeedbackByTargetId
         WHERE target_id IN (
           SELECT uint_to_uuid(episode_id_uint) FROM episodes
         )
-      ),
-    grouped AS (
-      SELECT
-          -- If task_name is NULL, group by episode_id_uint to treat each as singleton
-          -- Else use the task_name
-          ifNull(task_name, concat('NULL_EPISODE_', toString(episode_id_uint))) as group_key,
-          any(task_name) as task_name,
-          max(updated_at) as max_updated_at,
-          any(episode_id_uint) as episode_id_uint,
-          any(run_id_uint) as run_id_uint,
-          any(tags) as tags
-        FROM episodes
-        GROUP BY group_key
-        LIMIT {page_size:UInt64}
-        OFFSET {offset:UInt64}
-    )
+      )
+
     SELECT
+      e.group_key,
       uint_to_uuid(e.episode_id_uint) AS episode_id,
-      formatDateTime(
-        min(e.updated_at), -- when did the episode start?
-        '%Y-%m-%dT%H:%i:%SZ'
-      ) AS timestamp,
+      formatDateTime(min(e.updated_at), '%Y-%m-%dT%H:%i:%SZ') AS timestamp,
       uint_to_uuid(e.run_id_uint) AS run_id,
       e.tags,
       e.task_name,
-      -- 1) pack into [(name,value),…]
-      -- 2) arraySort by name
-      -- 3) arrayMap to pull out names
-      arrayMap(
-        t -> t.1,
-        arraySort(
-          (t) -> t.1,
-          groupArrayIf((f.metric_name, f.value), f.metric_name != '')
+      arrayMap(t -> t.1,
+        arraySort((t)->t.1,
+          groupArrayIf((f.metric_name,f.value), f.metric_name!='')
         )
       ) AS feedback_metric_names,
-
-      -- same 3-step, but pull out values
-      arrayMap(
-        t -> t.2,
-        arraySort(
-          (t) -> t.1,
-          groupArrayIf((f.metric_name, f.value), f.metric_name != '')
+      arrayMap(t -> t.2,
+        arraySort((t)->t.1,
+          groupArrayIf((f.metric_name,f.value), f.metric_name!='')
         )
       ) AS feedback_values
-
     FROM episodes AS e
     LEFT JOIN feedback_union AS f
       ON f.target_id = uint_to_uuid(e.episode_id_uint)
     GROUP BY
+      e.group_key,
       e.episode_id_uint,
       e.run_id_uint,
       e.tags,
       e.task_name
+    ORDER BY
+      e.group_key,
+      e.episode_id_uint
   `;
-  // TODO: this query is WRONG. I need to add a way to group the final result by the group_key
-  // and handle this properly.
+
   const result = await clickhouseClient.query({
     query,
     format: "JSONEachRow",
-    query_params: { page_size, offset, runIds },
+    query_params: { runIds, page_size, offset },
   });
-  const rows = await result.json<DynamicEvaluationRunEpisodeWithFeedback[]>();
-  console.log(rows);
-  return rows.map((row) =>
-    dynamicEvaluationRunEpisodeWithFeedbackSchema.parse(row),
-  );
+  const raw =
+    await result.json<DynamicEvaluationRunEpisodeWithFeedbackAndGroupKey>();
+
+  // bucket by group_key, parse each row with your Zod schema
+  const buckets: Record<string, DynamicEvaluationRunEpisodeWithFeedback[]> = {};
+  for (const row of raw) {
+    const { group_key, ...episodeRow } = row;
+    const eps = dynamicEvaluationRunEpisodeWithFeedbackSchema.parse(episodeRow);
+    buckets[group_key] ??= [];
+    buckets[group_key].push(eps);
+  }
+
+  // return an array of episode‑arrays, one per group
+  return Object.values(buckets);
 }
