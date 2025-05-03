@@ -109,7 +109,6 @@ export default function BasicInfo({
       <BasicInfoItem>
         <BasicInfoItemTitle>Usage</BasicInfoItemTitle>
         <BasicInfoItemContent>
-          <div className="flex flex-row gap-1">
             <Chip
               icon={<Input className="text-fg-tertiary" />}
               label={`${inferenceUsage?.input_tokens ?? ""} tok`}
@@ -136,7 +135,6 @@ export default function BasicInfo({
                 }
               />
             )}
-          </div>
         </BasicInfoItemContent>
       </BasicInfoItem>
 

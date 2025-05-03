@@ -30,8 +30,8 @@ const Chip: React.FC<ChipProps> = ({
   iconBg = "bg-none",
 }) => {
   const baseClasses =
-    "inline-flex items-center text-sm text-fg-primary py-1 px-2 gap-1.5 rounded-md whitespace-nowrap overflow-hidden";
-  const hoverClasses = link ? "hover:bg-bg-hover cursor-pointer" : "";
+    "inline-flex text-sm text-fg-primary py-1 px-0 md:px-2 gap-1.5 rounded-md whitespace-nowrap overflow-hidden";
+  const hoverClasses = link ? "md:hover:bg-bg-hover cursor-pointer" : "";
   const fontClasses = font === "mono" ? "font-mono" : "font-sans";
   const combinedClasses = clsx(baseClasses, hoverClasses, fontClasses, className);
 
@@ -39,7 +39,7 @@ const Chip: React.FC<ChipProps> = ({
     <>
       {icon && (
         <div
-          className={clsx(iconBg, "ml-[-2px] flex size-5 items-center justify-center rounded-sm flex-shrink-0")}
+          className={clsx(iconBg, "md:ml-[-2px] flex size-5 items-center justify-center rounded-sm flex-shrink-0")}
         >
           {icon}
         </div>
