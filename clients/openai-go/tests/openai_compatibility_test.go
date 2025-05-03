@@ -276,6 +276,8 @@ func TestStreamingInference(t *testing.T) {
 	// TODO: [test_async_inference_streaming_missing_model]
 	// TODO: [test_async_inference_streaming_malformed_function]
 	// TODO: [test_async_inference_streaming_malformed_input]
+
+	//TODO: [test_async_json_streaming] //line 558
 }
 
 func TestToolCallingInference(t *testing.T) {
@@ -452,35 +454,4 @@ func TestToolCallingInference(t *testing.T) {
 		}
 	})
 
-	// t.Run("it should handle streaming inference with malformed input", func(t *testing.T) {
-	//     episodeID, _ := uuid.NewV7()
-
-	//     messages := []openai.ChatCompletionMessageParamUnion{
-	//         {OfSystem: openai.ChatCompletionSystemMessageParam{
-	//             Content: []map[string]any{
-	//                 {"name_of_assistant": "Alfred Pennyworth"},
-	//             },
-	//         }},
-	//         openai.UserMessage("Hello"),
-	//     }
-
-	//     req := &openai.ChatCompletionNewParams{
-	//         Model:    "tensorzero::function_name::basic_test",
-	//         Messages: messages,
-	//         Stream:   true,
-	//     }
-	//     req.WithExtraFields(map[string]any{
-	//         "tensorzero::episode_id": episodeID.String(),
-	//     })
-
-	//     // Expect an error due to malformed input
-	//     _, err := client.Chat.Completions.NewStreaming(ctx, *req)
-	//     require.Error(t, err, "Expected an error due to malformed input")
-
-	//     // Validate the error
-	//     var apiErr *openai.APIError
-	//     require.ErrorAs(t, err, &apiErr)
-	//     assert.Equal(t, 400, apiErr.StatusCode, "Expected status code 400")
-	//     assert.Contains(t, apiErr.Message, "JSON Schema validation failed", "Expected JSON Schema validation error")
-	// })
 }
