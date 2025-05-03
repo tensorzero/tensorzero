@@ -7,7 +7,7 @@ import {
   TableRow,
   TableEmptyState,
 } from "~/components/ui/table";
-import type { InferenceByIdRow } from "~/utils/clickhouse/inference.server";
+import type { InferenceByIdRow } from "~/utils/clickhouse/inference";
 import { formatDate } from "~/utils/date";
 import { Link } from "react-router";
 import { VariantLink } from "~/components/function/variant/VariantLink";

@@ -1,4 +1,4 @@
-import type { ParsedInferenceRow } from "~/utils/clickhouse/inference.server";
+import type { ParsedInferenceRow } from "~/utils/clickhouse/inference";
 import { useConfig } from "~/context/config";
 import type { InferenceUsage } from "~/utils/clickhouse/helpers";
 import {

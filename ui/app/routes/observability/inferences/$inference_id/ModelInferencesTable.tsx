@@ -9,7 +9,7 @@ import {
   TableEmptyState,
 } from "~/components/ui/table";
 import { Sheet, SheetContent } from "~/components/ui/sheet";
-import type { ParsedModelInferenceRow } from "~/utils/clickhouse/inference.server";
+import type { ParsedModelInferenceRow } from "~/utils/clickhouse/inference";
 import { ModelInferenceItem } from "./ModelInferenceItem";
 
 interface ModelInferencesTableProps {
