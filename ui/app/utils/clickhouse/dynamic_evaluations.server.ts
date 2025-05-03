@@ -354,11 +354,6 @@ export async function searchDynamicEvaluationRuns(
   return rows.map((row) => dynamicEvaluationRunSchema.parse(row));
 }
 
-type DynamicEvaluationRunEpisodeWithFeedbackAndGroupKey =
-  DynamicEvaluationRunEpisodeWithFeedback & {
-    group_key: string;
-  };
-
 /**
  * Returns a list of episodes that were part of some set of dynamic evluation runs,
  * grouped into sublists that all have the same task_name.
@@ -481,8 +476,7 @@ export async function getDynamicEvaluationRunEpisodesByTaskName(
     format: "JSONEachRow",
     query_params: { runIds, page_size, offset },
   });
-  const raw =
-    await result.json<DynamicEvaluationRunEpisodeWithFeedbackAndGroupKey>();
+  const raw = await result.json<DynamicEvaluationRunEpisodeWithFeedback>();
 
   // bucket by group_key, parse each row with your Zod schema
   const buckets: Record<string, DynamicEvaluationRunEpisodeWithFeedback[]> = {};

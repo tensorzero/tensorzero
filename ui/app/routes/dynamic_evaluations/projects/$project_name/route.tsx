@@ -9,6 +9,7 @@ import {
 } from "~/utils/clickhouse/dynamic_evaluations.server";
 import type { DynamicEvaluationRunStatisticsByMetricName } from "~/utils/clickhouse/dynamic_evaluations";
 import { ColorAssignerProvider } from "~/hooks/evaluations/ColorAssigner";
+import { DynamicEvaluationProjectResultsTable } from "./DynamicEvaluationProjectResultsTable";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const projectName = params.project_name;
@@ -83,6 +84,11 @@ export default function DynamicEvaluationProjectPage({
           <DynamicEvalRunSelector
             projectName={projectName}
             selectedRunInfos={runInfos}
+          />
+          <DynamicEvaluationProjectResultsTable
+            selected_run_infos={runInfos}
+            evaluation_results={episodeInfo}
+            evaluation_statistics={runStats}
           />
         </SectionLayout>
       </PageLayout>

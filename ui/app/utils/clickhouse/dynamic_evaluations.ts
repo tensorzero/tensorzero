@@ -24,6 +24,7 @@ export const dynamicEvaluationRunEpisodeWithFeedbackSchema = z
     // The arrays are sorted by the metric name.
     feedback_metric_names: z.array(z.string()),
     feedback_values: z.array(z.string()),
+    group_key: z.string(),
   })
   .strict();
 
