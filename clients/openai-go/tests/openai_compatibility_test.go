@@ -19,7 +19,6 @@ package tests
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -28,6 +27,7 @@ import (
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
 	"github.com/openai/openai-go/packages/param"
+	"github.com/openai/openai-go/shared/constant"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -231,24 +231,34 @@ func TestStreamingInference(t *testing.T) {
 		assert.Equal(t, int64(16), completionChunk.Usage.CompletionTokens)
 		assert.Equal(t, int64(26), completionChunk.Usage.TotalTokens)
 
+		var previousInferenceID, previousEpisodeID string
 		textIndex := 0
 		// Validate the chunk Content
-		for i := 0; i < len(allChunks)-2; i++ {
+		for i := range len(allChunks) - 2 {
 			chunk := allChunks[i]
 			if len(chunk.Choices) == 0 {
 				continue
 			}
-
+			// Validate the model
 			assert.Equal(t, "tensorzero::function_name::basic_test::variant_name::test", chunk.Model, "Model mismatch")
-			//Validating the episode ID
+			// Validate inference ID consistency
+			if previousInferenceID != "" {
+				assert.Equal(t, previousInferenceID, chunk.ID, "Inference ID should remain consistent across chunks")
+			}
+			var chunkResponseEpisodeID string
 			if extra, ok := chunk.JSON.ExtraFields["episode_id"]; ok {
-				var responseEpisodeID string
-				err := json.Unmarshal([]byte(extra.Raw()), &responseEpisodeID)
+				err := json.Unmarshal([]byte(extra.Raw()), &chunkResponseEpisodeID)
 				require.NoError(t, err, "Failed to parse episode_id from chunk extras")
-				assert.Equal(t, episodeID.String(), responseEpisodeID, "Episode ID mismatch")
+				assert.Equal(t, episodeID.String(), chunkResponseEpisodeID, "Episode ID mismatch")
 			} else {
 				t.Errorf("Key 'tensorzero::episode_id' not found in response extras")
 			}
+			// Validate episode ID consistency
+			if previousEpisodeID != "" {
+				assert.Equal(t, previousEpisodeID, chunkResponseEpisodeID, "Episode ID should remain consistent across chunks")
+			}
+			previousInferenceID = chunk.ID
+			previousEpisodeID = chunkResponseEpisodeID
 
 			// Validating the content
 			content := chunk.Choices[0].Delta.Content
@@ -297,16 +307,180 @@ func TestToolCallingInference(t *testing.T) {
 			t.Errorf("Key 'tensorzero::episode_id' not found in response extras")
 		}
 		//Validate the model
-		assert.Equal(t, "tensorzero::function_name::weather_helper::variant_name::test", resp.Model)
-
-		// assert.Equal(t, `Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.`,
-		// 	resp.Choices[0].Message.Content)
-
-		// assert.Equal(t, int64(10), resp.Usage.PromptTokens)
-		// assert.Equal(t, int64(10), resp.Usage.CompletionTokens)
-		// assert.Equal(t, int64(20), resp.Usage.TotalTokens)
-		// assert.Equal(t, "stop", resp.Choices[0].FinishReason)
-		fmt.Println("Response:", resp.RawJSON())
-
+		assert.Equal(t, "tensorzero::function_name::weather_helper::variant_name::variant", resp.Model)
+		// Validate the response
+		assert.Empty(t, resp.Choices[0].Message.Content, "Message content should be empty")
+		require.NotNil(t, resp.Choices[0].Message.ToolCalls, "Tool calls should not be nil")
+		//Validate the tool call details
+		toolCalls := resp.Choices[0].Message.ToolCalls
+		require.Len(t, toolCalls, 1, "There should be exactly one tool call")
+		toolCall := toolCalls[0]
+		assert.Equal(t, constant.Function("function"), toolCall.Type, "Tool call type should be 'function'")
+		assert.Equal(t, "get_temperature", toolCall.Function.Name, "Function name should be 'get_temperature'")
+		assert.Equal(t, `{"location":"Brooklyn","units":"celsius"}`, toolCall.Function.Arguments, "Function arguments do not match")
+		// Validate the Usage
+		assert.Equal(t, int64(10), resp.Usage.PromptTokens)
+		assert.Equal(t, int64(10), resp.Usage.CompletionTokens)
+		assert.Equal(t, int64(20), resp.Usage.TotalTokens)
+		assert.Equal(t, "tool_calls", resp.Choices[0].FinishReason)
 	})
+
+	t.Run("it should handle malformed tool call inference", func(t *testing.T) {
+		episodeID, _ := uuid.NewV7()
+
+		messages := []openai.ChatCompletionMessageParamUnion{
+			{OfSystem: OldFormatSystemMessageWithAssistant(t, "Alfred Pennyworth")},
+			openai.UserMessage("Hi I'm visiting Brooklyn from Brazil. What's the weather?"),
+		}
+
+		req := &openai.ChatCompletionNewParams{
+			Model:           "tensorzero::function_name::weather_helper",
+			Messages:        messages,
+			PresencePenalty: openai.Float(0.5),
+		}
+		addEpisodeIDToRequest(t, req, episodeID)
+		req.WithExtraFields(map[string]any{
+			"tensorzero::variant_name": "bad_tool",
+		})
+
+		resp, err := client.Chat.Completions.New(ctx, *req)
+		require.NoError(t, err, "API request failed")
+
+		// Validate the model
+		assert.Equal(t, "tensorzero::function_name::weather_helper::variant_name::bad_tool", resp.Model)
+		// Validate the message content
+		assert.Empty(t, resp.Choices[0].Message.Content, "Message content should be empty")
+		// Validate tool calls
+		require.NotNil(t, resp.Choices[0].Message.ToolCalls, "Tool calls should not be nil")
+		toolCalls := resp.Choices[0].Message.ToolCalls
+		require.Equal(t, 1, len(toolCalls), "There should be exactly one tool call")
+		toolCall := toolCalls[0]
+		assert.Equal(t, constant.Function("function"), toolCall.Type, "Tool call type should be 'function'")
+		assert.Equal(t, "get_temperature", toolCall.Function.Name, "Function name should be 'get_temperature'")
+		assert.Equal(t, `{"location":"Brooklyn","units":"Celsius"}`, toolCall.Function.Arguments, "Function arguments do not match")
+		// Validate usage
+		assert.Equal(t, int64(10), resp.Usage.PromptTokens)
+		assert.Equal(t, int64(10), resp.Usage.CompletionTokens)
+		assert.Equal(t, int64(20), resp.Usage.TotalTokens)
+		assert.Equal(t, "tool_calls", resp.Choices[0].FinishReason)
+	})
+
+	t.Run("it should handle tool call streaming", func(t *testing.T) {
+		episodeID, _ := uuid.NewV7()
+
+		messages := []openai.ChatCompletionMessageParamUnion{
+			{OfSystem: OldFormatSystemMessageWithAssistant(t, "Alfred Pennyworth")},
+			openai.UserMessage("Hi I'm visiting Brooklyn from Brazil. What's the weather?"),
+		}
+
+		req := &openai.ChatCompletionNewParams{
+			Model:    "tensorzero::function_name::weather_helper",
+			Messages: messages,
+			StreamOptions: openai.ChatCompletionStreamOptionsParam{
+				IncludeUsage: openai.Bool(true),
+			},
+		}
+		addEpisodeIDToRequest(t, req, episodeID)
+
+		stream := client.Chat.Completions.NewStreaming(ctx, *req)
+		require.NotNil(t, stream, "Streaming response should not be nil")
+
+		var allChunks []openai.ChatCompletionChunk
+		for stream.Next() {
+			chunk := stream.Current()
+			allChunks = append(allChunks, chunk)
+		}
+
+		expectedText := []string{
+			`{"location"`,
+			`:"Brooklyn"`,
+			`,"units"`,
+			`:"celsius`,
+			`"}`,
+		}
+
+		// Validate the stop chunk
+		require.GreaterOrEqual(t, len(allChunks), 2, "Expected at least two chunks, but got fewer")
+		stopChunk := allChunks[len(allChunks)-2]
+		assert.Empty(t, stopChunk.Choices[0].Delta.Content)
+		assert.Empty(t, stopChunk.Choices[0].Delta.ToolCalls)
+		assert.Equal(t, stopChunk.Choices[0].FinishReason, "tool_calls")
+
+		// Validate the Completion chunk
+		completionChunk := allChunks[len(allChunks)-1]
+		assert.Equal(t, int64(10), completionChunk.Usage.PromptTokens)
+		assert.Equal(t, int64(5), completionChunk.Usage.CompletionTokens)
+		assert.Equal(t, int64(15), completionChunk.Usage.TotalTokens)
+
+		var previousInferenceID, previousEpisodeID string
+		//Test for intermediate chunks
+		for i := range len(allChunks) - 2 {
+			chunk := allChunks[i]
+			if len(chunk.Choices) == 0 {
+				continue
+			}
+
+			assert.Equal(t, "tensorzero::function_name::weather_helper::variant_name::variant", chunk.Model)
+			// Validate inference ID consistency
+			if previousInferenceID != "" {
+				assert.Equal(t, previousInferenceID, chunk.ID, "Inference ID should remain consistent across chunks")
+			}
+			var chunkResponseEpisodeID string
+			if extra, ok := chunk.JSON.ExtraFields["episode_id"]; ok {
+				err := json.Unmarshal([]byte(extra.Raw()), &chunkResponseEpisodeID)
+				require.NoError(t, err, "Failed to parse episode_id from chunk extras")
+				assert.Equal(t, episodeID.String(), chunkResponseEpisodeID, "Episode ID mismatch")
+			} else {
+				t.Errorf("Key 'tensorzero::episode_id' not found in response extras")
+			}
+			// Validate episode ID consistency
+			if previousEpisodeID != "" {
+				assert.Equal(t, previousEpisodeID, chunkResponseEpisodeID, "Episode ID should remain consistent across chunks")
+			}
+			previousInferenceID = chunk.ID
+			previousEpisodeID = chunkResponseEpisodeID
+
+			assert.Len(t, chunk.Choices, 1, "Each chunk should have exactly one choice")
+			assert.Empty(t, chunk.Choices[0].Delta.Content, "Content should be empty for intermediate chunks")
+			assert.Len(t, chunk.Choices[0].Delta.ToolCalls, 1, "Each intermediate chunk should have one tool call")
+
+			toolCall := chunk.Choices[0].Delta.ToolCalls[0]
+			//BUG : other toolcall.type arr of `constant.Function("function")`
+			assert.Equal(t, "function", toolCall.Type, "Tool call type should be 'function'")
+			assert.Equal(t, "get_temperature", toolCall.Function.Name, "Function name should be 'get_temperature'")
+			assert.Equal(t, expectedText[i], toolCall.Function.Arguments, "Function arguments do not match expected text")
+		}
+	})
+
+	// t.Run("it should handle streaming inference with malformed input", func(t *testing.T) {
+	//     episodeID, _ := uuid.NewV7()
+
+	//     messages := []openai.ChatCompletionMessageParamUnion{
+	//         {OfSystem: openai.ChatCompletionSystemMessageParam{
+	//             Content: []map[string]any{
+	//                 {"name_of_assistant": "Alfred Pennyworth"},
+	//             },
+	//         }},
+	//         openai.UserMessage("Hello"),
+	//     }
+
+	//     req := &openai.ChatCompletionNewParams{
+	//         Model:    "tensorzero::function_name::basic_test",
+	//         Messages: messages,
+	//         Stream:   true,
+	//     }
+	//     req.WithExtraFields(map[string]any{
+	//         "tensorzero::episode_id": episodeID.String(),
+	//     })
+
+	//     // Expect an error due to malformed input
+	//     _, err := client.Chat.Completions.NewStreaming(ctx, *req)
+	//     require.Error(t, err, "Expected an error due to malformed input")
+
+	//     // Validate the error
+	//     var apiErr *openai.APIError
+	//     require.ErrorAs(t, err, &apiErr)
+	//     assert.Equal(t, 400, apiErr.StatusCode, "Expected status code 400")
+	//     assert.Contains(t, apiErr.Message, "JSON Schema validation failed", "Expected JSON Schema validation error")
+	// })
 }
