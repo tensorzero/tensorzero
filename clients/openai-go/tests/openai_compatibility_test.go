@@ -19,6 +19,7 @@ package tests
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -265,4 +266,47 @@ func TestStreamingInference(t *testing.T) {
 	// TODO: [test_async_inference_streaming_missing_model]
 	// TODO: [test_async_inference_streaming_malformed_function]
 	// TODO: [test_async_inference_streaming_malformed_input]
+}
+
+func TestToolCallingInference(t *testing.T) {
+	t.Run("it should handle tool calling inference", func(t *testing.T) {
+		episodeID, _ := uuid.NewV7()
+
+		messages := []openai.ChatCompletionMessageParamUnion{
+			{OfSystem: OldFormatSystemMessageWithAssistant(t, "Alfred Pennyworth")},
+			openai.UserMessage("Hi I'm visiting Brooklyn from Brazil. What's the weather?"),
+		}
+
+		req := &openai.ChatCompletionNewParams{
+			Model:    "tensorzero::function_name::weather_helper",
+			Messages: messages,
+			TopP:     openai.Float(0.5),
+		}
+		addEpisodeIDToRequest(t, req, episodeID)
+
+		resp, err := client.Chat.Completions.New(ctx, *req)
+		require.NoError(t, err, "API request failed")
+
+		// Validate episode id
+		if extra, ok := resp.JSON.ExtraFields["episode_id"]; ok {
+			var responseEpisodeID string
+			err := json.Unmarshal([]byte(extra.Raw()), &responseEpisodeID)
+			require.NoError(t, err, "Failed to parse episode_id from response extras")
+			assert.Equal(t, episodeID.String(), responseEpisodeID)
+		} else {
+			t.Errorf("Key 'tensorzero::episode_id' not found in response extras")
+		}
+		//Validate the model
+		assert.Equal(t, "tensorzero::function_name::weather_helper::variant_name::test", resp.Model)
+
+		// assert.Equal(t, `Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.`,
+		// 	resp.Choices[0].Message.Content)
+
+		// assert.Equal(t, int64(10), resp.Usage.PromptTokens)
+		// assert.Equal(t, int64(10), resp.Usage.CompletionTokens)
+		// assert.Equal(t, int64(20), resp.Usage.TotalTokens)
+		// assert.Equal(t, "stop", resp.Choices[0].FinishReason)
+		fmt.Println("Response:", resp.RawJSON())
+
+	})
 }
