@@ -97,3 +97,39 @@ async fn get_providers() -> E2ETestProviders {
         json_mode_off_inference: vec![],
     }
 }
+
+/// Test to verify that OpenRouter-specific headers (X-Title and HTTP-Referer) are included in inference requests
+/// On the CI the provider-proxy will check for the presence and correct values for these headers, and return
+/// a 400 when they're not there.
+///
+/// This test will only fail when:
+/// - TENSORZERO_E2E_PROXY is set and the proxy is running
+/// - X-Title and HTTP-Referer headers are missing or have the wrong values (TensorZero and https://www.tensorzero.com/, respectively)
+///   in the gateway request to the OpenRouter API.
+#[tokio::test]
+async fn test_openrouter_headers_present_in_requests() {
+    let episode_id = Uuid::now_v7();
+    let payload = json!({
+        "function_name": "basic_test",
+        "variant_name": "openrouter",
+        "episode_id": episode_id,
+        "input": {
+            "system": {"assistant_name": "Dr. Mehta"},
+            "messages": [{
+                "role": "user",
+                "content": "What is the name of the capital city of Japan?"
+            }]
+        },
+        "stream": false,
+        "tags": {"foo": "bar"},
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+}
