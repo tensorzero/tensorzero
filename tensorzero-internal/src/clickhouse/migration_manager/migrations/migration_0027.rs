@@ -52,7 +52,7 @@ impl Migration for Migration0027<'_> {
                     variant_pins Map(String, String),
                     tags Map(String, String),
                     project_name String,
-                    run_display_name String,
+                    run_display_name Nullable(String),
                     is_deleted Bool DEFAULT false,
                     updated_at DateTime64(6, 'UTC') DEFAULT now()
                 ) ENGINE = ReplacingMergeTree(updated_at, is_deleted)
@@ -68,6 +68,7 @@ impl Migration for Migration0027<'_> {
                 TO DynamicEvaluationRunByProjectName
                 AS
                 SELECT * FROM DynamicEvaluationRun
+                WHERE project_name IS NOT NULL
                 ORDER BY project_name, run_id_uint;
         "#;
         let _ = self

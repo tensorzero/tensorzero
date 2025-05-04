@@ -119,8 +119,8 @@ export function DynamicEvaluationProjectResultsTable({
                           key={`input-${result.group_key}`}
                           className={
                             index !== task_results.length - 1
-                              ? "cursor-pointer border-b-0"
-                              : "cursor-pointer"
+                              ? "border-b-0"
+                              : ""
                           }
                         >
                           {/* Task name cell - only for the first row in each group */}
@@ -269,17 +269,14 @@ const MetricProperties = ({
   const selectedRunIds = selectedRunIdsParam
     ? selectedRunIdsParam.split(",")
     : [];
-  console.log("summaryStats", summaryStats);
   // Create a map of stats by run ID for easy lookup
   const statsByRunId = new Map(
     summaryStats.map((stat) => [stat.evaluation_run_id, stat]),
   );
-  console.log("statsByRunId", statsByRunId);
   // Filter and sort stats according to the order in URL parameters
   const orderedStats = selectedRunIds
     .filter((runId) => statsByRunId.has(runId))
     .map((runId) => statsByRunId.get(runId)!);
-  console.log("orderedStats", orderedStats);
 
   const assigner = useColorAssigner();
 

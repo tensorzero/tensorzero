@@ -2,11 +2,11 @@ import { z } from "zod";
 
 export const dynamicEvaluationRunSchema = z
   .object({
-    name: z.string().optional(),
+    name: z.string().nullable(),
     id: z.string().uuid(),
     variant_pins: z.record(z.string(), z.string()),
     tags: z.record(z.string(), z.string()),
-    project_name: z.string(),
+    project_name: z.string().nullable(),
     timestamp: z.string().datetime(),
   })
   .strict();
