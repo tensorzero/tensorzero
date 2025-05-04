@@ -106,6 +106,9 @@ async fn get_providers() -> E2ETestProviders {
 /// - TENSORZERO_E2E_PROXY is set and the proxy is running
 /// - X-Title and HTTP-Referer headers are missing or have the wrong values (TensorZero and https://www.tensorzero.com/, respectively)
 ///   in the gateway request to the OpenRouter API.
+///
+/// Note: other E2E tests will also break if the headers are missing or incorrect when running the proxy, so this test is really here for
+/// explicitness / documentation.
 #[tokio::test]
 async fn test_openrouter_headers_present_in_requests() {
     let episode_id = Uuid::now_v7();
