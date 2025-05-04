@@ -477,7 +477,6 @@ export async function getDynamicEvaluationRunEpisodesByTaskName(
     query_params: { runIds, page_size, offset },
   });
   const raw = await result.json<DynamicEvaluationRunEpisodeWithFeedback>();
-  console.log(raw);
 
   // bucket by group_key, parse each row with your Zod schema
   const buckets: Record<string, DynamicEvaluationRunEpisodeWithFeedback[]> = {};

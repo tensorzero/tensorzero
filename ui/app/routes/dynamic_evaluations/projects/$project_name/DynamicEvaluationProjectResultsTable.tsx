@@ -29,6 +29,8 @@ import type {
   DynamicEvaluationRunEpisodeWithFeedback,
   DynamicEvaluationRunStatisticsByMetricName,
 } from "~/utils/clickhouse/dynamic_evaluations";
+import { TableItemShortUuid } from "~/components/ui/TableItems";
+import { formatDate } from "~/utils/date";
 
 interface DynamicEvaluationProjectResultsTableProps {
   selected_run_infos: DynamicEvaluationRun[];
@@ -45,13 +47,12 @@ export function DynamicEvaluationProjectResultsTable({
   evaluation_statistics,
 }: DynamicEvaluationProjectResultsTableProps) {
   const selectedRunIds = selected_run_infos.map((info) => info.id);
-  // Extract all unique metric names from all episodes
+  // Extract all metrics from statistics
+  // (we use statistics instead of results because we want to include metrics that are not present in this page)
   const allMetricNames = new Set<string>();
-  evaluation_results.forEach((result) => {
-    result.forEach((episode) => {
-      episode.feedback_metric_names.forEach((metricName) => {
-        allMetricNames.add(metricName);
-      });
+  Object.values(evaluation_statistics).forEach((stats) => {
+    stats.forEach((stat) => {
+      allMetricNames.add(stat.metric_name);
     });
   });
   const statisticsByMetricName = convertStatsByRunIdToStatsByMetricName(
@@ -59,7 +60,6 @@ export function DynamicEvaluationProjectResultsTable({
     Array.from(allMetricNames),
     selectedRunIds,
   );
-
   // Convert to sorted array for consistent column order
   const uniqueMetricNames = Array.from(allMetricNames).sort();
   const config = useConfig();
@@ -123,11 +123,11 @@ export function DynamicEvaluationProjectResultsTable({
                               : "cursor-pointer"
                           }
                         >
-                          {/* Input cell - only for the first variant row */}
+                          {/* Task name cell - only for the first row in each group */}
                           {index === 0 && (
                             <TableCell
                               rowSpan={task_results.length}
-                              className="max-w-[200px] align-middle"
+                              className="max-w-[200px] text-center align-middle"
                             >
                               {result.task_name ?? "-"}
                             </TableCell>
@@ -139,6 +139,19 @@ export function DynamicEvaluationProjectResultsTable({
                               <EvaluationRunCircle runId={result.run_id} />
                             </TableCell>
                           )}
+
+                          {/* Episode ID cell */}
+                          <TableCell className="text-center align-middle">
+                            <TableItemShortUuid
+                              id={result.episode_id}
+                              link={`/observability/episodes/${result.episode_id}`}
+                            />
+                          </TableCell>
+
+                          {/* Timestamp cell */}
+                          <TableCell className="text-center align-middle">
+                            {formatDate(new Date(result.timestamp))}
+                          </TableCell>
 
                           {/* Metrics cells */}
                           {uniqueMetricNames.map((metric_name) => {
@@ -252,20 +265,21 @@ const MetricProperties = ({
   summaryStats: DynamicEvaluationStatisticsByRunId[];
 }) => {
   const [searchParams] = useSearchParams();
-  const selectedRunIdsParam = searchParams.get("evaluation_run_ids") || "";
+  const selectedRunIdsParam = searchParams.get("run_ids") || "";
   const selectedRunIds = selectedRunIdsParam
     ? selectedRunIdsParam.split(",")
     : [];
-
+  console.log("summaryStats", summaryStats);
   // Create a map of stats by run ID for easy lookup
   const statsByRunId = new Map(
     summaryStats.map((stat) => [stat.evaluation_run_id, stat]),
   );
-
+  console.log("statsByRunId", statsByRunId);
   // Filter and sort stats according to the order in URL parameters
   const orderedStats = selectedRunIds
     .filter((runId) => statsByRunId.has(runId))
     .map((runId) => statsByRunId.get(runId)!);
+  console.log("orderedStats", orderedStats);
 
   const assigner = useColorAssigner();
 

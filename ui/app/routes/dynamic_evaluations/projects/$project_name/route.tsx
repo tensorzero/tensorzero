@@ -28,7 +28,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   if (runIds.length > 0) {
     // Create promises for fetching statistics for each runId
     const statsPromises = runIds.map((runId) =>
-      getDynamicEvaluationRunStatisticsByMetricName(runId, projectName),
+      getDynamicEvaluationRunStatisticsByMetricName(runId),
     );
 
     // Create promise for fetching run info
