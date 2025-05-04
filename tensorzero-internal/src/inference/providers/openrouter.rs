@@ -873,16 +873,21 @@ impl OpenRouterProvider {
         if let Some(api_key) = api_key {
             request_builder = request_builder.bearer_auth(api_key.expose_secret());
         }
-        let res = request_builder.send().await.map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
-                message: format!(
-                    "Error downloading batch results from OpenRouter for file {file_id}: {e}"
-                ),
-                raw_request: None,
-                raw_response: None,
-                provider_type: PROVIDER_TYPE.to_string(),
-            })
-        })?;
+        let res = request_builder
+            .header("X-Title", "TensorZero")
+            .header("HTTP-Referer", "https://www.tensorzero.com/")
+            .send()
+            .await
+            .map_err(|e| {
+                Error::new(ErrorDetails::InferenceServer {
+                    message: format!(
+                        "Error downloading batch results from OpenRouter for file {file_id}: {e}"
+                    ),
+                    raw_request: None,
+                    raw_response: None,
+                    provider_type: PROVIDER_TYPE.to_string(),
+                })
+            })?;
 
         if res.status() != StatusCode::OK {
             return Err(handle_openrouter_error(
