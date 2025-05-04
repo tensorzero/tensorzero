@@ -16,7 +16,7 @@ from tools import load_wikipedia_page, search_wikipedia
 # The function will return the answer to the question.
 
 # The maximum number of inferences the agent will make.
-MAX_INFERENCES = 20
+MAX_INFERENCES = 8
 
 # The maximum number of characters in the messages before compacting.
 MAX_MESSAGE_LENGTH = 200000

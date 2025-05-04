@@ -1,4 +1,3 @@
-{"id":"01968d2c-553d-7cd3-a803-fd524120010e","target_id":"0aaedb76-b457-7c86-8a61-2ffa01519447","metric_name":"goated","value":true,"tags":{}}
 {"id":"0192ced0-a8a4-7472-8a02-d45ad8b75a67","target_id":"01935dd2-bbc0-7251-807e-a61a5e990fac","metric_name":"exact_match","value":false,"tags":{}}
 {"id":"0192ced0-98c8-7232-a2ae-8d3d63de3f75","target_id":"01939885-f868-7f62-8168-30258afebfeb","metric_name":"exact_match","value":true,"tags":{}}
 {"id":"0192ced0-a599-74a1-aa4b-84268b3f4e8c","target_id":"019368c7-d150-7ba0-819a-88a2cec33663","metric_name":"exact_match","value":true,"tags":{}}
@@ -168,6 +167,7 @@
 {"id":"01940a96-8da1-7e53-8ea5-4a54ef661e53","target_id":"0192ced0-a2c6-7323-be23-ce4124e683d3","metric_name":"exact_match_episode","value":true,"tags":{}}
 {"id":"01940a96-8da1-7e53-8ea5-48538dd0c641","target_id":"0192ced0-a2c6-7323-be23-ce66bf0ae2aa","metric_name":"exact_match_episode","value":true,"tags":{}}
 {"id":"01940a96-8da1-7e53-8ea5-4a898c9e32e1","target_id":"0192ced0-a2c6-7323-be23-ce7f39c0f76d","metric_name":"exact_match_episode","value":true,"tags":{}}
+{"id":"01968d2c-553d-7cd3-a803-fd524120010e","target_id":"0aaedb76-b457-7c86-8a61-2ffa01519447","metric_name":"goated","value":true,"tags":{}}
 {"id":"0193fb9e-2007-7e60-97af-8b469d9edd45","target_id":"01940831-01a8-7902-801c-e9903e3abd13","metric_name":"haiku_score","value":false,"tags":{}}
 {"id":"0193fb9e-1e01-78b2-bf33-4a38ebcc82f2","target_id":"01941110-52b0-7e13-802c-dd2185ce6d84","metric_name":"haiku_score","value":false,"tags":{}}
 {"id":"0193fb9e-20c1-7511-a3ae-054b6b2bfd29","target_id":"01940e87-5de0-7300-8069-c065d076d63b","metric_name":"haiku_score","value":true,"tags":{}}
