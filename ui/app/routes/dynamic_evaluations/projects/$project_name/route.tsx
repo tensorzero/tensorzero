@@ -3,6 +3,7 @@ import { PageLayout } from "~/components/layout/PageLayout";
 import type { Route } from "./+types/route";
 import { DynamicEvalRunSelector } from "~/routes/dynamic_evaluations/projects/$project_name/DynamicEvalRunSelector";
 import {
+  countDynamicEvaluationRunEpisodesByTaskName,
   getDynamicEvaluationRunEpisodesByTaskName,
   getDynamicEvaluationRunsByIds,
   getDynamicEvaluationRunStatisticsByMetricName,
@@ -10,6 +11,8 @@ import {
 import type { DynamicEvaluationRunStatisticsByMetricName } from "~/utils/clickhouse/dynamic_evaluations";
 import { ColorAssignerProvider } from "~/hooks/evaluations/ColorAssigner";
 import { DynamicEvaluationProjectResultsTable } from "./DynamicEvaluationProjectResultsTable";
+import { useNavigate } from "react-router";
+import PageButtons from "~/components/utils/PageButtons";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const projectName = params.project_name;
@@ -36,11 +39,13 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       pageSize,
       offset,
     );
+    const countPromise = countDynamicEvaluationRunEpisodesByTaskName(runIds);
     // Run all promises concurrently
-    const [statsResults, runInfos, episodeInfo] = await Promise.all([
+    const [statsResults, runInfos, episodeInfo, count] = await Promise.all([
       Promise.all(statsPromises),
       runInfosPromise,
       episodeInfoPromise,
+      countPromise,
     ]);
 
     runIds.forEach((runId, index) => {
@@ -52,14 +57,19 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       runInfos,
       runStats,
       episodeInfo,
+      count,
+      pageSize,
+      offset,
     };
   } else {
-    // Handle the case where there are no runIds
     return {
       projectName,
       runInfos: [],
-      runStats: {}, // Return empty runStats
+      runStats: {},
       episodeInfo: [],
+      count: 0,
+      pageSize,
+      offset,
     };
   }
 }
@@ -67,9 +77,27 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 export default function DynamicEvaluationProjectPage({
   loaderData,
 }: Route.ComponentProps) {
-  const { projectName, runInfos, runStats, episodeInfo } = loaderData;
+  const {
+    projectName,
+    runInfos,
+    runStats,
+    episodeInfo,
+    count,
+    pageSize,
+    offset,
+  } = loaderData;
+  const navigate = useNavigate();
   const selectedRunIds = runInfos.map((run) => run.id);
-
+  const handleNextPage = () => {
+    const searchParams = new URLSearchParams(window.location.search);
+    searchParams.set("offset", String(offset + pageSize));
+    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+  };
+  const handlePreviousPage = () => {
+    const searchParams = new URLSearchParams(window.location.search);
+    searchParams.set("offset", String(offset - pageSize));
+    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+  };
   return (
     <ColorAssignerProvider selectedRunIds={selectedRunIds}>
       <PageLayout>
@@ -88,6 +116,12 @@ export default function DynamicEvaluationProjectPage({
             selected_run_infos={runInfos}
             evaluation_results={episodeInfo}
             evaluation_statistics={runStats}
+          />
+          <PageButtons
+            onPreviousPage={handlePreviousPage}
+            onNextPage={handleNextPage}
+            disablePrevious={offset <= 0}
+            disableNext={offset + pageSize >= count}
           />
         </SectionLayout>
       </PageLayout>

@@ -490,3 +490,38 @@ export async function getDynamicEvaluationRunEpisodesByTaskName(
   // return an array of episode‑arrays, one per group
   return Object.values(buckets);
 }
+
+/**
+ * Counts the number of groups that would be returned by getDynamicEvaluationRunEpisodesByTaskName with no pagination.
+ */
+export async function countDynamicEvaluationRunEpisodesByTaskName(
+  runIds: string[],
+): Promise<number> {
+  const query = `
+    WITH
+      episodes_raw AS (
+        SELECT
+          episode_id_uint,
+          run_id_uint,
+          tags,
+          updated_at,
+          datapoint_name AS task_name
+        FROM DynamicEvaluationRunEpisodeByRunId
+        WHERE run_id_uint IN (
+          SELECT arrayJoin(
+            arrayMap(x -> toUInt128(toUUID(x)), {runIds:Array(String)})
+          )
+        )
+      )
+    SELECT toUInt32(countDistinct(ifNull(task_name, concat('NULL_EPISODE_', toString(episode_id_uint))))) as count
+    FROM episodes_raw
+  `;
+
+  const result = await clickhouseClient.query({
+    query,
+    format: "JSONEachRow",
+    query_params: { runIds },
+  });
+  const rows = await result.json<{ count: number }>();
+  return rows[0].count;
+}
