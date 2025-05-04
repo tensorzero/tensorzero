@@ -9113,7 +9113,7 @@ pub async fn check_json_mode_inference_response(
                 assert!(text.text.to_lowercase().contains("tokyo"));
                 found_valid_content = true;
             }
-            ContentBlock::ToolCall(tool_call) if is_openrouter => {
+            ContentBlock::ToolCall(tool_call) => {
                 // OpenRouter may use tool_call format
                 assert_eq!(tool_call.name, "respond");
                 let arguments: Value = serde_json::from_str(&tool_call.arguments).unwrap();
@@ -9399,7 +9399,7 @@ pub async fn check_dynamic_json_mode_inference_response(
                 assert!(&text.text.to_lowercase().contains("tokyo"));
                 found_valid_content = true;
             }
-            ContentBlock::ToolCall(tool_call) if is_openrouter => {
+            ContentBlock::ToolCall(tool_call) => {
                 // OpenRouter may use tool_call format
                 assert_eq!(tool_call.name, "respond");
                 let arguments: Value = serde_json::from_str(&tool_call.arguments).unwrap();
