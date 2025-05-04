@@ -38,12 +38,11 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     );
     // Run all promises concurrently
     const [statsResults, runInfos, episodeInfo] = await Promise.all([
-      Promise.all(statsPromises), // Wait for all stats promises
-      runInfosPromise, // Wait for run info promise
+      Promise.all(statsPromises),
+      runInfosPromise,
       episodeInfoPromise,
     ]);
 
-    // Construct the runStats object from the results
     runIds.forEach((runId, index) => {
       runStats[runId] = statsResults[index];
     });
@@ -51,7 +50,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     return {
       projectName,
       runInfos,
-      runStats, // Return runStats
+      runStats,
       episodeInfo,
     };
   } else {

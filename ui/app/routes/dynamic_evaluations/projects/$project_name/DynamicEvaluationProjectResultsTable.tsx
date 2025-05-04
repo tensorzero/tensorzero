@@ -16,7 +16,7 @@ import {
   TooltipTrigger,
 } from "~/components/ui/tooltip";
 
-import type { EvaluationRunInfo as DynamicEvaluationRun } from "~/utils/clickhouse/evaluations";
+import type { DynamicEvaluationRun } from "~/utils/clickhouse/dynamic_evaluations";
 
 import { useConfig } from "~/context/config";
 import {
@@ -44,9 +44,7 @@ export function DynamicEvaluationProjectResultsTable({
   evaluation_results,
   evaluation_statistics,
 }: DynamicEvaluationProjectResultsTableProps) {
-  const selectedRunIds = selected_run_infos.map(
-    (info) => info.evaluation_run_id,
-  );
+  const selectedRunIds = selected_run_infos.map((info) => info.id);
   // Extract all unique metric names from all episodes
   const allMetricNames = new Set<string>();
   evaluation_results.forEach((result) => {

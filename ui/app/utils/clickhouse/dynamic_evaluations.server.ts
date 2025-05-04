@@ -477,14 +477,14 @@ export async function getDynamicEvaluationRunEpisodesByTaskName(
     query_params: { runIds, page_size, offset },
   });
   const raw = await result.json<DynamicEvaluationRunEpisodeWithFeedback>();
+  console.log(raw);
 
   // bucket by group_key, parse each row with your Zod schema
   const buckets: Record<string, DynamicEvaluationRunEpisodeWithFeedback[]> = {};
   for (const row of raw) {
-    const { group_key, ...episodeRow } = row;
-    const eps = dynamicEvaluationRunEpisodeWithFeedbackSchema.parse(episodeRow);
-    buckets[group_key] ??= [];
-    buckets[group_key].push(eps);
+    const eps = dynamicEvaluationRunEpisodeWithFeedbackSchema.parse(row);
+    buckets[eps.group_key] ??= [];
+    buckets[eps.group_key].push(eps);
   }
 
   // return an array of episode‑arrays, one per group
