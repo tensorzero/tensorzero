@@ -64,6 +64,7 @@ async fn test_provider_proxy() {
             port: 0,
             sanitize_bearer_auth: true,
             sanitize_aws_sigv4: true,
+            sanitize_model_headers: true,
             write: true,
         },
         server_started_tx,

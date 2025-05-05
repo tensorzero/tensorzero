@@ -1,4 +1,4 @@
-use axum::extract::Request;
+use axum::extract::{DefaultBodyLimit, Request};
 use axum::http::HeaderValue;
 use axum::middleware::Next;
 use axum::response::Response;
@@ -223,6 +223,7 @@ async fn main() {
         )
         .fallback(endpoints::fallback::handle_404)
         .layer(axum::middleware::from_fn(add_version_header))
+        .layer(DefaultBodyLimit::max(100 * 1024 * 1024)) // increase the default body limit from 2MB to 100MB
         .with_state(app_state);
 
     // Bind to the socket address specified in the config, or default to 0.0.0.0:3000
