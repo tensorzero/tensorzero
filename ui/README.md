@@ -1,60 +1,30 @@
 # TensorZero UI
 
-## Status
-
-This UI is currently a work in progress.
-
-Our goals for this project are to:
-
-- [ ] Allow users to run TensorZero recipes through the UI. To start, this will include:
-
-  - [x] Supervised fine-tuning
-  - [ ] Dynamic in-context learning
-
-- [x] Allow users to review inferences and episodes
-- [ ]and provide feedback to either.
-- [ ] Provide a view showing the relative performance of different variants for a particular function.
-- [ ] Allow users to edit the configuration through the UI.
-
-Currently, we are building out the UI incrementally.
+The TensorZero UI provides a web interface to help manage your TensorZero deployments.
+The UI provides functionality for observability, optimization, and more.
 
 ## Running the UI
 
-### Prerequisites
+The easiest way to run the UI is to use the `tensorzero/ui` Docker image.
+See the [Quick Start](https://www.tensorzero.com/docs/quickstart/) and the [TensorZero UI Deployment Guide](https://www.tensorzero.com/docs/ui/deployment/) for more information.
 
-- Node.js (we have only tested with v22.9.0)
-- Docker Compose
-- a Rust toolchain
+## Development Setup
 
-### Setup
+> [!NOTE]
+>
+> **_The following instructions are for people building TensorZero itself, not for people using TensorZero for their applications._**
 
-Currently, the UI only runs against hardcoded fixtures in `fixtures/`.
-It depends on a running ClickHouse instance that has been initialized with the TensorZero data model.
-We include some fixture data as well in order to exercise some functionality.
-You will need Docker Compose installed to run the dependencies.
+We provide fixture data for development purposes, but you can also use the UI with any relevant configuration.
+The instructions below assume you're using the provided setup with fixture data.
 
-It also requires a one-time build of a WebAssembly module from Rust source code that is used to ensure consistent templating of messages across the gateway and UI.
+1. Build the `evaluations` binary. Run: `cargo build -p evaluations`
+2. Build the MiniJinja WASM module. See `./app/utils/minijinja/README.md` for reference.
+3. Set the environment variables for the gateway. Create a `.env` file in `fixtures/` with credentials. See `fixtures/.env.example` for reference.
+4. Launch the TensorZero Gateway and ClickHouse with `docker compose -f fixtures/docker-compose.yml up`.
+5. Set the UI environment variables in the shell (not `.env`). See `./.env.example` for reference.
+6. Run `pnpm install` to install the dependencies.
+7. Run `pnpm dev` to start the development server. Optionally, enable the feature flags to try out new features:
+   - `VITE_TENSORZERO_UI_FF_ENABLE_FEEDBACK=1` for human feedback in the UI
+   - `TENSORZERO_UI_FF_ENABLE_PYTHON=1` for delegating to Python-based optimization server
 
-Here are the steps in order to run or test the UI assuming you have the prerequisites installed and this repository checked out:
-
-1. Install npm dependencies: `npm install --legacy-peer-deps cmdk`
-2. Build the WebAssembly module following instructions in `app/utils/minijinja/README.md`.
-3. Create a `.env` file in the `ui` directory and set the following environment variables for the server:
-
-```bash
-OPENAI_API_KEY=<your-key>
-FIREWORKS_API_KEY=<your-key>
-FIREWORKS_ACCOUNT_ID=<your-account-id>
-CLICKHOUSE_URL=<your-clickhouse-url> # For testing, set to http://localhost:8123/tensorzero
-```
-
-4. Run the dependencies: `docker compose -f fixtures/docker-compose.yml up`
-
-With the dependencies running, you can run the tests with `npm run test`.
-Similarly, you can start a development server with `npm run dev`.
-
-### Running the production server
-
-To run the production server, you should set the environment variables in the `.env.example` file in `.env` (API keys are optional but required if you'd like to fine-tune) and then run `docker compose up`.
-
-If you are running the production server against the fixtures from the development environment, set `CONFIG_DIR=./fixtures/config` and `CLICKHOUSE_URL=http://host.docker.internal:8123/tensorzero` in the `.env` file.
+You can also run tests with `pnpm test` and Storybook with `pnpm storybook`.

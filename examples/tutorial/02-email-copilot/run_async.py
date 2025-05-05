@@ -4,20 +4,27 @@ from tensorzero import AsyncTensorZeroGateway
 
 
 async def main():
-    async with AsyncTensorZeroGateway("http://localhost:3000") as client:
+    async with await AsyncTensorZeroGateway.build_http(
+        gateway_url="http://localhost:3000"
+    ) as client:
         inference_result = await client.inference(
             function_name="draft_email",
             input={
                 "messages": [
                     {
                         "role": "user",
-                        "content": {
-                            "recipient_name": "TensorZero Team",
-                            "sender_name": "Mark Zuckerberg",
-                            "email_purpose": "Acquire TensorZero for $100 billion dollars.",
-                        },
+                        "content": [
+                            {
+                                "type": "text",
+                                "arguments": {
+                                    "recipient_name": "TensorZero Team",
+                                    "sender_name": "Mark Zuckerberg",
+                                    "email_purpose": "Acquire TensorZero for $100 billion dollars.",
+                                },
+                            }
+                        ],
                     }
-                ]
+                ],
             },
         )
 

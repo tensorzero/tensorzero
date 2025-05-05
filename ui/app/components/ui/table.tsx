@@ -6,10 +6,10 @@ const Table = React.forwardRef<
   HTMLTableElement,
   React.HTMLAttributes<HTMLTableElement>
 >(({ className, ...props }, ref) => (
-  <div className="relative w-full overflow-auto">
+  <div className="border-border relative w-full overflow-auto rounded-md border">
     <table
       ref={ref}
-      className={cn("w-full caption-bottom text-sm", className)}
+      className={cn("bg-bg-primary w-full caption-bottom text-sm", className)}
       {...props}
     />
   </div>
@@ -43,7 +43,7 @@ const TableFooter = React.forwardRef<
   <tfoot
     ref={ref}
     className={cn(
-      "border-t bg-muted/50 font-medium [&>tr]:last:border-b-0",
+      "bg-bg-secondary text-fg-secondary border-t font-medium last:[&>tr]:border-b-0",
       className,
     )}
     {...props}
@@ -58,7 +58,7 @@ const TableRow = React.forwardRef<
   <tr
     ref={ref}
     className={cn(
-      "border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted",
+      "data-[state=selected]:bg-muted border-b transition-colors",
       className,
     )}
     {...props}
@@ -73,7 +73,7 @@ const TableHead = React.forwardRef<
   <th
     ref={ref}
     className={cn(
-      "h-10 px-2 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
+      "bg-bg-secondary text-fg-tertiary h-10 px-3 text-left align-middle font-medium [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
       className,
     )}
     {...props}
@@ -88,7 +88,7 @@ const TableCell = React.forwardRef<
   <td
     ref={ref}
     className={cn(
-      "p-2 align-middle [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
+      "px-3 py-2.5 align-middle [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
       className,
     )}
     {...props}
@@ -102,11 +102,33 @@ const TableCaption = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <caption
     ref={ref}
-    className={cn("mt-4 text-sm text-muted-foreground", className)}
+    className={cn("text-muted-foreground mt-4 text-sm", className)}
     {...props}
   />
 ));
 TableCaption.displayName = "TableCaption";
+
+interface TableEmptyStateProps
+  extends React.TdHTMLAttributes<HTMLTableCellElement> {
+  message?: string;
+}
+
+const TableEmptyState = React.forwardRef<
+  HTMLTableCellElement,
+  TableEmptyStateProps
+>(({ message = "No data found", ...props }, ref) => (
+  <TableRow>
+    <TableCell
+      ref={ref}
+      colSpan={1000}
+      className="text-fg-muted py-10 text-center"
+      {...props}
+    >
+      {message}
+    </TableCell>
+  </TableRow>
+));
+TableEmptyState.displayName = "TableEmptyState";
 
 export {
   Table,
@@ -117,4 +139,5 @@ export {
   TableRow,
   TableCell,
   TableCaption,
+  TableEmptyState,
 };

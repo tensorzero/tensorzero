@@ -1,7 +1,10 @@
 services:
   clickhouse:
-    container_name: tensorzero-clickhouse-ui-tests
-    image: clickhouse/clickhouse-server:latest
+    image: clickhouse/clickhouse-server:${TENSORZERO_CLICKHOUSE_VERSION:-24.12-alpine}
+    environment:
+      CLICKHOUSE_USER: chuser
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+      CLICKHOUSE_PASSWORD: chpassword
     tmpfs:
       # So the fixtures aren't persisted between restarts of the containers and double-added
       - /var/lib/clickhouse
@@ -13,33 +16,26 @@ services:
         soft: 262144
         hard: 262144
     healthcheck:
-      test:
-        [
-          "CMD",
-          "wget",
-          "--no-verbose",
-          "--tries=1",
-          "--spider",
-          "http://localhost:8123/ping",
-        ]
+      test: wget --spider --tries 1 http://chuser:chpassword@clickhouse:8123/ping
       start_period: 30s
       start_interval: 1s
       timeout: 1s
 
   gateway:
-    container_name: tensorzero-gateway-ui-tests
     build:
       context: ../..
-      dockerfile: Dockerfile
+      dockerfile: gateway/Dockerfile
       target: gateway
     volumes:
       - ./config:/app/config:ro
     environment:
-      - CLICKHOUSE_URL=http://tensorzero-clickhouse-ui-tests:8123/tensorzero
+      TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures
     env_file:
-      - ${ENV_FILE:-../.env}
+      - .env
     ports:
       - "3000:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       clickhouse:
         condition: service_healthy
@@ -58,14 +54,17 @@ services:
       timeout: 1s
 
   fixtures:
-    # NOTE: This is expected to quickly terminate with status code 0
-    container_name: tensorzero-fixtures-ui-tests
-    image: clickhouse/clickhouse-server:latest
+    image: clickhouse/clickhouse-server:24.12-alpine
     volumes:
       - .:/fixtures:ro
     environment:
-      - CLICKHOUSE_HOST=tensorzero-clickhouse-ui-tests
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PASSWORD: chpassword
+      CLICKHOUSE_USER: chuser
     depends_on:
       gateway:
         condition: service_healthy
-    command: ["bash", "-c", "cd /fixtures && ./load_fixtures.sh"]
+    # Keep this running to make 'check-docker-compose.sh' detect that all containers are healthy
+    command:
+      ["bash", "-c", "cd /fixtures && ./load_fixtures.sh && sleep infinity"]

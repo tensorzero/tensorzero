@@ -1,0 +1,11 @@
+# Note - this is a duplicate of the rustflags in the `.cargo/config.toml` file
+# in the root of the repository
+# We can't use `[tools.maturin.include]` with a file from parent directory,
+# so we need a .cargo/config inside `python-pyo3`
+# During a normal build, cargo will pick up both of these config.toml files -
+# that's fine, as we'll just end up passing the same cfg twice.
+[target.'cfg(not(target_arch = "wasm32"))']
+rustflags = [
+    "--cfg",
+    "aws_sdk_unstable",  # needed for aws-smithy-types + serde-(de)serialize
+]

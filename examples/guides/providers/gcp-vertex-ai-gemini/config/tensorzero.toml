@@ -1,9 +1,9 @@
-[models.gemini_1_5_flash_001]
+[models.gemini_2_0_flash]
 routing = ["gcp_vertex_gemini"]
 
-[models.gemini_1_5_flash_001.providers.gcp_vertex_gemini]
+[models.gemini_2_0_flash.providers.gcp_vertex_gemini]
 type = "gcp_vertex_gemini"
-model_id = "gemini-1.5-flash-001"
+model_id = "gemini-2.0-flash"
 location = "us-central1"
 project_id = "your-project-id"  # change this
 
@@ -12,8 +12,4 @@ type = "chat"
 
 [functions.my_function_name.variants.my_variant_name]
 type = "chat_completion"
-model = "gemini_1_5_flash_001"
-
-# Disable observability to keep this example minimal (not recommended in production)
-[gateway]
-disable_observability = true
+model = "gemini_2_0_flash"

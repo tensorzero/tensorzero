@@ -5,4 +5,5 @@ notebook
 numpy
 openai
 pandas
+tiktoken
 toml

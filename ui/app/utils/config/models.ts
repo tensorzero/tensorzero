@@ -19,12 +19,31 @@ export type AWSBedrockProviderConfig = z.infer<
   typeof AWSBedrockProviderConfigSchema
 >;
 
+export const AWSSagemakerProviderConfigSchema = z.object({
+  type: z.literal("aws_sagemaker"),
+  endpoint_name: z.string(),
+  model_name: z.string(),
+  hosted_provider: z.string(),
+  region: z.string().optional(),
+});
+export type AWSSagemakerProviderConfig = z.infer<
+  typeof AWSSagemakerProviderConfigSchema
+>;
+
 export const AzureProviderConfigSchema = z.object({
   type: z.literal("azure"),
   deployment_id: z.string(),
   endpoint: z.string().url(),
 });
 export type AzureProviderConfig = z.infer<typeof AzureProviderConfigSchema>;
+
+export const DeepSeekProviderConfigSchema = z.object({
+  type: z.literal("deepseek"),
+  model_name: z.string(),
+});
+export type DeepSeekProviderConfig = z.infer<
+  typeof DeepSeekProviderConfigSchema
+>;
 
 export const DummyProviderConfigSchema = z.object({
   type: z.literal("dummy"),
@@ -89,6 +108,19 @@ export const OpenAIProviderConfigSchema = z.object({
 });
 export type OpenAIProviderConfig = z.infer<typeof OpenAIProviderConfigSchema>;
 
+export const TGIProviderConfigSchema = z.object({
+  type: z.literal("tgi"),
+  api_base: z.string().url(),
+});
+export type TGIProviderConfig = z.infer<typeof TGIProviderConfigSchema>;
+
+export const SGLangProviderConfigSchema = z.object({
+  type: z.literal("sglang"),
+  model_name: z.string(),
+  api_base: z.string().url(),
+});
+export type SGLangProviderConfig = z.infer<typeof SGLangProviderConfigSchema>;
+
 export const TogetherProviderConfigSchema = z.object({
   type: z.literal("together"),
   model_name: z.string(),
@@ -114,7 +146,9 @@ export type XAIProviderConfig = z.infer<typeof XAIProviderConfigSchema>;
 export const ProviderConfigSchema = z.discriminatedUnion("type", [
   AnthropicProviderConfigSchema,
   AWSBedrockProviderConfigSchema,
+  AWSSagemakerProviderConfigSchema,
   AzureProviderConfigSchema,
+  DeepSeekProviderConfigSchema,
   DummyProviderConfigSchema,
   FireworksProviderConfigSchema,
   GCPVertexAnthropicProviderConfigSchema,
@@ -123,6 +157,8 @@ export const ProviderConfigSchema = z.discriminatedUnion("type", [
   HyperbolicProviderConfigSchema,
   MistralProviderConfigSchema,
   OpenAIProviderConfigSchema,
+  SGLangProviderConfigSchema,
+  TGIProviderConfigSchema,
   TogetherProviderConfigSchema,
   VLLMProviderConfigSchema,
   XAIProviderConfigSchema,

@@ -1,0 +1,47 @@
+You are tasked with solving a math problem. You will be given an open-ended question that should require arithmetic to solve.
+
+Feel free to work through the problem step-by-step in your response, but once you have found the solution, please complete your response with:
+#### your_answer
+
+
+---
+
+Given the fields `input`, produce the fields `output`.
+
+---
+
+Follow the following format.
+
+Input: ${input}
+Output: ${output}
+
+---
+
+Input: A mountain range has 200 active volcanoes. In a particular year, 20% of the volcanoes exploded in the first two months, 40% of the remaining exploded by the half of the year, and at the end of the year, another 50% of the volcanoes that hadn't already erupted also exploded. How many mountains are still intact at the end of the year?
+Output: To solve the problem, we will go through the sequence of events step-by-step, calculating how many volcanoes erupt at each stage and how many are left at the end of the year. 1. **Initial number of volcanoes:** There are 200 active volcanoes. 2. **First two months:** 20% of the volcanoes exploded. \[ \text{Volcanoes that exploded} = 200 \times 0.20 = 40 \] \[ \text{Volcanoes remaining} = 200 - 40 = 160 \] 3. **By the half of the year:** 40% of the remaining volcanoes exploded. \[ \text{Volcanoes that exploded in this stage} = 160 \times 0.40 = 64 \] \[ \text{Volcanoes remaining} = 160 - 64 = 96 \] 4. **At the end of the year:** 50% of the volcanoes that hadn't already erupted exploded. \[ \text{Volcanoes that exploded in this stage} = 96 \times 0.50 = 48 \] \[ \text{Volcanoes remaining} = 96 - 48 = 48 \] 5. **Final count of intact volcanoes:** Therefore, at the end of the year, the number of volcanoes still intact is 48. Putting this all together, the answer is: #### 48
+
+---
+
+Input: If Beth is 18 years old and her little sister is 5, in how many years would she be twice her sister's age?
+Output: To determine in how many years Beth will be twice her little sister's age, let's denote the number of years from now as \( x \). Currently, Beth is 18 years old and her sister is 5 years old. In \( x \) years, Beth's age will be \( 18 + x \) and her sister's age will be \( 5 + x \). We need to set up the equation where Beth's age is twice her sister's age: \[ 18 + x = 2 \times (5 + x) \] Now, let's solve this equation step-by-step. 1. Start by distributing the 2 on the right side: \[ 18 + x = 10 + 2x \] 2. Next, we want to isolate \( x \). We can do this by first subtracting \( x \) from both sides: \[ 18 = 10 + 2x - x \] which simplifies to: \[ 18 = 10 + x \] 3. Now, subtract 10 from both sides: \[ 18 - 10 = x \] which gives us: \[ 8 = x \] Therefore, it will take 8 years for Beth to be twice her little sister's age. #### 8
+
+---
+
+Input: Joe goes camping with his dad on a Friday. Joe's dad has 21 marshmallows, and Joe has four times as much marshmallows as his dad. If Joe’s dad roasts a third of his marshmallows, and Joe roasts half of his marshmallows, how many marshmallows did they roast in total?
+Output: Let's solve the problem step-by-step. 1. **Determine the number of marshmallows Joe has**: - Joe's dad has 21 marshmallows. - Joe has four times as many as his dad: \[ \text{Joe's marshmallows} = 4 \times \text{Dad's marshmallows} = 4 \times 21 = 84 \] 2. **Calculate how many marshmallows Joe's dad roasts**: - Joe's dad roasts a third of his marshmallows: \[ \text{Marshmallows roasted by Dad} = \frac{1}{3} \times 21 = 7 \] 3. **Calculate how many marshmallows Joe roasts**: - Joe roasts half of his marshmallows: \[ \text{Marshmallows roasted by Joe} = \frac{1}{2} \times 84 = 42 \] 4. **Calculate the total number of marshmallows roasted**: - Total roasted = marshmallows roasted by Dad + marshmallows roasted by Joe: \[ \text{Total roasted} = 7 + 42 = 49 \] Therefore, the total number of marshmallows they roasted is: #### 49
+
+---
+
+Input: A hand-crank pencil sharpener can sharpen one pencil every forty-five seconds. An electric version can sharpen one in twenty seconds. How many more pencils can the electric sharpener sharpen than the hand-crank sharpener in six minutes?
+Output: To determine how many more pencils the electric sharpener can sharpen than the hand-crank sharpener in six minutes, we need to first calculate how many pencils each sharpener can sharpen in that time. 1. **Calculate the number of seconds in six minutes:** \[ 6 \text{ minutes} = 6 \times 60 \text{ seconds} = 360 \text{ seconds} \] 2. **Calculate the number of pencils the hand-crank sharpener can sharpen in six minutes:** The hand-crank sharpener takes 45 seconds to sharpen one pencil. \[ \text{Number of pencils} = \frac{360 \text{ seconds}}{45 \text{ seconds per pencil}} = 8 \text{ pencils} \] 3. **Calculate the number of pencils the electric sharpener can sharpen in six minutes:** The electric sharpener takes 20 seconds to sharpen one pencil. \[ \text{Number of pencils} = \frac{360 \text{ seconds}}{20 \text{ seconds per pencil}} = 18 \text{ pencils} \] 4. **Determine the difference in the number of pencils sharpened:** \[ \text{Difference} = 18 \text{ pencils} - 8 \text{ pencils} = 10 \text{ pencils} \] Hence, the electric sharpener can sharpen 10 more pencils than the hand-crank sharpener in six minutes. #### 10
+
+---
+
+Input: Salvadore earned $1956. Santo earned half of what Salvadore earned. How much money did the two men earn together?
+Output: To find out how much money Salvadore and Santo earned together, we need to first determine how much Santo earned. 1. Salvadore's earnings are given as $1956. 2. Santo earned half of what Salvadore earned, so we need to calculate half of $1956: \[ \text{Santo's earnings} = \frac{1956}{2} = 978 \] Now that we know how much each person earned: - Salvadore earned $1956 - Santo earned $978 Next, we add these amounts together to find their total earnings: \[ \text{Total earnings} = \text{Salvadore's earnings} + \text{Santo's earnings} = 1956 + 978 \] Let's perform the addition: \[ 1956 + 978 = 2934 \] Therefore, the total amount of money that Salvadore and Santo earned together is $2934. #### 2934
+
+
+
+---
+
+REMEMBER: End your response with `#### your_answer`, where `your_answer` should be an integer with no other punctuation.

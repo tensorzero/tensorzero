@@ -84,7 +84,9 @@ Did you have something else in mind? Reach out on Slack or Discord and let us kn
 - Enable `pre-commit` in your repository: `pre-commit install`
 - Install Docker [→](https://docs.docker.com/get-docker/)
 - Install `uv` [→](https://docs.astral.sh/uv/)
-- Install Python (3.10+) (e.g. `uv python install 3.10` + )
+- Install Python (3.9+) (e.g. `uv python install 3.9` + )
+- Install Node.js (we use v22) and `npm` [→](https://nodejs.org/en)
+- Install pnpm `npm install -g pnpm` [→](https://pnpm.io/installation)
 
 ### Tests
 
@@ -101,7 +103,7 @@ cargo test-unit
 1. Launch the test ClickHouse database
 
    ```bash
-   docker compose -f gateway/tests/e2e/docker-compose.yml up --wait
+   docker compose -f tensorzero-internal/tests/e2e/docker-compose.yml up --wait
    ```
 
 2. Set the relevant environment variables. See `examples/production-deployment/.env.example` for the full list.
@@ -127,7 +129,7 @@ cargo test-unit
 
 1. Launch ClickHouse and the gateway in E2E testing mode (see above).
 
-2. Go to the relevant directory (e.g. `cd clients/python`)
+2. Go to the relevant directory (e.g. `cd clients/python-pyo3`)
 
 3. Create a virtual environment and install the dependencies
 
@@ -159,7 +161,35 @@ cargo test-unit
 
 #### Dashboard
 
-Refer to the instructions in `dashboard/README.md`.
+For development, the UI runs against hardcoded fixtures in `ui/fixtures/`.
+It depends on a running ClickHouse instance that has been initialized with the TensorZero data model.
+We include some fixture data as well in order to exercise some functionality.
+
+It also requires a one-time build of a WebAssembly module from Rust source code that is used to ensure consistent templating of messages across the gateway and UI.
+
+The steps below assume you are in the `ui/` directory.
+
+Here are the steps in order to run or test the UI assuming you have the prerequisites installed and this repository checked out:
+
+1. Install dependencies: `pnpm install`
+2. Build the WebAssembly module following instructions in `ui/app/utils/minijinja/README.md`.
+3. Create a `.env` file and set the following environment variables for the server:
+
+```bash
+OPENAI_API_KEY=<your-key>
+FIREWORKS_API_KEY=<your-key>
+FIREWORKS_ACCOUNT_ID=<your-account-id>
+TENSORZERO_CLICKHOUSE_URL=<your-clickhouse-url> # For testing, set to http://chuser:chpassword@localhost:8123/tensorzero
+TENSORZERO_UI_CONFIG_PATH=<path-to-config-file> # For testing, set to ./fixtures/config/tensorzero.toml
+```
+
+4. Run the dependencies: `docker compose -f fixtures/docker-compose.yml up --build --force-recreate`
+   (you can omit these last 2 flags to skip the build step, but they ensure you're using the latest gateway)
+
+With the dependencies running, you can run the tests with `pnpm run test` and the Playwright tests with `pnpm run test-e2e`.
+Similarly, you can start a development server with `pnpm run dev`.
+There may be some Playwright tests in `main` that require feature flags to be on, so be aware of that if they fail for nonobvious reasons.
+
 
 ---
 

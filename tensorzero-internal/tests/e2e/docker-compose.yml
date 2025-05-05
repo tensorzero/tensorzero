@@ -1,0 +1,51 @@
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:${TENSORZERO_CLICKHOUSE_VERSION:-24.12-alpine}
+    environment:
+      CLICKHOUSE_USER: chuser
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+      CLICKHOUSE_PASSWORD: chpassword
+    volumes:
+      # If the directory doesn't exist locally (i.e. we haven't defined a version-specific config),
+      # an empty dir will get mounted in the container
+      - ./clickhouse-configs/${TENSORZERO_CLICKHOUSE_VERSION:-24.12-alpine}/users.xml:/etc/clickhouse-server/users.d/users.xml
+    ports:
+      - "8123:8123" # HTTP port
+      - "9000:9000" # Native port
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: wget --spider --tries 1 http://chuser:chpassword@clickhouse:8123/ping
+      start_period: 30s
+      start_interval: 1s
+      timeout: 1s
+
+  minio:
+    image: bitnami/minio
+    ports:
+      - "8000:9000" # API port
+      - "9001:9001" # Console port
+    environment:
+      MINIO_ROOT_USER: tensorzero-root
+      MINIO_ROOT_PASSWORD: tensorzero-root
+      MINIO_DEFAULT_BUCKETS: tensorzero-e2e-tests
+    healthcheck:
+      test: "mc ls local/tensorzero-e2e-tests || exit 1"
+      start_period: 30s
+      start_interval: 1s
+      timeout: 1s
+
+  jaeger:
+    image: jaegertracing/jaeger:2.5.0
+    volumes:
+      - ./jaeger-config.yaml:/jaeger/config.yaml
+    #command: --set=extensions.jaeger_storage.backends.some_store.memory.max_traces=1
+    command: --config /jaeger/config.yaml
+    ports:
+      - 16686:16686 # Browser UI
+      - 4317:4317
+      - 4318:4318
+      - 5778:5778
+      - 9411:9411

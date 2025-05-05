@@ -1,0 +1,46 @@
+[package]
+name = "tensorzero"
+version = "0.1.0"
+edition = "2021"
+
+[[test]]
+name = "client_tests"
+path = "tests/tests.rs"
+required-features = ["e2e_tests"]
+
+[dependencies]
+reqwest = { workspace = true }
+futures = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+secrecy = { workspace = true }
+uuid = { workspace = true }
+reqwest-eventsource = { workspace = true }
+async-stream = { workspace = true }
+tokio-stream = { workspace = true }
+tensorzero-internal = { path = "../../tensorzero-internal" }
+url = { workspace = true }
+thiserror = "2.0.11"
+pyo3 = { workspace = true, optional = true }
+tracing = { workspace = true }
+tokio = { workspace = true }
+serde-untagged = { workspace = true }
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+clap = { workspace = true }
+lazy_static = { workspace = true }
+object_store = { workspace = true }
+tokio = { workspace = true }
+tracing = "0.1.41"
+tracing-subscriber = "0.3.19"
+tracing-test = { workspace = true }
+
+[features]
+pyo3 = ["dep:pyo3"]
+default = []
+# Forward this feature to 'tensorzero-internal', so that our embedded
+# client can recognize things like the `dummy` provider
+e2e_tests = ["tensorzero-internal/e2e_tests"]

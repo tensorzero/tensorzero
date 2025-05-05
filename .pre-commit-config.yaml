@@ -3,6 +3,7 @@ repos:
     rev: v4.6.0
     hooks:
       - id: check-added-large-files
+        args: ["--maxkb=1024"]
       - id: check-case-conflict
       - id: check-executables-have-shebangs
       - id: check-json
@@ -14,18 +15,35 @@ repos:
       - id: check-yaml
       - id: detect-private-key
         exclude: |
-          (?x)
-          gateway/src/inference/providers/gcp_vertex_gemini\.rs|
-          CONTRIBUTING\.md
+          (?x)^(
+              tensorzero-internal/src/inference/providers/gcp_vertex_gemini\.rs|
+              ci/dummy-gcp-credentials\.json
+          )$
       - id: end-of-file-fixer
         exclude: \.minijinja$
       - id: trailing-whitespace
 
   - repo: local
     hooks:
+      # Find every pyproject.toml and generate a uv.lock file
+      - id: uv-lock
+        name: uv lock
+        entry: bash -c 'git ls-files "*.toml" "**/pyproject.toml" | grep -E "pyproject\.toml$" | while read f; do dir=$(dirname "$f"); echo "Locking $f"; (cd "$dir" && uv lock --project="pyproject.toml" && git add --intent-to-add "uv.lock"); done'
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      # Find every pyproject.toml and generate a requirements.txt file
+      - id: uv-export
+        name: uv export
+        entry: bash -c 'git ls-files "*.toml" "**/pyproject.toml" | grep -E "pyproject\.toml$" | while read f; do dir=$(dirname "$f"); echo "Exporting $f"; (cd "$dir" && uv export --project="pyproject.toml" --output-file="requirements.txt" --quiet && git add --intent-to-add "requirements.txt"); done'
+        language: system
+        pass_filenames: false
+        always_run: true
+
       - id: cargo-deny
         name: cargo deny
-        entry: cargo deny check bans
+        entry: cargo deny check advisories bans
         language: system
         types: [rust]
         pass_filenames: false
@@ -51,9 +69,9 @@ repos:
         types: [rust]
         pass_filenames: false
 
-      - id: prettier
-        name: prettier
-        entry: bash -c 'cd ui && npm run format'
+      - id: "prettier: ui"
+        name: "prettier: ui"
+        entry: bash -c 'cd ui && pnpm run format'
         language: node
         types_or:
           [css, html, javascript, json, jsx, markdown, scss, ts, tsx, yaml]
@@ -64,9 +82,22 @@ repos:
         exclude: '.*\.ipynb$'
         pass_filenames: false
 
-      - id: eslint
-        name: eslint
-        entry: bash -c 'cd ui && npm run lint'
+      - id: "prettier: openai-node"
+        name: "prettier: openai-node"
+        entry: bash -c 'cd clients/openai-node && pnpm run format'
+        language: node
+        types_or:
+          [css, html, javascript, json, jsx, markdown, scss, ts, tsx, yaml]
+        additional_dependencies:
+          - prettier
+          - prettier-plugin-tailwindcss
+          - "@prettier/plugin-xml"
+        exclude: '.*\.ipynb$'
+        pass_filenames: false
+
+      - id: "eslint: ui"
+        name: "eslint: ui"
+        entry: bash -c 'cd ui && pnpm run lint'
         language: node
         types_or: [javascript, jsx, ts, tsx]
         additional_dependencies:
@@ -75,9 +106,29 @@ repos:
           - "@typescript-eslint/eslint-plugin"
         pass_filenames: false
 
-      - id: tsc
-        name: tsc
-        entry: bash -c 'cd ui && npm run typecheck'
+      - id: "eslint: openai-node"
+        name: "eslint: openai-node"
+        entry: bash -c 'cd clients/openai-node && pnpm run lint'
+        language: node
+        types_or: [javascript, jsx, ts, tsx]
+        additional_dependencies:
+          - eslint
+          - "@typescript-eslint/parser"
+          - "@typescript-eslint/eslint-plugin"
+        pass_filenames: false
+
+      - id: "tsc: ui"
+        name: "tsc: ui"
+        entry: bash -c 'cd ui && pnpm run typecheck'
+        language: node
+        types_or: [ts, tsx]
+        additional_dependencies:
+          - typescript
+        pass_filenames: false
+
+      - id: "tsc: openai-node"
+        name: "tsc: openai-node"
+        entry: bash -c 'cd clients/openai-node && pnpm run typecheck'
         language: node
         types_or: [ts, tsx]
         additional_dependencies:
@@ -97,20 +148,26 @@ repos:
       - id: ruff
         args: ["--extend-select", "I", "--fix"]
       - id: ruff-format
+
   - repo: https://github.com/RobertCraigie/pyright-python
     rev: v1.1.391
     hooks:
-      - id: pyright
-        name: "pyright: clients/python"
-        files: ^clients/python/
-        args: ["--project", "clients/python/pyproject.toml"]
-        additional_dependencies:
-          - httpx
-          - uuid_utils
-
       - id: pyright
         name: "pyright: clients/openai-python"
         files: ^clients/openai-python/
         args: ["--project", "clients/openai-python/pyrightconfig.json"]
         additional_dependencies:
           - openai
+
+      - id: pyright
+        name: "pyright: recipes"
+        files: ^recipes/
+        args: ["--project", "recipes/pyrightconfig.json"]
+        additional_dependencies:
+          - clickhouse-connect
+          - pandas
+          - pandas-stubs
+          - pydantic
+          - tensorzero
+          - tiktoken
+          - toml

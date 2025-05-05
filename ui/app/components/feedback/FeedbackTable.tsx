@@ -5,14 +5,14 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  TableEmptyState,
 } from "~/components/ui/table";
 import FeedbackValue from "~/components/feedback/FeedbackValue";
 import { getMetricName } from "~/utils/clickhouse/helpers";
 import type { FeedbackRow } from "~/utils/clickhouse/feedback";
-import { formatDate } from "~/utils/date";
-import { MetricBadges } from "~/components/metric/MetricBadges";
+import MetricBadges from "~/components/metric/MetricBadges";
 import { useConfig } from "~/context/config";
-
+import { TableItemShortUuid, TableItemTime } from "~/components/ui/TableItems";
 export default function FeedbackTable({
   feedback,
 }: {
@@ -20,6 +20,7 @@ export default function FeedbackTable({
 }) {
   const config = useConfig();
   const metrics = config.metrics;
+
   return (
     <div>
       <Table>
@@ -32,25 +33,35 @@ export default function FeedbackTable({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {feedback.map((item) => (
-            <TableRow key={item.id}>
-              <TableCell className="max-w-[200px]">
-                <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono">
-                  {item.id}
-                </code>
-              </TableCell>
-              <TableCell>
-                <div className="flex items-center gap-2">
-                  <span>{getMetricName(item)}</span>
-                  <MetricBadges metric={metrics[getMetricName(item)]} />
-                </div>
-              </TableCell>
-              <TableCell>
-                <FeedbackValue feedback={item} />
-              </TableCell>
-              <TableCell>{formatDate(new Date(item.timestamp))}</TableCell>
-            </TableRow>
-          ))}
+          {feedback.length === 0 ? (
+            <TableEmptyState message="No feedback found" />
+          ) : (
+            feedback.map((item) => (
+              <TableRow key={item.id}>
+                <TableCell className="max-w-[200px]">
+                  <TableItemShortUuid id={item.id} />
+                </TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono">{getMetricName(item)}</span>
+                    <MetricBadges
+                      metric={metrics[getMetricName(item)]}
+                      row={item}
+                    />
+                  </div>
+                </TableCell>
+                <TableCell className="max-w-[200px]">
+                  <FeedbackValue
+                    feedback={item}
+                    metric={metrics[getMetricName(item)]}
+                  />
+                </TableCell>
+                <TableCell>
+                  <TableItemTime timestamp={item.timestamp} />
+                </TableCell>
+              </TableRow>
+            ))
+          )}
         </TableBody>
       </Table>
     </div>

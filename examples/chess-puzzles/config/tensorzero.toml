@@ -1,0 +1,52 @@
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                 FUNCTIONS                                  │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[functions.play_chess_board]
+type = "json"
+user_schema = "functions/play_chess_board/user_schema.json"
+output_schema = "functions/play_chess_board/output_schema.json"
+
+# Baseline Variant
+
+[functions.play_chess_board.variants.baseline]
+type = "chat_completion"
+model = "openai::gpt-4o-mini"
+system_template = "functions/play_chess_board/chess_prompt/system_template.minijinja"
+user_template = "functions/play_chess_board/chess_prompt/user_template.minijinja"
+json_mode = "strict"
+
+# Best of 5 Variant with 5 x Baseline
+
+[functions.play_chess_board.variants.best_of_5]
+type = "experimental_best_of_n_sampling"
+candidates = ["baseline", "baseline", "baseline", "baseline", "baseline"] # 5 x Baseline
+
+[functions.play_chess_board.variants.best_of_5.evaluator]
+model = "openai::gpt-4o-mini"
+system_template = "functions/play_chess_board/chess_prompt/system_template.minijinja"
+user_template = "functions/play_chess_board/chess_prompt/user_template.minijinja"
+json_mode = "strict"
+
+# Mixture of 5 Variant with 5 x Baseline
+
+[functions.play_chess_board.variants.mixture_of_5]
+type = "experimental_mixture_of_n"
+candidates = ["baseline", "baseline", "baseline", "baseline", "baseline"] # 5 x Baseline
+
+[functions.play_chess_board.variants.mixture_of_5.fuser]
+model = "openai::gpt-4o-mini"
+system_template = "functions/play_chess_board/chess_prompt/system_template.minijinja"
+user_template = "functions/play_chess_board/chess_prompt/user_template.minijinja"
+json_mode = "strict"
+
+# Exercise for the reader: Why don't you try combining 5 different variants (e.g. different prompts)?
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                  METRICS                                   │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[metrics.puzzle_success]
+type = "boolean"
+level = "episode"
+optimize = "max"

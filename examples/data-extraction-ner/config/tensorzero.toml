@@ -1,0 +1,50 @@
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                 FUNCTIONS                                  │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[functions.extract_entities]
+type = "json"
+output_schema = "functions/extract_entities/output_schema.json"
+
+[functions.extract_entities.variants.gpt_4o]
+type = "chat_completion"
+model = "openai::gpt-4o-2024-08-06"
+system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
+
+[functions.extract_entities.variants.gpt_4o_mini]
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"
+system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
+
+# TODO: Once you've fine-tuned your model, add it here like the commented example below
+
+# [functions.extract_entities.variants.gpt_4o_mini_fine_tuned]
+# type = "chat_completion"
+# model = "openai::ft:gpt-4o-mini-2024-07-18:xxxxxxxx::xxxxxxxx"
+# system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
+
+# [functions.extract_entities.variants.gpt_4o_mini_dicl]
+# type = "experimental_dynamic_in_context_learning"
+# embedding_model = "openai::text-embedding-3-small"
+# model = "openai::gpt-4o-mini-2024-07-18"
+# k = 10
+# system_instructions = "functions/extract_entities/initial_prompt/system_template.minijinja"
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                  METRICS                                   │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[metrics.exact_match]
+type = "boolean"
+level = "inference"
+optimize = "max"
+
+[metrics.jaccard_similarity]
+type = "float"
+level = "inference"
+optimize = "max"
+
+[metrics.valid_output]
+type = "boolean"
+level = "inference"
+optimize = "max"

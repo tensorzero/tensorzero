@@ -1,12 +1,18 @@
 import {
   queryEpisodeTable,
   queryEpisodeTableBounds,
+  countEpisodes,
 } from "~/utils/clickhouse/inference";
 import type { Route } from "./+types/route";
 import EpisodesTable from "./EpisodesTable";
 import { data, isRouteErrorResponse, useNavigate } from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
 import EpisodeSearchBar from "./EpisodeSearchBar";
+import {
+  PageHeader,
+  PageLayout,
+  SectionLayout,
+} from "~/components/layout/PageLayout";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
@@ -17,24 +23,26 @@ export async function loader({ request }: Route.LoaderArgs) {
     throw data("Page size cannot exceed 100", { status: 400 });
   }
 
-  const [episodes, bounds] = await Promise.all([
+  const [episodes, bounds, totalCount] = await Promise.all([
     queryEpisodeTable({
       before: before || undefined,
       after: after || undefined,
       page_size: pageSize,
     }),
     queryEpisodeTableBounds(),
+    countEpisodes(),
   ]);
 
   return {
     episodes,
     pageSize,
     bounds,
+    totalCount,
   };
 }
 
 export default function EpisodesPage({ loaderData }: Route.ComponentProps) {
-  const { episodes, pageSize, bounds } = loaderData;
+  const { episodes, pageSize, bounds, totalCount } = loaderData;
   const navigate = useNavigate();
 
   const topEpisode = episodes[0];
@@ -42,33 +50,41 @@ export default function EpisodesPage({ loaderData }: Route.ComponentProps) {
 
   // IMPORTANT: use the last_inference_id to navigate
   const handleNextPage = () => {
-    navigate(`?before=${bottomEpisode.last_inference_id}&pageSize=${pageSize}`);
+    navigate(
+      `?before=${bottomEpisode.last_inference_id}&pageSize=${pageSize}`,
+      { preventScrollReset: true },
+    );
   };
 
   const handlePreviousPage = () => {
-    navigate(`?after=${topEpisode.last_inference_id}&pageSize=${pageSize}`);
+    navigate(`?after=${topEpisode.last_inference_id}&pageSize=${pageSize}`, {
+      preventScrollReset: true,
+    });
   };
 
   // These are swapped because the table is sorted in descending order
-  const disablePrevious = bounds.last_id === topEpisode.last_inference_id;
-  const disableNext = bounds.first_id === bottomEpisode.last_inference_id;
+  const disablePrevious =
+    !bounds?.last_id || bounds.last_id === topEpisode.last_inference_id;
+  const disableNext =
+    !bounds?.first_id || bounds.first_id === bottomEpisode.last_inference_id;
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <h2 className="mb-4 text-2xl font-semibold">Episodes</h2>
-      <div className="mb-6 h-px w-full bg-gray-200"></div>
-      <EpisodeSearchBar />
-      <div className="my-6 h-px w-full bg-gray-200"></div>
-      <EpisodesTable episodes={episodes} />
-      <PageButtons
-        onPreviousPage={handlePreviousPage}
-        onNextPage={handleNextPage}
-        disablePrevious={disablePrevious}
-        disableNext={disableNext}
-      />
-    </div>
+    <PageLayout>
+      <PageHeader heading="Episodes" count={totalCount} />
+      <SectionLayout>
+        <EpisodeSearchBar />
+        <EpisodesTable episodes={episodes} />
+        <PageButtons
+          onPreviousPage={handlePreviousPage}
+          onNextPage={handleNextPage}
+          disablePrevious={disablePrevious}
+          disableNext={disableNext}
+        />
+      </SectionLayout>
+    </PageLayout>
   );
 }
+
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   console.error(error);
 

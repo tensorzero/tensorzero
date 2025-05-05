@@ -34,9 +34,21 @@ function formatProvider(provider: ProviderType): {
         className:
           "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300",
       };
+    case "aws_sagemaker":
+      return {
+        name: "AWS Sagemaker",
+        className:
+          "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300",
+      };
     case "azure":
       return {
         name: "Azure",
+        className:
+          "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300",
+      };
+    case "deepseek":
+      return {
+        name: "DeepSeek",
         className:
           "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300",
       };
@@ -83,6 +95,18 @@ function formatProvider(provider: ProviderType): {
         name: "OpenAI",
         className:
           "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300",
+      };
+    case "sglang":
+      return {
+        name: "SGLang",
+        className:
+          "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-300",
+      };
+    case "tgi":
+      return {
+        name: "TGI",
+        className:
+          "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-300",
       };
     case "together":
       return {

@@ -1,0 +1,40 @@
+[package]
+name = "provider-proxy"
+version = "0.1.0"
+edition = "2021"
+
+[[test]]
+name = "e2e"
+path = "tests/e2e/tests.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+bytes = { version = "1.10.0", features = ["serde"] }
+clap = { version = "4.5.37", features = ["derive"] }
+hex = "0.4.3"
+http = "1.2.0"
+http-body-util = "0.1.2"
+http-serde-ext = "1.0.2"
+hyper = { version = "1.6.0", features = ["client", "server", "http1", "http2"] }
+hyper-util = "0.1.11"
+moka = { version = "0.12.10", features = ["sync"] }
+pin-project = "1.1.10"
+rcgen = "0.13.2"
+reqwest.workspace = true
+rustls = "0.23.26"
+serde = { workspace = true }
+serde_json.workspace = true
+sha2 = "0.10.8"
+tokio.workspace = true
+tokio-rustls = "0.26.1"
+tracing = "0.1.41"
+tracing-subscriber.workspace = true
+
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+axum.workspace = true
+rand = "0.9.1"
+tempfile = "3.19.1"

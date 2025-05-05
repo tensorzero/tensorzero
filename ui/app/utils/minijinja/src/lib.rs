@@ -21,7 +21,7 @@ pub struct JsExposedEnv {
 }
 
 fn annotate_error(err: minijinja::Error) -> JsError {
-    JsError::new(&format!("{:#}", err))
+    JsError::new(&format!("{err:#}"))
 }
 
 #[wasm_bindgen]
@@ -51,12 +51,12 @@ pub fn create_env(templates: JsValue) -> Result<JsExposedEnv, JsError> {
 
 #[cfg(test)]
 mod tests {
+    #![cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
     use super::*;
     use serde_json::json;
     use wasm_bindgen_test::*;
 
     #[wasm_bindgen_test]
-    #[test]
     fn test_basic_template_rendering() {
         // Create a simple template environment
         let templates = HashMap::from([("hello".to_string(), "Hello, {{ name }}!".to_string())]);
@@ -80,7 +80,6 @@ mod tests {
     }
 
     #[wasm_bindgen_test]
-    #[test]
     fn test_template_error_handling() {
         // Test with invalid template syntax
         let templates = HashMap::from([(

@@ -6,19 +6,36 @@ import {
   BestOfNSamplingConfigSchema,
   DiclConfigSchema,
   MixtureOfNConfigSchema,
+  ChainOfThoughtConfigSchema,
+  type RawDiclConfig,
   type ChatCompletionConfig,
+  type DiclConfig,
   type VariantConfig,
+  type ChainOfThoughtConfig,
 } from "./variant";
 import { stringify } from "smol-toml";
 
 export const RawChatCompletionConfigSchema =
   BaseChatCompletionConfigSchema.extend({
     type: z.literal("chat_completion"),
-  }).partial({ retries: true, weight: true });
+  }).partial({ retries: true });
 
 export type RawChatCompletionConfig = z.infer<
   typeof RawChatCompletionConfigSchema
 >;
+
+export const RawChainOfThoughtConfigSchema =
+  RawChatCompletionConfigSchema.extend({
+    type: z.literal("experimental_chain_of_thought"),
+  });
+
+export type RawChainOfThoughtConfig = z.infer<
+  typeof RawChainOfThoughtConfigSchema
+>;
+
+export const RawDiclConfigSchema = DiclConfigSchema.extend({
+  type: z.literal("experimental_dynamic_in_context_learning"),
+});
 
 // Raw variant config using basic string templates
 export const RawVariantConfigSchema = z
@@ -27,6 +44,7 @@ export const RawVariantConfigSchema = z
     BestOfNSamplingConfigSchema,
     DiclConfigSchema,
     MixtureOfNConfigSchema,
+    RawChainOfThoughtConfigSchema,
   ])
   .transform((raw) => ({
     ...raw,
@@ -84,46 +102,83 @@ async function loadTemplateContent(
   );
 }
 
-export async function convertRawVariantConfig(
+async function convertRawVariantConfig(
   variantConfig: Omit<RawVariantConfig, "load">,
   configPath: string,
 ): Promise<VariantConfig> {
   if (variantConfig.type === "chat_completion") {
     const rawChatCompletionConfig = variantConfig as RawChatCompletionConfig;
-    const templatedVariant: ChatCompletionConfig = {
-      ...rawChatCompletionConfig,
-      type: "chat_completion",
-      system_template: rawChatCompletionConfig.system_template
+
+    return loadChatCompletionConfig(rawChatCompletionConfig, configPath);
+  }
+  if (variantConfig.type === "experimental_dynamic_in_context_learning") {
+    const rawDiclConfig = variantConfig as RawDiclConfig;
+    const diclConfig: DiclConfig = {
+      ...rawDiclConfig,
+      system_instructions: rawDiclConfig.system_instructions
         ? {
-            path: rawChatCompletionConfig.system_template,
+            path: rawDiclConfig.system_instructions,
             content: await loadTemplateContent(
-              rawChatCompletionConfig.system_template,
-              configPath,
-            ),
-          }
-        : undefined,
-      user_template: rawChatCompletionConfig.user_template
-        ? {
-            path: rawChatCompletionConfig.user_template,
-            content: await loadTemplateContent(
-              rawChatCompletionConfig.user_template,
-              configPath,
-            ),
-          }
-        : undefined,
-      assistant_template: rawChatCompletionConfig.assistant_template
-        ? {
-            path: rawChatCompletionConfig.assistant_template,
-            content: await loadTemplateContent(
-              rawChatCompletionConfig.assistant_template,
+              rawDiclConfig.system_instructions,
               configPath,
             ),
           }
         : undefined,
     };
-    return templatedVariant;
+    return diclConfig;
+  }
+  if (variantConfig.type === "experimental_chain_of_thought") {
+    const rawChainOfThoughtConfig = variantConfig as RawChainOfThoughtConfig;
+    const chatCompletionConfig = await loadChatCompletionConfig(
+      rawChainOfThoughtConfig,
+      configPath,
+    );
+    const chainOfThoughtConfig: ChainOfThoughtConfig =
+      ChainOfThoughtConfigSchema.parse({
+        ...chatCompletionConfig,
+        type: "experimental_chain_of_thought",
+      });
+    return chainOfThoughtConfig;
   }
 
   // Other variant types don't need conversion
   return variantConfig as VariantConfig;
+}
+
+async function loadChatCompletionConfig(
+  rawChatCompletionConfig: RawChatCompletionConfig | RawChainOfThoughtConfig,
+  configPath: string,
+): Promise<ChatCompletionConfig> {
+  const templatedVariant: ChatCompletionConfig = {
+    ...rawChatCompletionConfig,
+    type: "chat_completion",
+    system_template: rawChatCompletionConfig.system_template
+      ? {
+          path: rawChatCompletionConfig.system_template,
+          content: await loadTemplateContent(
+            rawChatCompletionConfig.system_template,
+            configPath,
+          ),
+        }
+      : undefined,
+    user_template: rawChatCompletionConfig.user_template
+      ? {
+          path: rawChatCompletionConfig.user_template,
+          content: await loadTemplateContent(
+            rawChatCompletionConfig.user_template,
+            configPath,
+          ),
+        }
+      : undefined,
+    assistant_template: rawChatCompletionConfig.assistant_template
+      ? {
+          path: rawChatCompletionConfig.assistant_template,
+          content: await loadTemplateContent(
+            rawChatCompletionConfig.assistant_template,
+            configPath,
+          ),
+        }
+      : undefined,
+  };
+  return templatedVariant;
 }

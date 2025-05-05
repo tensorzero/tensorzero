@@ -28,22 +28,38 @@ import { getConfig } from "../config/index.server";
 import { get_template_env, type ChatCompletionConfig } from "../config/variant";
 import { z } from "zod";
 import { SFTJob, type SFTJobStatus } from "./common";
-import { getCuratedInferences } from "../clickhouse/curation";
+import { getCuratedInferences } from "../clickhouse/curation.server";
 import type {
   ContentBlockOutput,
   JsonInferenceOutput,
 } from "../clickhouse/common";
 import type { ParsedInferenceExample } from "../clickhouse/curation";
-export const FIREWORKS_API_URL = "https://api.fireworks.ai";
-export const FIREWORKS_API_KEY = process.env.FIREWORKS_API_KEY || logError();
-export const FIREWORKS_ACCOUNT_ID =
-  process.env.FIREWORKS_ACCOUNT_ID || logError();
 
-// Log error and return empty string if env vars not set
-function logError(): string {
-  console.error("FIREWORKS_API_KEY and FIREWORKS_ACCOUNT_ID must be set");
-  return "";
-}
+// Base URL for the Fireworks API
+export const FIREWORKS_API_URL =
+  process.env.FIREWORKS_BASE_URL || "https://api.fireworks.ai";
+
+// Retrieves the API key for the Fireworks API from environment variables
+// Logs a warning if the key is not set
+export const FIREWORKS_API_KEY = (() => {
+  const key = process.env.FIREWORKS_API_KEY;
+  if (!key) {
+    console.warn("FIREWORKS_API_KEY is not set");
+    return "";
+  }
+  return key;
+})();
+
+// Retrieves the account ID for the Fireworks API from environment variables
+// Logs a warning if the ID is not set
+export const FIREWORKS_ACCOUNT_ID = (() => {
+  const id = process.env.FIREWORKS_ACCOUNT_ID;
+  if (!id) {
+    console.warn("FIREWORKS_ACCOUNT_ID is not set");
+    return "";
+  }
+  return id;
+})();
 
 interface FireworksSFTJobParams {
   jobPath: string;
@@ -142,7 +158,7 @@ export class FireworksSFTJob extends SFTJob {
     if (!jobId) {
       throw new Error("Failed to parse job ID from path");
     }
-    return `https://fireworks.ai/dashboard/fine-tuning/${jobId}`;
+    return `https://fireworks.ai/dashboard/fine-tuning/v1/${jobId}`;
   }
 
   status(): SFTJobStatus {
@@ -516,7 +532,7 @@ export function tensorzero_inference_to_fireworks_messages(
 }
 
 // Creates a dataset record in Fireworks.
-// This is a placeholder for the dataset that gets uploaded in a subsequest call.
+// This is a placeholder for the dataset that gets uploaded in a subsequent call.
 // Essentially all this does is make an ID in Fireworks that we reuse.
 // We'll use a UUIDv7
 async function create_dataset_record(accountId: string, exampleCount: number) {

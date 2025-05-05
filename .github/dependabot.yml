@@ -24,6 +24,10 @@ updates:
   - package-ecosystem: "cargo"
     directory: "/"
     schedule:
-      interval: "daily"
-    labels: []
-    open-pull-requests-limit: 0 # only send security updates
+      # This schedule does not affect security updates: https://docs.github.com/en/code-security/dependabot/dependabot-security-updates/customizing-dependabot-security-prs#about-customizing-pull-requests-for-security-updates
+      interval: "weekly"
+    groups:
+      rust-dependencies:
+        patterns:
+          - "*"
+    open-pull-requests-limit: 1 # This does not affect the security update pr limit

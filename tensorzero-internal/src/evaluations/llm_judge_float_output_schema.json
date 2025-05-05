@@ -1,0 +1,12 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["score"],
+  "additionalProperties": false,
+  "properties": {
+    "score": {
+      "type": "number",
+      "description": "The score assigned as a number"
+    }
+  }
+}

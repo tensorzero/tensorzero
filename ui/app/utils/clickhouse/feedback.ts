@@ -1,7 +1,7 @@
-import { z } from "zod";
-import type { TableBounds } from "./common";
+import { type TableBounds, TableBoundsSchema } from "./common";
 import { data } from "react-router";
-import { clickhouseClient } from "./common";
+import { clickhouseClient } from "./client.server";
+import { z } from "zod";
 
 export const booleanMetricFeedbackRowSchema = z.object({
   type: z.literal("boolean"),
@@ -44,7 +44,7 @@ export async function queryBooleanMetricsByTargetId(params: {
           metric_name,
           value,
           tags,
-          UUIDv7ToDateTime(id) AS timestamp
+          formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
         FROM BooleanMetricFeedbackByTargetId
         WHERE target_id = {target_id:String}
         ORDER BY toUInt128(id) DESC
@@ -59,7 +59,7 @@ export async function queryBooleanMetricsByTargetId(params: {
           metric_name,
           value,
           tags,
-          UUIDv7ToDateTime(id) AS timestamp
+          formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
         FROM BooleanMetricFeedbackByTargetId
         WHERE target_id = {target_id:String}
           AND toUInt128(id) < toUInt128(toUUID({before:String}))
@@ -85,7 +85,7 @@ export async function queryBooleanMetricsByTargetId(params: {
             metric_name,
             value,
             tags,
-            UUIDv7ToDateTime(id) AS timestamp
+            formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
           FROM BooleanMetricFeedbackByTargetId
           WHERE target_id = {target_id:String}
             AND toUInt128(id) > toUInt128(toUUID({after:String}))
@@ -104,7 +104,7 @@ export async function queryBooleanMetricsByTargetId(params: {
       query_params,
     });
     const rows = await resultSet.json<BooleanMetricFeedbackRow>();
-    return rows;
+    return z.array(booleanMetricFeedbackRowSchema).parse(rows);
   } catch (error) {
     console.error(error);
     throw data("Error querying boolean metrics", { status: 500 });
@@ -117,10 +117,8 @@ export async function queryBooleanMetricFeedbackBoundsByTargetId(params: {
   const { target_id } = params;
   const query = `
      SELECT
-    (SELECT id FROM BooleanMetricFeedbackByTargetId WHERE toUInt128(id) = (SELECT MIN(toUInt128(id)) FROM BooleanMetricFeedbackByTargetId WHERE target_id = {target_id:String})) AS first_id,
-    (SELECT id FROM BooleanMetricFeedbackByTargetId WHERE toUInt128(id) = (SELECT MAX(toUInt128(id)) FROM BooleanMetricFeedbackByTargetId WHERE target_id = {target_id:String})) AS last_id
-    FROM BooleanMetricFeedbackByTargetId
-    LIMIT 1
+      (SELECT id FROM BooleanMetricFeedbackByTargetId WHERE target_id = {target_id:String} ORDER BY toUInt128(id) ASC LIMIT 1) AS first_id,
+      (SELECT id FROM BooleanMetricFeedbackByTargetId WHERE target_id = {target_id:String} ORDER BY toUInt128(id) DESC LIMIT 1) AS last_id
     `;
 
   try {
@@ -137,9 +135,9 @@ export async function queryBooleanMetricFeedbackBoundsByTargetId(params: {
       rows.length === 0 ||
       (rows[0].first_id === null && rows[0].last_id === null)
     ) {
-      return { first_id: undefined, last_id: undefined };
+      return { first_id: null, last_id: null };
     }
-    return rows[0];
+    return TableBoundsSchema.parse(rows[0]);
   } catch (error) {
     console.error(error);
     throw data("Error querying boolean metric feedback bounds", {
@@ -198,7 +196,7 @@ export async function queryCommentFeedbackByTargetId(params: {
           target_id,
           target_type,
           value,
-          UUIDv7ToDateTime(id) AS timestamp
+          formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
         FROM CommentFeedbackByTargetId
         WHERE target_id = {target_id:String}
         ORDER BY toUInt128(id) DESC
@@ -212,7 +210,7 @@ export async function queryCommentFeedbackByTargetId(params: {
           target_id,
           target_type,
           value,
-          UUIDv7ToDateTime(id) AS timestamp
+          formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
         FROM CommentFeedbackByTargetId
         WHERE target_id = {target_id:String}
           AND toUInt128(id) < toUInt128(toUUID({before:String}))
@@ -236,7 +234,7 @@ export async function queryCommentFeedbackByTargetId(params: {
             target_id,
             target_type,
             value,
-            UUIDv7ToDateTime(id) AS timestamp
+            formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
           FROM CommentFeedbackByTargetId
           WHERE target_id = {target_id:String}
             AND toUInt128(id) > toUInt128(toUUID({after:String}))
@@ -255,7 +253,7 @@ export async function queryCommentFeedbackByTargetId(params: {
       query_params,
     });
     const rows = await resultSet.json<CommentFeedbackRow>();
-    return rows;
+    return z.array(commentFeedbackRowSchema).parse(rows);
   } catch (error) {
     console.error(error);
     throw data("Error querying comment feedback", { status: 500 });
@@ -288,9 +286,9 @@ export async function queryCommentFeedbackBoundsByTargetId(params: {
       rows.length === 0 ||
       (rows[0].first_id === null && rows[0].last_id === null)
     ) {
-      return { first_id: undefined, last_id: undefined };
+      return { first_id: null, last_id: null };
     }
-    return rows[0];
+    return TableBoundsSchema.parse(rows[0]);
   } catch (error) {
     console.error(error);
     throw data("Error querying comment feedback bounds", { status: 500 });
@@ -347,7 +345,7 @@ export async function queryDemonstrationFeedbackByInferenceId(params: {
           id,
           inference_id,
           value,
-          UUIDv7ToDateTime(id) AS timestamp
+          formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
         FROM DemonstrationFeedbackByInferenceId
         WHERE inference_id = {inference_id:String}
         ORDER BY toUInt128(id) DESC
@@ -360,7 +358,7 @@ export async function queryDemonstrationFeedbackByInferenceId(params: {
           id,
           inference_id,
           value,
-          UUIDv7ToDateTime(id) AS timestamp
+          formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
         FROM DemonstrationFeedbackByInferenceId
         WHERE inference_id = {inference_id:String}
           AND toUInt128(id) < toUInt128(toUUID({before:String}))
@@ -375,14 +373,14 @@ export async function queryDemonstrationFeedbackByInferenceId(params: {
           id,
           inference_id,
           value,
-          timestamp
+          formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
         FROM
         (
           SELECT
             id,
             inference_id,
             value,
-            UUIDv7ToDateTime(id) AS timestamp
+            formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
           FROM DemonstrationFeedbackByInferenceId
           WHERE inference_id = {inference_id:String}
             AND toUInt128(id) > toUInt128(toUUID({after:String}))
@@ -401,7 +399,7 @@ export async function queryDemonstrationFeedbackByInferenceId(params: {
       query_params,
     });
     const rows = await resultSet.json<DemonstrationFeedbackRow>();
-    return rows;
+    return z.array(demonstrationFeedbackRowSchema).parse(rows);
   } catch (error) {
     console.error(error);
     throw data("Error querying demonstration feedback", { status: 500 });
@@ -434,9 +432,9 @@ export async function queryDemonstrationFeedbackBoundsByInferenceId(params: {
       rows.length === 0 ||
       (rows[0].first_id === null && rows[0].last_id === null)
     ) {
-      return { first_id: undefined, last_id: undefined };
+      return { first_id: null, last_id: null };
     }
-    return rows[0];
+    return TableBoundsSchema.parse(rows[0]);
   } catch (error) {
     console.error(error);
     throw data("Error querying demonstration feedback bounds", {
@@ -501,7 +499,7 @@ export async function queryFloatMetricsByTargetId(params: {
           metric_name,
           value,
           tags,
-          UUIDv7ToDateTime(id) AS timestamp
+          formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
         FROM FloatMetricFeedbackByTargetId
         WHERE target_id = {target_id:String}
         ORDER BY toUInt128(id) DESC
@@ -516,7 +514,7 @@ export async function queryFloatMetricsByTargetId(params: {
           metric_name,
           value,
           tags,
-          UUIDv7ToDateTime(id) AS timestamp
+          formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
         FROM FloatMetricFeedbackByTargetId
         WHERE target_id = {target_id:String}
           AND toUInt128(id) < toUInt128(toUUID({before:String}))
@@ -542,7 +540,7 @@ export async function queryFloatMetricsByTargetId(params: {
             metric_name,
             value,
             tags,
-            UUIDv7ToDateTime(id) AS timestamp
+            formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
           FROM FloatMetricFeedbackByTargetId
           WHERE target_id = {target_id:String}
             AND toUInt128(id) > toUInt128(toUUID({after:String}))
@@ -561,7 +559,7 @@ export async function queryFloatMetricsByTargetId(params: {
       query_params,
     });
     const rows = await resultSet.json<FloatMetricFeedbackRow>();
-    return rows;
+    return z.array(floatMetricFeedbackRowSchema).parse(rows);
   } catch (error) {
     console.error(error);
     throw data("Error querying float metric feedback", { status: 500 });
@@ -574,10 +572,8 @@ export async function queryFloatMetricFeedbackBoundsByTargetId(params: {
   const { target_id } = params;
   const query = `
      SELECT
-    (SELECT id FROM FloatMetricFeedbackByTargetId WHERE toUInt128(id) = (SELECT MIN(toUInt128(id)) FROM FloatMetricFeedbackByTargetId WHERE target_id = {target_id:String})) AS first_id,
-    (SELECT id FROM FloatMetricFeedbackByTargetId WHERE toUInt128(id) = (SELECT MAX(toUInt128(id)) FROM FloatMetricFeedbackByTargetId WHERE target_id = {target_id:String})) AS last_id
-    FROM FloatMetricFeedbackByTargetId
-    LIMIT 1
+      (SELECT id FROM FloatMetricFeedbackByTargetId WHERE target_id = {target_id:String} ORDER BY toUInt128(id) ASC LIMIT 1) AS first_id,
+      (SELECT id FROM FloatMetricFeedbackByTargetId WHERE target_id = {target_id:String} ORDER BY toUInt128(id) DESC LIMIT 1) AS last_id
     `;
 
   try {
@@ -594,9 +590,9 @@ export async function queryFloatMetricFeedbackBoundsByTargetId(params: {
       rows.length === 0 ||
       (rows[0].first_id === null && rows[0].last_id === null)
     ) {
-      return { first_id: undefined, last_id: undefined };
+      return { first_id: null, last_id: null };
     }
-    return rows[0];
+    return TableBoundsSchema.parse(rows[0]);
   } catch (error) {
     console.error(error);
     throw data("Error querying float metric feedback bounds", {
@@ -741,4 +737,195 @@ export async function countFeedbackByTargetId(
   return (
     booleanMetrics + commentFeedback + demonstrationFeedback + floatMetrics
   );
+}
+
+export const metricsWithFeedbackRowSchema = z
+  .object({
+    function_name: z.string(),
+    metric_name: z.string(),
+    metric_type: z.enum(["boolean", "float", "demonstration"]),
+    feedback_count: z.number(),
+  })
+  .strict();
+
+export const metricsWithFeedbackDataSchema = z
+  .object({
+    metrics: z.array(metricsWithFeedbackRowSchema),
+  })
+  .strict();
+
+export type MetricsWithFeedbackRow = z.infer<
+  typeof metricsWithFeedbackRowSchema
+>;
+export type MetricsWithFeedbackData = z.infer<
+  typeof metricsWithFeedbackDataSchema
+>;
+
+export async function queryMetricsWithFeedback(params: {
+  function_name: string;
+  inference_table: string;
+  variant_name?: string;
+}): Promise<MetricsWithFeedbackData> {
+  const { function_name, inference_table, variant_name } = params;
+
+  const variantClause = variant_name
+    ? `AND i.variant_name = {variant_name:String}`
+    : "";
+
+  const query = `
+    WITH
+    boolean_inference_metrics AS (
+      SELECT
+        i.function_name,
+        bmf.metric_name,
+        'boolean' as metric_type,
+        COUNT(DISTINCT i.id) as feedback_count
+      FROM ${inference_table} i
+      JOIN BooleanMetricFeedback bmf ON bmf.target_id = i.id
+      WHERE i.function_name = {function_name:String}
+        ${variantClause}
+      GROUP BY i.function_name, bmf.metric_name
+      HAVING feedback_count > 0
+    ),
+
+    boolean_episode_metrics AS (
+      SELECT
+        i.function_name,
+        bmf.metric_name,
+        'boolean' as metric_type,
+        COUNT(DISTINCT i.id) as feedback_count
+      FROM ${inference_table} i
+      JOIN BooleanMetricFeedback bmf ON bmf.target_id = i.episode_id
+      WHERE i.function_name = {function_name:String}
+        ${variantClause}
+      GROUP BY i.function_name, bmf.metric_name
+      HAVING feedback_count > 0
+    ),
+
+    float_inference_metrics AS (
+      SELECT
+        i.function_name,
+        fmf.metric_name,
+        'float' as metric_type,
+        COUNT(DISTINCT i.id) as feedback_count
+      FROM ${inference_table} i
+      JOIN FloatMetricFeedback fmf ON fmf.target_id = i.id
+      WHERE i.function_name = {function_name:String}
+        ${variantClause}
+      GROUP BY i.function_name, fmf.metric_name
+      HAVING feedback_count > 0
+    ),
+
+    float_episode_metrics AS (
+      SELECT
+        i.function_name,
+        fmf.metric_name,
+        'float' as metric_type,
+        COUNT(DISTINCT i.id) as feedback_count
+      FROM ${inference_table} i
+      JOIN FloatMetricFeedback fmf ON fmf.target_id = i.episode_id
+      WHERE i.function_name = {function_name:String}
+        ${variantClause}
+      GROUP BY i.function_name, fmf.metric_name
+      HAVING feedback_count > 0
+    ),
+    demonstration_metrics AS (
+      SELECT
+        i.function_name,
+        'demonstration' as metric_name,
+        'demonstration' as metric_type,
+        COUNT(DISTINCT i.id) as feedback_count
+      FROM ${inference_table} i
+      JOIN DemonstrationFeedback df ON df.inference_id = i.id
+      WHERE i.function_name = {function_name:String}
+        ${variantClause}
+      GROUP BY i.function_name
+      HAVING feedback_count > 0
+    )
+    SELECT
+      function_name,
+      metric_name,
+      metric_type,
+      toString(feedback_count) as feedback_count
+    FROM (
+      SELECT * FROM boolean_inference_metrics
+      UNION ALL
+      SELECT * FROM boolean_episode_metrics
+      UNION ALL
+      SELECT * FROM float_inference_metrics
+      UNION ALL
+      SELECT * FROM float_episode_metrics
+      UNION ALL
+      SELECT * FROM demonstration_metrics
+    )
+    ORDER BY metric_type, metric_name`;
+
+  try {
+    const resultSet = await clickhouseClient.query({
+      query,
+      format: "JSONEachRow",
+      query_params: {
+        function_name,
+        ...(variant_name && { variant_name }),
+      },
+    });
+
+    const rawMetrics = (await resultSet.json()) as Array<{
+      function_name: string;
+      metric_name: string;
+      metric_type: "boolean" | "float" | "demonstration";
+      feedback_count: string;
+    }>;
+
+    const validMetrics = rawMetrics.map((metric) => ({
+      ...metric,
+      feedback_count: Number(metric.feedback_count),
+    }));
+
+    return metricsWithFeedbackDataSchema.parse({ metrics: validMetrics });
+  } catch (error) {
+    console.error("Error fetching metrics with feedback:", error);
+    throw data("Error fetching metrics with feedback", { status: 500 });
+  }
+}
+
+/**
+ * Polls for a specific feedback item on the first page.
+ * @param targetId The ID of the target (e.g., inference_id).
+ * @param feedbackId The ID of the feedback item to find.
+ * @param pageSize The number of items per page to fetch.
+ * @param maxRetries Maximum number of polling attempts.
+ * @param retryDelay Delay between retries in milliseconds.
+ * @returns An object containing the fetched feedback list and a boolean indicating if the specific item was found.
+ */
+export async function pollForFeedbackItem(
+  targetId: string,
+  feedbackId: string,
+  pageSize: number,
+  maxRetries: number = 10,
+  retryDelay: number = 200,
+): Promise<FeedbackRow[]> {
+  let feedback: FeedbackRow[] = [];
+  let found = false;
+  for (let i = 0; i < maxRetries; i++) {
+    feedback = await queryFeedbackByTargetId({
+      target_id: targetId,
+      page_size: pageSize,
+      // Only fetch the first page
+    });
+    if (feedback.some((f) => f.id === feedbackId)) {
+      found = true;
+      break;
+    }
+    if (i < maxRetries - 1) {
+      // Don't sleep after the last attempt
+      await new Promise((resolve) => setTimeout(resolve, retryDelay));
+    }
+  }
+  if (!found) {
+    console.warn(
+      `Feedback ${feedbackId} for target ${targetId} not found after ${maxRetries} retries.`,
+    );
+  }
+  return feedback;
 }

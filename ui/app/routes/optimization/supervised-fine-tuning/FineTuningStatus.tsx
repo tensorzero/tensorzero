@@ -14,11 +14,13 @@ import {
   MessageSquare,
 } from "lucide-react";
 import type { SFTJobStatus } from "~/utils/supervised_fine_tuning/common";
+import { SFTAnalysis } from "./SFTAnalysis";
 import { ModelBadge } from "~/components/model/ModelBadge";
 import { extractTimestampFromUUIDv7 } from "~/utils/common";
 import { MetadataItem } from "./MetadataItem";
 import { RawDataAccordion } from "./RawDataAccordion";
 import { ProgressIndicator } from "./ProgressIndicator";
+import { Separator } from "~/components/ui/separator";
 
 export default function LLMFineTuningStatus({
   status,
@@ -28,12 +30,12 @@ export default function LLMFineTuningStatus({
   if (status.status === "idle") return null;
   const createdAt = extractTimestampFromUUIDv7(status.formData.jobId);
   return (
-    <div className="container mx-auto space-y-6 bg-background p-6">
+    <div className="bg-background container mx-auto space-y-6 p-6">
       <div className="space-y-4">
         <div className="space-y-2">
           <h3 className="text-lg font-semibold">
             Job{" "}
-            <code className="rounded bg-muted px-1 py-0.5 text-sm">
+            <code className="bg-muted rounded px-1 py-0.5 text-sm">
               {status.formData.jobId}
             </code>
           </h3>
@@ -81,6 +83,19 @@ export default function LLMFineTuningStatus({
             isRaw
           />
         </div>
+        <a
+          href={status.jobUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-primary inline-flex items-center hover:underline"
+        >
+          View Job Details
+          <ExternalLink className="ml-1 h-4 w-4" />
+        </a>
+
+        <Separator />
+
+        <SFTAnalysis status={status} />
 
         {/* hide if not available from provider, eg fireworks */}
         {status.status === "running" &&
@@ -89,20 +104,13 @@ export default function LLMFineTuningStatus({
             <div className="max-w-lg space-y-2">
               <ProgressIndicator
                 createdAt={createdAt}
-                estimatedCompletion={status.estimatedCompletionTime}
+                estimatedCompletion={
+                  new Date(status.estimatedCompletionTime * 1000)
+                }
               />
             </div>
           )}
 
-        <a
-          href={status.jobUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center text-primary hover:underline"
-        >
-          View Job Details
-          <ExternalLink className="ml-1 h-4 w-4" />
-        </a>
         <RawDataAccordion rawData={status.rawData} />
       </div>
     </div>

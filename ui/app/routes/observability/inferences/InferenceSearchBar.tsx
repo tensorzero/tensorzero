@@ -29,7 +29,7 @@ export default function InferenceSearchBar() {
   });
 
   const onSubmit = (data: FormValues) => {
-    navigate(`/observability/inference/${data.inferenceId}`);
+    navigate(`/observability/inferences/${data.inferenceId}`);
     form.reset();
   };
 
@@ -41,7 +41,7 @@ export default function InferenceSearchBar() {
             control={form.control}
             name="inferenceId"
             render={({ field }) => (
-              <FormItem className="flex-grow">
+              <FormItem className="grow">
                 <FormControl>
                   <Input
                     placeholder="00000000-0000-0000-0000-000000000000"

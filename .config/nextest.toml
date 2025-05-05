@@ -1,13 +1,23 @@
+nextest-version = { recommended = "0.9.87" }
+
 [profile.default]
 retries = { backoff = "fixed", count = 2, delay = "5s", jitter = true }
 slow-timeout = { period = "10s", terminate-after = 3 }
+# We look for tests with names containing "no_aws_credentials"
+# These tests require that the surrounding environment has no AWS credentials
+# (including in places like `~/.aws`)
+# We don't have a good way of isolating these tests to ensure that they pass
+# on developer machines (with AWS credentials set up), so we exclude them by default.
+# On CI, we use the 'ci' profile, which runs all tests.
+default-filter = "not test(no_aws_credentials)"
 
 [profile.ci]
 retries = { backoff = "exponential", count = 4, delay = "5s", jitter = true, max-delay = "60s" }
+default-filter = "all()"
 
-[profile.unit]
-retries = 0
-slow-timeout = { period = "2s", terminate-after = 1 }
+[[profile.ci.overrides]]
+filter = 'binary(e2e) and (test(providers::aws_bedrock::) or test(providers::aws_sagemaker::))'
+retries = { backoff = "exponential", count = 8, delay = "5s", jitter = true, max-delay = "120s" }
 
 # Note: use the following commands to debug test groups:
 # cargo nextest show-config test-groups
@@ -15,23 +25,49 @@ slow-timeout = { period = "2s", terminate-after = 1 }
 
 # Run E2E provider tests sequentially to avoid rate limits
 [test-groups]
-e2e_aws_bedrock = { max-threads = 1 }
+e2e_aws_bedrock = { max-threads = 2 }
 e2e_fireworks = { max-threads = 1 }
-e2e_together = { max-threads = 1 }
-e2e_xai = { max-threads = 1 }
+# Our Sagemaker instance seems to be able to handle 2 concurrent requests
+e2e_aws_sagemaker = { max-threads = 2 }
 
 [[profile.default.overrides]]
 filter = 'binary(e2e) and test(providers::aws_bedrock::)'
 test-group = 'e2e_aws_bedrock'
 
 [[profile.default.overrides]]
+filter = 'binary(e2e) and test(providers::aws_sagemaker::)'
+test-group = 'e2e_aws_sagemaker'
+
+[[profile.default.overrides]]
 filter = 'binary(e2e) and test(providers::fireworks::)'
 test-group = 'e2e_fireworks'
 
 [[profile.default.overrides]]
-filter = 'binary(e2e) and test(providers::together::)'
-test-group = 'e2e_together'
+filter = 'binary(e2e) and test(providers::vllm::)'
+slow-timeout = { period = "60s", terminate-after = 2 }
 
 [[profile.default.overrides]]
-filter = 'binary(e2e) and test(providers::xai::)'
-test-group = 'e2e_xai'
+filter = 'binary(e2e) and test(providers::sglang::)'
+slow-timeout = { period = "60s", terminate-after = 2 }
+
+[[profile.default.overrides]]
+filter = 'test(test_concurrent_clickhouse_migrations)'
+# the test fails if migrations > 60s so we can kill it at 65
+slow-timeout = { period = "65s" }
+
+[[profile.default.overrides]]
+# Settings for running batch tests
+filter = 'test(batch)'
+slow-timeout = { period = "15s", terminate-after = 3 }
+
+[[profile.default.overrides]]
+# Settings for running clickhouse tests, which can be very slow on ClickHouse Clouc
+# (when spawning lots of concurrent inserts)
+filter = 'test(clickhouse)'
+slow-timeout = { period = "500s", terminate-after = 1 }
+
+[[profile.default.overrides]]
+# Settings for running unit tests
+filter = 'not binary(e2e)'
+retries = 0
+slow-timeout = { period = "10s", terminate-after = 1 }

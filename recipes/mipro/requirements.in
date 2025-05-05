@@ -1,0 +1,12 @@
+clickhouse_connect
+exceptiongroup
+ipykernel
+minijinja
+openai
+optuna
+pandas
+pydantic
+seaborn
+tensorzero
+toml
+tqdm

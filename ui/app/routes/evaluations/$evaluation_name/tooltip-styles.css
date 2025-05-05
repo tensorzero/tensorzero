@@ -1,0 +1,30 @@
+.tooltip-scrollable {
+  max-height: 60vh;
+  max-width: 90vw;
+  overflow: auto;
+}
+
+.tooltip-scrollable pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Add custom scrollbar styling for tooltip content */
+.tooltip-scrollable::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.tooltip-scrollable::-webkit-scrollbar-track {
+  background: hsl(var(--background));
+  border-radius: 3px;
+}
+
+.tooltip-scrollable::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.3);
+  border-radius: 3px;
+}
+
+.tooltip-scrollable::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.5);
+}

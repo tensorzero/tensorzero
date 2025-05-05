@@ -18,7 +18,7 @@ import {
   CommandItem,
   CommandList,
 } from "~/components/ui/command";
-import { cn } from "~/utils/common";
+import clsx from "clsx";
 import { ModelBadge } from "~/components/model/ModelBadge";
 
 export function ModelSelector({
@@ -80,12 +80,12 @@ export function ModelSelector({
           <div className="grid gap-x-8 md:grid-cols-2">
             <div className="w-full space-y-2">
               <Popover open={open} onOpenChange={setOpen}>
-                <PopoverTrigger className="border-gray-200 bg-gray-50" asChild>
+                <PopoverTrigger className="border-gray-200" asChild>
                   <Button
                     variant="outline"
                     role="combobox"
                     aria-expanded={open}
-                    className="w-full justify-between font-normal"
+                    className="w-full justify-between font-normal shadow-none"
                   >
                     <div>
                       {field.value?.displayName ?? "Select a model..."}
@@ -127,7 +127,7 @@ export function ModelSelector({
                           >
                             <div className="flex items-center">
                               <Check
-                                className={cn(
+                                className={clsx(
                                   "mr-2 h-4 w-4",
                                   field.value?.displayName ===
                                     model.displayName &&

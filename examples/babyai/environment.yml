@@ -1,0 +1,8 @@
+name: babyai
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - cmake
+  - python>=3.10
+  - jupyter>=1.0.0

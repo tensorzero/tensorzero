@@ -3,9 +3,7 @@ services:
     container_name: tensorzero-ui
     image: tensorzero/ui
     volumes:
-      - ${CONFIG_DIR:-./config}:/app/config:ro
-    environment:
-      - CONFIG_DIR=
+      - ./config:/app/config:ro
     env_file:
       - ${ENV_FILE:-.env}
     ports:

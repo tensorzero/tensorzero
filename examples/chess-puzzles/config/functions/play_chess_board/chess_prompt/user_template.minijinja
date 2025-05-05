@@ -1,0 +1,14 @@
+The current board state is:
+
+{{ board }}
+
+You are playing {{ color }} and it is your move.
+
+Here, capital letters represent white pieces and lowercase letters represent black pieces.
+
+The legal moves are:
+{%- for move in legal_moves_san %}
+- {{ move }}
+{%- endfor %}
+
+What's your next move?

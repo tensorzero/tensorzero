@@ -23,10 +23,11 @@ export const BaseChatCompletionConfigSchema = z.object({
   json_mode: jsonModeSchema.default("on"),
   retries: RetryConfigSchema.default({ num_retries: 0, max_delay_s: 10 }),
 });
-
-export const EvaluatorConfigSchema = z.object({
-  ...BaseChatCompletionConfigSchema.shape,
-});
+export const EvaluatorConfigSchema = z
+  .object({
+    ...BaseChatCompletionConfigSchema.shape,
+  })
+  .omit({ weight: true });
 
 export type EvaluatorConfig = z.infer<typeof EvaluatorConfigSchema>;
 
@@ -40,7 +41,7 @@ export const BestOfNSamplingConfigSchema = z.object({
 
 export type BestOfNSamplingConfig = z.infer<typeof BestOfNSamplingConfigSchema>;
 
-export const DiclConfigSchema = z.object({
+export const RawDiclConfigSchema = z.object({
   type: z.literal("experimental_dynamic_in_context_learning"),
   weight: z.number().default(0),
   embedding_model: z.string(),
@@ -58,6 +59,12 @@ export const DiclConfigSchema = z.object({
     num_retries: 0,
     max_delay_s: 10,
   }),
+});
+
+export type RawDiclConfig = z.infer<typeof RawDiclConfigSchema>;
+
+export const DiclConfigSchema = RawDiclConfigSchema.extend({
+  system_instructions: z.custom<TemplateWithContent>().optional(),
 });
 
 export type DiclConfig = z.infer<typeof DiclConfigSchema>;
@@ -86,9 +93,16 @@ export const ChatCompletionConfigSchema = BaseChatCompletionConfigSchema.extend(
     user_template: z.custom<TemplateWithContent>().optional(),
     assistant_template: z.custom<TemplateWithContent>().optional(),
   },
-).partial({ retries: true, weight: true });
+).partial({ retries: true });
 
 export type ChatCompletionConfig = z.infer<typeof ChatCompletionConfigSchema>;
+
+export const ChainOfThoughtConfigSchema = z.object({
+  ...ChatCompletionConfigSchema.shape,
+  type: z.literal("experimental_chain_of_thought"),
+});
+
+export type ChainOfThoughtConfig = z.infer<typeof ChainOfThoughtConfigSchema>;
 
 // Variant config using template content
 export const VariantConfigSchema = z.discriminatedUnion("type", [
@@ -96,11 +110,12 @@ export const VariantConfigSchema = z.discriminatedUnion("type", [
   BestOfNSamplingConfigSchema,
   DiclConfigSchema,
   MixtureOfNConfigSchema,
+  ChainOfThoughtConfigSchema,
 ]);
 
 export type VariantConfig = z.infer<typeof VariantConfigSchema>;
+export type VariantType = VariantConfig["type"];
 
-// Modify get_template_env to ensure WASM is initialized
 export async function get_template_env(variant: ChatCompletionConfig) {
   const env: {
     system?: string;

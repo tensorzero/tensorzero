@@ -1,20 +1,225 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
-html,
-body {
-  @apply bg-white dark:bg-gray-950;
+@plugin 'tailwindcss-animate';
 
-  @media (prefers-color-scheme: dark) {
-    color-scheme: dark;
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  --font-sans:
+    Geist, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif;
+  --font-mono:
+    Geist Mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --font-weight-thin: var(--font-weight-thin);
+  --font-weight-light: var(--font-weight-light);
+  --font-weight-normal: var(--font-weight-normal);
+  --font-weight-medium: var(--font-weight-medium);
+  --font-weight-semibold: var(--font-weight-semibold);
+  --font-weight-bold: var(--font-weight-bold);
+  --font-weight-black: var(--font-weight-black);
+
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1rem;
+  --text-sm: 0.875rem;
+  --text-sm--line-height: 1.25rem;
+  --text-md: 1rem;
+  --text-md--line-height: 1.5rem;
+  --text-lg: 1.125rem;
+  --text-lg--line-height: 1.75rem;
+  --text-xl: 1.25rem;
+  --text-xl--line-height: 1.75rem;
+  --text-2xl: 1.5rem;
+  --text-2xl--line-height: 2rem;
+  --text-3xl: 1.875rem;
+  --text-3xl--line-height: 2.25rem;
+  --text-4xl: 2.25rem;
+  --text-4xl--line-height: 2.5rem;
+  --text-5xl: 3rem;
+  --text-5xl--line-height: 1;
+  --text-6xl: 3.75rem;
+  --text-6xl--line-height: 1;
+
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+
+  --color-background: hsl(var(--background-primary));
+
+  --color-bg: hsl(var(--background-primary));
+  --color-bg-primary: hsl(var(--background-primary));
+  --color-bg-secondary: hsl(var(--background-secondary));
+  --color-bg-tertiary: hsl(var(--background-tertiary));
+  --color-bg-muted: hsl(var(--background-muted));
+  --color-bg-hover: hsl(var(--background-hover));
+  --color-bg-type-chat: hsl(var(--emerald-100));
+  --color-bg-type-json: hsl(var(--blue-100));
+
+  --color-foreground: hsl(var(--foreground-primary));
+
+  --color-fg: hsl(var(--foreground-primary));
+  --color-fg-primary: hsl(var(--foreground-primary));
+  --color-fg-secondary: hsl(var(--foreground-secondary));
+  --color-fg-tertiary: hsl(var(--foreground-tertiary));
+  --color-fg-muted: hsl(var(--foreground-muted));
+  --color-fg-type-chat: hsl(var(--emerald-600));
+  --color-fg-type-json: hsl(var(--blue-600));
+
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+
+  --color-chart-1: hsl(var(--chart-1));
+  --color-chart-2: hsl(var(--chart-2));
+  --color-chart-3: hsl(var(--chart-3));
+  --color-chart-4: hsl(var(--chart-4));
+  --color-chart-5: hsl(var(--chart-5));
+
+  --color-sidebar: hsl(var(--sidebar-background));
+  --color-sidebar-foreground: hsl(var(--sidebar-foreground));
+  --color-sidebar-primary: hsl(var(--sidebar-primary));
+  --color-sidebar-primary-foreground: hsl(var(--sidebar-primary-foreground));
+  --color-sidebar-accent: hsl(var(--sidebar-accent));
+  --color-sidebar-accent-foreground: hsl(var(--sidebar-accent-foreground));
+  --color-sidebar-border: hsl(var(--sidebar-border));
+  --color-sidebar-ring: hsl(var(--sidebar-ring));
+
+  --color-emerald-50: hsl(var(--emerald-50));
+  --color-emerald-100: hsl(var(--emerald-100));
+  --color-emerald-200: hsl(var(--emerald-200));
+  --color-emerald-300: hsl(var(--emerald-300));
+  --color-emerald-400: hsl(var(--emerald-400));
+  --color-emerald-500: hsl(var(--emerald-500));
+  --color-emerald-600: hsl(var(--emerald-600));
+  --color-emerald-700: hsl(var(--emerald-700));
+  --color-emerald-800: hsl(var(--emerald-800));
+  --color-emerald-900: hsl(var(--emerald-900));
+
+  --color-blue-50: hsl(var(--blue-50));
+  --color-blue-100: hsl(var(--blue-100));
+  --color-blue-200: hsl(var(--blue-200));
+  --color-blue-300: hsl(var(--blue-300));
+  --color-blue-400: hsl(var(--blue-400));
+  --color-blue-500: hsl(var(--blue-500));
+  --color-blue-600: hsl(var(--blue-600));
+  --color-blue-700: hsl(var(--blue-700));
+  --color-blue-800: hsl(var(--blue-800));
+  --color-blue-900: hsl(var(--blue-900));
+
+  --animate-accordion-down: accordion-down 0.2s ease-out;
+  --animate-accordion-up: accordion-up 0.2s ease-out;
+
+  @keyframes accordion-down {
+    from {
+      height: 0;
+    }
+    to {
+      height: var(--radix-accordion-content-height);
+    }
+  }
+  @keyframes accordion-up {
+    from {
+      height: var(--radix-accordion-content-height);
+    }
+    to {
+      height: 0;
+    }
+  }
+}
+
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
+}
+
+@layer utilities {
+  :root {
+    --font-weight-thin: 100;
+    --font-weight-light: 300;
+    --font-weight-normal: 450;
+    --font-weight-medium: 500;
+    --font-weight-semibold: 620;
+    --font-weight-bold: 700;
+    --font-weight-black: 900;
+  }
+
+  html,
+  body {
+    @apply bg-background dark:bg-background;
+    font-weight: var(--font-weight-normal);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    @media (prefers-color-scheme: dark) {
+      color-scheme: dark;
+    }
+  }
+
+  ::selection {
+    @apply bg-orange-200 text-gray-900;
+  }
+  ::-moz-selection {
+    @apply bg-orange-200 text-gray-900;
   }
 }
 
 @layer base {
+  /* Set default styles for font families */
+  .font-sans {
+    font-weight: var(--font-weight-normal);
+    font-size: 1rem;
+    line-height: 1.5rem;
+  }
+
+  .font-mono {
+    font-weight: var(--font-weight-normal);
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+  }
+
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --background-primary: 0 0% 100%;
+    --background-secondary: 0 0% 99%;
+    --background-tertiary: 0 0% 96%;
+    --background-muted: 0 0% 91%;
+    --background-hover: 0 0% 95%;
+    --foreground-primary: 0 0% 0%;
+    --foreground-secondary: 0 0% 32%;
+    --foreground-tertiary: 0 0% 48%;
+    --foreground-muted: 0 0% 60%;
     --card: 0 0% 100%;
     --card-foreground: 222.2 84% 4.9%;
     --popover: 0 0% 100%;
@@ -29,8 +234,8 @@ body {
     --accent-foreground: 222.2 47.4% 11.2%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
+    --border: 0 0% 90%;
+    --input: 0 0% 88%;
     --ring: 222.2 84% 4.9%;
     --chart-1: 12 76% 61%;
     --chart-2: 173 58% 39%;
@@ -38,17 +243,47 @@ body {
     --chart-4: 43 74% 66%;
     --chart-5: 27 87% 67%;
     --radius: 0.5rem;
-    --sidebar-background: 0 0% 98%;
+    --sidebar-background: 0 0% 96%;
     --sidebar-foreground: 240 5.3% 26.1%;
     --sidebar-primary: 240 5.9% 10%;
     --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent: 0 0% 91%;
     --sidebar-accent-foreground: 240 5.9% 10%;
     --sidebar-border: 220 13% 91%;
     --sidebar-ring: 217.2 91.2% 59.8%;
+
+    /* Colors */
+    --emerald-50: 150 32% 93%;
+    --emerald-100: 150 33% 90%;
+    --emerald-200: 150 34% 87%;
+    --emerald-300: 150 36% 80%;
+    --emerald-400: 150 38% 68%;
+    --emerald-500: 150 40% 56%;
+    --emerald-600: 150 50% 32%;
+    --emerald-700: 150 72% 16%;
+    --emerald-800: 150 80% 12%;
+    --emerald-900: 150 86% 8%;
+
+    --blue-50: 208 32% 93%;
+    --blue-100: 208 33% 90%;
+    --blue-200: 208 34% 87%;
+    --blue-300: 208 36% 80%;
+    --blue-400: 208 38% 68%;
+    --blue-500: 208 40% 56%;
+    --blue-600: 208 50% 32%;
+    --blue-700: 208 72% 16%;
+    --blue-800: 208 80% 12%;
+    --blue-900: 208 86% 8%;
   }
+
   .dark {
-    --background: 222.2 84% 4.9%;
+    --bg-primary: 222.2 84% 4.9%;
+    --bg-secondary: 215 28% 17%;
+    --background-tertiary: 217.2 32.6% 17.5%;
+    --background-hover: 217.2 32.6% 18%;
+    --foreground-primary: 0 0% 100%;
+    --foreground-secondary: 0 0% 70%;
+    --foreground-tertiary: 0 0% 45%;
     --foreground: 210 40% 98%;
     --card: 222.2 84% 4.9%;
     --card-foreground: 210 40% 98%;
@@ -64,7 +299,7 @@ body {
     --accent-foreground: 210 40% 98%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
+    --border: 0 0% 14.9%;
     --input: 217.2 32.6% 17.5%;
     --ring: 212.7 26.8% 83.9%;
     --chart-1: 220 70% 50%;
@@ -93,25 +328,10 @@ body {
 }
 
 @layer base {
-  :root {
-    --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 240 5.9% 10%;
-    --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 240 4.8% 95.9%;
-    --sidebar-accent-foreground: 240 5.9% 10%;
-    --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+  * {
+    @apply border-border outline-ring/50;
   }
-
-  .dark {
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+  body {
+    @apply bg-background text-foreground;
   }
 }
