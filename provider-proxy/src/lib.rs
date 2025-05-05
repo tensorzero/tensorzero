@@ -16,7 +16,7 @@ use std::{fs::OpenOptions, future::Future};
 use anyhow::Context as _;
 use bytes::{Bytes, BytesMut};
 use clap::{ArgAction, Parser};
-use http::HeaderValue;
+use http::{HeaderName, HeaderValue};
 use http_body_util::{combinators::BoxBody, BodyExt, Full};
 use hyper::service::service_fn;
 use mitm_server::MitmProxy;
@@ -263,6 +263,15 @@ pub struct Args {
     pub write: bool,
 }
 
+fn find_duplicate_header(headers: &http::HeaderMap) -> Option<HeaderName> {
+    for header_name in headers.keys() {
+        if headers.get_all(header_name).iter().count() > 1 {
+            return Some(header_name.clone());
+        }
+    }
+    None
+}
+
 pub async fn run_server(args: Args, server_started: oneshot::Sender<SocketAddr>) {
     use tracing_subscriber::EnvFilter;
 
@@ -301,6 +310,19 @@ pub async fn run_server(args: Args, server_started: oneshot::Sender<SocketAddr>)
                 let args = args_clone.clone();
                 async move {
                     let (parts, body) = req.into_parts();
+                    // While duplicate headers are allowed by the HTTP spec (the values get concatenated),
+                    // we never intentionally send duplicate headers from tensorzero.
+                    // We check for this and error to catch mistakes in our code
+                    if let Some(header) = find_duplicate_header(&parts.headers) {
+                        tracing::error!(url = ?parts.uri, "Duplicate header in request: `{header}`");
+                        return Ok(http::Response::builder()
+                            // Return a weird status code to increase the chances of this causing a test failure
+                            .status(http::StatusCode::IM_A_TEAPOT)
+                            .body(BoxBody::new(reqwest::Body::from(
+                                format!("provider-proxy: Duplicate header: {header}"),
+                            )))
+                            .unwrap());
+                    }
                     let body_bytes = body
                         .collect()
                         .await
