@@ -1,14 +1,15 @@
 import asyncio
 import json
 import os
-import typing as t
 import warnings
 from typing import Any, Dict, List, Literal, Optional, Union
 
 from minijinja import Environment
 from openai import AsyncOpenAI
+from openai.types.chat import ChatCompletionMessageParam
 from openai.types.fine_tuning import FineTuningJob
-from tensorzero.tensorzero import AsyncTensorZeroGateway
+from tensorzero import AsyncTensorZeroGateway
+from tensorzero.internal_optimizations_server_types import Sample
 from typing_extensions import TypedDict
 
 from ..rendering import get_template_env
@@ -70,6 +71,7 @@ class OpenAISFTJob(BaseSFTJob):
             threshold=data.threshold,
             max_samples=data.maxSamples,
         )
+
         if not curated_inferences or len(curated_inferences) == 0:
             raise ValueError("No curated inferences found")
 
@@ -164,14 +166,14 @@ class OpenAISFTJob(BaseSFTJob):
 
 
 def tensorzero_inference_to_openai_messages(
-    sample: Dict[str, t.Any], env: Environment
-) -> List[Dict]:
+    sample: Sample, env: Environment
+) -> List[ChatCompletionMessageParam]:
     messages = []
     system = try_template_system(sample, env)
     if system:
         messages.append(system)
 
-    for message in sample["input"]["messages"]:
+    for message in sample["input"].get("messages", []):
         for content in message["content"]:
             rendered_message = content_block_to_openai_message(
                 content, message["role"], env
@@ -195,12 +197,21 @@ def tensorzero_inference_to_openai_messages(
     return messages
 
 
-def content_block_to_openai_message(content: Dict, role: str, env: Any) -> Dict:
+def content_block_to_openai_message(
+    content: Dict, role: Literal["user", "assistant"], env: Environment
+) -> ChatCompletionMessageParam:
     if content["type"] == "text":
-        return {
-            "role": role,
-            "content": render_message(content, role, env),
-        }
+        # This looks dumb but PyRight doesn't infer the types correctly without the if/else...?
+        if role == "user":
+            return {
+                "role": role,
+                "content": render_message(content, role, env),
+            }
+        else:
+            return {
+                "role": role,
+                "content": render_message(content, role, env),
+            }
     elif content["type"] == "tool_call":
         return {
             "role": "assistant",
@@ -224,8 +235,12 @@ def content_block_to_openai_message(content: Dict, role: str, env: Any) -> Dict:
     elif content["type"] == "image":
         mime_type = content["image"]["mime_type"]
         data = content["image"]["data"]
+
+        if role != "user":
+            raise ValidationError(f"Image content must be user role, found: {role}")
+
         return {
-            "role": role,
+            "role": "user",
             "content": [
                 {
                     "type": "image_url",
@@ -236,18 +251,25 @@ def content_block_to_openai_message(content: Dict, role: str, env: Any) -> Dict:
             ],
         }
     elif content["type"] == "raw_text":
-        return {
-            "role": role,
-            "content": content["value"],
-        }
+        # This looks dumb but PyRight doesn't infer the types correctly without the if/else...?
+        if role == "user":
+            return {
+                "role": role,
+                "content": content["value"],
+            }
+        else:
+            return {
+                "role": role,
+                "content": content["value"],
+            }
     else:
         raise ValidationError(f"Unsupported content type: {content['type']}")
 
 
 def validate_and_convert_messages(
-    inferences: List[Dict],
-    template_env: Any,
-) -> List[List[Dict]]:
+    inferences: List[Sample],
+    template_env: Environment,
+) -> List[List[ChatCompletionMessageParam]]:
     all_messages = []
 
     for inference in inferences:
@@ -259,7 +281,7 @@ def validate_and_convert_messages(
 
 async def start_sft_openai(
     model_name: str,
-    inferences: List[Dict[str, Any]],
+    inferences: List[Sample],
     validation_split_percent: float,
     template_env: Environment,
     request: FineTuningRequest,
@@ -294,8 +316,10 @@ async def start_sft_openai(
     encoding = get_encoding_for_model(model_name)
 
     analysis = analyze_dataset(train_messages_for_analysis, model_name, encoding)
+
     # Prepare analysis data
-    first_example_messages = []
+    first_example_messages: List[ChatCompletionMessageParam] = []
+
     if train_messages_for_analysis and train_messages_for_analysis[0].get("messages"):
         first_example_messages = [
             {"role": msg.get("role", ""), "content": msg.get("content", "")}
@@ -359,7 +383,9 @@ async def start_sft_openai(
     )
 
 
-async def upload_examples_to_openai(samples: List[List[Dict[str, Any]]]) -> str:
+async def upload_examples_to_openai(
+    samples: List[List[ChatCompletionMessageParam]],
+) -> str:
     """
     Uploads examples to OpenAI by creating a file.
 
@@ -381,7 +407,7 @@ async def upload_examples_to_openai(samples: List[List[Dict[str, Any]]]) -> str:
 
 async def create_openai_fine_tuning_job(
     model: str, train_file_id: str, val_file_id: Optional[str] = None
-) -> Any:
+) -> FineTuningJob:
     """
     Create a fine-tuning job with OpenAI.
 

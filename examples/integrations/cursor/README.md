@@ -2,8 +2,7 @@
 
 This example demonstrates how TensorZero can be used as a proxy layer for Cursor. To try it out:
 
-- put credentials for whatever LLM providers you want in `.env` as in any other TensorZero deployment. Our example uses OpenAI, Anthropic, and Google AI studio. But, you can use any LLM provider TensorZero supports.
-- Copy `.env.example` to `.env`
+- put credentials for whatever LLM providers you want in `.env` as in any other TensorZero deployment. Our example uses OpenAI, Anthropic, and Google AI studio. But, you can use any LLM provider TensorZero supports. See `.env.example` for an example.
 - Generate a strong API key to protect your gateway endpoint in your .env file and use it replace the `API_TOKEN` value.
 - Make an [ngrok](https://ngrok.com/) account. Grab your auth token and add it to the .env file as the value for `NGROK_AUTHTOKEN`.
 - Run `docker compose up`. This stands up ClickHouse, the TensorZero Gateway, the TensorZero UI, nginx, and ngrok.

@@ -32,6 +32,7 @@ import httpx
 from minijinja import Environment
 from pydantic import BaseModel, ConfigDict
 from tensorzero import AsyncTensorZeroGateway
+from tensorzero.internal_optimizations_server_types import Sample
 from typing_extensions import TypedDict
 from uuid_utils import uuid7
 
@@ -163,6 +164,7 @@ class FireworksSFTJob(BaseSFTJob):
             threshold=data.threshold,
             max_samples=data.maxSamples,
         )
+
         if not curated_inferences or len(curated_inferences) == 0:
             raise ValueError("No curated inferences found")
 
@@ -385,7 +387,7 @@ def get_deployment_status(deploy_model_response: Dict[str, Any]) -> str:
 
 async def start_sft_fireworks(
     model_name: str,
-    inferences: List[Dict[str, Any]],
+    inferences: List[Sample],
     validation_split_percent: float,
     template_env: Environment,
     request: FineTuningRequest,
@@ -415,7 +417,7 @@ async def start_sft_fireworks(
 
 
 def tensorzero_inference_to_fireworks_messages(
-    sample: Dict[str, t.Any], env: Environment
+    sample: Sample, env: Environment
 ) -> FireworksExample:
     """Convert a TensorZero inference to Fireworks messages format"""
     messages = []
@@ -424,7 +426,7 @@ def tensorzero_inference_to_fireworks_messages(
         messages.append(system)
 
     # Handle input messages
-    for message in sample["input"]["messages"]:
+    for message in sample["input"].get("messages", []):
         for content in message["content"]:
             if content["type"] == "text":
                 messages.append(
