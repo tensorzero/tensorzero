@@ -246,6 +246,7 @@ interface MetricValueInfo {
   value: string;
   evaluator_inference_id: string | null;
   inference_id: string;
+  is_human_feedback: boolean;
 }
 
 export function EvaluationTable({
@@ -324,6 +325,7 @@ export function EvaluationTable({
           value: result.metric_value,
           evaluator_inference_id: result.evaluator_inference_id,
           inference_id: result.inference_id,
+          is_human_feedback: result.is_human_feedback,
         });
       }
     });
@@ -518,6 +520,9 @@ export function EvaluationTable({
                                           value={metricValue.value}
                                           metricType={metricType}
                                           evaluatorConfig={evaluatorConfig}
+                                          isHumanFeedback={
+                                            metricValue.is_human_feedback
+                                          }
                                         />
                                         {/* Make feedback editor appear on hover */}
                                         {evaluationType === "llm_judge" && (

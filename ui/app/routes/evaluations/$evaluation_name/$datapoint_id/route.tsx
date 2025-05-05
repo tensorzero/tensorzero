@@ -270,6 +270,7 @@ const MetricsDisplay = ({
               evaluatorInferenceId={metricObj.evaluator_inference_id}
               evalRunId={evalRunId}
               variantName={variantName}
+              isHumanFeedback={metricObj.is_human_feedback}
             />
           );
         })}
@@ -289,6 +290,7 @@ const MetricRow = ({
   evalRunId,
   evaluatorInferenceId,
   variantName,
+  isHumanFeedback,
 }: {
   evaluatorName: string;
   evaluation_name: string;
@@ -299,6 +301,7 @@ const MetricRow = ({
   evaluatorInferenceId: string | null;
   evalRunId: string;
   variantName: string;
+  isHumanFeedback: boolean;
 }) => {
   const config = useConfig();
   const metric_name = getEvaluatorMetricName(evaluation_name, evaluatorName);
@@ -354,6 +357,7 @@ const MetricRow = ({
         value={String(metricValue)}
         metricType={getMetricType(evaluatorConfig)}
         evaluatorConfig={evaluatorConfig}
+        isHumanFeedback={isHumanFeedback}
         className="text-sm"
       />
       {inferenceId !== null && evaluationType === "llm_judge" && (
