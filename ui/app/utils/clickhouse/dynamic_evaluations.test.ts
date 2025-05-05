@@ -17,6 +17,72 @@ describe("getDynamicEvaluationRuns", () => {
     const runInfos = await getDynamicEvaluationRuns(10, 0);
     expect(runInfos).toMatchObject([
       {
+        id: "0196a0e5-9600-7c83-ab3b-dac7598fddbd",
+        name: "agent-gemini-2.5-flash-compact_context-baseline",
+        project_name: "beerqa-agentic-rag",
+        tags: {},
+        timestamp: "2025-05-05T14:42:02Z",
+        variant_pins: {
+          compact_context: "baseline",
+          multi_hop_rag_agent: "gemini-2.5-flash",
+        },
+      },
+      {
+        id: "0196a0e5-9600-7c83-ab3b-dabb145a9dbe",
+        name: "agent-baseline-compact_context-baseline",
+        project_name: "beerqa-agentic-rag",
+        tags: {},
+        timestamp: "2025-05-05T14:42:02Z",
+        variant_pins: {
+          compact_context: "baseline",
+          multi_hop_rag_agent: "baseline",
+        },
+      },
+      {
+        id: "0196a0e5-9600-7c83-ab3b-daa3fd908279",
+        name: "agent-baseline-compact_context-gemini-2.5-flash",
+        project_name: "beerqa-agentic-rag",
+        tags: {},
+        timestamp: "2025-05-05T14:42:02Z",
+        variant_pins: {
+          compact_context: "gemini-2.5-flash",
+          multi_hop_rag_agent: "baseline",
+        },
+      },
+      {
+        id: "0196a0e5-9600-7c83-ab3b-da910bfdd03e",
+        name: "agent-gpt-4.1-mini-compact_context-baseline",
+        project_name: "beerqa-agentic-rag",
+        tags: {},
+        timestamp: "2025-05-05T14:42:02Z",
+        variant_pins: {
+          compact_context: "baseline",
+          multi_hop_rag_agent: "gpt-4.1-mini",
+        },
+      },
+      {
+        id: "0196a0e5-9600-7c83-ab3b-da81097b66cd",
+        name: "agent-gemini-2.5-flash-compact_context-gemini-2.5-flash",
+        project_name: "beerqa-agentic-rag",
+        tags: {},
+        timestamp: "2025-05-05T14:42:02Z",
+        variant_pins: {
+          compact_context: "gemini-2.5-flash",
+          multi_hop_rag_agent: "gemini-2.5-flash",
+        },
+      },
+      {
+        id: "0196a0e5-9600-7c83-ab3b-da7bc6aac7e7",
+        name: "agent-gpt-4.1-mini-compact_context-gemini-2.5-flash",
+        project_name: "beerqa-agentic-rag",
+        tags: {},
+        timestamp: "2025-05-05T14:42:02Z",
+        variant_pins: {
+          compact_context: "gemini-2.5-flash",
+          multi_hop_rag_agent: "gpt-4.1-mini",
+        },
+      },
+      {
         id: "01968d08-3198-7e82-b3c8-e228f8ddc779",
         name: "gpt-4.1-mini",
         project_name: "21_questions",
@@ -24,6 +90,7 @@ describe("getDynamicEvaluationRuns", () => {
         timestamp: "2025-05-01T18:07:26Z",
         variant_pins: {
           ask_question: "gpt-4.1-mini",
+          answer_question: "baseline",
         },
       },
       {
@@ -34,6 +101,7 @@ describe("getDynamicEvaluationRuns", () => {
         timestamp: "2025-05-01T18:04:52Z",
         variant_pins: {
           ask_question: "baseline",
+          answer_question: "baseline",
         },
       },
       {
@@ -44,6 +112,7 @@ describe("getDynamicEvaluationRuns", () => {
         timestamp: "2025-05-01T18:02:56Z",
         variant_pins: {
           ask_question: "gpt-4.1-nano",
+          answer_question: "baseline",
         },
       },
     ]);
@@ -150,7 +219,7 @@ describe("getDynamicEvaluationRunsByIds", () => {
 describe("countDynamicEvaluationRuns", () => {
   test("should return correct total number of runs", async () => {
     const totalRuns = await countDynamicEvaluationRuns();
-    expect(totalRuns).toBe(3);
+    expect(totalRuns).toBe(9);
   });
 });
 
@@ -294,6 +363,11 @@ describe("getDynamicEvaluationProjects", () => {
     const projects = await getDynamicEvaluationProjects(10, 0);
     expect(projects).toMatchObject([
       {
+        count: 6,
+        last_updated: "2025-05-05T14:42:02Z",
+        name: "beerqa-agentic-rag",
+      },
+      {
         count: 3,
         last_updated: "2025-05-01T18:07:26Z",
         name: "21_questions",
@@ -305,7 +379,7 @@ describe("getDynamicEvaluationProjects", () => {
 describe("countDynamicEvaluationProjects", () => {
   test("should return correct number of projects", async () => {
     const count = await countDynamicEvaluationProjects();
-    expect(count).toBe(1);
+    expect(count).toBe(2);
   });
 });
 
@@ -359,7 +433,7 @@ describe("searchDynamicEvaluationRuns", () => {
   });
 });
 
-describe("getDynamicEvaluationRunByDatapointName", () => {
+describe("getDynamicEvaluationRunByTaskName", () => {
   test("should return correct run by datapoint name", async () => {
     const runs = await getDynamicEvaluationRunEpisodesByTaskName(
       ["01968d04-142c-7e53-8ea7-3a3255b518dc"],

@@ -196,7 +196,6 @@ export async function getDynamicEvaluationRunEpisodesByRunIdWithFeedback(
     query_params: { page_size, offset, run_id },
   });
   const rows = await result.json<DynamicEvaluationRunEpisodeWithFeedback[]>();
-  console.log(rows);
   return rows.map((row) =>
     dynamicEvaluationRunEpisodeWithFeedbackSchema.parse(row),
   );
