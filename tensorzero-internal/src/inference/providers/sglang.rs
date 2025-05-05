@@ -1,9 +1,10 @@
 use std::sync::OnceLock;
+use std::time::Duration;
 
-use futures::{StreamExt, TryStreamExt};
-use reqwest_eventsource::RequestBuilderExt;
+use futures::StreamExt;
+use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use secrecy::{ExposeSecret, SecretString};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio::time::Instant;
 use url::Url;
@@ -13,21 +14,24 @@ use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
-use crate::inference::types::ContentBlockOutput;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponse, ProviderInferenceResponseArgs,
 };
+use crate::inference::types::{
+    ContentBlockChunk, ContentBlockOutput, FinishReason, ProviderInferenceResponseChunk,
+    ProviderInferenceResponseStreamInner, TextChunk,
+};
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
+use crate::tool::ToolCallChunk;
 
 use super::helpers::inject_extra_request_data;
 use super::openai::{
     get_chat_url, handle_openai_error, prepare_openai_messages, prepare_openai_tools,
-    stream_openai, OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, OpenAITool,
-    OpenAIToolChoice, StreamOptions,
+    OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, OpenAITool, OpenAIToolChoice,
+    OpenAIUsage, StreamOptions,
 };
-use super::provider_trait::TensorZeroEventError;
 
 fn default_api_key_location() -> CredentialLocation {
     CredentialLocation::Env("SGLANG_API_KEY".to_string())
@@ -284,12 +288,7 @@ impl InferenceProvider for SGLangProvider {
                 })
             })?;
 
-        let stream = stream_openai(
-            PROVIDER_TYPE.to_string(),
-            event_source.map_err(TensorZeroEventError::EventSource),
-            start_time,
-        )
-        .peekable();
+        let stream = stream_sglang(event_source, start_time).peekable();
         Ok((stream, raw_request))
     }
 
@@ -316,6 +315,220 @@ impl InferenceProvider for SGLangProvider {
         }
         .into())
     }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "snake_case")]
+enum SGLangFinishReason {
+    Stop,
+    Length,
+    ToolCalls,
+    ContentFilter,
+    #[serde(other)]
+    Unknown,
+}
+
+impl From<SGLangFinishReason> for FinishReason {
+    fn from(reason: SGLangFinishReason) -> Self {
+        match reason {
+            SGLangFinishReason::Stop => FinishReason::Stop,
+            SGLangFinishReason::Length => FinishReason::Length,
+            SGLangFinishReason::ToolCalls => FinishReason::ToolCall,
+            SGLangFinishReason::ContentFilter => FinishReason::ContentFilter,
+            SGLangFinishReason::Unknown => FinishReason::Unknown,
+        }
+    }
+}
+
+// Streaming-specific structs
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+struct SGLangFunctionCallChunk {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    arguments: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+struct SGLangToolCallChunk {
+    index: Option<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    id: Option<String>,
+    function: SGLangFunctionCallChunk,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+struct SGLangDelta {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    content: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_calls: Option<Vec<SGLangToolCallChunk>>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+struct SGLangChatChunkChoice {
+    delta: SGLangDelta,
+    #[serde(default)]
+    finish_reason: Option<SGLangFinishReason>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+struct SGLangChatChunk {
+    choices: Vec<SGLangChatChunkChoice>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    usage: Option<OpenAIUsage>,
+}
+
+/// Streams the SGLang response events and converts them into ProviderInferenceResponseChunks
+/// This function handles parsing and processing of thinking blocks with proper state tracking
+fn stream_sglang(
+    mut event_source: EventSource,
+    start_time: Instant,
+) -> ProviderInferenceResponseStreamInner {
+    let mut tool_call_ids = Vec::new();
+    let mut tool_call_names = Vec::new();
+    Box::pin(async_stream::stream! {
+        while let Some(ev) = event_source.next().await {
+            match ev {
+                Err(e) => {
+                    let message = e.to_string();
+                    let mut raw_response = None;
+                    if let reqwest_eventsource::Error::InvalidStatusCode(_, resp) = e {
+                        raw_response = resp.text().await.ok();
+                    }
+                    yield Err(ErrorDetails::InferenceServer {
+                        message,
+                        raw_request: None,
+                        raw_response,
+                        provider_type: PROVIDER_TYPE.to_string(),
+                    }.into());
+                }
+                Ok(event) => match event {
+                    Event::Open => continue,
+                    Event::Message(message) => {
+                        if message.data == "[DONE]" {
+                            break;
+                        }
+                        let data: Result<SGLangChatChunk, Error> =
+                            serde_json::from_str(&message.data).map_err(|e| Error::new(ErrorDetails::InferenceServer {
+                                message: format!("Error parsing chunk. Error: {e}"),
+                                raw_request: None,
+                                raw_response: Some(message.data.clone()),
+                                provider_type: PROVIDER_TYPE.to_string(),
+                            }));
+
+                        let latency = start_time.elapsed();
+                        let stream_message = data.and_then(|d| {
+                            sglang_to_tensorzero_chunk(d, latency, &mut tool_call_ids, &mut tool_call_names)
+                        });
+                        yield stream_message;
+                    }
+                },
+            }
+        }
+
+        event_source.close();
+    })
+}
+
+/// Maps a SGLang chunk to a TensorZero chunk for streaming inferences
+///
+/// This function handles the conversion of SGLang chat chunks into TensorZero chunks.
+/// It processes the content and tool calls from the SGLang response, updating the tool call IDs and names.
+fn sglang_to_tensorzero_chunk(
+    mut chunk: SGLangChatChunk,
+    latency: Duration,
+    tool_call_ids: &mut Vec<String>,
+    tool_call_names: &mut Vec<String>,
+) -> Result<ProviderInferenceResponseChunk, Error> {
+    let raw_message = serde_json::to_string(&chunk).map_err(|e| {
+        Error::new(ErrorDetails::InferenceServer {
+            message: format!(
+                "Error parsing response from Fireworks: {}",
+                DisplayOrDebugGateway::new(e)
+            ),
+            raw_request: None,
+            raw_response: Some(serde_json::to_string(&chunk).unwrap_or_default()),
+            provider_type: PROVIDER_TYPE.to_string(),
+        })
+    })?;
+    if chunk.choices.len() > 1 {
+        return Err(ErrorDetails::InferenceServer {
+            message: "Response has invalid number of choices: {}. Expected 1.".to_string(),
+            raw_request: None,
+            raw_response: Some(serde_json::to_string(&chunk).unwrap_or_default()),
+            provider_type: PROVIDER_TYPE.to_string(),
+        }
+        .into());
+    }
+    let usage = chunk.usage.map(|u| u.into());
+    let mut finish_reason = None;
+    let mut content = vec![];
+    if let Some(choice) = chunk.choices.pop() {
+        if let Some(reason) = choice.finish_reason {
+            finish_reason = Some(reason.into());
+        }
+        if let Some(text) = choice.delta.content {
+            content.push(ContentBlockChunk::Text(TextChunk {
+                text: text.to_string(),
+                id: "0".to_string(),
+            }));
+        }
+        if let Some(tool_calls) = choice.delta.tool_calls {
+            for tool_call in tool_calls {
+                let index = tool_call.index;
+                let id = match tool_call.id {
+                    Some(id) => {
+                        tool_call_ids.push(id.clone());
+                        id
+                    }
+                    None => {
+                        // NOTE: SGLang does not always provide an index for the tool call.
+                        // In this case, we assume it is zero as they hardcode a tool call id of zero.
+                        tool_call_ids
+                            .get(index.unwrap_or_default() as usize)
+                            .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
+                                message: "Tool call index out of bounds (meaning we haven't seen this many ids in the stream)".to_string(),
+                                raw_request: None,
+                                raw_response: None,
+                                provider_type: PROVIDER_TYPE.to_string(),
+                            }))?
+                            .clone()
+                    }
+                };
+                let name = match tool_call.function.name {
+                    Some(name) => {
+                        tool_call_names.push(name.clone());
+                        name
+                    }
+                    None => {
+                        tool_call_names
+                            .get(index.unwrap_or_default() as usize)
+                            .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
+                                message: "Tool call index out of bounds (meaning we haven't seen this many names in the stream)".to_string(),
+                                raw_request: None,
+                                raw_response: None,
+                                provider_type: PROVIDER_TYPE.to_string(),
+                            }))?
+                            .clone()
+                    }
+                };
+                content.push(ContentBlockChunk::ToolCall(ToolCallChunk {
+                    id,
+                    raw_name: name,
+                    raw_arguments: tool_call.function.arguments.unwrap_or_default(),
+                }));
+            }
+        }
+    }
+
+    Ok(ProviderInferenceResponseChunk::new(
+        content,
+        usage,
+        raw_message,
+        latency,
+        finish_reason,
+    ))
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]

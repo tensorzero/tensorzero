@@ -3426,6 +3426,7 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
     }
 
     let episode_id = Uuid::now_v7();
+    let extra_headers = get_extra_headers();
 
     let payload = json!({
         "function_name": "weather_helper",
@@ -3440,6 +3441,7 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
             ]},
         "stream": true,
         "variant_name": provider.variant_name,
+        "extra_headers": extra_headers
     });
 
     let mut event_source = Client::new()
@@ -4576,8 +4578,11 @@ pub async fn check_tool_use_tool_choice_required_inference_response(
 pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    // Azure and Together don't support `tool_choice: "required"`
-    if provider.model_provider_name == "azure" || provider.model_provider_name == "together" {
+    // Azure, Together, and SGLang don't support `tool_choice: "required"`
+    if provider.model_provider_name == "azure"
+        || provider.model_provider_name == "together"
+        || provider.model_provider_name == "sglang"
+    {
         return;
     }
 

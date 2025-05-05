@@ -24,8 +24,8 @@ pub fn get_extra_headers() -> UnfilteredInferenceExtraHeaders {
         value: modal_key.clone(),
     });
     extra_headers.push(InferenceExtraHeader::Provider {
-        model_provider_name: "tensorzero::model_name::google/gemma-3-1b-it::provider_name::sglang"
-            .to_string(),
+        model_provider_name:
+            "tensorzero::model_name::Qwen/Qwen2.5-1.5B-Instruct::provider_name::sglang".to_string(),
         name: "Modal-Key".to_string(),
         value: modal_key.clone(),
     });
@@ -43,8 +43,8 @@ pub fn get_extra_headers() -> UnfilteredInferenceExtraHeaders {
         value: modal_secret.clone(),
     });
     extra_headers.push(InferenceExtraHeader::Provider {
-        model_provider_name: "tensorzero::model_name::google/gemma-3-1b-it::provider_name::sglang"
-            .to_string(),
+        model_provider_name:
+            "tensorzero::model_name::Qwen/Qwen2.5-1.5B-Instruct::provider_name::sglang".to_string(),
         name: "Modal-Secret".to_string(),
         value: modal_secret.clone(),
     });

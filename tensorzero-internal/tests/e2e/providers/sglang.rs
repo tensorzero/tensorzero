@@ -9,7 +9,7 @@ async fn get_providers() -> E2ETestProviders {
     let standard_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "sglang".to_string(),
-        model_name: "google/gemma-3-1b-it".to_string(),
+        model_name: "Qwen/Qwen2.5-1.5B-Instruct".to_string(),
         model_provider_name: "sglang".to_string(),
         credentials: HashMap::new(),
     }];
@@ -17,7 +17,7 @@ async fn get_providers() -> E2ETestProviders {
     let extra_body_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "sglang-extra-body".to_string(),
-        model_name: "google/gemma-3-1b-it".to_string(),
+        model_name: "Qwen/Qwen2.5-1.5B-Instruct".to_string(),
         model_provider_name: "sglang".to_string(),
         credentials: HashMap::new(),
     }];
@@ -26,14 +26,14 @@ async fn get_providers() -> E2ETestProviders {
         E2ETestProvider {
             supports_batch_inference: false,
             variant_name: "sglang".to_string(),
-            model_name: "google/gemma-3-1b-it".to_string(),
+            model_name: "Qwen/Qwen2.5-1.5B-Instruct".to_string(),
             model_provider_name: "sglang".to_string(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
             supports_batch_inference: false,
             variant_name: "sglang-strict".to_string(),
-            model_name: "google/gemma-3-1b-it".to_string(),
+            model_name: "Qwen/Qwen2.5-1.5B-Instruct".to_string(),
             model_provider_name: "sglang".to_string(),
             credentials: HashMap::new(),
         },
@@ -42,7 +42,7 @@ async fn get_providers() -> E2ETestProviders {
     let tool_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "sglang".to_string(),
-        model_name: "google/gemma-3-1b-it".to_string(),
+        model_name: "Qwen/Qwen2.5-1.5B-Instruct".to_string(),
         model_provider_name: "sglang".to_string(),
         credentials: HashMap::new(),
     }];
@@ -50,7 +50,7 @@ async fn get_providers() -> E2ETestProviders {
     let json_mode_off_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "sglang_json_mode_off".to_string(),
-        model_name: "google/gemma-3-1b-it".to_string(),
+        model_name: "Qwen/Qwen2.5-1.5B-Instruct".to_string(),
         model_provider_name: "sglang".to_string(),
         credentials: HashMap::new(),
     }];
