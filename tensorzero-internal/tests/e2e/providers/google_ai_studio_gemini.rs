@@ -21,7 +21,7 @@ async fn get_providers() -> E2ETestProviders {
         },
         E2ETestProvider {
             supports_batch_inference: false,
-            variant_name: "google-ai-studio-gemini-pro-1_5".to_string(),
+            variant_name: "google-ai-studio-gemini-1_5-pro".to_string(),
             model_name: "gemini-1.5-pro".into(),
             model_provider_name: "google_ai_studio_gemini".into(),
             credentials: HashMap::new(),
@@ -61,7 +61,7 @@ async fn get_providers() -> E2ETestProviders {
         },
         E2ETestProvider {
             supports_batch_inference: false,
-            variant_name: "google-ai-studio-gemini-pro-1_5-dynamic".to_string(),
+            variant_name: "google-ai-studio-gemini-1_5-pro-dynamic".to_string(),
             model_name: "gemini-1.5-pro-dynamic".into(),
             model_provider_name: "google_ai_studio_gemini".into(),
             credentials,
@@ -93,14 +93,14 @@ async fn get_providers() -> E2ETestProviders {
         },
         E2ETestProvider {
             supports_batch_inference: false,
-            variant_name: "google-ai-studio-gemini-pro-1_5".to_string(),
+            variant_name: "google-ai-studio-gemini-1_5-pro".to_string(),
             model_name: "gemini-1.5-pro".into(),
             model_provider_name: "google_ai_studio_gemini".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
             supports_batch_inference: false,
-            variant_name: "google-ai-studio-gemini-pro-1_5-implicit".to_string(),
+            variant_name: "google-ai-studio-gemini-1_5-pro-implicit".to_string(),
             model_name: "gemini-1.5-pro".into(),
             model_provider_name: "google_ai_studio_gemini".into(),
             credentials: HashMap::new(),
