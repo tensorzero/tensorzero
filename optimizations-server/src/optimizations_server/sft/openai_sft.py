@@ -1,7 +1,7 @@
 import asyncio
 import json
+import logging
 import os
-import warnings
 from typing import Any, Dict, List, Literal, Optional, Union
 
 from minijinja import Environment
@@ -23,12 +23,14 @@ from .common import (
 )
 from .openai_analysis import analyze_dataset, get_encoding_for_model
 
+logger = logging.getLogger(__name__)
+
 # Initialize OpenAI client
 openai_client = None
 if os.environ.get("OPENAI_API_KEY"):
     openai_client = AsyncOpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 else:
-    warnings.warn("OPENAI_API_KEY environment variable is not set")
+    logger.warning("OPENAI_API_KEY environment variable is not set")
 
 
 def get_openai_client() -> AsyncOpenAI:
