@@ -11,6 +11,7 @@ use url::Url;
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
+use crate::inference::providers::openai::check_api_base_suffix;
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::ContentBlockOutput;
@@ -57,6 +58,10 @@ impl SGLangProvider {
             PROVIDER_TYPE,
             &DEFAULT_CREDENTIALS,
         )?;
+
+        // Check if the api_base has the `/chat/completions` suffix and warn if it does
+        check_api_base_suffix(&api_base);
+
         Ok(SGLangProvider {
             model_name,
             api_base,
@@ -506,6 +511,7 @@ mod tests {
     use std::{borrow::Cow, time::Duration};
 
     use serde_json::json;
+    use tracing_test::traced_test;
     use uuid::Uuid;
 
     use crate::inference::{
@@ -718,5 +724,48 @@ mod tests {
                 response_time: Duration::from_secs(0)
             }
         );
+    }
+
+    #[test]
+    #[traced_test]
+    fn test_sglang_provider_new_api_base_check() {
+        let model_name = "test-model".to_string();
+        let api_key_location = None;
+
+        // Valid cases (should not warn)
+        let _ = SGLangProvider::new(
+            model_name.clone(),
+            Url::parse("http://localhost:1234/v1/").unwrap(),
+            api_key_location.clone(),
+        )
+        .unwrap();
+
+        let _ = SGLangProvider::new(
+            model_name.clone(),
+            Url::parse("http://localhost:1234/v1").unwrap(),
+            api_key_location.clone(),
+        )
+        .unwrap();
+
+        // Invalid cases (should warn)
+        let invalid_url_1 = Url::parse("http://localhost:1234/chat/completions").unwrap();
+        let _ = SGLangProvider::new(
+            model_name.clone(),
+            invalid_url_1.clone(),
+            api_key_location.clone(),
+        )
+        .unwrap();
+        assert!(logs_contain("automatically appends `/chat/completions`"));
+        assert!(logs_contain(invalid_url_1.as_ref()));
+
+        let invalid_url_2 = Url::parse("http://localhost:1234/v1/chat/completions/").unwrap();
+        let _ = SGLangProvider::new(
+            model_name.clone(),
+            invalid_url_2.clone(),
+            api_key_location.clone(),
+        )
+        .unwrap();
+        assert!(logs_contain("automatically appends `/chat/completions`"));
+        assert!(logs_contain(invalid_url_2.as_ref()));
     }
 }
