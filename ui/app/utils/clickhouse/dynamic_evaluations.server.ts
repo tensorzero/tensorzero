@@ -216,7 +216,8 @@ export async function getDynamicEvaluationRunStatisticsByMetricName(
         FROM DynamicEvaluationRunEpisodeByRunId
         WHERE toUInt128(toUUID({run_id:String})) = run_id_uint
         ORDER BY episode_id_uint DESC
-      )
+      ),
+    results AS (
     SELECT
       metric_name,
       toUInt32(count()) as count,
@@ -241,7 +242,9 @@ export async function getDynamicEvaluationRunStatisticsByMetricName(
       SELECT uint_to_uuid(episode_id_uint) FROM episodes
     )
     ${metric_name ? `AND metric_name = {metric_name:String}` : ""}
-    GROUP BY metric_name
+      GROUP BY metric_name
+    )
+    SELECT * FROM results
     ORDER BY metric_name ASC
   `;
   const result = await clickhouseClient.query({
