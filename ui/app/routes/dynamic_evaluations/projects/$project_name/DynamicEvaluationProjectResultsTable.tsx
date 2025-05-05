@@ -26,7 +26,7 @@ import {
 import { useColorAssigner } from "~/hooks/evaluations/ColorAssigner";
 import MetricValue from "~/components/metric/MetricValue";
 import type {
-  DynamicEvaluationRunEpisodeWithFeedback,
+  GroupedDynamicEvaluationRunEpisodeWithFeedback,
   DynamicEvaluationRunStatisticsByMetricName,
 } from "~/utils/clickhouse/dynamic_evaluations";
 import { TableItemShortUuid } from "~/components/ui/TableItems";
@@ -34,7 +34,7 @@ import { formatDate } from "~/utils/date";
 
 interface DynamicEvaluationProjectResultsTableProps {
   selected_run_infos: DynamicEvaluationRun[];
-  evaluation_results: DynamicEvaluationRunEpisodeWithFeedback[][];
+  evaluation_results: GroupedDynamicEvaluationRunEpisodeWithFeedback[][];
   evaluation_statistics: Record<
     string,
     DynamicEvaluationRunStatisticsByMetricName[]
@@ -108,6 +108,12 @@ export function DynamicEvaluationProjectResultsTable({
                 {/* Map through datapoints and variants */}
                 {evaluation_results.map((task_results) => {
                   if (task_results.length === 0) return null;
+                  // Sort the results so they match the order of selected_run_ids
+                  task_results.sort((a, b) => {
+                    const indexA = selectedRunIds.indexOf(a.run_id);
+                    const indexB = selectedRunIds.indexOf(b.run_id);
+                    return indexA - indexB;
+                  });
 
                   return (
                     <React.Fragment key={task_results[0].group_key}>

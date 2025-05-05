@@ -4,10 +4,12 @@ import {
   dynamicEvaluationRunEpisodeWithFeedbackSchema,
   dynamicEvaluationRunSchema,
   dynamicEvaluationRunStatisticsByMetricNameSchema,
+  groupedDynamicEvaluationRunEpisodeWithFeedbackSchema,
   type DynamicEvaluationProject,
   type DynamicEvaluationRun,
   type DynamicEvaluationRunEpisodeWithFeedback,
   type DynamicEvaluationRunStatisticsByMetricName,
+  type GroupedDynamicEvaluationRunEpisodeWithFeedback,
 } from "./dynamic_evaluations";
 
 export async function getDynamicEvaluationRuns(
@@ -112,7 +114,8 @@ export async function getDynamicEvaluationRunEpisodesByRunIdWithFeedback(
           run_id_uint,
           tags,
           updated_at,
-          datapoint_name as task_name
+          datapoint_name as task_name,
+          ifNull(datapoint_name, concat('NULL_EPISODE_', toString(episode_id_uint))) as group_key
         FROM DynamicEvaluationRunEpisodeByRunId
         WHERE toUInt128(toUUID({run_id:String})) = run_id_uint
         ORDER BY episode_id_uint DESC
@@ -193,6 +196,7 @@ export async function getDynamicEvaluationRunEpisodesByRunIdWithFeedback(
     query_params: { page_size, offset, run_id },
   });
   const rows = await result.json<DynamicEvaluationRunEpisodeWithFeedback[]>();
+  console.log(rows);
   return rows.map((row) =>
     dynamicEvaluationRunEpisodeWithFeedbackSchema.parse(row),
   );
@@ -365,7 +369,7 @@ export async function getDynamicEvaluationRunEpisodesByTaskName(
   runIds: string[],
   page_size: number,
   offset: number,
-): Promise<DynamicEvaluationRunEpisodeWithFeedback[][]> {
+): Promise<GroupedDynamicEvaluationRunEpisodeWithFeedback[][]> {
   const query = `
     WITH
       -- 1) pull all episodes for these runIds
@@ -476,12 +480,16 @@ export async function getDynamicEvaluationRunEpisodesByTaskName(
     format: "JSONEachRow",
     query_params: { runIds, page_size, offset },
   });
-  const raw = await result.json<DynamicEvaluationRunEpisodeWithFeedback>();
+  const raw =
+    await result.json<GroupedDynamicEvaluationRunEpisodeWithFeedback>();
 
   // bucket by group_key, parse each row with your Zod schema
-  const buckets: Record<string, DynamicEvaluationRunEpisodeWithFeedback[]> = {};
+  const buckets: Record<
+    string,
+    GroupedDynamicEvaluationRunEpisodeWithFeedback[]
+  > = {};
   for (const row of raw) {
-    const eps = dynamicEvaluationRunEpisodeWithFeedbackSchema.parse(row);
+    const eps = groupedDynamicEvaluationRunEpisodeWithFeedbackSchema.parse(row);
     buckets[eps.group_key] ??= [];
     buckets[eps.group_key].push(eps);
   }

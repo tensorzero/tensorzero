@@ -117,6 +117,17 @@ export function SubNavBreadcrumbs() {
         continue;
       }
 
+      if (
+        segment === "projects" &&
+        i > 0 &&
+        pathSegments[i - 1] === "dynamic_evaluations"
+      ) {
+        breadcrumbs.push({
+          label: "Projects",
+        });
+        continue;
+      }
+
       // 3) A specific run ID under /dynamic_evaluations/runs/:id
       if (
         i > 1 &&
@@ -126,6 +137,17 @@ export function SubNavBreadcrumbs() {
         breadcrumbs.push({
           label: segment, // the UUID
           href: `/dynamic_evaluations/runs/${segment}`,
+        });
+        continue;
+      }
+
+      if (
+        i > 1 &&
+        pathSegments[i - 2] === "dynamic_evaluations" &&
+        pathSegments[i - 1] === "projects"
+      ) {
+        breadcrumbs.push({
+          label: segment, // the project name
         });
         continue;
       }

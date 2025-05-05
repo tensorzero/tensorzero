@@ -58,12 +58,18 @@ export default function BasicInfo({
         </BasicInfoItemContent>
       </BasicInfoItem>
 
-      <BasicInfoItem>
-        <BasicInfoItemTitle>Project</BasicInfoItemTitle>
-        <BasicInfoItemContent>
-          <Chip label={dynamicEvaluationRun.project_name} font="mono" />
-        </BasicInfoItemContent>
-      </BasicInfoItem>
+      {dynamicEvaluationRun.project_name ? (
+        <BasicInfoItem>
+          <BasicInfoItemTitle>Project</BasicInfoItemTitle>
+          <BasicInfoItemContent>
+            <Chip
+              label={dynamicEvaluationRun.project_name}
+              font="mono"
+              link={`/dynamic_evaluations/projects/${dynamicEvaluationRun.project_name}`}
+            />
+          </BasicInfoItemContent>
+        </BasicInfoItem>
+      ) : null}
 
       <BasicInfoItem>
         <BasicInfoItemTitle>Variant Pins</BasicInfoItemTitle>
