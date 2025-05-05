@@ -2622,6 +2622,7 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
     assert_eq!(output.len(), 1);
+
     // Check the InferenceTag Table
     let result =
         select_inference_tags_clickhouse(&clickhouse, "basic_test", "key", tag_value, inference_id)
@@ -2630,6 +2631,7 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     let id = result.get("inference_id").unwrap().as_str().unwrap();
     let id = Uuid::parse_str(id).unwrap();
     assert_eq!(id, inference_id);
+
     full_content
 }
 
