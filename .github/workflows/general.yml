@@ -238,10 +238,19 @@ jobs:
         run: |
           pnpm install
 
+      - name: "Node.js: Run prettier"
+        working-directory: clients/openai-node
+        run: pnpm run format
+
       - name: "Node.js: OpenAI Client: typecheck"
         working-directory: clients/openai-node
         run: |
           pnpm run typecheck
+
+      - name: "Node.js: OpenAI Client: lint"
+        working-directory: clients/openai-node
+        run: |
+          pnpm run lint
 
       - name: "Python: Recipes: Install dependencies"
         working-directory: recipes
@@ -253,11 +262,6 @@ jobs:
         working-directory: recipes
         run: |
           uv run pyright
-
-      - name: "Node.js: OpenAI Client: lint"
-        working-directory: clients/openai-node
-        run: |
-          pnpm run lint
 
       - name: Setup Node.js
         uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
@@ -325,10 +329,38 @@ jobs:
         run: uv run pre-commit run detect-private-key --all-files
 
       - name: end‑of‑file‑fixer
-        run: uv run pre-commit run end-of-file-fixer --all-files
+        run: uv run pre-commit run end-of-file-fixer --all-files --exclude=*.minijinja
 
       - name: trailing‑whitespace
-        run: uv run pre-commit run trailing-whitespace --all-files
+        run: uv run pre-commit run trailing-whitespace --all-files --exclude=*.minijinja
+
+      - name: uv-lock
+        run: |
+          bash -c '
+          git ls-files "**/pyproject.toml" \
+            | while read f; do
+                dir=$(dirname "$f")
+                (cd "$dir" && uv lock --project="pyproject.toml")
+              done
+          '
+
+      - name: uv-export
+        run: |
+          bash -c '
+          git ls-files "**/pyproject.toml" \
+            | while read f; do
+                dir=$(dirname "$f")
+                (cd "$dir" && uv export --project="pyproject.toml" --output-file=requirements.txt --quiet)
+              done
+          '
+      - name: verify uv generated files
+        run: git diff --exit-code
+
+      - name: Install nb-clean
+        run: uv pip install nb-clean
+
+      - name: Run nb-clean
+        run: uv run nb-clean
 
   clickhouse-tests:
     # We don't run many tests here, so use a normal runner with Github Actions caching
