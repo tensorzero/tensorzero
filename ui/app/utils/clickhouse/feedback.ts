@@ -166,6 +166,7 @@ export const commentFeedbackRowSchema = z.object({
   target_type: z.enum(["inference", "episode"]),
   value: z.string(),
   timestamp: z.string().datetime(),
+  tags: z.record(z.string(), z.string()),
 });
 
 export type CommentFeedbackRow = z.infer<typeof commentFeedbackRowSchema>;
@@ -196,6 +197,7 @@ export async function queryCommentFeedbackByTargetId(params: {
           target_id,
           target_type,
           value,
+          tags,
           formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
         FROM CommentFeedbackByTargetId
         WHERE target_id = {target_id:String}
@@ -210,6 +212,7 @@ export async function queryCommentFeedbackByTargetId(params: {
           target_id,
           target_type,
           value,
+          tags,
           formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
         FROM CommentFeedbackByTargetId
         WHERE target_id = {target_id:String}
@@ -226,7 +229,8 @@ export async function queryCommentFeedbackByTargetId(params: {
           target_id,
           target_type,
           value,
-          timestamp
+          tags,
+          formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
         FROM
         (
           SELECT
@@ -314,6 +318,7 @@ export const demonstrationFeedbackRowSchema = z.object({
   inference_id: z.string().uuid(),
   value: z.string(),
   timestamp: z.string().datetime(),
+  tags: z.record(z.string(), z.string()),
 });
 
 export type DemonstrationFeedbackRow = z.infer<
@@ -345,6 +350,7 @@ export async function queryDemonstrationFeedbackByInferenceId(params: {
           id,
           inference_id,
           value,
+          tags,
           formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
         FROM DemonstrationFeedbackByInferenceId
         WHERE inference_id = {inference_id:String}
@@ -358,6 +364,7 @@ export async function queryDemonstrationFeedbackByInferenceId(params: {
           id,
           inference_id,
           value,
+          tags,
           formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
         FROM DemonstrationFeedbackByInferenceId
         WHERE inference_id = {inference_id:String}
@@ -373,6 +380,7 @@ export async function queryDemonstrationFeedbackByInferenceId(params: {
           id,
           inference_id,
           value,
+          tags,
           formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
         FROM
         (

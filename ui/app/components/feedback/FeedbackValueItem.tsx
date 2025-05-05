@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { getFeedbackIcon } from "~/utils/icon";
+import { UserFeedback } from "../icons/Icons";
 
 interface ValueItemProps {
   iconType:
@@ -39,30 +40,43 @@ function ValueItem({ iconType, children, onClick }: ValueItemProps) {
 function BooleanItem({
   value,
   status,
+  isHumanFeedback,
 }: {
   value: boolean;
   status: "success" | "failure" | "default";
+  isHumanFeedback: boolean;
 }) {
+  console.log("isHumanFeedback", isHumanFeedback);
   return (
     <ValueItem iconType={status === "default" ? "unknown" : status}>
       <span>{value ? "True" : "False"}</span>
+      {isHumanFeedback && <UserFeedback />}
     </ValueItem>
   );
 }
 
-function FloatItem({ value }: { value: number }) {
+function FloatItem({
+  value,
+  isHumanFeedback,
+}: {
+  value: number;
+  isHumanFeedback: boolean;
+}) {
   return (
     <ValueItem iconType="float">
       <span>{value.toFixed(3)}</span>
+      {isHumanFeedback && <UserFeedback />}
     </ValueItem>
   );
 }
 
 function CommentItem({
   value,
+  isHumanFeedback,
   onClick,
 }: {
   value: string;
+  isHumanFeedback: boolean;
   onClick?: (event: React.MouseEvent) => void;
 }) {
   return (
@@ -70,15 +84,18 @@ function CommentItem({
       <span className="overflow-hidden text-ellipsis whitespace-nowrap">
         {value}
       </span>
+      {isHumanFeedback && <UserFeedback />}
     </ValueItem>
   );
 }
 
 function DemonstrationItem({
   value,
+  isHumanFeedback,
   onClick,
 }: {
   value: string;
+  isHumanFeedback: boolean;
   onClick?: (event: React.MouseEvent) => void;
 }) {
   return (
@@ -86,6 +103,7 @@ function DemonstrationItem({
       <span className="overflow-hidden font-mono text-ellipsis whitespace-nowrap">
         {value}
       </span>
+      {isHumanFeedback && <UserFeedback />}
     </ValueItem>
   );
 }
