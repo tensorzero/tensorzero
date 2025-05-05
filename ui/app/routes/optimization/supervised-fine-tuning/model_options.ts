@@ -10,6 +10,16 @@ export type ModelOption = z.infer<typeof ModelOptionSchema>;
 
 export const models: ModelOption[] = [
   {
+    displayName: "gpt-4.1-2025-04-14",
+    name: "gpt-4.1-2025-04-14",
+    provider: "openai",
+  },
+  {
+    displayName: "gpt-4.1-mini-2025-04-14",
+    name: "gpt-4.1-mini-2025-04-14",
+    provider: "openai",
+  },
+  {
     displayName: "gpt-4o-2024-08-06",
     name: "gpt-4o-2024-08-06",
     provider: "openai",

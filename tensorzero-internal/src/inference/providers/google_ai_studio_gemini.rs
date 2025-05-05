@@ -792,6 +792,7 @@ impl TryFrom<GeminiResponseContentPart> for ContentBlockOutput {
 
 #[derive(Debug, Deserialize, Serialize)]
 struct GeminiResponseContent {
+    #[serde(default)]
     parts: Vec<GeminiResponseContentPart>,
 }
 

@@ -5,6 +5,8 @@
  * As of 20250305
  */
 export const CURRENT_MODEL_VERSIONS = [
+  "gpt-4.1-2025-04-14",
+  "gpt-4.1-mini-2025-04-14",
   "gpt-4-0613",
   "gpt-4o-2024-08-06",
   "gpt-4o-mini-2024-07-18",
@@ -13,6 +15,8 @@ export const CURRENT_MODEL_VERSIONS = [
   // "gpt-3.5-turbo-0613",  //https://platform.openai.com/docs/deprecations#2023-11-06-chat-model-updates
 ] as const;
 export const MODEL_TOKEN_LIMITS: Record<string, number> = {
+  "gpt-4.1-2025-04-14": 65536,
+  "gpt-4.1-mini-2025-04-14": 65536,
   "gpt-4-0613": 8192,
   "gpt-4o-2024-08-06": 65536,
   "gpt-4o-mini-2024-07-18": 65536,
