@@ -8425,8 +8425,7 @@ pub async fn check_parallel_tool_use_inference_response(
             .count();
         assert_eq!(
             tool_calls, 2,
-            "Expected 2 tool calls for OpenRouter, got {}",
-            tool_calls
+            "Expected 2 tool calls for OpenRouter, got {tool_calls}"
         );
     } else {
         // For other providers, expect exactly 2 blocks total
@@ -9122,10 +9121,7 @@ pub async fn check_json_mode_inference_response(
                 found_valid_content = true;
             }
             _ => {
-                panic!(
-                    "Expected a text block or tool_call (for OpenRouter), got {:?}",
-                    output_block
-                );
+                panic!("Expected a text block or tool_call (for OpenRouter), got {output_block:?}");
             }
         }
     }
@@ -9408,10 +9404,7 @@ pub async fn check_dynamic_json_mode_inference_response(
                 found_valid_content = true;
             }
             _ => {
-                panic!(
-                    "Expected a text block or tool_call (for OpenRouter), got {:?}",
-                    output_block
-                );
+                panic!("Expected a text block or tool_call (for OpenRouter), got {output_block:?}");
             }
         }
     }
