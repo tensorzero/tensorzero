@@ -47,7 +47,7 @@ use super::provider_trait::{TensorZeroEventError, WrappedProvider};
 
 lazy_static! {
     static ref GROQ_DEFAULT_BASE_URL: Url = {
-        #[allow(clippy::expect_used)]
+        #[expect(clippy::expect_used)]
         Url::parse("https://api.groq.com/openai/v1/")
             .expect("Failed to parse GROQ_DEFAULT_BASE_URL")
     };
@@ -788,9 +788,8 @@ pub fn stream_groq(
                         let data: Result<GroqChatChunk, Error> =
                             serde_json::from_str(&message.data).map_err(|e| Error::new(ErrorDetails::InferenceServer {
                                 message: format!(
-                                    "Error parsing chunk. Error: {}",
-                                    e,
-                                ),
+                                    "Error parsing chunk. Error: {e}",
+                                    ),
                                 raw_request: None,
                                 raw_response: Some(message.data.clone()),
                                 provider_type: provider_type.clone(),
@@ -933,7 +932,7 @@ fn get_file_url(base_url: &Url, file_id: Option<&str>) -> Result<Url, Error> {
         url.set_path(&format!("{}/", url.path()));
     }
     let path = if let Some(id) = file_id {
-        format!("files/{}/content", id)
+        format!("files/{id}/content")
     } else {
         "files".to_string()
     };
