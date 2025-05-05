@@ -204,13 +204,13 @@ macro_rules! generate_provider_tests {
         use $crate::providers::common::test_json_mode_off_inference_request_with_provider;
         use $crate::providers::common::test_multiple_text_blocks_in_message_with_provider;
 
-        #[tokio::test]
-        async fn test_simple_inference_request() {
+        async fn test_simple_inference_request(client: tensorzero::Client) {
             let providers = $func().await.simple_inference;
             for provider in providers {
-                test_simple_inference_request_with_provider(provider).await;
+                test_simple_inference_request_with_provider(provider, &client).await;
             }
         }
+        $crate::make_gateway_test_functions!(test_simple_inference_request);
 
 
 
@@ -239,14 +239,13 @@ macro_rules! generate_provider_tests {
             }
         }
 
-
-        #[tokio::test]
-        async fn test_shorthand_inference_request() {
+        async fn test_shorthand_inference_request(client: tensorzero::Client) {
             let providers = $func().await.shorthand_inference;
             for provider in providers {
-                test_simple_inference_request_with_provider(provider).await;
+                test_simple_inference_request_with_provider(provider, &client).await;
             }
         }
+        $crate::make_gateway_test_functions!(test_shorthand_inference_request);
 
         #[tokio::test]
         async fn test_simple_streaming_inference_request() {
@@ -1493,78 +1492,106 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
     assert_eq!(status, StatusCode::BAD_GATEWAY);
 }
 
-pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvider) {
+pub async fn test_simple_inference_request_with_provider(
+    provider: E2ETestProvider,
+    client: &tensorzero::Client,
+) {
     let episode_id = Uuid::now_v7();
     let extra_headers = get_extra_headers();
-    let payload = json!({
-        "function_name": "basic_test",
-        "variant_name": provider.variant_name,
-        "episode_id": episode_id,
-        "input":
-            {
-               "system": {"assistant_name": "Dr. Mehta"},
-               "messages": [
-                {
-                    "role": "user",
-                    "content": "What is the name of the capital city of Japan?"
-                }
-            ]},
-        "stream": false,
-        "tags": {"foo": "bar"},
-        "extra_headers": extra_headers.headers,
-    });
-
-    let response = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .send()
+    let response = client
+        .inference(ClientInferenceParams {
+            function_name: Some("basic_test".to_string()),
+            variant_name: Some(provider.variant_name.clone()),
+            episode_id: Some(episode_id),
+            input: ClientInput {
+                system: Some(json!({"assistant_name": "Dr. Mehta"})),
+                messages: vec![ClientInputMessage {
+                    role: Role::User,
+                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                        text: "What is the name of the capital city of Japan?".to_string(),
+                    })],
+                }],
+            },
+            tags: [("foo".to_string(), "bar".to_string())]
+                .into_iter()
+                .collect(),
+            extra_headers: extra_headers.headers,
+            ..Default::default()
+        })
         .await
         .unwrap();
 
-    // Check that the API response is ok
-    assert_eq!(response.status(), StatusCode::OK);
-    let response_json = response.json::<Value>().await.unwrap();
+    match response {
+        tensorzero::InferenceOutput::NonStreaming(response) => {
+            let response_json = serde_json::to_value(&response).unwrap();
 
-    println!("API response: {response_json:#?}");
+            println!("API response: {response_json:#?}");
 
-    check_simple_inference_response(response_json, Some(episode_id), &provider, false, false).await;
+            check_simple_inference_response(
+                response_json,
+                Some(episode_id),
+                &provider,
+                false,
+                false,
+            )
+            .await;
+        }
+        tensorzero::InferenceOutput::Streaming(_) => {
+            panic!("Unexpected streaming response");
+        }
+    }
+
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     let episode_id = Uuid::now_v7();
 
-    let payload = json!({
-        "function_name": "basic_test",
-        "variant_name": provider.variant_name,
-        "episode_id": episode_id,
-        "input":
-            {
-               "system": {"assistant_name": "Dr. Mehta"},
-               "messages": [
-                {
-                    "role": "user",
-                    "content": "What is the name of the capital city of Japan?"
-                }
-            ]},
-        "stream": false,
-        "tags": {"foo": "bar"},
-        "cache_options": {"enabled": "on", "lookback_s": 10},
-        "extra_headers": extra_headers.headers,
-    });
-
-    let response = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .send()
+    let response = client
+        .inference(ClientInferenceParams {
+            function_name: Some("basic_test".to_string()),
+            variant_name: Some(provider.variant_name.clone()),
+            episode_id: Some(episode_id),
+            input: ClientInput {
+                system: Some(json!({"assistant_name": "Dr. Mehta"})),
+                messages: vec![ClientInputMessage {
+                    role: Role::User,
+                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                        text: "What is the name of the capital city of Japan?".to_string(),
+                    })],
+                }],
+            },
+            tags: [("foo".to_string(), "bar".to_string())]
+                .into_iter()
+                .collect(),
+            cache_options: CacheParamsOptions {
+                enabled: CacheEnabledMode::On,
+                lookback_s: Some(10),
+                ..Default::default()
+            },
+            extra_headers: extra_headers.headers.clone(),
+            ..Default::default()
+        })
         .await
         .unwrap();
 
-    // Check that the API response is ok
-    assert_eq!(response.status(), StatusCode::OK);
-    let response_json = response.json::<Value>().await.unwrap();
+    match response {
+        tensorzero::InferenceOutput::NonStreaming(response) => {
+            let response_json = serde_json::to_value(&response).unwrap();
 
-    println!("API response: {response_json:#?}");
+            println!("API response: {response_json:#?}");
 
-    check_simple_inference_response(response_json, Some(episode_id), &provider, false, true).await;
+            check_simple_inference_response(
+                response_json,
+                Some(episode_id),
+                &provider,
+                false,
+                true,
+            )
+            .await;
+        }
+        tensorzero::InferenceOutput::Streaming(_) => {
+            panic!("Unexpected streaming response");
+        }
+    }
 }
 
 pub async fn check_base64_image_response(
