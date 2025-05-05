@@ -296,7 +296,9 @@ jobs:
         run: pnpm run typecheck
 
       - name: Install pre-commit
-        run: uv pip install pre-commit
+        run: |
+          uv venv
+          uv pip install pre-commit
 
       - name: check‑case‑conflict
         run: uv run pre-commit run check-case-conflict --all-files
