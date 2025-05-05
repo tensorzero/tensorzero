@@ -150,11 +150,11 @@ impl InferenceProvider for HyperbolicProvider {
         let request_builder = http_client
             .post(request_url)
             .header("Content-Type", "application/json")
-            .headers(headers)
             .bearer_auth(api_key.expose_secret());
 
         let res = request_builder
             .json(&request_body)
+            .headers(headers)
             .send()
             .await
             .map_err(|e| {
@@ -208,6 +208,7 @@ impl InferenceProvider for HyperbolicProvider {
             .try_into()?)
         } else {
             Err(handle_openai_error(
+                &serde_json::to_string(&request_body).unwrap_or_default(),
                 res.status(),
                 &res.text().await.map_err(|e| {
                     Error::new(ErrorDetails::InferenceServer {
@@ -269,8 +270,8 @@ impl InferenceProvider for HyperbolicProvider {
             .post(request_url)
             .header("Content-Type", "application/json")
             .bearer_auth(api_key.expose_secret())
-            .headers(headers)
             .json(&request_body)
+            .headers(headers)
             .eventsource()
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
