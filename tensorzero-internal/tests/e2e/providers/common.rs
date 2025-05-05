@@ -1460,10 +1460,9 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
             )
         }
         "vllm" => {
-            assert!(
-                res["error"].as_str().unwrap().contains("Unauthorized"),
-                "Unexpected error: {res}"
-            )
+            // vLLM returns different errors if you mess with the request headers,
+            // so we just check that an error occurs
+            assert!(res["error"].as_str().is_some(), "Unexpected error: {res}")
         }
         "xai" => {
             assert!(
