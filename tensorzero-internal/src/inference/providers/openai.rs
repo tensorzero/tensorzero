@@ -103,11 +103,11 @@ impl OpenAIProvider {
 /// This check exists because a common mistake when configuring OpenAI API endpoints is to include
 /// `/chat/completions` in the base URL. The gateway automatically appends this path when making requests,
 /// so including it in the base URL results in an invalid endpoint like:
-/// `https://api.openai.com/v1/chat/completions/chat/completions`
+/// `http://localhost:1234/v1/chat/completions/chat/completions`
 ///
 /// For example:
-/// - Correct: `https://api.openai.com/v1/`
-/// - Incorrect: `https://api.openai.com/v1/chat/completions`
+/// - Correct: `http://localhost:1234/v1` or `http://localhost:1234/openai/v1/`
+/// - Incorrect: `http://localhost:1234/v1/chat/completions`
 pub fn check_api_base_suffix(api_base: &Url) {
     let path = api_base.path();
     if path.ends_with("/chat/completions") || path.ends_with("/chat/completions/") {
