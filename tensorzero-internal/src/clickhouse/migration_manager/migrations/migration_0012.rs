@@ -7,7 +7,7 @@ use async_trait::async_trait;
 
 /// This migration is used to set up the ClickHouse database for the datasets feature.
 /// It creates two tables: `ChatInferenceDataset` and `JsonInferenceDataset`
-/// These tables store the information required to do things like run evals,
+/// These tables store the information required to do things like run evaluations,
 /// implement dynamic in-context learning, and run curated SFT jobs.
 /// We anticipate unpredictable future uses for datasets as well.
 pub struct Migration0012<'a> {
@@ -63,7 +63,7 @@ impl Migration for Migration0012<'_> {
             ) ENGINE = ReplacingMergeTree(created_at, is_deleted)
             ORDER BY (dataset_name, function_name, id)
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self.clickhouse.run_query_synchronous(query.to_string(), None).await?;
 
         // Create the `JsonInferenceDataset` table
         let query = r#"
@@ -83,7 +83,7 @@ impl Migration for Migration0012<'_> {
             ) ENGINE = ReplacingMergeTree(created_at, is_deleted)
             ORDER BY (dataset_name, function_name, id)
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self.clickhouse.run_query_synchronous(query.to_string(), None).await?;
 
         Ok(())
     }

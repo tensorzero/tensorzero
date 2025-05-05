@@ -1,0 +1,10 @@
+[project]
+name = "sagemaker-ollama"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["flask", "requests"]
+
+[dependency-groups]
+dev = ["boto3>=1.37.26", "sagemaker>=2.243.0"]

@@ -1,14 +1,13 @@
-import json
-import typing as t
 import warnings
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
 from json import JSONEncoder
-from typing import Any, Dict, List, Literal, Optional, TypedDict, Union
+from typing import Any, Dict, List, Literal, Optional, Union, cast
 from uuid import UUID
 
 import httpx
+from typing_extensions import NotRequired, TypedDict
 
 
 # Helper used to serialize Python objects to JSON, which may contain dataclasses like `Text`
@@ -100,16 +99,21 @@ class ToolCall(ContentBlock):
     arguments: Optional[Dict[str, Any]]
     id: str
     name: Optional[str]
-    raw_arguments: Dict[str, Any]
+    raw_arguments: str
     raw_name: str
 
     def to_dict(self) -> Dict[str, Any]:
-        return dict(
-            type="tool_call",
-            arguments=json.dumps(self.raw_arguments),
-            id=self.id,
-            name=self.raw_name,
-        )
+        d: Dict[str, Any] = {
+            "id": self.id,
+            "raw_arguments": self.raw_arguments,
+            "raw_name": self.raw_name,
+            "type": "tool_call",
+        }
+        if self.arguments is not None:
+            d["arguments"] = self.arguments
+        if self.name is not None:
+            d["name"] = self.name
+        return d
 
 
 @dataclass
@@ -141,7 +145,7 @@ class FinishReason(str, Enum):
 
 @dataclass
 class JsonInferenceOutput:
-    raw: str
+    raw: Optional[str]
     parsed: Optional[Dict[str, Any]]
 
 
@@ -170,9 +174,12 @@ class Message(TypedDict):
     content: Any
 
 
+System = Union[str, Dict[str, Any]]
+
+
 class InferenceInput(TypedDict):
-    messages: Union[List[Message], Dict[str, Any]]
-    system: Optional[Union[str, Dict[str, Any]]]
+    messages: NotRequired[List[Message]]
+    system: NotRequired[System]
 
 
 InferenceResponse = Union[ChatInferenceResponse, JsonInferenceResponse]
@@ -192,7 +199,7 @@ def parse_inference_response(data: Dict[str, Any]) -> InferenceResponse:
             finish_reason=finish_reason_enum,
         )
     elif "output" in data and isinstance(data["output"], dict):
-        output: Dict[str, Any] = data["output"]
+        output = cast(Dict[str, Any], data["output"])
         finish_reason = data.get("finish_reason")
         finish_reason_enum = FinishReason(finish_reason) if finish_reason else None
 
@@ -284,13 +291,13 @@ InferenceChunk = Union[ChatChunk, JsonChunk]
 class VariantExtraBody(TypedDict):
     variant_name: str
     pointer: str
-    value: t.Any
+    value: Any
 
 
 class ProviderExtraBody(TypedDict):
     model_provider_name: str
     pointer: str
-    value: t.Any
+    value: Any
 
 
 ExtraBody = Union[VariantExtraBody, ProviderExtraBody]
@@ -355,11 +362,11 @@ class TensorZeroInternalError(BaseTensorZeroError):
         self.msg = msg
 
     def __str__(self) -> str:
-        return f"TensorZeroInternalError: {self.msg}"
+        return self.msg
 
 
 class TensorZeroError(BaseTensorZeroError):
-    def __init__(self, status_code: int, text: t.Optional[str]):
+    def __init__(self, status_code: int, text: Optional[str]):
         self.text = text
         self.status_code = status_code
         self._response = httpx.Response(status_code=status_code, text=text)
@@ -375,3 +382,25 @@ class TensorZeroError(BaseTensorZeroError):
 
     def __str__(self) -> str:
         return f"TensorZeroError (status code {self.status_code}): {self.text}"
+
+
+@dataclass
+class DynamicEvaluationRunResponse:
+    run_id: UUID
+
+
+def parse_dynamic_evaluation_run_response(
+    data: Dict[str, Any],
+) -> DynamicEvaluationRunResponse:
+    return DynamicEvaluationRunResponse(run_id=UUID(data["run_id"]))
+
+
+@dataclass
+class DynamicEvaluationRunEpisodeResponse:
+    episode_id: UUID
+
+
+def parse_dynamic_evaluation_run_episode_response(
+    data: Dict[str, Any],
+) -> DynamicEvaluationRunEpisodeResponse:
+    return DynamicEvaluationRunEpisodeResponse(episode_id=UUID(data["episode_id"]))

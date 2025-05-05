@@ -2,6 +2,8 @@ import z from "zod";
 import {
   type ContentBlockOutput,
   type JsonInferenceOutput,
+  modelInferenceInputMessageSchema,
+  resolvedInputMessageSchema,
   resolvedInputSchema,
   type TableBounds,
   TableBoundsSchema,
@@ -12,12 +14,11 @@ import {
   getInferenceTableName,
   inputSchema,
   jsonInferenceOutputSchema,
-  requestMessageSchema,
 } from "./common";
 import { data } from "react-router";
 import type { FunctionConfig } from "../config/function";
 import { clickhouseClient } from "./client.server";
-import { resolveInput } from "../resolve.server";
+import { resolveInput, resolveModelInferenceMessages } from "../resolve.server";
 
 export const inferenceByIdRowSchema = z
   .object({
@@ -629,60 +630,62 @@ export async function queryInferenceById(
   id: string,
 ): Promise<ParsedInferenceRow | null> {
   const query = `
-  WITH inference AS (
+    WITH inference AS (
+        SELECT
+            id_uint,
+            function_name,
+            variant_name,
+            episode_id,
+            function_type
+        FROM InferenceById FINAL
+        WHERE id_uint = toUInt128({id:UUID})
+        LIMIT 1
+    )
     SELECT
-        id_uint,
-        function_name,
-        variant_name,
-        episode_id,
-        function_type
-    FROM InferenceById FINAL
-    WHERE id_uint = toUInt128({id:UUID})
-)
-SELECT
-    uint_to_uuid(i.id_uint) AS id,
+        c.id,
+        c.function_name,
+        c.variant_name,
+        c.episode_id,
+        c.input,
+        c.output,
+        c.tool_params,
+        c.inference_params,
+        c.processing_time_ms,
+        NULL AS output_schema, -- Placeholder for JSON column
+        formatDateTime(c.timestamp, '%Y-%m-%dT%H:%i:%SZ') AS timestamp,
+        c.tags,
+        'chat' AS function_type
+    FROM ChatInference c
+    WHERE
+        'chat' = (SELECT function_type FROM inference)
+        AND c.function_name IN (SELECT function_name FROM inference)
+        AND c.variant_name IN (SELECT variant_name FROM inference)
+        AND c.episode_id IN (SELECT episode_id FROM inference)
+        AND c.id = {id:UUID}
 
-    -- Common columns (picked via IF)
-    IF(i.function_type = 'chat', c.function_name, j.function_name) AS function_name,
-    IF(i.function_type = 'chat', c.variant_name,   j.variant_name)   AS variant_name,
-    IF(i.function_type = 'chat', c.episode_id,     j.episode_id)     AS episode_id,
-    IF(i.function_type = 'chat', c.input,          j.input)          AS input,
-    IF(i.function_type = 'chat', c.output,         j.output)         AS output,
+    UNION ALL
 
-    -- Chat-specific columns
-    IF(i.function_type = 'chat', c.tool_params, '') AS tool_params,
-
-    -- Inference params (common name in the union)
-    IF(i.function_type = 'chat', c.inference_params, j.inference_params) AS inference_params,
-
-    -- Processing time
-    IF(i.function_type = 'chat', c.processing_time_ms, j.processing_time_ms) AS processing_time_ms,
-
-    -- JSON-specific column
-    IF(i.function_type = 'json', j.output_schema, '') AS output_schema,
-
-    -- Timestamps & tags
-    IF(i.function_type = 'chat',
-       formatDateTime(c.timestamp, '%Y-%m-%dT%H:%i:%SZ'),
-       formatDateTime(j.timestamp, '%Y-%m-%dT%H:%i:%SZ')
-    ) AS timestamp,
-    IF(i.function_type = 'chat', c.tags, j.tags) AS tags,
-
-    -- Discriminator itself
-    i.function_type
-FROM inference i
-LEFT JOIN ChatInference c
-    ON i.function_type = 'chat'
-    AND i.function_name = c.function_name
-    AND i.variant_name = c.variant_name
-    AND i.episode_id = c.episode_id
-    AND uint_to_uuid(i.id_uint) = c.id
-LEFT JOIN JsonInference j
-    ON i.function_type = 'json'
-    AND i.function_name = j.function_name
-    AND i.variant_name = j.variant_name
-    AND i.episode_id = j.episode_id
-    AND uint_to_uuid(i.id_uint) = j.id;
+    SELECT
+        j.id,
+        j.function_name,
+        j.variant_name,
+        j.episode_id,
+        j.input,
+        j.output,
+        NULL AS tool_params, -- Placeholder for Chat column
+        j.inference_params,
+        j.processing_time_ms,
+        j.output_schema,
+        formatDateTime(j.timestamp, '%Y-%m-%dT%H:%i:%SZ') AS timestamp,
+        j.tags,
+        'json' AS function_type
+    FROM JsonInference j
+    WHERE
+        'json' = (SELECT function_type FROM inference)
+        AND j.function_name IN (SELECT function_name FROM inference)
+        AND j.variant_name IN (SELECT variant_name FROM inference)
+        AND j.episode_id IN (SELECT episode_id FROM inference)
+        AND j.id = {id:UUID}
   `;
 
   const resultSet = await clickhouseClient.query({
@@ -712,6 +715,7 @@ export const modelInferenceRowSchema = z.object({
   system: z.string().nullable(),
   input_messages: z.string(),
   output: z.string(),
+  cached: z.boolean(),
 });
 
 export type ModelInferenceRow = z.infer<typeof modelInferenceRowSchema>;
@@ -722,7 +726,7 @@ export const parsedModelInferenceRowSchema = modelInferenceRowSchema
     output: true,
   })
   .extend({
-    input_messages: z.array(requestMessageSchema),
+    input_messages: z.array(resolvedInputMessageSchema),
     output: z.array(contentBlockSchema),
   });
 
@@ -730,14 +734,16 @@ export type ParsedModelInferenceRow = z.infer<
   typeof parsedModelInferenceRowSchema
 >;
 
-function parseModelInferenceRow(
+async function parseModelInferenceRow(
   row: ModelInferenceRow,
-): ParsedModelInferenceRow {
+): Promise<ParsedModelInferenceRow> {
+  const parsedMessages = z
+    .array(modelInferenceInputMessageSchema)
+    .parse(JSON.parse(row.input_messages));
+  const resolvedMessages = await resolveModelInferenceMessages(parsedMessages);
   return {
     ...row,
-    input_messages: z
-      .array(requestMessageSchema)
-      .parse(JSON.parse(row.input_messages)),
+    input_messages: resolvedMessages,
     output: z.array(contentBlockSchema).parse(JSON.parse(row.output)),
   };
 }
@@ -755,7 +761,9 @@ export async function queryModelInferencesByInferenceId(
   });
   const rows = await resultSet.json<ModelInferenceRow>();
   const validatedRows = z.array(modelInferenceRowSchema).parse(rows);
-  const parsedRows = validatedRows.map(parseModelInferenceRow);
+  const parsedRows = await Promise.all(
+    validatedRows.map(parseModelInferenceRow),
+  );
   return parsedRows;
 }
 

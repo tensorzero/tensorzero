@@ -14,13 +14,16 @@ from uuid import UUID
 
 import uuid_utils
 
+import tensorzero.internal_optimizations_server_types as iost
 from tensorzero import (
+    DynamicEvaluationRunEpisodeResponse,
+    DynamicEvaluationRunResponse,
+    ExtraBody,
     FeedbackResponse,
     InferenceChunk,
     InferenceInput,
     InferenceResponse,
 )
-from tensorzero.types import ExtraBody
 
 class BaseTensorZeroGateway:
     pass
@@ -89,6 +92,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         credentials: Optional[Dict[str, str]] = None,
         cache_options: Optional[Dict[str, Any]] = None,
         extra_body: Optional[List[ExtraBody | Dict[str, Any]]] = None,
+        extra_headers: Optional[List[Dict[str, Any]]] = None,
     ) -> Union[InferenceResponse, Iterator[InferenceChunk]]:
         """
         Make a POST request to the /inference endpoint.
@@ -118,6 +122,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         :param parallel_tool_calls: If true, the request will allow for multiple tool calls in a single inference request.
         :param tags: If set, adds tags to the inference request.
         :param extra_body: If set, injects extra fields into the provider request body.
+        :param extra_headers: If set, injects extra headers into the provider request.
         :return: If stream is false, returns an InferenceResponse.
                  If stream is true, returns an async iterator that yields InferenceChunks as they come in.
         """
@@ -147,6 +152,40 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         :param dryrun: If true, the feedback request will be executed but won't be stored to the database (i.e. no-op).
         :param tags: If set, adds tags to the feedback request.
         :return: {"feedback_id": str}
+        """
+
+    def dynamic_evaluation_run(
+        self,
+        *,
+        variants: Dict[str, str],
+        tags: Optional[Dict[str, str]] = None,
+        project_name: Optional[str] = None,
+        display_name: Optional[str] = None,
+    ) -> DynamicEvaluationRunResponse:
+        """
+        Make a POST request to the /dynamic_evaluation_run endpoint.
+
+        :param variants: A dictionary of variant names to variant values.
+        :param tags: A dictionary of tags to add to the dynamic evaluation run.
+        :param project_name: The name of the project to use for the dynamic evaluation run.
+        :param display_name: The display name of the dynamic evaluation run.
+        :return: A `DynamicEvaluationRunResponse` instance ({"run_id": str}).
+        """
+
+    def dynamic_evaluation_run_episode(
+        self,
+        *,
+        run_id: str | UUID | uuid_utils.UUID,
+        datapoint_name: Optional[str] = None,
+        tags: Optional[Dict[str, str]] = None,
+    ) -> DynamicEvaluationRunEpisodeResponse:
+        """
+        Make a POST request to the /dynamic_evaluation_run_episode endpoint.
+
+        :param run_id: The run ID to use for the dynamic evaluation run.
+        :param datapoint_name: The name of the datapoint to use for the dynamic evaluation run.
+        :param tags: A dictionary of tags to add to the dynamic evaluation run.
+        :return: A `DynamicEvaluationRunEpisodeResponse` instance ({"episode_id": str}).
         """
 
     def close(self) -> None:
@@ -230,6 +269,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         credentials: Optional[Dict[str, str]] = None,
         cache_options: Optional[Dict[str, Any]] = None,
         extra_body: Optional[List[ExtraBody | Dict[str, Any]]] = None,
+        extra_headers: Optional[List[Dict[str, Any]]] = None,
     ) -> Union[InferenceResponse, AsyncIterator[InferenceChunk]]:
         """
         Make a POST request to the /inference endpoint.
@@ -259,6 +299,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         :param parallel_tool_calls: If true, the request will allow for multiple tool calls in a single inference request.
         :param tags: If set, adds tags to the inference request.
         :param extra_body: If set, injects extra fields into the provider request body.
+        :param extra_headers: If set, injects extra headers into the provider request.
         :return: If stream is false, returns an InferenceResponse.
                  If stream is true, returns an async iterator that yields InferenceChunks as they come in.
         """
@@ -290,6 +331,40 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         :return: {"feedback_id": str}
         """
 
+    async def dynamic_evaluation_run(  # type: ignore[override]
+        self,
+        *,
+        variants: Dict[str, str],
+        tags: Optional[Dict[str, str]] = None,
+        project_name: Optional[str] = None,
+        display_name: Optional[str] = None,
+    ) -> DynamicEvaluationRunResponse:
+        """
+        Make a POST request to the /dynamic_evaluation_run endpoint.
+
+        :param variants: A dictionary of variant names to variant values.
+        :param tags: A dictionary of tags to add to the dynamic evaluation run.
+        :param project_name: The name of the project to use for the dynamic evaluation run.
+        :param display_name: The display name of the dynamic evaluation run.
+        :return: A `DynamicEvaluationRunResponse` instance ({"run_id": str}).
+        """
+
+    async def dynamic_evaluation_run_episode(  # type: ignore[override]
+        self,
+        *,
+        run_id: str | UUID | uuid_utils.UUID,
+        datapoint_name: Optional[str] = None,
+        tags: Optional[Dict[str, str]] = None,
+    ) -> DynamicEvaluationRunEpisodeResponse:
+        """
+        Make a POST request to the /dynamic_evaluation_run_episode endpoint.
+
+        :param run_id: The run ID to use for the dynamic evaluation run.
+        :param datapoint_name: The name of the datapoint to use for the dynamic evaluation run.
+        :param tags: A dictionary of tags to add to the dynamic evaluation run.
+        :return: A `DynamicEvaluationRunEpisodeResponse` instance ({"episode_id": str}).
+        """
+
     async def close(self) -> None:
         """
         Close the connection to the TensorZero gateway.
@@ -302,6 +377,17 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         exc_val: Optional[BaseException],
         exc_tb: Optional[object],
     ) -> None: ...
+    async def _internal_get_curated_inferences(
+        self,
+        *,
+        function_name: str,
+        metric_name: Optional[str] = None,
+        threshold: Optional[float] = None,
+        max_samples: Optional[int] = None,
+    ) -> List[iost.Sample]: ...
+    def _internal_get_template_config(
+        self, *, function_name: str, variant_name: str
+    ) -> Dict[str, Any]: ...
 
 # Internal helper method
 def _start_http_gateway(

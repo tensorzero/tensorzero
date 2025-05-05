@@ -3,7 +3,7 @@ import { ModelConfigSchema, EmbeddingModelConfigSchema } from "./models";
 import { FunctionConfigSchema } from "./function";
 import { MetricConfigSchema } from "./metric";
 import { ToolConfigSchema } from "./tool";
-import { EvalConfigSchema } from "./evals";
+import { EvaluationConfigSchema } from "./evaluations";
 
 export const GatewayConfig = z.object({
   bind_address: z.string().optional(), // Socket address as string
@@ -21,6 +21,6 @@ export const Config = z.object({
   functions: z.record(z.string(), FunctionConfigSchema),
   metrics: z.record(z.string(), MetricConfigSchema),
   tools: z.record(z.string(), ToolConfigSchema).optional().default({}),
-  evals: z.record(z.string(), EvalConfigSchema),
+  evaluations: z.record(z.string(), EvaluationConfigSchema),
 });
 export type Config = z.infer<typeof Config>;

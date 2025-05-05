@@ -13,7 +13,7 @@ use crate::inference::types::{
     ChatInferenceResult, ContentBlockOutput, InferenceResult, Input, InputMessageContent,
     JsonInferenceResult, ModelInferenceResponseWithMetadata, Role, TextKind, Usage,
 };
-use crate::jsonschema_util::{JSONSchemaFromPath, JsonSchemaRef};
+use crate::jsonschema_util::{JsonSchemaRef, StaticJSONSchema};
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
 use crate::tool::{DynamicToolParams, StaticToolConfig, ToolCallConfig, ToolChoice};
@@ -43,22 +43,24 @@ impl FunctionConfig {
 #[derive(Debug, Default)]
 pub struct FunctionConfigChat {
     pub variants: HashMap<String, VariantConfig>, // variant name => variant config
-    pub system_schema: Option<JSONSchemaFromPath>,
-    pub user_schema: Option<JSONSchemaFromPath>,
-    pub assistant_schema: Option<JSONSchemaFromPath>,
+    pub system_schema: Option<StaticJSONSchema>,
+    pub user_schema: Option<StaticJSONSchema>,
+    pub assistant_schema: Option<StaticJSONSchema>,
     pub tools: Vec<String>, // tool names
     pub tool_choice: ToolChoice,
     pub parallel_tool_calls: Option<bool>,
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Default)]
 pub struct FunctionConfigJson {
     pub variants: HashMap<String, VariantConfig>, // variant name => variant config
-    pub system_schema: Option<JSONSchemaFromPath>,
-    pub user_schema: Option<JSONSchemaFromPath>,
-    pub assistant_schema: Option<JSONSchemaFromPath>,
-    pub output_schema: JSONSchemaFromPath, // schema is mandatory for JSON functions
+    pub system_schema: Option<StaticJSONSchema>,
+    pub user_schema: Option<StaticJSONSchema>,
+    pub assistant_schema: Option<StaticJSONSchema>,
+    pub output_schema: StaticJSONSchema, // schema is mandatory for JSON functions
     pub implicit_tool_call_config: ToolCallConfig,
+    pub description: Option<String>,
 }
 
 impl FunctionConfig {
@@ -68,9 +70,7 @@ impl FunctionConfig {
             FunctionConfig::Json(params) => &params.variants,
         }
     }
-}
 
-impl FunctionConfig {
     pub fn validate_inference_params(
         &self,
         params: &crate::endpoints::inference::Params,
@@ -162,7 +162,7 @@ impl FunctionConfig {
     }
 
     #[instrument(skip_all, fields(inference_id))]
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     pub async fn prepare_response<'a, 'request>(
         &self,
         inference_id: Uuid,
@@ -187,34 +187,26 @@ impl FunctionConfig {
                 .await,
             )),
             FunctionConfig::Json(params) => {
-                // Parse the content blocks into a JSON object
-                // We assume here that the last content block that's text or a tool call is the JSON object.
-                // (this is because we could have used an implicit tool call and there is no other reason for a tool call in a JSON function).
-                let raw = content_blocks
-                    .iter()
-                    .rev()
-                    .find_map(|content_block| match content_block {
-                        ContentBlockOutput::Text(text) => Some(&text.text),
-                        ContentBlockOutput::ToolCall(tool_call) => Some(&tool_call.arguments),
-                        _ => None,
-                    })
-                    .ok_or_else(|| {
-                        Error::new(ErrorDetails::Inference {
-                            message: "No valid content blocks found in JSON function response"
-                                .to_string(),
+                let (raw_output, auxiliary_content, json_block_index) =
+                    get_json_output_from_content_blocks(content_blocks);
+
+                // Try to parse the raw output as JSON.
+                //
+                // If the raw output is None, parsed output is also None.
+                // If the raw output is not a valid JSON string, log an error and set parsed output to None.
+                let parsed_output: Option<Value> = raw_output.as_ref().and_then(|raw_output| {
+                    serde_json::from_str::<Value>(raw_output)
+                        .map_err(|e| {
+                            Error::new(ErrorDetails::OutputParsing {
+                                message: format!(
+                                    "Failed to parse output from JSON function response {e}",
+                                ),
+                                raw_output: raw_output.to_string(),
+                            })
                         })
-                    })?;
-                let parsed_output = serde_json::from_str::<Value>(raw)
-                    .map_err(|e| {
-                        Error::new(ErrorDetails::OutputParsing {
-                            message: format!(
-                                "Failed to parse output from JSON function response {}",
-                                e
-                            ),
-                            raw_output: raw.to_string(),
-                        })
-                    })
-                    .ok();
+                        .ok()
+                });
+
                 let output_schema = match &inference_config.dynamic_output_schema {
                     Some(schema) => JsonSchemaRef::Dynamic(schema),
                     None => JsonSchemaRef::Static(&params.output_schema),
@@ -230,8 +222,10 @@ impl FunctionConfig {
                 };
                 Ok(InferenceResult::Json(JsonInferenceResult::new(
                     inference_id,
-                    raw.to_string(),
+                    raw_output,
                     parsed_output,
+                    json_block_index,
+                    auxiliary_content,
                     usage,
                     model_inference_results,
                     output_schema.value().clone(),
@@ -242,24 +236,31 @@ impl FunctionConfig {
         }
     }
 
-    pub fn system_schema(&self) -> Option<&JSONSchemaFromPath> {
+    pub fn system_schema(&self) -> Option<&StaticJSONSchema> {
         match self {
             FunctionConfig::Chat(params) => params.system_schema.as_ref(),
             FunctionConfig::Json(params) => params.system_schema.as_ref(),
         }
     }
 
-    pub fn user_schema(&self) -> Option<&JSONSchemaFromPath> {
+    pub fn user_schema(&self) -> Option<&StaticJSONSchema> {
         match self {
             FunctionConfig::Chat(params) => params.user_schema.as_ref(),
             FunctionConfig::Json(params) => params.user_schema.as_ref(),
         }
     }
 
-    pub fn assistant_schema(&self) -> Option<&JSONSchemaFromPath> {
+    pub fn assistant_schema(&self) -> Option<&StaticJSONSchema> {
         match self {
             FunctionConfig::Chat(params) => params.assistant_schema.as_ref(),
             FunctionConfig::Json(params) => params.assistant_schema.as_ref(),
+        }
+    }
+
+    pub fn description(&self) -> Option<&String> {
+        match self {
+            FunctionConfig::Chat(params) => params.description.as_ref(),
+            FunctionConfig::Json(params) => params.description.as_ref(),
         }
     }
 
@@ -305,15 +306,50 @@ impl FunctionConfig {
     }
 }
 
+/// Parse the content blocks into a JSON object
+/// We assume here that the last content block that's text or a tool call is the JSON object.
+/// (this is because we could have used an implicit tool call and there is no other reason for a tool call in a JSON function).
+///
+/// Sometimes models will return no content blocks (e.g. when instructed to not return anything), so `raw_output` will be `None` then.
+///
+/// Returns: the raw output, the auxiliary content, and the index of the JSON block in the original content blocks.
+fn get_json_output_from_content_blocks(
+    mut content_blocks: Vec<ContentBlockOutput>,
+) -> (Option<String>, Vec<ContentBlockOutput>, Option<usize>) {
+    let raw_output = content_blocks
+        .iter()
+        .rev()
+        .find_map(|content_block| match content_block {
+            ContentBlockOutput::Text(text) => Some(text.text.to_string()),
+            ContentBlockOutput::ToolCall(tool_call) => Some(tool_call.arguments.to_string()),
+            _ => None,
+        });
+    let maybe_index_from_end = content_blocks.iter().rev().position(|content_block| {
+        matches!(
+            content_block,
+            ContentBlockOutput::Text(_) | ContentBlockOutput::ToolCall(_)
+        )
+    });
+    let json_block_index = match maybe_index_from_end {
+        Some(i) => {
+            let index_from_start = content_blocks.len() - 1 - i;
+            content_blocks.remove(index_from_start);
+            Some(index_from_start)
+        }
+        None => None,
+    };
+    (raw_output, content_blocks, json_block_index)
+}
+
 /// Validate all input messages that contain text (not raw_text).
 /// The validation is done based on the input's role and the function's schemas.
 /// We first validate the system message (if it exists)
 /// Next we validate all messages containing text blocks.
 /// If there are multiple text or raw text blocks in a message we reject.
 fn validate_all_text_input(
-    system_schema: Option<&JSONSchemaFromPath>,
-    user_schema: Option<&JSONSchemaFromPath>,
-    assistant_schema: Option<&JSONSchemaFromPath>,
+    system_schema: Option<&StaticJSONSchema>,
+    user_schema: Option<&StaticJSONSchema>,
+    assistant_schema: Option<&StaticJSONSchema>,
     input: &Input,
 ) -> Result<(), Error> {
     match (input.system.as_ref(), system_schema) {
@@ -385,7 +421,7 @@ fn validate_all_text_input(
 /// Otherwise, the message must contain JSON content that matches the schema
 fn validate_single_message(
     content: &Value,
-    schema: Option<&JSONSchemaFromPath>,
+    schema: Option<&StaticJSONSchema>,
     index_role: Option<(usize, &Role)>,
 ) -> Result<(), Error> {
     match schema {
@@ -511,6 +547,8 @@ mod tests {
     use crate::inference::types::FinishReason;
     use crate::inference::types::InputMessage;
     use crate::inference::types::Latency;
+    use crate::inference::types::Text;
+    use crate::inference::types::Thought;
     use crate::jsonschema_util::DynamicJSONSchema;
     use crate::minijinja_util::TemplateConfig;
     use crate::tool::ToolCall;
@@ -524,7 +562,7 @@ mod tests {
     use tempfile::NamedTempFile;
     use tracing_test::traced_test;
 
-    fn create_test_schema() -> JSONSchemaFromPath {
+    fn create_test_schema() -> StaticJSONSchema {
         let schema = r#"
         {
             "type": "object",
@@ -537,9 +575,9 @@ mod tests {
         "#;
 
         let mut temp_file = NamedTempFile::new().expect("Failed to create temporary file");
-        write!(temp_file, "{}", schema).expect("Failed to write schema to temporary file");
+        write!(temp_file, "{schema}").expect("Failed to write schema to temporary file");
 
-        JSONSchemaFromPath::new(temp_file.path().to_owned(), PathBuf::new())
+        StaticJSONSchema::from_path(temp_file.path().to_owned(), PathBuf::new())
             .expect("Failed to create schema")
     }
 
@@ -1020,8 +1058,9 @@ mod tests {
             system_schema: None,
             user_schema: None,
             assistant_schema: None,
-            output_schema: JSONSchemaFromPath::from_value(&json!({})).unwrap(),
+            output_schema: StaticJSONSchema::from_value(&json!({})).unwrap(),
             implicit_tool_call_config,
+            description: None,
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -1092,8 +1131,9 @@ mod tests {
             system_schema: Some(system_schema),
             user_schema: None,
             assistant_schema: None,
-            output_schema: JSONSchemaFromPath::from_value(&output_schema).unwrap(),
+            output_schema: StaticJSONSchema::from_value(&output_schema).unwrap(),
             implicit_tool_call_config,
+            description: None,
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -1154,8 +1194,9 @@ mod tests {
             system_schema: None,
             user_schema: Some(user_schema),
             assistant_schema: None,
-            output_schema: JSONSchemaFromPath::from_value(&output_schema).unwrap(),
+            output_schema: StaticJSONSchema::from_value(&output_schema).unwrap(),
             implicit_tool_call_config,
+            description: None,
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -1217,8 +1258,9 @@ mod tests {
             system_schema: None,
             user_schema: None,
             assistant_schema: Some(assistant_schema),
-            output_schema: JSONSchemaFromPath::from_value(&output_schema).unwrap(),
+            output_schema: StaticJSONSchema::from_value(&output_schema).unwrap(),
             implicit_tool_call_config,
+            description: None,
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -1284,8 +1326,9 @@ mod tests {
             system_schema: Some(system_schema),
             user_schema: Some(user_schema),
             assistant_schema: Some(assistant_schema),
-            output_schema: JSONSchemaFromPath::from_value(&output_schema).unwrap(),
+            output_schema: StaticJSONSchema::from_value(&output_schema).unwrap(),
             implicit_tool_call_config,
+            description: None,
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -1394,8 +1437,7 @@ mod tests {
 
                 assert!(
                     diff <= tolerance,
-                    "Probability for variant {} is outside the acceptable range",
-                    variant_name
+                    "Probability for variant {variant_name} is outside the acceptable range"
                 );
             }
         }
@@ -1440,11 +1482,7 @@ mod tests {
         for (variant_name, count) in counts {
             assert!(
                 (count as i32 - expected_count as i32).abs() <= tolerance as i32,
-                "Variant {} was not sampled uniformly. Expected {} +/- {}, got {}",
-                variant_name,
-                expected_count,
-                tolerance,
-                count
+                "Variant {variant_name} was not sampled uniformly. Expected {expected_count} +/- {tolerance}, got {count}"
             );
         }
     }
@@ -1473,6 +1511,58 @@ mod tests {
         assert!((0.0..1.0).contains(&value4));
     }
 
+    #[test]
+    fn test_description_getter() {
+        // Test for Chat function with description
+        let chat_config = FunctionConfigChat {
+            variants: HashMap::new(),
+            system_schema: None,
+            user_schema: None,
+            assistant_schema: None,
+            tools: vec![],
+            tool_choice: ToolChoice::None,
+            parallel_tool_calls: None,
+            description: Some("A chat function description".to_string()),
+        };
+        let function_config = FunctionConfig::Chat(chat_config);
+        assert_eq!(
+            function_config.description(),
+            Some(&"A chat function description".to_string())
+        );
+
+        // Test for JSON function with description
+        let output_schema = StaticJSONSchema::from_value(&json!({})).unwrap();
+        let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&json!({}));
+        let json_config = FunctionConfigJson {
+            variants: HashMap::new(),
+            system_schema: None,
+            user_schema: None,
+            assistant_schema: None,
+            output_schema,
+            implicit_tool_call_config,
+            description: Some("A JSON function description".to_string()),
+        };
+        let function_config = FunctionConfig::Json(json_config);
+        assert_eq!(
+            function_config.description(),
+            Some(&"A JSON function description".to_string())
+        );
+
+        // Test for None description
+        let chat_config = FunctionConfigChat {
+            variants: HashMap::new(),
+            system_schema: None,
+            user_schema: None,
+            assistant_schema: None,
+            tools: vec![],
+            tool_choice: ToolChoice::None,
+            parallel_tool_calls: None,
+            description: None,
+        };
+        let function_config = FunctionConfig::Chat(chat_config);
+        assert_eq!(function_config.description(), None);
+    }
+
     #[tokio::test]
     #[traced_test]
     async fn test_prepare_response_json() {
@@ -1494,7 +1584,7 @@ mod tests {
           "additionalProperties": false
         });
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
-        let output_schema = JSONSchemaFromPath::from_value(&output_schema).unwrap();
+        let output_schema = StaticJSONSchema::from_value(&output_schema).unwrap();
         let function_config = FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             system_schema: None,
@@ -1502,6 +1592,7 @@ mod tests {
             assistant_schema: None,
             output_schema,
             implicit_tool_call_config,
+            description: None,
         });
         let raw_request = "raw_request".to_string();
 
@@ -1542,6 +1633,7 @@ mod tests {
             templates: &templates,
             dynamic_output_schema: None,
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
         let response = function_config
@@ -1563,7 +1655,7 @@ mod tests {
             InferenceResult::Json(result) => {
                 assert_eq!(result.inference_id, inference_id);
                 assert!(result.output.parsed.is_none());
-                assert_eq!(result.output.raw, "Hello, world!");
+                assert_eq!(result.output.raw, Some("Hello, world!".to_string()));
                 assert_eq!(result.usage, usage);
                 assert_eq!(result.finish_reason, Some(FinishReason::Stop));
                 assert_eq!(result.model_inference_results, vec![model_response]);
@@ -1615,7 +1707,10 @@ mod tests {
                     result.output.parsed.unwrap(),
                     json!({"name": "Jerry", "age": 30}),
                 );
-                assert_eq!(result.output.raw, r#"{"name": "Jerry", "age": 30}"#);
+                assert_eq!(
+                    result.output.raw,
+                    Some("{\"name\": \"Jerry\", \"age\": 30}".to_string())
+                );
                 assert_eq!(result.usage, usage);
                 assert_eq!(result.model_inference_results, vec![model_response]);
             }
@@ -1663,7 +1758,10 @@ mod tests {
             InferenceResult::Json(result) => {
                 assert_eq!(result.inference_id, inference_id);
                 assert!(result.output.parsed.is_none());
-                assert_eq!(result.output.raw, r#"{"name": "Jerry", "age": "thirty"}"#);
+                assert_eq!(
+                    result.output.raw,
+                    Some("{\"name\": \"Jerry\", \"age\": \"thirty\"}".to_string())
+                );
                 assert_eq!(result.usage, usage);
                 assert_eq!(result.model_inference_results, vec![model_response]);
                 assert_eq!(result.finish_reason, Some(FinishReason::ToolCall));
@@ -1717,7 +1815,7 @@ mod tests {
             InferenceResult::Json(result) => {
                 assert_eq!(result.inference_id, inference_id);
                 assert!(result.output.parsed.is_none());
-                assert_eq!(result.output.raw, "tool_call_arguments");
+                assert_eq!(result.output.raw, Some("tool_call_arguments".to_string()));
                 assert_eq!(result.usage, usage);
                 assert_eq!(result.model_inference_results, vec![model_response]);
                 assert_eq!(result.finish_reason, Some(FinishReason::ToolCall));
@@ -1773,7 +1871,10 @@ mod tests {
                     result.output.parsed.unwrap(),
                     json!({"name": "Jerry", "age": 30}),
                 );
-                assert_eq!(result.output.raw, r#"{"name": "Jerry", "age": 30}"#);
+                assert_eq!(
+                    result.output.raw,
+                    Some(r#"{"name": "Jerry", "age": 30}"#.to_string())
+                );
                 assert_eq!(result.usage, usage);
                 assert_eq!(result.model_inference_results, vec![model_response]);
                 assert_eq!(result.finish_reason, Some(FinishReason::ContentFilter));
@@ -1786,7 +1887,7 @@ mod tests {
         let content_blocks = Vec::new();
         let usage = Usage {
             input_tokens: 10,
-            output_tokens: 10,
+            output_tokens: 0,
         };
         let model_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
@@ -1799,13 +1900,13 @@ mod tests {
             usage: usage.clone(),
             model_provider_name: "model_provider_name".into(),
             model_name: "model_name".into(),
-            finish_reason: None,
+            finish_reason: Some(FinishReason::Stop),
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
             },
             cached: false,
         };
-        let error = function_config
+        let response = function_config
             .prepare_response(
                 inference_id,
                 content_blocks,
@@ -1816,14 +1917,18 @@ mod tests {
                 None,
             )
             .await
-            .unwrap_err();
-        assert_eq!(
-            error,
-            ErrorDetails::Inference {
-                message: "No valid content blocks found in JSON function response".to_string()
+            .unwrap();
+        match response {
+            InferenceResult::Json(result) => {
+                assert_eq!(result.inference_id, inference_id);
+                assert!(result.output.parsed.is_none());
+                assert!(result.output.raw.is_none());
+                assert_eq!(result.usage, usage);
+                assert_eq!(result.finish_reason, model_response.finish_reason);
+                assert_eq!(result.model_inference_results, vec![model_response]);
             }
-            .into()
-        );
+            _ => panic!("Expected a JSON inference result"),
+        }
 
         let dynamic_output_schema = DynamicJSONSchema::new(serde_json::json!({
             "type": "object",
@@ -1845,6 +1950,7 @@ mod tests {
             templates: &templates,
             dynamic_output_schema: Some(&dynamic_output_schema),
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
         // Test with a correct content block
@@ -1888,7 +1994,7 @@ mod tests {
             InferenceResult::Json(result) => {
                 assert_eq!(result.inference_id, inference_id);
                 assert_eq!(result.output.parsed.unwrap(), json!({"answer": "42"}),);
-                assert_eq!(result.output.raw, r#"{"answer": "42"}"#);
+                assert_eq!(result.output.raw, Some(r#"{"answer": "42"}"#.to_string()));
                 assert_eq!(result.usage, usage);
                 assert_eq!(result.model_inference_results, vec![model_response]);
             }
@@ -1936,7 +2042,10 @@ mod tests {
             InferenceResult::Json(result) => {
                 assert_eq!(result.inference_id, inference_id);
                 assert!(result.output.parsed.is_none());
-                assert_eq!(result.output.raw, r#"{"response": "forty-two"}"#);
+                assert_eq!(
+                    result.output.raw,
+                    Some(r#"{"response": "forty-two"}"#.to_string())
+                );
                 assert_eq!(result.usage, usage);
                 assert_eq!(result.model_inference_results, vec![model_response]);
             }
@@ -1989,7 +2098,7 @@ mod tests {
             InferenceResult::Json(result) => {
                 assert_eq!(result.inference_id, inference_id);
                 assert!(result.output.parsed.is_none());
-                assert_eq!(result.output.raw, "tool_call_arguments");
+                assert_eq!(result.output.raw, Some("tool_call_arguments".to_string()));
                 assert_eq!(result.usage, usage);
                 assert_eq!(result.model_inference_results, vec![model_response]);
             }
@@ -2041,7 +2150,7 @@ mod tests {
             InferenceResult::Json(result) => {
                 assert_eq!(result.inference_id, inference_id);
                 assert_eq!(result.output.parsed.unwrap(), json!({"answer": "42"}),);
-                assert_eq!(result.output.raw, r#"{"answer": "42"}"#);
+                assert_eq!(result.output.raw, Some(r#"{"answer": "42"}"#.to_string()));
                 assert_eq!(result.usage, usage);
                 assert_eq!(result.model_inference_results, vec![model_response]);
             }
@@ -2051,7 +2160,7 @@ mod tests {
         // Test with an empty output schema
         let output_schema = json!({});
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
-        let output_schema = JSONSchemaFromPath::from_value(&output_schema).unwrap();
+        let output_schema = StaticJSONSchema::from_value(&output_schema).unwrap();
         let function_config = FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             system_schema: None,
@@ -2059,6 +2168,7 @@ mod tests {
             assistant_schema: None,
             output_schema,
             implicit_tool_call_config,
+            description: None,
         });
         let inference_id = Uuid::now_v7();
         let content_blocks = vec![r#"{"answer": "42"}"#.to_string().into()];
@@ -2100,12 +2210,128 @@ mod tests {
             InferenceResult::Json(result) => {
                 assert_eq!(result.inference_id, inference_id);
                 assert_eq!(result.output.parsed.unwrap(), json!({"answer": "42"}),);
-                assert_eq!(result.output.raw, r#"{"answer": "42"}"#);
+                assert_eq!(result.output.raw, Some(r#"{"answer": "42"}"#.to_string()));
                 assert_eq!(result.usage, usage);
                 assert_eq!(result.model_inference_results, vec![model_response]);
                 assert_eq!(result.finish_reason, Some(FinishReason::Stop));
             }
             _ => panic!("Expected a JSON inference result"),
+        }
+    }
+
+    #[test]
+    fn test_get_json_output_from_content_blocks() {
+        // Case 1: Text followed by ToolCall
+        let content_blocks = vec![
+            ContentBlockOutput::Text(Text {
+                text: "Hello".to_string(),
+            }),
+            ContentBlockOutput::ToolCall(ToolCall {
+                id: "tool_call_id".to_string(),
+                name: "tool_call_name".to_string(),
+                arguments: "tool_call_arguments".to_string(),
+            }),
+        ];
+        let (raw_output, auxiliary_content, json_block_index) =
+            get_json_output_from_content_blocks(content_blocks.clone());
+        assert_eq!(raw_output, Some("tool_call_arguments".to_string()));
+        assert_eq!(auxiliary_content.len(), 1);
+        assert_eq!(json_block_index, Some(1));
+        match &auxiliary_content[0] {
+            ContentBlockOutput::Text(t) => assert_eq!(t.text, "Hello"),
+            _ => panic!("Expected Text block"),
+        }
+
+        // Case 2: Only Thought blocks
+        let content_blocks = vec![
+            ContentBlockOutput::Thought(Thought {
+                text: "thinking...".to_string(),
+                signature: None,
+            }),
+            ContentBlockOutput::Thought(Thought {
+                text: "still thinking".to_string(),
+                signature: Some("sig".to_string()),
+            }),
+        ];
+        let (raw_output, auxiliary_content, json_block_index) =
+            get_json_output_from_content_blocks(content_blocks.clone());
+        assert_eq!(raw_output, None);
+        assert_eq!(auxiliary_content, content_blocks);
+        assert_eq!(json_block_index, None);
+
+        // Case 3: Mixed Text, Thought, ToolCall
+        let content_blocks = vec![
+            ContentBlockOutput::Thought(Thought {
+                text: "first thought".to_string(),
+                signature: None,
+            }),
+            ContentBlockOutput::Text(Text {
+                text: "Some text".to_string(),
+            }),
+            ContentBlockOutput::Thought(Thought {
+                text: "second thought".to_string(),
+                signature: Some("sig2".to_string()),
+            }),
+            ContentBlockOutput::ToolCall(ToolCall {
+                id: "id2".to_string(),
+                name: "name2".to_string(),
+                arguments: "{\"foo\": 1}".to_string(),
+            }),
+        ];
+        let (raw_output, auxiliary_content, json_block_index) =
+            get_json_output_from_content_blocks(content_blocks.clone());
+        assert_eq!(raw_output, Some("{\"foo\": 1}".to_string()));
+        assert_eq!(json_block_index, Some(3));
+        // Should exclude the ToolCall block from auxiliary_content
+        assert_eq!(auxiliary_content.len(), 3);
+        assert!(auxiliary_content
+            .iter()
+            .any(|b| matches!(b, ContentBlockOutput::Text(_))));
+        assert_eq!(
+            auxiliary_content
+                .iter()
+                .filter(|b| matches!(b, ContentBlockOutput::Thought(_)))
+                .count(),
+            2
+        );
+
+        // Case 4: Only Text blocks
+        let content_blocks = vec![
+            ContentBlockOutput::Text(Text {
+                text: "A".to_string(),
+            }),
+            ContentBlockOutput::Text(Text {
+                text: "B".to_string(),
+            }),
+        ];
+        let (raw_output, auxiliary_content, json_block_index) =
+            get_json_output_from_content_blocks(content_blocks.clone());
+        assert_eq!(raw_output, Some("B".to_string()));
+        assert_eq!(auxiliary_content.len(), 1);
+        assert_eq!(json_block_index, Some(1));
+        match &auxiliary_content[0] {
+            ContentBlockOutput::Text(t) => assert_eq!(t.text, "A"),
+            _ => panic!("Expected Text block"),
+        }
+
+        // Case 5: Thought block at the end
+        let content_blocks = vec![
+            ContentBlockOutput::Text(Text {
+                text: "A".to_string(),
+            }),
+            ContentBlockOutput::Thought(Thought {
+                text: "final thought".to_string(),
+                signature: None,
+            }),
+        ];
+        let (raw_output, auxiliary_content, json_block_index) =
+            get_json_output_from_content_blocks(content_blocks.clone());
+        assert_eq!(raw_output, Some("A".to_string()));
+        assert_eq!(auxiliary_content.len(), 1);
+        assert_eq!(json_block_index, Some(0));
+        match &auxiliary_content[0] {
+            ContentBlockOutput::Thought(t) => assert_eq!(t.text, "final thought"),
+            _ => panic!("Expected Thought block"),
         }
     }
 }

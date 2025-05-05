@@ -1,23 +1,109 @@
-use std::pin::Pin;
+use std::{collections::HashMap, pin::Pin};
 
+use axum::http;
+use bytes::Bytes;
 use futures::{stream::Peekable, Stream};
+use serde::de::DeserializeOwned;
 use serde_json::{map::Entry, Map, Value};
+use uuid::Uuid;
 
 use crate::{
-    error::{Error, ErrorDetails},
+    error::{DisplayOrDebugGateway, Error, ErrorDetails},
     inference::types::{
+        batch::{ProviderBatchInferenceOutput, ProviderBatchInferenceResponse},
         extra_body::{FullExtraBodyConfig, InferenceExtraBody},
+        extra_headers::{ExtraHeader, FullExtraHeadersConfig, InferenceExtraHeader},
         ProviderInferenceResponseChunk,
     },
     model::{fully_qualified_name, ModelProviderRequestInfo},
 };
 
-pub fn inject_extra_body(
+pub struct JsonlBatchFileInfo {
+    pub provider_type: String,
+    pub raw_request: String,
+    pub raw_response: String,
+    pub file_id: String,
+}
+
+/// A helper function to parse lines from a JSONL file into a batch response.
+/// The provided type `T` is used to parse each line.
+pub async fn parse_jsonl_batch_file<T: DeserializeOwned, E: std::error::Error>(
+    bytes: Result<Bytes, E>,
+    JsonlBatchFileInfo {
+        provider_type,
+        raw_request,
+        raw_response,
+        file_id,
+    }: JsonlBatchFileInfo,
+) -> Result<ProviderBatchInferenceResponse, Error>
+where
+    ProviderBatchInferenceOutput: TryFrom<T>,
+{
+    let bytes = bytes.map_err(|e| {
+        Error::new(ErrorDetails::InferenceServer {
+            message: format!(
+                "Error reading batch results response for file {file_id}: {}",
+                DisplayOrDebugGateway::new(e)
+            ),
+            raw_request: None,
+            raw_response: None,
+            provider_type: provider_type.to_string(),
+        })
+    })?;
+    let mut elements: HashMap<Uuid, ProviderBatchInferenceOutput> = HashMap::new();
+    let text = std::str::from_utf8(&bytes).map_err(|e| {
+        Error::new(ErrorDetails::InferenceServer {
+            message: format!(
+                "Error parsing batch results response for file {file_id}: {}",
+                DisplayOrDebugGateway::new(e)
+            ),
+            raw_request: None,
+            raw_response: None,
+            provider_type: provider_type.to_string(),
+        })
+    })?;
+    for line in text.lines() {
+        let row = match serde_json::from_str::<T>(line) {
+            Ok(row) => row,
+            Err(e) => {
+                // Construct error for logging but don't return it
+                let _ = Error::new(ErrorDetails::InferenceServer {
+                    message: format!(
+                        "Error parsing batch results row for file {file_id}: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
+                    raw_request: None,
+                    raw_response: Some(line.to_string()),
+                    provider_type: provider_type.to_string(),
+                });
+                continue;
+            }
+        };
+        let output = match ProviderBatchInferenceOutput::try_from(row) {
+            Ok(output) => output,
+            Err(_) => {
+                // Construct error for logging but don't return it
+                continue;
+            }
+        };
+        elements.insert(output.id, output);
+    }
+
+    Ok(ProviderBatchInferenceResponse {
+        elements,
+        raw_request,
+        raw_response,
+    })
+}
+
+#[must_use = "Extra headers must be inserted into request builder"]
+pub fn inject_extra_request_data(
     config: &FullExtraBodyConfig,
+    extra_headers_config: &FullExtraHeadersConfig,
     model_provider_data: impl Into<ModelProviderRequestInfo>,
     model_name: &str,
     body: &mut serde_json::Value,
-) -> Result<(), Error> {
+) -> Result<http::HeaderMap, Error> {
     if !body.is_object() {
         return Err(Error::new(ErrorDetails::Serialization {
             message: "Body is not a map".to_string(),
@@ -65,7 +151,99 @@ pub fn inject_extra_body(
             }
         }
     }
-    Ok(())
+
+    let mut headers = http::HeaderMap::new();
+    // Write the variant extra_headers first, then the model_provider extra_headers.
+    // This way, the model_provider extra_headers will overwrite keys in the
+    // variant extra_headers.
+    for extra_headers in [
+        &extra_headers_config.variant_extra_headers,
+        &model_provider.extra_headers,
+    ]
+    .into_iter()
+    .flatten()
+    {
+        for ExtraHeader { name, value } in &extra_headers.data {
+            headers.insert(
+                http::header::HeaderName::from_bytes(name.as_bytes()).map_err(|e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!(
+                            "Invalid header name `{name}`: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
+                    })
+                })?,
+                http::header::HeaderValue::from_bytes(value.as_bytes()).map_err(|e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!(
+                            "Invalid header value `{value}`: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
+                    })
+                })?,
+            );
+        }
+    }
+
+    // Finally, write the inference-level extra_headers information. This can overwrite header set from the config-level extra_headers.
+    for extra_header in &extra_headers_config.inference_extra_headers.data {
+        match extra_header {
+            InferenceExtraHeader::Variant {
+                // We're iterating over a 'InferenceExtraHeader', so we've already removed any non-matching variant names.
+                // Any remaining `InferenceExtraHeader::Variant` values should be applied to the current request
+                variant_name: _,
+                name,
+                value,
+            } => {
+                headers.insert(
+                    http::header::HeaderName::from_bytes(name.as_bytes()).map_err(|e| {
+                        Error::new(ErrorDetails::Serialization {
+                            message: format!(
+                                "Invalid header name `{name}`: {}",
+                                DisplayOrDebugGateway::new(e)
+                            ),
+                        })
+                    })?,
+                    http::header::HeaderValue::from_bytes(value.as_bytes()).map_err(|e| {
+                        Error::new(ErrorDetails::Serialization {
+                            message: format!(
+                                "Invalid header value `{value}`: {}",
+                                DisplayOrDebugGateway::new(e)
+                            ),
+                        })
+                    })?,
+                );
+            }
+            InferenceExtraHeader::Provider {
+                model_provider_name,
+                name,
+                value,
+            } => {
+                if *model_provider_name == expected_provider_name {
+                    headers.insert(
+                        http::header::HeaderName::from_bytes(name.as_bytes()).map_err(|e| {
+                            Error::new(ErrorDetails::Serialization {
+                                message: format!(
+                                    "Invalid header name `{name}`: {}",
+                                    DisplayOrDebugGateway::new(e)
+                                ),
+                            })
+                        })?,
+                        http::header::HeaderValue::from_bytes(value.as_bytes()).map_err(|e| {
+                            Error::new(ErrorDetails::Serialization {
+                                message: format!(
+                                    "Invalid header value `{value}`: {}",
+                                    DisplayOrDebugGateway::new(e)
+                                ),
+                            })
+                        })?,
+                    );
+                }
+            }
+        }
+    }
+
+    Ok(headers)
 }
 
 // Copied from serde_json (MIT-licensed): https://github.com/serde-rs/json/blob/400eaa977f1f0a1c9ad5e35d634ed2226bf1218c/src/value/mod.rs#L259
@@ -213,6 +391,7 @@ mod tests {
 
     use crate::inference::types::{
         extra_body::{ExtraBodyConfig, ExtraBodyReplacement, FilteredInferenceExtraBody},
+        extra_headers::{ExtraHeadersConfig, FilteredInferenceExtraHeaders, InferenceExtraHeader},
         ContentBlockChunk, TextChunk,
     };
 
@@ -280,11 +459,13 @@ mod tests {
     #[test]
     fn test_inject_nothing() {
         let mut body = serde_json::json!({});
-        inject_extra_body(
+        inject_extra_request_data(
+            &Default::default(),
             &Default::default(),
             ModelProviderRequestInfo {
                 provider_name: "dummy_provider".into(),
                 extra_body: Default::default(),
+                extra_headers: None,
             },
             "dummy_model",
             &mut body,
@@ -296,7 +477,7 @@ mod tests {
     #[test]
     fn test_inject_no_matches() {
         let mut body = serde_json::json!({});
-        inject_extra_body(
+        let headers = inject_extra_request_data(
             &FullExtraBodyConfig {
                 extra_body: Some(ExtraBodyConfig { data: vec![] }),
                 inference_extra_body: FilteredInferenceExtraBody {
@@ -307,7 +488,18 @@ mod tests {
                     }],
                 },
             },
+            &FullExtraHeadersConfig {
+                variant_extra_headers: Some(ExtraHeadersConfig { data: vec![] }),
+                inference_extra_headers: FilteredInferenceExtraHeaders {
+                    data: vec![InferenceExtraHeader::Provider {
+                        model_provider_name: "wrong_provider".to_string(),
+                        name: "X-My-Header".to_string(),
+                        value: "My Value".to_string(),
+                    }],
+                },
+            },
             ModelProviderRequestInfo {
+                extra_headers: None,
                 provider_name: "dummy_provider".into(),
                 extra_body: Default::default(),
             },
@@ -316,15 +508,18 @@ mod tests {
         )
         .unwrap();
         assert_eq!(body, serde_json::json!({}));
+        assert_eq!(headers.len(), 0);
     }
 
     #[test]
     fn test_inject_to_non_map() {
-        let err = inject_extra_body(
+        let err = inject_extra_request_data(
+            &Default::default(),
             &Default::default(),
             ModelProviderRequestInfo {
                 provider_name: "dummy_provider".into(),
                 extra_body: Default::default(),
+                extra_headers: None,
             },
             "dummy_model",
             &mut serde_json::Value::String("test".to_string()),
@@ -338,6 +533,87 @@ mod tests {
     }
 
     #[test]
+    fn test_inject_headers() {
+        let headers = inject_extra_request_data(
+            &Default::default(),
+            &FullExtraHeadersConfig {
+                variant_extra_headers: Some(ExtraHeadersConfig {
+                    data: vec![
+                        ExtraHeader {
+                            name: "X-My-Overridden".to_string(),
+                            value: "My variant value".to_string(),
+                        },
+                        ExtraHeader {
+                            name: "X-My-Overridden-Inference".to_string(),
+                            value: "My variant value".to_string(),
+                        },
+                        ExtraHeader {
+                            name: "X-My-Variant".to_string(),
+                            value: "My variant header".to_string(),
+                        },
+                    ],
+                }),
+                inference_extra_headers: FilteredInferenceExtraHeaders {
+                    data: vec![
+                        InferenceExtraHeader::Provider {
+                            model_provider_name:
+                                "tensorzero::model_name::dummy_model::provider_name::dummy_provider"
+                                    .to_string(),
+                            name: "X-My-Inference".to_string(),
+                            value: "My inference header value".to_string(),
+                        },
+                        InferenceExtraHeader::Variant {
+                            variant_name: "dummy_variant".to_string(),
+                            name: "X-My-Overridden-Inference".to_string(),
+                            value: "My inference value".to_string(),
+                        },
+                    ],
+                },
+            },
+            ModelProviderRequestInfo {
+                provider_name: "dummy_provider".into(),
+                extra_body: Default::default(),
+                extra_headers: Some(ExtraHeadersConfig {
+                    data: vec![
+                        ExtraHeader {
+                            name: "X-My-Overridden".to_string(),
+                            value: "My model provider value".to_string(),
+                        },
+                        ExtraHeader {
+                            name: "X-My-Overridden-Inference".to_string(),
+                            value: "My model provider value".to_string(),
+                        },
+                        ExtraHeader {
+                            name: "X-My-ModelProvider".to_string(),
+                            value: "My model provider header".to_string(),
+                        },
+                    ],
+                }),
+            },
+            "dummy_model",
+            &mut serde_json::json!({}),
+        )
+        .unwrap();
+        assert_eq!(
+            headers.get("X-My-Overridden").unwrap(),
+            "My model provider value"
+        );
+        assert_eq!(headers.get("X-My-Variant").unwrap(), "My variant header");
+        assert_eq!(
+            headers.get("X-My-ModelProvider").unwrap(),
+            "My model provider header"
+        );
+        assert_eq!(
+            headers.get("X-My-Inference").unwrap(),
+            "My inference header value"
+        );
+        assert_eq!(
+            headers.get("X-My-Overridden-Inference").unwrap(),
+            "My inference value"
+        );
+    }
+
+    #[test]
     fn test_inject_overwrite_object() {
         let mut body = serde_json::json!({
             "otherKey": "otherValue",
@@ -345,7 +621,7 @@ mod tests {
                 "temperature": 123
             }
         });
-        inject_extra_body(
+        inject_extra_request_data(
             &FullExtraBodyConfig {
                 extra_body: Some(ExtraBodyConfig {
                     data: vec![
@@ -371,9 +647,11 @@ mod tests {
                     }],
                 },
             },
+            &Default::default(),
             ModelProviderRequestInfo {
                 provider_name: "dummy_provider".into(),
                 extra_body: Default::default(),
+                extra_headers: None,
             },
             "dummy_model",
             &mut body,
@@ -404,7 +682,7 @@ mod tests {
                 "temperature": 123
             }
         });
-        inject_extra_body(
+        inject_extra_request_data(
             &FullExtraBodyConfig {
                 extra_body: Some(ExtraBodyConfig {
                     data: vec![
@@ -432,6 +710,7 @@ mod tests {
                     }],
                 },
             },
+            &Default::default(),
             ModelProviderRequestInfo {
                 provider_name: "dummy_provider".into(),
                 extra_body: Some(ExtraBodyConfig {
@@ -450,6 +729,7 @@ mod tests {
                         },
                     ],
                 }),
+                extra_headers: None,
             },
             "dummy_model",
             &mut body,

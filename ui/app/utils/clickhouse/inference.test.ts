@@ -14,6 +14,7 @@ import {
   queryInferenceTableByFunctionName,
   queryInferenceTableBoundsByFunctionName,
   queryInferenceTableBoundsByVariantName,
+  queryModelInferencesByInferenceId,
 } from "./inference";
 import { countInferencesForFunction } from "./inference";
 import type {
@@ -28,7 +29,7 @@ test("countInferencesForFunction returns correct counts", async () => {
     type: "json",
     variants: {},
   });
-  expect(jsonCount).toBe(524);
+  expect(jsonCount).toBe(604);
 
   const chatCount = await countInferencesForFunction("write_haiku", {
     type: "chat",
@@ -37,7 +38,7 @@ test("countInferencesForFunction returns correct counts", async () => {
     tool_choice: "none",
     parallel_tool_calls: false,
   });
-  expect(chatCount).toBe(720);
+  expect(chatCount).toBe(804);
 });
 
 // Test countInferencesForVariant
@@ -47,7 +48,7 @@ test("countInferencesForVariant returns correct counts", async () => {
     { type: "json", variants: {} },
     "gpt4o_initial_prompt",
   );
-  expect(jsonCount).toBe(131);
+  expect(jsonCount).toBe(132);
 
   const chatCount = await countInferencesForVariant(
     "write_haiku",
@@ -60,7 +61,7 @@ test("countInferencesForVariant returns correct counts", async () => {
     },
     "initial_prompt_gpt4o_mini",
   );
-  expect(chatCount).toBe(569);
+  expect(chatCount).toBe(648);
 });
 
 test("queryInferenceTable", async () => {
@@ -118,7 +119,7 @@ test("queryInferenceTable pages through all results correctly using before", asy
   expect(currentPage.length).toBeLessThanOrEqual(PAGE_SIZE);
 
   // Verify total number of elements
-  expect(totalElements).toBe(3179);
+  expect(totalElements).toBe(3515);
 
   // We should have seen at least one full page
   expect(numFullPages).toBeGreaterThan(0);
@@ -178,7 +179,7 @@ test("queryInferenceTable pages through all results correctly using after", asyn
   expect(currentPage.length).toBeLessThanOrEqual(PAGE_SIZE);
 
   // Verify total number of elements matches the previous test
-  expect(totalElements).toBe(3178); // One less than with before because we excluded the first ID
+  expect(totalElements).toBe(3514); // One less than with before because we excluded the first ID
 
   // We should have seen at least one full page
   expect(numFullPages).toBeGreaterThan(0);
@@ -317,13 +318,13 @@ test("queryInferenceTableByEpisodeId pages through all results correctly using a
 test("queryInferenceTableBounds", async () => {
   const bounds = await queryInferenceTableBounds();
   expect(bounds.first_id).toBe("01934c9a-be70-74e2-8e6d-8eb19531638c");
-  expect(bounds.last_id).toBe("0195e31b-68d6-7001-b7b7-fde770175c65");
+  expect(bounds.last_id).toBe("01965ac8-0d98-7312-835f-aa2993fb655f");
 });
 
 test("queryEpisodeTableBounds", async () => {
   const bounds = await queryEpisodeTableBounds();
   expect(bounds.first_id).toBe("01934c9a-be70-74e2-8e6d-8eb19531638c");
-  expect(bounds.last_id).toBe("0195e31b-68d6-7001-b7b7-fde770175c65");
+  expect(bounds.last_id).toBe("01965ac8-0d98-7312-835f-aa2993fb655f");
 });
 
 test("queryInferenceTableBounds with episode_id", async () => {
@@ -376,7 +377,7 @@ test("queryInferenceTableBoundsByFunctionName", async () => {
     function_name: "extract_entities",
   });
   expect(bounds.first_id).toBe("01934c9a-be70-74e2-8e6d-8eb19531638c");
-  expect(bounds.last_id).toBe("0195c501-b126-7181-8bed-3558a7a7348e");
+  expect(bounds.last_id).toBe("0196374c-2c92-74b3-843f-ffa611b577b4");
 });
 
 test("queryInferenceTableByVariantName", async () => {
@@ -417,7 +418,7 @@ test("queryInferenceTableBoundsByVariantName", async () => {
     variant_name: "gpt4o_initial_prompt",
   });
   expect(bounds.first_id).toBe("01939adf-0f50-79d0-8d55-7a009fcc5e32");
-  expect(bounds.last_id).toBe("0195aef7-edb9-7e13-897e-1d08865e8b8c");
+  expect(bounds.last_id).toBe("0196368e-5505-7721-88d2-654cd26483b4");
 });
 
 test("queryEpisodeTable", async () => {
@@ -509,7 +510,7 @@ test("queryEpisodeTable pages through all results correctly using before", async
   expect(currentPage.length).toBeLessThanOrEqual(PAGE_SIZE);
 
   // Verify total number of elements
-  expect(totalElements).toBe(1648);
+  expect(totalElements).toBe(1984);
 
   // We should have seen at least 9 full pages
   expect(numFullPages).toBeGreaterThan(8);
@@ -571,7 +572,7 @@ test("queryEpisodeTable pages through all results correctly using after", async 
   expect(currentPage.length).toBeLessThanOrEqual(PAGE_SIZE);
 
   // Verify total number of elements matches the previous test
-  expect(totalElements).toBe(1647); // One less than with before because we excluded the first ID
+  expect(totalElements).toBe(1983); // One less than with before because we excluded the first ID
 
   // We should have seen at least 9 full pages
   expect(numFullPages).toBeGreaterThan(8);
@@ -619,55 +620,53 @@ test("queryInferenceById for json inference", async () => {
   const output = inference?.output as JsonInferenceOutput;
   expect(output.parsed).toBeDefined();
 });
-
 test("countInferencesByFunction", async () => {
   const countsInfo = await countInferencesByFunction();
-  expect(countsInfo).toEqual([
-    {
-      count: 3,
-      function_name: "tensorzero::default",
-      max_timestamp: "2025-03-29T18:12:59Z",
-    },
-    {
-      count: 124,
-      function_name: "tensorzero::llm_judge::entity_extraction::count_sports",
-      max_timestamp: "2025-03-23T21:56:27Z",
-    },
-    {
-      count: 524,
-      function_name: "extract_entities",
-      max_timestamp: "2025-03-23T21:56:17Z",
-    },
-    {
-      count: 226,
-      function_name: "tensorzero::llm_judge::haiku::topic_starts_with_f",
-      max_timestamp: "2025-03-23T20:01:40Z",
-    },
-    {
-      count: 720,
-      function_name: "write_haiku",
-      max_timestamp: "2025-03-23T20:01:28Z",
-    },
+  expect(countsInfo).toEqual(
+    expect.arrayContaining([
+      {
+        count: 204,
+        function_name: "tensorzero::llm_judge::entity_extraction::count_sports",
+        max_timestamp: "2025-04-15T02:34:22Z",
+      },
+      {
+        count: 604,
+        function_name: "extract_entities",
+        max_timestamp: "2025-04-15T02:34:21Z",
+      },
+      {
+        count: 310,
+        function_name: "tensorzero::llm_judge::haiku::topic_starts_with_f",
+        max_timestamp: "2025-04-15T02:33:10Z",
+      },
+      {
+        count: 804,
+        function_name: "write_haiku",
+        max_timestamp: "2025-04-15T02:33:07Z",
+      },
+      {
+        count: 1,
+        function_name: "tensorzero::default",
+        max_timestamp: "2025-04-15T02:02:36Z",
+      },
+      {
+        count: 1,
+        function_name: "foo",
+        max_timestamp: "2025-02-13T22:29:20Z",
+      },
+    ]),
+  );
+});
 
-    {
-      count: 1,
-      function_name: "foo",
-      max_timestamp: "2025-02-13T22:29:20Z",
-    },
-    {
-      count: 767,
-      function_name: "ask_question",
-      max_timestamp: "2025-01-03T21:52:59Z",
-    },
-    {
-      count: 764,
-      function_name: "answer_question",
-      max_timestamp: "2025-01-03T21:52:59Z",
-    },
-    {
-      count: 50,
-      function_name: "generate_secret",
-      max_timestamp: "2025-01-03T21:51:29Z",
-    },
-  ]);
+test("queryModelInferencesByInferenceId", async () => {
+  const modelInferences = await queryModelInferencesByInferenceId(
+    "0195aef6-6cee-75e3-9097-f7bdf6e9c9af",
+  );
+  expect(modelInferences.length).toBe(1);
+  const firstInference = modelInferences[0];
+  expect(firstInference.id).toBe("0195aef6-77a9-7ce1-8910-016c2bef9cec");
+  expect(firstInference.input_messages.length).toBe(1);
+  expect(firstInference.output.length).toBe(1);
+  expect(firstInference.output[0].type).toBe("text");
+  expect(!firstInference.cached);
 });

@@ -1,6 +1,7 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import {
   countCommentFeedbackByTargetId,
+  pollForFeedbackItem,
   queryCommentFeedbackBoundsByTargetId,
   queryCommentFeedbackByTargetId,
   queryFeedbackByTargetId,
@@ -86,7 +87,7 @@ test("queryCommentFeedbackByTargetId", async () => {
   checkSorting(secondBackwardPage);
   checkSorting(thirdBackwardPage);
 
-  // Check total number of items matches
+  // Check the total number of items matches
   expect(
     firstBackwardPage.length +
       secondBackwardPage.length +
@@ -225,18 +226,6 @@ describe("queryMetricsWithFeedback", () => {
     const jsonResults = await queryMetricsWithFeedback({
       function_name: "extract_entities",
       inference_table: "JsonInference",
-      metrics: {
-        exact_match: {
-          type: "boolean",
-          optimize: "max",
-          level: "inference",
-        },
-        jaccard_similarity: {
-          type: "float",
-          optimize: "max",
-          level: "inference",
-        },
-      },
     });
 
     // Check boolean counts for JSON function
@@ -259,13 +248,6 @@ describe("queryMetricsWithFeedback", () => {
     const chatResults = await queryMetricsWithFeedback({
       function_name: "write_haiku",
       inference_table: "ChatInference",
-      metrics: {
-        haiku_rating: {
-          type: "float",
-          optimize: "max",
-          level: "inference",
-        },
-      },
     });
 
     expect(chatResults.metrics).toContainEqual({
@@ -289,13 +271,6 @@ describe("queryMetricsWithFeedback", () => {
     const results = await queryMetricsWithFeedback({
       function_name: "nonexistent_function",
       inference_table: "ChatInference",
-      metrics: {
-        haiku_rating: {
-          type: "float",
-          optimize: "max",
-          level: "inference",
-        },
-      },
     });
 
     expect(results.metrics).toEqual([]);
@@ -306,18 +281,6 @@ describe("queryMetricsWithFeedback", () => {
     const results = await queryMetricsWithFeedback({
       function_name: "write_haiku",
       inference_table: "ChatInference",
-      metrics: {
-        haiku_rating: {
-          type: "float",
-          optimize: "max",
-          level: "inference",
-        },
-        haiku_rating_episode: {
-          type: "float",
-          optimize: "max",
-          level: "episode",
-        },
-      },
     });
 
     // Check inference level metric
@@ -342,13 +305,6 @@ describe("queryMetricsWithFeedback", () => {
       function_name: "write_haiku",
       variant_name: "initial_prompt_gpt4o_mini",
       inference_table: "ChatInference",
-      metrics: {
-        haiku_rating: {
-          type: "float",
-          optimize: "max",
-          level: "inference",
-        },
-      },
     });
 
     expect(results.metrics).toContainEqual({
@@ -358,4 +314,57 @@ describe("queryMetricsWithFeedback", () => {
       feedback_count: 491,
     });
   });
+});
+
+test("pollForFeedbackItem should find feedback when it exists", async () => {
+  const targetId = "01942e26-4693-7e80-8591-47b98e25d721";
+  const pageSize = 10;
+
+  // RUn the queryFeedbackByTargetId function to return feedback with the target ID
+  const originalQueryFeedback = await queryFeedbackByTargetId({
+    target_id: targetId,
+    page_size: pageSize,
+  });
+
+  // Ensure we have feedback to test with
+  expect(originalQueryFeedback.length).toBeGreaterThan(0);
+
+  // Use the first feedback item's ID for our test
+  const existingFeedbackId = originalQueryFeedback[0].id;
+
+  // Poll for the existing feedback item
+  const feedback = await pollForFeedbackItem(
+    targetId,
+    existingFeedbackId,
+    pageSize,
+    3, // Fewer retries for faster test
+    50, // Shorter delay for faster test
+  );
+
+  // Verify the feedback was found
+  expect(feedback.length).toBeGreaterThan(0);
+  expect(feedback.some((f) => f.id === existingFeedbackId)).toBe(true);
+
+  // Test with non-existent feedback ID
+  const nonExistentId = "non-existent-feedback-id";
+  const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+  const emptyFeedback = await pollForFeedbackItem(
+    targetId,
+    nonExistentId,
+    pageSize,
+    2, // Fewer retries for faster test
+    50, // Shorter delay for faster test
+  );
+
+  // Verify warning was logged
+  expect(consoleSpy).toHaveBeenCalledWith(
+    `Feedback ${nonExistentId} for target ${targetId} not found after 2 retries.`,
+  );
+
+  // Verify we still get feedback for the target, even though specific item wasn't found
+  expect(emptyFeedback.length).toBeGreaterThan(0);
+  expect(emptyFeedback.some((f) => f.id === nonExistentId)).toBe(false);
+
+  consoleSpy.mockRestore();
 });

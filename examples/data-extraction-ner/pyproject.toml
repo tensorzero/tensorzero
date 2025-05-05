@@ -9,4 +9,5 @@ dependencies = [
     "notebook",
     "pandas",
     "tensorzero",
+    "tqdm",
 ]

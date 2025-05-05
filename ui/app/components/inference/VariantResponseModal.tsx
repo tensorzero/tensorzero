@@ -11,18 +11,14 @@ import { Separator } from "~/components/ui/separator";
 import type { ParsedInferenceRow } from "~/utils/clickhouse/inference";
 import type { ParsedDatasetRow } from "~/utils/clickhouse/datasets";
 import type { InferenceUsage } from "~/utils/clickhouse/helpers";
-import { useFetcher } from "react-router";
-import type { JsonInferenceOutput } from "~/utils/clickhouse/common";
-import type { ContentBlockOutput } from "~/utils/clickhouse/common";
-import { OutputContent } from "~/components/inference/Output";
+import NewOutput from "~/components/inference/NewOutput";
 import type { InferenceResponse } from "~/utils/tensorzero";
 import { Card, CardContent } from "~/components/ui/card";
-import { resolvedInputToTensorZeroInput } from "~/routes/api/tensorzero/inference";
+import type { VariantResponseInfo } from "~/routes/api/tensorzero/inference.utils";
 
 interface VariantResponseModalProps {
   isOpen: boolean;
   isLoading: boolean;
-  setIsLoading: (isLoading: boolean) => void;
   onClose: () => void;
   // Use a union type to accept either inference or datapoint
   item: ParsedInferenceRow | ParsedDatasetRow;
@@ -31,30 +27,24 @@ interface VariantResponseModalProps {
   selectedVariant: string;
   // Add a source property to determine what type of item we're dealing with
   source: "inference" | "datapoint";
-}
-
-interface VariantResponseInfo {
-  output?: JsonInferenceOutput | ContentBlockOutput[];
-  usage?: InferenceUsage;
+  error?: string | null;
+  variantResponse: VariantResponseInfo | null;
+  rawResponse: InferenceResponse | null;
 }
 
 export function VariantResponseModal({
   isOpen,
   isLoading,
-  setIsLoading,
   onClose,
   item,
   inferenceUsage,
   selectedVariant,
   source,
+  error,
+  variantResponse,
+  rawResponse,
 }: VariantResponseModalProps) {
-  const [variantResponse, setVariantResponse] =
-    useState<VariantResponseInfo | null>(null);
-  const [rawResponse, setRawResponse] = useState<InferenceResponse | null>(
-    null,
-  );
   const [showRawResponse, setShowRawResponse] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   // Set up baseline response based on source type
   const baselineResponse: VariantResponseInfo = {
@@ -68,90 +58,10 @@ export function VariantResponseModal({
       ? (item as ParsedInferenceRow).variant_name
       : undefined;
 
-  const variantInferenceFetcher = useFetcher();
-
   useEffect(() => {
-    if (isOpen) {
-      setVariantResponse(null);
-      setShowRawResponse(false);
-      setError(null);
-
-      // Prepare request based on source and function type
-      let request;
-      if (
-        source === "inference" &&
-        item.function_name === "tensorzero::default"
-      ) {
-        request = prepareDefaultFunctionRequest(
-          item as ParsedInferenceRow,
-          selectedVariant,
-        );
-      } else {
-        const tensorZeroInput = resolvedInputToTensorZeroInput(item.input);
-        request = {
-          function_name: item.function_name,
-          input: tensorZeroInput,
-          variant_name: selectedVariant,
-          dryrun: true,
-        };
-      }
-
-      variantInferenceFetcher.submit(
-        { data: JSON.stringify(request) },
-        {
-          method: "POST",
-          action: "/api/tensorzero/inference",
-        },
-      );
-      setIsLoading(true);
-    }
-  }, [isOpen, selectedVariant, source]);
-
-  useEffect(() => {
-    if (
-      variantInferenceFetcher.state === "submitting" ||
-      variantInferenceFetcher.state === "loading"
-    ) {
-      setIsLoading(true);
-      return;
-    }
-
-    setIsLoading(false);
-
-    if (variantInferenceFetcher.data) {
-      setError(null);
-      try {
-        const inferenceOutput =
-          variantInferenceFetcher.data as InferenceResponse;
-
-        // Check if the response contains an error
-        if ("error" in inferenceOutput && inferenceOutput.error) {
-          setError(
-            `Inference Failed: ${typeof inferenceOutput.error === "string" ? inferenceOutput.error : JSON.stringify(inferenceOutput.error)}`,
-          );
-          return;
-        }
-
-        const variantResponse: VariantResponseInfo = {
-          output:
-            "content" in inferenceOutput
-              ? inferenceOutput.content
-              : inferenceOutput.output,
-          usage: inferenceOutput.usage,
-        };
-        setVariantResponse(variantResponse);
-        setRawResponse(inferenceOutput);
-      } catch (err) {
-        setError("Failed to process response data");
-        console.error("Error processing response:", err);
-      }
-    } else if (
-      variantInferenceFetcher.state === "idle" &&
-      variantInferenceFetcher.data === undefined
-    ) {
-      setError("Failed to fetch response. Please try again.");
-    }
-  }, [variantInferenceFetcher.data, variantInferenceFetcher.state]);
+    // reset when modal opens or closes
+    setShowRawResponse(false);
+  }, [isOpen]);
 
   const ResponseColumn = ({
     title,
@@ -178,16 +88,17 @@ export function VariantResponseModal({
       ) : (
         response && (
           <>
-            <div className="flex-1">
-              <h4 className="mb-1 text-xs font-semibold">Output</h4>
-              {response.output && (
-                <Card>
-                  <CardContent className="pt-8">
-                    <OutputContent output={response.output} />
-                  </CardContent>
-                </Card>
-              )}
-            </div>
+            {response.output && (
+              <div className="flex-1">
+                <NewOutput
+                  output={response.output}
+                  outputSchema={
+                    "output_schema" in item ? item.output_schema : undefined
+                  }
+                />
+              </div>
+            )}
+
             {response.usage && (
               <div className="mt-4">
                 <h4 className="mb-1 text-xs font-semibold">Usage</h4>
@@ -211,11 +122,11 @@ export function VariantResponseModal({
       return (
         <>
           Comparing{" "}
-          <code className="rounded bg-muted px-1.5 py-0.5 font-mono">
+          <code className="bg-muted rounded px-1.5 py-0.5 font-mono">
             {originalVariant}
           </code>{" "}
           vs.{" "}
-          <code className="rounded bg-muted px-1.5 py-0.5 font-mono">
+          <code className="bg-muted rounded px-1.5 py-0.5 font-mono">
             {selectedVariant}
           </code>
         </>
@@ -224,7 +135,7 @@ export function VariantResponseModal({
       return (
         <>
           Comparing datapoint vs.{" "}
-          <code className="rounded bg-muted px-1.5 py-0.5 font-mono">
+          <code className="bg-muted rounded px-1.5 py-0.5 font-mono">
             {selectedVariant}
           </code>
         </>
@@ -234,7 +145,7 @@ export function VariantResponseModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-h-[90vh] sm:max-w-[1200px]">
+      <DialogContent className="max-h-[90vh] sm:max-w-[90vw]">
         <DialogHeader>
           <DialogTitle>{getTitle()}</DialogTitle>
         </DialogHeader>
@@ -252,7 +163,7 @@ export function VariantResponseModal({
             </div>
           ) : (
             <>
-              <div className="flex min-h-[300px] space-x-4">
+              <div className="flex flex-col gap-4 md:grid md:min-h-[300px] md:grid-cols-2">
                 <ResponseColumn title="Original" response={baselineResponse} />
                 <ResponseColumn
                   title="New"
@@ -276,7 +187,7 @@ export function VariantResponseModal({
                   )}
                 </Button>
                 {showRawResponse && (
-                  <pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-words rounded-md bg-gray-100 p-4 text-xs">
+                  <pre className="mt-2 overflow-x-auto rounded-md bg-gray-100 p-4 text-xs break-words whitespace-pre-wrap">
                     <code>{JSON.stringify(rawResponse, null, 2)}</code>
                   </pre>
                 )}
@@ -287,34 +198,4 @@ export function VariantResponseModal({
       </DialogContent>
     </Dialog>
   );
-}
-
-function prepareDefaultFunctionRequest(
-  inference: ParsedInferenceRow,
-  selectedVariant: string,
-) {
-  const tensorZeroInput = resolvedInputToTensorZeroInput(inference.input);
-  if (inference.function_type === "chat") {
-    const tool_choice = inference.tool_params?.tool_choice;
-    const parallel_tool_calls = inference.tool_params?.parallel_tool_calls;
-    const tools_available = inference.tool_params?.tools_available;
-    return {
-      model_name: selectedVariant,
-      input: tensorZeroInput,
-      dryrun: true,
-      tool_choice: tool_choice,
-      parallel_tool_calls: parallel_tool_calls,
-      // We need to add all tools as additional for the default function
-      additional_tools: tools_available,
-    };
-  } else if (inference.function_type === "json") {
-    // This should never happen, just in case and for type safety
-    const output_schema = inference.output_schema;
-    return {
-      model_name: selectedVariant,
-      input: tensorZeroInput,
-      dryrun: true,
-      output_schema: output_schema,
-    };
-  }
 }

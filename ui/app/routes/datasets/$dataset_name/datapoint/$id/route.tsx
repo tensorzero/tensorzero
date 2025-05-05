@@ -1,15 +1,22 @@
-import { useFetcher } from "react-router";
-import { data, isRouteErrorResponse, redirect } from "react-router";
+import type { ActionFunctionArgs } from "react-router";
+import {
+  data,
+  isRouteErrorResponse,
+  Link,
+  redirect,
+  useFetcher,
+  useParams,
+} from "react-router";
 import { v7 as uuid } from "uuid";
 import BasicInfo from "./DatapointBasicInfo";
 import Input from "~/components/inference/Input";
 import Output from "~/components/inference/Output";
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import { useConfig } from "~/context/config";
 import { getDatapoint } from "~/utils/clickhouse/datasets.server";
 import { VariantResponseModal } from "~/components/inference/VariantResponseModal";
 import type { Route } from "./+types/route";
-import type { ActionFunctionArgs } from "react-router";
 import {
   ParsedDatasetRowSchema,
   type ParsedDatasetRow,
@@ -27,51 +34,13 @@ import {
   SectionsGroup,
 } from "~/components/layout/PageLayout";
 import { DatapointActions } from "./DatapointActions";
-import type {
-  ResolvedInput,
-  ResolvedInputMessage,
-  ResolvedInputMessageContent,
-} from "~/utils/clickhouse/common";
+import type { ResolvedInputMessage } from "~/utils/clickhouse/common";
 import { getConfig } from "~/utils/config/index.server";
-
-/**
- * Transforms input from clickhouse format to TensorZero client format
- */
-function transformInputForTensorZero(input: ResolvedInput) {
-  return {
-    system: input.system,
-    messages: input.messages.map((msg: ResolvedInputMessage) => ({
-      role: msg.role as "system" | "user" | "assistant" | "tool",
-      content: msg.content.map((c: ResolvedInputMessageContent) => {
-        if (c.type === "text") {
-          return { type: "text" as const, value: c.value };
-        } else if (c.type === "tool_call") {
-          return {
-            type: "tool_call" as const,
-            id: c.id,
-            name: c.name,
-            arguments: c.arguments,
-          };
-        } else if (c.type === "tool_result") {
-          return {
-            type: "tool_result" as const,
-            id: c.id,
-            name: c.name,
-            result: c.result,
-          };
-        } else if (c.type === "image") {
-          // Skip image content as it's not supported in the target schema
-          return {
-            type: "text" as const,
-            value: "[Image content not supported]",
-          };
-        }
-        // Fallback case
-        return { type: "text" as const, value: "Unsupported content type" };
-      }),
-    })),
-  };
-}
+import { resolvedInputToTensorZeroInput } from "~/routes/api/tensorzero/inference";
+import {
+  prepareInferenceActionRequest,
+  useInferenceActionFetcher,
+} from "~/routes/api/tensorzero/inference.utils";
 
 export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData();
@@ -96,6 +65,7 @@ export async function action({ request }: ActionFunctionArgs) {
     is_deleted: formData.get("is_deleted") === "true",
     updated_at: formData.get("updated_at"),
     staled_at: null,
+    source_inference_id: formData.get("source_inference_id"),
   };
 
   const cleanedData = Object.fromEntries(
@@ -106,7 +76,6 @@ export async function action({ request }: ActionFunctionArgs) {
   const config = await getConfig();
   const functionConfig = config.functions[parsedFormData.function_name];
   const functionType = functionConfig?.type;
-  // await deleteDatapointServer(parsedFormData);
   const action = formData.get("action");
   if (action === "delete") {
     await staleDatapoint(
@@ -124,37 +93,45 @@ export async function action({ request }: ActionFunctionArgs) {
     }
     return redirect(`/datasets/${parsedFormData.dataset_name}`);
   } else if (action === "save") {
+    // If the input changed, we should remove the source_inference_id
+    // because it will no longer be valid
     // Transform input to match TensorZero client's expected format
-    const transformedInput = transformInputForTensorZero(parsedFormData.input);
+    const transformedInput = resolvedInputToTensorZeroInput(
+      parsedFormData.input,
+    );
     const transformedOutput = transformOutputForTensorZero(
       parsedFormData.output,
     );
 
     try {
+      // For future reference:
+      // These two calls would be a transaction but ClickHouse doesn't support
+
+      const datapoint = {
+        function_name: parsedFormData.function_name,
+        input: transformedInput,
+        output: transformedOutput,
+        tags: parsedFormData.tags || {},
+        auxiliary: parsedFormData.auxiliary,
+        ...(functionType === "json"
+          ? {
+              output_schema:
+                parsedFormData["output_schema" as keyof typeof parsedFormData],
+            }
+          : {}),
+        ...(functionType === "chat" && "tool_params" in parsedFormData
+          ? {
+              tool_params:
+                parsedFormData["tool_params" as keyof typeof parsedFormData],
+            }
+          : {}),
+        source_inference_id: parsedFormData.source_inference_id,
+      };
       const { id } = await tensorZeroClient.updateDatapoint(
         parsedFormData.dataset_name,
         uuid(),
-        {
-          function_name: parsedFormData.function_name,
-          input: transformedInput,
-          output: transformedOutput,
-          tags: parsedFormData.tags || {},
-          auxiliary: parsedFormData.auxiliary,
-          ...(functionType === "json"
-            ? {
-                output_schema:
-                  parsedFormData[
-                    "output_schema" as keyof typeof parsedFormData
-                  ],
-              }
-            : {}),
-          ...(functionType === "chat" && "tool_params" in parsedFormData
-            ? {
-                tool_params:
-                  parsedFormData["tool_params" as keyof typeof parsedFormData],
-              }
-            : {}),
-        },
+        datapoint,
+        formData.get("inputChanged") === "true",
       );
       await staleDatapoint(
         parsedFormData.dataset_name,
@@ -200,27 +177,30 @@ export async function loader({
 export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   const { datapoint } = loaderData;
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [variantInferenceIsLoading, setVariantInferenceIsLoading] =
-    useState(false);
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
   const [input, setInput] = useState<typeof datapoint.input>(datapoint.input);
-  const originalInput = useMemo(() => datapoint.input, []);
+  const [originalInput] = useState(datapoint.input);
+  const [originalOutput] = useState(datapoint.output);
   const [output, setOutput] = useState<typeof datapoint.output>(
     datapoint.output,
   );
-  const originalOutput = useMemo(() => datapoint.output, []);
   const config = useConfig();
   const [isEditing, setIsEditing] = useState(false);
   const [resetKey, setResetKey] = useState(0);
   const [canSave, setCanSave] = useState(false);
+  const [inputChanged, setInputChanged] = useState(false);
+  const [outputChanged, setOutputChanged] = useState(false);
+
   useEffect(() => {
     // Use JSON.stringify to compare object values rather than references
-    const inputChanged =
+    const hasInputChanged =
       JSON.stringify(input) !== JSON.stringify(originalInput);
-    const outputChanged =
+    const hasOutputChanged =
       JSON.stringify(output) !== JSON.stringify(originalOutput);
 
-    setCanSave(isEditing && (inputChanged || outputChanged));
+    setInputChanged(hasInputChanged);
+    setOutputChanged(hasOutputChanged);
+    setCanSave(isEditing && (hasInputChanged || hasOutputChanged));
   }, [isEditing, input, output, originalInput, originalOutput]);
 
   const toggleEditing = () => setIsEditing(!isEditing);
@@ -239,8 +219,17 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
     setInput({ ...input, messages });
   };
 
-  const handleOutputChange = (newOutput: typeof datapoint.output) => {
-    setOutput(newOutput);
+  const handleOutputChange = (newOutput: typeof datapoint.output | null) => {
+    if (newOutput === null) {
+      setCanSave(false);
+    } else {
+      const hasOutputChanged =
+        JSON.stringify(newOutput) !== JSON.stringify(originalOutput);
+      const hasInputChanged =
+        JSON.stringify(input) !== JSON.stringify(originalInput);
+      setOutput(newOutput);
+      setCanSave(isEditing && (hasOutputChanged || hasInputChanged));
+    }
   };
 
   const fetcher = useFetcher();
@@ -264,6 +253,8 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
     });
 
     formData.append("action", action);
+    formData.append("inputChanged", String(inputChanged));
+    formData.append("outputChanged", String(outputChanged));
 
     // Submit to the local action by targeting the current route (".")
     fetcher.submit(formData, { method: "post", action: "." });
@@ -281,15 +272,30 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
     config.functions[datapoint.function_name]?.variants || {},
   );
 
+  const variantInferenceFetcher = useInferenceActionFetcher();
+  const variantSource = "datapoint";
+  const variantInferenceIsLoading =
+    // only concerned with rendering loading state when the modal is open
+    isModalOpen &&
+    (variantInferenceFetcher.state === "submitting" ||
+      variantInferenceFetcher.state === "loading");
+
+  const { submit } = variantInferenceFetcher;
   const onVariantSelect = (variant: string) => {
     setSelectedVariant(variant);
     setIsModalOpen(true);
+    const request = prepareInferenceActionRequest({
+      resource: datapoint,
+      source: variantSource,
+      variant,
+    });
+    // TODO: handle JSON.stringify error
+    submit({ data: JSON.stringify(request) });
   };
 
   const handleModalClose = () => {
     setIsModalOpen(false);
     setSelectedVariant(null);
-    setVariantInferenceIsLoading(false);
   };
 
   return (
@@ -353,7 +359,9 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
         <VariantResponseModal
           isOpen={isModalOpen}
           isLoading={variantInferenceIsLoading}
-          setIsLoading={setVariantInferenceIsLoading}
+          error={variantInferenceFetcher.error?.message}
+          variantResponse={variantInferenceFetcher.data?.info ?? null}
+          rawResponse={variantInferenceFetcher.data?.raw ?? null}
           onClose={handleModalClose}
           item={datapoint}
           selectedVariant={selectedVariant}
@@ -364,35 +372,75 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   );
 }
 
-export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  console.error(error);
-
+function getUserFacingError(error: unknown): {
+  heading: string;
+  message: ReactNode;
+} {
   if (isRouteErrorResponse(error)) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 text-red-500">
-        <h1 className="text-2xl font-bold">
-          {error.status} {error.statusText}
-        </h1>
-        <p>{error.data}</p>
-      </div>
-    );
-  } else if (error instanceof Error) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 text-red-500">
-        <h1 className="text-2xl font-bold">Error</h1>
-        <p>{error.message}</p>
-      </div>
-    );
-  } else {
-    return (
-      <div className="flex h-screen items-center justify-center text-red-500">
-        <h1 className="text-2xl font-bold">Unknown Error</h1>
-      </div>
-    );
+    switch (error.status) {
+      case 400:
+        return {
+          heading: `${error.status}: Bad Request`,
+          message: "Please try again later.",
+        };
+      case 401:
+        return {
+          heading: `${error.status}: Unauthorized`,
+          message: "You do not have permission to access this resource.",
+        };
+      case 403:
+        return {
+          heading: `${error.status}: Forbidden`,
+          message: "You do not have permission to access this resource.",
+        };
+      case 404:
+        return {
+          heading: `${error.status}: Not Found`,
+          message:
+            "The requested resource was not found. Please check the URL and try again.",
+        };
+      case 500:
+      default:
+        return {
+          heading: "An unknown error occurred",
+          message: "Please try again later.",
+        };
+    }
   }
+  return {
+    heading: "An unknown error occurred",
+    message: "Please try again later.",
+  };
 }
 
-function transformOutputForTensorZero(output: ParsedDatasetRow["output"]) {
+export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
+  useEffect(() => {
+    console.error(error);
+  }, [error]);
+  const { heading, message } = getUserFacingError(error);
+  const { dataset_name: datasetName } = useParams<{
+    dataset_name: string;
+    id: string;
+  }>();
+  return (
+    <div className="flex flex-col items-center justify-center md:h-full">
+      <div className="mt-8 flex flex-col items-center justify-center gap-2 rounded-xl bg-red-50 p-6 md:mt-0">
+        <h1 className="text-2xl font-bold">{heading}</h1>
+        {typeof message === "string" ? <p>{message}</p> : message}
+        <Link
+          to={`/datasets/${datasetName}`}
+          className="font-bold text-red-800 hover:text-red-600"
+        >
+          Go back &rarr;
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+function transformOutputForTensorZero(
+  output: ParsedDatasetRow["output"],
+): string | null {
   if (output === null || output === undefined) {
     return null;
   } else if ("raw" in output) {

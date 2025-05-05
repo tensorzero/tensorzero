@@ -10,6 +10,14 @@ export const textInputSchema = z.object({
 });
 export type TextInput = z.infer<typeof textInputSchema>;
 
+export const modelInferenceTextInputSchema = z.object({
+  type: z.literal("text"),
+  text: z.string(),
+});
+export type ModelInferenceTextInput = z.infer<
+  typeof modelInferenceTextInputSchema
+>;
+
 export const rawTextInputSchema = z.object({
   type: z.literal("raw_text"),
   value: z.string(),
@@ -67,7 +75,7 @@ export const storageKindSchema = z.discriminatedUnion("type", [
     .object({
       type: z.literal("s3_compatible"),
       bucket_name: z.string(),
-      region: z.string(),
+      region: z.string().nullable(),
       endpoint: z.string().nullable(),
       allow_http: z.boolean().nullable(),
     })
@@ -124,6 +132,20 @@ export const inputMessageContentSchema = z.discriminatedUnion("type", [
 ]);
 export type InputMessageContent = z.infer<typeof inputMessageContentSchema>;
 
+export const modelInferenceInputMessageContentSchema = z.discriminatedUnion(
+  "type",
+  [
+    modelInferenceTextInputSchema,
+    toolCallContentSchema,
+    toolResultContentSchema,
+    imageContentSchema,
+    rawTextInputSchema,
+  ],
+);
+export type ModelInferenceInputMessageContent = z.infer<
+  typeof modelInferenceInputMessageContentSchema
+>;
+
 export const resolvedInputMessageContentSchema = z.discriminatedUnion("type", [
   textInputSchema,
   toolCallContentSchema,
@@ -145,6 +167,16 @@ export const inputMessageSchema = z
   .strict();
 export type InputMessage = z.infer<typeof inputMessageSchema>;
 
+export const modelInferenceInputMessageSchema = z
+  .object({
+    role: roleSchema,
+    content: z.array(modelInferenceInputMessageContentSchema),
+  })
+  .strict();
+export type ModelInferenceInputMessage = z.infer<
+  typeof modelInferenceInputMessageSchema
+>;
+
 export const resolvedInputMessageSchema = z
   .object({
     role: roleSchema,
@@ -160,6 +192,14 @@ export const inputSchema = z
   })
   .strict();
 export type Input = z.infer<typeof inputSchema>;
+
+export const modelInferenceInputSchema = z
+  .object({
+    system: z.any().optional(), // Value type from Rust maps to any in TS
+    messages: z.array(modelInferenceInputMessageSchema).default([]),
+  })
+  .strict();
+export type ModelInferenceInput = z.infer<typeof modelInferenceInputSchema>;
 
 export const resolvedInputSchema = z
   .object({
@@ -192,8 +232,8 @@ export const requestMessageSchema = z.object({
 export type RequestMessage = z.infer<typeof requestMessageSchema>;
 
 export const jsonInferenceOutputSchema = z.object({
-  raw: z.string(),
-  parsed: z.any().optional(),
+  raw: z.string().default(""),
+  parsed: z.any().nullable(),
 });
 
 export type JsonInferenceOutput = z.infer<typeof jsonInferenceOutputSchema>;

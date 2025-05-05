@@ -1,6 +1,15 @@
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::print_stdout)]
+#![expect(clippy::unwrap_used, clippy::expect_used, clippy::print_stdout)]
+use crate::endpoints::dynamic_evaluation_run::{
+    DynamicEvaluationRunEpisodeRow, DynamicEvaluationRunRow,
+};
+
+#[cfg(feature = "e2e_tests")]
+use super::escape_string_for_clickhouse_literal;
 use super::ClickHouseConnectionInfo;
+use serde::Deserialize;
 use serde_json::Value;
+#[cfg(feature = "e2e_tests")]
+use std::collections::HashMap;
 use uuid::Uuid;
 
 lazy_static::lazy_static! {
@@ -21,14 +30,13 @@ pub async fn get_clickhouse() -> ClickHouseConnectionInfo {
 #[cfg(feature = "e2e_tests")]
 pub async fn clickhouse_flush_async_insert(clickhouse: &ClickHouseConnectionInfo) {
     if let Err(e) = clickhouse
-        .run_query("SYSTEM FLUSH ASYNC INSERT QUEUE".to_string(), None)
+        .run_query_synchronous("SYSTEM FLUSH ASYNC INSERT QUEUE".to_string(), None)
         .await
     {
         tracing::warn!("Failed to run `SYSTEM FLUSH ASYNC INSERT QUEUE`: {}", e);
     }
 }
 
-#[allow(dead_code)]
 pub async fn select_chat_datapoint_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     inference_id: Uuid,
@@ -37,19 +45,17 @@ pub async fn select_chat_datapoint_clickhouse(
     clickhouse_flush_async_insert(clickhouse_connection_info).await;
 
     let query = format!(
-        "SELECT * FROM ChatInferenceDatapoint WHERE id = '{}' LIMIT 1 FORMAT JSONEachRow",
-        inference_id
+        "SELECT * FROM ChatInferenceDatapoint WHERE id = '{inference_id}' LIMIT 1 FORMAT JSONEachRow"
     );
 
     let text = clickhouse_connection_info
-        .run_query(query, None)
+        .run_query_synchronous(query, None)
         .await
         .unwrap();
     let json: Value = serde_json::from_str(&text).ok()?;
     Some(json)
 }
 
-#[allow(dead_code)]
 pub async fn select_json_datapoint_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     inference_id: Uuid,
@@ -58,12 +64,11 @@ pub async fn select_json_datapoint_clickhouse(
     clickhouse_flush_async_insert(clickhouse_connection_info).await;
 
     let query = format!(
-        "SELECT * FROM JsonInferenceDatapoint WHERE id = '{}' LIMIT 1 FORMAT JSONEachRow",
-        inference_id
+        "SELECT * FROM JsonInferenceDatapoint WHERE id = '{inference_id}' LIMIT 1 FORMAT JSONEachRow"
     );
 
     let text = clickhouse_connection_info
-        .run_query(query, None)
+        .run_query_synchronous(query, None)
         .await
         .unwrap();
     let json: Value = serde_json::from_str(&text).ok()?;
@@ -78,12 +83,11 @@ pub async fn select_chat_inference_clickhouse(
     clickhouse_flush_async_insert(clickhouse_connection_info).await;
 
     let query = format!(
-        "SELECT * FROM ChatInference WHERE id = '{}' LIMIT 1 FORMAT JSONEachRow",
-        inference_id
+        "SELECT * FROM ChatInference WHERE id = '{inference_id}' LIMIT 1 FORMAT JSONEachRow"
     );
 
     let text = clickhouse_connection_info
-        .run_query(query, None)
+        .run_query_synchronous(query, None)
         .await
         .unwrap();
     let json: Value = serde_json::from_str(&text).ok()?;
@@ -99,12 +103,11 @@ pub async fn select_json_inference_clickhouse(
 
     // We limit to 1 in case there are duplicate entries (can be caused by a race condition in polling batch inferences)
     let query = format!(
-        "SELECT * FROM JsonInference WHERE id = '{}' LIMIT 1 FORMAT JSONEachRow",
-        inference_id
+        "SELECT * FROM JsonInference WHERE id = '{inference_id}' LIMIT 1 FORMAT JSONEachRow"
     );
 
     let text = clickhouse_connection_info
-        .run_query(query, None)
+        .run_query_synchronous(query, None)
         .await
         .unwrap();
     let json: Value = serde_json::from_str(&text).ok()?;
@@ -120,12 +123,11 @@ pub async fn select_model_inference_clickhouse(
 
     // We limit to 1 in case there are duplicate entries (can be caused by a race condition in polling batch inferences)
     let query = format!(
-        "SELECT * FROM ModelInference WHERE inference_id = '{}' LIMIT 1 FORMAT JSONEachRow",
-        inference_id
+        "SELECT * FROM ModelInference WHERE inference_id = '{inference_id}' LIMIT 1 FORMAT JSONEachRow"
     );
 
     let text = clickhouse_connection_info
-        .run_query(query, None)
+        .run_query_synchronous(query, None)
         .await
         .unwrap();
     let json: Value = serde_json::from_str(&text).ok()?;
@@ -141,12 +143,11 @@ pub async fn select_model_inferences_clickhouse(
 
     // We limit to 1 in case there are duplicate entries (can be caused by a race condition in polling batch inferences)
     let query = format!(
-        "SELECT * FROM ModelInference WHERE inference_id = '{}' FORMAT JSONEachRow",
-        inference_id
+        "SELECT * FROM ModelInference WHERE inference_id = '{inference_id}' FORMAT JSONEachRow"
     );
 
     let text = clickhouse_connection_info
-        .run_query(query, None)
+        .run_query_synchronous(query, None)
         .await
         .unwrap();
     let json_rows: Vec<Value> = text
@@ -172,12 +173,11 @@ pub async fn select_inference_tags_clickhouse(
     clickhouse_flush_async_insert(clickhouse_connection_info).await;
 
     let query = format!(
-        "SELECT * FROM InferenceTag WHERE function_name = '{}' AND key = '{}' AND value = '{}' AND inference_id = '{}' FORMAT JSONEachRow",
-        function_name, tag_key, tag_value, inference_id
+        "SELECT * FROM InferenceTag WHERE function_name = '{function_name}' AND key = '{tag_key}' AND value = '{tag_value}' AND inference_id = '{inference_id}' FORMAT JSONEachRow"
     );
 
     let text = clickhouse_connection_info
-        .run_query(query, None)
+        .run_query_synchronous(query, None)
         .await
         .unwrap();
     let json: Value = serde_json::from_str(&text).ok()?;
@@ -193,13 +193,12 @@ pub async fn select_batch_model_inference_clickhouse(
         SELECT bmi.*
         FROM BatchModelInference bmi
         INNER JOIN BatchIdByInferenceId bid ON bmi.inference_id = bid.inference_id
-        WHERE bid.inference_id = '{}'
-        FORMAT JSONEachRow"#,
-        inference_id
+        WHERE bid.inference_id = '{inference_id}'
+        FORMAT JSONEachRow"#
     );
 
     let text = clickhouse_connection_info
-        .run_query(query, None)
+        .run_query_synchronous(query, None)
         .await
         .unwrap();
     Some(serde_json::from_str(&text).unwrap())
@@ -213,13 +212,12 @@ pub async fn select_batch_model_inferences_clickhouse(
         r#"
         SELECT bmi.*
         FROM BatchModelInference bmi
-        WHERE bmi.batch_id = '{}'
-        FORMAT JSONEachRow"#,
-        batch_id
+        WHERE bmi.batch_id = '{batch_id}'
+        FORMAT JSONEachRow"#
     );
 
     let text = clickhouse_connection_info
-        .run_query(query, None)
+        .run_query_synchronous(query, None)
         .await
         .unwrap();
     let json_rows: Vec<Value> = text
@@ -235,12 +233,11 @@ pub async fn select_latest_batch_request_clickhouse(
     batch_id: Uuid,
 ) -> Option<Value> {
     let query = format!(
-        "SELECT * FROM BatchRequest WHERE batch_id = '{}' ORDER BY timestamp DESC LIMIT 1 FORMAT JSONEachRow",
-        batch_id
+        "SELECT * FROM BatchRequest WHERE batch_id = '{batch_id}' ORDER BY timestamp DESC LIMIT 1 FORMAT JSONEachRow"
     );
 
     let text = clickhouse_connection_info
-        .run_query(query, None)
+        .run_query_synchronous(query, None)
         .await
         .unwrap();
     let json: Value = serde_json::from_str(&text).ok()?;
@@ -255,13 +252,10 @@ pub async fn select_feedback_clickhouse(
 ) -> Option<Value> {
     clickhouse_flush_async_insert(clickhouse_connection_info).await;
 
-    let query = format!(
-        "SELECT * FROM {} WHERE id = '{}' FORMAT JSONEachRow",
-        table_name, feedback_id
-    );
+    let query = format!("SELECT * FROM {table_name} WHERE id = '{feedback_id}' FORMAT JSONEachRow");
 
     let text = clickhouse_connection_info
-        .run_query(query, None)
+        .run_query_synchronous(query, None)
         .await
         .unwrap();
     let json: Value = serde_json::from_str(&text).ok()?;
@@ -273,16 +267,217 @@ pub async fn select_feedback_by_target_id_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     table_name: &str,
     target_id: Uuid,
+    metric_name: Option<&str>,
 ) -> Option<Value> {
-    let query = format!(
-        "SELECT * FROM {} WHERE target_id = '{}' FORMAT JSONEachRow",
-        table_name, target_id
-    );
+    let query = match metric_name {
+        Some(metric_name) => {
+            format!(
+                "SELECT * FROM {table_name} WHERE target_id = '{target_id}' AND metric_name = '{metric_name}' FORMAT JSONEachRow"
+            )
+        }
+        None => {
+            format!("SELECT * FROM {table_name} WHERE target_id = '{target_id}' FORMAT JSONEachRow")
+        }
+    };
 
     let text = clickhouse_connection_info
-        .run_query(query, None)
+        .run_query_synchronous(query, None)
         .await
         .unwrap();
     let json: Value = serde_json::from_str(&text).ok()?;
     Some(json)
+}
+
+#[cfg(feature = "e2e_tests")]
+pub async fn stale_datapoint_clickhouse(
+    clickhouse_connection_info: &ClickHouseConnectionInfo,
+    datapoint_id: Uuid,
+) {
+    let query = format!(
+        "INSERT INTO ChatInferenceDatapoint
+        (
+            dataset_name,
+            function_name,
+            id,
+            episode_id,
+            input,
+            output,
+            tool_params,
+            tags,
+            auxiliary,
+            is_deleted,
+            source_inference_id,
+            staled_at,
+            updated_at
+        )
+        SELECT
+            dataset_name,
+            function_name,
+            id,
+            episode_id,
+            input,
+            output,
+            tool_params,
+            tags,
+            auxiliary,
+            is_deleted,
+            source_inference_id,
+            now64() as staled_at,
+            now64() as updated_at
+        FROM ChatInferenceDatapoint FINAL
+        WHERE id = '{datapoint_id}'"
+    );
+
+    // Execute the query and ignore errors (in case the datapoint doesn't exist in this table)
+    let _ = clickhouse_connection_info
+        .run_query_synchronous(query, None)
+        .await;
+
+    let query = format!(
+        "INSERT INTO JsonInferenceDatapoint
+        (
+            dataset_name,
+            function_name,
+            id,
+            episode_id,
+            input,
+            output,
+            output_schema,
+            tags,
+            auxiliary,
+            is_deleted,
+            source_inference_id,
+            staled_at,
+            updated_at
+        )
+        SELECT
+            dataset_name,
+            function_name,
+            id,
+            episode_id,
+            input,
+            output,
+            output_schema,
+            tags,
+            auxiliary,
+            is_deleted,
+            source_inference_id,
+            now64() as staled_at,
+            now64() as updated_at
+        FROM JsonInferenceDatapoint FINAL
+        WHERE id = '{datapoint_id}'"
+    );
+
+    clickhouse_flush_async_insert(clickhouse_connection_info).await;
+
+    let _ = clickhouse_connection_info
+        .run_query_synchronous(query, None)
+        .await;
+}
+
+pub async fn select_dynamic_evaluation_run_clickhouse(
+    clickhouse_connection_info: &ClickHouseConnectionInfo,
+    run_id: Uuid,
+) -> Option<DynamicEvaluationRunRow> {
+    let query = format!(
+        "SELECT
+            uint_to_uuid(run_id_uint) as run_id,
+            variant_pins,
+            tags,
+            project_name,
+            run_display_name
+        FROM DynamicEvaluationRun
+        WHERE run_id_uint = toUInt128(toUUID('{run_id}'))
+        FORMAT JSONEachRow",
+    );
+
+    let text = clickhouse_connection_info
+        .run_query_synchronous(query, None)
+        .await
+        .unwrap();
+
+    Some(serde_json::from_str(&text).unwrap())
+}
+
+pub async fn select_dynamic_evaluation_run_episode_clickhouse(
+    clickhouse_connection_info: &ClickHouseConnectionInfo,
+    run_id: Uuid,
+    episode_id: Uuid,
+) -> Option<DynamicEvaluationRunEpisodeRow> {
+    let query = format!(
+        "SELECT run_id, uint_to_uuid(episode_id_uint) as episode_id, variant_pins, datapoint_name, tags FROM DynamicEvaluationRunEpisode WHERE run_id = '{run_id}' AND episode_id_uint = toUInt128(toUUID('{episode_id}')) FORMAT JSONEachRow",
+    );
+
+    let text = clickhouse_connection_info
+        .run_query_synchronous(query, None)
+        .await
+        .unwrap();
+    Some(serde_json::from_str(&text).unwrap())
+}
+
+#[cfg(feature = "e2e_tests")]
+pub async fn select_feedback_tags_clickhouse(
+    clickhouse_connection_info: &ClickHouseConnectionInfo,
+    metric_name: &str,
+    tag_key: &str,
+    tag_value: &str,
+) -> Option<Value> {
+    clickhouse_flush_async_insert(clickhouse_connection_info).await;
+
+    let query = format!(
+            "SELECT * FROM FeedbackTag WHERE metric_name = '{metric_name}' AND key = '{tag_key}' AND value = '{tag_value}' FORMAT JSONEachRow"
+        );
+
+    let text = clickhouse_connection_info
+        .run_query_synchronous(query, None)
+        .await
+        .unwrap();
+    let json: Value = serde_json::from_str(&text).ok()?;
+    Some(json)
+}
+
+#[derive(Debug, Deserialize)]
+pub struct StaticEvaluationHumanFeedback {
+    pub metric_name: String,
+    pub datapoint_id: Uuid,
+    pub output: String,
+    pub value: String,
+    pub feedback_id: Uuid,
+    pub evaluator_inference_id: Option<Uuid>,
+}
+
+#[cfg(feature = "e2e_tests")]
+pub async fn select_human_static_evaluation_feedback_clickhouse(
+    clickhouse_connection_info: &ClickHouseConnectionInfo,
+    metric_name: &str,
+    datapoint_id: Uuid,
+    output: &str,
+) -> Option<StaticEvaluationHumanFeedback> {
+    let datapoint_id_str = datapoint_id.to_string();
+    let escaped_output = escape_string_for_clickhouse_literal(output);
+    let params = HashMap::from([
+        ("metric_name", metric_name),
+        ("datapoint_id", &datapoint_id_str),
+        ("output", &escaped_output),
+    ]);
+    let query = r#"
+        SELECT * FROM StaticEvaluationHumanFeedback
+        WHERE
+            metric_name = {metric_name:String}
+            AND datapoint_id = {datapoint_id:UUID}
+            AND output = {output:String}
+        FORMAT JSONEachRow"#
+        .to_string();
+    let text = clickhouse_connection_info
+        .run_query_synchronous(query, Some(&params))
+        .await
+        .unwrap();
+    if text.is_empty() {
+        // Return None if the query returns no rows
+        None
+    } else {
+        // Panic if the query fails to parse or multiple rows are returned
+        let json: StaticEvaluationHumanFeedback = serde_json::from_str(&text).unwrap();
+        Some(json)
+    }
 }

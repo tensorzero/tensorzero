@@ -6,7 +6,7 @@ import {
   SelectValue,
   SelectTrigger,
 } from "~/components/ui/select";
-import { MetricBadges } from "~/components/metric/MetricBadges";
+import MetricBadges from "~/components/metric/MetricBadges";
 import React from "react";
 import { useConfig } from "~/context/config";
 
@@ -21,14 +21,14 @@ export function MetricSelector({
   selectedMetric,
   onMetricChange,
 }: MetricSelectorProps) {
+  const config = useConfig();
   if (!metricsWithFeedback.metrics?.length) {
     return (
-      <div className="flex flex-col justify-center">
-        <div>No metrics available</div>
+      <div className="text-fg-muted flex flex-col justify-center text-sm">
+        No metrics available.
       </div>
     );
   }
-  const config = useConfig();
 
   return (
     <div className="flex flex-col justify-center">

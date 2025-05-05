@@ -6,6 +6,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  TableEmptyState,
 } from "~/components/ui/table";
 import type { EpisodeByIdRow } from "~/utils/clickhouse/inference";
 
@@ -43,14 +44,7 @@ export default function EpisodesTable({
         </TableHeader>
         <TableBody>
           {episodes.length === 0 ? (
-            <TableRow className="hover:bg-bg-primary">
-              <TableCell
-                colSpan={3}
-                className="px-3 py-2.5 text-center text-fg-muted"
-              >
-                No episodes found
-              </TableCell>
-            </TableRow>
+            <TableEmptyState message="No episodes found" />
           ) : (
             episodes.map((episode) => (
               <TableRow key={episode.episode_id} id={episode.episode_id}>
@@ -59,7 +53,7 @@ export default function EpisodesTable({
                     to={`/observability/episodes/${episode.episode_id}`}
                     className="block no-underline"
                   >
-                    <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
+                    <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
                       {episode.episode_id}
                     </code>
                   </Link>

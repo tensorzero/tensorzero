@@ -1,23 +1,13 @@
 import { Badge } from "~/components/ui/badge";
-import { cn } from "~/utils/common";
 
 // Empty message component
 interface EmptyMessageProps {
   message?: string;
-  className?: string;
 }
 
-export function EmptyMessage({
-  message = "No content defined",
-  className,
-}: EmptyMessageProps) {
+function EmptyMessage({ message = "No content defined" }: EmptyMessageProps) {
   return (
-    <div
-      className={cn(
-        "flex items-center justify-center py-16 text-sm text-fg-secondary",
-        className,
-      )}
-    >
+    <div className="text-fg-muted flex items-center justify-center py-16 text-sm">
       {message}
     </div>
   );
@@ -26,18 +16,13 @@ export function EmptyMessage({
 // Label component
 interface LabelProps {
   text?: string;
-  className?: string;
 }
 
-export function Label({ text, className }: LabelProps) {
+function Label({ text }: LabelProps) {
   if (!text) return null;
 
   return (
-    <Badge
-      className={cn("mx-4 mb-0 mt-4 bg-bg-muted text-fg-primary", className)}
-    >
-      {text}
-    </Badge>
+    <Badge className="bg-bg-muted text-fg-primary mx-4 mt-4 mb-0">{text}</Badge>
   );
 }
 
@@ -47,7 +32,6 @@ interface CodeMessageProps {
   content?: string;
   showLineNumbers?: boolean;
   emptyMessage?: string;
-  className?: string;
 }
 
 export function CodeMessage({
@@ -55,7 +39,6 @@ export function CodeMessage({
   content,
   showLineNumbers = false,
   emptyMessage,
-  className,
 }: CodeMessageProps) {
   if (!content) {
     return <EmptyMessage message={emptyMessage} />;
@@ -65,14 +48,14 @@ export function CodeMessage({
   const lineCount = content ? content.split("\n").length : 0;
 
   return (
-    <div className={cn("relative w-full", className)}>
+    <div className="relative w-full">
       <Label text={label} />
 
-      <div className="w-full overflow-hidden rounded-lg bg-bg-primary">
+      <div className="bg-bg-primary w-full overflow-hidden rounded-lg">
         <div className="w-full">
           <div className="flex w-full">
             {showLineNumbers && (
-              <div className="pointer-events-none sticky left-0 min-w-[3rem] flex-shrink-0 select-none bg-bg-primary py-5 pl-4 pr-3 text-right font-mono text-fg-muted">
+              <div className="bg-bg-primary text-fg-muted pointer-events-none sticky left-0 min-w-[3rem] shrink-0 py-5 pr-3 pl-4 text-right font-mono select-none">
                 {Array.from({ length: lineCount }, (_, i) => (
                   <div key={i} className="text-sm leading-6">
                     {i + 1}
@@ -80,10 +63,10 @@ export function CodeMessage({
                 ))}
               </div>
             )}
-            <div className="w-0 flex-grow overflow-auto">
+            <div className="w-0 grow overflow-auto">
               <pre className="w-full px-4 py-5">
-                <code className="block whitespace-pre font-mono text-sm leading-6 text-fg-primary">
-                  {content || " "}
+                <code className="text-fg-primary block font-mono text-sm leading-6 whitespace-pre">
+                  {content || ""}
                 </code>
               </pre>
             </div>
@@ -99,27 +82,25 @@ interface TextMessageProps {
   label?: string;
   content?: string;
   emptyMessage?: string;
-  className?: string;
 }
 
 export function TextMessage({
   label,
   content,
   emptyMessage,
-  className,
 }: TextMessageProps) {
   if (!content) {
     return <EmptyMessage message={emptyMessage} />;
   }
 
   return (
-    <div className={cn("relative w-full", className)}>
+    <div className="relative w-full">
       <Label text={label} />
 
-      <div className="w-full overflow-hidden rounded-lg bg-bg-primary">
+      <div className="bg-bg-primary w-full overflow-hidden rounded-lg">
         <div className="p-5">
-          <div className="whitespace-pre-wrap break-words text-sm text-fg-primary">
-            {content}
+          <div className="text-fg-primary text-sm break-words whitespace-pre-wrap">
+            {content || ""}
           </div>
         </div>
       </div>

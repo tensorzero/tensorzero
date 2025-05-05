@@ -1,37 +1,28 @@
-import { cn } from "~/utils/common";
 import { type ReactNode } from "react";
 
 interface BasicInfoLayoutProps {
   children: ReactNode;
-  className?: string;
 }
 
-export function BasicInfoLayout({ children, className }: BasicInfoLayoutProps) {
-  return <div className={cn("flex flex-col gap-2", className)}>{children}</div>;
+export function BasicInfoLayout({ children }: BasicInfoLayoutProps) {
+  return <div className="flex flex-col gap-2">{children}</div>;
 }
 
 interface BasicInfoItemProps {
   children: ReactNode;
-  className?: string;
 }
 
-export function BasicInfoItem({ children, className }: BasicInfoItemProps) {
-  return <div className={cn("flex flex-row", className)}>{children}</div>;
+export function BasicInfoItem({ children }: BasicInfoItemProps) {
+  return <div className="flex flex-row">{children}</div>;
 }
 
 interface BasicInfoItemTitleProps {
   children: ReactNode;
-  className?: string;
 }
 
-export function BasicInfoItemTitle({
-  children,
-  className,
-}: BasicInfoItemTitleProps) {
+export function BasicInfoItemTitle({ children }: BasicInfoItemTitleProps) {
   return (
-    <div
-      className={cn("w-32 py-1 text-left text-sm text-fg-secondary", className)}
-    >
+    <div className="text-fg-secondary w-32 py-1 text-left text-sm">
       {children}
     </div>
   );
@@ -39,17 +30,11 @@ export function BasicInfoItemTitle({
 
 interface BasicInfoItemContentProps {
   children: ReactNode;
-  className?: string;
 }
 
-export function BasicInfoItemContent({
-  children,
-  className,
-}: BasicInfoItemContentProps) {
+export function BasicInfoItemContent({ children }: BasicInfoItemContentProps) {
   return (
-    <div
-      className={cn("ml-6 flex-1 text-left text-sm text-fg-primary", className)}
-    >
+    <div className="text-fg-primary ml-6 flex-1 text-left text-sm">
       {children}
     </div>
   );

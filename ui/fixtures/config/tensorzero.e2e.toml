@@ -1,3 +1,6 @@
+[gateway]
+debug = true
+
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                   MODELS                                   │
 # └────────────────────────────────────────────────────────────────────────────┘
@@ -138,6 +141,13 @@ type = "chat"
 type = "chat_completion"
 model = "openai::gpt-4o-mini-2024-07-18"
 
+[functions.image_judger]
+type = "chat"
+
+[functions.image_judger.variants.honest_answer]
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"
+
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                  METRICS                                   │
 # └────────────────────────────────────────────────────────────────────────────┘
@@ -193,53 +203,93 @@ level = "episode"
 optimize = "min"
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
-# │                                  EVALS                                     │
+# │                                  EVALUATIONS                               │
 # └────────────────────────────────────────────────────────────────────────────┘
 
-[evals.entity_extraction]
+[evaluations.entity_extraction]
+type = "static"
 function_name = "extract_entities"
 dataset_name = "foo"
 
-[evals.entity_extraction.evaluators.exact_match]
+[evaluations.entity_extraction.evaluators.exact_match]
 type = "exact_match"
 cutoff = 0.6
 
-[evals.entity_extraction.evaluators.count_sports]
+[evaluations.entity_extraction.evaluators.count_sports]
 type = "llm_judge"
 output_type = "float"
 optimize = "min"
 include = { reference_output = false }
 cutoff = 0.5
 
-[evals.entity_extraction.evaluators.count_sports.variants.mini]
+[evaluations.entity_extraction.evaluators.count_sports.variants.mini]
 type = "chat_completion"
 model = "openai::gpt-4o-mini-2024-07-18"
 active = true
-system_instructions = "evals/entity_extraction/count_sports/system_instructions.txt"
+system_instructions = "evaluations/entity_extraction/count_sports/system_instructions.txt"
 json_mode = "strict"
 temperature = 0.1
 
-[evals.haiku]
+[evaluations.haiku]
+type = "static"
 function_name = "write_haiku"
 dataset_name = "foo"
 
-[evals.haiku.evaluators.exact_match]
+[evaluations.haiku.evaluators.exact_match]
 type = "exact_match"
 
-[evals.haiku.evaluators.topic_starts_with_f]
+[evaluations.haiku.evaluators.topic_starts_with_f]
 type = "llm_judge"
 output_type = "boolean"
 optimize = "min"
 include = { reference_output = false }
 cutoff = 0.5
 
-[evals.haiku.evaluators.topic_starts_with_f.variants.mini]
+[evaluations.haiku.evaluators.topic_starts_with_f.variants.mini]
 type = "chat_completion"
 model = "openai::gpt-4o-mini-2024-07-18"
 active = true
-system_instructions = "evals/haiku/topic_starts_with_f/system_instructions.txt"
+system_instructions = "evaluations/haiku/topic_starts_with_f/system_instructions.txt"
 json_mode = "strict"
 temperature = 0
+
+[evaluations.images]
+type = "static"
+function_name = "image_judger"
+
+[evaluations.images.evaluators.exact_match]
+type = "exact_match"
+
+[evaluations.images.evaluators.honest_answer]
+type = "llm_judge"
+input_format = "messages"
+output_type = "boolean"
+optimize = "max"
+include = { reference_output = false }
+cutoff = 0.2
+
+[evaluations.images.evaluators.honest_answer.variants.mini]
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"
+system_instructions = "evaluations/images/honest_answer/system_instructions.txt"
+temperature = 0
+json_mode = "strict"
+
+[evaluations.images.evaluators.matches_reference]
+type = "llm_judge"
+input_format = "messages"
+output_type = "boolean"
+optimize = "max"
+include = { reference_output = true }
+cutoff = 0.5
+
+[evaluations.images.evaluators.matches_reference.variants.mini]
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"
+system_instructions = "evaluations/images/matches_reference/system_instructions.txt"
+temperature = 0
+json_mode = "strict"
+
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                               OBJECT_STORAGE                               │

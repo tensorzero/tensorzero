@@ -1,4 +1,3 @@
-import { Link } from "react-router";
 import type { InferenceByIdRow } from "~/utils/clickhouse/inference";
 import {
   Table,
@@ -7,8 +6,9 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  TableEmptyState,
 } from "~/components/ui/table";
-import { formatDate } from "~/utils/date";
+import { TableItemShortUuid, TableItemTime } from "~/components/ui/TableItems";
 import { FunctionLink } from "~/components/function/FunctionLink";
 import { VariantLink } from "~/components/function/variant/VariantLink";
 
@@ -31,40 +31,25 @@ export default function InferencesTable({
         </TableHeader>
         <TableBody>
           {inferences.length === 0 ? (
-            <TableRow className="hover:bg-bg-primary">
-              <TableCell
-                colSpan={5}
-                className="px-3 py-8 text-center text-fg-muted"
-              >
-                No inferences found
-              </TableCell>
-            </TableRow>
+            <TableEmptyState message="No inferences found" />
           ) : (
             inferences.map((inference) => (
               <TableRow key={inference.id} id={inference.id}>
-                <TableCell className="max-w-[200px]">
-                  <Link
-                    to={`/observability/inferences/${inference.id}`}
-                    className="block no-underline"
-                  >
-                    <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
-                      {inference.id}
-                    </code>
-                  </Link>
+                <TableCell>
+                  <TableItemShortUuid
+                    id={inference.id}
+                    link={`/observability/inferences/${inference.id}`}
+                  />
                 </TableCell>
-                <TableCell className="max-w-[200px]">
-                  <Link
-                    to={`/observability/episodes/${inference.episode_id}`}
-                    className="block no-underline"
-                  >
-                    <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
-                      {inference.episode_id}
-                    </code>
-                  </Link>
+                <TableCell>
+                  <TableItemShortUuid
+                    id={inference.episode_id}
+                    link={`/observability/episodes/${inference.episode_id}`}
+                  />
                 </TableCell>
                 <TableCell>
                   <FunctionLink functionName={inference.function_name}>
-                    <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
+                    <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
                       {inference.function_name}
                     </code>
                   </FunctionLink>
@@ -74,13 +59,13 @@ export default function InferencesTable({
                     variantName={inference.variant_name}
                     functionName={inference.function_name}
                   >
-                    <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
+                    <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
                       {inference.variant_name}
                     </code>
                   </VariantLink>
                 </TableCell>
                 <TableCell>
-                  {formatDate(new Date(inference.timestamp))}
+                  <TableItemTime timestamp={inference.timestamp} />
                 </TableCell>
               </TableRow>
             ))

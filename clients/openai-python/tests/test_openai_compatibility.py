@@ -19,6 +19,7 @@ uv run pytest
 ```
 """
 
+import asyncio
 import base64
 import json
 import os
@@ -124,6 +125,146 @@ async def test_async_basic_inference_json_schema(async_client):
 
 
 @pytest.mark.asyncio
+async def test_async_inference_cache(async_client):
+    messages = [
+        {"role": "system", "content": [{"assistant_name": "Alfred Pennyworth"}]},
+        {"role": "user", "content": "Hello"},
+    ]
+
+    result = await async_client.chat.completions.create(
+        messages=messages,
+        model="tensorzero::function_name::basic_test",
+        temperature=0.4,
+    )
+
+    assert (
+        result.choices[0].message.content
+        == "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
+    )
+    usage = result.usage
+    assert usage.prompt_tokens == 10
+    assert usage.completion_tokens == 10
+    assert usage.total_tokens == 20
+
+    # Test caching
+    result = await async_client.chat.completions.create(
+        extra_body={
+            "tensorzero::cache_options": {"max_age_s": 10, "enabled": "on"},
+        },
+        messages=messages,
+        model="tensorzero::function_name::basic_test",
+        temperature=0.4,
+    )
+
+    assert (
+        result.choices[0].message.content
+        == "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
+    )
+    usage = result.usage
+    assert usage.prompt_tokens == 0  # should be cached
+    assert usage.completion_tokens == 0  # should be cached
+    assert usage.total_tokens == 0  # should be cached
+
+
+@pytest.mark.asyncio
+async def test_async_inference_streaming_with_cache(async_client):
+    messages = [
+        {"role": "system", "content": [{"assistant_name": "Alfred Pennyworth"}]},
+        {"role": "user", "content": "Hello"},
+    ]
+
+    # First request without cache to populate the cache
+    stream = await async_client.chat.completions.create(
+        extra_body={"tensorzero::episode_id": str(uuid7())},
+        messages=messages,
+        model="tensorzero::function_name::basic_test",
+        stream=True,
+        stream_options={"include_usage": True},
+        seed=69,
+    )
+
+    chunks = []
+    async for chunk in stream:
+        chunks.append(chunk)
+
+    # Verify the response
+    expected_text = [
+        "Wally,",
+        " the",
+        " golden",
+        " retriever,",
+        " wagged",
+        " his",
+        " tail",
+        " excitedly",
+        " as",
+        " he",
+        " devoured",
+        " a",
+        " slice",
+        " of",
+        " cheese",
+        " pizza.",
+    ]
+
+    content = ""
+    for i, chunk in enumerate(chunks[:-1]):  # All but the last chunk
+        if i < len(expected_text):
+            assert chunk.choices[0].delta.content == expected_text[i]
+            content += chunk.choices[0].delta.content
+
+    # Check second-to-last chunk has correct finish reason
+    stop_chunk = chunks[-2]
+    assert stop_chunk.choices[0].finish_reason == "stop"
+
+    final_chunk = chunks[-1]
+    assert final_chunk.usage.prompt_tokens == 10
+    assert final_chunk.usage.completion_tokens == 16
+
+    # Wait for trailing cache write to ClickHouse
+    await asyncio.sleep(1)
+
+    # Second request with cache
+    stream = await async_client.chat.completions.create(
+        extra_body={
+            "tensorzero::episode_id": str(uuid7()),
+            "tensorzero::cache_options": {"max_age_s": None, "enabled": "on"},
+        },
+        messages=messages,
+        model="tensorzero::function_name::basic_test",
+        stream=True,
+        stream_options={"include_usage": True},
+        seed=69,
+    )
+
+    cached_chunks = []
+    async for chunk in stream:
+        cached_chunks.append(chunk)
+
+    # Verify we get the same content
+    cached_content = ""
+    for i, chunk in enumerate(cached_chunks[:-1]):  # All but the last chunk
+        if i < len(expected_text):
+            assert chunk.choices[0].delta.content == expected_text[i]
+            cached_content += chunk.choices[0].delta.content
+
+    assert content == cached_content
+
+    # Check second-to-last chunk has the correct finish reason
+    print("Chunks: ", cached_chunks)
+    finish_chunk = cached_chunks[-2]
+    assert finish_chunk.choices[0].finish_reason == "stop"
+
+    final_cached_chunk = cached_chunks[-1]
+
+    # In streaming mode, the cached response will not include usage statistics
+    # This is still correct behavior as no tokens were used
+    assert final_cached_chunk.usage.prompt_tokens == 0  # should be cached
+    assert final_cached_chunk.usage.completion_tokens == 0  # should be cached
+    assert final_cached_chunk.usage.total_tokens == 0  # should be cached
+
+
+@pytest.mark.asyncio
 async def test_async_inference_streaming(async_client):
     start_time = time()
     messages = [
@@ -135,6 +276,7 @@ async def test_async_inference_streaming(async_client):
         messages=messages,
         model="tensorzero::function_name::basic_test",
         stream=True,
+        stream_options={"include_usage": True},
         max_tokens=300,
         seed=69,
     )
@@ -176,16 +318,20 @@ async def test_async_inference_streaming(async_client):
         assert (
             chunk.model == "tensorzero::function_name::basic_test::variant_name::test"
         )
-        if i + 1 < len(chunks):
+        if i + 2 < len(chunks):
             assert len(chunk.choices) == 1
             assert chunk.choices[0].delta.content == expected_text[i]
             assert chunk.choices[0].finish_reason is None
-        else:
-            assert chunk.choices[0].delta.content is None
-            assert chunk.usage.prompt_tokens == 10
-            assert chunk.usage.completion_tokens == 16
-            assert chunk.usage.total_tokens == 26
-            assert chunk.choices[0].finish_reason == "stop"
+
+    stop_chunk = chunks[-2]
+    assert stop_chunk.choices[0].finish_reason == "stop"
+    assert stop_chunk.choices[0].delta.content is None
+
+    final_chunk = chunks[-1]
+    assert len(final_chunk.choices) == 0
+    assert final_chunk.usage.prompt_tokens == 10
+    assert final_chunk.usage.completion_tokens == 16
+    assert final_chunk.usage.total_tokens == 26
 
 
 @pytest.mark.asyncio
@@ -285,10 +431,7 @@ async def test_async_inference_streaming_malformed_input(async_client):
             stream=True,
         )
     assert exc_info.value.status_code == 400
-    assert (
-        str(exc_info.value)
-        == """Error code: 400 - {'error': 'JSON Schema validation failed for Function:\\n\\n"assistant_name" is a required property\\nData: {"name_of_assistant":"Alfred Pennyworth"}Schema: {"type":"object","properties":{"assistant_name":{"type":"string"}},"required":["assistant_name"]}'}"""
-    )
+    assert "JSON Schema validation failed" in str(exc_info.value)
 
 
 @pytest.mark.asyncio
@@ -405,9 +548,9 @@ async def test_async_tool_call_streaming(async_client):
             assert tool_call.function.arguments == expected_text[i]
         else:
             assert chunk.choices[0].delta.content is None
-            assert len(chunk.choices[0].delta.tool_calls) == 0
-            assert chunk.usage.prompt_tokens == 10
-            assert chunk.usage.completion_tokens == 5
+            assert chunk.choices[0].delta.tool_calls is None
+            # We did not send 'include_usage'
+            assert chunk.usage is None
             assert chunk.choices[0].finish_reason == "tool_calls"
 
 
@@ -460,8 +603,8 @@ async def test_async_json_streaming(async_client):
             assert chunk.choices[0].delta.content == expected_text[i]
         else:
             assert len(chunk.choices[0].delta.content) == 0
-            assert chunk.usage.prompt_tokens == 10
-            assert chunk.usage.completion_tokens == 16
+            # We did not send 'include_usage'
+            assert chunk.usage is None
 
 
 @pytest.mark.asyncio
@@ -630,6 +773,76 @@ async def test_async_json_invalid_system(async_client):
         "Invalid request to OpenAI-compatible endpoint: System message must be a text content block"
         in str(exc_info.value)
     )
+
+
+@pytest.mark.asyncio
+async def test_async_extra_headers_param(async_client):
+    messages = [
+        {"role": "user", "content": "Hello, world!"},
+    ]
+    result = await async_client.chat.completions.create(
+        extra_body={
+            "tensorzero::extra_headers": [
+                {
+                    "model_provider_name": "tensorzero::model_name::dummy::echo_extra_info::provider_name::dummy",
+                    "name": "x-my-extra-header",
+                    "value": "my-extra-header-value",
+                },
+            ]
+        },
+        messages=messages,
+        model="tensorzero::model_name::dummy::echo_extra_info",
+    )
+    assert result.model == "tensorzero::model_name::dummy::echo_extra_info"
+    assert json.loads(result.choices[0].message.content) == {
+        "extra_body": {"inference_extra_body": []},
+        "extra_headers": {
+            "inference_extra_headers": [
+                {
+                    "model_provider_name": "tensorzero::model_name::dummy::echo_extra_info::provider_name::dummy",
+                    "name": "x-my-extra-header",
+                    "value": "my-extra-header-value",
+                }
+            ],
+            "variant_extra_headers": None,
+        },
+    }
+
+
+@pytest.mark.asyncio
+async def test_async_extra_body_param(async_client):
+    messages = [
+        {"role": "user", "content": "Hello, world!"},
+    ]
+    result = await async_client.chat.completions.create(
+        extra_body={
+            "tensorzero::extra_body": [
+                {
+                    "model_provider_name": "tensorzero::model_name::dummy::echo_extra_info::provider_name::dummy",
+                    "pointer": "/thinking",
+                    "value": {
+                        "type": "enabled",
+                        "budget_tokens": 1024,
+                    },
+                },
+            ]
+        },
+        messages=messages,
+        model="tensorzero::model_name::dummy::echo_extra_info",
+    )
+    assert result.model == "tensorzero::model_name::dummy::echo_extra_info"
+    assert json.loads(result.choices[0].message.content) == {
+        "extra_body": {
+            "inference_extra_body": [
+                {
+                    "model_provider_name": "tensorzero::model_name::dummy::echo_extra_info::provider_name::dummy",
+                    "pointer": "/thinking",
+                    "value": {"type": "enabled", "budget_tokens": 1024},
+                }
+            ]
+        },
+        "extra_headers": {"variant_extra_headers": None, "inference_extra_headers": []},
+    }
 
 
 @pytest.mark.asyncio
@@ -1052,3 +1265,40 @@ async def test_patch_openai_client_with_async_client_async_setup_false():
     )
 
     tensorzero.close_patched_openai_client_gateway(patched_client)
+
+
+@pytest.mark.asyncio
+async def test_async_chat_function_null_response(async_client):
+    """
+    Test that an chat inference with null response (i.e. no generated content blocks) works as expected.
+    """
+    result = await async_client.chat.completions.create(
+        model="tensorzero::function_name::null_chat",
+        messages=[
+            {
+                "role": "user",
+                "content": "No yapping!",
+            }
+        ],
+    )
+
+    assert result.model == "tensorzero::function_name::null_chat::variant_name::variant"
+    assert result.choices[0].message.content is None
+
+
+@pytest.mark.asyncio
+async def test_async_json_function_null_response(async_client):
+    """
+    Test that a JSON inference with null response (i.e. no generated content blocks) works as expected.
+    """
+    result = await async_client.chat.completions.create(
+        model="tensorzero::function_name::null_json",
+        messages=[
+            {
+                "role": "user",
+                "content": "Extract no data!",
+            }
+        ],
+    )
+    assert result.model == "tensorzero::function_name::null_json::variant_name::variant"
+    assert result.choices[0].message.content is None

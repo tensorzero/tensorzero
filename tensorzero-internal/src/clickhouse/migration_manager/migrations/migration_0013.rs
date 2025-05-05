@@ -35,7 +35,7 @@ impl Migration for Migration0013<'_> {
             if !check_table_exists(self.clickhouse, table, "0013").await? {
                 return Err(ErrorDetails::ClickHouseMigration {
                     id: "0013".to_string(),
-                    message: format!("Table {} does not exist", table),
+                    message: format!("Table {table} does not exist"),
                 }
                 .into());
             }
@@ -79,7 +79,7 @@ impl Migration for Migration0013<'_> {
             return Ok(true);
         }
         let query = "SHOW CREATE TABLE InferenceById".to_string();
-        let result = self.clickhouse.run_query(query, None).await?;
+        let result = self.clickhouse.run_query_synchronous(query, None).await?;
         if !result.contains("UInt128") {
             return Err(ErrorDetails::ClickHouseMigration {
                 id: "0013".to_string(),
@@ -90,7 +90,7 @@ impl Migration for Migration0013<'_> {
             .into());
         }
         let query = "SHOW CREATE TABLE InferenceByEpisodeId".to_string();
-        let result = self.clickhouse.run_query(query, None).await?;
+        let result = self.clickhouse.run_query_synchronous(query, None).await?;
         if !result.contains("UInt128") {
             return Err(ErrorDetails::ClickHouseMigration {
                 id: "0013".to_string(),
@@ -101,7 +101,7 @@ impl Migration for Migration0013<'_> {
             .into());
         }
         let query = "SELECT 1 FROM system.functions WHERE name = 'uint_to_uuid'".to_string();
-        let result = self.clickhouse.run_query(query, None).await?;
+        let result = self.clickhouse.run_query_synchronous(query, None).await?;
         if !result.contains("1") {
             return Ok(true);
         }
@@ -124,7 +124,7 @@ impl Migration for Migration0013<'_> {
         let query = "SELECT toUInt32(COUNT())  FROM ChatInference".to_string();
         let chat_count: usize = self
             .clickhouse
-            .run_query(query, None)
+            .run_query_synchronous(query, None)
             .await?
             .trim()
             .parse()
@@ -137,7 +137,7 @@ impl Migration for Migration0013<'_> {
         let query = "SELECT toUInt32(COUNT())  FROM JsonInference".to_string();
         let json_count: usize = self
             .clickhouse
-            .run_query(query, None)
+            .run_query_synchronous(query, None)
             .await?
             .trim()
             .parse()
@@ -168,17 +168,17 @@ impl Migration for Migration0013<'_> {
         //       If you are seeing issues with this migration please contact the TensorZero team.
         //       We can drop these because we are now erroring if the database is not up to date.
         // let query = "DROP TABLE IF EXISTS InferenceById".to_string();
-        // let _ = self.clickhouse.run_query(query, None).await?;
+        // let _ = self.clickhouse.run_query_synchronous(query, None).await?;
         // let query = "DROP VIEW IF EXISTS ChatInferenceByIdView".to_string();
-        // let _ = self.clickhouse.run_query(query, None).await?;
+        // let _ = self.clickhouse.run_query_synchronous(query, None).await?;
         // let query = "DROP VIEW IF EXISTS JsonInferenceByIdView".to_string();
-        // let _ = self.clickhouse.run_query(query, None).await?;
+        // let _ = self.clickhouse.run_query_synchronous(query, None).await?;
         // let query = "DROP TABLE IF EXISTS InferenceByEpisodeId".to_string();
-        // let _ = self.clickhouse.run_query(query, None).await?;
+        // let _ = self.clickhouse.run_query_synchronous(query, None).await?;
         // let query = "DROP VIEW IF EXISTS ChatInferenceByEpisodeIdView".to_string();
-        // let _ = self.clickhouse.run_query(query, None).await?;
+        // let _ = self.clickhouse.run_query_synchronous(query, None).await?;
         // let query = "DROP VIEW IF EXISTS JsonInferenceByEpisodeIdView".to_string();
-        // let _ = self.clickhouse.run_query(query, None).await?;
+        // let _ = self.clickhouse.run_query_synchronous(query, None).await?;
         // Create the new tables with UInt128 primary keys
         // Create the `InferenceById` table
         let query = r#"
@@ -192,7 +192,10 @@ impl Migration for Migration0013<'_> {
             ) ENGINE = MergeTree()
             ORDER BY id_uint;
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous(query.to_string(), None)
+            .await?;
         // Create the `InferenceByEpisodeId` table
         let query = r#"
             CREATE TABLE IF NOT EXISTS InferenceByEpisodeId
@@ -206,7 +209,10 @@ impl Migration for Migration0013<'_> {
             ENGINE = MergeTree()
             ORDER BY (episode_id_uint, id_uint);
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous(query.to_string(), None)
+            .await?;
         // Create the `uint_to_uuid` function
         let query = r#"CREATE FUNCTION IF NOT EXISTS uint_to_uuid AS (x) -> reinterpretAsUUID(
             concat(
@@ -214,7 +220,10 @@ impl Migration for Migration0013<'_> {
                 substring(reinterpretAsString(x), 1, 8)
             )
         );"#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous(query.to_string(), None)
+            .await?;
 
         // If we are not doing a clean start, we need to add a where clause to the view to only include rows that have been created after the view_timestamp
         let view_where_clause = if !self.clean_start {
@@ -237,10 +246,9 @@ impl Migration for Migration0013<'_> {
                     'chat' AS function_type
                 FROM ChatInference
                 {view_where_clause};
-            "#,
-            view_where_clause = view_where_clause
+            "#
         );
-        let _ = self.clickhouse.run_query(query, None).await?;
+        let _ = self.clickhouse.run_query_synchronous(query, None).await?;
 
         // IMPORTANT: The function_type column is now correctly set to 'json'
         let query = format!(
@@ -256,10 +264,9 @@ impl Migration for Migration0013<'_> {
                     'json' AS function_type
                 FROM JsonInference
                 {view_where_clause};
-            "#,
-            view_where_clause = view_where_clause
+            "#
         );
-        let _ = self.clickhouse.run_query(query, None).await?;
+        let _ = self.clickhouse.run_query_synchronous(query, None).await?;
 
         // Create the materialized view for the `InferenceByEpisodeId` table from ChatInference
         // IMPORTANT: The function_type column is now correctly set to 'chat'
@@ -276,10 +283,9 @@ impl Migration for Migration0013<'_> {
                     'chat' as function_type
                 FROM ChatInference
                 {view_where_clause};
-            "#,
-            view_where_clause = view_where_clause
+            "#
         );
-        let _ = self.clickhouse.run_query(query, None).await?;
+        let _ = self.clickhouse.run_query_synchronous(query, None).await?;
 
         // Create the materialized view for the `InferenceByEpisodeId` table from JsonInference
         // IMPORTANT: The function_type column is now correctly set to 'json'
@@ -296,10 +302,9 @@ impl Migration for Migration0013<'_> {
                     'json' as function_type
                 FROM JsonInference
                 {view_where_clause};
-            "#,
-            view_where_clause = view_where_clause
+            "#
         );
-        let _ = self.clickhouse.run_query(query, None).await?;
+        let _ = self.clickhouse.run_query_synchronous(query, None).await?;
 
         /*
         if !self.clean_start {
@@ -321,7 +326,7 @@ impl Migration for Migration0013<'_> {
                 "#,
                     view_timestamp = view_timestamp
                 );
-                self.clickhouse.run_query(query, None).await
+                self.clickhouse.run_query_synchronous(query, None).await
             };
 
             let insert_json_inference = async {
@@ -339,7 +344,7 @@ impl Migration for Migration0013<'_> {
                 "#,
                     view_timestamp = view_timestamp
                 );
-                self.clickhouse.run_query(query, None).await
+                self.clickhouse.run_query_synchronous(query, None).await
             };
 
             // Insert the data from the original tables into the new table (we do this concurrently since it could theoretically take a long time)
@@ -358,7 +363,7 @@ impl Migration for Migration0013<'_> {
                 "#,
                     view_timestamp = view_timestamp
                 );
-                self.clickhouse.run_query(query, None).await
+                self.clickhouse.run_query_synchronous(query, None).await
             };
 
             let insert_json_inference_by_episode_id = async {
@@ -376,7 +381,7 @@ impl Migration for Migration0013<'_> {
                 "#,
                     view_timestamp = view_timestamp
                 );
-                self.clickhouse.run_query(query, None).await
+                self.clickhouse.run_query_synchronous(query, None).await
             };
 
             tokio::try_join!(

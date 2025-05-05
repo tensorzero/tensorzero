@@ -5,7 +5,7 @@ use serde_json::Value;
 
 use crate::{
     error::{Error, ErrorDetails},
-    jsonschema_util::{DynamicJSONSchema, JSONSchemaFromPath},
+    jsonschema_util::{DynamicJSONSchema, StaticJSONSchema},
 };
 
 /* A Tool is a function that can be called by an LLM
@@ -41,7 +41,7 @@ pub enum ToolConfig {
 #[derive(Debug, PartialEq, Serialize)]
 pub struct StaticToolConfig {
     pub description: String,
-    pub parameters: JSONSchemaFromPath,
+    pub parameters: StaticJSONSchema,
     pub name: String,
     pub strict: bool,
 }
@@ -59,7 +59,7 @@ pub struct DynamicToolConfig {
 /// JSON schema enforcement
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ImplicitToolConfig {
-    pub parameters: JSONSchemaFromPath,
+    pub parameters: StaticJSONSchema,
 }
 
 /// Contains the configuration information for a tool used in implicit tool calling for
@@ -217,55 +217,68 @@ pub struct ToolCall {
     pub id: String,
 }
 
-impl<'de> Deserialize<'de> for ToolCall {
-    fn deserialize<D>(deserializer: D) -> Result<ToolCall, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        #[derive(Debug, Deserialize)]
-        #[serde(deny_unknown_fields)]
-        struct ToolCallHelper {
-            name: Option<String>,
-            arguments: Option<Value>,
-            id: String,
-            raw_arguments: Option<String>,
-            raw_name: Option<String>,
-        }
+/// The input format that we accept from the clients.
+/// This is like `ToolCallOutput`, but more relaxed (`raw_arguments` and `raw_name` are optional)
+/// This allows round-tripping a `ToolCallOutput` without needing to modify the json object,
+/// but also allows manually-constructed `ToolCallInput` where users don't care about the
+/// name/raw_name distinction.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ToolCallInput {
+    pub name: Option<String>,
+    pub arguments: Option<Value>,
+    pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub raw_arguments: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub raw_name: Option<String>,
+}
 
-        let helper = ToolCallHelper::deserialize(deserializer)?;
-
-        let name = helper.name.or(helper.raw_name).ok_or_else(|| {
-            serde::de::Error::custom("ToolCall must have `name` or `raw_name` set")
+impl TryFrom<ToolCallInput> for ToolCall {
+    type Error = Error;
+    fn try_from(value: ToolCallInput) -> Result<Self, Self::Error> {
+        let name = value.name.or(value.raw_name).ok_or_else(|| {
+            Error::new(ErrorDetails::InvalidRequest {
+                message: "ToolCall must have `name` or `raw_name` set".to_string(),
+            })
         })?;
 
-        let arguments = if let Some(arguments) = helper.arguments {
+        let arguments = if let Some(arguments) = value.arguments {
             match arguments {
                 Value::String(s) => {
                     tracing::warn!("Deprecation Warning: Treating string 'ToolCall.arguments' as a serialized JSON object. Please pass in a JSON object instead. Support for strings will be removed in a future release: https://github.com/tensorzero/tensorzero/issues/1410");
                     s
                 }
-                Value::Object(obj) => {
-                    serde_json::to_string(&obj).map_err(serde::de::Error::custom)?
-                }
+                Value::Object(obj) => Value::Object(obj).to_string(),
                 _ => {
-                    return Err(serde::de::Error::custom(
-                        "ToolCall arguments must be a string or an object",
-                    ))
+                    return Err(Error::new(ErrorDetails::InvalidRequest {
+                        message: "ToolCall arguments must be a string or an object".to_string(),
+                    }));
                 }
             }
-        } else if let Some(raw_arguments) = helper.raw_arguments {
+        } else if let Some(raw_arguments) = value.raw_arguments {
             raw_arguments
         } else {
-            return Err(serde::de::Error::custom(
-                "ToolCall must have `arguments` or `raw_arguments` set",
-            ));
+            return Err(Error::new(ErrorDetails::InvalidRequest {
+                message: "ToolCall must have `arguments` or `raw_arguments` set".to_string(),
+            }));
         };
 
         Ok(ToolCall {
             name,
             arguments,
-            id: helper.id,
+            id: value.id,
         })
+    }
+}
+
+impl<'de> Deserialize<'de> for ToolCall {
+    fn deserialize<D>(deserializer: D) -> Result<ToolCall, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let helper = ToolCallInput::deserialize(deserializer)?;
+        ToolCall::try_from(helper).map_err(serde::de::Error::custom)
     }
 }
 
@@ -317,7 +330,7 @@ impl ToolCallOutput {
 impl ToolCallConfig {
     #[cfg(test)]
     pub fn implicit_from_value(value: &Value) -> Self {
-        let parameters = JSONSchemaFromPath::from_value(value).unwrap();
+        let parameters = StaticJSONSchema::from_value(value).unwrap();
         let implicit_tool_config = ToolConfig::Implicit(ImplicitToolConfig { parameters });
         Self {
             tools_available: vec![implicit_tool_config],
@@ -572,7 +585,7 @@ impl From<ToolCallConfigDatabaseInsert> for ToolCallConfig {
 
 /// For use in initializing JSON functions
 /// Creates a ToolCallConfig with a single implicit tool that takes the schema as arguments
-pub fn create_implicit_tool_call_config(schema: JSONSchemaFromPath) -> ToolCallConfig {
+pub fn create_implicit_tool_call_config(schema: StaticJSONSchema) -> ToolCallConfig {
     let implicit_tool = ToolConfig::Implicit(ImplicitToolConfig { parameters: schema });
     ToolCallConfig {
         tools_available: vec![implicit_tool],
@@ -581,10 +594,12 @@ pub fn create_implicit_tool_call_config(schema: JSONSchemaFromPath) -> ToolCallC
     }
 }
 
+#[cfg(test)]
 mod tests {
     use super::*;
     use lazy_static::lazy_static;
     use serde_json::json;
+    use tracing_test::traced_test;
 
     lazy_static! {
         static ref TOOLS: HashMap<String, Arc<StaticToolConfig>> = {
@@ -594,8 +609,7 @@ mod tests {
                 Arc::new(StaticToolConfig {
                     name: "get_temperature".to_string(),
                     description: "Get the current temperature in a given location".to_string(),
-                    #[allow(clippy::expect_used)]
-                    parameters: JSONSchemaFromPath::from_value(&json!({
+                    parameters: StaticJSONSchema::from_value(&json!({
                     "type": "object",
                     "properties": {
                         "location": {"type": "string"},
@@ -613,8 +627,7 @@ mod tests {
                     name: "query_articles".to_string(),
                     description: "Query articles from a database based on given criteria"
                         .to_string(),
-                    #[allow(clippy::expect_used)]
-                    parameters: JSONSchemaFromPath::from_value(&json!({
+                    parameters: StaticJSONSchema::from_value(&json!({
                         "type": "object",
                         "properties": {
                             "keyword": {"type": "string"},
@@ -1015,5 +1028,17 @@ mod tests {
             err_msg,
             "ToolCall must have `arguments` or `raw_arguments` set"
         );
+    }
+
+    #[test]
+    #[traced_test]
+    fn test_tool_call_deserialize_deprecated_arguments() {
+        let tool_call = serde_json::json!({
+            "name": "get_temperature",
+            "id": "123",
+            "arguments": "My string arguments"
+        });
+        serde_json::from_value::<ToolCall>(tool_call).unwrap();
+        assert!(logs_contain("Deprecation Warning: Treating string 'ToolCall.arguments' as a serialized JSON object."))
     }
 }

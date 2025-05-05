@@ -30,7 +30,7 @@ impl Migration for Migration0005<'_> {
                     if !exists {
                         return Err(ErrorDetails::ClickHouseMigration {
                             id: "0005".to_string(),
-                            message: format!("Table {} does not exist", table),
+                            message: format!("Table {table} does not exist"),
                         }
                         .into());
                     }
@@ -58,13 +58,12 @@ impl Migration for Migration0005<'_> {
                 r#"SELECT EXISTS(
                     SELECT 1
                     FROM system.columns
-                    WHERE database = '{}'
-                      AND table = '{}'
+                    WHERE database = '{database}'
+                      AND table = '{table}'
                       AND name = 'tags'
-                )"#,
-                database, table
+                )"#
             );
-            match self.clickhouse.run_query(query, None).await {
+            match self.clickhouse.run_query_synchronous(query, None).await {
                 Err(e) => {
                     return Err(ErrorDetails::ClickHouseMigration {
                         id: "0005".to_string(),
@@ -104,19 +103,28 @@ impl Migration for Migration0005<'_> {
             ) ENGINE = MergeTree()
             ORDER BY (function_name, key, value);
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous(query.to_string(), None)
+            .await?;
 
         // Add a column `tags` to the `BooleanMetricFeedback` table
         let query = r#"
             ALTER TABLE ChatInference
             ADD COLUMN IF NOT EXISTS tags Map(String, String) DEFAULT map();"#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous(query.to_string(), None)
+            .await?;
 
         // Add a column `tags` to the `JsonInference` table
         let query = r#"
             ALTER TABLE JsonInference
             ADD COLUMN IF NOT EXISTS tags Map(String, String) DEFAULT map();"#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous(query.to_string(), None)
+            .await?;
 
         // In the following few queries we create the materialized views that map the tags from the original tables to the new `InferenceTag` table
         // We do not need to handle the case where there are already tags in the table since we created those columns just now.
@@ -134,7 +142,10 @@ impl Migration for Migration0005<'_> {
                 FROM ChatInference
                 ARRAY JOIN mapKeys(tags) as key
             "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous(query.to_string(), None)
+            .await?;
 
         // Create the materialized view for the `InferenceTag` table from JsonInference
         let query = r#"
@@ -149,7 +160,10 @@ impl Migration for Migration0005<'_> {
                 FROM JsonInference
                 ARRAY JOIN mapKeys(tags) as key
             "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous(query.to_string(), None)
+            .await?;
         Ok(())
     }
 

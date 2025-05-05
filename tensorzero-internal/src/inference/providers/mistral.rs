@@ -12,7 +12,7 @@ use url::Url;
 use crate::{
     cache::ModelProviderRequest,
     endpoints::inference::InferenceCredentials,
-    error::{Error, ErrorDetails},
+    error::{DisplayOrDebugGateway, Error, ErrorDetails},
     inference::types::{
         batch::{BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse},
         ContentBlockChunk, ContentBlockOutput, FinishReason, Latency, ModelInferenceRequest,
@@ -25,7 +25,7 @@ use crate::{
 };
 
 use super::{
-    helpers::inject_extra_body,
+    helpers::inject_extra_request_data,
     openai::{
         convert_stream_error, get_chat_url, tensorzero_to_openai_messages, OpenAIFunction,
         OpenAIRequestMessage, OpenAISystemRequestMessage, OpenAITool, OpenAIToolType,
@@ -35,7 +35,7 @@ use super::{
 
 lazy_static! {
     static ref MISTRAL_API_BASE: Url = {
-        #[allow(clippy::expect_used)]
+        #[expect(clippy::expect_used)]
         Url::parse("https://api.mistral.ai/v1/").expect("Failed to parse MISTRAL_API_BASE")
     };
 }
@@ -71,13 +71,16 @@ impl MistralProvider {
             credentials,
         })
     }
+
+    pub fn model_name(&self) -> &str {
+        &self.model_name
+    }
 }
 
 #[derive(Clone, Debug)]
 pub enum MistralCredentials {
     Static(SecretString),
     Dynamic(String),
-    #[cfg(any(test, feature = "e2e_tests"))]
     None,
 }
 
@@ -88,7 +91,6 @@ impl TryFrom<Credential> for MistralCredentials {
         match credentials {
             Credential::Static(key) => Ok(MistralCredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(MistralCredentials::Dynamic(key_name)),
-            #[cfg(any(test, feature = "e2e_tests"))]
             Credential::Missing => Ok(MistralCredentials::None),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for Mistral provider".to_string(),
@@ -112,7 +114,6 @@ impl MistralCredentials {
                     .into()
                 })
             }
-            #[cfg(any(test, feature = "e2e_tests"))]
             MistralCredentials::None => Err(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
             }
@@ -136,11 +137,15 @@ impl InferenceProvider for MistralProvider {
         let mut request_body =
             serde_json::to_value(MistralRequest::new(&self.model_name, request)?).map_err(|e| {
                 Error::new(ErrorDetails::Serialization {
-                    message: format!("Error serializing Mistral request: {e}"),
+                    message: format!(
+                        "Error serializing Mistral request: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                 })
             })?;
-        inject_extra_body(
+        let headers = inject_extra_request_data(
             &request.extra_body,
+            &request.extra_headers,
             model_provider,
             model_name,
             &mut request_body,
@@ -153,12 +158,16 @@ impl InferenceProvider for MistralProvider {
             .header("Content-Type", "application/json")
             .bearer_auth(api_key.expose_secret())
             .json(&request_body)
+            .headers(headers)
             .send()
             .await
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
-                    message: format!("Error sending request to Mistral: {e}"),
                     status_code: e.status(),
+                    message: format!(
+                        "Error sending request to Mistral: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                     raw_response: None,
@@ -170,7 +179,10 @@ impl InferenceProvider for MistralProvider {
         if res.status().is_success() {
             let raw_response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing text response: {e}"),
+                    message: format!(
+                        "Error parsing text response: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                     raw_response: None,
@@ -179,7 +191,10 @@ impl InferenceProvider for MistralProvider {
 
             let response = serde_json::from_str(&raw_response).map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing JSON response: {e}"),
+                    message: format!(
+                        "Error parsing JSON response: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                     raw_response: Some(raw_response.clone()),
@@ -199,7 +214,10 @@ impl InferenceProvider for MistralProvider {
                 res.status(),
                 &res.text().await.map_err(|e| {
                     Error::new(ErrorDetails::InferenceServer {
-                        message: format!("Error parsing error response: {e}"),
+                        message: format!(
+                            "Error parsing error response: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
                         provider_type: PROVIDER_TYPE.to_string(),
                         raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                         raw_response: None,
@@ -223,18 +241,25 @@ impl InferenceProvider for MistralProvider {
         let mut request_body =
             serde_json::to_value(MistralRequest::new(&self.model_name, request)?).map_err(|e| {
                 Error::new(ErrorDetails::Serialization {
-                    message: format!("Error serializing Mistral request: {e}"),
+                    message: format!(
+                        "Error serializing Mistral request: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                 })
             })?;
-        inject_extra_body(
+        let headers = inject_extra_request_data(
             &request.extra_body,
+            &request.extra_headers,
             model_provider,
             model_name,
             &mut request_body,
         )?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
-                message: format!("Error serializing request: {e}"),
+                message: format!(
+                    "Error serializing request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
             })
         })?;
         let request_url = get_chat_url(&MISTRAL_API_BASE)?;
@@ -245,10 +270,14 @@ impl InferenceProvider for MistralProvider {
             .header("Content-Type", "application/json")
             .bearer_auth(api_key.expose_secret())
             .json(&request_body)
+            .headers(headers)
             .eventsource()
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
-                    message: format!("Error sending request to Mistral: {e}"),
+                    message: format!(
+                        "Error sending request to Mistral: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     status_code: None,
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(raw_request.clone()),
@@ -651,7 +680,10 @@ impl<'a> TryFrom<MistralResponseWithMetadata<'a>> for ProviderInferenceResponse 
         }
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
-                message: format!("Error serializing request body as JSON: {e}"),
+                message: format!(
+                    "Error serializing request body as JSON: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
             })
         })?;
         let system = generic_request.system.clone();
@@ -717,7 +749,10 @@ fn mistral_to_tensorzero_chunk(
 ) -> Result<ProviderInferenceResponseChunk, Error> {
     let raw_message = serde_json::to_string(&chunk).map_err(|e| {
         Error::new(ErrorDetails::Serialization {
-            message: format!("Error parsing response from Mistral: {e}"),
+            message: format!(
+                "Error parsing response from Mistral: {}",
+                DisplayOrDebugGateway::new(e)
+            ),
         })
     })?;
     if chunk.choices.len() > 1 {
@@ -1190,13 +1225,10 @@ mod tests {
         let creds = MistralCredentials::try_from(generic).unwrap();
         assert!(matches!(creds, MistralCredentials::Dynamic(_)));
 
-        // Test Missing credential (test mode)
-        #[cfg(any(test, feature = "e2e_tests"))]
-        {
-            let generic = Credential::Missing;
-            let creds = MistralCredentials::try_from(generic).unwrap();
-            assert!(matches!(creds, MistralCredentials::None));
-        }
+        // Test Missing credential
+        let generic = Credential::Missing;
+        let creds = MistralCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, MistralCredentials::None));
 
         // Test invalid type
         let generic = Credential::FileContents(SecretString::from("test"));

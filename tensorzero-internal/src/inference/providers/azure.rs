@@ -1,6 +1,6 @@
 use std::sync::OnceLock;
 
-use futures::StreamExt;
+use futures::{StreamExt, TryStreamExt};
 use reqwest::StatusCode;
 use reqwest_eventsource::RequestBuilderExt;
 use secrecy::{ExposeSecret, SecretString};
@@ -11,7 +11,7 @@ use url::Url;
 
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
-use crate::error::{Error, ErrorDetails};
+use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::{
@@ -22,13 +22,13 @@ use crate::inference::types::{
 use crate::inference::types::{ContentBlockOutput, ProviderInferenceResponseArgs};
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
 
-use super::helpers::inject_extra_body;
+use super::helpers::inject_extra_request_data;
 use super::openai::{
     handle_openai_error, prepare_openai_messages, prepare_openai_tools, stream_openai,
     OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, OpenAITool, OpenAIToolChoice,
     OpenAIToolChoiceString, SpecificToolChoice,
 };
-use super::provider_trait::InferenceProvider;
+use super::provider_trait::{InferenceProvider, TensorZeroEventError};
 
 const PROVIDER_NAME: &str = "Azure";
 const PROVIDER_TYPE: &str = "azure";
@@ -60,13 +60,16 @@ impl AzureProvider {
             credentials,
         })
     }
+
+    pub fn deployment_id(&self) -> &str {
+        &self.deployment_id
+    }
 }
 
 #[derive(Clone, Debug, Deserialize)]
 pub enum AzureCredentials {
     Static(SecretString),
     Dynamic(String),
-    #[cfg(any(test, feature = "e2e_tests"))]
     None,
 }
 
@@ -77,7 +80,6 @@ impl TryFrom<Credential> for AzureCredentials {
         match credentials {
             Credential::Static(key) => Ok(AzureCredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(AzureCredentials::Dynamic(key_name)),
-            #[cfg(any(test, feature = "e2e_tests"))]
             Credential::Missing => Ok(AzureCredentials::None),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for Azure provider".to_string(),
@@ -101,7 +103,6 @@ impl AzureCredentials {
                     .into()
                 })
             }
-            #[cfg(any(test, feature = "e2e_tests"))]
             AzureCredentials::None => Err(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
             }
@@ -128,11 +129,15 @@ impl InferenceProvider for AzureProvider {
     ) -> Result<ProviderInferenceResponse, Error> {
         let mut request_body = serde_json::to_value(AzureRequest::new(request)?).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
-                message: format!("Error serializing Azure request: {e}"),
+                message: format!(
+                    "Error serializing Azure request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
             })
         })?;
-        inject_extra_body(
+        let headers = inject_extra_request_data(
             &request.extra_body,
+            &request.extra_headers,
             model_provider,
             model_name,
             &mut request_body,
@@ -144,6 +149,7 @@ impl InferenceProvider for AzureProvider {
             .post(request_url)
             .header("Content-Type", "application/json")
             .header("api-key", api_key.expose_secret())
+            .headers(headers)
             .json(&request_body)
             .send()
             .await
@@ -163,7 +169,10 @@ impl InferenceProvider for AzureProvider {
 
             let raw_response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing text response: {e}"),
+                    message: format!(
+                        "Error parsing text response: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                     raw_response: None,
@@ -191,13 +200,21 @@ impl InferenceProvider for AzureProvider {
             let status = res.status();
             let response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing error response: {e}"),
+                    message: format!(
+                        "Error parsing error response: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                     raw_response: None,
                 })
             })?;
-            Err(handle_openai_error(status, &response, PROVIDER_TYPE))
+            Err(handle_openai_error(
+                &serde_json::to_string(&request_body).unwrap_or_default(),
+                status,
+                &response,
+                PROVIDER_TYPE,
+            ))
         }
     }
 
@@ -214,18 +231,25 @@ impl InferenceProvider for AzureProvider {
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let mut request_body = serde_json::to_value(AzureRequest::new(request)?).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
-                message: format!("Error serializing Azure request: {e}"),
+                message: format!(
+                    "Error serializing Azure request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
             })
         })?;
-        inject_extra_body(
+        let headers = inject_extra_request_data(
             &request.extra_body,
+            &request.extra_headers,
             model_provider,
             model_name,
             &mut request_body,
         )?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
-                message: format!("Error serializing request body as JSON: {e}"),
+                message: format!(
+                    "Error serializing request body as JSON: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
             })
         })?;
         let request_url = get_azure_chat_url(&self.endpoint, &self.deployment_id)?;
@@ -235,18 +259,27 @@ impl InferenceProvider for AzureProvider {
             .post(request_url)
             .header("Content-Type", "application/json")
             .header("api-key", api_key.expose_secret())
+            .headers(headers)
             .json(&request_body)
             .eventsource()
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
-                    message: format!("Error sending request to Azure: {e}"),
+                    message: format!(
+                        "Error sending request to Azure: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     status_code: None,
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 })
             })?;
-        let stream = stream_openai(event_source, start_time).peekable();
+        let stream = stream_openai(
+            PROVIDER_TYPE.to_string(),
+            event_source.map_err(TensorZeroEventError::EventSource),
+            start_time,
+        )
+        .peekable();
         Ok((stream, raw_request))
     }
 
@@ -354,7 +387,8 @@ struct AzureRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     seed: Option<u32>,
     stream: bool,
-    response_format: AzureResponseFormat,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    response_format: Option<AzureResponseFormat>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<Vec<OpenAITool<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -395,19 +429,23 @@ pub enum AzureResponseFormat {
 }
 
 impl AzureResponseFormat {
-    fn new(json_mode: &ModelInferenceRequestJsonMode, output_schema: Option<&Value>) -> Self {
+    fn new(
+        json_mode: &ModelInferenceRequestJsonMode,
+        output_schema: Option<&Value>,
+    ) -> Option<Self> {
         // Note: Some models on Azure won't support strict JSON mode.
         // Azure will 400 if you try to use it for those.
         // See these docs: https://learn.microsoft.com/en-us/azure/ai-services/openai/how-to/structured-outputs
         match json_mode {
-            ModelInferenceRequestJsonMode::On => AzureResponseFormat::JsonObject,
-            ModelInferenceRequestJsonMode::Off => AzureResponseFormat::Text,
+            ModelInferenceRequestJsonMode::On => Some(AzureResponseFormat::JsonObject),
+            // For now, we never explicitly send `AzureResponseFormat::Text`
+            ModelInferenceRequestJsonMode::Off => None,
             ModelInferenceRequestJsonMode::Strict => match output_schema {
                 Some(schema) => {
                     let json_schema = json!({"name": "response", "strict": true, "schema": schema});
-                    AzureResponseFormat::JsonSchema { json_schema }
+                    Some(AzureResponseFormat::JsonSchema { json_schema })
                 }
-                None => AzureResponseFormat::JsonObject,
+                None => Some(AzureResponseFormat::JsonObject),
             },
         }
     }
@@ -471,7 +509,10 @@ impl<'a> TryFrom<AzureResponseWithMetadata<'a>> for ProviderInferenceResponse {
         }
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
-                message: format!("Error serializing request body as JSON: {e}"),
+                message: format!(
+                    "Error serializing request body as JSON: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
             })
         })?;
 
@@ -539,7 +580,7 @@ mod tests {
         assert_eq!(azure_request.max_tokens, Some(100));
         assert!(!azure_request.stream);
         assert_eq!(azure_request.seed, Some(69));
-        assert_eq!(azure_request.response_format, AzureResponseFormat::Text);
+        assert_eq!(azure_request.response_format, None);
         assert!(azure_request.tools.is_some());
         let tools = azure_request.tools.as_ref().unwrap();
         assert_eq!(tools.len(), 1);
@@ -590,7 +631,7 @@ mod tests {
         assert_eq!(azure_request.seed, Some(69));
         assert_eq!(
             azure_request.response_format,
-            AzureResponseFormat::JsonObject
+            Some(AzureResponseFormat::JsonObject)
         );
         assert!(azure_request.tools.is_some());
         let tools = azure_request.tools.as_ref().unwrap();
@@ -666,13 +707,10 @@ mod tests {
         let creds = AzureCredentials::try_from(generic).unwrap();
         assert!(matches!(creds, AzureCredentials::Dynamic(_)));
 
-        // Test Missing credential (test mode)
-        #[cfg(any(test, feature = "e2e_tests"))]
-        {
-            let generic = Credential::Missing;
-            let creds = AzureCredentials::try_from(generic).unwrap();
-            assert!(matches!(creds, AzureCredentials::None));
-        }
+        // Test Missing credential
+        let generic = Credential::Missing;
+        let creds = AzureCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, AzureCredentials::None));
 
         // Test invalid type
         let generic = Credential::FileContents(SecretString::from("test"));

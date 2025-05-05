@@ -5,11 +5,18 @@ import {
 } from "~/utils/clickhouse/inference";
 import {
   countFeedbackByTargetId,
+  pollForFeedbackItem,
   queryFeedbackBoundsByTargetId,
   queryFeedbackByTargetId,
 } from "~/utils/clickhouse/feedback";
 import type { Route } from "./+types/route";
-import { data, isRouteErrorResponse, useNavigate } from "react-router";
+import {
+  data,
+  Form,
+  isRouteErrorResponse,
+  redirect,
+  useNavigate,
+} from "react-router";
 import EpisodeInferenceTable from "./EpisodeInferenceTable";
 import FeedbackTable from "~/components/feedback/FeedbackTable";
 import PageButtons from "~/components/utils/PageButtons";
@@ -20,6 +27,17 @@ import {
   SectionsGroup,
   SectionHeader,
 } from "~/components/layout/PageLayout";
+import { addHumanFeedback } from "~/utils/tensorzero.server";
+import { Toaster } from "~/components/ui/toaster";
+import { useToast } from "~/hooks/use-toast";
+import { useEffect, useState } from "react";
+import { ActionBar } from "~/components/layout/ActionBar";
+import { HumanFeedbackButton } from "~/components/feedback/HumanFeedbackButton";
+import { HumanFeedbackModal } from "~/components/feedback/HumanFeedbackModal";
+import { HumanFeedbackForm } from "~/components/feedback/HumanFeedbackForm";
+
+const FF_ENABLE_FEEDBACK =
+  import.meta.env.VITE_TENSORZERO_UI_FF_ENABLE_FEEDBACK === "1";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { episode_id } = params;
@@ -29,9 +47,22 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const beforeFeedback = url.searchParams.get("beforeFeedback");
   const afterFeedback = url.searchParams.get("afterFeedback");
   const pageSize = Number(url.searchParams.get("pageSize")) || 10;
+  const newFeedbackId = url.searchParams.get("newFeedbackId");
   if (pageSize > 100) {
     throw data("Page size cannot exceed 100", { status: 400 });
   }
+
+  // If there is a freshly inserted feedback, ClickHouse may take some time to
+  // update the feedback table as it is eventually consistent.
+  // In this case, we poll for the feedback item until it is found but time out and log a warning.
+  const feedbackDataPromise = newFeedbackId
+    ? pollForFeedbackItem(episode_id, newFeedbackId, pageSize)
+    : queryFeedbackByTargetId({
+        target_id: episode_id,
+        before: beforeFeedback || undefined,
+        after: afterFeedback || undefined,
+        page_size: pageSize,
+      });
 
   const [
     inferences,
@@ -50,12 +81,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     queryInferenceTableBoundsByEpisodeId({
       episode_id,
     }),
-    queryFeedbackByTargetId({
-      target_id: episode_id,
-      before: beforeFeedback || undefined,
-      after: afterFeedback || undefined,
-      page_size: pageSize,
-    }),
+    feedbackDataPromise,
     queryFeedbackBoundsByTargetId({
       target_id: episode_id,
     }),
@@ -76,7 +102,23 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     feedback_bounds,
     num_inferences,
     num_feedbacks,
+    newFeedbackId,
   };
+}
+
+export async function action({ request }: Route.ActionArgs) {
+  const formData = await request.formData();
+  const _action = formData.get("_action");
+  switch (_action) {
+    case "addFeedback": {
+      const response = await addHumanFeedback(formData);
+      const url = new URL(request.url);
+      url.searchParams.delete("beforeFeedback");
+      url.searchParams.delete("afterFeedback");
+      url.searchParams.set("newFeedbackId", response.feedback_id);
+      return redirect(url.toString());
+    }
+  }
 }
 
 export default function InferencesPage({ loaderData }: Route.ComponentProps) {
@@ -88,8 +130,10 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     feedback_bounds,
     num_inferences,
     num_feedbacks,
+    newFeedbackId,
   } = loaderData;
   const navigate = useNavigate();
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   const topInference = inferences[0];
   const bottomInference = inferences[inferences.length - 1];
@@ -133,6 +177,14 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
 
+  const { toast } = useToast();
+  useEffect(() => {
+    if (newFeedbackId) {
+      toast({
+        title: "Feedback Added",
+      });
+    }
+  }, [newFeedbackId, toast]);
   // These are swapped because the table is sorted in descending order
   const disablePreviousFeedbackPage =
     !topFeedback?.id ||
@@ -146,7 +198,22 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
 
   return (
     <PageLayout>
-      <PageHeader label="Episode" name={episode_id} />
+      <PageHeader label="Episode" name={episode_id}>
+        {FF_ENABLE_FEEDBACK && (
+          <ActionBar>
+            <HumanFeedbackModal
+              isOpen={isModalOpen}
+              onOpenChange={setIsModalOpen}
+              trigger={<HumanFeedbackButton />}
+            >
+              <Form method="post" onSubmit={() => setIsModalOpen(false)}>
+                <input type="hidden" name="_action" value="addFeedback" />
+                <HumanFeedbackForm episodeId={episode_id} />
+              </Form>
+            </HumanFeedbackModal>
+          </ActionBar>
+        )}
+      </PageHeader>
 
       <SectionsGroup>
         <SectionLayout>
@@ -179,6 +246,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
           />
         </SectionLayout>
       </SectionsGroup>
+      <Toaster />
     </PageLayout>
   );
 }

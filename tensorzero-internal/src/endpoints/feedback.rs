@@ -1,5 +1,6 @@
 use std::cmp::max;
 use std::collections::HashMap;
+use std::sync::OnceLock;
 use std::time::Duration;
 
 use axum::extract::State;
@@ -20,7 +21,7 @@ use crate::inference::types::batch::deserialize_optional_json_string;
 use crate::inference::types::{
     parse_chat_output, ContentBlockChatOutput, ContentBlockOutput, Text,
 };
-use crate::jsonschema_util::JSONSchemaFromPath;
+use crate::jsonschema_util::StaticJSONSchema;
 use crate::tool::{ToolCall, ToolCallConfig, ToolCallConfigDatabaseInsert};
 use crate::uuid_util::uuid_elapsed;
 
@@ -106,6 +107,7 @@ pub async fn feedback(
     params: Params,
 ) -> Result<Json<FeedbackResponse>, Error> {
     validate_tags(&params.tags, params.internal)?;
+    validate_feedback_specific_tags(&params.tags)?;
     // Get the metric config or return an error if it doesn't exist
     let feedback_metadata = get_feedback_metadata(
         &config,
@@ -230,10 +232,7 @@ fn get_feedback_metadata<'a>(
         MetricConfigLevel::Episode => episode_id,
     }
     .ok_or_else(|| ErrorDetails::InvalidRequest {
-        message: format!(
-            r#"Correct ID was not provided for feedback level "{}"."#,
-            feedback_level
-        ),
+        message: format!(r#"Correct ID was not provided for feedback level "{feedback_level}"."#),
     })?;
     Ok(FeedbackMetadata {
         r#type: feedback_type,
@@ -298,7 +297,7 @@ async fn write_demonstration(
         validate_parse_demonstration(function_config, value, dynamic_demonstration_info).await?;
     let string_value = serde_json::to_string(&parsed_value).map_err(|e| {
         Error::new(ErrorDetails::InvalidRequest {
-            message: format!("Failed to serialize parsed value to json: {}", e),
+            message: format!("Failed to serialize parsed value to json: {e}"),
         })
     })?;
     let payload = json!({"inference_id": inference_id, "value": string_value, "id": feedback_id, "tags": tags});
@@ -393,7 +392,9 @@ async fn throttled_get_function_name(
     target_id: &Uuid,
 ) -> Result<String, Error> {
     // Compute how long ago the target_id was created.
-    let elapsed = uuid_elapsed(target_id)?;
+    // Some UUIDs are in the future, e.g. for dynamic evaluation runs.
+    // In this case we should be conservative and assume no time has passed.
+    let elapsed = uuid_elapsed(target_id).unwrap_or(Duration::from_secs(0));
 
     // Calculate the remaining cooldown (which may be zero) and ensure we wait at least FEEDBACK_MINIMUM_WAIT_TIME.
     let wait_time = max(
@@ -408,7 +409,14 @@ async fn throttled_get_function_name(
             Ok(identifier) => return Ok(identifier),
             Err(err) => {
                 if Instant::now() >= deadline {
+                    // We log here since this means we were not able to find the target_id in the database
+                    // and are timing out.
+                    err.log();
                     return Err(err);
+                } else {
+                    tracing::info!(
+                        "Failed to find function name for target_id: {target_id}. Retrying..."
+                    );
                 }
             }
         }
@@ -448,16 +456,16 @@ async fn get_function_name(
         MetricConfigLevel::Episode => "episode_id_uint",
     };
     let query = format!(
-        "SELECT function_name FROM {} FINAL WHERE {} = toUInt128(toUUID('{}'))",
-        table_name, identifier_key, target_id
+        "SELECT function_name FROM {table_name} FINAL WHERE {identifier_key} = toUInt128(toUUID('{target_id}'))"
     );
     let function_name = connection_info
-        .run_query(query, None)
+        .run_query_synchronous(query, None)
         .await?
         .trim()
         .to_string();
     if function_name.is_empty() {
-        return Err(Error::new(ErrorDetails::InvalidRequest {
+        // We don't want to log here since this can happen if we send feedback immediately after the target is created.
+        return Err(Error::new_without_logging(ErrorDetails::InvalidRequest {
             message: format!("{identifier_type} ID: {target_id} does not exist"),
         }));
     };
@@ -477,10 +485,7 @@ impl TryFrom<DemonstrationToolCall> for ToolCall {
             name: value.name,
             arguments: serde_json::to_string(&value.arguments).map_err(|e| {
                 Error::new(ErrorDetails::InvalidRequest {
-                    message: format!(
-                        "Failed to serialize demonstration tool call arguments: {}",
-                        e
-                    ),
+                    message: format!("Failed to serialize demonstration tool call arguments: {e}"),
                 })
             })?,
             id: "".to_string(),
@@ -538,7 +543,7 @@ pub async fn validate_parse_demonstration(
                         serde_json::from_value::<DemonstrationContentBlock>(block.clone()).map_err(
                             |e| {
                                 Error::new(ErrorDetails::InvalidRequest {
-                                    message: format!("Invalid demonstration content block: {}", e),
+                                    message: format!("Invalid demonstration content block: {e}"),
                                 })
                             },
                         )
@@ -578,19 +583,18 @@ pub async fn validate_parse_demonstration(
         }
         (FunctionConfig::Json(_), DynamicDemonstrationInfo::Json(output_schema)) => {
             // For json functions, the value should be a valid json object.
-            JSONSchemaFromPath::from_value(&output_schema)?
+            StaticJSONSchema::from_value(&output_schema)?
                 .validate(value)
                 .map_err(|e| {
                     Error::new(ErrorDetails::InvalidRequest {
                         message: format!(
-                            "Demonstration does not fit function output schema: {}",
-                            e
+                            "Demonstration does not fit function output schema: {e}"
                         ),
                     })
                 })?;
             let raw = serde_json::to_string(value).map_err(|e| {
                 Error::new(ErrorDetails::InvalidRequest {
-                    message: format!("Failed to serialize demonstration to json: {}", e),
+                    message: format!("Failed to serialize demonstration to json: {e}"),
                 })
             })?;
             let json_inference_response = json!({"raw": raw, "parsed": value});
@@ -630,7 +634,7 @@ async fn get_dynamic_demonstration_info(
         FunctionConfig::Chat(..) => {
             let parameterized_query = "SELECT tool_params FROM ChatInference WHERE function_name={function_name:String} and id={inference_id:String} FORMAT JSONEachRow".to_string();
             let result = clickhouse_client
-                .run_query(
+                .run_query_synchronous(
                     parameterized_query,
                     Some(&HashMap::from([
                         ("function_name", function_name),
@@ -642,7 +646,7 @@ async fn get_dynamic_demonstration_info(
             let tool_params_result =
                 serde_json::from_str::<ToolParamsResult>(&result).map_err(|e| {
                     Error::new(ErrorDetails::ClickHouseQuery {
-                        message: format!("Failed to parse demonstration result: {}", e),
+                        message: format!("Failed to parse demonstration result: {e}"),
                     })
                 })?;
 
@@ -658,7 +662,7 @@ async fn get_dynamic_demonstration_info(
         FunctionConfig::Json(..) => {
             let parameterized_query = "SELECT output_schema FROM JsonInference WHERE function_name={function_name:String} and id={inference_id:String} FORMAT JSONEachRow".to_string();
             let result = clickhouse_client
-                .run_query(
+                .run_query_synchronous(
                     parameterized_query,
                     Some(&HashMap::from([
                         ("function_name", function_name),
@@ -668,7 +672,7 @@ async fn get_dynamic_demonstration_info(
                 .await?;
             let result_value = serde_json::from_str::<Value>(&result).map_err(|e| {
                 Error::new(ErrorDetails::ClickHouseQuery {
-                    message: format!("Failed to parse demonstration result: {}", e),
+                    message: format!("Failed to parse demonstration result: {e}"),
                 })
             })?;
             let output_schema_str = result_value
@@ -681,14 +685,117 @@ async fn get_dynamic_demonstration_info(
                     })
                 })?;
 
-            let output_schema = serde_json::from_str::<Value>(output_schema_str).map_err(|e| {
-                Error::new(ErrorDetails::ClickHouseQuery {
-                    message: format!("Failed to parse output schema: {}", e),
-                })
-            })?;
+            let mut output_schema =
+                serde_json::from_str::<Value>(output_schema_str).map_err(|e| {
+                    Error::new(ErrorDetails::ClickHouseQuery {
+                        message: format!("Failed to parse output schema: {e}"),
+                    })
+                })?;
+            if function_name.starts_with("tensorzero::llm_judge") {
+                output_schema = handle_llm_judge_output_schema(output_schema);
+            }
             Ok(DynamicDemonstrationInfo::Json(output_schema))
         }
     }
+}
+
+static OLD_LLM_JUDGE_OUTPUT_SCHEMA_FLOAT: OnceLock<Value> = OnceLock::new();
+static OLD_LLM_JUDGE_OUTPUT_SCHEMA_BOOLEAN: OnceLock<Value> = OnceLock::new();
+static NEW_LLM_JUDGE_OUTPUT_SCHEMA_FLOAT: OnceLock<Value> = OnceLock::new();
+static NEW_LLM_JUDGE_OUTPUT_SCHEMA_BOOLEAN: OnceLock<Value> = OnceLock::new();
+
+/// When we first introduced LLM Judges, we used a slightly different output schema
+/// for them that explicitly included a "thinking" field.
+/// We want to be able to take demonstrations that do not include this field.
+/// This function handles the conversion of the old schema to the new schema for validation purposes.
+fn handle_llm_judge_output_schema(output_schema: Value) -> Value {
+    let old_float_schema = OLD_LLM_JUDGE_OUTPUT_SCHEMA_FLOAT.get_or_init(|| {
+        json!({
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "type": "object",
+            "required": ["thinking", "score"],
+            "additionalProperties": false,
+            "properties": {
+              "thinking": {
+                "type": "string",
+                "description": "The reasoning or thought process behind the judgment"
+              },
+              "score": {
+                "type": "number",
+                "description": "The score assigned as a number"
+              }
+            }
+        })
+    });
+
+    let old_boolean_schema = OLD_LLM_JUDGE_OUTPUT_SCHEMA_BOOLEAN.get_or_init(|| {
+        json!({
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "type": "object",
+            "required": ["thinking", "score"],
+            "additionalProperties": false,
+            "properties": {
+              "thinking": {
+                "type": "string",
+                "description": "The reasoning or thought process behind the judgment"
+              },
+              "score": {
+                "type": "boolean",
+                "description": "The LLM judge's score as a boolean"
+              }
+            }
+        })
+    });
+
+    let new_float_schema = NEW_LLM_JUDGE_OUTPUT_SCHEMA_FLOAT.get_or_init(|| {
+        json!({
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "type": "object",
+            "required": ["score"],
+            "additionalProperties": false,
+            "properties": {
+              "score": {
+                "type": "number",
+                "description": "The score assigned as a number"
+              }
+            }
+        })
+    });
+
+    let new_boolean_schema = NEW_LLM_JUDGE_OUTPUT_SCHEMA_BOOLEAN.get_or_init(|| {
+        json!({
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "type": "object",
+            "required": ["score"],
+            "additionalProperties": false,
+            "properties": {
+              "score": {
+                "type": "boolean",
+                "description": "The LLM judge's score as a boolean"
+              }
+            }
+        })
+    });
+
+    if output_schema == *old_float_schema {
+        new_float_schema.clone()
+    } else if output_schema == *old_boolean_schema {
+        new_boolean_schema.clone()
+    } else {
+        output_schema
+    }
+}
+
+fn validate_feedback_specific_tags(tags: &HashMap<String, String>) -> Result<(), Error> {
+    if tags.contains_key("tensorzero::datapoint_id")
+        && tags.contains_key("tensorzero::human_feedback")
+        && !tags.contains_key("tensorzero::evaluator_inference_id")
+    {
+        return Err(Error::new(ErrorDetails::InvalidRequest {
+            message: "tensorzero::evaluator_inference_id is required when tensorzero::datapoint_id and tensorzero::human_feedback are provided".to_string(),
+        }));
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -699,7 +806,7 @@ mod tests {
 
     use crate::config_parser::{Config, MetricConfig, MetricConfigOptimize};
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
-    use crate::jsonschema_util::JSONSchemaFromPath;
+    use crate::jsonschema_util::StaticJSONSchema;
     use crate::testing::get_unit_test_app_state_data;
     use crate::tool::{StaticToolConfig, ToolCallOutput, ToolChoice, ToolConfig};
 
@@ -1065,7 +1172,7 @@ mod tests {
         let weather_tool_config_static = StaticToolConfig {
             name: "get_temperature".to_string(),
             description: "Get the current temperature in a given location".to_string(),
-            parameters: JSONSchemaFromPath::from_value(&json!({
+            parameters: StaticJSONSchema::from_value(&json!({
                 "type": "object",
                 "properties": {
                     "location": {"type": "string"},
@@ -1089,6 +1196,7 @@ mod tests {
                 tools: vec!["get_temperature".to_string()],
                 tool_choice: ToolChoice::Auto,
                 parallel_tool_calls: None,
+                description: None,
             })));
 
         // Case 1: a string passed to a chat function
@@ -1214,8 +1322,9 @@ mod tests {
             system_schema: None,
             user_schema: None,
             assistant_schema: None,
-            output_schema: JSONSchemaFromPath::from_value(&output_schema).unwrap(),
+            output_schema: StaticJSONSchema::from_value(&output_schema).unwrap(),
             implicit_tool_call_config,
+            description: None,
         })));
 
         // Case 5: a JSON function with correct output
@@ -1284,5 +1393,46 @@ mod tests {
                 message: "The DynamicDemonstrationInfo does not match the function type. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.".to_string()
             }
         );
+    }
+
+    #[test]
+    fn test_validate_feedback_specific_tags() {
+        // Case 1: Empty tags should be valid
+        let tags = HashMap::new();
+        assert!(validate_feedback_specific_tags(&tags).is_ok());
+
+        // Case 2: Tags with only datapoint_id should be valid
+        let mut tags = HashMap::new();
+        tags.insert("tensorzero::datapoint_id".to_string(), "123".to_string());
+        assert!(validate_feedback_specific_tags(&tags).is_ok());
+
+        // Case 3: Tags with only human_feedback should be valid
+        let mut tags = HashMap::new();
+        tags.insert("tensorzero::human_feedback".to_string(), "true".to_string());
+        assert!(validate_feedback_specific_tags(&tags).is_ok());
+
+        // Case 4: Tags with datapoint_id and human_feedback but without evaluator_inference_id should be invalid
+        let mut tags = HashMap::new();
+        tags.insert("tensorzero::datapoint_id".to_string(), "123".to_string());
+        tags.insert("tensorzero::human_feedback".to_string(), "true".to_string());
+        assert!(validate_feedback_specific_tags(&tags).is_err());
+        let err = validate_feedback_specific_tags(&tags).unwrap_err();
+        let details = err.get_owned_details();
+        assert_eq!(
+            details,
+            ErrorDetails::InvalidRequest {
+                message: "tensorzero::evaluator_inference_id is required when tensorzero::datapoint_id and tensorzero::human_feedback are provided".to_string(),
+            }
+        );
+
+        // Case 5: Tags with all three required keys should be valid
+        let mut tags = HashMap::new();
+        tags.insert("tensorzero::datapoint_id".to_string(), "123".to_string());
+        tags.insert("tensorzero::human_feedback".to_string(), "true".to_string());
+        tags.insert(
+            "tensorzero::evaluator_inference_id".to_string(),
+            "456".to_string(),
+        );
+        assert!(validate_feedback_specific_tags(&tags).is_ok());
     }
 }

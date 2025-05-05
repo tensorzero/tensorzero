@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button } from "~/components/ui/button";
+import { Button, ButtonIcon } from "~/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -97,11 +97,11 @@ export function AddToDatasetButton({
               </div>
             ) : (
               <>
-                <AddToDataset className="h-4 w-4 text-fg-tertiary" />
+                <ButtonIcon as={AddToDataset} variant="tertiary" />
                 Add to dataset
               </>
             )}
-            <ChevronDown className="h-4 w-4 text-fg-tertiary" />
+            <ButtonIcon as={ChevronDown} variant="tertiary" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent className="w-80 p-0">

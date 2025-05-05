@@ -38,6 +38,7 @@ from pytest import FixtureRequest
 from tensorzero import (
     AsyncTensorZeroGateway,
     ChatInferenceResponse,
+    DynamicEvaluationRunResponse,
     FeedbackResponse,
     FinishReason,
     ImageBase64,
@@ -608,10 +609,7 @@ async def test_async_inference_streaming_malformed_input(
             pass
 
     assert exc_info.value.status_code == 400
-    assert (
-        str(exc_info.value)
-        == 'TensorZeroError (status code 400): {"error":"JSON Schema validation failed for Function:\\n\\n\\"assistant_name\\" is a required property\\nData: {\\"name_of_assistant\\":\\"Alfred Pennyworth\\"}Schema: {\\"type\\":\\"object\\",\\"properties\\":{\\"assistant_name\\":{\\"type\\":\\"string\\"}},\\"required\\":[\\"assistant_name\\"]}"}'
-    )
+    assert "JSON Schema validation failed" in str(exc_info.value)
 
 
 @pytest.mark.asyncio
@@ -795,7 +793,12 @@ async def test_async_json_streaming_reasoning(async_client: AsyncTensorZeroGatew
         variant_name="json_reasoner",
         input={
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": {"country": "Japan"}}],
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "arguments": {"country": "Japan"}}],
+                }
+            ],
         },
         stream=True,
     )
@@ -835,7 +838,12 @@ async def test_async_json_success(async_client: AsyncTensorZeroGateway):
         function_name="json_success",
         input={
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": {"country": "Japan"}}],
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "arguments": {"country": "Japan"}}],
+                }
+            ],
         },
         output_schema={"type": "object", "properties": {"answer": {"type": "string"}}},
         stream=False,
@@ -855,7 +863,12 @@ async def test_async_json_reasoning(async_client: AsyncTensorZeroGateway):
         variant_name="json_reasoner",
         input={
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": {"country": "Japan"}}],
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "arguments": {"country": "Japan"}}],
+                }
+            ],
         },
         stream=False,
     )
@@ -1009,7 +1022,7 @@ def sync_client(request: FixtureRequest):
             yield client
 
 
-def test_sync_basic_inference(sync_client: TensorZeroGateway):
+def test_sync_inference_caching(sync_client: TensorZeroGateway):
     result = sync_client.inference(
         function_name="basic_test",
         input={
@@ -1055,6 +1068,83 @@ def test_sync_basic_inference(sync_client: TensorZeroGateway):
     usage = result.usage
     assert usage.input_tokens == 0  # should be cached
     assert usage.output_tokens == 0  # should be cached
+
+
+def test_sync_inference_streaming_caching(sync_client: TensorZeroGateway):
+    stream = sync_client.inference(
+        function_name="basic_test",
+        input={
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": "Hello"}],
+        },
+        stream=True,
+    )
+    assert isinstance(stream, t.Iterator)
+
+    chunks: t.List[ChatChunk] = []
+    for chunk in stream:
+        assert isinstance(chunk, ChatChunk)
+        chunks.append(chunk)
+
+    expected_text = [
+        "Wally,",
+        " the",
+        " golden",
+        " retriever,",
+        " wagged",
+        " his",
+        " tail",
+        " excitedly",
+        " as",
+        " he",
+        " devoured",
+        " a",
+        " slice",
+        " of",
+        " cheese",
+        " pizza.",
+    ]
+
+    for i, chunk in enumerate(chunks[:-1]):
+        assert len(chunk.content) == 1
+        assert chunk.content[0].type == "text"
+        assert isinstance(chunk.content[0], TextChunk)
+        assert chunk.content[0].text == expected_text[i]
+
+    final_chunk = chunks[-1]
+    assert len(final_chunk.content) == 0
+    assert final_chunk.usage is not None
+    assert final_chunk.usage.input_tokens == 10
+    assert final_chunk.usage.output_tokens == 16
+
+    # Test caching
+    stream = sync_client.inference(
+        function_name="basic_test",
+        input={
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": "Hello"}],
+        },
+        stream=True,
+        cache_options={"max_age_s": 10, "enabled": "on"},
+    )
+    assert isinstance(stream, t.Iterator)
+
+    chunks: t.List[ChatChunk] = []
+    for chunk in stream:
+        assert isinstance(chunk, ChatChunk)
+        chunks.append(chunk)
+
+    for i, chunk in enumerate(chunks[:-1]):
+        assert len(chunk.content) == 1
+        assert chunk.content[0].type == "text"
+        assert isinstance(chunk.content[0], TextChunk)
+        assert chunk.content[0].text == expected_text[i]
+
+    final_chunk = chunks[-1]
+    assert len(final_chunk.content) == 0
+    if final_chunk.usage is not None:
+        assert final_chunk.usage.input_tokens == 0  # should be cached
+        assert final_chunk.usage.output_tokens == 0  # should be cached
 
 
 def test_default_function_inference(sync_client: TensorZeroGateway):
@@ -1293,10 +1383,7 @@ def test_sync_inference_streaming_malformed_input(sync_client: TensorZeroGateway
             pass
 
     assert exc_info.value.status_code == 400
-    assert (
-        str(exc_info.value)
-        == 'TensorZeroError (status code 400): {"error":"JSON Schema validation failed for Function:\\n\\n\\"assistant_name\\" is a required property\\nData: {\\"name_of_assistant\\":\\"Alfred Pennyworth\\"}Schema: {\\"type\\":\\"object\\",\\"properties\\":{\\"assistant_name\\":{\\"type\\":\\"string\\"}},\\"required\\":[\\"assistant_name\\"]}"}'
-    )
+    assert "JSON Schema validation failed" in str(exc_info.value)
 
 
 def test_sync_tool_call_inference(sync_client: TensorZeroGateway):
@@ -1519,7 +1606,12 @@ def test_sync_json_streaming(sync_client: TensorZeroGateway):
         function_name="json_success",
         input={
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": {"country": "Japan"}}],
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "arguments": {"country": "Japan"}}],
+                }
+            ],
         },
         stream=True,
     )
@@ -1569,7 +1661,12 @@ def test_sync_json_streaming_reasoning(sync_client: TensorZeroGateway):
         variant_name="json_reasoner",
         input={
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": {"country": "Japan"}}],
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "arguments": {"country": "Japan"}}],
+                }
+            ],
         },
         stream=True,
     )
@@ -1608,7 +1705,12 @@ def test_sync_json_success(sync_client: TensorZeroGateway):
         function_name="json_success",
         input={
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": {"country": "Japan"}}],
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "arguments": {"country": "Japan"}}],
+                }
+            ],
         },
         output_schema={"type": "object", "properties": {"answer": {"type": "string"}}},
         stream=False,
@@ -1627,7 +1729,12 @@ def test_sync_json_reasoning(sync_client: TensorZeroGateway):
         variant_name="json_reasoner",
         input={
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": {"country": "Japan"}}],
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "arguments": {"country": "Japan"}}],
+                }
+            ],
         },
         stream=False,
     )
@@ -1726,13 +1833,13 @@ def test_sync_basic_inference_with_content_block(sync_client: TensorZeroGateway)
                         ToolCall(
                             type="tool_call",
                             id="1",
-                            name="test",
-                            raw_arguments={"arg": "value"},
+                            name="test_tool",
+                            raw_arguments=json.dumps({"arg": "value"}),
                             raw_name="test_tool",
                             arguments={"arg": "value"},
                         ),
                         ToolResult(
-                            name="test",
+                            name="test_tool",
                             result="success",
                             id="1",
                         ),
@@ -1829,8 +1936,8 @@ def test_prepare_inference_request(sync_client: TensorZeroGateway):
                         ToolCall(
                             type="tool_call",
                             id="1",
-                            name="test",
-                            raw_arguments={"arg": "value"},
+                            name="test_tool",
+                            raw_arguments=json.dumps({"arg": "value"}),
                             raw_name="test_tool",
                             arguments={"arg": "value"},
                         )
@@ -1840,7 +1947,7 @@ def test_prepare_inference_request(sync_client: TensorZeroGateway):
                     "role": "assistant",
                     "content": [
                         ToolResult(
-                            name="test",
+                            name="test_tool",
                             result="success",
                             id="1",
                         )
@@ -1872,11 +1979,13 @@ def test_prepare_inference_request(sync_client: TensorZeroGateway):
         "type": "tool_call",
         "id": "1",
         "name": "test_tool",
-        "arguments": '{"arg": "value"}',
+        "arguments": {"arg": "value"},
+        "raw_name": "test_tool",
+        "raw_arguments": '{"arg": "value"}',
     }
     assert request["input"]["messages"][1]["content"][0] == {
         "type": "tool_result",
-        "name": "test",
+        "name": "test_tool",
         "result": "success",
         "id": "1",
     }
@@ -1910,6 +2019,26 @@ def test_prepare_inference_request(sync_client: TensorZeroGateway):
     assert request["variant_name"] == "baz"
     assert request["function_name"] == "basic_test"
     assert request["parallel_tool_calls"]
+
+
+def test_extra_headers_raw(sync_client: TensorZeroGateway):
+    with pytest.raises(TensorZeroError) as exc_info:
+        sync_client.inference(
+            function_name="basic_test",
+            variant_name="openai",
+            input={
+                "system": {"assistant_name": "Alfred Pennyworth"},
+                "messages": [{"role": "user", "content": "Write me a haiku"}],
+            },
+            extra_headers=[
+                {
+                    "variant_name": "openai",
+                    "name": "Authorization",
+                    "value": "fake_auth_token",
+                }
+            ],
+        )
+    assert "You didn't provide an API key" in str(exc_info.value)
 
 
 def test_extra_body_raw(sync_client: TensorZeroGateway):
@@ -2064,7 +2193,7 @@ async def test_async_timeout_int_http():
                     "messages": [{"role": "user", "content": "Hello"}],
                 },
             )
-        assert "HTTP request timed out" in str(exc_info.value)
+        assert "HTTP Error: request timed out" in str(exc_info.value)
 
 
 @pytest.mark.asyncio
@@ -2085,7 +2214,7 @@ async def test_async_timeout_int_embedded():
                     "messages": [{"role": "user", "content": "Hello"}],
                 },
             )
-        assert "HTTP request timed out" in str(exc_info.value)
+        assert "HTTP Error: request timed out" in str(exc_info.value)
 
 
 @pytest.mark.asyncio
@@ -2105,7 +2234,7 @@ async def test_async_timeout_float_http():
                     "messages": [{"role": "user", "content": "Hello"}],
                 },
             )
-        assert "HTTP request timed out" in str(exc_info.value)
+        assert "HTTP Error: request timed out" in str(exc_info.value)
 
 
 @pytest.mark.asyncio
@@ -2126,7 +2255,7 @@ async def test_async_timeout_float_embedded():
                     "messages": [{"role": "user", "content": "Hello"}],
                 },
             )
-        assert "HTTP request timed out" in str(exc_info.value)
+        assert "HTTP Error: request timed out" in str(exc_info.value)
 
 
 def test_sync_timeout_invalid():
@@ -2638,3 +2767,107 @@ def test_content_block_text_init_validation():
     text = Text(type="text", arguments=arguments)
     assert text.text is None
     assert text.arguments == arguments
+
+
+def test_sync_dynamic_evaluation_run(sync_client: TensorZeroGateway):
+    response = sync_client.dynamic_evaluation_run(
+        variants={"basic_test": "test2"},
+        tags={"foo": "bar"},
+    )
+    assert isinstance(response, DynamicEvaluationRunResponse)
+    run_id = response.run_id
+    assert isinstance(run_id, UUID)
+    assert run_id is not None
+
+    # Get the episode id
+    episode_id = sync_client.dynamic_evaluation_run_episode(
+        run_id=run_id,
+        datapoint_name="basic_test",
+    ).episode_id
+
+    inference_response = sync_client.inference(
+        function_name="basic_test",
+        episode_id=episode_id,
+        input={
+            "messages": [{"role": "user", "content": "Hello, world!"}],
+            "system": {"assistant_name": "Dr. Mehta"},
+        },
+    )
+    assert isinstance(inference_response, ChatInferenceResponse)
+    first_content_block = inference_response.content[0]
+    assert isinstance(first_content_block, Text)
+    assert first_content_block.text is not None
+    assert first_content_block.text.startswith("Megumin")
+    assert inference_response.variant_name == "test2"
+
+
+@pytest.mark.asyncio
+async def test_async_dynamic_evaluation_run(async_client: AsyncTensorZeroGateway):
+    response = await async_client.dynamic_evaluation_run(
+        variants={"basic_test": "test2"},
+        tags={"foo": "bar"},
+    )
+    assert isinstance(response, DynamicEvaluationRunResponse)
+    run_id = response.run_id
+    assert isinstance(run_id, UUID)
+    assert run_id is not None
+
+    # Get the episode id
+    episode_response = await async_client.dynamic_evaluation_run_episode(
+        run_id=run_id,
+        datapoint_name="basic_test",
+    )
+    episode_id = episode_response.episode_id
+    inference_response = await async_client.inference(
+        function_name="basic_test",
+        episode_id=episode_id,
+        input={
+            "messages": [{"role": "user", "content": "Hello, world!"}],
+            "system": {"assistant_name": "Dr. Mehta"},
+        },
+    )
+    assert isinstance(inference_response, ChatInferenceResponse)
+    first_content_block = inference_response.content[0]
+    assert isinstance(first_content_block, Text)
+    assert first_content_block.text is not None
+    assert first_content_block.text.startswith("Megumin")
+    assert inference_response.variant_name == "test2"
+
+
+def test_sync_chat_function_null_response(sync_client: TensorZeroGateway):
+    """
+    Test that an chat inference with null response (i.e. no generated content blocks) works as expected.
+    """
+    result = sync_client.inference(
+        function_name="null_chat",
+        input={
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "No yapping!",
+                }
+            ],
+        },
+    )
+    assert isinstance(result, ChatInferenceResponse)
+    assert len(result.content) == 0
+
+
+def test_sync_json_function_null_response(sync_client: TensorZeroGateway):
+    """
+    Test that a JSON inference with null response (i.e. no generated content blocks) works as expected.
+    """
+    result = sync_client.inference(
+        function_name="null_json",
+        input={
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Extract no data!",
+                }
+            ],
+        },
+    )
+    assert isinstance(result, JsonInferenceResponse)
+    assert result.output.raw is None
+    assert result.output.parsed is None

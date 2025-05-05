@@ -1,6 +1,13 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 
+/**
+ * A helper function to merge class names conditionally, and deduplicating potentially conflicting
+ * Tailwind classes. Note that deduplication can have a potentially significant performance overhead
+ * for already slow-rendering components, and it is generally only useful in cases where a component
+ * defines its own classes and receives potentially conflicting classes via props. If all you need is
+ * to conditionally apply classes, it is preferred to use `clsx` directly.
+ */
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
@@ -22,3 +29,5 @@ export function extractTimestampFromUUIDv7(uuid: string): Date {
 
   return date;
 }
+
+export class JSONParseError extends SyntaxError {}

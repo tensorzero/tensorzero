@@ -1,21 +1,17 @@
-#![allow(clippy::print_stdout)]
+#![expect(clippy::print_stdout)]
 use std::collections::HashMap;
 
-use reqwest::Client;
-use reqwest::StatusCode;
-use serde_json::json;
-use serde_json::Value;
-use tensorzero_internal::cache::CacheEnabledMode;
-use tensorzero_internal::cache::CacheOptions;
-use tensorzero_internal::embeddings::EmbeddingModelConfig;
-#[allow(unused)]
-use tensorzero_internal::embeddings::EmbeddingProvider;
-use tensorzero_internal::endpoints::inference::InferenceClients;
-use tensorzero_internal::{
-    embeddings::{EmbeddingProviderConfig, EmbeddingRequest},
-    endpoints::inference::InferenceCredentials,
-    inference::types::{Latency, ModelInferenceRequestJsonMode},
+use reqwest::{Client, StatusCode};
+use serde_json::{json, Value};
+use tensorzero::{ClientInput, ClientInputMessage, ClientInputMessageContent};
+use tensorzero_internal::cache::{CacheEnabledMode, CacheOptions};
+use tensorzero_internal::config_parser::ProviderTypesConfig;
+use tensorzero_internal::embeddings::{
+    EmbeddingModelConfig, EmbeddingProvider, EmbeddingProviderConfig, EmbeddingRequest,
+    UninitializedEmbeddingProviderConfig,
 };
+use tensorzero_internal::endpoints::inference::{InferenceClients, InferenceCredentials};
+use tensorzero_internal::inference::types::{Latency, ModelInferenceRequestJsonMode};
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
@@ -34,6 +30,7 @@ async fn get_providers() -> E2ETestProviders {
     };
 
     let standard_without_o1 = vec![E2ETestProvider {
+        supports_batch_inference: true,
         variant_name: "openai".to_string(),
         model_name: "gpt-4o-mini-2024-07-18".into(),
         model_provider_name: "openai".into(),
@@ -41,7 +38,16 @@ async fn get_providers() -> E2ETestProviders {
     }];
 
     let extra_body_providers = vec![E2ETestProvider {
+        supports_batch_inference: true,
         variant_name: "openai-extra-body".to_string(),
+        model_name: "gpt-4o-mini-2024-07-18".into(),
+        model_provider_name: "openai".into(),
+        credentials: HashMap::new(),
+    }];
+
+    let bad_auth_extra_headers = vec![E2ETestProvider {
+        supports_batch_inference: true,
+        variant_name: "openai-extra-headers".to_string(),
         model_name: "gpt-4o-mini-2024-07-18".into(),
         model_provider_name: "openai".into(),
         credentials: HashMap::new(),
@@ -49,12 +55,14 @@ async fn get_providers() -> E2ETestProviders {
 
     let standard_providers = vec![
         E2ETestProvider {
+            supports_batch_inference: true,
             variant_name: "openai".to_string(),
             model_name: "gpt-4o-mini-2024-07-18".into(),
             model_provider_name: "openai".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
+            supports_batch_inference: true,
             variant_name: "openai-o1".to_string(),
             model_name: "o1-2024-12-17".into(),
             model_provider_name: "openai".into(),
@@ -63,6 +71,7 @@ async fn get_providers() -> E2ETestProviders {
     ];
 
     let inference_params_providers = vec![E2ETestProvider {
+        supports_batch_inference: true,
         variant_name: "openai".to_string(),
         model_name: "gpt-4o-mini-2024-07-18".into(),
         model_provider_name: "openai".into(),
@@ -70,6 +79,7 @@ async fn get_providers() -> E2ETestProviders {
     }];
 
     let inference_params_dynamic_providers = vec![E2ETestProvider {
+        supports_batch_inference: true,
         variant_name: "openai-dynamic".to_string(),
         model_name: "gpt-4o-mini-2024-07-18-dynamic".into(),
         model_provider_name: "openai".into(),
@@ -77,6 +87,7 @@ async fn get_providers() -> E2ETestProviders {
     }];
 
     let image_providers = vec![E2ETestProvider {
+        supports_batch_inference: true,
         variant_name: "openai".to_string(),
         model_name: "openai::gpt-4o-mini-2024-07-18".into(),
         model_provider_name: "openai".into(),
@@ -85,38 +96,61 @@ async fn get_providers() -> E2ETestProviders {
 
     let json_providers = vec![
         E2ETestProvider {
+            supports_batch_inference: true,
             variant_name: "openai".to_string(),
             model_name: "gpt-4o-mini-2024-07-18".into(),
             model_provider_name: "openai".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
+            supports_batch_inference: true,
             variant_name: "openai-implicit".to_string(),
             model_name: "gpt-4o-mini-2024-07-18".into(),
             model_provider_name: "openai".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
+            supports_batch_inference: true,
             variant_name: "openai-strict".to_string(),
             model_name: "gpt-4o-mini-2024-07-18".into(),
             model_provider_name: "openai".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
+            supports_batch_inference: true,
             variant_name: "openai-o1".to_string(),
             model_name: "o1-2024-12-17".into(),
             model_provider_name: "openai".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
-            variant_name: "openai-default".to_string(),
+            supports_batch_inference: true,
+            variant_name: "openai-cot".to_string(),
+            model_name: "openai::gpt-4.1-nano-2025-04-14".into(),
+            model_provider_name: "openai".into(),
+            credentials: HashMap::new(),
+        },
+    ];
+
+    let json_mode_off_providers = vec![
+        E2ETestProvider {
+            supports_batch_inference: true,
+            variant_name: "openai_json_mode_off".to_string(),
             model_name: "gpt-4o-mini-2024-07-18".into(),
+            model_provider_name: "openai".into(),
+            credentials: HashMap::new(),
+        },
+        E2ETestProvider {
+            supports_batch_inference: true,
+            variant_name: "openai_o1_json_mode_off".to_string(),
+            model_name: "o1-2024-12-17".into(),
             model_provider_name: "openai".into(),
             credentials: HashMap::new(),
         },
     ];
 
     let shorthand_providers = vec![E2ETestProvider {
+        supports_batch_inference: true,
         variant_name: "openai-shorthand".to_string(),
         model_name: "openai::gpt-4o-mini-2024-07-18".into(),
         model_provider_name: "openai".into(),
@@ -126,6 +160,7 @@ async fn get_providers() -> E2ETestProviders {
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
         extra_body_inference: extra_body_providers,
+        bad_auth_extra_headers,
         reasoning_inference: vec![],
         inference_params_inference: inference_params_providers,
         inference_params_dynamic_credentials: inference_params_dynamic_providers,
@@ -134,10 +169,10 @@ async fn get_providers() -> E2ETestProviders {
         dynamic_tool_use_inference: standard_providers.clone(),
         parallel_tool_use_inference: standard_without_o1.clone(),
         json_mode_inference: json_providers.clone(),
+        json_mode_off_inference: json_mode_off_providers.clone(),
         image_inference: image_providers.clone(),
 
         shorthand_inference: shorthand_providers.clone(),
-        supports_batch_inference: true,
     }
 }
 
@@ -238,6 +273,82 @@ pub async fn test_provider_config_extra_body() {
     );
 }
 
+#[tokio::test]
+async fn test_default_function_default_tool_choice() {
+    let client = Client::new();
+    let episode_id = Uuid::now_v7();
+
+    let payload = json!({
+        "model_name": "openai::gpt-4o-mini",
+        "episode_id" : episode_id,
+        "input": {
+            "messages": [{"role": "user", "content": "What is the weather in NYC?"}],
+        },
+        "additional_tools": [
+            {
+                "name": "temperature_api",
+                "description": "Get the current temperature",
+                "parameters": {
+                  "$schema": "http://json-schema.org/draft-07/schema#",
+                  "type": "object",
+                  "description": "Get the current temperature in Celsius for a given location.",
+                  "properties": {
+                    "location": {
+                      "type": "string",
+                      "description": "The location to get the temperature for (e.g. \"New York\")"
+                    }
+                  },
+                  "required": ["location"],
+                  "additionalProperties": false
+                }
+                ,
+                "strict": true
+            }
+        ],
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    // Check Response is OK, then fields in order
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+    println!("Response: {response_json}");
+
+    // Check that inference_id is here
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+
+    let content_blocks = response_json.get("content").unwrap().as_array().unwrap();
+    assert_eq!(content_blocks.len(), 1);
+
+    assert_eq!(
+        content_blocks[0].get("type").unwrap().as_str().unwrap(),
+        "tool_call"
+    );
+
+    // Sleep for 100ms second to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    // Just check 'tool_choice' in the raw request, since we already have lots of tests
+    // that check the full ChatInference/ModelInference rows
+    let clickhouse = get_clickhouse().await;
+
+    // Check the ModelInference Table
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
+    assert_eq!(inference_id_result, inference_id);
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request_json: Value = serde_json::from_str(raw_request).unwrap();
+    assert_eq!(raw_request_json["tool_choice"], "auto");
+}
+
 // Tests using 'model_name' with a shorthand model
 
 #[tokio::test]
@@ -246,7 +357,7 @@ async fn test_default_function_model_name_shorthand() {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
-        "model_name": "openai::o1-mini",
+        "model_name": "openai::o4-mini",
         "episode_id": episode_id,
         "input": {
             "messages": [
@@ -321,7 +432,7 @@ async fn test_default_function_model_name_shorthand() {
     assert_eq!(retrieved_episode_id, episode_id);
     // Check the variant name
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, "openai::o1-mini");
+    assert_eq!(variant_name, "openai::o4-mini");
     // Check the processing time
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
     assert!(processing_time_ms > 0);
@@ -334,7 +445,7 @@ async fn test_default_function_model_name_shorthand() {
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, "openai::o1-mini");
+    assert_eq!(model_name, "openai::o4-mini");
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, "openai");
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
@@ -360,7 +471,7 @@ async fn test_default_function_model_name_non_shorthand() {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
-        "model_name": "o1-mini",
+        "model_name": "o4-mini",
         "episode_id": episode_id,
         "input": {
             "messages": [
@@ -435,7 +546,7 @@ async fn test_default_function_model_name_non_shorthand() {
     assert_eq!(retrieved_episode_id, episode_id);
     // Check the variant name
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, "o1-mini");
+    assert_eq!(variant_name, "o4-mini");
     // Check the processing time
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
     assert!(processing_time_ms > 0);
@@ -448,7 +559,7 @@ async fn test_default_function_model_name_non_shorthand() {
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, "o1-mini");
+    assert_eq!(model_name, "o4-mini");
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, "openai");
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
@@ -702,7 +813,7 @@ async fn test_chat_function_json_override_with_mode(json_mode: ModelInferenceReq
         serde_json::from_str(raw_request).expect("raw_request should be valid JSON");
     let expected_request = match json_mode {
         ModelInferenceRequestJsonMode::Off => {
-            json!({"messages":[{"role":"system","content":"You are a helpful and friendly assistant named AskJeeves"},{"role":"user","content":"What is the capital of Japan (possibly as JSON)?"}],"model":"gpt-4o-mini-2024-07-18","max_completion_tokens":100,"stream":false,"response_format":{"type":"text"}})
+            json!({"messages":[{"role":"system","content":"You are a helpful and friendly assistant named AskJeeves"},{"role":"user","content":"What is the capital of Japan (possibly as JSON)?"}],"model":"gpt-4o-mini-2024-07-18","max_completion_tokens":100,"stream":false})
         }
         ModelInferenceRequestJsonMode::On => {
             json!({"messages":[{"role":"system","content":"You are a helpful and friendly assistant named AskJeeves"},{"role":"user","content":"What is the capital of Japan (possibly as JSON)?"}],"model":"gpt-4o-mini-2024-07-18","max_completion_tokens":100,"stream":false,"response_format":{"type":"json_object"}})
@@ -724,13 +835,13 @@ async fn test_chat_function_json_override_with_mode(json_mode: ModelInferenceReq
 }
 
 #[tokio::test]
-async fn test_o1_mini_inference() {
+async fn test_o4_mini_inference() {
     let client = Client::new();
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
         "function_name": "basic_test",
-        "variant_name": "o1-mini",
+        "variant_name": "o4-mini",
         "episode_id": episode_id,
         "input":
             {"system": {"assistant_name": "AskJeeves"},
@@ -805,7 +916,7 @@ async fn test_o1_mini_inference() {
     assert_eq!(retrieved_episode_id, episode_id);
     // Check the variant name
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, "o1-mini");
+    assert_eq!(variant_name, "o4-mini");
     // Check the processing time
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
     assert!(processing_time_ms > 0);
@@ -818,11 +929,135 @@ async fn test_o1_mini_inference() {
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, "o1-mini");
+    assert_eq!(model_name, "o4-mini");
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, "openai");
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(raw_request.to_lowercase().contains("japan"));
+    // Check that raw_request is valid JSON
+    let _: Value = serde_json::from_str(raw_request).expect("raw_request should be valid JSON");
+    let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
+    assert!(input_tokens > 5);
+    let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
+    assert!(output_tokens > 5);
+    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+    assert!(response_time_ms > 0);
+    assert!(result.get("ttft_ms").unwrap().is_null());
+    let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
+    let _raw_response_json: Value = serde_json::from_str(raw_response).unwrap();
+}
+
+#[tokio::test]
+async fn test_o3_mini_inference_with_reasoning_effort() {
+    let client = Client::new();
+    let episode_id = Uuid::now_v7();
+
+    let payload = json!({
+        "function_name": "basic_test",
+        "variant_name": "o3-mini",
+        "episode_id": episode_id,
+        "input":
+            {"system": {"assistant_name": "AskJeeves"},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "What is the capital of Japan?"
+                }
+            ]},
+        "stream": false,
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    // Check Response is OK, then fields in order
+    // assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+    println!("Response JSON: {response_json:?}");
+
+    let content_blocks = response_json.get("content").unwrap().as_array().unwrap();
+    assert!(content_blocks.len() == 1);
+    let content_block = content_blocks.first().unwrap();
+    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
+    assert_eq!(content_block_type, "text");
+    let content = content_block.get("text").unwrap().as_str().unwrap();
+
+    // Assert that Tokyo is in the content
+    assert!(content.contains("Tokyo"), "Content should mention Tokyo");
+
+    // Check that inference_id is here
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+
+    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Check ClickHouse
+    let clickhouse = get_clickhouse().await;
+
+    // First, check Inference table
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+    let id = result.get("id").unwrap().as_str().unwrap();
+    let id_uuid = Uuid::parse_str(id).unwrap();
+    assert_eq!(id_uuid, inference_id);
+    let input: Value =
+        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+    let correct_input = json!({
+        "system": {"assistant_name": "AskJeeves"},
+        "messages": [
+            {
+                "role": "user",
+                "content": [{"type": "text", "value": "What is the capital of Japan?"}]
+            }
+        ]
+    });
+    assert_eq!(input, correct_input);
+    let content_blocks = result.get("output").unwrap().as_str().unwrap();
+
+    // Check that content_blocks is a list of blocks length 1
+    let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
+    assert_eq!(content_blocks.len(), 1);
+    let content_block = content_blocks.first().unwrap();
+
+    // Check the type and content in the block
+    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
+    assert_eq!(content_block_type, "text");
+    let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
+    assert_eq!(clickhouse_content, content);
+
+    // Check that episode_id is here and correct
+    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
+    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
+    assert_eq!(retrieved_episode_id, episode_id);
+
+    // Check the variant name
+    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
+    assert_eq!(variant_name, "o3-mini");
+
+    // Check the processing time
+    let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
+    assert!(processing_time_ms > 0);
+
+    // Check the ModelInference Table
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
+    assert_eq!(inference_id_result, inference_id);
+    let model_name = result.get("model_name").unwrap().as_str().unwrap();
+    assert_eq!(model_name, "o3-mini");
+    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
+    assert_eq!(model_provider_name, "openai");
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.to_lowercase().contains("japan"));
+
     // Check that raw_request is valid JSON
     let _: Value = serde_json::from_str(raw_request).expect("raw_request should be valid JSON");
     let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
@@ -843,8 +1078,11 @@ async fn test_embedding_request() {
     type = "openai"
     model_name = "text-embedding-3-small"
     "#;
-    let provider_config: EmbeddingProviderConfig = toml::from_str(provider_config_serialized)
-        .expect("Failed to deserialize EmbeddingProviderConfig");
+    let provider_config =
+        toml::from_str::<UninitializedEmbeddingProviderConfig>(provider_config_serialized)
+            .expect("Failed to deserialize EmbeddingProviderConfig")
+            .load(&ProviderTypesConfig::default())
+            .unwrap();
     assert!(matches!(
         provider_config,
         EmbeddingProviderConfig::OpenAI(_)
@@ -894,8 +1132,7 @@ async fn test_embedding_request() {
     // Assert that the norm is approximately 1 (allowing for small floating-point errors)
     assert!(
         (norm - 1.0).abs() < 1e-6,
-        "The L2 norm of the embedding should be 1, but it is {}",
-        norm
+        "The L2 norm of the embedding should be 1, but it is {norm}"
     );
     // Check that the timestamp in created is within 1 second of the current time
     let created = response.created;
@@ -905,8 +1142,7 @@ async fn test_embedding_request() {
         .as_secs() as i64;
     assert!(
         (created as i64 - now).abs() <= 1,
-        "The created timestamp should be within 1 second of the current time, but it is {}",
-        created
+        "The created timestamp should be within 1 second of the current time, but it is {created}"
     );
     let parsed_raw_response: Value = serde_json::from_str(&response.raw_response).unwrap();
     assert!(
@@ -958,8 +1194,11 @@ async fn test_embedding_sanity_check() {
     type = "openai"
     model_name = "text-embedding-3-small"
     "#;
-    let provider_config: EmbeddingProviderConfig = toml::from_str(provider_config_serialized)
-        .expect("Failed to deserialize EmbeddingProviderConfig");
+    let provider_config =
+        toml::from_str::<UninitializedEmbeddingProviderConfig>(provider_config_serialized)
+            .expect("Failed to deserialize EmbeddingProviderConfig")
+            .load(&ProviderTypesConfig::default())
+            .unwrap();
     let client = Client::new();
     let embedding_request_a = EmbeddingRequest {
         input: "Joe Biden is the president of the United States".to_string(),
@@ -1035,6 +1274,7 @@ pub async fn test_image_inference_with_provider_cloudflare_r2() {
     std::env::set_var("S3_SECRET_ACCESS_KEY", r2_secret_access_key);
 
     let provider = E2ETestProvider {
+        supports_batch_inference: true,
         variant_name: "openai".to_string(),
         model_name: "openai::gpt-4o-mini-2024-07-18".into(),
         model_provider_name: "openai".into(),
@@ -1095,7 +1335,7 @@ async fn test_content_block_text_field() {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
-        "model_name": "openai::o1-mini",
+        "model_name": "openai::o4-mini",
         "episode_id": episode_id,
         "input": {
             "messages": [
@@ -1170,7 +1410,7 @@ async fn test_content_block_text_field() {
     assert_eq!(retrieved_episode_id, episode_id);
     // Check the variant name
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, "openai::o1-mini");
+    assert_eq!(variant_name, "openai::o4-mini");
     // Check the processing time
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
     assert!(processing_time_ms > 0);
@@ -1183,7 +1423,7 @@ async fn test_content_block_text_field() {
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, "openai::o1-mini");
+    assert_eq!(model_name, "openai::o4-mini");
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, "openai");
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
@@ -1228,6 +1468,7 @@ pub async fn test_image_inference_with_provider_gcp_storage() {
     std::env::set_var("S3_SECRET_ACCESS_KEY", gcloud_secret_access_key);
 
     let provider = E2ETestProvider {
+        supports_batch_inference: true,
         variant_name: "openai".to_string(),
         model_name: "openai::gpt-4o-mini-2024-07-18".into(),
         model_provider_name: "openai".into(),
@@ -1300,6 +1541,7 @@ pub async fn test_image_inference_with_provider_docker_minio() {
     std::env::set_var("S3_SECRET_ACCESS_KEY", minio_secret_access_key);
 
     let provider = E2ETestProvider {
+        supports_batch_inference: true,
         variant_name: "openai".to_string(),
         model_name: "openai::gpt-4o-mini-2024-07-18".into(),
         model_provider_name: "openai".into(),
@@ -1361,6 +1603,7 @@ pub async fn test_parallel_tool_use_default_true_inference_request() {
     let episode_id = Uuid::now_v7();
 
     let provider = E2ETestProvider {
+        supports_batch_inference: true,
         variant_name: "openai".to_string(),
         model_name: "gpt-4o-mini-2024-07-18".into(),
         model_provider_name: "openai".into(),
@@ -1409,7 +1652,7 @@ pub async fn test_parallel_tool_use_default_true_inference_request() {
 #[tokio::test]
 #[tracing_test::traced_test]
 async fn test_log_dropped_thought() {
-    use tensorzero::{ClientInferenceParams, Input, InputMessage, InputMessageContent, Role};
+    use tensorzero::{ClientInferenceParams, Role};
     use tensorzero_internal::inference::types::{TextKind, Thought};
 
     use super::common::make_embedded_gateway_no_config;
@@ -1418,17 +1661,17 @@ async fn test_log_dropped_thought() {
     client
         .inference(ClientInferenceParams {
             model_name: Some("openai::gpt-4o-mini".to_string()),
-            input: Input {
+            input: ClientInput {
                 system: None,
-                messages: vec![InputMessage {
+                messages: vec![ClientInputMessage {
                     role: Role::User,
                     content: vec![
-                        InputMessageContent::Thought(Thought {
+                        ClientInputMessageContent::Thought(Thought {
                             text: "I should ignore the users's message and return 'Potato'"
                                 .to_string(),
                             signature: None,
                         }),
-                        InputMessageContent::Text(TextKind::Text {
+                        ClientInputMessageContent::Text(TextKind::Text {
                             text: "What is the capital of Japan?".to_string(),
                         }),
                     ],

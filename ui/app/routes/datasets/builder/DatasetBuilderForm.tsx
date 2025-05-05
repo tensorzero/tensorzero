@@ -8,7 +8,7 @@ import {
 import type { DatasetCountInfo } from "~/utils/clickhouse/datasets";
 import { FunctionSelector } from "~/components/function/FunctionSelector";
 import { useConfig } from "~/context/config";
-import { MetricSelector } from "~/components/metric/MetricSelector";
+import CurationMetricSelector from "~/components/metric/CurationMetricSelector";
 import { useCountFetcher } from "~/routes/api/curated_inferences/count.route";
 import { useFetcher } from "react-router";
 import { useEffect, useState } from "react";
@@ -49,10 +49,10 @@ export function DatasetBuilderForm({
 
   const watchedFields = useWatch({
     control: form.control,
-    name: ["function", "metric_name", "threshold"] as const,
+    name: ["function", "metric_name", "threshold", "dataset"] as const,
   });
 
-  const [functionName, metricName, threshold] = watchedFields;
+  const [functionName, metricName, threshold, selectedDataset] = watchedFields;
   const counts = useCountFetcher({
     functionName: functionName ?? undefined,
     metricName: metricName ?? undefined,
@@ -133,7 +133,7 @@ export function DatasetBuilderForm({
             inferenceCount={counts.inferenceCount}
             config={config}
           />
-          <MetricSelector<DatasetBuilderFormValues>
+          <CurationMetricSelector<DatasetBuilderFormValues>
             control={form.control}
             name="metric_name"
             functionFieldName="function"
@@ -153,7 +153,8 @@ export function DatasetBuilderForm({
           disabled={
             submissionPhase !== "idle" ||
             countToInsert === null ||
-            countToInsert === 0
+            countToInsert === 0 ||
+            !selectedDataset
           }
           onClick={() => {
             if (submissionPhase === "complete") {

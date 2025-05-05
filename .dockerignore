@@ -8,6 +8,6 @@ target-rust-analyzer
 **/node_modules
 **/.env*
 **/.vscode
-.git
 /recipes
 /examples
+!/examples/integrations/cursor/experimental

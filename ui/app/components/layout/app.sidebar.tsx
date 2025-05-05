@@ -10,7 +10,6 @@ import {
   Evaluation,
 } from "~/components/icons/Icons";
 import { useSidebar } from "~/components/ui/sidebar";
-import { cn } from "~/utils/common";
 import { useActivePath } from "~/hooks/use-active-path";
 import { TensorZeroLogo } from "~/components/icons/Icons";
 import { Link } from "react-router";
@@ -30,9 +29,7 @@ import {
   SidebarGroupLabel,
   SidebarGroupContent,
 } from "~/components/ui/sidebar";
-
-const FF_ENABLE_DATASETS =
-  import.meta.env.VITE_TENSORZERO_UI_FF_ENABLE_DATASETS === "1";
+import TensorZeroStatusIndicator from "./TensorZeroStatusIndicator";
 
 interface NavigationItem {
   title: string;
@@ -76,25 +73,21 @@ const navigation: NavigationSection[] = [
       },
     ],
   },
-  ...(FF_ENABLE_DATASETS
-    ? [
-        {
-          title: "Workflows",
-          items: [
-            {
-              title: "Datasets",
-              url: "/datasets",
-              icon: Dataset,
-            },
-            {
-              title: "Evaluations",
-              url: "/evaluations",
-              icon: Evaluation,
-            },
-          ],
-        },
-      ]
-    : []),
+  {
+    title: "Workflows",
+    items: [
+      {
+        title: "Datasets",
+        url: "/datasets",
+        icon: Dataset,
+      },
+      {
+        title: "Evaluations",
+        url: "/evaluations",
+        icon: Evaluation,
+      },
+    ],
+  },
 ];
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
@@ -120,11 +113,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
-      <SidebarContent
-        className={cn(
-          "!overflow-y-auto !overflow-x-hidden transition-[width] duration-200",
-        )}
-      >
+      <SidebarContent className="overflow-x-hidden! overflow-y-auto! transition-[width] duration-200">
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenuItem className="list-none">
@@ -192,7 +181,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter className="relative">
-        <SidebarTrigger className="justify-left flex">
+        {state === "expanded" && <TensorZeroStatusIndicator />}
+        <SidebarTrigger className="justify-left mt-1 flex">
           <span className="sr-only">
             {state === "expanded" ? "Collapse sidebar" : "Expand sidebar"}
           </span>

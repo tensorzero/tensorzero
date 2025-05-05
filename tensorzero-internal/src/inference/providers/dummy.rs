@@ -55,6 +55,10 @@ impl DummyProvider {
             })),
         }
     }
+
+    pub fn model_name(&self) -> &str {
+        &self.model_name
+    }
 }
 
 fn default_api_key_location() -> CredentialLocation {
@@ -116,6 +120,8 @@ lazy_static! {
 }
 pub static DUMMY_JSON_RESPONSE_RAW: &str = r#"{"answer":"Hello"}"#;
 pub static DUMMY_JSON_GOODBYE_RESPONSE_RAW: &str = r#"{"answer":"Goodbye"}"#;
+pub static DUMMY_JSON_COT_RESPONSE_RAW: &str =
+    r#"{"thinking":"hmmm", "response": {"answer":"tokyo!"}}"#;
 pub static DUMMY_INFER_USAGE: Usage = Usage {
     input_tokens: 10,
     output_tokens: 10,
@@ -170,7 +176,7 @@ impl InferenceProvider for DummyProvider {
 
         // Check for flaky models
         if self.model_name.starts_with("flaky_") {
-            #[allow(clippy::expect_used)]
+            #[expect(clippy::expect_used)]
             let mut counters = FLAKY_COUNTERS
                 .lock()
                 .expect("FLAKY_COUNTERS mutex is poisoned");
@@ -225,9 +231,10 @@ impl InferenceProvider for DummyProvider {
         let id = Uuid::now_v7();
         let created = current_timestamp();
         let content = match self.model_name.as_str() {
+            "null" => vec![],
             "tool" => vec![ContentBlockOutput::ToolCall(ToolCall {
                 name: "get_temperature".to_string(),
-                #[allow(clippy::unwrap_used)]
+                #[expect(clippy::unwrap_used)]
                 arguments: serde_json::to_string(&*DUMMY_TOOL_RESPONSE).unwrap(),
                 id: "0".to_string(),
             })],
@@ -251,12 +258,13 @@ impl InferenceProvider for DummyProvider {
             ],
             "bad_tool" => vec![ContentBlockOutput::ToolCall(ToolCall {
                 name: "get_temperature".to_string(),
-                #[allow(clippy::unwrap_used)]
+                #[expect(clippy::unwrap_used)]
                 arguments: serde_json::to_string(&*DUMMY_BAD_TOOL_RESPONSE).unwrap(),
                 id: "0".to_string(),
             })],
             "json" => vec![DUMMY_JSON_RESPONSE_RAW.to_string().into()],
             "json_goodbye" => vec![DUMMY_JSON_GOODBYE_RESPONSE_RAW.to_string().into()],
+            "json_cot" => vec![DUMMY_JSON_COT_RESPONSE_RAW.to_string().into()],
             "json_beatles_1" => vec![r#"{"names":["John", "George"]}"#.to_string().into()],
             "json_beatles_2" => vec![r#"{"names":["Paul", "Ringo"]}"#.to_string().into()],
             "best_of_n_0" => {
@@ -280,13 +288,21 @@ impl InferenceProvider for DummyProvider {
                 })]
             }
             "alternate" => vec![ALTERNATE_INFER_RESPONSE_CONTENT.to_string().into()],
-            #[allow(clippy::unwrap_used)]
+            "echo_extra_info" => {
+                vec![ContentBlockOutput::Text(Text {
+                    text: json!({
+                        "extra_body": request.extra_body,
+                        "extra_headers": request.extra_headers,
+                    })
+                    .to_string(),
+                })]
+            }
             "echo_request_messages" => vec![ContentBlockOutput::Text(Text {
-                text: serde_json::to_string(&json!({
+                text: json!({
                     "system": request.system,
                     "messages": request.messages,
-                }))
-                .unwrap(),
+                })
+                .to_string(),
             })],
             "extract_images" => {
                 let images: Vec<_> = request
@@ -310,14 +326,10 @@ impl InferenceProvider for DummyProvider {
                     })?,
                 })]
             }
-            "llm_judge::true" => vec![r#"{"thinking": "hmmm", "score": true}"#.to_string().into()],
-            "llm_judge::false" => {
-                vec![r#"{"thinking": "hmmm", "score": false}"#.to_string().into()]
-            }
-            "llm_judge::zero" => vec![r#"{"thinking": "hmmm", "score": 0}"#.to_string().into()],
-            "llm_judge::one" => {
-                vec![r#"{"thinking": "hmmm", "score": 1}"#.to_string().into()]
-            }
+            "llm_judge::true" => vec![r#"{"score": true}"#.to_string().into()],
+            "llm_judge::false" => vec![r#"{"score": false}"#.to_string().into()],
+            "llm_judge::zero" => vec![r#"{"score": 0}"#.to_string().into()],
+            "llm_judge::one" => vec![r#"{"score": 1}"#.to_string().into()],
             "llm_judge::error" => {
                 return Err(ErrorDetails::InferenceClient {
                     message: "Dummy error in inference".to_string(),
@@ -332,13 +344,12 @@ impl InferenceProvider for DummyProvider {
         };
         let raw_request = DUMMY_RAW_REQUEST.to_string();
         let raw_response = match self.model_name.as_str() {
-            #[allow(clippy::unwrap_used)]
+            #[expect(clippy::unwrap_used)]
             "tool" => serde_json::to_string(&*DUMMY_TOOL_RESPONSE).unwrap(),
-            #[allow(clippy::unwrap_used)]
             "json" => DUMMY_JSON_RESPONSE_RAW.to_string(),
-            #[allow(clippy::unwrap_used)]
             "json_goodbye" => DUMMY_JSON_GOODBYE_RESPONSE_RAW.to_string(),
-            #[allow(clippy::unwrap_used)]
+            "json_cot" => DUMMY_JSON_COT_RESPONSE_RAW.to_string(),
+            #[expect(clippy::unwrap_used)]
             "bad_tool" => serde_json::to_string(&*DUMMY_BAD_TOOL_RESPONSE).unwrap(),
             "best_of_n_0" => r#"{"thinking": "hmmm", "answer_choice": 0}"#.to_string(),
             "best_of_n_1" => r#"{"thinking": "hmmm", "answer_choice": 1}"#.to_string(),
@@ -399,7 +410,7 @@ impl InferenceProvider for DummyProvider {
         }
         // Check for flaky models
         if self.model_name.starts_with("flaky_") {
-            #[allow(clippy::expect_used)]
+            #[expect(clippy::expect_used)]
             let mut counters = FLAKY_COUNTERS
                 .lock()
                 .expect("FLAKY_COUNTERS mutex is poisoned");

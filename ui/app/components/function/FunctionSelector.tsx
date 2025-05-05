@@ -61,7 +61,7 @@ export function FunctionSelector<T extends Record<string, unknown>>({
                 })}
               </SelectContent>
             </Select>
-            <div className="text-sm text-muted-foreground">
+            <div className="text-muted-foreground text-sm">
               Inferences:{" "}
               {field.value ? (
                 <span className="font-medium">
