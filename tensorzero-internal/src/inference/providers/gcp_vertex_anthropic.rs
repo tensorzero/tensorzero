@@ -232,8 +232,8 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
             .post(&self.streaming_request_url)
             .bearer_auth(api_key.expose_secret())
             .header("content-type", "application/json")
-            .headers(headers)
             .json(&request_body)
+            .headers(headers)
             .eventsource()
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {

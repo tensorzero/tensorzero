@@ -9,9 +9,9 @@ import {
 } from "~/components/ui/table";
 import type { FunctionConfig } from "~/utils/config/function";
 import type { FunctionCountInfo } from "~/utils/clickhouse/inference.server";
-import { formatDate } from "~/utils/date";
 import { Code } from "~/components/ui/code";
 import { FunctionLink } from "~/components/function/FunctionLink";
+import { TableItemTime } from "~/components/ui/TableItems";
 
 export default function FunctionsTable({
   functions,
@@ -78,9 +78,11 @@ export default function FunctionsTable({
                   </TableCell>
                   <TableCell>{count}</TableCell>
                   <TableCell>
-                    {max_timestamp === "Never"
-                      ? "Never"
-                      : formatDate(new Date(max_timestamp))}
+                    {max_timestamp === "Never" ? (
+                      "Never"
+                    ) : (
+                      <TableItemTime timestamp={max_timestamp} />
+                    )}
                   </TableCell>
                 </TableRow>
               ),

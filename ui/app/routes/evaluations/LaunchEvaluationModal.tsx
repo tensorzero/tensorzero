@@ -33,6 +33,8 @@ import {
 } from "~/components/ui/popover";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { cn } from "~/utils/common";
+import { AdvancedParametersAccordion } from "./AdvancedParametersAccordion";
+import type { InferenceCacheSetting } from "~/utils/evaluations.server";
 
 interface LaunchEvaluationModalProps {
   isOpen: boolean;
@@ -139,6 +141,8 @@ function EvaluationForm({ dataset_names }: { dataset_names: string[] }) {
     null,
   );
   const [concurrencyLimit, setConcurrencyLimit] = useState<string>("5");
+  const [inferenceCache, setInferenceCache] =
+    useState<InferenceCacheSetting>("on");
 
   let count = null;
   let isLoading = false;
@@ -158,6 +162,7 @@ function EvaluationForm({ dataset_names }: { dataset_names: string[] }) {
     selectedDatasetName !== null &&
     datasetCount !== null &&
     datasetCount > 0 &&
+    inferenceCache !== null &&
     concurrencyLimit !== "";
 
   return (
@@ -276,6 +281,13 @@ function EvaluationForm({ dataset_names }: { dataset_names: string[] }) {
           className="border-input bg-background w-full rounded-md border px-3 py-2 text-sm"
           required
         />
+      </div>
+      <div className="mt-4">
+        <AdvancedParametersAccordion
+          inference_cache={inferenceCache}
+          setInferenceCache={setInferenceCache}
+        />
+        <input type="hidden" name="inference_cache" value={inferenceCache} />
       </div>
       <DialogFooter>
         <Button className="mt-2" type="submit" disabled={!isFormValid}>

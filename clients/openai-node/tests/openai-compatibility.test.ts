@@ -1376,3 +1376,69 @@ it("should handle json function null response", async () => {
   );
   expect(result.choices[0].message.content).toBeNull();
 });
+
+it("should handle extra headers parameter", async () => {
+  const result = await client.chat.completions.create({
+    // @ts-expect-error - custom TensorZero property
+    "tensorzero::extra_headers": [
+      {
+        model_provider_name:
+          "tensorzero::model_name::dummy::echo_extra_info::provider_name::dummy",
+        name: "x-my-extra-header",
+        value: "my-extra-header-value",
+      },
+    ],
+    messages: [{ role: "user", content: "Hello, world!" }],
+    model: "tensorzero::model_name::dummy::echo_extra_info",
+  });
+
+  expect(result.model).toBe("tensorzero::model_name::dummy::echo_extra_info");
+  expect(JSON.parse(result.choices[0].message.content!)).toEqual({
+    extra_body: { inference_extra_body: [] },
+    extra_headers: {
+      inference_extra_headers: [
+        {
+          model_provider_name:
+            "tensorzero::model_name::dummy::echo_extra_info::provider_name::dummy",
+          name: "x-my-extra-header",
+          value: "my-extra-header-value",
+        },
+      ],
+      variant_extra_headers: null,
+    },
+  });
+});
+
+it("should handle extra body parameter", async () => {
+  const result = await client.chat.completions.create({
+    // @ts-expect-error - custom TensorZero property
+    "tensorzero::extra_body": [
+      {
+        model_provider_name:
+          "tensorzero::model_name::dummy::echo_extra_info::provider_name::dummy",
+        pointer: "/thinking",
+        value: {
+          type: "enabled",
+          budget_tokens: 1024,
+        },
+      },
+    ],
+    messages: [{ role: "user", content: "Hello, world!" }],
+    model: "tensorzero::model_name::dummy::echo_extra_info",
+  });
+
+  expect(result.model).toBe("tensorzero::model_name::dummy::echo_extra_info");
+  expect(JSON.parse(result.choices[0].message.content!)).toEqual({
+    extra_body: {
+      inference_extra_body: [
+        {
+          model_provider_name:
+            "tensorzero::model_name::dummy::echo_extra_info::provider_name::dummy",
+          pointer: "/thinking",
+          value: { type: "enabled", budget_tokens: 1024 },
+        },
+      ],
+    },
+    extra_headers: { variant_extra_headers: null, inference_extra_headers: [] },
+  });
+});

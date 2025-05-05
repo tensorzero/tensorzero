@@ -22,7 +22,7 @@ workspace = true
 async-stream = { workspace = true }
 async-trait = "0.1.86"
 aws-config = { version = "1.6", features = ["behavior-version-latest"] }
-aws-sdk-bedrockruntime = { version = "1.84.0", default-features = false, features = [
+aws-sdk-bedrockruntime = { version = "1.85.0", default-features = false, features = [
     "behavior-version-latest",
     "rt-tokio",
     "default-https-client",
@@ -67,7 +67,7 @@ serde-untagged = { workspace = true }
 serde_json = { workspace = true }
 http = { workspace = true }
 serde_path_to_error = "0.1.17"
-sha2 = "0.10.8"
+sha2 = "0.10.9"
 strum = { version = "0.27.1", features = ["derive"] }
 strum_macros = "0.27.1"
 tokio = { workspace = true }
@@ -116,4 +116,4 @@ aws-credential-types = { version = "1.2.2", features = [
 ] }
 
 [build-dependencies]
-built = { version = "0.7.7", features = ["git2"] }
+built = { version = "0.8.0", features = ["git2"] }
