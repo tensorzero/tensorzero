@@ -204,12 +204,6 @@ type = "float"
 level = "episode"
 optimize = "min"
 
-[metrics.num_questions_human]
-type = "float"
-level = "episode"
-optimize = "min"
-
-
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                               EVALUATIONS                                  │
 # └────────────────────────────────────────────────────────────────────────────┘
