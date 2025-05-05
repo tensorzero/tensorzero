@@ -51,6 +51,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     runIds.forEach((runId, index) => {
       runStats[runId] = statsResults[index];
     });
+    // Sort runInfos by the same order as the url params
+    runInfos.sort((a, b) => runIds.indexOf(a.id) - runIds.indexOf(b.id));
 
     return {
       projectName,
