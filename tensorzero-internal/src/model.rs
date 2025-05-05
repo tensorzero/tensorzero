@@ -824,11 +824,9 @@ impl UninitializedProviderConfig {
                 model_name,
                 api_base,
                 api_key_location,
-            } => ProviderConfig::OpenAI(OpenAIProvider::new(
-                model_name,
-                api_base.map(check_api_base),
-                api_key_location,
-            )?),
+            } => {
+                ProviderConfig::OpenAI(OpenAIProvider::new(model_name, api_base, api_key_location)?)
+            }
             UninitializedProviderConfig::Together {
                 model_name,
                 api_key_location,
@@ -842,11 +840,7 @@ impl UninitializedProviderConfig {
                 model_name,
                 api_base,
                 api_key_location,
-            } => ProviderConfig::VLLM(VLLMProvider::new(
-                model_name,
-                check_api_base(api_base),
-                api_key_location,
-            )?),
+            } => ProviderConfig::VLLM(VLLMProvider::new(model_name, api_base, api_key_location)?),
             UninitializedProviderConfig::XAI {
                 model_name,
                 api_key_location,
@@ -855,18 +849,13 @@ impl UninitializedProviderConfig {
                 model_name,
                 api_base,
                 api_key_location,
-            } => ProviderConfig::SGLang(SGLangProvider::new(
-                model_name,
-                check_api_base(api_base),
-                api_key_location,
-            )?),
+            } => {
+                ProviderConfig::SGLang(SGLangProvider::new(model_name, api_base, api_key_location)?)
+            }
             UninitializedProviderConfig::TGI {
                 api_base,
                 api_key_location,
-            } => ProviderConfig::TGI(TGIProvider::new(
-                check_api_base(api_base),
-                api_key_location,
-            )?),
+            } => ProviderConfig::TGI(TGIProvider::new(api_base, api_key_location)?),
             UninitializedProviderConfig::DeepSeek {
                 model_name,
                 api_key_location,
@@ -1322,42 +1311,6 @@ fn racy_get_or_try_init<T: Clone, E>(
         let _ = once_lock.set(val.clone());
         Ok(val)
     }
-}
-
-/// Checks if there's an extra suffix in the provided api_base and log a tracing::warn if found
-/// this function fixes the problem described in issue #1833
-fn check_api_base(api_base: Url) -> Url {
-    if api_base.scheme() != "https" {
-        tracing::warn!("provided api_base is not https");
-    }
-
-    match api_base.path_segments() {
-        Some(mut segments) => {
-            // loop over each segment to check where the version
-            for segment in segments.by_ref() {
-                // we ignore anything before version url segment
-                if segment.contains("v") {
-                    let replace_v = segment.replace("v", "");
-
-                    // if we parse a correct semver version then we should now break and check for suffix
-                    if lenient_semver::parse(&replace_v).is_ok() {
-                        break;
-                    }
-                }
-            }
-
-            if let Some(xtra_suffix) = segments.next() {
-                if !xtra_suffix.is_empty() {
-                    tracing::warn!("extra suffix provided, double check your url")
-                }
-            }
-        }
-        None => {
-            tracing::warn!("no path segment provided only base")
-        }
-    }
-
-    api_base
 }
 
 impl TryFrom<(CredentialLocation, &str)> for Credential {
@@ -2409,34 +2362,5 @@ mod tests {
 
         assert_eq!(cache.get(), None);
         assert_eq!(make_creds_call_count.get(), 1);
-    }
-
-    #[traced_test]
-    #[test]
-    fn check_api_base_url_without_suffix_warning() {
-        let url = Url::try_from("http://openai.com/openai/v1").unwrap();
-        let _ = check_api_base(url);
-
-        assert!(logs_contain("is not https"));
-
-        let url_test_semver = Url::try_from("https://openai.com/openai/somv/v2/").unwrap();
-
-        let _ = check_api_base(url_test_semver);
-
-        assert!(!logs_contain("extra suffix provided"));
-
-        let url_test_semver_without_backslash =
-            Url::try_from("https://openai.com/openai/somv/v2").unwrap();
-
-        let _ = check_api_base(url_test_semver_without_backslash);
-
-        assert!(!logs_contain("extra suffix provided"));
-
-        let url_test_with_extra_suffix =
-            Url::try_from("https://openai.com/openai/vom/v2/x").unwrap();
-
-        let _ = check_api_base(url_test_with_extra_suffix);
-
-        assert!(logs_contain("extra suffix provided"));
     }
 }
