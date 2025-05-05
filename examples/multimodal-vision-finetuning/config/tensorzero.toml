@@ -1,3 +1,6 @@
+[gateway]
+debug = true
+
 [object_storage]
 type = "filesystem"
 path = "object_storage"
