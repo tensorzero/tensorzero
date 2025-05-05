@@ -1,5 +1,5 @@
 [project]
-name = "optimizations-server"
+name = "optimizations_server"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
@@ -23,3 +23,7 @@ dev = ["pyright", "ruff", "pytest-asyncio", "pytest-xdist", "pytest"]
 
 [tool.uv.sources]
 tensorzero = { path = "${PROJECT_ROOT}/../../clients/python-pyo3", editable = true }
+
+[build-system]
+requires = ["hatchling >= 1.26"]
+build-backend = "hatchling.build"

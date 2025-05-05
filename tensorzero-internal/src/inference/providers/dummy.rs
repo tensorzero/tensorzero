@@ -288,13 +288,21 @@ impl InferenceProvider for DummyProvider {
                 })]
             }
             "alternate" => vec![ALTERNATE_INFER_RESPONSE_CONTENT.to_string().into()],
-            #[expect(clippy::unwrap_used)]
+            "echo_extra_info" => {
+                vec![ContentBlockOutput::Text(Text {
+                    text: json!({
+                        "extra_body": request.extra_body,
+                        "extra_headers": request.extra_headers,
+                    })
+                    .to_string(),
+                })]
+            }
             "echo_request_messages" => vec![ContentBlockOutput::Text(Text {
-                text: serde_json::to_string(&json!({
+                text: json!({
                     "system": request.system,
                     "messages": request.messages,
-                }))
-                .unwrap(),
+                })
+                .to_string(),
             })],
             "extract_images" => {
                 let images: Vec<_> = request

@@ -14,6 +14,6 @@ The following optional environment variables can also be set:
 * `OPENAI_BASE_URL`: Overrides the OpenAI server used for fine-tuning jobs
 * `FIREWORKS_BASE_URL`: Overrides the Fireworks server used for fine-tuning jobs
 
-To start the server, run `uv run fastapi run src --port 7001`
+To start the server, run `uv run fastapi run src/optimizations_server/main.py --port 7001`
 
-To use the ui fixtures config, run `TENSORZERO_UI_CONFIG_PATH=../ui/fixtures/config/tensorzero.toml uv run fastapi run src --port 7001`
+To use the ui fixtures config, run `TENSORZERO_UI_CONFIG_PATH=../ui/fixtures/config/tensorzero.toml uv run fastapi run src/optimizations_server/main.py --port 7001`
