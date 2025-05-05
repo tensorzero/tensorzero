@@ -101,13 +101,8 @@ export default function DynamicEvaluationProjectPage({
   return (
     <ColorAssignerProvider selectedRunIds={selectedRunIds}>
       <PageLayout>
-        <PageHeader
-          heading={`Dynamic Evaluation Runs for Project ${projectName}`}
-        />
+        <PageHeader heading="Dynamic Evaluation Project" name={projectName} />
         <SectionLayout>
-          <div>
-            <h1>Dynamic Evaluation Runs</h1>
-          </div>
           <DynamicEvalRunSelector
             projectName={projectName}
             selectedRunInfos={runInfos}

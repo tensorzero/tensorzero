@@ -93,7 +93,10 @@ export function DynamicEvaluationProjectResultsTable({
                     if (!filteredStats) return null;
 
                     return (
-                      <TableHead key={metric_name} className="py-2 text-center">
+                      <TableHead
+                        key={metric_name}
+                        className="py-2 text-center align-top"
+                      >
                         <MetricHeader
                           metric_name={metric_name}
                           summaryStats={filteredStats}

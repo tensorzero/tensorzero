@@ -115,7 +115,7 @@ export function DynamicEvalRunSelector({
               aria-expanded={open}
               className="flex w-96 items-center justify-between gap-2"
             >
-              <span>Select evaluation runs to compare...</span>
+              <span>Select dynamic evaluation runs to compare...</span>
               <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
             </Button>
           </PopoverTrigger>
