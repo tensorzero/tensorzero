@@ -28,7 +28,7 @@ uuid = { version = "1.16.0", features = ["serde", "v7"] }
 serde_json = { version = "1.0.134", features = ["preserve_order"] }
 secrecy = { version = "0.10.2", features = ["serde"] }
 tracing-test = { version = "0.2.5", features = ["no-env-filter"] }
-toml = "0.8.21"
+toml = "0.8.22"
 reqwest-eventsource = "0.6.0"
 async-stream = "0.3.5"
 http = "1.3.1"
@@ -46,7 +46,7 @@ url = "2.5.4"
 serde-untagged = "0.1.7"
 object_store = { version = "0.12.0", features = ["serde", "aws", "gcp"] }
 rand = "0.9.1"
-chrono = { version = "0.4.40", features = ["serde"] }
+chrono = { version = "0.4.41", features = ["serde"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
