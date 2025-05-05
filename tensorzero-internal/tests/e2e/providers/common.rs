@@ -4305,8 +4305,11 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
 pub async fn test_tool_use_tool_choice_required_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    // Azure and Together don't support `tool_choice: "required"`
-    if provider.model_provider_name == "azure" || provider.model_provider_name == "together" {
+    // Azure, Together, and SGLang don't support `tool_choice: "required"`
+    if provider.model_provider_name == "azure"
+        || provider.model_provider_name == "together"
+        || provider.model_provider_name == "sglang"
+    {
         return;
     }
 
