@@ -205,7 +205,6 @@ impl InferenceProvider for OpenRouterProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        println!("Starting inference");
         let request_url = get_chat_url(
             self.api_base
                 .as_ref()
