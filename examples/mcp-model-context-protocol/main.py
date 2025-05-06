@@ -94,6 +94,7 @@ async def main():
                             print(f"\n[Tool Call: {content_block.raw_name}]")
                             print(content_block.raw_arguments)
 
+                            # NB: depending on the use case, you might want to await multiple tool calls in parallel
                             mcp_tool_result = await session.call_tool(
                                 content_block.name, content_block.arguments
                             )
