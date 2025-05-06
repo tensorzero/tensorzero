@@ -34,7 +34,7 @@ export async function getEvaluationRunInfos(
         '%Y-%m-%dT%H:%i:%SZ'
       ) as most_recent_inference_date
     FROM
-      TagInference AS run_tag
+      TagInference FINAL AS run_tag
     WHERE
       run_tag.key = 'tensorzero::evaluation_run_id'
       AND run_tag.value IN ({evaluation_run_ids:Array(String)})
@@ -66,28 +66,10 @@ export async function getEvaluationRunInfosForDatapoint(
   const function_type = config.functions[function_name].type;
   const inference_table_name =
     function_type === "chat" ? "ChatInference" : "JsonInference";
-  /*
-  const query = `
-    SELECT any(i.tags['tensorzero::evaluation_run_id']) as evaluation_run_id, any(i.variant_name) as variant_name,
-      formatDateTime(
-        max(UUIDv7ToDateTime(inference_id)),
-        '%Y-%m-%dT%H:%i:%SZ'
-      ) as most_recent_inference_date
-    FROM TagInference t
-    INNER JOIN {inference_table_name:Identifier} i
-      ON t.inference_id = i.id
-      AND i.function_name = {function_name:String}
-      AND i.variant_name = t.variant_name
-      AND i.episode_id = t.episode_id
-    WHERE t.key = 'tensorzero::datapoint_id'
-      AND t.value = {datapoint_id:String}
-    GROUP BY
-      i.tags['tensorzero::evaluation_run_id']
-  `;
-  */
+
   const query = `
     WITH datapoint_inference_ids AS (
-      SELECT inference_id FROM TagInference WHERE key = 'tensorzero::datapoint_id' AND value = {datapoint_id:String}
+      SELECT inference_id FROM TagInference FINAL WHERE key = 'tensorzero::datapoint_id' AND value = {datapoint_id:String}
     )
     SELECT any(tags['tensorzero::evaluation_run_id']) as evaluation_run_id,
            any(variant_name) as variant_name,
@@ -182,13 +164,13 @@ const getEvaluationResultDatapointIdQuery = (
   return `
     all_inference_ids AS (
       SELECT DISTINCT inference_id
-      FROM TagInference WHERE key = 'tensorzero::evaluation_run_id'
+      FROM TagInference FINAL WHERE key = 'tensorzero::evaluation_run_id'
       AND function_name = {function_name:String}
       AND value IN ({evaluation_run_ids:Array(String)})
     ),
     all_datapoint_ids AS (
       SELECT DISTINCT value as datapoint_id
-      FROM TagInference
+      FROM TagInference FINAL
       WHERE key = 'tensorzero::datapoint_id'
       AND function_name = {function_name:String}
       AND inference_id IN (SELECT inference_id FROM all_inference_ids)
@@ -216,7 +198,7 @@ export async function getEvaluationResults(
   const query = `
   WITH ${getEvaluationResultDatapointIdQuery(limit, offset)},
     filtered_dp AS (
-      SELECT * FROM {datapoint_table_name:Identifier}
+      SELECT * FROM {datapoint_table_name:Identifier} FINAL
       WHERE function_name = {function_name:String}
       -- We don't have the dataset_name here but there is an index on datapoint_ids so this should not be a full scan
       AND id IN (SELECT datapoint_id FROM all_datapoint_ids)
@@ -266,7 +248,7 @@ export async function getEvaluationResults(
   INNER JOIN filtered_feedback feedback
     ON feedback.target_id = ci.id
   ORDER BY toUInt128(datapoint_id) DESC
-   
+
   `;
 
   const result = await clickhouseClient.query({
@@ -427,7 +409,7 @@ export async function getEvaluationRunInfo(
             any(function_name) AS inference_function_name,
             any(variant_name) AS variant_name,
             max(toUInt128(inference_id)) AS max_inference_id
-        FROM TagInference
+        FROM TagInference FINAL
         WHERE key IN ('tensorzero::evaluation_run_id', 'tensorzero::evaluation_name', 'tensorzero::dataset_name')
         GROUP BY inference_id
     )
@@ -465,7 +447,7 @@ export async function searchEvaluationRuns(
         AND value = {evaluation_name:String}
       )
     SELECT DISTINCT value as evaluation_run_id, variant_name
-    FROM TagInference
+    FROM TagInference FINAL
     WHERE key = 'tensorzero::evaluation_run_id'
       AND function_name = {function_name:String}
       AND inference_id IN (SELECT inference_id FROM evaluation_inference_ids)
@@ -514,52 +496,63 @@ export async function getEvaluationsForDatapoint(
     getEvaluatorMetricName(evaluation_name, evaluatorName),
   );
   const query = `
-  SELECT
-    inference.input as input,
-    dp.id as datapoint_id,
-    dp.output as reference_output,
-    inference.id as inference_id,
-    inference.output as generated_output,
-    inference.tags['tensorzero::evaluation_run_id'] as evaluation_run_id,
-    inference.variant_name as variant_name,
-    inference.tags['tensorzero::dataset_name'] as dataset_name,
-    if(length(feedback.evaluator_inference_id) > 0, feedback.evaluator_inference_id, null) as evaluator_inference_id,
-    feedback.metric_name as metric_name,
-    feedback.value as metric_value,
-    feedback.feedback_id as feedback_id
-  FROM TagInference datapoint_tag FINAL
-  JOIN {inference_table_name:Identifier} inference
-    ON datapoint_tag.inference_id = inference.id
-    AND inference.function_name = {function_name:String}
-    AND inference.variant_name = datapoint_tag.variant_name
-    AND inference.episode_id = datapoint_tag.episode_id
-  JOIN {datapoint_table_name:Identifier} dp
-    ON dp.id = toUUIDOrNull(datapoint_tag.value)
-    AND dp.function_name = {function_name:String}
-    AND dp.dataset_name = inference.tags['tensorzero::dataset_name']
-  LEFT JOIN (
-    SELECT target_id,
-           metric_name,
-           argMax(toString(value), timestamp) as value,
-           argMax(tags['tensorzero::evaluator_inference_id'], timestamp) as evaluator_inference_id,
-           argMax(id, timestamp) as feedback_id
-    FROM BooleanMetricFeedback
-    WHERE metric_name IN ({metric_names:Array(String)})
-    GROUP BY target_id, metric_name -- for the argMax
-    UNION ALL
-    SELECT target_id,
-           metric_name,
-           argMax(toString(value), timestamp) as value,
-           argMax(tags['tensorzero::evaluator_inference_id'], timestamp) as evaluator_inference_id,
-           argMax(id, timestamp) as feedback_id
-    FROM FloatMetricFeedback
-    WHERE metric_name IN ({metric_names:Array(String)})
-    GROUP BY target_id, metric_name -- for the argMax
-  ) feedback
-    ON feedback.target_id = inference.id
-  WHERE datapoint_tag.key = 'tensorzero::datapoint_id'
-    AND datapoint_tag.value = {datapoint_id:String}
-    AND inference.tags['tensorzero::evaluation_run_id'] IN ({evaluation_run_ids:Array(String)})
+   WITH all_inference_ids AS (
+      SELECT DISTINCT inference_id
+      FROM TagInference FINAL WHERE key = 'tensorzero::datapoint_id'
+      AND value = {datapoint_id:String}
+      AND function_name = {function_name:String}
+    ),
+    filtered_inference AS (
+      SELECT * FROM {inference_table_name:Identifier}
+      WHERE id IN (SELECT inference_id FROM all_inference_ids)
+      AND function_name = {function_name:String}
+      AND tags['tensorzero::evaluation_run_id'] IN ({evaluation_run_ids:Array(String)})
+    ),
+    filtered_feedback AS (
+      SELECT target_id,
+            metric_name,
+            argMax(toString(value), timestamp) as value,
+            argMax(tags['tensorzero::evaluator_inference_id'], timestamp) as evaluator_inference_id,
+            argMax(id, timestamp) as feedback_id
+      FROM BooleanMetricFeedback
+      WHERE metric_name IN ({metric_names:Array(String)})
+      AND target_id IN (SELECT inference_id FROM all_inference_ids)
+      GROUP BY target_id, metric_name -- for the argMax
+      UNION ALL
+      SELECT target_id,
+            metric_name,
+            argMax(toString(value), timestamp) as value,
+            argMax(tags['tensorzero::evaluator_inference_id'], timestamp) as evaluator_inference_id,
+            argMax(id, timestamp) as feedback_id
+      FROM FloatMetricFeedback
+      WHERE metric_name IN ({metric_names:Array(String)})
+      AND target_id IN (SELECT inference_id FROM all_inference_ids)
+      GROUP BY target_id, metric_name -- for the argMax
+    ),
+    filtered_datapoint AS (
+      SELECT * FROM {datapoint_table_name:Identifier}
+      WHERE id = {datapoint_id:UUID}
+      AND function_name = {function_name:String}
+    )
+    SELECT
+      filtered_inference.input as input,
+      filtered_inference.tags['tensorzero::datapoint_id'] as datapoint_id,
+      filtered_datapoint.output as reference_output,
+      filtered_inference.id as inference_id,
+      filtered_inference.output as generated_output,
+      filtered_inference.tags['tensorzero::evaluation_run_id'] as evaluation_run_id,
+      filtered_inference.variant_name as variant_name,
+      filtered_inference.tags['tensorzero::dataset_name'] as dataset_name,
+      if(length(filtered_feedback.evaluator_inference_id) > 0, filtered_feedback.evaluator_inference_id, null) as evaluator_inference_id,
+      filtered_feedback.metric_name as metric_name,
+      filtered_feedback.value as metric_value,
+      filtered_feedback.feedback_id as feedback_id
+    FROM filtered_inference
+    INNER JOIN filtered_datapoint
+      ON filtered_datapoint.id = toUUIDOrNull(filtered_inference.tags['tensorzero::datapoint_id'])
+    INNER JOIN filtered_feedback
+      ON filtered_feedback.target_id = filtered_inference.id
+
   `;
 
   const result = await clickhouseClient.query({
