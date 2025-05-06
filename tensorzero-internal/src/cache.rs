@@ -42,8 +42,6 @@ pub struct CacheParamsOptions {
     #[serde(default)]
     pub max_age_s: Option<u32>,
     #[serde(default)]
-    pub lookback_s: Option<u32>,
-    #[serde(default)]
     pub enabled: CacheEnabledMode,
 }
 
