@@ -4,6 +4,8 @@ run-name: Merge Queue Checks for ${{ github.ref }}
 on:
   workflow_dispatch:
   merge_group:
+  pull_request:
+    branches: ["main"]
 
 env:
   ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -183,6 +185,10 @@ jobs:
         working-directory: clients/openai-node
         run: |
           pnpm run test
+
+      - name: "Go: OpenAI Client: test"
+        working-directory: clients/openai-go/tests
+        run: go test -v
 
       - name: "Python: Recipes: pytest"
         working-directory: recipes
