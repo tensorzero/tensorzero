@@ -335,6 +335,7 @@ impl<'c> Config<'c> {
                 .into())
             }
         };
+        tracing::debug!("Conffig_table: {:?}", config_table);
         let base_path = match PathBuf::from(&config_path).parent() {
             Some(base_path) => base_path.to_path_buf(),
             None => {
@@ -366,6 +367,7 @@ impl<'c> Config<'c> {
             tracing::info!("Config file is empty, so only default functions will be available.")
         }
         let uninitialized_config = UninitializedConfig::try_from(table)?;
+        tracing::debug!("Loading config from toml: {:?}", uninitialized_config);
 
         let gateway = uninitialized_config
             .gateway
