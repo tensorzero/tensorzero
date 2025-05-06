@@ -417,103 +417,10 @@ impl InferenceProvider for OpenRouterProvider {
         }
         .into())
     }
+
 }
 
-impl EmbeddingProvider for OpenRouterProvider {
-    async fn embed(
-        &self,
-        request: &EmbeddingRequest,
-        client: &reqwest::Client,
-        dynamic_api_keys: &InferenceCredentials,
-    ) -> Result<EmbeddingProviderResponse, Error> {
-        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
-        let request_body = OpenRouterEmbeddingRequest::new(&self.model_name, &request.input);
-        let request_url = get_embedding_url(
-            self.api_base
-                .as_ref()
-                .unwrap_or(&OPENROUTER_DEFAULT_BASE_URL),
-        )?;
-        let start_time = Instant::now();
-        let mut request_builder = client
-            .post(request_url)
-            .header("Content-Type", "application/json")
-            .header("X-Title", "TensorZero")
-            .header("HTTP-Referer", "https://www.tensorzero.com/");
-        if let Some(api_key) = api_key {
-            request_builder = request_builder.bearer_auth(api_key.expose_secret());
-        }
-        let res = request_builder
-            .json(&request_body)
-            .send()
-            .await
-            .map_err(|e| {
-                Error::new(ErrorDetails::InferenceClient {
-                    status_code: e.status(),
-                    message: format!(
-                        "Error sending request to OpenRouter: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
-                    raw_response: None,
-                })
-            })?;
-        if res.status().is_success() {
-            let raw_response = res.text().await.map_err(|e| {
-                Error::new(ErrorDetails::InferenceServer {
-                    message: format!(
-                        "Error parsing text response: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
-                    raw_response: None,
-                    provider_type: PROVIDER_TYPE.to_string(),
-                })
-            })?;
 
-            let response: OpenRouterEmbeddingResponse = serde_json::from_str(&raw_response)
-                .map_err(|e| {
-                    Error::new(ErrorDetails::InferenceServer {
-                        message: format!(
-                            "Error parsing JSON response: {}",
-                            DisplayOrDebugGateway::new(e)
-                        ),
-                        raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
-                        raw_response: Some(raw_response.clone()),
-                        provider_type: PROVIDER_TYPE.to_string(),
-                    })
-                })?;
-            let latency = Latency::NonStreaming {
-                response_time: start_time.elapsed(),
-            };
-
-            Ok(OpenRouterEmbeddingResponseWithMetadata {
-                response,
-                latency,
-                request: request_body,
-                raw_response,
-            }
-            .try_into()?)
-        } else {
-            Err(handle_openrouter_error(
-                &serde_json::to_string(&request_body).unwrap_or_default(),
-                res.status(),
-                &res.text().await.map_err(|e| {
-                    Error::new(ErrorDetails::InferenceServer {
-                        message: format!(
-                            "Error parsing error response: {}",
-                            DisplayOrDebugGateway::new(e)
-                        ),
-                        raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
-                        raw_response: None,
-                        provider_type: PROVIDER_TYPE.to_string(),
-                    })
-                })?,
-                PROVIDER_TYPE,
-            ))
-        }
-    }
-}
 
 pub async fn convert_stream_error(provider_type: String, e: reqwest_eventsource::Error) -> Error {
     let message = e.to_string();
@@ -602,19 +509,6 @@ fn get_file_url(base_url: &Url, file_id: Option<&str>) -> Result<Url, Error> {
         "files".to_string()
     };
     url.join(&path).map_err(|e| {
-        Error::new(ErrorDetails::InvalidBaseUrl {
-            message: e.to_string(),
-        })
-    })
-}
-
-
-fn get_embedding_url(base_url: &Url) -> Result<Url, Error> {
-    let mut url = base_url.clone();
-    if !url.path().ends_with('/') {
-        url.set_path(&format!("{}/", url.path()));
-    }
-    url.join("embeddings").map_err(|e| {
         Error::new(ErrorDetails::InvalidBaseUrl {
             message: e.to_string(),
         })
@@ -1637,92 +1531,6 @@ fn openrouter_to_tensorzero_chunk(
         latency,
         finish_reason,
     ))
-}
-
-#[derive(Debug, Serialize)]
-struct OpenRouterEmbeddingRequest<'a> {
-    model: &'a str,
-    input: &'a str,
-}
-
-impl<'a> OpenRouterEmbeddingRequest<'a> {
-    fn new(model: &'a str, input: &'a str) -> Self {
-        Self { model, input }
-    }
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct OpenRouterEmbeddingResponse {
-    data: Vec<OpenRouterEmbeddingData>,
-    usage: OpenRouterUsage,
-}
-
-struct OpenRouterEmbeddingResponseWithMetadata<'a> {
-    response: OpenRouterEmbeddingResponse,
-    latency: Latency,
-    request: OpenRouterEmbeddingRequest<'a>,
-    raw_response: String,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct OpenRouterEmbeddingData {
-    embedding: Vec<f32>,
-}
-
-impl<'a> TryFrom<OpenRouterEmbeddingResponseWithMetadata<'a>> for EmbeddingProviderResponse {
-    type Error = Error;
-    fn try_from(
-        response: OpenRouterEmbeddingResponseWithMetadata<'a>,
-    ) -> Result<Self, Self::Error> {
-        let OpenRouterEmbeddingResponseWithMetadata {
-            response,
-            latency,
-            request,
-            raw_response,
-        } = response;
-        let raw_request = serde_json::to_string(&request).map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
-                message: format!(
-                    "Error serializing request body as JSON: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-                raw_request: Some(serde_json::to_string(&request).unwrap_or_default()),
-                raw_response: None,
-                provider_type: PROVIDER_TYPE.to_string(),
-            })
-        })?;
-
-        if response.data.len() != 1 {
-            return Err(Error::new(ErrorDetails::InferenceServer {
-                message: "Expected exactly one embedding in response".to_string(),
-                raw_request: Some(raw_request.clone()),
-                raw_response: Some(raw_response.clone()),
-                provider_type: PROVIDER_TYPE.to_string(),
-            }));
-        }
-        let embedding = response
-            .data
-            .into_iter()
-            .next()
-            .ok_or_else(|| {
-                Error::new(ErrorDetails::InferenceServer {
-                    message: "Expected exactly one embedding in response".to_string(),
-                    raw_request: Some(raw_request.clone()),
-                    raw_response: Some(raw_response.clone()),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                })
-            })?
-            .embedding;
-
-        Ok(EmbeddingProviderResponse::new(
-            embedding,
-            request.input.to_string(),
-            raw_request,
-            raw_response,
-            response.usage.into(),
-            latency,
-        ))
-    }
 }
 
 
