@@ -2,12 +2,12 @@ import { describe, expect, test } from "vitest";
 import {
   countDatapointsForEvaluation,
   countTotalEvaluationRuns,
-  getEvaluationResults,
   getEvaluationRunInfo,
   getEvaluationRunInfos,
   getEvaluationRunInfosForDatapoint,
   getEvaluationsForDatapoint,
   getEvaluationStatistics,
+  getEvaluationResults,
   searchEvaluationRuns,
 } from "./evaluations.server";
 import type { ChatEvaluationResultWithVariant } from "./evaluations";
@@ -569,14 +569,14 @@ describe("getEvaluationRunInfosForDatapoint", () => {
 
   test("should return correct evaluation run info for ragged haiku datapoint", async () => {
     const evaluationRunInfos = await getEvaluationRunInfosForDatapoint(
-      "01963691-7489-74b3-837f-e386de14c5f9",
+      "0196374a-d03f-7420-9da5-1561cba71ddb",
       "write_haiku",
     );
 
     const expected = {
-      evaluation_run_id: "01963691-9d3c-7793-a8be-3937ebb849c1",
+      evaluation_run_id: "0196374b-04a3-7013-9049-e59ed5fe3f74",
       variant_name: "better_prompt_haiku_3_5",
-      most_recent_inference_date: "2025-04-14T23:10:35Z",
+      most_recent_inference_date: "2025-04-15T02:33:05Z",
     };
     expect(evaluationRunInfos).toHaveLength(1); // Ensure exactly one item
     expect(evaluationRunInfos).toEqual(expect.arrayContaining([expected]));
