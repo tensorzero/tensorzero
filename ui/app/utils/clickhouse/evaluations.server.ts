@@ -330,7 +330,7 @@ export async function getEvaluationStatistics(
     avg(toFloat64(feedback.value)) AS mean_metric,
     stddevSamp(toFloat64(feedback.value)) / sqrt(count()) AS stderr_metric
   FROM (
-    ${getEvaluationResultDatapointIdsQuery}
+    ${getEvaluationResultDatapointIdQuery()}
   ) dp
   INNER JOIN TagInference datapoint_tag FINAL
     ON dp_id = toUUIDOrNull(datapoint_tag.value)
@@ -395,10 +395,9 @@ export async function countDatapointsForEvaluation(
     function_type === "chat" ? "ChatInference" : "JsonInference";
 
   const query = `
+      WITH ${getEvaluationResultDatapointIdQuery()}
       SELECT toUInt32(count()) as count
-      FROM (
-        ${getEvaluationResultDatapointIdsQuery}
-      )
+      FROM all_datapoint_ids
   `;
 
   const result = await clickhouseClient.query({
