@@ -323,29 +323,39 @@ describe("getDynamicEvaluationRunStatisticsByMetricName", () => {
     const statistics = await getDynamicEvaluationRunStatisticsByMetricName(
       "01968d04-142c-7e53-8ea7-3a3255b518dc",
     );
-    expect(statistics).toMatchObject([
+    // The sort order of strings seems to be unstable on CI vs locally, so we made this test
+    // order agnostic for now.
+    const expected = [
       {
-        avg_metric: 91678.72114158163,
-        ci_error: 5895.3442187499995,
-        count: 49,
         metric_name: "elapsed_ms",
-        stdev: 21054.80078125,
-      },
-      {
-        avg_metric: 1,
-        ci_error: null,
-        count: 1,
-        metric_name: "goated",
-        stdev: null,
-      },
-      {
-        avg_metric: 0.4489795918367347,
-        ci_error: 0.14071247279470286,
         count: 49,
-        metric_name: "solved",
-        stdev: 0.5025445456953674,
+        avg_metric: 91678.72114158163,
+        stdev: 21054.80078125,
+        ci_error: 5895.3442187499995,
       },
-    ]);
+      {
+        metric_name: "goated",
+        count: 1,
+        avg_metric: 1,
+        stdev: null,
+        ci_error: null,
+      },
+      {
+        metric_name: "solved",
+        count: 49,
+        avg_metric: 0.4489795918367347,
+        stdev: 0.5025445456953674,
+        ci_error: 0.14071247279470286,
+      },
+    ];
+
+    expect(statistics).toHaveLength(expected.length);
+
+    expected.forEach((exp) => {
+      expect(statistics).toEqual(
+        expect.arrayContaining([expect.objectContaining(exp)]),
+      );
+    });
   });
 });
 
