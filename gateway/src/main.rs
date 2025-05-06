@@ -2,7 +2,7 @@ use axum::extract::{DefaultBodyLimit, Request};
 use axum::http::HeaderValue;
 use axum::middleware::Next;
 use axum::response::Response;
-use axum::routing::{get, post, put};
+use axum::routing::{delete, get, post, put};
 use axum::Router;
 use axum_tracing_opentelemetry::middleware::{OtelAxumLayer, OtelInResponseLayer};
 use clap::Parser;
@@ -198,11 +198,19 @@ async fn main() {
         .route("/status", get(endpoints::status::status_handler))
         .route("/health", get(endpoints::status::health_handler))
         .route(
-            "/internal/datasets/{dataset}/datapoints",
+            "/datasets/{dataset_name}/datapoints/batch",
             post(endpoints::datasets::create_datapoint_handler),
         )
         .route(
-            "/internal/datasets/{dataset}/datapoints/{id}",
+            "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+            delete(endpoints::datasets::delete_datapoint_handler),
+        )
+        .route(
+            "/internal/datasets/{dataset_name}/datapoints",
+            post(endpoints::datasets::create_from_existing_datapoint_handler),
+        )
+        .route(
+            "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
             put(endpoints::datasets::update_datapoint_handler),
         )
         .route(
