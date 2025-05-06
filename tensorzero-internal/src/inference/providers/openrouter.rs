@@ -394,299 +394,28 @@ impl InferenceProvider for OpenRouterProvider {
         Ok((stream, raw_request))
     }
 
-    // Get a single chunk from the stream and make sure it is OK then send to client.
-    // We want to do this here so that we can tell that the request is working.
-    /// 1. Upload the requests to OpenRouter as a File
-    /// 2. Start the batch inference
-    ///    We do them in sequence here.
     async fn start_batch_inference<'a>(
         &'a self,
-        requests: &'a [ModelInferenceRequest<'_>],
-        client: &'a reqwest::Client,
-        dynamic_api_keys: &'a InferenceCredentials,
+        _requests: &'a [ModelInferenceRequest<'_>],
+        _client: &'a reqwest::Client,
+        _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<StartBatchProviderInferenceResponse, Error> {
-        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
-        let request_url = get_file_url(
-            self.api_base
-                .as_ref()
-                .unwrap_or(&OPENROUTER_DEFAULT_BASE_URL),
-            None,
-        )?;
-        let mut batch_requests = Vec::with_capacity(requests.len());
-        for request in requests {
-            batch_requests.push(
-                OpenRouterBatchFileInput::new(request.inference_id, &self.model_name, request)
-                    .await?,
-            );
+        Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
+            provider_type: PROVIDER_TYPE.to_string(),
         }
-        let raw_requests: Result<Vec<String>, serde_json::Error> = batch_requests
-            .iter()
-            .map(|b| serde_json::to_string(&b.body))
-            .collect();
-        let raw_requests = raw_requests.map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: e.to_string(),
-            })
-        })?;
-        let mut jsonl_data = Vec::new();
-        for item in batch_requests {
-            serde_json::to_writer(&mut jsonl_data, &item).map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: format!(
-                        "Error serializing request: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                })
-            })?;
-            jsonl_data.write_all(b"\n").map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: format!("Error writing to JSONL: {}", DisplayOrDebugGateway::new(e)),
-                })
-            })?;
-        }
-        // Create the multipart form
-        let form = Form::new().text("purpose", "batch").part(
-            "file",
-            Part::bytes(jsonl_data)
-                .file_name("data.jsonl")
-                .mime_str("application/json")
-                .map_err(|e| {
-                    Error::new(ErrorDetails::Serialization {
-                        message: format!(
-                            "Error setting MIME type: {}",
-                            DisplayOrDebugGateway::new(e)
-                        ),
-                    })
-                })?,
-        );
-        let mut request_builder = client.post(request_url);
-        if let Some(api_key) = api_key {
-            request_builder = request_builder.bearer_auth(api_key.expose_secret());
-        }
-        // Actually upload the file to OpenRouter
-        let res = request_builder
-            .header("X-Title", "TensorZero")
-            .header("HTTP-Referer", "https://www.tensorzero.com/")
-            .multipart(form)
-            .send()
-            .await
-            .map_err(|e| {
-                Error::new(ErrorDetails::InferenceClient {
-                    status_code: e.status(),
-                    message: format!(
-                        "Error sending request to OpenRouter: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: None,
-                    raw_response: None,
-                })
-            })?;
-        let text = res.text().await.map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
-                message: format!(
-                    "Error retrieving text response: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-                provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: None,
-                raw_response: None,
-            })
-        })?;
-        let response: OpenRouterFileResponse = serde_json::from_str(&text).map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
-                message: format!("Error parsing JSON response: {e}, text: {text}"),
-                raw_request: None,
-                raw_response: Some(text.clone()),
-                provider_type: PROVIDER_TYPE.to_string(),
-            })
-        })?;
-        let file_id = response.id;
-        let batch_request = OpenRouterBatchRequest::new(&file_id);
-        let raw_request = serde_json::to_string(&batch_request).map_err(|_| Error::new(ErrorDetails::Serialization { message: "Error serializing OpenRouter batch request. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string() }))?;
-        let request_url = get_batch_url(
-            self.api_base
-                .as_ref()
-                .unwrap_or(&OPENROUTER_DEFAULT_BASE_URL),
-        )?;
-        let mut request_builder = client.post(request_url);
-        if let Some(api_key) = api_key {
-            request_builder = request_builder.bearer_auth(api_key.expose_secret());
-        }
-        // Now let's actually start the batch inference
-        let res = request_builder
-            .header("X-Title", "TensorZero")
-            .header("HTTP-Referer", "https://www.tensorzero.com/")
-            .json(&batch_request)
-            .send()
-            .await
-            .map_err(|e| {
-                Error::new(ErrorDetails::InferenceClient {
-                    status_code: e.status(),
-                    message: format!(
-                        "Error sending request to OpenRouter: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: Some(serde_json::to_string(&batch_request).unwrap_or_default()),
-                    raw_response: None,
-                })
-            })?;
-        let text = res.text().await.map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
-                message: format!(
-                    "Error retrieving batch response: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-                raw_request: Some(serde_json::to_string(&batch_request).unwrap_or_default()),
-                raw_response: None,
-                provider_type: PROVIDER_TYPE.to_string(),
-            })
-        })?;
-        let response: OpenRouterBatchResponse = serde_json::from_str(&text).map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
-                message: format!("Error parsing JSON response: {e}, text: {text}"),
-                raw_request: Some(serde_json::to_string(&batch_request).unwrap_or_default()),
-                raw_response: Some(text.clone()),
-                provider_type: PROVIDER_TYPE.to_string(),
-            })
-        })?;
-        let batch_params = OpenRouterBatchParams {
-            file_id: Cow::Owned(file_id),
-            batch_id: Cow::Owned(response.id),
-        };
-        let batch_params = serde_json::to_value(batch_params).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!(
-                    "Error serializing OpenRouter batch params: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-            })
-        })?;
-        let errors = match response.errors {
-            Some(errors) => errors
-                .data
-                .into_iter()
-                .map(|error| {
-                    serde_json::to_value(&error).map_err(|e| {
-                        Error::new(ErrorDetails::Serialization {
-                            message: format!(
-                                "Error serializing batch error: {}",
-                                DisplayOrDebugGateway::new(e)
-                            ),
-                        })
-                    })
-                })
-                .collect::<Result<Vec<_>, _>>()?,
-            None => vec![],
-        };
-        Ok(StartBatchProviderInferenceResponse {
-            batch_id: Uuid::now_v7(),
-            batch_params,
-            raw_requests,
-            raw_request,
-            raw_response: text,
-            status: BatchStatus::Pending,
-            errors,
-        })
+        .into())
     }
 
-    #[instrument(skip_all, fields(batch_request = ?batch_request))]
     async fn poll_batch_inference<'a>(
         &'a self,
-        batch_request: &'a BatchRequestRow<'a>,
-        http_client: &'a reqwest::Client,
-        dynamic_api_keys: &'a InferenceCredentials,
+        _batch_request: &'a BatchRequestRow<'a>,
+        _http_client: &'a reqwest::Client,
+        _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<PollBatchInferenceResponse, Error> {
-        let batch_params = OpenRouterBatchParams::from_ref(&batch_request.batch_params)?;
-        let mut request_url = get_batch_url(
-            self.api_base
-                .as_ref()
-                .unwrap_or(&OPENROUTER_DEFAULT_BASE_URL),
-        )?;
-        request_url
-            .path_segments_mut()
-            .map_err(|_| {
-                Error::new(ErrorDetails::Inference {
-                    message: "Failed to get mutable path segments".to_string(),
-                })
-            })?
-            .push(&batch_params.batch_id);
-        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
-        let raw_request = request_url.to_string();
-        let mut request_builder = http_client
-            .get(request_url)
-            .header("Content-Type", "application/json")
-            .header("X-Title", "TensorZero")
-            .header("HTTP-Referer", "https://www.tensorzero.com/");
-        if let Some(api_key) = api_key {
-            request_builder = request_builder.bearer_auth(api_key.expose_secret());
+        Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
+            provider_type: PROVIDER_TYPE.to_string(),
         }
-        let res = request_builder.send().await.map_err(|e| {
-            Error::new(ErrorDetails::InferenceClient {
-                status_code: e.status(),
-                message: format!(
-                    "Error sending request to OpenRouter: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-                provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: Some(serde_json::to_string(&batch_request).unwrap_or_default()),
-                raw_response: None,
-            })
-        })?;
-        let text = res.text().await.map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
-                message: format!(
-                    "Error parsing JSON response: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-                raw_request: Some(serde_json::to_string(&batch_request).unwrap_or_default()),
-                raw_response: None,
-                provider_type: PROVIDER_TYPE.to_string(),
-            })
-        })?;
-        let response: OpenRouterBatchResponse = serde_json::from_str(&text).map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
-                message: format!("Error parsing JSON response: {e}."),
-                raw_request: Some(serde_json::to_string(&batch_request).unwrap_or_default()),
-                raw_response: Some(text.clone()),
-                provider_type: PROVIDER_TYPE.to_string(),
-            })
-        })?;
-        let status: BatchStatus = response.status.into();
-        let raw_response = text;
-        match status {
-            BatchStatus::Pending => Ok(PollBatchInferenceResponse::Pending {
-                raw_request,
-                raw_response,
-            }),
-            BatchStatus::Completed => {
-                let output_file_id = response.output_file_id.as_ref().ok_or_else(|| {
-                    Error::new(ErrorDetails::InferenceServer {
-                        message: "Output file ID is missing".to_string(),
-                        raw_request: Some(
-                            serde_json::to_string(&batch_request).unwrap_or_default(),
-                        ),
-                        raw_response: Some(raw_response.clone()),
-                        provider_type: PROVIDER_TYPE.to_string(),
-                    })
-                })?;
-                let response = self
-                    .collect_finished_batch(
-                        output_file_id,
-                        http_client,
-                        dynamic_api_keys,
-                        raw_request,
-                        raw_response,
-                    )
-                    .await?;
-                Ok(PollBatchInferenceResponse::Completed(response))
-            }
-            BatchStatus::Failed => Ok(PollBatchInferenceResponse::Failed {
-                raw_request,
-                raw_response,
-            }),
-        }
+        .into())
     }
 }
 
@@ -850,76 +579,6 @@ pub fn stream_openrouter(
     })
 }
 
-impl OpenRouterProvider {
-    // Once a batch has been completed we need to retrieve the results from OpenRouter using the files API
-    #[instrument(skip_all, fields(file_id = file_id))]
-    async fn collect_finished_batch(
-        &self,
-        file_id: &str,
-        client: &reqwest::Client,
-        credentials: &InferenceCredentials,
-        raw_request: String,
-        raw_response: String,
-    ) -> Result<ProviderBatchInferenceResponse, Error> {
-        let file_url = get_file_url(
-            self.api_base
-                .as_ref()
-                .unwrap_or(&OPENROUTER_DEFAULT_BASE_URL),
-            Some(file_id),
-        )?;
-        let api_key = self.credentials.get_api_key(credentials)?;
-        let mut request_builder = client.get(file_url);
-        if let Some(api_key) = api_key {
-            request_builder = request_builder.bearer_auth(api_key.expose_secret());
-        }
-        let res = request_builder
-            .header("X-Title", "TensorZero")
-            .header("HTTP-Referer", "https://www.tensorzero.com/")
-            .send()
-            .await
-            .map_err(|e| {
-                Error::new(ErrorDetails::InferenceServer {
-                    message: format!(
-                        "Error downloading batch results from OpenRouter for file {file_id}: {e}"
-                    ),
-                    raw_request: None,
-                    raw_response: None,
-                    provider_type: PROVIDER_TYPE.to_string(),
-                })
-            })?;
-
-        if res.status() != StatusCode::OK {
-            return Err(handle_openrouter_error(
-                &raw_request,
-                res.status(),
-                &res.text().await.map_err(|e| {
-                    Error::new(ErrorDetails::InferenceServer {
-                        message: format!(
-                            "Error parsing error response for file {file_id}: {}",
-                            DisplayOrDebugGateway::new(e)
-                        ),
-                        raw_request: None,
-                        raw_response: None,
-                        provider_type: PROVIDER_TYPE.to_string(),
-                    })
-                })?,
-                PROVIDER_TYPE,
-            ));
-        }
-
-        parse_jsonl_batch_file::<OpenRouterBatchFileRow, _>(
-            res.bytes().await,
-            JsonlBatchFileInfo {
-                file_id: file_id.to_string(),
-                raw_request,
-                raw_response,
-                provider_type: PROVIDER_TYPE.to_string(),
-            },
-        )
-        .await
-    }
-}
-
 pub(super) fn get_chat_url(base_url: &Url) -> Result<Url, Error> {
     let mut url = base_url.clone();
     if !url.path().ends_with('/') {
@@ -949,17 +608,6 @@ fn get_file_url(base_url: &Url, file_id: Option<&str>) -> Result<Url, Error> {
     })
 }
 
-fn get_batch_url(base_url: &Url) -> Result<Url, Error> {
-    let mut url = base_url.clone();
-    if !url.path().ends_with('/') {
-        url.set_path(&format!("{}/", url.path()));
-    }
-    url.join("batches").map_err(|e| {
-        Error::new(ErrorDetails::InvalidBaseUrl {
-            message: e.to_string(),
-        })
-    })
-}
 
 fn get_embedding_url(base_url: &Url) -> Result<Url, Error> {
     let mut url = base_url.clone();
@@ -1672,47 +1320,7 @@ impl<'a> OpenRouterRequest<'a> {
     }
 }
 
-#[derive(Debug, Serialize)]
-struct OpenRouterBatchFileInput<'a> {
-    custom_id: String,
-    method: String,
-    url: String,
-    body: OpenRouterRequest<'a>,
-}
 
-impl<'a> OpenRouterBatchFileInput<'a> {
-    async fn new(
-        inference_id: Uuid,
-        model: &'a str,
-        request: &'a ModelInferenceRequest<'_>,
-    ) -> Result<Self, Error> {
-        let body = OpenRouterRequest::new(model, request)?;
-        Ok(Self {
-            custom_id: inference_id.to_string(),
-            method: "POST".to_string(),
-            url: "/v1/chat/completions".to_string(),
-            body,
-        })
-    }
-}
-
-#[derive(Debug, Serialize)]
-struct OpenRouterBatchRequest<'a> {
-    input_file_id: &'a str,
-    endpoint: &'a str,
-    completion_window: &'a str,
-    // metadata: HashMap<String, String>
-}
-
-impl<'a> OpenRouterBatchRequest<'a> {
-    fn new(input_file_id: &'a str) -> Self {
-        Self {
-            input_file_id,
-            endpoint: "/v1/chat/completions",
-            completion_window: "24h",
-        }
-    }
-}
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub(super) struct OpenRouterUsage {
@@ -2117,159 +1725,14 @@ impl<'a> TryFrom<OpenRouterEmbeddingResponseWithMetadata<'a>> for EmbeddingProvi
     }
 }
 
-#[derive(Debug, Deserialize)]
-struct OpenRouterFileResponse {
-    id: String,
-}
 
-#[derive(Debug, Deserialize)]
-struct OpenRouterBatchResponse {
-    id: String,
-    // object: String,
-    // endpoint: String,
-    errors: Option<OpenRouterBatchErrors>,
-    // input_file_id: String,
-    // completion_window: String,
-    status: OpenRouterBatchStatus,
-    output_file_id: Option<String>,
-    // error_file_id: String,
-    // created_at: i64,
-    // in_progress_at: Option<i64>,
-    // expires_at: i64,
-    // finalizing_at: Option<i64>,
-    // completed_at: Option<i64>,
-    // failed_at: Option<i64>,
-    // expired_at: Option<i64>,
-    // cancelling_at: Option<i64>,
-    // cancelled_at: Option<i64>,
-    // request_counts: OpenRouterBatchRequestCounts,
-    // metadata: HashMap<String, String>,
-}
 
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "snake_case")]
-enum OpenRouterBatchStatus {
-    Validating,
-    Failed,
-    InProgress,
-    Finalizing,
-    Completed,
-    Expired,
-    Cancelling,
-    Cancelled,
-}
 
-impl From<OpenRouterBatchStatus> for BatchStatus {
-    fn from(status: OpenRouterBatchStatus) -> Self {
-        match status {
-            OpenRouterBatchStatus::Completed => BatchStatus::Completed,
-            OpenRouterBatchStatus::Validating
-            | OpenRouterBatchStatus::InProgress
-            | OpenRouterBatchStatus::Finalizing => BatchStatus::Pending,
-            OpenRouterBatchStatus::Failed
-            | OpenRouterBatchStatus::Expired
-            | OpenRouterBatchStatus::Cancelling
-            | OpenRouterBatchStatus::Cancelled => BatchStatus::Failed,
-        }
-    }
-}
 
-impl TryFrom<OpenRouterBatchFileRow> for ProviderBatchInferenceOutput {
-    type Error = Error;
 
-    fn try_from(row: OpenRouterBatchFileRow) -> Result<Self, Self::Error> {
-        let mut response = row.response.body;
-        // Validate we have exactly one choice
-        if response.choices.len() != 1 {
-            return Err(ErrorDetails::InferenceServer {
-                message: format!(
-                    "Response has invalid number of choices: {}. Expected 1.",
-                    response.choices.len()
-                ),
-                raw_request: None,
-                raw_response: Some(serde_json::to_string(&response).unwrap_or_default()),
-                provider_type: PROVIDER_TYPE.to_string(),
-            }
-            .into());
-        }
 
-        // Convert response to raw string for storage
-        let raw_response = serde_json::to_string(&response).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!("Error parsing response: {}", DisplayOrDebugGateway::new(e)),
-            })
-        })?;
 
-        // Extract the message from choices
-        let OpenRouterResponseChoice {
-            message,
-            finish_reason,
-            ..
-        } = response
-            .choices
-            .pop()
-            .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
-                message: "Response has no choices (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
-                raw_request: None,
-                raw_response: Some(raw_response.clone()),
-                provider_type: PROVIDER_TYPE.to_string(),
-            }))?;
 
-        // Convert message content to ContentBlocks
-        let mut content: Vec<ContentBlockOutput> = Vec::new();
-        if let Some(text) = message.content {
-            content.push(text.into());
-        }
-        if let Some(tool_calls) = message.tool_calls {
-            for tool_call in tool_calls {
-                content.push(ContentBlockOutput::ToolCall(tool_call.into()));
-            }
-        }
-
-        Ok(Self {
-            id: row.inference_id,
-            output: content,
-            raw_response,
-            usage: response.usage.into(),
-            finish_reason: Some(finish_reason.into()),
-        })
-    }
-}
-
-#[derive(Debug, Deserialize)]
-struct OpenRouterBatchErrors {
-    // object: String,
-    data: Vec<OpenRouterBatchError>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct OpenRouterBatchError {
-    code: String,
-    message: String,
-    param: Option<String>,
-    line: Option<i32>,
-}
-
-#[derive(Debug, Deserialize)]
-struct OpenRouterBatchRequestCounts {
-    // total: u32,
-    // completed: u32,
-    // failed: u32,
-}
-
-#[derive(Debug, Deserialize)]
-struct OpenRouterBatchFileRow {
-    #[serde(rename = "custom_id")]
-    inference_id: Uuid,
-    response: OpenRouterBatchFileResponse,
-}
-
-#[derive(Debug, Deserialize)]
-struct OpenRouterBatchFileResponse {
-    // status_code: u16,
-    // request_id: String,
-    body: OpenRouterResponse,
-}
 
 #[cfg(test)]
 mod tests {
