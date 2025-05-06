@@ -656,7 +656,6 @@ pub(super) enum UninitializedProviderConfig {
     },
     Groq {
         model_name: String,
-        api_base: Option<Url>,
         api_key_location: Option<CredentialLocation>,
     },
     Hyperbolic {
@@ -822,9 +821,8 @@ impl UninitializedProviderConfig {
             )?),
             UninitializedProviderConfig::Groq {
                 model_name,
-                api_base,
                 api_key_location,
-            } => ProviderConfig::Groq(GroqProvider::new(model_name, api_base, api_key_location)?),
+            } => ProviderConfig::Groq(GroqProvider::new(model_name, api_key_location)?),
             UninitializedProviderConfig::Hyperbolic {
                 model_name,
                 api_key_location,

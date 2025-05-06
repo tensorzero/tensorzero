@@ -43,14 +43,6 @@ use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use crate::inference::providers::helpers::inject_extra_request_data;
 
-lazy_static! {
-    static ref GROQ_DEFAULT_BASE_URL: Url = {
-        #[expect(clippy::expect_used)]
-        Url::parse("https://api.groq.com/openai/v1/")
-            .expect("Failed to parse GROQ_DEFAULT_BASE_URL")
-    };
-}
-
 fn default_api_key_location() -> CredentialLocation {
     CredentialLocation::Env("GROQ_API_KEY".to_string())
 }
@@ -61,7 +53,6 @@ const PROVIDER_TYPE: &str = "groq";
 #[derive(Debug)]
 pub struct GroqProvider {
     model_name: String,
-    api_base: Option<Url>,
     credentials: GroqCredentials,
 }
 
@@ -70,7 +61,6 @@ static DEFAULT_CREDENTIALS: OnceLock<GroqCredentials> = OnceLock::new();
 impl GroqProvider {
     pub fn new(
         model_name: String,
-        api_base: Option<Url>,
         api_key_location: Option<CredentialLocation>,
     ) -> Result<Self, Error> {
         let credentials = build_creds_caching_default(
@@ -81,7 +71,6 @@ impl GroqProvider {
         )?;
         Ok(GroqProvider {
             model_name,
-            api_base,
             credentials,
         })
     }
@@ -143,7 +132,7 @@ impl InferenceProvider for GroqProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_url = get_chat_url(self.api_base.as_ref().unwrap_or(&GROQ_DEFAULT_BASE_URL))?;
+        let request_url = Url::parse("https://api.groq.com/openai/v1/chat/completions").unwrap();
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         
@@ -289,7 +278,7 @@ impl InferenceProvider for GroqProvider {
                 ),
             })
         })?;
-        let request_url = get_chat_url(self.api_base.as_ref().unwrap_or(&GROQ_DEFAULT_BASE_URL))?;
+        let request_url = Url::parse("https://api.groq.com/openai/v1/chat/completions").unwrap();
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let mut request_builder = http_client
@@ -861,17 +850,6 @@ impl GroqProvider {
     }
 }
 
-pub(super) fn get_chat_url(base_url: &Url) -> Result<Url, Error> {
-    let mut url = base_url.clone();
-    if !url.path().ends_with('/') {
-        url.set_path(&format!("{}/", url.path()));
-    }
-    url.join("chat/completions").map_err(|e| {
-        Error::new(ErrorDetails::InvalidBaseUrl {
-            message: e.to_string(),
-        })
-    })
-}
 
 fn get_file_url(base_url: &Url, file_id: Option<&str>) -> Result<Url, Error> {
     let mut url = base_url.clone();
@@ -2204,32 +2182,6 @@ mod tests {
     };
 
     use super::*;
-
-    #[test]
-    fn test_get_chat_url() {
-        // Test with custom base URL
-        let custom_base = "https://custom.groq.com/api/";
-        let custom_url = get_chat_url(&Url::parse(custom_base).unwrap()).unwrap();
-        assert_eq!(
-            custom_url.as_str(),
-            "https://custom.groq.com/api/chat/completions"
-        );
-
-        // Test with URL without trailing slash
-        let unjoinable_url = get_chat_url(&Url::parse("https://example.com").unwrap());
-        assert!(unjoinable_url.is_ok());
-        assert_eq!(
-            unjoinable_url.unwrap().as_str(),
-            "https://example.com/chat/completions"
-        );
-        // Test with URL that can't be joined
-        let unjoinable_url = get_chat_url(&Url::parse("https://example.com/foo").unwrap());
-        assert!(unjoinable_url.is_ok());
-        assert_eq!(
-            unjoinable_url.unwrap().as_str(),
-            "https://example.com/foo/chat/completions"
-        );
-    }
 
     #[test]
     fn test_handle_groq_error() {
