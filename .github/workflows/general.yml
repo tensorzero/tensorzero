@@ -175,46 +175,42 @@ jobs:
             pnpm
             rust
             uv
-      - name: Install pre-commit
-        run: |
-          uv venv
-          uv pip install pre-commit
 
       - name: check‑case‑conflict
-        run: uv run pre-commit run check-case-conflict --all-files
+        run: uv run --with pre-commit pre-commit run check-case-conflict --all-files
 
       - name: check‑executables‑have‑shebangs
-        run: uv run pre-commit run check-executables-have-shebangs --all-files
+        run: uv run --with pre-commit pre-commit run check-executables-have-shebangs --all-files
 
       - name: check‑json
-        run: uv run pre-commit run check-json --all-files
+        run: uv run --with pre-commit pre-commit run check-json --all-files
 
       - name: check‑yaml
-        run: uv run pre-commit run check-yaml --all-files
+        run: uv run --with pre-commit pre-commit run check-yaml --all-files
 
       - name: check‑toml
-        run: uv run pre-commit run check-toml --all-files
+        run: uv run --with pre-commit pre-commit run check-toml --all-files
 
       - name: check‑xml
-        run: uv run pre-commit run check-xml --all-files
+        run: uv run --with pre-commit pre-commit run check-xml --all-files
 
       - name: check‑merge‑conflict
-        run: uv run pre-commit run check-merge-conflict --all-files
+        run: uv run --with pre-commit pre-commit run check-merge-conflict --all-files
 
       - name: check‑symlinks
-        run: uv run pre-commit run check-symlinks --all-files
+        run: uv run --with pre-commit pre-commit run check-symlinks --all-files
 
       - name: check‑vcs‑permalinks
-        run: uv run pre-commit run check-vcs-permalinks --all-files
+        run: uv run --with pre-commit pre-commit run check-vcs-permalinks --all-files
 
       - name: detect‑private‑key
-        run: uv run pre-commit run detect-private-key --all-files
+        run: uv run --with pre-commit pre-commit run detect-private-key --all-files
 
       - name: end‑of‑file‑fixer
-        run: uv run pre-commit run end-of-file-fixer --all-files --exclude=*.minijinja
+        run: uv run --with pre-commit pre-commit run end-of-file-fixer --all-files --exclude=*.minijinja
 
       - name: trailing‑whitespace
-        run: uv run pre-commit run trailing-whitespace --all-files --exclude=*.minijinja
+        run: uv run --with pre-commit pre-commit run trailing-whitespace --all-files --exclude=*.minijinja
 
       - name: uv-lock
         run: |
