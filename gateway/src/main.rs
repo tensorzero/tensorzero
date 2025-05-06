@@ -4,7 +4,7 @@ use axum::middleware::Next;
 use axum::response::Response;
 use axum::routing::{delete, get, post, put};
 use axum::Router;
-use axum_tracing_opentelemetry::middleware::{OtelAxumLayer, OtelInResponseLayer};
+use axum_tracing_opentelemetry::middleware::OtelAxumLayer;
 use clap::Parser;
 use mimalloc::MiMalloc;
 use std::fmt::Display;
@@ -191,8 +191,9 @@ async fn main() {
             post(endpoints::openai_compatible::inference_handler),
         )
         .route("/feedback", post(endpoints::feedback::feedback_handler))
-        // Everything above these two layers has OpenTelemetry tracing enabled
-        .layer(OtelInResponseLayer)
+        // Everything above this layer has OpenTelemetry tracing enabled
+        // Note - we do *not* attach a `OtelInResponseLayer`, as this seems to be incorrect according to the W3C Trace Context spec
+        // (the only response header is `traceresponse` for a completed trace)
         .layer(OtelAxumLayer::default())
         // Everything below the Otel layers does not have OpenTelemetry tracing enabled
         .route("/status", get(endpoints::status::status_handler))
