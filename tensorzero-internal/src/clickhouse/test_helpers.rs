@@ -1,5 +1,8 @@
 #![expect(clippy::unwrap_used, clippy::expect_used, clippy::print_stdout)]
-use crate::endpoints::datasets::{ChatInferenceDatapoint, JsonInferenceDatapoint};
+use crate::endpoints::datasets::{
+    ChatInferenceDatapoint, ClickHouseChatInferenceDatapoint, ClickHouseJsonInferenceDatapoint,
+    JsonInferenceDatapoint,
+};
 use crate::endpoints::dynamic_evaluation_run::{
     DynamicEvaluationRunEpisodeRow, DynamicEvaluationRunRow,
 };
@@ -94,8 +97,8 @@ pub async fn select_chat_dataset_clickhouse(
     let lines = text.lines();
     let mut chat_rows: Vec<ChatInferenceDatapoint> = Vec::new();
     for line in lines {
-        let chat_row: ChatInferenceDatapoint = serde_json::from_str(line).unwrap();
-        chat_rows.push(chat_row);
+        let chat_row: ClickHouseChatInferenceDatapoint = serde_json::from_str(line).unwrap();
+        chat_rows.push(chat_row.into());
     }
     Some(chat_rows)
 }
@@ -118,8 +121,8 @@ pub async fn select_json_dataset_clickhouse(
     let lines = text.lines();
     let mut json_rows: Vec<JsonInferenceDatapoint> = Vec::new();
     for line in lines {
-        let json_row: JsonInferenceDatapoint = serde_json::from_str(line).unwrap();
-        json_rows.push(json_row);
+        let json_row: ClickHouseJsonInferenceDatapoint = serde_json::from_str(line).unwrap();
+        json_rows.push(json_row.into());
     }
 
     Some(json_rows)

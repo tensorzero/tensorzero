@@ -870,13 +870,10 @@ pub struct ChatInferenceDatapoint {
     pub function_name: String,
     pub id: Uuid,
     pub episode_id: Option<Uuid>,
-    #[serde(deserialize_with = "deserialize_json_string")]
     pub input: ResolvedInput,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(deserialize_with = "deserialize_optional_json_string")]
     pub output: Option<Vec<ContentBlockChatOutput>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(deserialize_with = "deserialize_optional_json_string")]
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tags: Option<HashMap<String, String>>,
@@ -894,12 +891,9 @@ pub struct JsonInferenceDatapoint {
     pub function_name: String,
     pub id: Uuid,
     pub episode_id: Option<Uuid>,
-    #[serde(deserialize_with = "deserialize_json_string")]
     pub input: ResolvedInput,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(deserialize_with = "deserialize_optional_json_string")]
     pub output: Option<JsonInferenceOutput>,
-    #[serde(deserialize_with = "deserialize_json_string")]
     pub output_schema: serde_json::Value,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tags: Option<HashMap<String, String>>,
@@ -943,6 +937,25 @@ pub struct ClickHouseChatInferenceDatapoint {
     staled_at: Option<String>,
 }
 
+impl From<ClickHouseChatInferenceDatapoint> for ChatInferenceDatapoint {
+    fn from(value: ClickHouseChatInferenceDatapoint) -> Self {
+        ChatInferenceDatapoint {
+            dataset_name: value.dataset_name,
+            function_name: value.function_name,
+            id: value.id,
+            episode_id: value.episode_id,
+            input: value.input,
+            output: value.output,
+            tool_params: value.tool_params,
+            tags: value.tags,
+            auxiliary: value.auxiliary,
+            is_deleted: value.is_deleted,
+            source_inference_id: value.source_inference_id,
+            staled_at: value.staled_at,
+        }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub struct ClickHouseJsonInferenceDatapoint {
     pub dataset_name: String,
@@ -962,41 +975,30 @@ pub struct ClickHouseJsonInferenceDatapoint {
     staled_at: Option<String>,
 }
 
+impl From<ClickHouseJsonInferenceDatapoint> for JsonInferenceDatapoint {
+    fn from(value: ClickHouseJsonInferenceDatapoint) -> Self {
+        JsonInferenceDatapoint {
+            dataset_name: value.dataset_name,
+            function_name: value.function_name,
+            id: value.id,
+            episode_id: value.episode_id,
+            input: value.input,
+            output: value.output,
+            output_schema: value.output_schema,
+            tags: value.tags,
+            auxiliary: value.auxiliary,
+            is_deleted: value.is_deleted,
+            source_inference_id: value.source_inference_id,
+            staled_at: value.staled_at,
+        }
+    }
+}
+
 impl From<ClickHouseDatapoint> for Datapoint {
     fn from(value: ClickHouseDatapoint) -> Self {
         match value {
-            ClickHouseDatapoint::Chat(datapoint) => {
-                Datapoint::ChatInference(ChatInferenceDatapoint {
-                    dataset_name: datapoint.dataset_name,
-                    function_name: datapoint.function_name,
-                    id: datapoint.id,
-                    episode_id: datapoint.episode_id,
-                    input: datapoint.input,
-                    output: datapoint.output,
-                    tool_params: datapoint.tool_params,
-                    tags: datapoint.tags,
-                    auxiliary: datapoint.auxiliary,
-                    is_deleted: datapoint.is_deleted,
-                    source_inference_id: datapoint.source_inference_id,
-                    staled_at: datapoint.staled_at,
-                })
-            }
-            ClickHouseDatapoint::Json(datapoint) => {
-                Datapoint::JsonInference(JsonInferenceDatapoint {
-                    dataset_name: datapoint.dataset_name,
-                    function_name: datapoint.function_name,
-                    id: datapoint.id,
-                    episode_id: datapoint.episode_id,
-                    input: datapoint.input,
-                    output: datapoint.output,
-                    output_schema: datapoint.output_schema,
-                    tags: datapoint.tags,
-                    auxiliary: datapoint.auxiliary,
-                    is_deleted: datapoint.is_deleted,
-                    source_inference_id: datapoint.source_inference_id,
-                    staled_at: datapoint.staled_at,
-                })
-            }
+            ClickHouseDatapoint::Chat(datapoint) => Datapoint::ChatInference(datapoint.into()),
+            ClickHouseDatapoint::Json(datapoint) => Datapoint::JsonInference(datapoint.into()),
         }
     }
 }
