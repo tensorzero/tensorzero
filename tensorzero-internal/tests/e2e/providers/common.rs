@@ -891,7 +891,6 @@ pub async fn test_url_image_inference_with_provider_and_store(
                 cache_options: CacheParamsOptions {
                     enabled: CacheEnabledMode::On,
                     max_age_s: Some(10),
-                    lookback_s: None,
                 },
                 extra_headers: get_extra_headers(),
                 ..Default::default()
@@ -953,7 +952,6 @@ pub async fn test_base64_image_inference_with_provider_and_store(
                 cache_options: CacheParamsOptions {
                     enabled: CacheEnabledMode::On,
                     max_age_s: Some(10),
-                    lookback_s: None,
                 },
                 ..Default::default()
             })
@@ -1499,6 +1497,7 @@ pub async fn test_simple_inference_request_with_provider(
     client: &tensorzero::Client,
 ) {
     let episode_id = Uuid::now_v7();
+    let extra_headers = get_extra_headers();
     let response = client
         .inference(ClientInferenceParams {
             function_name: Some("basic_test".to_string()),
@@ -1516,7 +1515,7 @@ pub async fn test_simple_inference_request_with_provider(
             tags: [("foo".to_string(), "bar".to_string())]
                 .into_iter()
                 .collect(),
-            extra_headers: get_extra_headers(),
+            extra_headers: extra_headers.headers,
             ..Default::default()
         })
         .await
@@ -1568,7 +1567,7 @@ pub async fn test_simple_inference_request_with_provider(
                 lookback_s: Some(10),
                 ..Default::default()
             },
-            extra_headers: get_extra_headers(),
+            extra_headers: extra_headers.headers.clone(),
             ..Default::default()
         })
         .await
