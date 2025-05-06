@@ -50,7 +50,8 @@ async fn test_dynamic_evaluation() {
             .dynamic_evaluation_run_episode(
                 run_id,
                 DynamicEvaluationRunEpisodeParams {
-                    datapoint_name: Some(format!("test_datapoint_{i}")),
+                    task_name: Some(format!("test_datapoint_{i}")),
+                    datapoint_name: None,
                     tags: HashMap::from([
                         ("baz".to_string(), format!("baz_{i}")),
                         ("zoo".to_string(), format!("zoo_{i}")),
@@ -226,6 +227,7 @@ async fn test_dynamic_evaluation_other_function() {
         .dynamic_evaluation_run_episode(
             run_id,
             DynamicEvaluationRunEpisodeParams {
+                task_name: None,
                 datapoint_name: None,
                 tags: HashMap::new(),
             },
@@ -295,6 +297,7 @@ async fn test_dynamic_evaluation_variant_error() {
         .dynamic_evaluation_run_episode(
             run_id,
             DynamicEvaluationRunEpisodeParams {
+                task_name: None,
                 datapoint_name: None,
                 tags: HashMap::new(),
             },
@@ -348,6 +351,7 @@ async fn test_dynamic_evaluation_override_variant_tags() {
         .dynamic_evaluation_run_episode(
             run_id,
             DynamicEvaluationRunEpisodeParams {
+                task_name: None,
                 datapoint_name: None,
                 tags: HashMap::new(),
             },
