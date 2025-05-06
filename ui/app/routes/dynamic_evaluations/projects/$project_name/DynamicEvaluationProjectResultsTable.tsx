@@ -136,7 +136,7 @@ export function DynamicEvaluationProjectResultsTable({
                           {index === 0 && (
                             <TableCell
                               rowSpan={task_results.length}
-                              className="max-w-[200px] text-center align-middle"
+                              className="max-w-[200px] overflow-hidden text-center align-middle text-ellipsis whitespace-nowrap"
                             >
                               {result.task_name ?? "-"}
                             </TableCell>
@@ -144,8 +144,10 @@ export function DynamicEvaluationProjectResultsTable({
 
                           {/* Variant circle - only if multiple variants are selected */}
                           {selectedRunIds.length > 1 && (
-                            <TableCell className="text-center align-middle">
-                              <EvaluationRunCircle runId={result.run_id} />
+                            <TableCell className="align-middle">
+                              <div className="flex h-full w-full items-center justify-center">
+                                <EvaluationRunCircle runId={result.run_id} />
+                              </div>
                             </TableCell>
                           )}
 
