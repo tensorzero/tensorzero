@@ -237,7 +237,7 @@ jobs:
         run: git diff --exit-code
 
       - name: Run nb-clean
-        run: uv run --with nb-clean nb-clean --remove-empty-cells
+        run: uv run --with nb-clean nb-clean check --remove-empty-cells
 
       - name: Install cargo-nextest, cargo-deny, and cargo-hack
         uses: taiki-e/install-action@37bdc826eaedac215f638a96472df572feab0f9b
