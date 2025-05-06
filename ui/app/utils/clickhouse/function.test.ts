@@ -558,7 +558,7 @@ describe("getVariantCounts", () => {
         variant_name: "initial_prompt_gpt4o_mini",
       },
       {
-        count: 156,
+        count: 155,
         last_used: "2025-04-15T02:33:07.000Z",
         variant_name: "better_prompt_haiku_3_5",
       },

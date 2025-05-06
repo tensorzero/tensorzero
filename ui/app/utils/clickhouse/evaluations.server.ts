@@ -34,7 +34,7 @@ export async function getEvaluationRunInfos(
         '%Y-%m-%dT%H:%i:%SZ'
       ) as most_recent_inference_date
     FROM
-      TagInference FINAL AS run_tag
+      TagInference AS run_tag FINAL
     WHERE
       run_tag.key = 'tensorzero::evaluation_run_id'
       AND run_tag.value IN ({evaluation_run_ids:Array(String)})
