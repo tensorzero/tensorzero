@@ -5,7 +5,7 @@ use std::{
     rc::Rc,
 };
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, TimeZone, Utc};
 use git2::{Commit, DiffDelta, DiffOptions, Repository};
 
@@ -186,9 +186,16 @@ pub fn find_paths_in_repo<P: AsRef<Path>>(repo: &Repository, path: &P) -> Result
     // Search the repo for the path that suffixes with the given path
     let mut paths = Vec::new();
     let index = repo.index()?;
+    let workdir = repo
+        .workdir()
+        .with_context(|| "Failed to get git repository workdir")?;
     for entry in index.iter() {
         let tracked = Path::new(std::str::from_utf8(&entry.path)?);
-        if tracked.ends_with(path) {
+        // Prepend the workdir when comparing - if we're in a repository named 'foo',
+        // then the 'tracked' will be path like 'my/src/file.rs'.
+        // If Cursor is run from the root of the repository, then Cursor path will look like
+        // 'foo/my/src/file.rs'.
+        if workdir.join(tracked).ends_with(path) {
             paths.push(tracked.to_path_buf());
         }
     }
