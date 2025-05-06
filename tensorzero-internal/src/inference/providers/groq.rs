@@ -135,16 +135,18 @@ impl InferenceProvider for GroqProvider {
         let request_url = Url::parse("https://api.groq.com/openai/v1/chat/completions").unwrap();
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
-        
-        let mut request_body = serde_json::to_value(GroqRequest::new(&self.model_name, request.request)?)
-            .map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: format!(
-                        "Error serializing Groq request: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                })
-            })?;
+
+        let mut request_body =
+            serde_json::to_value(GroqRequest::new(&self.model_name, request.request)?).map_err(
+                |e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!(
+                            "Error serializing Groq request: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
+                    })
+                },
+            )?;
         let headers = inject_extra_request_data(
             &request.request.extra_body,
             &request.request.extra_headers,
