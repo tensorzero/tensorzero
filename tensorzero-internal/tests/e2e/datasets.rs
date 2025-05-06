@@ -212,7 +212,7 @@ async fn test_create_delete_datapoint_chat() {
 
     let resp = client
         .post(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints",
+            "/datasets/{dataset_name}/datapoints/batch",
         )))
         .json(&json!({
             "function_name": "basic_test",
@@ -360,7 +360,7 @@ async fn test_create_datapoint_chat_bad_request() {
 
     let resp = client
         .post(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints",
+            "/datasets/{dataset_name}/datapoints/batch",
         )))
         .json(&json!({
             "function_name": "basic_test",
@@ -892,7 +892,7 @@ async fn test_create_delete_datapoint_json() {
     });
     let resp = client
         .post(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints",
+            "/datasets/{dataset_name}/datapoints/batch",
         )))
         .json(&json!({
             "function_name": "json_success",
@@ -989,7 +989,7 @@ async fn test_create_datapoint_json_bad_output() {
 
     let resp = client
         .post(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints",
+            "/datasets/{dataset_name}/datapoints/batch",
         )))
         .json(&json!({
             "function_name": "json_success",
