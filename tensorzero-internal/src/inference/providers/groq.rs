@@ -43,8 +43,6 @@ use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use crate::inference::providers::helpers::inject_extra_request_data;
 
-use super::provider_trait::{TensorZeroEventError, WrappedProvider};
-
 lazy_static! {
     static ref GROQ_DEFAULT_BASE_URL: Url = {
         #[expect(clippy::expect_used)]
@@ -137,66 +135,6 @@ impl GroqCredentials {
     }
 }
 
-impl WrappedProvider for GroqProvider {
-    fn make_body<'a>(
-        &'a self,
-        ModelProviderRequest {
-            request,
-            provider_name: _,
-            model_name: _,
-        }: ModelProviderRequest<'a>,
-    ) -> Result<serde_json::Value, Error> {
-        let request_body = serde_json::to_value(GroqRequest::new(&self.model_name, request)?)
-            .map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: format!(
-                        "Error serializing Groq request: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                })
-            })?;
-        Ok(request_body)
-    }
-    fn parse_response(
-        &self,
-        request: &ModelInferenceRequest,
-        raw_request: String,
-        raw_response: String,
-        latency: Latency,
-    ) -> Result<ProviderInferenceResponse, Error> {
-        let response = serde_json::from_str(&raw_response).map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
-                message: format!(
-                    "Error parsing JSON response: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-                raw_request: Some(raw_request.clone()),
-                raw_response: Some(raw_response.clone()),
-                provider_type: PROVIDER_TYPE.to_string(),
-            })
-        })?;
-
-        GroqResponseWithMetadata {
-            response,
-            raw_response,
-            latency,
-            raw_request,
-            generic_request: request,
-        }
-        .try_into()
-    }
-
-    fn stream_events(
-        &self,
-        event_source: Pin<
-            Box<dyn Stream<Item = Result<Event, TensorZeroEventError>> + Send + 'static>,
-        >,
-        start_time: Instant,
-    ) -> ProviderInferenceResponseStreamInner {
-        stream_groq(PROVIDER_TYPE.to_string(), event_source, start_time)
-    }
-}
-
 impl InferenceProvider for GroqProvider {
     async fn infer<'a>(
         &'a self,
@@ -208,7 +146,16 @@ impl InferenceProvider for GroqProvider {
         let request_url = get_chat_url(self.api_base.as_ref().unwrap_or(&GROQ_DEFAULT_BASE_URL))?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
-        let mut request_body = self.make_body(request)?;
+        
+        let mut request_body = serde_json::to_value(GroqRequest::new(&self.model_name, request.request)?)
+            .map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!(
+                        "Error serializing Groq request: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
+                })
+            })?;
         let headers = inject_extra_request_data(
             &request.request.extra_body,
             &request.request.extra_headers,
