@@ -25,6 +25,7 @@ pyo3 = { workspace = true, optional = true }
 tracing = { workspace = true }
 tokio = { workspace = true }
 serde-untagged = { workspace = true }
+git2 = { workspace = true }
 
 [lints]
 workspace = true

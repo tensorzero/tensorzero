@@ -2,14 +2,18 @@ use std::{
     cmp::Ordering, env, fmt::Display, future::Future, path::PathBuf, sync::Arc, time::Duration,
 };
 
+use git::GitInfo;
 use reqwest::header::HeaderMap;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use serde_json::Value;
 use std::fmt::Debug;
 use tensorzero_internal::{
     config_parser::Config,
-    endpoints::dynamic_evaluation_run::{
-        DynamicEvaluationRunEpisodeParams, DynamicEvaluationRunEpisodeResponse,
+    endpoints::{
+        dynamic_evaluation_run::{
+            DynamicEvaluationRunEpisodeParams, DynamicEvaluationRunEpisodeResponse,
+        },
+        validate_tags,
     },
     error::{Error, ErrorDetails},
     gateway_util::{setup_clickhouse, setup_http_client, AppStateData},
@@ -22,6 +26,7 @@ use uuid::Uuid;
 
 mod client_inference_params;
 mod client_input;
+mod git;
 pub mod input_handling;
 
 pub use client_inference_params::{ClientInferenceParams, ClientSecretString};
@@ -127,6 +132,11 @@ pub enum TensorZeroError {
     },
     #[error("HTTP Error: request timed out")]
     RequestTimeout,
+    #[error("Failed to get git info: {source}")]
+    Git {
+        #[source]
+        source: git2::Error,
+    },
 }
 
 #[derive(Debug, Error)]
@@ -506,8 +516,17 @@ impl Client {
 
     pub async fn dynamic_evaluation_run(
         &self,
-        params: DynamicEvaluationRunParams,
+        mut params: DynamicEvaluationRunParams,
     ) -> Result<DynamicEvaluationRunResponse, TensorZeroError> {
+        // We validate the tags here since we're going to add git information to the tags afterwards and set internal to true
+        validate_tags(&params.tags, false)
+            .map_err(|e| TensorZeroError::Other { source: e.into() })?;
+        // Apply the git information to the tags so it gets stored for our dynamic evaluation run
+        if let Ok(git_info) = GitInfo::new() {
+            params.tags.extend(git_info.into_tags());
+        }
+        // Set internal to true so we don't validate the tags again
+        params.internal = true;
         match &self.mode {
             ClientMode::HTTPGateway(client) => {
                 let url = client.base_url.join("dynamic_evaluation_run").map_err(|e| TensorZeroError::Other {
