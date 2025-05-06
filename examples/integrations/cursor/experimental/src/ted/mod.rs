@@ -17,6 +17,7 @@ use tree_sitter::{Node, TreeCursor};
 #[derive(Debug)]
 pub struct TedInfo {
     pub min_ted: u64,
+    pub min_ted_source: Option<String>,
     pub ted_ratio: f64,
     pub size: usize,
 }
@@ -56,6 +57,7 @@ pub fn minimum_ted(
     let needle_tree = Tree::new_from_postorder(&needle_post, &needle_subtree_start, 0);
     // Iterate over the haystack and create the subtree ending at each index
     let mut min_ted = u64::MAX;
+    let mut min_tree = None;
     for (end, &start) in haystack_subtree_start.iter().enumerate() {
         let haystack_tree = Tree::new_from_postorder(
             &haystack_post[start..=end],
@@ -65,11 +67,13 @@ pub fn minimum_ted(
         let ted = haystack_tree.tree_edit_distance(&needle_tree);
         if ted < min_ted {
             min_ted = ted;
+            min_tree = Some(&haystack_post[end]);
         }
     }
     let needle_size = needle_post.len();
     TedInfo {
         min_ted,
+        min_ted_source: min_tree.and_then(|t| t.label.full_text.clone()),
         ted_ratio: 1.0 - min_ted as f64 / needle_size as f64,
         size: needle_size,
     }
@@ -78,20 +82,21 @@ pub fn minimum_ted(
 #[derive(Debug)]
 struct TsNodeWrapper<'tree> {
     node: Node<'tree>,
-    leaf_text: Option<String>,
+    full_text: Option<String>,
+    is_leaf: bool,
 }
 
 impl<'tree> TsNodeWrapper<'tree> {
     pub fn new(node: Node<'tree>, src: &'tree [u8]) -> Self {
-        let leaf_text = if node.child_count() == 0 {
-            // I don't want to propagate non-UTF-8 errors
-            // since that's just deeply wrong if we get here.
-            #[expect(clippy::unwrap_used)]
-            Some(node.utf8_text(src).unwrap().to_string())
-        } else {
-            None
-        };
-        Self { node, leaf_text }
+        // I don't want to propagate non-UTF-8 errors
+        // since that's just deeply wrong if we get here.
+        #[expect(clippy::unwrap_used)]
+        let full_text = Some(node.utf8_text(src).unwrap().to_string());
+        Self {
+            node,
+            full_text,
+            is_leaf: node.child_count() == 0,
+        }
     }
 }
 
@@ -100,7 +105,10 @@ impl PartialEq for TsNodeWrapper<'_> {
         if self.node.kind() != other.node.kind() {
             return false;
         }
-        match (&self.leaf_text, &other.leaf_text) {
+        match (
+            self.is_leaf.then_some(&self.full_text),
+            other.is_leaf.then_some(&other.full_text),
+        ) {
             (Some(a), Some(b)) => a == b,
             (None, None) => true,
             _ => false,

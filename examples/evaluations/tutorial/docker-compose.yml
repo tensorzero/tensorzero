@@ -31,6 +31,19 @@ services:
       - "3000:3000"
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:3000/health",
+        ]
+      start_period: 1s
+      start_interval: 1s
+      timeout: 1s
     depends_on:
       clickhouse:
         condition: service_healthy
@@ -47,6 +60,8 @@ services:
       - "4000:4000"
     depends_on:
       clickhouse:
+        condition: service_healthy
+      gateway:
         condition: service_healthy
 
   evaluations:

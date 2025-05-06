@@ -14,6 +14,7 @@ permissions:
 
 jobs:
   CLAAssistant:
+    if: github.repository == 'tensorzero/tensorzero'
     runs-on: ubuntu-latest
     steps:
       - name: "CLA Assistant"

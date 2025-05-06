@@ -739,6 +739,7 @@ impl TensorZeroGateway {
     ) -> PyResult<Py<PyAny>> {
         let client = this.as_super().client.clone();
         let params = DynamicEvaluationRunParams {
+            internal: false,
             variants,
             tags: tags.unwrap_or_default(),
             project_name,
@@ -1128,6 +1129,7 @@ impl AsyncTensorZeroGateway {
     ) -> PyResult<Bound<'_, PyAny>> {
         let client = this.as_super().client.clone();
         let params = DynamicEvaluationRunParams {
+            internal: false,
             variants,
             tags: tags.unwrap_or_default(),
             project_name,
