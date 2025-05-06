@@ -1668,6 +1668,7 @@ mod tests {
                 tensorzero_cache_options: Some(CacheParamsOptions {
                     max_age_s: Some(3600),
                     enabled: CacheEnabledMode::On,
+                    lookback_s: None,
                 }),
                 tensorzero_extra_body: UnfilteredInferenceExtraBody::default(),
                 tensorzero_extra_headers: UnfilteredInferenceExtraHeaders::default(),
@@ -1680,7 +1681,8 @@ mod tests {
             params.cache_options,
             CacheParamsOptions {
                 max_age_s: Some(3600),
-                enabled: CacheEnabledMode::On
+                enabled: CacheEnabledMode::On,
+                lookback_s: None,
             }
         );
 
@@ -1710,6 +1712,7 @@ mod tests {
                 tensorzero_cache_options: Some(CacheParamsOptions {
                     max_age_s: Some(3600),
                     enabled: CacheEnabledMode::On,
+                    lookback_s: None,
                 }),
                 tensorzero_extra_body: UnfilteredInferenceExtraBody::default(),
                 tensorzero_extra_headers: UnfilteredInferenceExtraHeaders::default(),
@@ -1723,6 +1726,7 @@ mod tests {
             CacheParamsOptions {
                 max_age_s: Some(3600),
                 enabled: CacheEnabledMode::On,
+                lookback_s: None,
             }
         );
 
@@ -1752,6 +1756,7 @@ mod tests {
                 tensorzero_cache_options: Some(CacheParamsOptions {
                     max_age_s: None,
                     enabled: CacheEnabledMode::WriteOnly,
+                    lookback_s: None,
                 }),
                 tensorzero_extra_body: UnfilteredInferenceExtraBody::default(),
                 tensorzero_extra_headers: UnfilteredInferenceExtraHeaders::default(),
@@ -1764,7 +1769,8 @@ mod tests {
             params.cache_options,
             CacheParamsOptions {
                 max_age_s: None,
-                enabled: CacheEnabledMode::WriteOnly
+                enabled: CacheEnabledMode::WriteOnly,
+                lookback_s: None,
             }
         );
     }
