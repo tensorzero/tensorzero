@@ -43,7 +43,8 @@ use crate::inference::types::{
     ProviderInferenceResponseStreamInner, Role, Text, TextChunk,
 };
 use crate::model::{
-    build_creds_caching_default_with_fn, Credential, CredentialLocation, ModelProvider,
+    build_creds_caching_default_with_fn, fully_qualified_name, Credential, CredentialLocation,
+    ModelProvider,
 };
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
@@ -248,6 +249,7 @@ impl GCPVertexGeminiProvider {
         raw_response: String,
         api_key: &GCPVertexCredentials,
         dynamic_api_keys: &InferenceCredentials,
+        batch_request: &BatchRequestRow<'_>,
     ) -> Result<ProviderBatchInferenceResponse, Error> {
         match output_data {
             GCPVertexBatchResponseOutputInfo::Gcs {
@@ -282,6 +284,13 @@ impl GCPVertexGeminiProvider {
                         raw_request,
                         raw_response,
                         file_id: store_and_path.path.to_string(),
+                    },
+                    |r| {
+                        make_provider_batch_inference_output(
+                            r,
+                            &batch_request.model_name,
+                            &batch_request.model_provider_name,
+                        )
                     },
                 )
                 .await
@@ -362,56 +371,60 @@ struct GCPVertexBatchResponseLine {
     request: Box<RawValue>,
     response: GCPVertexGeminiResponse,
 }
-
-impl TryFrom<GCPVertexBatchResponseLine> for ProviderBatchInferenceOutput {
-    type Error = Error;
-
-    fn try_from(line: GCPVertexBatchResponseLine) -> Result<Self, Self::Error> {
-        let raw_request = line.request.to_string();
-        let request = GCPVertexGeminiRequestMinimal::deserialize(&*line.request).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!("Error deserializing batch request: {e}"),
-            })
-        })?;
-        let raw_response = serde_json::to_string(&line.response).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!("Error serializing batch response: {e}"),
-            })
-        })?;
-        let inference_id = request.labels.get(INFERENCE_ID_LABEL).ok_or_else(|| {
-            Error::new(ErrorDetails::InternalError {
-                message: format!("Missing {INFERENCE_ID_LABEL} label on GCP batch request"),
-            })
-        })?;
-
-        let usage = line
-            .response
-            .usage_metadata
-            .clone()
-            .ok_or_else(|| {
-                Error::new(ErrorDetails::InferenceServer {
-                    message: "GCP Vertex Gemini batch response has no usage metadata".to_string(),
-                    raw_request: Some(raw_request.clone()),
-                    raw_response: Some(raw_response.clone()),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                })
-            })?
-            .into();
-
-        let (output, finish_reason) =
-            get_response_content(line.response, &raw_request, &raw_response)?;
-        Ok(ProviderBatchInferenceOutput {
-            id: Uuid::parse_str(inference_id).map_err(|e| {
-                Error::new(ErrorDetails::InternalError {
-                    message: format!("Invalid inference ID: {e}"),
-                })
-            })?,
-            output,
-            raw_response,
-            usage,
-            finish_reason,
+fn make_provider_batch_inference_output(
+    line: GCPVertexBatchResponseLine,
+    model_name: &str,
+    provider_name: &str,
+) -> Result<ProviderBatchInferenceOutput, Error> {
+    let raw_request = line.request.to_string();
+    let request = GCPVertexGeminiRequestMinimal::deserialize(&*line.request).map_err(|e| {
+        Error::new(ErrorDetails::Serialization {
+            message: format!("Error deserializing batch request: {e}"),
         })
-    }
+    })?;
+    let raw_response = serde_json::to_string(&line.response).map_err(|e| {
+        Error::new(ErrorDetails::Serialization {
+            message: format!("Error serializing batch response: {e}"),
+        })
+    })?;
+    let inference_id = request.labels.get(INFERENCE_ID_LABEL).ok_or_else(|| {
+        Error::new(ErrorDetails::InternalError {
+            message: format!("Missing {INFERENCE_ID_LABEL} label on GCP batch request"),
+        })
+    })?;
+
+    let usage = line
+        .response
+        .usage_metadata
+        .clone()
+        .ok_or_else(|| {
+            Error::new(ErrorDetails::InferenceServer {
+                message: "GCP Vertex Gemini batch response has no usage metadata".to_string(),
+                raw_request: Some(raw_request.clone()),
+                raw_response: Some(raw_response.clone()),
+                provider_type: PROVIDER_TYPE.to_string(),
+            })
+        })?
+        .into();
+
+    let (output, finish_reason) = get_response_content(
+        line.response,
+        &raw_request,
+        &raw_response,
+        model_name,
+        provider_name,
+    )?;
+    Ok(ProviderBatchInferenceOutput {
+        id: Uuid::parse_str(inference_id).map_err(|e| {
+            Error::new(ErrorDetails::InternalError {
+                message: format!("Invalid inference ID: {e}"),
+            })
+        })?,
+        output,
+        raw_response,
+        usage,
+        finish_reason,
+    })
 }
 
 #[derive(Clone, Copy, Debug, Deserialize)]
@@ -599,31 +612,28 @@ impl InferenceProvider for GCPVertexGeminiProvider {
     /// GCP Vertex Gemini non-streaming API request
     async fn infer<'a>(
         &'a self,
-        ModelProviderRequest {
-            request,
-            provider_name: _,
-            model_name,
-        }: ModelProviderRequest<'a>,
+        provider_request: ModelProviderRequest<'a>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let mut request_body =
-            serde_json::to_value(GCPVertexGeminiRequest::new(request, &self.model_id)?).map_err(
-                |e| {
-                    Error::new(ErrorDetails::Serialization {
-                        message: format!(
-                            "Error serializing GCP Vertex Gemini request: {}",
-                            DisplayOrDebugGateway::new(e)
-                        ),
-                    })
-                },
-            )?;
+        let mut request_body = serde_json::to_value(GCPVertexGeminiRequest::new(
+            provider_request.request,
+            &self.model_id,
+        )?)
+        .map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!(
+                    "Error serializing GCP Vertex Gemini request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
+            })
+        })?;
         let headers = inject_extra_request_data(
-            &request.extra_body,
-            &request.extra_headers,
+            &provider_request.request.extra_body,
+            &provider_request.request.extra_headers,
             model_provider,
-            model_name,
+            provider_request.model_name,
             &mut request_body,
         )?;
         let api_key = self
@@ -674,8 +684,10 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                 response,
                 latency,
                 request: request_body,
-                generic_request: request,
+                generic_request: provider_request.request,
                 raw_response,
+                model_name: provider_request.model_name,
+                provider_name: provider_request.provider_name,
             };
             Ok(response_with_latency.try_into()?)
         } else {
@@ -737,6 +749,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                 ),
             })
         })?;
+
         let api_key = self
             .credentials
             .get_api_key(&self.audience, dynamic_api_keys)?;
@@ -1059,6 +1072,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                         raw_response,
                         &self.credentials,
                         dynamic_api_keys,
+                        batch_request,
                     )
                     .await?;
                 Ok(PollBatchInferenceResponse::Completed(batch_response))
@@ -1564,51 +1578,70 @@ enum GCPVertexGeminiResponseContentPart {
     // TODO (if needed): InlineData { inline_data: Blob },
     // TODO (if needed): FileData { file_data: FileData },
     FunctionCall(GCPVertexGeminiResponseFunctionCall),
+    ExecutableCode(serde_json::Value),
     // TODO (if needed): FunctionResponse
     // TODO (if needed): VideoMetadata { video_metadata: VideoMetadata },
 }
 
-impl From<GCPVertexGeminiResponseContentPart> for ContentBlockChunk {
+impl TryFrom<GCPVertexGeminiResponseContentPart> for ContentBlockChunk {
+    type Error = Error;
     /// GCP Vertex Gemini does not support parallel tool calling or multiple content blocks as far as I can tell.
     /// So there is no issue with bookkeeping IDs for content blocks.
     /// We should revisit this if they begin to support it.
-    fn from(part: GCPVertexGeminiResponseContentPart) -> Self {
+    fn try_from(part: GCPVertexGeminiResponseContentPart) -> Result<Self, Self::Error> {
         match part {
-            GCPVertexGeminiResponseContentPart::Text(text) => ContentBlockChunk::Text(TextChunk {
+            GCPVertexGeminiResponseContentPart::Text(text) => Ok(ContentBlockChunk::Text(TextChunk {
                 text,
                 id: "0".to_string(),
-            }),
+            })),
             GCPVertexGeminiResponseContentPart::FunctionCall(function_call) => {
                 let arguments = serialize_or_log(&function_call.args);
-                ContentBlockChunk::ToolCall(ToolCallChunk {
+                Ok(ContentBlockChunk::ToolCall(ToolCallChunk {
                     raw_name: function_call.name,
                     raw_arguments: arguments,
                     id: "0".to_string(),
-                })
+                }))
+            }
+            GCPVertexGeminiResponseContentPart::ExecutableCode(_) => {
+                Err(Error::new(ErrorDetails::InferenceServer {
+                    message: "executableCode is not supported in streaming response for GCP Vertex Gemini".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: None,
+                    raw_response: Some(serde_json::to_string(&part).unwrap_or_default()),
+                }))
             }
         }
     }
 }
 
-impl TryFrom<GCPVertexGeminiResponseContentPart> for ContentBlockOutput {
-    type Error = Error;
-    fn try_from(part: GCPVertexGeminiResponseContentPart) -> Result<Self, Self::Error> {
-        match part {
-            GCPVertexGeminiResponseContentPart::Text(text) => Ok(text.into()),
-            GCPVertexGeminiResponseContentPart::FunctionCall(function_call) => {
-                Ok(ContentBlockOutput::ToolCall(ToolCall {
-                    name: function_call.name,
-                    arguments: serde_json::to_string(&function_call.args).map_err(|e| {
-                        Error::new(ErrorDetails::Serialization {
-                            message: format!(
-                                "Error serializing function call arguments returned from GCP: {e}"
-                            ),
-                        })
-                    })?,
-                    // GCP doesn't have the concept of tool call ID so we generate one for our bookkeeping
-                    id: Uuid::now_v7().to_string(),
-                }))
-            }
+fn convert_to_output(
+    model_name: &str,
+    provider_name: &str,
+    part: GCPVertexGeminiResponseContentPart,
+) -> Result<ContentBlockOutput, Error> {
+    match part {
+        GCPVertexGeminiResponseContentPart::Text(text) => Ok(text.into()),
+        GCPVertexGeminiResponseContentPart::FunctionCall(function_call) => {
+            Ok(ContentBlockOutput::ToolCall(ToolCall {
+                name: function_call.name,
+                arguments: serde_json::to_string(&function_call.args).map_err(|e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!(
+                            "Error serializing function call arguments returned from GCP: {e}"
+                        ),
+                    })
+                })?,
+                // GCP doesn't have the concept of tool call ID so we generate one for our bookkeeping
+                id: Uuid::now_v7().to_string(),
+            }))
+        }
+        GCPVertexGeminiResponseContentPart::ExecutableCode(data) => {
+            Ok(ContentBlockOutput::Unknown {
+                data: serde_json::json!({
+                    "executableCode": data,
+                }),
+                model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
+            })
         }
     }
 }
@@ -1695,12 +1728,16 @@ struct GCPVertexGeminiResponseWithMetadata<'a> {
     latency: Latency,
     request: serde_json::Value,
     generic_request: &'a ModelInferenceRequest<'a>,
+    model_name: &'a str,
+    provider_name: &'a str,
 }
 
 fn get_response_content(
     response: GCPVertexGeminiResponse,
     raw_request: &str,
     raw_response: &str,
+    model_name: &str,
+    provider_name: &str,
 ) -> Result<(Vec<ContentBlockOutput>, Option<FinishReason>), Error> {
     // GCP Vertex Gemini response can contain multiple candidates and each of these can contain
     // multiple content parts. We will only use the first candidate but handle all parts of the response therein.
@@ -1722,7 +1759,7 @@ fn get_response_content(
         Some(content) => content
             .parts
             .into_iter()
-            .map(|part| part.try_into())
+            .map(|part| convert_to_output(model_name, provider_name, part))
             .collect::<Result<Vec<ContentBlockOutput>, Error>>()?,
         None => vec![],
     };
@@ -1738,6 +1775,8 @@ impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceR
             latency,
             request: request_body,
             generic_request,
+            model_name,
+            provider_name,
         } = response;
 
         let usage = response
@@ -1764,7 +1803,13 @@ impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceR
         let system = generic_request.system.clone();
         let input_messages = generic_request.messages.clone();
 
-        let (content, finish_reason) = get_response_content(response, &raw_request, &raw_response)?;
+        let (content, finish_reason) = get_response_content(
+            response,
+            &raw_request,
+            &raw_response,
+            model_name,
+            provider_name,
+        )?;
 
         Ok(ProviderInferenceResponse::new(
             ProviderInferenceResponseArgs {
@@ -1810,7 +1855,11 @@ impl TryFrom<GCPVertexGeminiStreamResponseWithMetadata> for ProviderInferenceRes
 
         // GCP sometimes returns chunks without content (e.g. they might have usage only).
         let mut content: Vec<ContentBlockChunk> = match first_candidate.content {
-            Some(content) => content.parts.into_iter().map(|part| part.into()).collect(),
+            Some(content) => content
+                .parts
+                .into_iter()
+                .map(|part| part.try_into())
+                .collect::<Result<Vec<ContentBlockChunk>, Error>>()?,
             None => vec![],
         };
 
@@ -1978,7 +2027,7 @@ mod tests {
     #[test]
     fn test_from_tool_choice() {
         let tool_choice = ToolChoice::Auto;
-        let supports_any_model_name = "gemini-1.5-pro-001";
+        let supports_any_model_name = "gemini-2.5-pro-preview-05-06";
         let tool_config = GCPVertexGeminiToolConfig::from((&tool_choice, supports_any_model_name));
         assert_eq!(
             tool_config,
@@ -2145,7 +2194,8 @@ mod tests {
             ..Default::default()
         };
         // JSON schema should be supported for Gemini Pro models
-        let result = GCPVertexGeminiRequest::new(&inference_request, "gemini-1.5-pro-001");
+        let result =
+            GCPVertexGeminiRequest::new(&inference_request, "gemini-2.5-pro-preview-05-06");
         let request = result.unwrap();
         assert_eq!(request.contents.len(), 3);
         assert_eq!(request.contents[0].role, GCPVertexGeminiRole::User);
@@ -2328,6 +2378,8 @@ mod tests {
             request: serde_json::to_value(&request_body).unwrap(),
             generic_request: &generic_request,
             raw_response: raw_response.clone(),
+            model_name: "gemini-pro",
+            provider_name: "gcp_vertex_gemini",
         };
         let model_inference_response: ProviderInferenceResponse =
             response_with_latency.try_into().unwrap();
@@ -2414,6 +2466,8 @@ mod tests {
             request: serde_json::to_value(&request_body).unwrap(),
             generic_request: &generic_request,
             raw_response: raw_response.clone(),
+            model_name: "gemini-pro",
+            provider_name: "gcp_vertex_gemini",
         };
         let model_inference_response: ProviderInferenceResponse =
             response_with_latency.try_into().unwrap();
@@ -2506,6 +2560,8 @@ mod tests {
             request: serde_json::to_value(&request_body).unwrap(),
             generic_request: &generic_request,
             raw_response: raw_response.clone(),
+            model_name: "gemini-pro",
+            provider_name: "gcp_vertex_gemini",
         };
         let model_inference_response: ProviderInferenceResponse =
             response_with_latency.try_into().unwrap();
@@ -2576,7 +2632,8 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let (tools, tool_choice) = prepare_tools(&request_with_tools, "gemini-1.5-pro-001");
+        let (tools, tool_choice) =
+            prepare_tools(&request_with_tools, "gemini-2.5-pro-preview-05-06");
         let tools = tools.unwrap();
         let tool_config = tool_choice.unwrap();
         assert_eq!(

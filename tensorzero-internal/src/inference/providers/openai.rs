@@ -868,6 +868,7 @@ impl OpenAIProvider {
                 raw_response,
                 provider_type: PROVIDER_TYPE.to_string(),
             },
+            |r| r.try_into(),
         )
         .await
     }
