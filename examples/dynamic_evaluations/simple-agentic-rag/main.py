@@ -2,11 +2,10 @@ import asyncio
 import itertools
 from asyncio import Semaphore
 
-from tensorzero import AsyncTensorZeroGateway
-
 from agent import ask_question
 from dataset import load_beerqa
 from judge import judge_answer
+from tensorzero import AsyncTensorZeroGateway
 
 MAX_SAMPLES = 10
 CONCURRENCY = 10
@@ -44,7 +43,11 @@ async def evaluate_variant_pins(
     # and a 'answers' key with a list of strings value
     # We want to evaluate the agent on each key
     display_name = f"agent-{variant_pins['multi_hop_rag_agent']}-compact_context-{variant_pins['compact_context']}"
-    run_info = await t0.dynamic_evaluation_run(variants=variant_pins, project_name="beerqa-agentic-rag", display_name=display_name)
+    run_info = await t0.dynamic_evaluation_run(
+        variants=variant_pins,
+        project_name="beerqa-agentic-rag",
+        display_name=display_name,
+    )
 
     # Create tasks for each question
     question_tasks = []
@@ -61,7 +64,9 @@ async def evaluate_question(
     t0: AsyncTensorZeroGateway, semaphore: Semaphore, question: dict, run_id: str
 ):
     try:
-        episode_info = await t0.dynamic_evaluation_run_episode(run_id=run_id, task_name=question["id"])
+        episode_info = await t0.dynamic_evaluation_run_episode(
+            run_id=run_id, task_name=question["id"]
+        )
         episode_id = episode_info.episode_id
         result = await ask_question(
             t0, semaphore, question["question"], episode_id=episode_id, verbose=False
@@ -69,7 +74,6 @@ async def evaluate_question(
         await judge_answer(t0, semaphore, question, result.answer, episode_id, result.t)
     except Exception as e:
         print(f"Error evaluating question {question['id']}: {e}")
-        
 
 
 if __name__ == "__main__":
