@@ -1,4 +1,8 @@
 #![expect(clippy::unwrap_used, clippy::expect_used, clippy::print_stdout)]
+use crate::endpoints::datasets::{
+    ChatInferenceDatapoint, ClickHouseChatInferenceDatapoint, ClickHouseJsonInferenceDatapoint,
+    JsonInferenceDatapoint,
+};
 use crate::endpoints::dynamic_evaluation_run::{
     DynamicEvaluationRunEpisodeRow, DynamicEvaluationRunRow,
 };
@@ -73,6 +77,55 @@ pub async fn select_json_datapoint_clickhouse(
         .unwrap();
     let json: Value = serde_json::from_str(&text).ok()?;
     Some(json)
+}
+
+pub async fn select_chat_dataset_clickhouse(
+    clickhouse_connection_info: &ClickHouseConnectionInfo,
+    dataset_name: &str,
+) -> Option<Vec<ChatInferenceDatapoint>> {
+    #[cfg(feature = "e2e_tests")]
+    clickhouse_flush_async_insert(clickhouse_connection_info).await;
+
+    let query = format!(
+        "SELECT * FROM ChatInferenceDatapoint FINAL WHERE dataset_name = '{dataset_name}' AND staled_at IS NULL FORMAT JSONEachRow"
+    );
+
+    let text = clickhouse_connection_info
+        .run_query_synchronous(query, None)
+        .await
+        .unwrap();
+    let lines = text.lines();
+    let mut chat_rows: Vec<ChatInferenceDatapoint> = Vec::new();
+    for line in lines {
+        let chat_row: ClickHouseChatInferenceDatapoint = serde_json::from_str(line).unwrap();
+        chat_rows.push(chat_row.into());
+    }
+    Some(chat_rows)
+}
+
+pub async fn select_json_dataset_clickhouse(
+    clickhouse_connection_info: &ClickHouseConnectionInfo,
+    dataset_name: &str,
+) -> Option<Vec<JsonInferenceDatapoint>> {
+    #[cfg(feature = "e2e_tests")]
+    clickhouse_flush_async_insert(clickhouse_connection_info).await;
+
+    let query = format!(
+        "SELECT * FROM JsonInferenceDatapoint FINAL WHERE dataset_name = '{dataset_name}' AND staled_at IS NULL FORMAT JSONEachRow"
+    );
+
+    let text = clickhouse_connection_info
+        .run_query_synchronous(query, None)
+        .await
+        .unwrap();
+    let lines = text.lines();
+    let mut json_rows: Vec<JsonInferenceDatapoint> = Vec::new();
+    for line in lines {
+        let json_row: ClickHouseJsonInferenceDatapoint = serde_json::from_str(line).unwrap();
+        json_rows.push(json_row.into());
+    }
+
+    Some(json_rows)
 }
 
 pub async fn select_chat_inference_clickhouse(

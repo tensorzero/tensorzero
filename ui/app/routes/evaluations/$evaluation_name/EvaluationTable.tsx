@@ -35,15 +35,16 @@ import OutputComponent from "~/components/inference/Output";
 import "./tooltip-styles.css";
 import { useConfig } from "~/context/config";
 import { getEvaluatorMetricName } from "~/utils/clickhouse/evaluations";
-import type { MetricConfig } from "~/utils/config/metric";
+import {
+  formatMetricSummaryValue,
+  type MetricConfig,
+} from "~/utils/config/metric";
 import { type EvaluatorConfig } from "~/utils/config/evaluations";
 import {
   useColorAssigner,
   ColorAssignerProvider,
 } from "~/hooks/evaluations/ColorAssigner";
-import MetricValue, {
-  isCutoffFailed,
-} from "~/components/evaluations/MetricValue";
+import MetricValue, { isCutoffFailed } from "~/components/metric/MetricValue";
 import EvaluationFeedbackEditor from "~/components/evaluations/EvaluationFeedbackEditor";
 
 // Enhanced TruncatedText component that can handle complex structures
@@ -519,10 +520,15 @@ export function EvaluationTable({
                                         <MetricValue
                                           value={metricValue.value}
                                           metricType={metricType}
-                                          evaluatorConfig={evaluatorConfig}
                                           isHumanFeedback={
                                             metricValue.is_human_feedback
                                           }
+                                          optimize={
+                                            evaluatorConfig.type === "llm_judge"
+                                              ? evaluatorConfig.optimize
+                                              : "max"
+                                          }
+                                          cutoff={evaluatorConfig.cutoff}
                                         />
                                         {/* Make feedback editor appear on hover */}
                                         {evaluationType === "llm_judge" && (
@@ -669,25 +675,34 @@ const EvaluatorProperties = ({
               stat.evaluation_run_id,
               false,
             ); // Pass 'false' to get non-hover version
-
+            const failed =
+              evaluatorConfig.type === "llm_judge" && evaluatorConfig.cutoff
+                ? isCutoffFailed(
+                    stat.mean_metric,
+                    evaluatorConfig.optimize,
+                    evaluatorConfig.cutoff,
+                  )
+                : false;
             return (
               <div
                 key={stat.evaluation_run_id}
                 className={`mt-1 flex items-center justify-center gap-1.5 ${
-                  isCutoffFailed(stat.mean_metric, evaluatorConfig)
-                    ? "text-red-700"
-                    : ""
+                  failed ? "text-red-700" : ""
                 }`}
               >
                 <div
                   className={`h-2 w-2 rounded-full ${variantColorClass} shrink-0`}
                 ></div>
                 <span>
-                  {formatSummaryValue(stat.mean_metric, metricConfig)}
+                  {formatMetricSummaryValue(stat.mean_metric, metricConfig)}
                   {stat.stderr_metric ? (
                     <>
                       {" "}
-                      ± {formatSummaryValue(stat.stderr_metric, metricConfig)}
+                      ±{" "}
+                      {formatMetricSummaryValue(
+                        stat.stderr_metric,
+                        metricConfig,
+                      )}
                     </>
                   ) : null}{" "}
                   (n={stat.datapoint_count})
@@ -699,13 +714,4 @@ const EvaluatorProperties = ({
       )}
     </div>
   );
-};
-
-const formatSummaryValue = (value: number, metricConfig: MetricConfig) => {
-  if (metricConfig.type === "boolean") {
-    return `${Math.round(value * 100)}%`;
-  } else if (metricConfig.type === "float") {
-    return value.toFixed(2);
-  }
-  return value;
 };

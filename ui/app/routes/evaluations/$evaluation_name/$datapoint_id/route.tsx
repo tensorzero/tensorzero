@@ -21,7 +21,7 @@ import {
   type ConsolidatedMetric,
 } from "~/utils/clickhouse/evaluations";
 import { useConfig } from "~/context/config";
-import MetricValue from "~/components/evaluations/MetricValue";
+import MetricValue from "~/components/metric/MetricValue";
 import {
   getMetricType,
   type EvaluatorConfig,
@@ -356,7 +356,12 @@ const MetricRow = ({
       <MetricValue
         value={String(metricValue)}
         metricType={getMetricType(evaluatorConfig)}
-        evaluatorConfig={evaluatorConfig}
+        optimize={
+          evaluatorConfig.type === "llm_judge"
+            ? evaluatorConfig.optimize
+            : "max"
+        }
+        cutoff={evaluatorConfig.cutoff}
         isHumanFeedback={isHumanFeedback}
         className="text-sm"
       />

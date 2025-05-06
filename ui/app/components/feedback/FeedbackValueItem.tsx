@@ -46,7 +46,6 @@ function BooleanItem({
   status: "success" | "failure" | "default";
   isHumanFeedback: boolean;
 }) {
-  console.log("isHumanFeedback", isHumanFeedback);
   return (
     <ValueItem iconType={status === "default" ? "unknown" : status}>
       <span>{value ? "True" : "False"}</span>
