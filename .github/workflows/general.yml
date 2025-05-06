@@ -96,7 +96,9 @@ jobs:
         continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
       - name: Create the `object_storage` directory for the multimodal-vision-finetuning example
-        run: mkdir -p examples/multimodal-vision-finetuning/object_storage
+        run: |
+          mkdir -p examples/multimodal-vision-finetuning/object_storage
+          chmod 777 examples/multimodal-vision-finetuning/object_storage
 
       - name: Check all docker-compose.yml files
         run: ./ci/check-all-docker-compose.sh
