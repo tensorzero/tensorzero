@@ -181,43 +181,6 @@ const getEvaluationResultDatapointIdQuery = (
 `;
 };
 
-export async function getAllInferenceIds(
-  function_name: string,
-  function_type: "chat" | "json",
-  metric_names: string[],
-  evaluation_run_ids: string[],
-  limit: number = 100,
-  offset: number = 0,
-) {
-  const query = `
-    WITH all_inference_ids AS (
-      SELECT DISTINCT inference_id
-        FROM TagInference WHERE key = 'tensorzero::evaluation_run_id'
-        AND function_name = {function_name:String}
-        AND value IN ({evaluation_run_ids:Array(String)})
-    )
-      SELECT DISTINCT value as datapoint_id
-      FROM TagInference
-      WHERE key = 'tensorzero::datapoint_id'
-      AND function_name = {function_name:String}
-      AND inference_id IN (SELECT inference_id FROM all_inference_ids)
-      ORDER BY toUInt128(toUUID(datapoint_id)) DESC
-  `;
-  const result = await clickhouseClient.query({
-    query,
-    format: "JSONEachRow",
-    query_params: {
-      evaluation_run_ids: evaluation_run_ids,
-      function_name: function_name,
-      limit: limit,
-      offset: offset,
-    },
-  });
-  const rows = await result.json<{ datapoint_id: string }>();
-  console.log("rows num2", rows.length);
-  return rows.map((row) => row.datapoint_id);
-}
-
 export async function getEvaluationResults(
   function_name: string,
   function_type: "chat" | "json",
