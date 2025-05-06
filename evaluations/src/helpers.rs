@@ -71,6 +71,7 @@ pub fn get_cache_options(inference_cache: CacheEnabledMode) -> CacheParamsOption
     CacheParamsOptions {
         enabled: inference_cache,
         max_age_s: None,
+        lookback_s: None,
     }
 }
 
