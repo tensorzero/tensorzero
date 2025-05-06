@@ -24,6 +24,7 @@ pub mod migration_0022;
 pub mod migration_0023;
 pub mod migration_0024;
 pub mod migration_0025;
+pub mod migration_0027;
 
 /// Returns true if the table exists, false if it does not
 /// Errors if the query fails
@@ -161,4 +162,14 @@ async fn get_table_engine(
     );
     let result = clickhouse.run_query_synchronous(query, None).await?;
     Ok(result.trim().to_string())
+}
+
+async fn check_index_exists(
+    clickhouse: &ClickHouseConnectionInfo,
+    table: &str,
+    index: &str,
+) -> Result<bool, Error> {
+    let query = format!("SELECT 1 FROM system.data_skipping_indices WHERE database='{}' AND table='{}' AND name='{}'", clickhouse.database(), table, index);
+    let result = clickhouse.run_query_synchronous(query, None).await?;
+    Ok(result.trim() == "1")
 }
