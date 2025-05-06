@@ -2,10 +2,11 @@ import asyncio
 import itertools
 from asyncio import Semaphore
 
+from tensorzero import AsyncTensorZeroGateway
+
 from agent import ask_question
 from dataset import load_beerqa
 from judge import judge_answer
-from tensorzero import AsyncTensorZeroGateway
 
 MAX_SAMPLES = 10
 CONCURRENCY = 10

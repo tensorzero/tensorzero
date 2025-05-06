@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from tensorzero import AsyncTensorZeroGateway, ToolCall, ToolResult
 from tensorzero.types import ToDictEncoder
+
 from tools import load_wikipedia_page, search_wikipedia
 
 # ## Agentic RAG
