@@ -1,0 +1,6 @@
+[project]
+name = "tensorzero-examples-mcp-model-context-protocol"
+version = "0.0.0"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["mcp>=1.6.0", "tensorzero"]
