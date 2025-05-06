@@ -1,6 +1,5 @@
 use futures::{Stream, StreamExt, TryStreamExt};
 use lazy_static::lazy_static;
-use reqwest::multipart::{Form, Part};
 use reqwest::StatusCode;
 use reqwest_eventsource::{Event, RequestBuilderExt};
 use secrecy::{ExposeSecret, SecretString};
@@ -8,27 +7,22 @@ use serde::de::IntoDeserializer;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
 use std::borrow::Cow;
-use std::io::Write;
-use std::pin::Pin;
 use std::sync::OnceLock;
 use std::time::Duration;
 use tokio::time::Instant;
 use tracing::instrument;
 use url::Url;
+#[cfg(test)]
 use uuid::Uuid;
 
 use crate::cache::ModelProviderRequest;
-use crate::embeddings::{EmbeddingProvider, EmbeddingProviderResponse, EmbeddingRequest};
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
-use crate::inference::types::batch::{
-    ProviderBatchInferenceOutput, ProviderBatchInferenceResponse,
-};
+use crate::inference::types::batch::{StartBatchProviderInferenceResponse};
 use crate::inference::types::resolved_input::ImageWithPath;
 use crate::inference::types::{
-    batch::{BatchStatus, StartBatchProviderInferenceResponse},
     ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponse, ProviderInferenceResponseChunk, RequestMessage, Role, Text,
@@ -42,8 +36,7 @@ use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use crate::inference::providers::helpers::inject_extra_request_data;
 
-use super::helpers::{parse_jsonl_batch_file, JsonlBatchFileInfo};
-use super::provider_trait::{TensorZeroEventError, WrappedProvider};
+use super::provider_trait::{TensorZeroEventError};
 
 lazy_static! {
     static ref OPENROUTER_DEFAULT_BASE_URL: Url = {
@@ -448,6 +441,8 @@ pub(super) fn get_chat_url(base_url: &Url) -> Result<Url, Error> {
     })
 }
 
+// Functions only needed for tests
+#[cfg(test)]
 fn get_file_url(base_url: &Url, file_id: Option<&str>) -> Result<Url, Error> {
     let mut url = base_url.clone();
     if !url.path().ends_with('/') {
