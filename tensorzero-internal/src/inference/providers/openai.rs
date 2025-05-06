@@ -346,13 +346,15 @@ impl InferenceProvider for OpenAIProvider {
         let start_time = Instant::now();
         let mut request_builder = http_client
             .post(request_url)
-            .header("Content-Type", "application/json")
-            .headers(headers);
+            .header("Content-Type", "application/json");
         if let Some(api_key) = api_key {
             request_builder = request_builder.bearer_auth(api_key.expose_secret());
         }
         let event_source = request_builder
             .json(&request_body)
+            // Important - the 'headers' call should come just before we sent the request with '.eventsource()',
+            // so that users can override any of the headers that we set.
+            .headers(headers)
             .eventsource()
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {

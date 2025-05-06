@@ -35,6 +35,8 @@ pub struct DynamicEvaluationRunParams {
     pub project_name: Option<String>,
     #[serde(default)]
     pub display_name: Option<String>,
+    #[serde(default)]
+    pub internal: bool, // For internal use only
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -59,7 +61,7 @@ pub async fn dynamic_evaluation_run(
     }: AppStateData,
     params: DynamicEvaluationRunParams,
 ) -> Result<DynamicEvaluationRunResponse, Error> {
-    validate_tags(&params.tags, false)?;
+    validate_tags(&params.tags, params.internal)?;
     validate_variant_pins(&params.variants, &config)?;
     let run_id = Uuid::now_v7();
     write_dynamic_evaluation_run(

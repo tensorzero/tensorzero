@@ -429,18 +429,20 @@ export async function searchEvaluationRuns(
   limit: number = 100,
   offset: number = 0,
 ) {
-  // This query is not efficient since it is joining on the inference id.
-  // We should rewrite this with some kind of MV for performance reasons if it becomes a bottleneck.
   const query = `
-    SELECT DISTINCT run_tag.value as evaluation_run_id, run_tag.variant_name as variant_name
-    FROM TagInference AS name_tag
-    INNER JOIN TagInference AS run_tag
-      ON name_tag.inference_id = run_tag.inference_id
-    WHERE name_tag.key = 'tensorzero::evaluation_name'
-      AND name_tag.value = {evaluation_name:String}
-      AND run_tag.key = 'tensorzero::evaluation_run_id'
-      AND run_tag.function_name = {function_name:String}
-      AND (positionCaseInsensitive(run_tag.value, {search_query:String}) > 0 OR positionCaseInsensitive(run_tag.variant_name, {search_query:String}) > 0)
+    WITH
+      evaluation_inference_ids AS (
+        SELECT inference_id
+        FROM TagInference
+        WHERE key = 'tensorzero::evaluation_name'
+        AND value = {evaluation_name:String}
+      )
+    SELECT DISTINCT value as evaluation_run_id, variant_name
+    FROM TagInference
+    WHERE key = 'tensorzero::evaluation_run_id'
+      AND function_name = {function_name:String}
+      AND inference_id IN (SELECT inference_id FROM evaluation_inference_ids)
+      AND (positionCaseInsensitive(value, {search_query:String}) > 0 OR positionCaseInsensitive(variant_name, {search_query:String}) > 0)
     ORDER BY toUInt128(toUUID(evaluation_run_id)) DESC
     LIMIT {limit:UInt32}
     OFFSET {offset:UInt32}

@@ -1,3 +1,4 @@
+import logging
 import os
 import typing as t
 
@@ -5,9 +6,14 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from tensorzero import AsyncTensorZeroGateway
 
-from .sft.common import FineTuningRequest
-from .sft.fireworks_sft import FireworksSFTJob
-from .sft.openai_sft import BaseSFTJob, OpenAISFTJob
+from optimizations_server.sft.common import FineTuningRequest
+from optimizations_server.sft.fireworks_sft import FireworksSFTJob
+from optimizations_server.sft.openai_sft import BaseSFTJob, OpenAISFTJob
+
+logging.basicConfig(
+    format="%(asctime)s.%(msecs)03dZ  %(levelname)-5s %(name)s: %(message)s",
+    datefmt="%Y-%m-%dT%H:%M:%S",
+)
 
 CONFIG_PATH = os.environ.get("TENSORZERO_UI_CONFIG_PATH", "config/tensorzero.toml")
 CLICKHOUSE_URL = os.environ["TENSORZERO_CLICKHOUSE_URL"]

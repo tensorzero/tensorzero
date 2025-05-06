@@ -1,7 +1,9 @@
+import logging
 import typing as t
-import warnings
 
 import tiktoken
+
+logger = logging.getLogger(__name__)
 
 
 def get_encoding_for_model(model: str) -> tiktoken.Encoding:
@@ -19,7 +21,7 @@ def get_encoding_for_model(model: str) -> tiktoken.Encoding:
     try:
         return tiktoken.encoding_for_model(model)
     except KeyError:
-        warnings.warn(f"Unknown model: {model}, using cl100k_base")
+        logger.warning(f"Unknown model: {model}, using cl100k_base")
         return tiktoken.get_encoding("cl100k_base")
 
 
@@ -54,7 +56,7 @@ def num_tokens_from_messages(
     elif "gpt-4" in model:
         return num_tokens_from_messages(messages, encoding, model="gpt-4-0613")
     else:
-        warnings.warn(
+        logger.warning(
             "Unknown model %s for token counting, using default message/name counts"
             % model
         )
@@ -66,7 +68,7 @@ def num_tokens_from_messages(
             try:
                 num_tokens += len(encoding.encode(value))
             except Exception as e:
-                warnings.warn(f"Error encoding message: {e}. Skipping.")
+                logger.warning(f"Error encoding message: {e}. Skipping.")
                 continue
             if key == "name":
                 num_tokens += tokens_per_name
