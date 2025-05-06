@@ -401,20 +401,6 @@ pub fn stream_groq(
     })
 }
 
-impl GroqProvider {
-
-fn get_embedding_url(base_url: &Url) -> Result<Url, Error> {
-    let mut url = base_url.clone();
-    if !url.path().ends_with('/') {
-        url.set_path(&format!("{}/", url.path()));
-    }
-    url.join("embeddings").map_err(|e| {
-        Error::new(ErrorDetails::InvalidBaseUrl {
-            message: e.to_string(),
-        })
-    })
-}
-
 pub(super) fn handle_groq_error(
     response_code: StatusCode,
     response_body: &str,
@@ -1364,92 +1350,6 @@ fn groq_to_tensorzero_chunk(
         finish_reason,
     ))
 }
-
-#[derive(Debug, Serialize)]
-struct GroqEmbeddingRequest<'a> {
-    model: &'a str,
-    input: &'a str,
-}
-
-impl<'a> GroqEmbeddingRequest<'a> {
-    fn new(model: &'a str, input: &'a str) -> Self {
-        Self { model, input }
-    }
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct GroqEmbeddingResponse {
-    data: Vec<GroqEmbeddingData>,
-    usage: GroqUsage,
-}
-
-struct GroqEmbeddingResponseWithMetadata<'a> {
-    response: GroqEmbeddingResponse,
-    latency: Latency,
-    request: GroqEmbeddingRequest<'a>,
-    raw_response: String,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct GroqEmbeddingData {
-    embedding: Vec<f32>,
-}
-
-impl<'a> TryFrom<GroqEmbeddingResponseWithMetadata<'a>> for EmbeddingProviderResponse {
-    type Error = Error;
-    fn try_from(response: GroqEmbeddingResponseWithMetadata<'a>) -> Result<Self, Self::Error> {
-        let GroqEmbeddingResponseWithMetadata {
-            response,
-            latency,
-            request,
-            raw_response,
-        } = response;
-        let raw_request = serde_json::to_string(&request).map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
-                message: format!(
-                    "Error serializing request body as JSON: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-                raw_request: Some(serde_json::to_string(&request).unwrap_or_default()),
-                raw_response: None,
-                provider_type: PROVIDER_TYPE.to_string(),
-            })
-        })?;
-
-        if response.data.len() != 1 {
-            return Err(Error::new(ErrorDetails::InferenceServer {
-                message: "Expected exactly one embedding in response".to_string(),
-                raw_request: Some(raw_request.clone()),
-                raw_response: Some(raw_response.clone()),
-                provider_type: PROVIDER_TYPE.to_string(),
-            }));
-        }
-        let embedding = response
-            .data
-            .into_iter()
-            .next()
-            .ok_or_else(|| {
-                Error::new(ErrorDetails::InferenceServer {
-                    message: "Expected exactly one embedding in response".to_string(),
-                    raw_request: Some(raw_request.clone()),
-                    raw_response: Some(raw_response.clone()),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                })
-            })?
-            .embedding;
-
-        Ok(EmbeddingProviderResponse::new(
-            embedding,
-            request.input.to_string(),
-            raw_request,
-            raw_response,
-            response.usage.into(),
-            latency,
-        ))
-    }
-}
-
-
 #[cfg(test)]
 mod tests {
 
