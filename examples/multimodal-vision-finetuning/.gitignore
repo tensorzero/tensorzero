@@ -5,3 +5,4 @@ object_storage/
 data/papers/
 data/images/
 data/dataset/
+data/labels.csv
