@@ -137,65 +137,7 @@ impl OpenRouterCredentials {
     }
 }
 
-impl WrappedProvider for OpenRouterProvider {
-    fn make_body<'a>(
-        &'a self,
-        ModelProviderRequest {
-            request,
-            provider_name: _,
-            model_name: _,
-        }: ModelProviderRequest<'a>,
-    ) -> Result<serde_json::Value, Error> {
-        let request_body = serde_json::to_value(OpenRouterRequest::new(&self.model_name, request)?)
-            .map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: format!(
-                        "Error serializing OpenRouter request: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                })
-            })?;
-        Ok(request_body)
-    }
-    fn parse_response(
-        &self,
-        request: &ModelInferenceRequest,
-        raw_request: String,
-        raw_response: String,
-        latency: Latency,
-    ) -> Result<ProviderInferenceResponse, Error> {
-        let response = serde_json::from_str(&raw_response).map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
-                message: format!(
-                    "Error parsing JSON response: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-                raw_request: Some(raw_request.clone()),
-                raw_response: Some(raw_response.clone()),
-                provider_type: PROVIDER_TYPE.to_string(),
-            })
-        })?;
 
-        OpenRouterResponseWithMetadata {
-            response,
-            raw_response,
-            latency,
-            raw_request,
-            generic_request: request,
-        }
-        .try_into()
-    }
-
-    fn stream_events(
-        &self,
-        event_source: Pin<
-            Box<dyn Stream<Item = Result<Event, TensorZeroEventError>> + Send + 'static>,
-        >,
-        start_time: Instant,
-    ) -> ProviderInferenceResponseStreamInner {
-        stream_openrouter(PROVIDER_TYPE.to_string(), event_source, start_time)
-    }
-}
 
 impl InferenceProvider for OpenRouterProvider {
     async fn infer<'a>(
@@ -212,7 +154,15 @@ impl InferenceProvider for OpenRouterProvider {
         )?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
-        let mut request_body = self.make_body(request)?;
+        let request_body_obj = OpenRouterRequest::new(&self.model_name, request.request)?;
+        let mut request_body = serde_json::to_value(request_body_obj).map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!(
+                    "Error serializing request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
+            })
+        })?;
         let headers = inject_extra_request_data(
             &request.request.extra_body,
             &request.request.extra_headers,
@@ -392,7 +342,7 @@ impl InferenceProvider for OpenRouterProvider {
         )
         .peekable();
         Ok((stream, raw_request))
-    }
+    }  
 
     async fn start_batch_inference<'a>(
         &'a self,
