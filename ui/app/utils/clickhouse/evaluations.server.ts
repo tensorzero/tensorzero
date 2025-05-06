@@ -286,48 +286,48 @@ export async function getEvaluationStatistics(
   const inference_table_name =
     function_type === "chat" ? "ChatInference" : "JsonInference";
   const query = `
+  WITH ${getEvaluationResultDatapointIdQuery()},
+    filtered_inference AS (
+      SELECT * FROM {inference_table_name:Identifier}
+      WHERE id IN (SELECT inference_id FROM all_inference_ids)
+      AND function_name = {function_name:String}
+    ),
+   filtered_feedback AS (
+      SELECT metric_name,
+             argMax(value, timestamp) as value,
+             argMax(tags['tensorzero::evaluator_inference_id'], timestamp) as evaluator_inference_id,
+             argMax(id, timestamp) as feedback_id,
+             target_id
+      FROM BooleanMetricFeedback
+      WHERE metric_name IN ({metric_names:Array(String)})
+      AND target_id IN (SELECT inference_id FROM all_inference_ids)
+      GROUP BY target_id, metric_name -- for the argMax
+      UNION ALL
+      SELECT metric_name,
+             argMax(value, timestamp) as value,
+             argMax(tags['tensorzero::evaluator_inference_id'], timestamp) as evaluator_inference_id,
+             argMax(id, timestamp) as feedback_id,
+             target_id
+      FROM FloatMetricFeedback
+      WHERE metric_name IN ({metric_names:Array(String)})
+      AND target_id IN (SELECT inference_id FROM all_inference_ids)
+      GROUP BY target_id, metric_name -- for the argMax
+    )
   SELECT
-    ci.tags['tensorzero::evaluation_run_id'] AS evaluation_run_id,
-    feedback.metric_name AS metric_name,
+    filtered_inference.tags['tensorzero::evaluation_run_id'] AS evaluation_run_id,
+    filtered_feedback.metric_name AS metric_name,
     toUInt32(count()) AS datapoint_count,
-    avg(toFloat64(feedback.value)) AS mean_metric,
-    stddevSamp(toFloat64(feedback.value)) / sqrt(count()) AS stderr_metric
-  FROM (
-    ${getEvaluationResultDatapointIdQuery()}
-  ) dp
-  INNER JOIN TagInference datapoint_tag FINAL
-    ON dp_id = toUUIDOrNull(datapoint_tag.value)
-    AND datapoint_tag.key = 'tensorzero::datapoint_id'
-    AND datapoint_tag.function_name = {function_name:String}
-  INNER JOIN {inference_table_name:Identifier} ci
-    ON datapoint_tag.inference_id = ci.id
-    AND ci.function_name = {function_name:String}
-    AND ci.variant_name = datapoint_tag.variant_name
-    AND ci.episode_id = datapoint_tag.episode_id
-  INNER JOIN (
-    SELECT target_id,
-           metric_name,
-           argMax(value, timestamp) as value
-    FROM BooleanMetricFeedback
-    WHERE metric_name IN ({metric_names:Array(String)})
-    GROUP BY target_id, metric_name -- for the argMax
-    UNION ALL
-    SELECT target_id,
-           metric_name,
-           argMax(value, timestamp) as value
-    FROM FloatMetricFeedback
-    WHERE metric_name IN ({metric_names:Array(String)})
-    GROUP BY target_id, metric_name -- for the argMax
-  ) feedback
-    ON feedback.target_id = ci.id
-  WHERE
-     ci.tags['tensorzero::evaluation_run_id'] IN ({evaluation_run_ids:Array(String)})
-    AND feedback.value IS NOT NULL
+    avg(toFloat64(filtered_feedback.value)) AS mean_metric,
+    stddevSamp(toFloat64(filtered_feedback.value)) / sqrt(count()) AS stderr_metric
+  FROM filtered_inference
+  INNER JOIN filtered_feedback
+    ON filtered_feedback.target_id = filtered_inference.id
+    AND filtered_feedback.value IS NOT NULL
   GROUP BY
-    ci.tags['tensorzero::evaluation_run_id'],
-    feedback.metric_name
+    filtered_inference.tags['tensorzero::evaluation_run_id'],
+    filtered_feedback.metric_name
   ORDER BY
-    toUInt128(toUUID(ci.tags['tensorzero::evaluation_run_id'])) DESC
+    toUInt128(toUUID(filtered_inference.tags['tensorzero::evaluation_run_id'])) DESC
   `;
 
   const result = await clickhouseClient.query({

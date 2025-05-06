@@ -346,16 +346,16 @@ describe("getEvaluationStatistics", () => {
     expect(statistics[2].metric_name).toBe(
       "tensorzero::evaluation_name::entity_extraction::evaluator_name::exact_match",
     );
-    expect(statistics[2].datapoint_count).toBe(41);
-    expect(statistics[2].mean_metric).toBeCloseTo(0.5122);
+    expect(statistics[2].datapoint_count).toBe(42);
+    expect(statistics[2].mean_metric).toBeCloseTo(0.524);
     expect(statistics[2].stderr_metric).toBeCloseTo(0.08);
 
     expect(statistics[3].evaluation_run_id).toBe(evaluation_run_id2);
     expect(statistics[3].metric_name).toBe(
       "tensorzero::evaluation_name::entity_extraction::evaluator_name::count_sports",
     );
-    expect(statistics[3].datapoint_count).toBe(41);
-    expect(statistics[3].mean_metric).toBeCloseTo(0.7805);
+    expect(statistics[3].datapoint_count).toBe(42);
+    expect(statistics[3].mean_metric).toBeCloseTo(0.762);
     expect(statistics[3].stderr_metric).toBeCloseTo(0.0665);
   });
 });
