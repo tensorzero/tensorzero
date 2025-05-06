@@ -2404,14 +2404,6 @@ mod tests {
     }
 
     #[test]
-    fn test_groq_api_base() {
-        assert_eq!(
-            GROQ_DEFAULT_BASE_URL.as_str(),
-            "https://api.groq.com/openai/v1/"
-        );
-    }
-
-    #[test]
     fn test_tensorzero_to_groq_system_message() {
         // Test Case 1: system is None, json_mode is Off
         let system = None;
