@@ -1,6 +1,4 @@
 use futures::{Stream, StreamExt, TryStreamExt};
-use lazy_static::lazy_static;
-use reqwest::multipart::{Form, Part};
 use reqwest::StatusCode;
 use reqwest_eventsource::{Event, RequestBuilderExt};
 use secrecy::{ExposeSecret, SecretString};
@@ -8,32 +6,21 @@ use serde::de::IntoDeserializer;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 use std::borrow::Cow;
-use std::collections::HashMap;
-use std::io::Write;
-use std::pin::Pin;
 use std::sync::OnceLock;
 use std::time::Duration;
 use tokio::time::Instant;
-use tracing::instrument;
-use url::Url;
-use uuid::Uuid;
 
 use crate::cache::ModelProviderRequest;
-use crate::embeddings::{EmbeddingProvider, EmbeddingProviderResponse, EmbeddingRequest};
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
-use crate::inference::providers::provider_trait::InferenceProvider;
+use crate::inference::providers::provider_trait::{InferenceProvider, TensorZeroEventError};
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
-use crate::inference::types::batch::{
-    ProviderBatchInferenceOutput, ProviderBatchInferenceResponse,
-};
 use crate::inference::types::resolved_input::ImageWithPath;
 use crate::inference::types::{
-    batch::{BatchStatus, StartBatchProviderInferenceResponse},
-    ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
-    ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
-    ProviderInferenceResponse, ProviderInferenceResponseChunk, RequestMessage, Role, Text,
-    TextChunk, Usage,
+    batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk,
+    ContentBlockOutput, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
+    PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
+    ProviderInferenceResponseChunk, RequestMessage, Role, Text, TextChunk, Usage,
 };
 use crate::inference::types::{
     FinishReason, ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner,
@@ -132,7 +119,7 @@ impl InferenceProvider for GroqProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_url = Url::parse("https://api.groq.com/openai/v1/chat/completions").unwrap();
+        let request_url = "https://api.groq.com/openai/v1/chat/completions".to_string();
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
 
@@ -280,7 +267,7 @@ impl InferenceProvider for GroqProvider {
                 ),
             })
         })?;
-        let request_url = Url::parse("https://api.groq.com/openai/v1/chat/completions").unwrap();
+        let request_url = "https://api.groq.com/openai/v1/chat/completions".to_string();
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let mut request_builder = http_client
@@ -1466,7 +1453,7 @@ mod tests {
     fn test_groq_request_new() {
         // Test basic request
         let basic_request = ModelInferenceRequest {
-            inference_id: Uuid::now_v7(),
+            inference_id: uuid::Uuid::now_v7(),
             messages: vec![
                 RequestMessage {
                     role: Role::User,
@@ -1515,7 +1502,7 @@ mod tests {
 
         // Test request with tools and JSON mode
         let request_with_tools = ModelInferenceRequest {
-            inference_id: Uuid::now_v7(),
+            inference_id: uuid::Uuid::now_v7(),
             messages: vec![RequestMessage {
                 role: Role::User,
                 content: vec!["What's the weather?".to_string().into()],
@@ -1574,7 +1561,7 @@ mod tests {
 
         // Test request with strict JSON mode with no output schema
         let request_with_tools = ModelInferenceRequest {
-            inference_id: Uuid::now_v7(),
+            inference_id: uuid::Uuid::now_v7(),
             messages: vec![RequestMessage {
                 role: Role::User,
                 content: vec!["What's the weather?".to_string().into()],
@@ -1622,7 +1609,7 @@ mod tests {
         // Test request with strict JSON mode with an output schema
         let output_schema = json!({});
         let request_with_tools = ModelInferenceRequest {
-            inference_id: Uuid::now_v7(),
+            inference_id: uuid::Uuid::now_v7(),
             messages: vec![RequestMessage {
                 role: Role::User,
                 content: vec!["What's the weather?".to_string().into()],
@@ -1689,7 +1676,7 @@ mod tests {
             },
         };
         let generic_request = ModelInferenceRequest {
-            inference_id: Uuid::now_v7(),
+            inference_id: uuid::Uuid::now_v7(),
             messages: vec![RequestMessage {
                 role: Role::User,
                 content: vec!["test_user".to_string().into()],
@@ -1786,7 +1773,7 @@ mod tests {
             },
         };
         let generic_request = ModelInferenceRequest {
-            inference_id: Uuid::now_v7(),
+            inference_id: uuid::Uuid::now_v7(),
             messages: vec![RequestMessage {
                 role: Role::Assistant,
                 content: vec!["test_assistant".to_string().into()],
@@ -1965,7 +1952,7 @@ mod tests {
     #[test]
     fn test_prepare_groq_tools() {
         let request_with_tools = ModelInferenceRequest {
-            inference_id: Uuid::now_v7(),
+            inference_id: uuid::Uuid::now_v7(),
             messages: vec![RequestMessage {
                 role: Role::User,
                 content: vec!["What's the weather?".to_string().into()],
@@ -2007,7 +1994,7 @@ mod tests {
 
         // Test no tools but a tool choice and make sure tool choice output is None
         let request_without_tools = ModelInferenceRequest {
-            inference_id: Uuid::now_v7(),
+            inference_id: uuid::Uuid::now_v7(),
             messages: vec![RequestMessage {
                 role: Role::User,
                 content: vec!["What's the weather?".to_string().into()],
