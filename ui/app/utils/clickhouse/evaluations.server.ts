@@ -66,6 +66,7 @@ export async function getEvaluationRunInfosForDatapoint(
   const function_type = config.functions[function_name].type;
   const inference_table_name =
     function_type === "chat" ? "ChatInference" : "JsonInference";
+  /*
   const query = `
     SELECT any(i.tags['tensorzero::evaluation_run_id']) as evaluation_run_id, any(i.variant_name) as variant_name,
       formatDateTime(
@@ -82,6 +83,23 @@ export async function getEvaluationRunInfosForDatapoint(
       AND t.value = {datapoint_id:String}
     GROUP BY
       i.tags['tensorzero::evaluation_run_id']
+  `;
+  */
+  const query = `
+    WITH datapoint_inference_ids AS (
+      SELECT inference_id FROM TagInference WHERE key = 'tensorzero::datapoint_id' AND value = {datapoint_id:String}
+    )
+    SELECT any(tags['tensorzero::evaluation_run_id']) as evaluation_run_id,
+           any(variant_name) as variant_name,
+           formatDateTime(
+             max(UUIDv7ToDateTime(id)),
+             '%Y-%m-%dT%H:%i:%SZ'
+           ) as most_recent_inference_date
+    FROM {inference_table_name:Identifier}
+      WHERE id IN (SELECT inference_id FROM datapoint_inference_ids)
+      AND function_name = {function_name:String}
+    GROUP BY
+      tags['tensorzero::evaluation_run_id']
   `;
   const result = await clickhouseClient.query({
     query,
