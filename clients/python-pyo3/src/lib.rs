@@ -792,6 +792,7 @@ impl TensorZeroGateway {
     /// :param dataset_name: The name of the dataset to insert the datapoints into.
     /// :param datapoints: A list of datapoints to insert.
     /// :return: None.
+    #[pyo3(signature = (*, dataset_name, datapoints))]
     fn bulk_insert_datapoints(
         this: PyRef<'_, Self>,
         dataset_name: String,
@@ -820,6 +821,7 @@ impl TensorZeroGateway {
     /// :param dataset_name: The name of the dataset to delete the datapoint from.
     /// :param datapoint_id: The ID of the datapoint to delete.
     /// :return: None.
+    #[pyo3(signature = (*, dataset_name, datapoint_id))]
     fn delete_datapoint(
         this: PyRef<'_, Self>,
         dataset_name: String,
@@ -1233,6 +1235,7 @@ impl AsyncTensorZeroGateway {
     /// :param dataset_name: The name of the dataset to insert the datapoints into.
     /// :param datapoints: A list of datapoints to insert.
     /// :return: None.
+    #[pyo3(signature = (*, dataset_name, datapoints))]
     fn bulk_insert_datapoints<'a>(
         this: PyRef<'a, Self>,
         dataset_name: String,
@@ -1267,6 +1270,7 @@ impl AsyncTensorZeroGateway {
     /// :param dataset_name: The name of the dataset to delete the datapoint from.
     /// :param datapoint_id: The ID of the datapoint to delete.
     /// :return: None.
+    #[pyo3(signature = (*, dataset_name, datapoint_id))]
     fn delete_datapoint<'a>(
         this: PyRef<'a, Self>,
         dataset_name: String,
