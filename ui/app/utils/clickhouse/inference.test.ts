@@ -124,6 +124,16 @@ test("queryInferenceTable pagination samples front and near-end pages correctly"
   for (let i = 1; i < endPage2.length; i++) {
     expect(endPage2[i - 1].id > endPage2[i].id).toBe(true);
   }
+
+  // Try to grab the last page by after
+  const lastPageByAfter = await queryInferenceTable({
+    after: endPage1[endPage1.length - 1].id,
+    page_size: PAGE_SIZE,
+  });
+  expect(lastPageByAfter.length).toBe(PAGE_SIZE);
+  for (let i = 1; i < lastPageByAfter.length; i++) {
+    expect(lastPageByAfter[i - 1].id > lastPageByAfter[i].id).toBe(true);
+  }
 });
 
 test("queryInferenceTable pages through results correctly using after with inference ID", async () => {
