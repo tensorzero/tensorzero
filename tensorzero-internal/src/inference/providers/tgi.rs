@@ -1025,7 +1025,7 @@ mod tests {
     #[test]
     #[traced_test]
     fn test_tgi_provider_new_api_base_check() {
-        let api_key_location = None;
+        let api_key_location = Some(CredentialLocation::None);
 
         // Valid cases (should not warn)
         let _ = TGIProvider::new(

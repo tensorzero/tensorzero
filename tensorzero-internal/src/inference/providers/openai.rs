@@ -2241,21 +2241,15 @@ struct OpenAIBatchFileResponse {
 
 #[cfg(test)]
 mod tests {
-
-    use std::borrow::Cow;
-
     use serde_json::json;
+    use std::borrow::Cow;
     use tracing_test::traced_test;
 
-    use crate::{
-        inference::{
-            providers::test_helpers::{
-                MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL, WEATHER_TOOL_CONFIG,
-            },
-            types::{FunctionType, RequestMessage},
-        },
-        tool::ToolCallConfig,
+    use crate::inference::providers::test_helpers::{
+        MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL, WEATHER_TOOL_CONFIG,
     };
+    use crate::inference::types::{FunctionType, RequestMessage};
+    use crate::tool::ToolCallConfig;
 
     use super::*;
 
@@ -3635,7 +3629,7 @@ mod tests {
     #[traced_test]
     fn test_openai_provider_new_api_base_check() {
         let model_name = "test-model".to_string();
-        let api_key_location = None;
+        let api_key_location = Some(CredentialLocation::None);
 
         // Valid cases (should not warn)
         let _ = OpenAIProvider::new(

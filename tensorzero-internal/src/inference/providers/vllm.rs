@@ -685,7 +685,7 @@ mod tests {
     #[traced_test]
     fn test_vllm_provider_new_api_base_check() {
         let model_name = "test-model".to_string();
-        let api_key_location = None;
+        let api_key_location = Some(CredentialLocation::None);
 
         // Valid cases (should not warn)
         let _ = VLLMProvider::new(
