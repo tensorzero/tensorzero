@@ -82,8 +82,9 @@ async fn main() {
     let args = Args::parse();
     // Set up logs and metrics immediately, so that we can use `tracing`.
     // OTLP will be enabled based on the config file
-    let otel_handle =
-        observability::setup_logs(true, args.log_format).expect_pretty("Failed to set up logs");
+    let otel_handle = observability::setup_logs(true, args.log_format)
+        .await
+        .expect_pretty("Failed to set up logs");
 
     let git_sha = tensorzero_internal::built_info::GIT_COMMIT_HASH_SHORT.unwrap_or("unknown");
 
