@@ -145,7 +145,10 @@ impl DelayedOtelEnableHandle {
 /// However, the call to `build_opentelemetry_layer` requires a Tokio runtime,
 /// so marking this function as async makes it clear to callers that they need to
 /// be in an async context.
-pub async fn setup_logs(debug: bool, log_format: LogFormat) -> Result<DelayedOtelEnableHandle, Error> {
+pub async fn setup_logs(
+    debug: bool,
+    log_format: LogFormat,
+) -> Result<DelayedOtelEnableHandle, Error> {
     let default_level = if debug { "debug,warn" } else { "warn" };
     // Get the current log level from the environment variable `RUST_LOG`
     let log_level = tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
