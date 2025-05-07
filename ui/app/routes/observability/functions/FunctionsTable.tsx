@@ -38,11 +38,16 @@ export default function FunctionsTable({
       type = "?";
     }
 
+    const variantsCount = function_config?.variants
+      ? Object.keys(function_config.variants).length
+      : 0;
+
     return {
       function_name,
       count: countInfo ? countInfo.count : 0,
       max_timestamp: countInfo ? countInfo.max_timestamp : "Never",
       type,
+      variantsCount,
     };
   });
 
@@ -52,7 +57,8 @@ export default function FunctionsTable({
         <TableHeader>
           <TableRow>
             <TableHead>Name</TableHead>
-            <TableHead>Inference Count</TableHead>
+            <TableHead>Variants</TableHead>
+            <TableHead>Inferences</TableHead>
             <TableHead>Last Used</TableHead>
           </TableRow>
         </TableHeader>
@@ -61,7 +67,7 @@ export default function FunctionsTable({
             <TableEmptyState message="No functions found" />
           ) : (
             mergedFunctions.map(
-              ({ function_name, count, max_timestamp, type }) => (
+              ({ function_name, count, max_timestamp, type, variantsCount }) => (
                 <TableRow key={function_name} id={function_name}>
                   <TableCell className="max-w-[200px] lg:max-w-none">
                     <TableItemFunction
@@ -70,6 +76,7 @@ export default function FunctionsTable({
                       link={`/observability/functions/${function_name}`}
                     />
                   </TableCell>
+                  <TableCell>{variantsCount}</TableCell>
                   <TableCell>{count}</TableCell>
                   <TableCell>
                     {max_timestamp === "Never" ? (
