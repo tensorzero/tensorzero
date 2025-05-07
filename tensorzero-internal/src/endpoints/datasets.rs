@@ -442,7 +442,7 @@ pub async fn update_datapoint_handler(
     }))
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct CreateDatapointParams {
     // the function name
