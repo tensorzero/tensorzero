@@ -42,7 +42,7 @@ impl Migration for Migration0024<'_> {
         Ok(!auxiliary_content_column_exists)
     }
 
-    async fn apply(&self) -> Result<(), Error> {
+    async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         self.clickhouse
             .run_query_synchronous(
                 "ALTER TABLE JsonInference ADD COLUMN IF NOT EXISTS auxiliary_content String"
