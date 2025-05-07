@@ -97,7 +97,7 @@ export default function BasicInfo({
 
       {commitHash && (
         <BasicInfoItem>
-          <BasicInfoItemTitle>Commit</BasicInfoItemTitle>
+          <BasicInfoItemTitle>Git Commit</BasicInfoItemTitle>
           <BasicInfoItemContent>
             <CommitHash tags={dynamicEvaluationRun.tags} />
           </BasicInfoItemContent>
