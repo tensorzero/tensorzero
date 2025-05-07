@@ -272,7 +272,7 @@ export const WithHumanFeedback: Story = {
         id: "00000000-0000-0000-0000-000000000003",
         target_id: "00000000-0000-0000-0000-000000000003",
         metric_name: "revenue",
-        value: 1234567890123456789, // eslint-disable-line no-loss-of-precision
+        value: 12345678901234567890, // eslint-disable-line no-loss-of-precision
         tags: { "tensorzero::human_feedback": "true" },
         timestamp: "2024-03-20T10:03:00Z",
       },
