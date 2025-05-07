@@ -78,18 +78,18 @@ function TableItemFunction({
   const functionConfig = config.functions[functionName];
 
   const baseClasses =
-    "inline-flex items-center text-sm text-fg-primary py-1 px-2 gap-1.5 rounded-md font-mono";
+    "flex items-center text-sm text-fg-primary gap-2 rounded-md font-mono";
 
   const content = (
     <>
       {functionIconConfig.icon && (
         <div
-          className={`${functionIconConfig.iconBg} ml-[-2px] flex size-5 items-center justify-center rounded-sm`}
+          className={`${functionIconConfig.iconBg} p-0.5 rounded-sm`}
         >
           {functionIconConfig.icon}
         </div>
       )}
-      <span className="text-fg-primary inline-block truncate">
+      <span className="text-fg-primary inline-block truncate group-hover:text-gray-500 transition-colors duration-300">
         {functionName}
       </span>
     </>
@@ -100,7 +100,7 @@ function TableItemFunction({
       return (
         <Link
           to={link}
-          className={`${baseClasses} hover:bg-bg-hover cursor-pointer`}
+          className={`${baseClasses} cursor-pointer group`}
         >
           {content}
         </Link>
