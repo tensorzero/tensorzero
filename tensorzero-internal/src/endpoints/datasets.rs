@@ -440,7 +440,7 @@ pub async fn update_datapoint_handler(
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct CreateDatapointParams {
-    pub datapoints: Vec<DatapointInput>,
+    pub datapoints: Vec<Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -481,14 +481,23 @@ pub async fn create_datapoint(
         object_store_info: &config.object_store_info,
     };
     for (i, datapoint) in params.datapoints.into_iter().enumerate() {
-        match datapoint {
-            DatapointInput::Chat(chat) => {
-                let function_config = get_possibly_default_function(&chat.function_name, config)?;
-                let FunctionConfig::Chat(_) = &*function_config else {
-                    return Err(Error::new(ErrorDetails::InvalidRequest {
-                        message: "Expected chat function config for datapoint {i}".to_string(),
-                    }));
-                };
+        let function_name = datapoint
+            .get("function_name")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::InvalidRequest {
+                    message: format!("Expected function name for datapoint {i}"),
+                })
+            })?;
+        let function_config = get_possibly_default_function(function_name, config)?;
+        match &*function_config {
+            FunctionConfig::Chat(_) => {
+                let chat: ChatInferenceDatapointInput =
+                    serde_json::from_value(datapoint).map_err(|e| {
+                        Error::new(ErrorDetails::InvalidRequest {
+                            message: format!("Failed to deserialize chat datapoint {i}: {e}"),
+                        })
+                    })?;
                 // Validate the input
                 function_config.validate_input(&chat.input)?;
                 let resolved_input = chat.input.resolve(&fetch_context).await?;
@@ -543,13 +552,13 @@ pub async fn create_datapoint(
                     staled_at: None,
                 })
             }
-            DatapointInput::Json(json) => {
-                let function_config = get_possibly_default_function(&json.function_name, config)?;
-                let FunctionConfig::Json(json_function_config) = &*function_config else {
-                    return Err(Error::new(ErrorDetails::InvalidRequest {
-                        message: "Expected json function config for datapoint {i}".to_string(),
-                    }));
-                };
+            FunctionConfig::Json(json_function_config) => {
+                let json: JsonInferenceDatapointInput =
+                    serde_json::from_value(datapoint).map_err(|e| {
+                        Error::new(ErrorDetails::InvalidRequest {
+                            message: format!("Failed to deserialize json datapoint {i}: {e}"),
+                        })
+                    })?;
                 // Validate the input
                 function_config.validate_input(&json.input)?;
                 let resolved_input = json.input.resolve(&fetch_context).await?;
@@ -836,7 +845,7 @@ pub struct ChatInferenceDatapointInput {
     pub function_name: String,
     pub input: Input,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub output: Option<Vec<ContentBlockChatOutput>>,
+    pub output: Option<Value>,
     #[serde(flatten)]
     pub dynamic_tool_params: DynamicToolParams,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -848,11 +857,10 @@ pub struct JsonInferenceDatapointInput {
     pub function_name: String,
     pub input: Input,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub output: Option<JsonInferenceOutput>,
-    pub output_schema: Option<serde_json::Value>, // Default to the function's output schema
+    pub output: Option<Value>,
+    pub output_schema: Option<Value>, // Default to the function's output schema
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tags: Option<HashMap<String, String>>,
-    pub auxiliary: String,
 }
 
 #[derive(Debug, Deserialize, Serialize)]

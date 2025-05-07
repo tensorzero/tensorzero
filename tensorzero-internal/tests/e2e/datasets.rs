@@ -188,7 +188,7 @@ async fn test_create_delete_datapoint_chat() {
     let dataset_name = format!("test-dataset-{}", Uuid::now_v7());
     println!("dataset_name: {dataset_name}");
 
-    let additional_tools = json!([null, [{"description": "Get the current temperature in a given location",
+    let additional_tools = json!([{"description": "Get the current temperature in a given location",
                 "parameters": {
                     "$schema": "http://json-schema.org/draft-07/schema#",
                     "type": "object",
@@ -207,34 +207,66 @@ async fn test_create_delete_datapoint_chat() {
                     "additionalProperties": false
                 },
                 "name": "get_temperature",
-                "strict": false}], null]);
-    let tool_choice = json!([null, "auto", null]);
+                "strict": false}]);
 
     let resp = client
         .post(get_gateway_endpoint(&format!(
             "/datasets/{dataset_name}/datapoints/bulk",
         )))
         .json(&json!({
-            "function_name": "basic_test",
-            "input": [{"system": {"assistant_name": "foo"}, "messages": [{"role": "user", "content": [{"type": "text", "text": "bar"}]}]},
-            {
-                "system": {"assistant_name": "Dummy"},
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": "My synthetic input"}
+            "datapoints": [
+                {
+                    "function_name": "basic_test",
+                    "input": {
+                        "system": { "assistant_name": "foo" },
+                        "messages": [
+                            {
+                                "role": "user",
+                                "content": [ { "type": "text", "text": "bar" } ]
+                            }
                         ]
-                    }
-                ]
-            },
-            {"system": {"assistant_name": "bar"}, "messages": [{"role": "user", "content": [{"type": "text", "text": "foo"}]}]},
-            ],
-            "output": [[{"type": "text", "text": "foobar"}],[
-                {"type": "tool_call", "name": "get_temperature", "arguments": {"location": "New York", "units": "fahrenheit"}}
-            ], null],
-            "additional_tools": additional_tools,
-            "tool_choice": tool_choice,
+                    },
+                    "output": [ { "type": "text", "text": "foobar" } ],
+                    "additional_tools": null,
+                    "tool_choice":   null,
+                },
+                {
+                    "function_name": "basic_test",
+                    "input": {
+                        "system": { "assistant_name": "Dummy" },
+                        "messages": [
+                            {
+                                "role": "user",
+                                "content": [ { "type": "text", "text": "My synthetic input" } ]
+                            }
+                        ]
+                    },
+                    "output": [
+                        {
+                            "type": "tool_call",
+                            "name": "get_temperature",
+                            "arguments": { "location": "New York", "units": "fahrenheit" }
+                        }
+                    ],
+                    "additional_tools": additional_tools,
+                    "tool_choice":  "auto"
+                },
+                {
+                    "function_name": "basic_test",
+                    "input": {
+                        "system": { "assistant_name": "bar" },
+                        "messages": [
+                            {
+                                "role": "user",
+                                "content": [ { "type": "text", "text": "foo" } ]
+                            }
+                        ]
+                    },
+                    "output": null,
+                    "additional_tools": null,
+                    "tool_choice":  null
+                }
+            ]
         }))
         .send()
         .await
@@ -363,23 +395,25 @@ async fn test_create_datapoint_chat_bad_request() {
             "/datasets/{dataset_name}/datapoints/bulk",
         )))
         .json(&json!({
-            "function_name": "basic_test",
-            "input": [
-            {
-                "system": {"assistant_name": "Dummy"},
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": "My synthetic input"}
+            "datapoints": [
+                {
+                    "function_name": "basic_test",
+                    "input": {
+                        "system": {"assistant_name": "Dummy"},
+                        "messages": [
+                            {
+                                "role": "user",
+                                "content": [
+                                    {"type": "text", "text": "My synthetic input"}
+                                ]
+                            }
                         ]
-                    }
-                ]
-            },
-            ],
-            "output": [[
-                {"type": "tool_call", "name": "get_temperature", "arguments": {"location": "New York", "units": "fahrenheit"}}
-            ] ],
+                    },
+                    "output": [
+                        {"type": "tool_call", "name": "get_temperature", "arguments": {"location": "New York", "units": "fahrenheit"}}
+                    ]
+                }
+            ]
         }))
         .send()
         .await
@@ -895,13 +929,19 @@ async fn test_create_delete_datapoint_json() {
             "/datasets/{dataset_name}/datapoints/bulk",
         )))
         .json(&json!({
-            "function_name": "json_success",
-            "input": [
-                {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "US"}}]}]},
-                {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "US"}}]}]},
-            ],
-            "output": [{"answer": "Hello"}, {"response": "Hello"}],
-            "output_schemas": [null, alternate_output_schema],
+            "datapoints": [
+                {
+                    "function_name": "json_success",
+                    "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "US"}}]}]},
+                    "output": {"answer": "Hello"},
+                },
+                {
+                    "function_name": "json_success",
+                    "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "US"}}]}]},
+                    "output": {"response": "Hello"},
+                    "output_schema": alternate_output_schema
+                }
+            ]
         }))
         .send()
         .await
@@ -992,19 +1032,34 @@ async fn test_create_datapoint_json_bad_output() {
             "/datasets/{dataset_name}/datapoints/bulk",
         )))
         .json(&json!({
-            "function_name": "json_success",
-            "input": [
-                {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "US"}}]}]},
-            ],
-            "output": [{"response": "Hello"}],
+            "datapoints": [
+                {
+                    "function_name": "json_success",
+                    "input": {
+                        "system": { "assistant_name": "Dummy" },
+                        "messages": [
+                            {
+                                "role": "user",
+                                "content": [
+                                    {
+                                        "type": "text",
+                                        "arguments": { "country": "US" }
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    "output": [
+                        { "response": "Hello" }
+                    ]
+                }
+            ]
         }))
         .send()
         .await
         .unwrap();
 
-    let status = resp.status();
-
-    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]
