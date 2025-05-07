@@ -83,11 +83,23 @@ function TableItemFunction({
   const content = (
     <>
       {functionIconConfig.icon && (
-        <div
-          className={`${functionIconConfig.iconBg} p-0.5 rounded-sm`}
-        >
-          {functionIconConfig.icon}
-        </div>
+        <TooltipProvider delayDuration={400}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div
+                className={`${functionIconConfig.iconBg} p-0.5 rounded-sm`}
+              >
+                {functionIconConfig.icon}
+              </div>
+            </TooltipTrigger>
+            <TooltipContent
+              className="border-border bg-bg-secondary text-fg-primary border shadow-lg"
+              sideOffset={5}
+            >
+              {functionIconConfig.label}
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       )}
       <span className="text-fg-primary inline-block truncate group-hover:text-gray-500 transition-colors duration-300">
         {functionName}

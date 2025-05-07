@@ -9,6 +9,7 @@ import type { ReactNode } from "react";
 export type IconConfig = {
   icon: ReactNode;
   iconBg: string;
+  label?: string;
 };
 
 /**
@@ -23,21 +24,25 @@ export function getFunctionTypeIcon(functionType: string): IconConfig {
       return {
         icon: <TypeChat className="text-fg-type-chat" />,
         iconBg: "bg-bg-type-chat",
+        label: "Function type: Chat",
       };
     case "json":
       return {
         icon: <TypeJson className="text-fg-type-json" />,
         iconBg: "bg-bg-type-json",
+        label: "Function type: JSON",
       };
     case "?":
       return {
         icon: <QuestionMark className="text-neutral-600" />,
         iconBg: "bg-neutral-100",
+        label: "Function type: Unknown",
       };
     default:
       return {
         icon: <Functions className="text-neutral-600" />,
         iconBg: "bg-neutral-100",
+        label: "Function type is not specified",
       };
   }
 }
