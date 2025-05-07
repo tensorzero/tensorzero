@@ -13,7 +13,30 @@ use crate::providers::common::make_embedded_gateway;
 use tensorzero_internal::clickhouse::test_helpers::get_clickhouse;
 
 #[tokio::test]
-async fn e2e_test_comment_feedback() {
+async fn e2e_test_comment_feedback_normal_function() {
+    e2e_test_comment_feedback_with_payload(serde_json::json!({
+        "function_name": "json_success",
+        "input": {
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "Japan"}}]}]
+        },
+        "stream": false,
+    })).await;
+}
+
+#[tokio::test]
+async fn e2e_test_comment_feedback_default_function() {
+    e2e_test_comment_feedback_with_payload(serde_json::json!({
+        "model_name": "dummy::good",
+        "input": {
+            "messages": [{"role": "user", "content": "Hello, world!"}]
+        },
+        "stream": false,
+    }))
+    .await;
+}
+
+async fn e2e_test_comment_feedback_with_payload(inference_payload: serde_json::Value) {
     let client = Client::new();
     // // Running without valid episode_id. Should fail.
     let episode_id = Uuid::now_v7();
@@ -28,15 +51,6 @@ async fn e2e_test_comment_feedback() {
         .unwrap();
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     // Run inference (standard, no dryrun) to get an episode_id.
-    let inference_payload = serde_json::json!({
-        "function_name": "json_success",
-        "input": {
-            "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "Japan"}}]}]
-        },
-        "stream": false,
-    });
-
     let response = client
         .post(get_gateway_endpoint("/inference"))
         .json(&inference_payload)
@@ -157,7 +171,31 @@ async fn e2e_test_comment_feedback() {
 }
 
 #[tokio::test]
-async fn e2e_test_demonstration_feedback() {
+async fn e2e_test_demonstration_feedback_normal_function() {
+    e2e_test_demonstration_feedback_with_payload(serde_json::json!({
+        "function_name": "basic_test",
+        "input": {
+            "system": {"assistant_name": "AskJeeves"},
+            "messages": [{"role": "user", "content": "Hello, world!"}]
+        },
+        "stream": false,
+    }))
+    .await;
+}
+
+#[tokio::test]
+async fn e2e_test_demonstration_feedback_default_function() {
+    e2e_test_demonstration_feedback_with_payload(serde_json::json!({
+        "model_name": "dummy::good",
+        "input": {
+            "messages": [{"role": "user", "content": "Hello, world!"}]
+        },
+        "stream": false,
+    }))
+    .await;
+}
+
+async fn e2e_test_demonstration_feedback_with_payload(inference_payload: serde_json::Value) {
     let client = Client::new();
     // Running without valid inference_id. Should fail.
     let tag_value = Uuid::now_v7().to_string();
@@ -176,15 +214,6 @@ async fn e2e_test_demonstration_feedback() {
         .unwrap();
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     // Run inference (standard, no dryrun) to get an inference_id
-    let inference_payload = serde_json::json!({
-        "function_name": "basic_test",
-        "input": {
-            "system": {"assistant_name": "AskJeeves"},
-            "messages": [{"role": "user", "content": "Hello, world!"}]
-        },
-        "stream": false,
-    });
-
     let response = client
         .post(get_gateway_endpoint("/inference"))
         .json(&inference_payload)
@@ -933,7 +962,30 @@ async fn e2e_test_demonstration_feedback_dynamic_tool() {
 }
 
 #[tokio::test]
-async fn e2e_test_float_feedback() {
+async fn e2e_test_float_feedback_normal_function() {
+    e2e_test_float_feedback_with_payload(serde_json::json!({
+        "function_name": "json_success",
+        "input": {
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "Japan"}}]}]
+        },
+        "stream": false,
+    })).await;
+}
+
+#[tokio::test]
+async fn e2e_test_float_feedback_default_function() {
+    e2e_test_float_feedback_with_payload(serde_json::json!({
+        "model_name": "dummy::good",
+        "input": {
+            "messages": [{"role": "user", "content": "Hello, world!"}]
+        },
+        "stream": false,
+    }))
+    .await;
+}
+
+async fn e2e_test_float_feedback_with_payload(inference_payload: serde_json::Value) {
     let client = Client::new();
     let tag_value = Uuid::now_v7().to_string();
     // Running without valid episode_id. Should fail.
@@ -947,15 +999,6 @@ async fn e2e_test_float_feedback() {
         .unwrap();
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     // Run inference (standard, no dryrun) to get an episode_id.
-    let inference_payload = serde_json::json!({
-        "function_name": "json_success",
-        "input": {
-            "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "Japan"}}]}]
-        },
-        "stream": false,
-    });
-
     let response = client
         .post(get_gateway_endpoint("/inference"))
         .json(&inference_payload)
@@ -1111,7 +1154,30 @@ async fn e2e_test_float_feedback() {
 }
 
 #[tokio::test]
-async fn e2e_test_boolean_feedback() {
+async fn e2e_test_boolean_feedback_normal_function() {
+    e2e_test_boolean_feedback_with_payload(serde_json::json!({
+        "function_name": "json_success",
+        "input": {
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "Japan"}}]}]
+        },
+        "stream": false,
+    })).await;
+}
+
+#[tokio::test]
+async fn e2e_test_boolean_feedback_default_function() {
+    e2e_test_boolean_feedback_with_payload(serde_json::json!({
+        "model_name": "dummy::good",
+        "input": {
+            "messages": [{"role": "user", "content": "Hello, world!"}]
+        },
+        "stream": false,
+    }))
+    .await;
+}
+
+async fn e2e_test_boolean_feedback_with_payload(inference_payload: serde_json::Value) {
     let client = Client::new();
     let inference_id = Uuid::now_v7();
     let tag_value = Uuid::now_v7().to_string();
@@ -1126,15 +1192,6 @@ async fn e2e_test_boolean_feedback() {
         .unwrap();
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     // Run inference (standard, no dryrun) to get an inference_id.
-    let inference_payload = serde_json::json!({
-        "function_name": "json_success",
-        "input": {
-            "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "Japan"}}]}]
-        },
-        "stream": false,
-    });
-
     let response = client
         .post(get_gateway_endpoint("/inference"))
         .json(&inference_payload)
