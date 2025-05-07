@@ -470,6 +470,9 @@ jobs:
         uses: namespacelabs/nscloud-setup-buildx-action@v0
         continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
+
       - name: Install pnpm
         uses: pnpm/action-setup@v4
         with:
@@ -543,6 +546,9 @@ jobs:
 
       # We allow the namespace builder setup to fail on Dependabot PRs and PRs from forks
       # (where the oidc token is not available)
+
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
