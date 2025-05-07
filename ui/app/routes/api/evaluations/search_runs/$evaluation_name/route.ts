@@ -22,7 +22,13 @@ export async function loader({
     return new Response("Missing evaluation_name parameter", { status: 400 });
   }
 
-  const runs = await searchEvaluationRuns(evaluationName, function_name, query);
+  const runs = await searchEvaluationRuns(
+    evaluationName,
+    function_name,
+    query,
+    100,
+    0,
+  );
   return new Response(JSON.stringify(runs), {
     headers: {
       "Content-Type": "application/json",
