@@ -53,9 +53,9 @@ pub(crate) static TENSORZERO_INTERNAL_ERROR: GILOnceCell<Py<PyAny>> = GILOnceCel
 #[pymodule]
 fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Otel is disabled for now in the Python client until we decide how it should be configured
-    let _enable_otel = tokio_block_on_without_gil(
+    let _delayed_enable = tokio_block_on_without_gil(
         m.py(),
-        tensorzero_rust::observability::setup_logs(false, LogFormat::Pretty),
+        tensorzero_rust::observability::setup_observability(LogFormat::Pretty),
     )
     .map_err(|e| convert_error(m.py(), TensorZeroError::Other { source: e.into() }))?;
     m.add_class::<BaseTensorZeroGateway>()?;
