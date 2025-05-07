@@ -1,6 +1,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 use serde_untagged::UntaggedEnumVisitor;
+use tensorzero_derive::TensorZeroDeserialize;
 use tensorzero_internal::{
     error::Error,
     inference::types::{Image, InputMessageContent, Role, TextKind, Thought},
@@ -26,8 +27,9 @@ pub struct ClientInputMessage {
     pub content: Vec<ClientInputMessageContent>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Clone, Debug, TensorZeroDeserialize, Serialize, PartialEq)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 pub enum ClientInputMessageContent {
     Text(TextKind),
     ToolCall(ToolCallInput),

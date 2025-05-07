@@ -2871,3 +2871,16 @@ def test_sync_json_function_null_response(sync_client: TensorZeroGateway):
     assert isinstance(result, JsonInferenceResponse)
     assert result.output.raw is None
     assert result.output.parsed is None
+
+
+def test_sync_invalid_input(sync_client: TensorZeroGateway):
+    with pytest.raises(TensorZeroInternalError) as exc_info:
+        sync_client.inference(
+            function_name="json_success",
+            input={"messages": [{"role": "user", "content": ["Invalid", "Content"]}]},
+        )
+
+    assert (
+        str(exc_info.value)
+        == 'Failed to deserialize JSON to tensorzero::client_input::ClientInput: messages[0].content[0]: invalid type: string "Invalid", expected object at line 1 column 54'
+    )
