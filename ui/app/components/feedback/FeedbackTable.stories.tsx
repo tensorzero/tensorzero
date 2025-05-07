@@ -203,3 +203,89 @@ export const WithLongDemonstration: Story = {
     ],
   },
 };
+
+export const WithHumanFeedback: Story = {
+  args: {
+    feedback: [
+      // Short demonstration
+      {
+        type: "demonstration",
+        id: "00000000-0000-0000-0000-000000000000",
+        inference_id: "00000000-0000-0000-0000-000000000000",
+        value: JSON.stringify([
+          {
+            type: "text",
+            text: "Short demonstration",
+          },
+        ]),
+        tags: { "tensorzero::human_feedback": "true" },
+        timestamp: "2024-03-20T10:00:00Z",
+      },
+      // Long demonstration
+      {
+        type: "demonstration",
+        id: "00000000-0000-0000-0000-000000000000",
+        inference_id: "00000000-0000-0000-0000-000000000000",
+        value: JSON.stringify([
+          {
+            type: "text",
+            text: "Long demonstration: Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book. It has survived not only five centuries, but also the leap into electronic typesetting, remaining essentially unchanged. It was popularised in the 1960s with the release of Letraset sheets containing Lorem Ipsum passages, and more recently with desktop publishing software like Aldus PageMaker including versions of Lorem Ipsum.\n\nLorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book. It has survived not only five centuries, but also the leap into electronic typesetting, remaining essentially unchanged. It was popularised in the 1960s with the release of Letraset sheets containing Lorem Ipsum passages, and more recently with desktop publishing software like Aldus PageMaker including versions of Lorem Ipsum.\n\nLorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book. It has survived not only five centuries, but also the leap into electronic typesetting, remaining essentially unchanged. It was popularised in the 1960s with the release of Letraset sheets containing Lorem Ipsum passages, and more recently with desktop publishing software like Aldus PageMaker including versions of Lorem Ipsum.\n\nLorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book. It has survived not only five centuries, but also the leap into electronic typesetting, remaining essentially unchanged. It was popularised in the 1960s with the release of Letraset sheets containing Lorem Ipsum passages, and more recently with desktop publishing software like Aldus PageMaker including versions of Lorem Ipsum.\n\nLorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book. It has survived not only five centuries, but also the leap into electronic typesetting, remaining essentially unchanged. It was popularised in the 1960s with the release of Letraset sheets containing Lorem Ipsum passages, and more recently with desktop publishing software like Aldus PageMaker including versions of Lorem Ipsum.\n\n",
+          },
+        ]),
+        tags: { "tensorzero::human_feedback": "true" },
+        timestamp: "2024-03-20T10:00:00Z",
+      },
+      // Short comment
+      {
+        type: "comment",
+        id: "00000000-0000-0000-0000-000000000001",
+        target_id: "00000000-0000-0000-0000-000000000001",
+        target_type: "episode",
+        value: "Nice job!",
+        tags: { "tensorzero::human_feedback": "true" },
+        timestamp: "2024-03-20T10:01:00Z",
+      },
+      // Long comment
+      {
+        type: "comment",
+        id: "00000000-0000-0000-0000-000000000002",
+        target_id: "00000000-0000-0000-0000-000000000002",
+        target_type: "episode",
+        value:
+          "This is a really long comment. Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book. It has survived not only five centuries, but also the leap into electronic typesetting, remaining essentially unchanged. It was popularised in the 1960s with the release of Letraset sheets containing Lorem Ipsum passages, and more recently with desktop publishing software like Aldus PageMaker including versions of Lorem Ipsum.\n\nLorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book. It has survived not only five centuries, but also the leap into electronic typesetting, remaining essentially unchanged. It was popularised in the 1960s with the release of Letraset sheets containing Lorem Ipsum passages, and more recently with desktop publishing software like Aldus PageMaker including versions of Lorem Ipsum.\n\nLorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book. It has survived not only five centuries, but also the leap into electronic typesetting, remaining essentially unchanged. It was popularised in the 1960s with the release of Letraset sheets containing Lorem Ipsum passages, and more recently with desktop publishing software like Aldus PageMaker including versions of Lorem Ipsum.\n\nLorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book. It has survived not only five centuries, but also the leap into electronic typesetting, remaining essentially unchanged. It was popularised in the 1960s with the release of Letraset sheets containing Lorem Ipsum passages, and more recently with desktop publishing software like Aldus PageMaker including versions of Lorem Ipsum.\n\nLorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book. It has survived not only five centuries, but also the leap into electronic typesetting, remaining essentially unchanged. It was popularised in the 1960s with the release of Letraset sheets containing Lorem Ipsum passages, and more recently with desktop publishing software like Aldus PageMaker including versions of Lorem Ipsum.\n\n",
+        tags: { "tensorzero::human_feedback": "true" },
+        timestamp: "2024-03-20T10:02:00Z",
+      },
+      // Short float
+      {
+        type: "float",
+        id: "00000000-0000-0000-0000-000000000003",
+        target_id: "00000000-0000-0000-0000-000000000003",
+        metric_name: "accuracy",
+        value: 0.5,
+        tags: { "tensorzero::human_feedback": "true" },
+        timestamp: "2024-03-20T10:03:00Z",
+      },
+      // Long float
+      {
+        type: "float",
+        id: "00000000-0000-0000-0000-000000000003",
+        target_id: "00000000-0000-0000-0000-000000000003",
+        metric_name: "revenue",
+        value: 1234567890123456789, // eslint-disable-line no-loss-of-precision
+        tags: { "tensorzero::human_feedback": "true" },
+        timestamp: "2024-03-20T10:03:00Z",
+      },
+      // Boolean
+      {
+        type: "boolean",
+        id: "00000000-0000-0000-0000-000000000004",
+        target_id: "00000000-0000-0000-0000-000000000004",
+        metric_name: "nsfw_detected",
+        value: true,
+        tags: { "tensorzero::human_feedback": "true" },
+        timestamp: "2024-03-20T10:04:00Z",
+      },
+    ],
+  },
+};
