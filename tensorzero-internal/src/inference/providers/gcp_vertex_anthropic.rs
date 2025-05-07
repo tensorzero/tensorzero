@@ -1,31 +1,39 @@
 use std::borrow::Cow;
-use std::sync::OnceLock;
+use std::io::Write;
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
+use axum::http;
 use futures::StreamExt;
+use object_store::gcp::{GcpCredential, GoogleCloudStorageBuilder};
+use object_store::path::Path;
+use object_store::{ObjectStore, StaticCredentialProvider};
 use reqwest::StatusCode;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::time::Instant;
+use url::Url;
+use uuid::Uuid;
 
 use crate::cache::ModelProviderRequest;
+use crate::config_parser::{GCPBatchConfigType, ProviderTypesConfig};
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
+use crate::inference::providers::helpers::{parse_jsonl_batch_file, JsonlBatchFileInfo};
 use crate::inference::providers::provider_trait::InferenceProvider;
-use crate::inference::types::batch::BatchRequestRow;
-use crate::inference::types::batch::PollBatchInferenceResponse;
-use crate::inference::types::resolved_input::ImageWithPath;
-use crate::inference::types::{
-    batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk, FunctionType,
-    Latency, ModelInferenceRequestJsonMode, Role, Text, TextChunk,
+use crate::inference::types::batch::{
+    BatchRequestRow, BatchStatus, PollBatchInferenceResponse, ProviderBatchInferenceOutput,
+    ProviderBatchInferenceResponse, StartBatchProviderInferenceResponse,
 };
+use crate::inference::types::resolved_input::ImageWithPath;
+use crate::inference::types::PeekableProviderInferenceResponseStream;
 use crate::inference::types::{
-    ContentBlockOutput, FlattenUnknown, ModelInferenceRequest,
-    PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
+    ContentBlock, ContentBlockChunk, ContentBlockOutput, FlattenUnknown, FunctionType, Latency,
+    ModelInferenceRequest, ModelInferenceRequestJsonMode, ProviderInferenceResponse,
     ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
-    ProviderInferenceResponseStreamInner, RequestMessage, Usage,
+    ProviderInferenceResponseStreamInner, RequestMessage, Role, Text, TextChunk, Usage,
 };
 use crate::model::ModelProvider;
 use crate::model::{build_creds_caching_default_with_fn, CredentialLocation};
@@ -47,11 +55,20 @@ const PROVIDER_TYPE: &str = "gcp_vertex_anthropic";
 
 #[derive(Debug)]
 pub struct GCPVertexAnthropicProvider {
+    api_v1_base_url: Url,
     model_id: String,
     request_url: String,
     streaming_request_url: String,
     audience: String,
     credentials: GCPVertexCredentials,
+    batch_config: Option<BatchConfig>,
+}
+
+#[derive(Debug)]
+struct BatchConfig {
+    input_uri_prefix: String,
+    output_uri_prefix: String,
+    batch_request_url: String,
 }
 
 static DEFAULT_CREDENTIALS: OnceLock<GCPVertexCredentials> = OnceLock::new();
@@ -62,6 +79,7 @@ impl GCPVertexAnthropicProvider {
         location: String,
         project_id: String,
         api_key_location: Option<CredentialLocation>,
+        provider_types_config: &ProviderTypesConfig,
     ) -> Result<Self, Error> {
         let credentials = build_creds_caching_default_with_fn(
             api_key_location,
@@ -74,17 +92,98 @@ impl GCPVertexAnthropicProvider {
         let streaming_request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/anthropic/models/{model_id}:streamRawPredict");
         let audience = format!("https://{location}-aiplatform.googleapis.com/");
 
+        // Create base URL for API calls
+        let api_v1_base_url = Url::parse(&format!(
+            "https://{location}-aiplatform.googleapis.com/v1/",
+        ))
+        .map_err(|e| {
+            Error::new(ErrorDetails::InternalError {
+                message: format!("Failed to parse URL: {e}"),
+            })
+        })?;
+
+        // Configure batch settings if available
+        let batch_config = match &provider_types_config.gcp_vertex_anthropic {
+            Some(config) => match &config.batch {
+                Some(GCPBatchConfigType::CloudStorage(cs_config)) => Some(BatchConfig {
+                    input_uri_prefix: cs_config.input_uri_prefix.clone(),
+                    output_uri_prefix: cs_config.output_uri_prefix.clone(),
+                    batch_request_url: format!(
+                        "https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/batchPredictionJobs",
+                    ),
+                }),
+                Some(GCPBatchConfigType::None) | None => None,
+            },
+            None => None,
+        };
+
         Ok(GCPVertexAnthropicProvider {
+            api_v1_base_url,
             model_id,
             request_url,
             streaming_request_url,
             audience,
             credentials,
+            batch_config,
         })
     }
 
     pub fn model_id(&self) -> &str {
         &self.model_id
+    }
+
+    async fn collect_finished_batch(
+        &self,
+        output_data: GCPVertexBatchResponseOutputInfo,
+        raw_request: String,
+        raw_response: String,
+        api_key: &GCPVertexCredentials,
+        dynamic_api_keys: &InferenceCredentials,
+        batch_request: &BatchRequestRow<'_>,
+    ) -> Result<ProviderBatchInferenceResponse, Error> {
+        match output_data {
+            GCPVertexBatchResponseOutputInfo::Gcs {
+                gcs_output_directory,
+            } => {
+                // The Vertex API always writes to 'predictions.jsonl' in the output directory
+                let store_and_path = make_gcp_object_store(
+                    &join_cloud_paths(&gcs_output_directory, "predictions.jsonl"),
+                    api_key,
+                    dynamic_api_keys,
+                )?;
+
+                let data = store_and_path
+                    .store
+                    .get(&store_and_path.path)
+                    .await
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::InternalError {
+                            message: format!("Failed to get GCS object: {e}"),
+                        })
+                    })?
+                    .bytes()
+                    .await;
+
+                // Parse the JSONL response file
+                parse_jsonl_batch_file::<GCPVertexAnthropicBatchResponseLine, _>(
+                    data,
+                    JsonlBatchFileInfo {
+                        provider_type: PROVIDER_TYPE.to_string(),
+                        raw_request,
+                        raw_response,
+                        file_id: store_and_path.path.to_string(),
+                    },
+                    |r| {
+                        make_provider_batch_inference_output(
+                            r,
+                            &batch_request.model_name,
+                            &batch_request.model_provider_name,
+                        )
+                    },
+                )
+                .await
+            }
+        }
     }
 }
 
@@ -258,32 +357,537 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
 
     async fn start_batch_inference<'a>(
         &'a self,
-        _requests: &'a [ModelInferenceRequest<'_>],
-        _client: &'a reqwest::Client,
-        _dynamic_api_keys: &'a InferenceCredentials,
+        requests: &'a [ModelInferenceRequest<'_>],
+        http_client: &'a reqwest::Client,
+        dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<StartBatchProviderInferenceResponse, Error> {
-        Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
-            provider_type: "GCP Vertex Anthropic".to_string(),
+        let Some(batch_config) = &self.batch_config else {
+            return Err(ErrorDetails::Config {
+                message: "Missing config section: `[provider_types.gcp_vertex_anthropic.batch]`"
+                    .to_string(),
+            }
+            .into());
+        };
+
+        let api_key = self
+            .credentials
+            .get_api_key(&self.audience, dynamic_api_keys)?;
+
+        let mut raw_requests = Vec::with_capacity(requests.len());
+        let mut jsonl_data = Vec::new();
+        for request in requests {
+            let request_body = GCPVertexAnthropicRequestBody::new(request)?;
+            let line = serde_json::to_string(&GCPVertexBatchLine {
+                request: request_body,
+            })
+            .map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!(
+                        "Error serializing request: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
+                })
+            })?;
+
+            jsonl_data.write_all(line.as_bytes()).map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!("Error writing to JSONL: {}", DisplayOrDebugGateway::new(e)),
+                })
+            })?;
+            jsonl_data.write_all(b"\n").map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!("Error writing to JSONL: {}", DisplayOrDebugGateway::new(e)),
+                })
+            })?;
+            raw_requests.push(line);
         }
-        .into())
+
+        let batch_id = Uuid::now_v7();
+        let input_source_url = join_cloud_paths(
+            &batch_config.input_uri_prefix,
+            &format!("tensorzero-batch-input-{batch_id}.jsonl"),
+        );
+
+        // For now, we use the same set of credentials for writing to Google Cloud Storage as we do for invoking
+        // the Vertex API. In the future, we may want to allow configuring a separate set of credentials.
+        let store_and_path =
+            make_gcp_object_store(&input_source_url, &self.credentials, dynamic_api_keys)?;
+
+        store_and_path
+            .store
+            .put(&store_and_path.path, jsonl_data.into())
+            .await
+            .map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!(
+                        "Error uploading JSONL to object store: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
+                })
+            })?;
+
+        let request_body = GCPVertexAnthropicBatchRequest {
+            display_name: format!("tensorzero-batch-{batch_id}"),
+            model: format!("publishers/anthropic/models/{}", self.model_id.clone()),
+            input_config: GCPVertexAnthropicBatchRequestInputConfig::Jsonl {
+                gcs_source: GCPVertexAnthropicGCSSource {
+                    uris: input_source_url,
+                },
+            },
+            output_config: GCPVertexAnthropicBatchRequestOutputConfig::Jsonl {
+                gcs_destination: GCPVertexAnthropicGCSDestination {
+                    output_uri_prefix: join_cloud_paths(
+                        &batch_config.output_uri_prefix,
+                        &format!("tensorzero-batch-output-{batch_id}"),
+                    ),
+                },
+            },
+        };
+
+        let raw_request = serde_json::to_string(&request_body).map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!(
+                    "Error serializing request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
+            })
+        })?;
+
+        let res = http_client
+            .post(batch_config.batch_request_url.clone())
+            .bearer_auth(api_key.expose_secret())
+            .body(raw_request.clone())
+            .header(http::header::CONTENT_TYPE, "application/json")
+            .send()
+            .await
+            .map_err(|e| {
+                Error::new(ErrorDetails::InferenceClient {
+                    status_code: e.status(),
+                    message: format!("Error sending request: {}", DisplayOrDebugGateway::new(e)),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(raw_request.clone()),
+                    raw_response: None,
+                })
+            })?;
+
+        if !res.status().is_success() {
+            let _response_code = res.status();
+            let error_body = res.text().await.map_err(|e| {
+                Error::new(ErrorDetails::InferenceServer {
+                    message: format!(
+                        "Error getting error response: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(raw_request.clone()),
+                    raw_response: None,
+                })
+            })?;
+            return Err(Error::new(ErrorDetails::InferenceServer {
+                message: format!("GCP Vertex API error: {error_body}"),
+                provider_type: PROVIDER_TYPE.to_string(),
+                raw_request: Some(raw_request.clone()),
+                raw_response: Some(error_body),
+            }));
+        }
+
+        let raw_response = res.text().await.map_err(|e| {
+            Error::new(ErrorDetails::InferenceServer {
+                message: format!(
+                    "Error retrieving batch response: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
+                raw_request: Some(raw_request.clone()),
+                raw_response: None,
+                provider_type: PROVIDER_TYPE.to_string(),
+            })
+        })?;
+
+        let response =
+            serde_json::from_str::<GCPVertexBatchResponse>(&raw_response).map_err(|e| {
+                Error::new(ErrorDetails::InferenceServer {
+                    message: format!("Error parsing JSON response: {e}: {raw_response}"),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(raw_request.clone()),
+                    raw_response: Some(raw_response.clone()),
+                })
+            })?;
+
+        let batch_params = GCPVertexBatchParams {
+            job_url_suffix: response.name,
+        };
+
+        Ok(StartBatchProviderInferenceResponse {
+            batch_id,
+            batch_params: serde_json::to_value(batch_params).map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!(
+                        "Error serializing batch params: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
+                })
+            })?,
+            raw_requests,
+            raw_request,
+            raw_response,
+            status: BatchStatus::Pending,
+            errors: Vec::new(),
+        })
     }
 
     async fn poll_batch_inference<'a>(
         &'a self,
-        _batch_request: &'a BatchRequestRow<'a>,
-        _http_client: &'a reqwest::Client,
-        _dynamic_api_keys: &'a InferenceCredentials,
+        batch_request: &'a BatchRequestRow<'a>,
+        http_client: &'a reqwest::Client,
+        dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<PollBatchInferenceResponse, Error> {
-        Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
-            provider_type: PROVIDER_TYPE.to_string(),
+        let api_key = self
+            .credentials
+            .get_api_key(&self.audience, dynamic_api_keys)?;
+
+        let batch_params: GCPVertexBatchParams = serde_json::from_value(
+            batch_request.batch_params.clone().into_owned(),
+        )
+        .map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!(
+                    "Error deserializing batch params: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
+            })
+        })?;
+
+        let job_poll_url = self
+            .api_v1_base_url
+            .join(&batch_params.job_url_suffix)
+            .map_err(|e| {
+                Error::new(ErrorDetails::InternalError {
+                    message: format!(
+                        "Failed to join batch job URL - this should never happen: {e}"
+                    ),
+                })
+            })?;
+
+        let raw_request = job_poll_url.to_string();
+
+        let res = http_client
+            .get(job_poll_url)
+            .bearer_auth(api_key.expose_secret())
+            .header(http::header::CONTENT_TYPE, "application/json")
+            .send()
+            .await
+            .map_err(|e| {
+                Error::new(ErrorDetails::InferenceClient {
+                    status_code: e.status(),
+                    message: format!("Error sending request: {}", DisplayOrDebugGateway::new(e)),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(raw_request.clone()),
+                    raw_response: None,
+                })
+            })?;
+
+        if !res.status().is_success() {
+            let _response_code = res.status();
+            let error_body = res.text().await.map_err(|e| {
+                Error::new(ErrorDetails::InferenceServer {
+                    message: format!(
+                        "Error getting error response: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(raw_request.clone()),
+                    raw_response: None,
+                })
+            })?;
+            return Err(Error::new(ErrorDetails::InferenceServer {
+                message: format!("GCP Vertex API error: {error_body}"),
+                provider_type: PROVIDER_TYPE.to_string(),
+                raw_request: Some(raw_request.clone()),
+                raw_response: Some(error_body),
+            }));
         }
-        .into())
+
+        let raw_response = res.text().await.map_err(|e| {
+            Error::new(ErrorDetails::InferenceServer {
+                message: format!(
+                    "Error retrieving batch response: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
+                raw_request: Some(raw_request.clone()),
+                raw_response: None,
+                provider_type: PROVIDER_TYPE.to_string(),
+            })
+        })?;
+
+        let response =
+            serde_json::from_str::<GCPVertexBatchResponse>(&raw_response).map_err(|e| {
+                Error::new(ErrorDetails::InferenceServer {
+                    message: format!("Error parsing JSON response: {e}: {raw_response}"),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(raw_request.clone()),
+                    raw_response: Some(raw_response.clone()),
+                })
+            })?;
+
+        match response.state {
+            GCPVertexJobState::Pending
+            | GCPVertexJobState::Running
+            | GCPVertexJobState::Queued
+            | GCPVertexJobState::Paused
+            | GCPVertexJobState::Updating
+            | GCPVertexJobState::Unspecified => Ok(PollBatchInferenceResponse::Pending {
+                raw_request,
+                raw_response,
+            }),
+            GCPVertexJobState::Succeeded | GCPVertexJobState::PartiallySucceeded => {
+                let output_info = response.output_info.ok_or_else(|| {
+                    Error::new(ErrorDetails::InferenceServer {
+                        message: format!(
+                            "GCP Vertex Anthropic batch response has no output info in state {:?}",
+                            response.state
+                        ),
+                        raw_request: Some(raw_request.clone()),
+                        raw_response: Some(raw_response.clone()),
+                        provider_type: PROVIDER_TYPE.to_string(),
+                    })
+                })?;
+                let batch_response = self
+                    .collect_finished_batch(
+                        output_info,
+                        raw_request,
+                        raw_response,
+                        &self.credentials,
+                        dynamic_api_keys,
+                        batch_request,
+                    )
+                    .await?;
+                Ok(PollBatchInferenceResponse::Completed(batch_response))
+            }
+            GCPVertexJobState::Failed
+            | GCPVertexJobState::Cancelling
+            | GCPVertexJobState::Expired
+            | GCPVertexJobState::Cancelled
+            | GCPVertexJobState::Unknown => Ok(PollBatchInferenceResponse::Failed {
+                raw_request,
+                raw_response,
+            }),
+        }
     }
 }
 
 /// Maps events from Anthropic into the TensorZero format
 /// Modified from the example [here](https://github.com/64bit/async-openai/blob/5c9c817b095e3bacb2b6c9804864cdf8b15c795e/async-openai/src/client.rs#L433)
 /// At a high level, this function is handling low-level EventSource details and mapping the objects returned by Anthropic into our `InferenceResultChunk` type
+// Batch-related structs
+#[derive(Serialize)]
+struct GCPVertexBatchLine<'a> {
+    request: GCPVertexAnthropicRequestBody<'a>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GCPVertexBatchResponse {
+    name: String,
+    state: GCPVertexJobState,
+    output_info: Option<GCPVertexBatchResponseOutputInfo>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", tag = "outputDataFormat")]
+enum GCPVertexBatchResponseOutputInfo {
+    Gcs { gcs_output_directory: String },
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GCPVertexAnthropicBatchRequest {
+    display_name: String,
+    model: String,
+    input_config: GCPVertexAnthropicBatchRequestInputConfig,
+    output_config: GCPVertexAnthropicBatchRequestOutputConfig,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase", tag = "dataFormat")]
+enum GCPVertexAnthropicBatchRequestInputConfig {
+    Jsonl {
+        gcs_source: GCPVertexAnthropicGCSSource,
+    },
+}
+
+#[derive(Serialize)]
+struct GCPVertexAnthropicGCSSource {
+    uris: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase", tag = "dataFormat")]
+enum GCPVertexAnthropicBatchRequestOutputConfig {
+    Jsonl {
+        gcs_destination: GCPVertexAnthropicGCSDestination,
+    },
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GCPVertexAnthropicGCSDestination {
+    output_uri_prefix: String,
+}
+
+// For storing the batch job URL
+#[derive(Serialize, Deserialize)]
+struct GCPVertexBatchParams {
+    job_url_suffix: String,
+}
+
+// Job state handling
+#[derive(Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+enum GCPVertexJobState {
+    #[serde(rename = "JOB_STATE_UNSPECIFIED")]
+    Unspecified,
+    #[serde(rename = "JOB_STATE_QUEUED")]
+    Queued,
+    #[serde(rename = "JOB_STATE_PENDING")]
+    Pending,
+    #[serde(rename = "JOB_STATE_RUNNING")]
+    Running,
+    #[serde(rename = "JOB_STATE_SUCCEEDED")]
+    Succeeded,
+    #[serde(rename = "JOB_STATE_FAILED")]
+    Failed,
+    #[serde(rename = "JOB_STATE_CANCELLING")]
+    Cancelling,
+    #[serde(rename = "JOB_STATE_CANCELLED")]
+    Cancelled,
+    #[serde(rename = "JOB_STATE_PAUSED")]
+    Paused,
+    #[serde(rename = "JOB_STATE_EXPIRED")]
+    Expired,
+    #[serde(rename = "JOB_STATE_UPDATING")]
+    Updating,
+    #[serde(rename = "JOB_STATE_PARTIALLY_SUCCEEDED")]
+    PartiallySucceeded,
+    #[serde(other)]
+    Unknown,
+}
+
+// For parsing batch response lines
+#[derive(Debug, Deserialize)]
+struct GCPVertexAnthropicBatchResponseLine {
+    prediction: GCPVertexAnthropicResponse,
+}
+
+// Helper functions for batch operations
+fn make_gcp_object_store(
+    uri: &str,
+    credentials: &GCPVertexCredentials,
+    dynamic_api_keys: &InferenceCredentials,
+) -> Result<ObjectStoreAndPath, Error> {
+    let (bucket, path) = parse_gcp_uri(uri)?;
+
+    let store = match credentials {
+        GCPVertexCredentials::Static { raw, .. } => GoogleCloudStorageBuilder::default()
+            .with_service_account_key(raw.expose_secret())
+            .with_bucket_name(bucket)
+            .build()
+            .map_err(|e| {
+                Error::new(ErrorDetails::InternalError {
+                    message: format!("Failed to create GCS object store: {e}"),
+                })
+            })?,
+        GCPVertexCredentials::Dynamic(key_name) => {
+            let key = dynamic_api_keys.get(key_name).ok_or_else(|| {
+                Error::new(ErrorDetails::ApiKeyMissing {
+                    provider_name: PROVIDER_NAME.to_string(),
+                })
+            })?;
+            GoogleCloudStorageBuilder::default()
+                .with_credentials(Arc::new(StaticCredentialProvider::new(GcpCredential {
+                    bearer: key.expose_secret().to_string(),
+                })))
+                .with_bucket_name(bucket)
+                .build()
+                .map_err(|e| {
+                    Error::new(ErrorDetails::InternalError {
+                        message: format!("Failed to create GCS object store: {e}"),
+                    })
+                })?
+        }
+        GCPVertexCredentials::None => {
+            return Err(Error::new(ErrorDetails::ApiKeyMissing {
+                provider_name: PROVIDER_NAME.to_string(),
+            }));
+        }
+    };
+
+    Ok(ObjectStoreAndPath {
+        store: Box::new(store),
+        path: Path::from(path),
+    })
+}
+
+fn parse_gcp_uri(uri: &str) -> Result<(&str, &str), Error> {
+    let prefix = "gs://";
+    if !uri.starts_with(prefix) {
+        return Err(Error::new(ErrorDetails::InternalError {
+            message: format!("Invalid GCS URI: {uri}"),
+        }));
+    }
+    let path_without_prefix = &uri[prefix.len()..];
+    let mut parts = path_without_prefix.splitn(2, '/');
+    let bucket = parts.next().ok_or_else(|| {
+        Error::new(ErrorDetails::InternalError {
+            message: format!("Invalid GCS URI, missing bucket: {uri}"),
+        })
+    })?;
+    let path = parts.next().unwrap_or("");
+    Ok((bucket, path))
+}
+
+struct ObjectStoreAndPath {
+    store: Box<dyn ObjectStore>,
+    path: Path,
+}
+
+fn join_cloud_paths(base: &str, suffix: &str) -> String {
+    if base.ends_with('/') {
+        format!("{base}{suffix}")
+    } else {
+        format!("{base}/{suffix}")
+    }
+}
+
+// Helper for creating provider batch inference output
+fn make_provider_batch_inference_output(
+    response_line: GCPVertexAnthropicBatchResponseLine,
+    model_name: &str,
+    model_provider_name: &str,
+) -> Result<ProviderBatchInferenceOutput, Error> {
+    // Create a ContentBlockOutput from the response text
+    let content_block = ContentBlockOutput::Text(Text {
+        text: if let Some(first_content) = response_line.prediction.content.first() {
+            match first_content {
+                GCPVertexAnthropicContentBlock::Text { text } => text.clone(),
+                _ => format!("[Unsupported content type from GCP Vertex Anthropic]"),
+            }
+        } else {
+            format!("[Empty response from GCP Vertex Anthropic]")
+        },
+    });
+
+    let inference_id = Uuid::now_v7(); // GCP doesn't provide a unique ID per item
+    let raw_response = serde_json::to_string(&response_line.prediction).unwrap_or_default();
+
+    Ok(ProviderBatchInferenceOutput {
+        id: inference_id,
+        output: vec![content_block],
+        raw_response,
+        usage: Usage::from(response_line.prediction.usage),
+        finish_reason: None,
+    })
+}
+
 fn stream_anthropic(
     mut event_source: EventSource,
     start_time: Instant,
@@ -721,7 +1325,9 @@ impl TryFrom<GCPVertexAnthropicContentBlock> for ContentBlockOutput {
     type Error = Error;
     fn try_from(block: GCPVertexAnthropicContentBlock) -> Result<Self, Self::Error> {
         match block {
-            GCPVertexAnthropicContentBlock::Text { text } => Ok(text.into()),
+            GCPVertexAnthropicContentBlock::Text { text } => {
+                Ok(ContentBlockOutput::Text(Text { text }))
+            }
             GCPVertexAnthropicContentBlock::ToolUse { id, name, input } => {
                 Ok(ContentBlockOutput::ToolCall(ToolCall {
                     id,
@@ -747,10 +1353,10 @@ pub struct GCPVertexAnthropic {
 }
 
 impl From<GCPVertexAnthropic> for Usage {
-    fn from(value: GCPVertexAnthropic) -> Self {
+    fn from(anthropic: GCPVertexAnthropic) -> Self {
         Usage {
-            input_tokens: value.input_tokens,
-            output_tokens: value.output_tokens,
+            input_tokens: anthropic.input_tokens,
+            output_tokens: anthropic.output_tokens,
         }
     }
 }
@@ -1075,6 +1681,9 @@ fn parse_usage_info(usage_info: &Value) -> GCPVertexAnthropic {
 
 #[cfg(test)]
 mod tests {
+    use crate::config_parser::{
+        GCPBatchConfigCloudStorage, GCPBatchConfigType, GCPProviderTypeConfig, ProviderTypesConfig,
+    };
     use crate::inference::types::FlattenUnknown;
     use std::borrow::Cow;
 
@@ -1087,6 +1696,59 @@ mod tests {
     use crate::inference::types::{FunctionType, ModelInferenceRequestJsonMode};
     use crate::jsonschema_util::DynamicJSONSchema;
     use crate::tool::{DynamicToolConfig, ToolConfig, ToolResult};
+
+    #[test]
+    fn test_anthropic_batch_config_parsing() {
+        // Test with CloudStorage batch config
+        let provider_types_config = ProviderTypesConfig {
+            gcp_vertex_anthropic: Some(GCPProviderTypeConfig {
+                batch: Some(GCPBatchConfigType::CloudStorage(
+                    GCPBatchConfigCloudStorage {
+                        input_uri_prefix: "gs://test-bucket/input/".to_string(),
+                        output_uri_prefix: "gs://test-bucket/output/".to_string(),
+                    },
+                )),
+            }),
+            gcp_vertex_gemini: None,
+        };
+
+        let provider = GCPVertexAnthropicProvider::new(
+            "claude-3-haiku".to_string(),
+            "us-central1".to_string(),
+            "test-project".to_string(),
+            None,
+            &provider_types_config,
+        )
+        .unwrap();
+
+        assert!(provider.batch_config.is_some());
+        let batch_config = provider.batch_config.as_ref().unwrap();
+        assert_eq!(batch_config.input_uri_prefix, "gs://test-bucket/input/");
+        assert_eq!(batch_config.output_uri_prefix, "gs://test-bucket/output/");
+        assert_eq!(
+            batch_config.batch_request_url,
+            "https://us-central1-aiplatform.googleapis.com/v1/projects/test-project/locations/us-central1/batchPredictionJobs"
+        );
+
+        // Test with None batch config
+        let provider_types_config = ProviderTypesConfig {
+            gcp_vertex_anthropic: Some(GCPProviderTypeConfig {
+                batch: Some(GCPBatchConfigType::None),
+            }),
+            gcp_vertex_gemini: None,
+        };
+
+        let provider = GCPVertexAnthropicProvider::new(
+            "claude-3-haiku".to_string(),
+            "us-central1".to_string(),
+            "test-project".to_string(),
+            None,
+            &provider_types_config,
+        )
+        .unwrap();
+
+        assert!(provider.batch_config.is_none());
+    }
 
     #[test]
     fn test_try_from_tool_choice() {
