@@ -1,18 +1,21 @@
 use std::sync::OnceLock;
 
-use futures::{TryStreamExt, StreamExt};
+use futures::{StreamExt, TryStreamExt};
 use lazy_static::lazy_static;
 use reqwest_eventsource::RequestBuilderExt;
 use secrecy::{ExposeSecret, SecretString};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio::time::Instant;
 use url::Url;
 
 use crate::cache::ModelProviderRequest;
+use crate::embeddings::{EmbeddingProvider, EmbeddingProviderResponse, EmbeddingRequest};
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
-use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse};
+use crate::inference::types::batch::{
+    BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse,
+};
 use crate::inference::types::{
     ContentBlockOutput, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
@@ -24,7 +27,7 @@ use super::helpers::inject_extra_request_data;
 use super::openai::{
     get_chat_url, handle_openai_error, prepare_openai_messages, prepare_openai_tools,
     stream_openai, OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, OpenAITool,
-    OpenAIToolChoice, StreamOptions,
+    OpenAIToolChoice, OpenAIUsage, StreamOptions,
 };
 use super::provider_trait::{InferenceProvider, TensorZeroEventError};
 
@@ -37,6 +40,18 @@ lazy_static! {
 
 fn default_api_key_location() -> CredentialLocation {
     CredentialLocation::Env("OLLAMA_API_KEY".to_string())
+}
+
+fn get_embedding_url(base_url: &Url) -> Result<Url, Error> {
+    let mut url = base_url.clone();
+    if !url.path().ends_with('/') {
+        url.set_path(&format!("{}/", url.path()));
+    }
+    url.join("embeddings").map_err(|e| {
+        Error::new(ErrorDetails::InvalidBaseUrl {
+            message: e.to_string(),
+        })
+    })
 }
 
 const PROVIDER_NAME: &str = "Ollama";
@@ -346,6 +361,97 @@ impl InferenceProvider for OllamaProvider {
     }
 }
 
+impl EmbeddingProvider for OllamaProvider {
+    async fn embed(
+        &self,
+        request: &EmbeddingRequest,
+        client: &reqwest::Client,
+        dynamic_api_keys: &InferenceCredentials,
+    ) -> Result<EmbeddingProviderResponse, Error> {
+        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let request_body = OllamaEmbeddingRequest::new(&self.model_name, &request.input);
+        let request_url =
+            get_embedding_url(self.api_base.as_ref().unwrap_or(&OLLAMA_DEFAULT_BASE_URL))?;
+        let start_time = Instant::now();
+        let mut request_builder = client
+            .post(request_url)
+            .header("Content-Type", "application/json");
+        if let Some(api_key) = api_key {
+            request_builder = request_builder.bearer_auth(api_key.expose_secret());
+        }
+        let res = request_builder
+            .json(&request_body)
+            .send()
+            .await
+            .map_err(|e| {
+                Error::new(ErrorDetails::InferenceClient {
+                    status_code: e.status(),
+                    message: format!(
+                        "Error sending request to OpenAI: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: None,
+                })
+            })?;
+        if res.status().is_success() {
+            let raw_response = res.text().await.map_err(|e| {
+                Error::new(ErrorDetails::InferenceServer {
+                    message: format!(
+                        "Error parsing text response: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: None,
+                    provider_type: PROVIDER_TYPE.to_string(),
+                })
+            })?;
+
+            let response: OllamaEmbeddingResponse =
+                serde_json::from_str(&raw_response).map_err(|e| {
+                    Error::new(ErrorDetails::InferenceServer {
+                        message: format!(
+                            "Error parsing JSON response: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
+                        raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                        raw_response: Some(raw_response.clone()),
+                        provider_type: PROVIDER_TYPE.to_string(),
+                    })
+                })?;
+            let latency = Latency::NonStreaming {
+                response_time: start_time.elapsed(),
+            };
+
+            Ok(OllamaEmbeddingResponseWithMetadata {
+                response,
+                latency,
+                request: request_body,
+                raw_response,
+            }
+            .try_into()?)
+        } else {
+            Err(handle_openai_error(
+                &serde_json::to_string(&request_body).unwrap_or_default(),
+                res.status(),
+                &res.text().await.map_err(|e| {
+                    Error::new(ErrorDetails::InferenceServer {
+                        message: format!(
+                            "Error parsing error response: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
+                        raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                        raw_response: None,
+                        provider_type: PROVIDER_TYPE.to_string(),
+                    })
+                })?,
+                PROVIDER_TYPE,
+            ))
+        }
+    }
+}
+
 #[derive(Debug, Serialize)]
 struct OllamaRequest<'a> {
     messages: Vec<OpenAIRequestMessage<'a>>,
@@ -531,3 +637,89 @@ impl<'a> TryFrom<OllamaResponseWithMetadata<'a>> for ProviderInferenceResponse {
         ))
     }
 }
+
+#[derive(Debug, Serialize)]
+struct OllamaEmbeddingRequest<'a> {
+    model: &'a str,
+    input: &'a str,
+}
+
+impl<'a> OllamaEmbeddingRequest<'a> {
+    fn new(model: &'a str, input: &'a str) -> Self {
+        Self { model, input }
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct OllamaEmbeddingData {
+    embedding: Vec<f32>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct OllamaEmbeddingResponse {
+    data: Vec<OllamaEmbeddingData>,
+    usage: OpenAIUsage,
+}
+
+struct OllamaEmbeddingResponseWithMetadata<'a> {
+    response: OllamaEmbeddingResponse,
+    latency: Latency,
+    request: OllamaEmbeddingRequest<'a>,
+    raw_response: String,
+}
+
+impl<'a> TryFrom<OllamaEmbeddingResponseWithMetadata<'a>> for EmbeddingProviderResponse {
+    type Error = Error;
+    fn try_from(response: OllamaEmbeddingResponseWithMetadata<'a>) -> Result<Self, Self::Error> {
+        let OllamaEmbeddingResponseWithMetadata {
+            response,
+            latency,
+            request,
+            raw_response,
+        } = response;
+        let raw_request = serde_json::to_string(&request).map_err(|e| {
+            Error::new(ErrorDetails::InferenceServer {
+                message: format!(
+                    "Error serializing request body as JSON: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
+                raw_request: Some(serde_json::to_string(&request).unwrap_or_default()),
+                raw_response: None,
+                provider_type: PROVIDER_TYPE.to_string(),
+            })
+        })?;
+
+        if response.data.len() != 1 {
+            return Err(Error::new(ErrorDetails::InferenceServer {
+                message: "Expected exactly one embedding in response".to_string(),
+                raw_request: Some(raw_request.clone()),
+                raw_response: Some(raw_response.clone()),
+                provider_type: PROVIDER_TYPE.to_string(),
+            }));
+        }
+        let embedding = response
+            .data
+            .into_iter()
+            .next()
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::InferenceServer {
+                    message: "Expected exactly one embedding in response".to_string(),
+                    raw_request: Some(raw_request.clone()),
+                    raw_response: Some(raw_response.clone()),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                })
+            })?
+            .embedding;
+
+        Ok(EmbeddingProviderResponse::new(
+            embedding,
+            request.input.to_string(),
+            raw_request,
+            raw_response,
+            response.usage.into(),
+            latency,
+        ))
+    }
+}
+
+

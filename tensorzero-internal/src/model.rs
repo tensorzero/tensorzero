@@ -1485,6 +1485,7 @@ impl ShorthandModelConfig for ModelConfig {
                 crate::inference::providers::together::default_parse_think_blocks(),
             )?),
             "xai" => ProviderConfig::XAI(XAIProvider::new(model_name, None)?),
+            "ollama" => ProviderConfig::Ollama(OllamaProvider::new(model_name, None, None)?),
             #[cfg(any(test, feature = "e2e_tests"))]
             "dummy" => ProviderConfig::Dummy(DummyProvider::new(model_name, None)?),
             _ => {
