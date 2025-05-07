@@ -74,5 +74,5 @@ services:
       test: ["CMD", "test", "-f", "/tmp/load_complete.marker"]
       interval: 5s
       timeout: 1s
-      retries: 12 # Retry for up to a minute
+      retries: 48 # Retry for up to 4 minutes
       start_period: 5s # Give the script time to start
