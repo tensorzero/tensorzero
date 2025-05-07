@@ -51,4 +51,4 @@ curl -X POST "http://localhost:3000/feedback" \
 
 Finally, visit the Jaeger UI at `http://localhost:16686` to see the traces.
 
-TODO: add image
+![Screenshot of TensorZero Gateway traces in Jaeger](https://github.com/user-attachments/assets/4f168a98-28a4-4721-95d3-acabfc156866)
