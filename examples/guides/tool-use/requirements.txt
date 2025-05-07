@@ -102,10 +102,6 @@ jiter==0.9.0 \
     --hash=sha256:fca1a02ad60ec30bb230f65bc01f611c8608b02d269f998bc29cca8619a919dc \
     --hash=sha256:ffba79584b3b670fefae66ceb3a28822365d25b7bf811e030609a3d5b876f538
     # via openai
-nodeenv==1.9.1 \
-    --hash=sha256:6ec12890a2dab7946721edbfbcd91f3319c6ccc9aec47be7c7e6b7011ee6645f \
-    --hash=sha256:ba11c9782d29c27c70ffbdda2d7415098754709be8a7056d79a737cd901155c9
-    # via pyright
 openai==1.77.0 \
     --hash=sha256:07706e91eb71631234996989a8ea991d5ee56f0744ef694c961e0824d4f39218 \
     --hash=sha256:897969f927f0068b8091b4b041d1f8175bcf124f7ea31bab418bf720971223bc
@@ -193,9 +189,6 @@ pydantic-core==2.33.2 \
     --hash=sha256:fa854f5cf7e33842a892e5c73f45327760bc7bc516339fda888c75ae60edaeb6 \
     --hash=sha256:fe5b32187cbc0c862ee201ad66c30cf218e5ed468ec8dc1cf49dec66e160cc4d
     # via pydantic
-pyright==1.1.400 \
-    --hash=sha256:b8a3ba40481aa47ba08ffb3228e821d22f7d391f83609211335858bf05686bdb \
-    --hash=sha256:c80d04f98b5a4358ad3a35e241dbf2a408eee33a40779df365644f8054d2517e
 sniffio==1.3.1 \
     --hash=sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2 \
     --hash=sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc
@@ -224,7 +217,6 @@ typing-extensions==4.13.2 \
     #   openai
     #   pydantic
     #   pydantic-core
-    #   pyright
     #   tensorzero
     #   typing-inspection
 typing-inspection==0.4.0 \
