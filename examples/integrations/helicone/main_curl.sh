@@ -9,7 +9,6 @@ fi
 # Test our `helicone_gpt_4o_mini` model
 curl http://localhost:3000/inference \
   -H "Content-Type: application/json" \
-  -H "Helicone-Auth: Bearer $HELICONE_API_KEY" \
   -d '{
     "model_name": "helicone_gpt_4o_mini",
     "input": {"messages": [{"role": "user", "content": "Who is the CEO of OpenAI?"}]},
@@ -25,7 +24,6 @@ echo "\n"
 # Test our `helicone_grok_3` model
 curl http://localhost:3000/inference \
   -H "Content-Type: application/json" \
-  -H "Helicone-Auth: Bearer $HELICONE_API_KEY" \
   -d '{
     "model_name": "helicone_grok_3",
     "input": {"messages": [{"role": "user", "content": "Who is the CEO of xAI?"}]},
