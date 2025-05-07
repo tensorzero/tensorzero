@@ -864,13 +864,6 @@ pub struct JsonInferenceDatapointInput {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-#[serde(untagged)]
-pub enum DatapointInput {
-    Chat(ChatInferenceDatapointInput),
-    Json(JsonInferenceDatapointInput),
-}
-
-#[derive(Debug, Deserialize, Serialize)]
 pub struct ChatInferenceDatapoint {
     pub dataset_name: String,
     pub function_name: String,

@@ -404,3 +404,24 @@ def parse_dynamic_evaluation_run_episode_response(
     data: Dict[str, Any],
 ) -> DynamicEvaluationRunEpisodeResponse:
     return DynamicEvaluationRunEpisodeResponse(episode_id=UUID(data["episode_id"]))
+
+
+@dataclass
+class ChatInferenceDatapointInput:
+    function_name: str
+    input: InferenceInput
+    output: Optional[Any]
+    allowed_tools: Optional[List[str]]
+    additional_tools: Optional[List[Any]]
+    tool_choice: Optional[str]
+    parallel_tool_calls: Optional[bool]
+    tags: Optional[Dict[str, str]]
+
+
+@dataclass
+class JsonInferenceDatapointInput:
+    function_name: str
+    input: InferenceInput
+    output: Optional[Any]
+    output_schema: Optional[Any]
+    tags: Optional[Dict[str, str]]
