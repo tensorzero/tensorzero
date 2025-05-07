@@ -212,7 +212,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         self,
         *,
         dataset_name: str,
-        datapoint_id: str,
+        datapoint_id: UUID,
     ) -> None:
         """
         Make a DELETE request to the /datasets/{dataset_name}/datapoints/{datapoint_id} endpoint.
@@ -420,7 +420,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         self,
         *,
         dataset_name: str,
-        datapoint_id: str,
+        datapoint_id: UUID,
     ) -> None:
         """
         Make a DELETE request to the /datasets/{dataset_name}/datapoints/{datapoint_id} endpoint.
