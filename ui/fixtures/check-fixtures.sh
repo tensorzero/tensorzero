@@ -19,6 +19,8 @@ all_tables["ModelInference"]="model_inference_examples.jsonl ./s3-fixtures/large
 all_tables["ChatInferenceDatapoint FINAL"]="chat_inference_datapoint_examples.jsonl"
 all_tables["JsonInferenceDatapoint FINAL"]="json_inference_datapoint_examples.jsonl"
 all_tables["ModelInferenceCache"]="model_inference_cache_examples.jsonl"
+all_tables["DynamicEvaluationRun"]="dynamic_evaluation_run_examples.jsonl"
+all_tables["DynamicEvaluationRunEpisode"]="dynamic_evaluation_run_episode_examples.jsonl"
 
 # Track if there's any mismatch
 mismatch=0

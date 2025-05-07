@@ -35,10 +35,8 @@ pub async fn parse_jsonl_batch_file<T: DeserializeOwned, E: std::error::Error>(
         raw_response,
         file_id,
     }: JsonlBatchFileInfo,
-) -> Result<ProviderBatchInferenceResponse, Error>
-where
-    ProviderBatchInferenceOutput: TryFrom<T>,
-{
+    mut make_output: impl FnMut(T) -> Result<ProviderBatchInferenceOutput, Error>,
+) -> Result<ProviderBatchInferenceResponse, Error> {
     let bytes = bytes.map_err(|e| {
         Error::new(ErrorDetails::InferenceServer {
             message: format!(
@@ -79,7 +77,7 @@ where
                 continue;
             }
         };
-        let output = match ProviderBatchInferenceOutput::try_from(row) {
+        let output = match make_output(row) {
             Ok(output) => output,
             Err(_) => {
                 // Construct error for logging but don't return it

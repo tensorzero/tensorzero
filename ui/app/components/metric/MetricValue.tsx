@@ -1,21 +1,19 @@
-import type { EvaluatorConfig } from "~/utils/config/evaluations";
-import { getOptimize } from "~/utils/config/evaluations";
-
 // Format metric value display component
 export default function MetricValue({
   value,
   metricType,
-  evaluatorConfig,
+  optimize,
+  cutoff,
   className = "",
 }: {
   value: string;
   metricType: "boolean" | "float" | "comment" | "demonstration";
-  evaluatorConfig: EvaluatorConfig;
+  optimize: "min" | "max";
+  cutoff?: number;
   className?: string;
 }): React.ReactElement {
   if (metricType === "boolean") {
     const boolValue = value === "true" || value === "1";
-    const optimize = getOptimize(evaluatorConfig);
     const failed =
       (!boolValue && optimize === "max") || (boolValue && optimize === "min");
 
@@ -36,7 +34,8 @@ export default function MetricValue({
     const numValue = parseFloat(value);
     if (!isNaN(numValue)) {
       // Check if value fails the cutoff criteria
-      const failsCutoff = isCutoffFailed(numValue, evaluatorConfig);
+      const failsCutoff =
+        optimize && cutoff ? isCutoffFailed(numValue, optimize, cutoff) : false;
       return (
         <span
           className={`whitespace-nowrap ${failsCutoff ? "text-red-700" : "text-gray-700"} ${className}`}
@@ -53,16 +52,16 @@ export default function MetricValue({
 
 export function isCutoffFailed(
   value: number | boolean,
-  evaluatorConfig: EvaluatorConfig,
+  optimize: "min" | "max",
+  cutoff: number,
 ) {
   const numericValue = typeof value === "number" ? value : value ? 1 : 0;
-  const optimize = getOptimize(evaluatorConfig);
-  if (evaluatorConfig.cutoff === undefined) {
+  if (cutoff === undefined) {
     return false;
   }
   if (optimize === "max") {
-    return numericValue < evaluatorConfig.cutoff;
+    return numericValue < cutoff;
   } else {
-    return numericValue > evaluatorConfig.cutoff;
+    return numericValue > cutoff;
   }
 }
