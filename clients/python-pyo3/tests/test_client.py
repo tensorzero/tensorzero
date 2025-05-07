@@ -2782,7 +2782,7 @@ def test_sync_dynamic_evaluation_run(sync_client: TensorZeroGateway):
     # Get the episode id
     episode_id = sync_client.dynamic_evaluation_run_episode(
         run_id=run_id,
-        datapoint_name="basic_test",
+        task_name="basic_test",
     ).episode_id
 
     inference_response = sync_client.inference(
@@ -2815,7 +2815,7 @@ async def test_async_dynamic_evaluation_run(async_client: AsyncTensorZeroGateway
     # Get the episode id
     episode_response = await async_client.dynamic_evaluation_run_episode(
         run_id=run_id,
-        datapoint_name="basic_test",
+        task_name="basic_test",
     )
     episode_id = episode_response.episode_id
     inference_response = await async_client.inference(

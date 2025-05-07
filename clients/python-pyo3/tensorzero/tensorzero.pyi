@@ -176,6 +176,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         self,
         *,
         run_id: str | UUID | uuid_utils.UUID,
+        task_name: Optional[str] = None,
         datapoint_name: Optional[str] = None,
         tags: Optional[Dict[str, str]] = None,
     ) -> DynamicEvaluationRunEpisodeResponse:
@@ -183,7 +184,9 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         Make a POST request to the /dynamic_evaluation_run_episode endpoint.
 
         :param run_id: The run ID to use for the dynamic evaluation run.
+        :param task_name: The name of the task to use for the dynamic evaluation run.
         :param datapoint_name: The name of the datapoint to use for the dynamic evaluation run.
+                    Deprecated: use `task_name` instead.
         :param tags: A dictionary of tags to add to the dynamic evaluation run.
         :return: A `DynamicEvaluationRunEpisodeResponse` instance ({"episode_id": str}).
         """
@@ -353,6 +356,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         self,
         *,
         run_id: str | UUID | uuid_utils.UUID,
+        task_name: Optional[str] = None,
         datapoint_name: Optional[str] = None,
         tags: Optional[Dict[str, str]] = None,
     ) -> DynamicEvaluationRunEpisodeResponse:
@@ -360,7 +364,9 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         Make a POST request to the /dynamic_evaluation_run_episode endpoint.
 
         :param run_id: The run ID to use for the dynamic evaluation run.
+        :param task_name: The name of the task to use for the dynamic evaluation run.
         :param datapoint_name: The name of the datapoint to use for the dynamic evaluation run.
+                    Deprecated: use `task_name` instead.
         :param tags: A dictionary of tags to add to the dynamic evaluation run.
         :return: A `DynamicEvaluationRunEpisodeResponse` instance ({"episode_id": str}).
         """
