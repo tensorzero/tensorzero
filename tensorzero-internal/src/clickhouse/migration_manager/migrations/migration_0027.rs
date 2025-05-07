@@ -72,7 +72,7 @@ impl Migration for Migration0027<'_> {
             || !json_datapoint_index_exists)
     }
 
-    async fn apply(&self) -> Result<(), Error> {
+    async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         let create_index_query = r#"
             ALTER TABLE TagInference ADD INDEX inference_id_index inference_id TYPE bloom_filter GRANULARITY 1;
         "#;
