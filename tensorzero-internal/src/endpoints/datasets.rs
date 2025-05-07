@@ -455,15 +455,16 @@ pub async fn create_datapoint_handler(
     State(app_state): AppState,
     Path(path_params): Path<CreateDatapointPathParams>,
     StructuredJson(params): StructuredJson<CreateDatapointParams>,
-) -> Result<(), Error> {
-    create_datapoint(
+) -> Result<Json<Vec<Uuid>>, Error> {
+    let datapoint_ids = create_datapoint(
         path_params.dataset_name,
         params,
         &app_state.config,
         &app_state.http_client,
         &app_state.clickhouse_connection_info,
     )
-    .await
+    .await?;
+    Ok(Json(datapoint_ids))
 }
 
 pub async fn create_datapoint(
@@ -472,7 +473,7 @@ pub async fn create_datapoint(
     config: &Config<'_>,
     http_client: &Client,
     clickhouse: &ClickHouseConnectionInfo,
-) -> Result<(), Error> {
+) -> Result<Vec<Uuid>, Error> {
     validate_dataset_name(&dataset_name)?;
     let mut chat_datapoints = Vec::with_capacity(params.datapoints.len());
     let mut json_datapoints = Vec::with_capacity(params.datapoints.len());
@@ -480,6 +481,7 @@ pub async fn create_datapoint(
         client: http_client,
         object_store_info: &config.object_store_info,
     };
+    let mut datapoint_ids = Vec::with_capacity(params.datapoints.len());
     for (i, datapoint) in params.datapoints.into_iter().enumerate() {
         let function_name = datapoint
             .get("function_name")
@@ -499,8 +501,16 @@ pub async fn create_datapoint(
                         })
                     })?;
                 // Validate the input
-                function_config.validate_input(&chat.input)?;
-                let resolved_input = chat.input.resolve(&fetch_context).await?;
+                function_config.validate_input(&chat.input).map_err(|e| {
+                    Error::new(ErrorDetails::InvalidRequest {
+                        message: format!("Failed to validate chat input for datapoint {i}: {e}"),
+                    })
+                })?;
+                let resolved_input = chat.input.resolve(&fetch_context).await.map_err(|e| {
+                    Error::new(ErrorDetails::InternalError {
+                        message: format!("Failed to resolve chat input for datapoint {i}: {e}"),
+                    })
+                })?;
                 // Prepare the tool config
                 let tool_config =
                     function_config.prepare_tool_config(chat.dynamic_tool_params, &config.tools)?;
@@ -537,10 +547,12 @@ pub async fn create_datapoint(
                 } else {
                     None
                 };
+                let datapoint_id = Uuid::now_v7();
+                datapoint_ids.push(datapoint_id);
                 chat_datapoints.push(ChatInferenceDatapoint {
                     dataset_name: dataset_name.clone(),
                     function_name: chat.function_name,
-                    id: Uuid::now_v7(),
+                    id: datapoint_id,
                     episode_id: None,
                     input: resolved_input,
                     output,
@@ -560,8 +572,16 @@ pub async fn create_datapoint(
                         })
                     })?;
                 // Validate the input
-                function_config.validate_input(&json.input)?;
-                let resolved_input = json.input.resolve(&fetch_context).await?;
+                function_config.validate_input(&json.input).map_err(|e| {
+                    Error::new(ErrorDetails::InvalidRequest {
+                        message: format!("Failed to validate input for datapoint {i}: {e}"),
+                    })
+                })?;
+                let resolved_input = json.input.resolve(&fetch_context).await.map_err(|e| {
+                    Error::new(ErrorDetails::InternalError {
+                        message: format!("Failed to resolve input for datapoint {i}: {e}"),
+                    })
+                })?;
                 // Validate the outputs against the output schema
                 let output_schema = json
                     .output_schema
@@ -603,10 +623,12 @@ pub async fn create_datapoint(
                 } else {
                     None
                 };
+                let datapoint_id = Uuid::now_v7();
+                datapoint_ids.push(datapoint_id);
                 let datapoint = JsonInferenceDatapoint {
                     dataset_name: dataset_name.clone(),
                     function_name: json.function_name,
-                    id: Uuid::now_v7(),
+                    id: datapoint_id,
                     episode_id: None,
                     input: resolved_input,
                     output,
@@ -640,7 +662,7 @@ pub async fn create_datapoint(
 
     // Run all futures concurrently and propagate any error
     future::try_join_all(futures_vec).await?;
-    Ok(())
+    Ok(datapoint_ids)
 }
 
 #[derive(Debug, Deserialize)]

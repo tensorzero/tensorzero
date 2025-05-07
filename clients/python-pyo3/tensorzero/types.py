@@ -410,18 +410,39 @@ def parse_dynamic_evaluation_run_episode_response(
 class ChatInferenceDatapointInput:
     function_name: str
     input: InferenceInput
-    output: Optional[Any]
-    allowed_tools: Optional[List[str]]
-    additional_tools: Optional[List[Any]]
-    tool_choice: Optional[str]
-    parallel_tool_calls: Optional[bool]
-    tags: Optional[Dict[str, str]]
+    output: Optional[Any] = None
+    allowed_tools: Optional[List[str]] = None
+    additional_tools: Optional[List[Any]] = None
+    tool_choice: Optional[str] = None
+    parallel_tool_calls: Optional[bool] = None
+    tags: Optional[Dict[str, str]] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "function_name": self.function_name,
+            "input": self.input,
+            "output": self.output,
+            "allowed_tools": self.allowed_tools,
+            "additional_tools": self.additional_tools,
+            "tool_choice": self.tool_choice,
+            "parallel_tool_calls": self.parallel_tool_calls,
+            "tags": self.tags,
+        }
 
 
 @dataclass
 class JsonInferenceDatapointInput:
     function_name: str
     input: InferenceInput
-    output: Optional[Any]
-    output_schema: Optional[Any]
-    tags: Optional[Dict[str, str]]
+    output: Optional[Any] = None
+    output_schema: Optional[Any] = None
+    tags: Optional[Dict[str, str]] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "function_name": self.function_name,
+            "input": self.input,
+            "output": self.output,
+            "output_schema": self.output_schema,
+            "tags": self.tags,
+        }

@@ -200,9 +200,9 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         datapoints: List[
             Union[ChatInferenceDatapointInput, JsonInferenceDatapointInput]
         ],
-    ) -> None:
+    ) -> List[UUID]:
         """
-        Make a POST request to the /bulk_insert_datapoints endpoint.
+        Make a POST request to the /datasets/{dataset_name}/datapoints/bulk endpoint.
 
         :param dataset_name: The name of the dataset to insert the datapoints into.
         :param datapoints: A list of datapoints to insert.
@@ -215,7 +215,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         datapoint_id: str,
     ) -> None:
         """
-        Make a POST request to the /delete_datapoint endpoint.
+        Make a DELETE request to the /datasets/{dataset_name}/datapoints/{datapoint_id} endpoint.
 
         :param dataset_name: The name of the dataset to delete the datapoint from.
         :param datapoint_id: The ID of the datapoint to delete.
@@ -408,9 +408,9 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         datapoints: List[
             Union[ChatInferenceDatapointInput, JsonInferenceDatapointInput]
         ],
-    ) -> None:
+    ) -> List[UUID]:
         """
-        Make a POST request to the /bulk_insert_datapoints endpoint.
+        Make a POST request to the /datasets/{dataset_name}/datapoints/bulk endpoint.
 
         :param dataset_name: The name of the dataset to insert the datapoints into.
         :param datapoints: A list of datapoints to insert.
@@ -423,7 +423,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         datapoint_id: str,
     ) -> None:
         """
-        Make a POST request to the /delete_datapoint endpoint.
+        Make a DELETE request to the /datasets/{dataset_name}/datapoints/{datapoint_id} endpoint.
 
         :param dataset_name: The name of the dataset to delete the datapoint from.
         :param datapoint_id: The ID of the datapoint to delete.

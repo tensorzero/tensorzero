@@ -588,7 +588,7 @@ impl Client {
         &self,
         dataset_name: String,
         params: CreateDatapointParams,
-    ) -> Result<(), TensorZeroError> {
+    ) -> Result<Vec<Uuid>, TensorZeroError> {
         match &self.mode {
             ClientMode::HTTPGateway(client) => {
                 let url = client.base_url.join(&format!("datasets/{dataset_name}/datapoints/bulk")).map_err(|e| TensorZeroError::Other {
@@ -631,7 +631,25 @@ impl Client {
                     .into(),
                 })?;
                 let builder = client.http_client.delete(url);
-                self.parse_http_response(builder.send().await).await
+                let resp = builder.send().await.map_err(|e| TensorZeroError::Other {
+                    source: tensorzero_internal::error::Error::new(ErrorDetails::JsonRequest {
+                        message: format!("Error deleting datapoint: {e:?}"),
+                    })
+                    .into(),
+                })?;
+                if resp.status().is_success() {
+                    Ok(())
+                } else {
+                    Err(TensorZeroError::Other {
+                        source: tensorzero_internal::error::Error::new(ErrorDetails::JsonRequest {
+                            message: format!(
+                                "Error deleting datapoint: {}",
+                                resp.text().await.unwrap_or_default()
+                            ),
+                        })
+                        .into(),
+                    })
+                }
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
