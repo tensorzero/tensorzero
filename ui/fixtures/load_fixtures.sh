@@ -16,7 +16,7 @@ clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --
 
 
 # Give ClickHouse some time to make the writes visible
-sleep 1
+sleep 2
 
 ./check-fixtures.sh
 
