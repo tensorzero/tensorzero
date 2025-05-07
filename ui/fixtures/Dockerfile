@@ -4,4 +4,4 @@ FROM clickhouse/clickhouse-server:24.12-alpine
 
 RUN apk add --no-cache python3 py3-pip aws-cli
 RUN pip install parquet-tools --break-system-packages
-RUN curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
