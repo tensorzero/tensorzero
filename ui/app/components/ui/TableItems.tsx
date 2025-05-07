@@ -5,7 +5,10 @@ import {
   TooltipTrigger,
   TooltipProvider,
 } from "./tooltip";
+import { getFunctionTypeIcon } from "~/utils/icon";
 import { formatDate } from "~/utils/date";
+import { useConfig } from "~/context/config";
+import { AlertDialog } from "~/components/ui/AlertDialog";
 
 interface TableItemShortUuidProps {
   id: string;
@@ -59,4 +62,62 @@ function TableItemTime({ timestamp }: TableItemTimeProps) {
   );
 }
 
-export { TableItemShortUuid, TableItemTime };
+interface TableItemFunctionProps {
+  functionName: string;
+  functionType: string;
+  link?: string;
+}
+
+function TableItemFunction({
+  functionName,
+  functionType,
+  link,
+}: TableItemFunctionProps) {
+  const config = useConfig();
+  const functionIconConfig = getFunctionTypeIcon(functionType);
+  const functionConfig = config.functions[functionName];
+
+  const baseClasses =
+    "inline-flex items-center text-sm text-fg-primary py-1 px-2 gap-1.5 rounded-md font-mono";
+
+  const content = (
+    <>
+      {functionIconConfig.icon && (
+        <div
+          className={`${functionIconConfig.iconBg} ml-[-2px] flex size-5 items-center justify-center rounded-sm`}
+        >
+          {functionIconConfig.icon}
+        </div>
+      )}
+      <span className="text-fg-primary inline-block truncate">
+        {functionName}
+      </span>
+    </>
+  );
+
+  if (link) {
+    if (functionConfig) {
+      return (
+        <Link
+          to={link}
+          className={`${baseClasses} hover:bg-bg-hover cursor-pointer`}
+        >
+          {content}
+        </Link>
+      );
+    } else {
+      return (
+        <AlertDialog
+          message="This function is not present in your configuration file."
+          trigger={
+            <div className={`${baseClasses} cursor-default`}>{content}</div>
+          }
+        />
+      );
+    }
+  }
+
+  return <div className={`${baseClasses} cursor-default`}>{content}</div>;
+}
+
+export { TableItemShortUuid, TableItemTime, TableItemFunction };

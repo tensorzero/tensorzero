@@ -9,9 +9,7 @@ import {
 } from "~/components/ui/table";
 import type { FunctionConfig } from "~/utils/config/function";
 import type { FunctionCountInfo } from "~/utils/clickhouse/inference";
-import { Code } from "~/components/ui/code";
-import { FunctionLink } from "~/components/function/FunctionLink";
-import { TableItemTime } from "~/components/ui/TableItems";
+import { TableItemTime, TableItemFunction } from "~/components/ui/TableItems";
 
 export default function FunctionsTable({
   functions,
@@ -54,7 +52,6 @@ export default function FunctionsTable({
         <TableHeader>
           <TableRow>
             <TableHead>Name</TableHead>
-            <TableHead>Type</TableHead>
             <TableHead>Inference Count</TableHead>
             <TableHead>Last Used</TableHead>
           </TableRow>
@@ -67,14 +64,11 @@ export default function FunctionsTable({
               ({ function_name, count, max_timestamp, type }) => (
                 <TableRow key={function_name} id={function_name}>
                   <TableCell className="max-w-[200px] lg:max-w-none">
-                    <FunctionLink functionName={function_name}>
-                      <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
-                        {function_name}
-                      </code>
-                    </FunctionLink>
-                  </TableCell>
-                  <TableCell>
-                    <Code>{type}</Code>
+                    <TableItemFunction
+                      functionName={function_name}
+                      functionType={type}
+                      link={`/observability/functions/${function_name}`}
+                    />
                   </TableCell>
                   <TableCell>{count}</TableCell>
                   <TableCell>
