@@ -5,6 +5,8 @@ use async_trait::async_trait;
 
 use super::check_table_exists;
 
+/// NOTE: This migration is BANNED in favor of migration_0028.
+///
 /// This migration adds a table StaticEvaluationHumanFeedback that stores human feedback in an easy-to-reference format.
 /// This is technically an auxiliary table as the primary store is still the various feedback tables.
 /// We also create two materialized views that automatically write to StaticEvaluationHumanFeedback when
