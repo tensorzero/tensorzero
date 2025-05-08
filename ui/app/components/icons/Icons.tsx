@@ -310,18 +310,6 @@ export const Compare: React.FC<IconProps> = (props) => (
   </IconWrapper>
 );
 
-// TODO: make this icon more appropriate for a feedback button
-export const Feedback: React.FC<IconProps> = (props) => (
-  <IconWrapper {...props}>
-    <path
-      fillRule="evenodd"
-      clipRule="evenodd"
-      d="M8.75 2C8.75 1.58579 8.41421 1.25 8 1.25C7.58579 1.25 7.25 1.58579 7.25 2L7.25 14C7.25 14.4142 7.58579 14.75 8 14.75C8.41421 14.75 8.75 14.4142 8.75 14L8.75 2ZM0.75 5C0.75 4.0335 1.5335 3.25 2.5 3.25H4.5C5.4665 3.25 6.25 4.0335 6.25 5V11C6.25 11.9665 5.4665 12.75 4.5 12.75H2.5C1.5335 12.75 0.75 11.9665 0.75 11V5ZM2.5 4.75C2.36193 4.75 2.25 4.86193 2.25 5V11C2.25 11.1381 2.36193 11.25 2.5 11.25H4.5C4.63807 11.25 4.75 11.1381 4.75 11V5C4.75 4.86193 4.63807 4.75 4.5 4.75H2.5ZM9.75 5C9.75 4.0335 10.5335 3.25 11.5 3.25H13.5C14.4665 3.25 15.25 4.0335 15.25 5V11C15.25 11.9665 14.4665 12.75 13.5 12.75H11.5C10.5335 12.75 9.75 11.9665 9.75 11V5ZM11.5 4.75C11.3619 4.75 11.25 4.86193 11.25 5V11C11.25 11.1381 11.3619 11.25 11.5 11.25H13.5C13.6381 11.25 13.75 11.1381 13.75 11V5C13.75 4.86193 13.6381 4.75 13.5 4.75H11.5Z"
-      fill="currentColor"
-    />
-  </IconWrapper>
-);
-
 export const ArrowTopRight: React.FC<IconProps> = (props) => (
   <IconWrapper {...props}>
     <path
@@ -399,6 +387,17 @@ export const QuestionMark: React.FC<IconProps> = (props) => (
   </IconWrapper>
 );
 
+export const AddFeedback: React.FC<IconProps> = (props) => (
+  <IconWrapper {...props}>
+    <path
+      fillRule="evenodd"
+      clipRule="evenodd"
+      d="M11.5 7.75C11.9142 7.75 12.25 8.08579 12.25 8.5V10.25H14L14.0771 10.2539C14.4551 10.2925 14.75 10.6118 14.75 11C14.75 11.3882 14.4551 11.7075 14.0771 11.7461L14 11.75H12.25V13.5L12.2461 13.5771C12.2075 13.9551 11.8882 14.25 11.5 14.25C11.1118 14.25 10.7925 13.9551 10.7539 13.5771L10.75 13.5V11.75H9C8.58579 11.75 8.25 11.4142 8.25 11C8.25 10.5858 8.58579 10.25 9 10.25H10.75V8.5C10.75 8.08579 11.0858 7.75 11.5 7.75ZM5 10.25C5.41421 10.25 5.75 10.5858 5.75 11C5.75 11.4142 5.41421 11.75 5 11.75H2.5C2.08579 11.75 1.75 11.4142 1.75 11C1.75 10.5858 2.08579 10.25 2.5 10.25H5ZM8 6.75C8.41421 6.75 8.75 7.08579 8.75 7.5C8.75 7.91421 8.41421 8.25 8 8.25H2.5C2.08579 8.25 1.75 7.91421 1.75 7.5C1.75 7.08579 2.08579 6.75 2.5 6.75H8ZM12 3.25C12.4142 3.25 12.75 3.58579 12.75 4C12.75 4.41421 12.4142 4.75 12 4.75H2.5C2.08579 4.75 1.75 4.41421 1.75 4C1.75 3.58579 2.08579 3.25 2.5 3.25H12Z"
+      fill="currentColor"
+    />
+  </IconWrapper>
+);
+
 export const Evaluation: React.FC<IconProps> = (props) => (
   <IconWrapper {...props}>
     <path
@@ -447,7 +446,7 @@ export const iconComponents: Record<string, React.FC<IconProps>> = {
   Dataset,
   AddToDataset,
   Compare,
-  Feedback,
+  AddFeedback,
   ArrowTopRight,
   ArrowBottomRight,
   Check,
