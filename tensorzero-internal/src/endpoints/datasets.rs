@@ -1,4 +1,4 @@
-use std::{collections::HashMap, future::Future, pin::Pin, sync::Arc};
+use std::{collections::HashMap, future::Future, pin::Pin};
 
 use axum::{
     extract::{Path, State},
@@ -14,22 +14,21 @@ use crate::{
     clickhouse::{ClickHouseConnectionInfo, ExternalDataInfo},
     config_parser::Config,
     error::{Error, ErrorDetails},
-    function::{FunctionConfig, FunctionConfigChat},
+    function::FunctionConfig,
     gateway_util::{AppState, StructuredJson},
     inference::types::{
         batch::{deserialize_json_string, deserialize_optional_json_string},
         ChatInferenceDatabaseInsert, ContentBlockChatOutput, FetchContext, Input,
         JsonInferenceDatabaseInsert, JsonInferenceOutput, ResolvedInput,
     },
-    tool::{DynamicToolParams, ToolCallConfigDatabaseInsert, ToolChoice},
+    tool::{DynamicToolParams, ToolCallConfigDatabaseInsert},
     uuid_util::validate_tensorzero_uuid,
 };
 use tracing::instrument;
 
 pub const CLICKHOUSE_DATETIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S%.6f";
-use super::{
-    feedback::{validate_parse_demonstration, DemonstrationOutput, DynamicDemonstrationInfo},
-    inference::DEFAULT_FUNCTION_NAME,
+use super::feedback::{
+    validate_parse_demonstration, DemonstrationOutput, DynamicDemonstrationInfo,
 };
 
 #[derive(Debug, Deserialize)]
@@ -301,10 +300,11 @@ pub async fn update_datapoint_handler(
             message: format!("Failed to deserialize `function_name`: {e}"),
         })
     })?;
-    let function_config =
-        get_possibly_default_function(&function_data.function_name, &app_state.config)?;
+    let function_config = app_state
+        .config
+        .get_function(&function_data.function_name)?;
 
-    match *function_config {
+    match **function_config {
         FunctionConfig::Chat(_) => {
             let chat: SyntheticChatInferenceDatapoint =
                 serde_json::from_value(params).map_err(|e| {
@@ -491,8 +491,12 @@ pub async fn create_datapoint(
                     message: format!("Expected function name for datapoint {i}"),
                 })
             })?;
-        let function_config = get_possibly_default_function(function_name, config)?;
-        match &*function_config {
+        let function_config = config.get_function(function_name).map_err(|e| {
+            Error::new(ErrorDetails::InvalidRequest {
+                message: format!("Failed to get function config for datapoint {i}: {e}"),
+            })
+        })?;
+        match &**function_config {
             FunctionConfig::Chat(_) => {
                 let chat: ChatInferenceDatapointInput =
                     serde_json::from_value(datapoint).map_err(|e| {
@@ -1076,26 +1080,6 @@ pub struct SyntheticJsonInferenceDatapoint {
     pub auxiliary: String,
     #[serde(default)]
     pub source_inference_id: Option<Uuid>,
-}
-
-fn get_possibly_default_function(
-    function_name: &str,
-    config: &Config,
-) -> Result<Arc<FunctionConfig>, Error> {
-    if function_name == DEFAULT_FUNCTION_NAME {
-        Ok(Arc::new(FunctionConfig::Chat(FunctionConfigChat {
-            variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: None,
-            tools: vec![],
-            tool_choice: ToolChoice::None,
-            parallel_tool_calls: None,
-            description: None,
-        })))
-    } else {
-        config.get_function(function_name).cloned()
-    }
 }
 
 fn validate_dataset_name(dataset_name: &str) -> Result<(), Error> {

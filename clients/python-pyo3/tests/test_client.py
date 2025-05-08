@@ -3110,3 +3110,16 @@ async def test_async_bulk_insert_delete_datapoints(
     await async_client.delete_datapoint(
         dataset_name="test", datapoint_id=datapoint_ids[3]
     )
+
+
+def test_sync_invalid_input(sync_client: TensorZeroGateway):
+    with pytest.raises(TensorZeroInternalError) as exc_info:
+        sync_client.inference(
+            function_name="json_success",
+            input={"messages": [{"role": "user", "content": ["Invalid", "Content"]}]},
+        )
+
+    assert (
+        str(exc_info.value)
+        == 'Failed to deserialize JSON to tensorzero::client_input::ClientInput: messages[0].content[0]: invalid type: string "Invalid", expected object at line 1 column 54'
+    )
