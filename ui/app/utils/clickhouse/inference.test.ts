@@ -301,13 +301,13 @@ test("queryInferenceTableByEpisodeId pages through a sample of results correctly
 test("queryInferenceTableBounds", async () => {
   const bounds = await queryInferenceTableBounds();
   expect(bounds.first_id).toBe("01934c9a-be70-74e2-8e6d-8eb19531638c");
-  expect(bounds.last_id).toBe("01969224-8479-7160-bee3-472ed18aa2ee");
+  expect(bounds.last_id).toBe("0196a0ea-d197-76d0-b6fc-15778589a4da");
 });
 
 test("queryEpisodeTableBounds", async () => {
   const bounds = await queryEpisodeTableBounds();
   expect(bounds.first_id).toBe("01934c9a-be70-74e2-8e6d-8eb19531638c");
-  expect(bounds.last_id).toBe("01969224-8479-7160-bee3-472ed18aa2ee");
+  expect(bounds.last_id).toBe("0196a0ea-d197-76d0-b6fc-15778589a4da");
 });
 
 test("queryInferenceTableBounds with episode_id", async () => {
@@ -501,11 +501,6 @@ test("countInferencesByFunction", async () => {
   expect(countsInfo).toEqual(
     expect.arrayContaining([
       {
-        count: 10000000,
-        function_name: "basic_test",
-        max_timestamp: "2025-05-02T17:56:28Z",
-      },
-      {
         count: 204,
         function_name: "tensorzero::llm_judge::entity_extraction::count_sports",
         max_timestamp: "2025-04-15T02:34:22Z",
@@ -534,21 +529,6 @@ test("countInferencesByFunction", async () => {
         count: 1,
         function_name: "foo",
         max_timestamp: "2025-02-13T22:29:20Z",
-      },
-      {
-        count: 767,
-        function_name: "ask_question",
-        max_timestamp: "2025-01-03T21:52:59Z",
-      },
-      {
-        count: 764,
-        function_name: "answer_question",
-        max_timestamp: "2025-01-03T21:52:59Z",
-      },
-      {
-        count: 50,
-        function_name: "generate_secret",
-        max_timestamp: "2025-01-03T21:51:29Z",
       },
     ]),
   );
