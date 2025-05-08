@@ -3,6 +3,7 @@ use object_store::local::LocalFileSystem;
 use object_store::{ObjectStore, PutPayload};
 use scoped_tls::scoped_thread_local;
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -10,6 +11,7 @@ use tensorzero_derive::TensorZeroDeserialize;
 use tracing::instrument;
 
 use crate::embeddings::{EmbeddingModelTable, UninitializedEmbeddingModelConfig};
+use crate::endpoints::inference::DEFAULT_FUNCTION_NAME;
 use crate::error::{Error, ErrorDetails};
 use crate::evaluations::{EvaluationConfig, UninitializedEvaluationConfig};
 use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
@@ -576,12 +578,29 @@ impl<'c> Config<'c> {
     pub fn get_function<'a>(
         &'a self,
         function_name: &str,
-    ) -> Result<&'a Arc<FunctionConfig>, Error> {
-        self.functions.get(function_name).ok_or_else(|| {
-            Error::new(ErrorDetails::UnknownFunction {
-                name: function_name.to_string(),
-            })
-        })
+    ) -> Result<Cow<'a, Arc<FunctionConfig>>, Error> {
+        if function_name == DEFAULT_FUNCTION_NAME {
+            Ok(Cow::Owned(Arc::new(FunctionConfig::Chat(
+                FunctionConfigChat {
+                    variants: HashMap::new(),
+                    system_schema: None,
+                    user_schema: None,
+                    assistant_schema: None,
+                    tools: vec![],
+                    tool_choice: ToolChoice::None,
+                    parallel_tool_calls: None,
+                    description: None,
+                },
+            ))))
+        } else {
+            Ok(Cow::Borrowed(
+                self.functions.get(function_name).ok_or_else(|| {
+                    Error::new(ErrorDetails::UnknownFunction {
+                        name: function_name.to_string(),
+                    })
+                })?,
+            ))
+        }
     }
 
     /// Get a metric by name, producing an error if it's not found

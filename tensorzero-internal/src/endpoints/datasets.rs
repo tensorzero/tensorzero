@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::collections::HashMap;
 
 use axum::{
     extract::{Path, State},
@@ -13,7 +13,7 @@ use crate::{
     clickhouse::{ClickHouseConnectionInfo, ExternalDataInfo},
     config_parser::Config,
     error::{Error, ErrorDetails},
-    function::{FunctionConfig, FunctionConfigChat},
+    function::FunctionConfig,
     gateway_util::{AppState, StructuredJson},
     inference::types::{
         batch::{
@@ -24,7 +24,7 @@ use crate::{
     },
     tool::{
         BatchDynamicToolParams, BatchDynamicToolParamsWithSize, DynamicToolParams,
-        ToolCallConfigDatabaseInsert, ToolChoice,
+        ToolCallConfigDatabaseInsert,
     },
     uuid_util::validate_tensorzero_uuid,
 };
@@ -34,7 +34,6 @@ pub const CLICKHOUSE_DATETIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S%.6f";
 use super::{
     batch_inference::{BatchOutputSchemas, BatchTags},
     feedback::{validate_parse_demonstration, DemonstrationOutput, DynamicDemonstrationInfo},
-    inference::DEFAULT_FUNCTION_NAME,
 };
 
 #[derive(Debug, Deserialize)]
@@ -306,10 +305,11 @@ pub async fn update_datapoint_handler(
             message: format!("Failed to deserialize `function_name`: {e}"),
         })
     })?;
-    let function_config =
-        get_possibly_default_function(&function_data.function_name, &app_state.config)?;
+    let function_config = app_state
+        .config
+        .get_function(&function_data.function_name)?;
 
-    match *function_config {
+    match **function_config {
         FunctionConfig::Chat(_) => {
             let chat: SyntheticChatInferenceDatapoint =
                 serde_json::from_value(params).map_err(|e| {
@@ -506,7 +506,7 @@ pub async fn create_datapoint(
     clickhouse: &ClickHouseConnectionInfo,
 ) -> Result<(), Error> {
     validate_dataset_name(&dataset_name)?;
-    let function_config = get_possibly_default_function(&params.function_name, config)?;
+    let function_config = config.get_function(&params.function_name)?;
     let num_datapoints = params.input.len();
     if num_datapoints == 0 {
         return Err(Error::new(ErrorDetails::InvalidRequest {
@@ -544,7 +544,7 @@ pub async fn create_datapoint(
         client: http_client,
         object_store_info: &config.object_store_info,
     };
-    match &*function_config {
+    match &**function_config {
         FunctionConfig::Chat(_) => {
             let mut datapoints = Vec::with_capacity(num_datapoints);
             // Validate all the datapoints (output and tool params), then write them to ClickHouse
@@ -1055,26 +1055,6 @@ pub struct SyntheticJsonInferenceDatapoint {
     pub auxiliary: String,
     #[serde(default)]
     pub source_inference_id: Option<Uuid>,
-}
-
-fn get_possibly_default_function(
-    function_name: &str,
-    config: &Config,
-) -> Result<Arc<FunctionConfig>, Error> {
-    if function_name == DEFAULT_FUNCTION_NAME {
-        Ok(Arc::new(FunctionConfig::Chat(FunctionConfigChat {
-            variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: None,
-            tools: vec![],
-            tool_choice: ToolChoice::None,
-            parallel_tool_calls: None,
-            description: None,
-        })))
-    } else {
-        config.get_function(function_name).cloned()
-    }
 }
 
 fn validate_dataset_name(dataset_name: &str) -> Result<(), Error> {
