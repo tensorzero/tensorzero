@@ -19,17 +19,7 @@ use tensorzero_internal::clickhouse::migration_manager::migrations::migration_00
 use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0009::Migration0009;
 use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0011::Migration0011;
 use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0013::Migration0013;
-use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0015::Migration0015;
-use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0016::Migration0016;
-use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0017::Migration0017;
-use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0018::Migration0018;
-use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0019::Migration0019;
-use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0020::Migration0020;
-use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0021::Migration0021;
-use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0022::Migration0022;
-use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0023::Migration0023;
-use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0024::Migration0024;
-use tensorzero_internal::clickhouse::migration_manager::{self};
+use tensorzero_internal::clickhouse::migration_manager::{self, make_all_migrations};
 use tensorzero_internal::clickhouse::test_helpers::{get_clickhouse, CLICKHOUSE_URL};
 use tensorzero_internal::clickhouse::ClickHouseConnectionInfo;
 
@@ -84,71 +74,7 @@ async fn test_clickhouse_migration_manager() {
     clickhouse.create_database().await.unwrap();
     // Run it twice to test that it is a no-op the second time
     clickhouse.create_database().await.unwrap();
-
-    // When creating a new migration, add it to the end of this array,
-    // and adjust the call to `invoke_all!` to include the new array index.
-    let migrations: &[Box<dyn Migration + '_>] = &[
-        Box::new(Migration0000 {
-            clickhouse: &clickhouse,
-        }),
-        Box::new(Migration0002 {
-            clickhouse: &clickhouse,
-        }),
-        Box::new(Migration0003 {
-            clickhouse: &clickhouse,
-        }),
-        Box::new(Migration0004 {
-            clickhouse: &clickhouse,
-        }),
-        Box::new(Migration0005 {
-            clickhouse: &clickhouse,
-        }),
-        Box::new(Migration0006 {
-            clickhouse: &clickhouse,
-        }),
-        Box::new(Migration0008 {
-            clickhouse: &clickhouse,
-        }),
-        Box::new(Migration0009 {
-            clickhouse: &clickhouse,
-            clean_start: true,
-        }),
-        Box::new(Migration0011 {
-            clickhouse: &clickhouse,
-        }),
-        Box::new(Migration0015 {
-            clickhouse: &clickhouse,
-        }),
-        Box::new(Migration0016 {
-            clickhouse: &clickhouse,
-        }),
-        Box::new(Migration0017 {
-            clickhouse: &clickhouse,
-        }),
-        Box::new(Migration0018 {
-            clickhouse: &clickhouse,
-        }),
-        Box::new(Migration0019 {
-            clickhouse: &clickhouse,
-        }),
-        Box::new(Migration0020 {
-            clickhouse: &clickhouse,
-            clean_start: true,
-        }),
-        Box::new(Migration0021 {
-            clickhouse: &clickhouse,
-            clean_start: true,
-        }),
-        Box::new(Migration0022 {
-            clickhouse: &clickhouse,
-        }),
-        Box::new(Migration0023 {
-            clickhouse: &clickhouse,
-        }),
-        Box::new(Migration0024 {
-            clickhouse: &clickhouse,
-        }),
-    ];
+    let migrations = make_all_migrations(&clickhouse);
 
     // This runs all migrations up to and including the given migration number,
     // verifying that only the most recent migration is actually applied.
@@ -157,7 +83,7 @@ async fn test_clickhouse_migration_manager() {
         async move {
             // All of the previous migrations should have already been run
             for (i, migration) in migrations.iter().enumerate().take(migration_num) {
-                let clean_start = migration_manager::run_migration(migration.as_ref())
+                let clean_start = migration_manager::run_migration(migration.as_ref(), false)
                     .await
                     .unwrap();
                 if i == 0 {
@@ -175,9 +101,10 @@ async fn test_clickhouse_migration_manager() {
                 );
             }
 
-            let clean_start = migration_manager::run_migration(migrations[migration_num].as_ref())
-                .await
-                .unwrap();
+            let clean_start =
+                migration_manager::run_migration(migrations[migration_num].as_ref(), true)
+                    .await
+                    .unwrap();
             if migration_num == 0 {
                 // When running for the first time, we should have a clean start.
                 assert!(clean_start);
@@ -195,10 +122,10 @@ async fn test_clickhouse_migration_manager() {
     };
 
     #[traced_test]
-    async fn run_all(migrations: &[Box<dyn Migration + '_>]) {
+    async fn run_all(migrations: &[Box<dyn Migration + Send + Sync + '_>]) {
         // Now, run all of the migrations, and verify that none of them apply
         for (i, migration) in migrations.iter().enumerate() {
-            let clean_start = migration_manager::run_migration(migration.as_ref())
+            let clean_start = migration_manager::run_migration(migration.as_ref(), true)
                 .await
                 .unwrap();
             if i == 0 {
@@ -223,9 +150,9 @@ async fn test_clickhouse_migration_manager() {
         // will throw an error if it doesn't.
         // This must be an array literal, so that the macro can generate a function
         // for each element in the array.
-        [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
+        [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
     );
-    run_all(migrations).await;
+    run_all(&migrations).await;
 
     let database = clickhouse.database();
     tracing::info!("Attempting to drop test database: {database}");
@@ -310,7 +237,6 @@ async fn test_migration_0013_old_table() {
         }),
         Box::new(Migration0009 {
             clickhouse: &clickhouse,
-            clean_start: true,
         }),
         Box::new(Migration0011 {
             clickhouse: &clickhouse,
@@ -319,7 +245,7 @@ async fn test_migration_0013_old_table() {
 
     // Run migrations up to right before 0013
     for migration in migrations.iter() {
-        migration_manager::run_migration(migration.as_ref())
+        migration_manager::run_migration(migration.as_ref(), true)
             .await
             .unwrap();
     }
@@ -339,10 +265,12 @@ async fn test_migration_0013_old_table() {
         .run_query_synchronous(query.to_string(), None)
         .await
         .unwrap();
-    let err = migration_manager::run_migration(&Migration0013 {
-        clean_start: false,
-        clickhouse: &clickhouse,
-    })
+    let err = migration_manager::run_migration(
+        &Migration0013 {
+            clickhouse: &clickhouse,
+        },
+        false,
+    )
     .await
     .unwrap_err();
     assert!(
@@ -386,7 +314,6 @@ async fn test_migration_0013_data_no_table() {
         }),
         Box::new(Migration0009 {
             clickhouse: &clickhouse,
-            clean_start: true,
         }),
         Box::new(Migration0011 {
             clickhouse: &clickhouse,
@@ -395,7 +322,7 @@ async fn test_migration_0013_data_no_table() {
 
     // Run migrations up to right before 0013
     for migration in migrations.iter() {
-        migration_manager::run_migration(migration.as_ref())
+        migration_manager::run_migration(migration.as_ref(), true)
             .await
             .unwrap();
     }
@@ -410,10 +337,12 @@ async fn test_migration_0013_data_no_table() {
         .run_query_synchronous(query.to_string(), None)
         .await
         .unwrap();
-    let err = migration_manager::run_migration(&Migration0013 {
-        clean_start: false,
-        clickhouse: &clickhouse,
-    })
+    let err = migration_manager::run_migration(
+        &Migration0013 {
+            clickhouse: &clickhouse,
+        },
+        false,
+    )
     .await
     .unwrap_err();
     assert!(err.to_string()

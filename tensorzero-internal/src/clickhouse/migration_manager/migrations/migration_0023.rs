@@ -53,7 +53,7 @@ impl Migration for Migration0023<'_> {
             || !boolean_materialized_view_exists)
     }
 
-    async fn apply(&self) -> Result<(), Error> {
+    async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         self.clickhouse
             .run_query_synchronous(
                 r#"CREATE TABLE IF NOT EXISTS StaticEvaluationHumanFeedback (

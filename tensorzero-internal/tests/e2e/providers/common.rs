@@ -587,14 +587,14 @@ model = "google_ai_studio_gemini::gemini-2.0-flash-lite"
 
 [functions.image_test.variants.gcp_vertex]
 type = "chat_completion"
-model = "gemini-1.5-pro-001"
+model = "gemini-2.5-pro-preview-05-06"
 
-[models."gemini-1.5-pro-001"]
+[models."gemini-2.5-pro-preview-05-06"]
 routing = ["gcp_vertex_gemini"]
 
-[models."gemini-1.5-pro-001".providers.gcp_vertex_gemini]
+[models."gemini-2.5-pro-preview-05-06".providers.gcp_vertex_gemini]
 type = "gcp_vertex_gemini"
-model_id = "gemini-1.5-pro-001"
+model_id = "gemini-2.5-pro-preview-05-06"
 location = "us-central1"
 project_id = "tensorzero-public"
 
@@ -1460,10 +1460,9 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
             )
         }
         "vllm" => {
-            assert!(
-                res["error"].as_str().unwrap().contains("Unauthorized"),
-                "Unexpected error: {res}"
-            )
+            // vLLM returns different errors if you mess with the request headers,
+            // so we just check that an error occurs
+            assert!(res["error"].as_str().is_some(), "Unexpected error: {res}")
         }
         "xai" => {
             assert!(
@@ -1976,6 +1975,8 @@ pub async fn check_simple_inference_response(
     assert!(inference_params.get("seed").is_none());
     let max_tokens = if provider.model_name.starts_with("o1") {
         1000
+    } else if provider.model_name.starts_with("gemini-2.5-pro") {
+        500
     } else {
         100
     };
@@ -2189,6 +2190,8 @@ pub async fn check_simple_image_inference_response(
     assert!(inference_params.get("seed").is_none());
     let max_tokens = if provider.model_name.starts_with("o1") {
         1000
+    } else if provider.model_name.starts_with("gemini-2.5-pro") {
+        500
     } else {
         100
     };
@@ -2526,6 +2529,8 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     assert!(inference_params.get("seed").is_none());
     let expected_max_tokens = if provider.model_name.starts_with("o1") {
         1000
+    } else if provider.model_name.starts_with("gemini-2.5-pro") {
+        500
     } else {
         100
     };
@@ -2636,6 +2641,10 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
 }
 
 pub async fn test_inference_params_inference_request_with_provider(provider: E2ETestProvider) {
+    // Gemini 2.5 Pro gives us 'Penalty is not enabled for models/gemini-2.5-pro-preview-05-06'
+    if provider.model_name.starts_with("gemini-2.5-pro") {
+        return;
+    }
     let episode_id = Uuid::now_v7();
     let extra_headers = get_extra_headers();
     let payload = json!({
@@ -2874,6 +2883,10 @@ pub async fn check_inference_params_response(
 pub async fn test_inference_params_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    // Gemini 2.5 Pro gives us 'Penalty is not enabled for models/gemini-2.5-pro-preview-05-06'
+    if provider.model_name.starts_with("gemini-2.5-pro") {
+        return;
+    }
     let episode_id = Uuid::now_v7();
     let extra_headers = get_extra_headers();
     let payload = json!({
@@ -3136,7 +3149,7 @@ pub async fn test_tool_use_tool_choice_auto_used_inference_request_with_provider
     provider: E2ETestProvider,
 ) {
     let episode_id = Uuid::now_v7();
-
+    let extra_headers = get_extra_headers();
     let payload = json!({
         "function_name": "weather_helper",
         "episode_id": episode_id,
@@ -3150,7 +3163,8 @@ pub async fn test_tool_use_tool_choice_auto_used_inference_request_with_provider
             ]},
         "stream": false,
         "variant_name": provider.variant_name,
-        "tags": {"test_type": "auto_used"}
+        "tags": {"test_type": "auto_used"},
+        "extra_headers": extra_headers.headers,
     });
 
     let response = Client::new()
@@ -3427,6 +3441,7 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
     }
 
     let episode_id = Uuid::now_v7();
+    let extra_headers = get_extra_headers();
 
     let payload = json!({
         "function_name": "weather_helper",
@@ -3441,6 +3456,7 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
             ]},
         "stream": true,
         "variant_name": provider.variant_name,
+        "extra_headers": extra_headers
     });
 
     let mut event_source = Client::new()
@@ -3760,7 +3776,7 @@ pub async fn test_tool_use_tool_choice_auto_unused_inference_request_with_provid
     provider: E2ETestProvider,
 ) {
     let episode_id = Uuid::now_v7();
-
+    let extra_headers = get_extra_headers();
     let payload = json!({
         "function_name": "weather_helper",
         "episode_id": episode_id,
@@ -3774,6 +3790,7 @@ pub async fn test_tool_use_tool_choice_auto_unused_inference_request_with_provid
             ]},
         "stream": false,
         "variant_name": provider.variant_name,
+        "extra_headers": extra_headers.headers,
     });
 
     let response = Client::new()
@@ -4020,7 +4037,7 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
         return;
     }
     let episode_id = Uuid::now_v7();
-
+    let extra_headers = get_extra_headers();
     let payload = json!({
         "function_name": "weather_helper",
         "episode_id": episode_id,
@@ -4034,6 +4051,7 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
             ]},
         "stream": true,
         "variant_name": provider.variant_name,
+        "extra_headers": extra_headers.headers,
     });
 
     let mut event_source = Client::new()
@@ -4300,13 +4318,16 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
 pub async fn test_tool_use_tool_choice_required_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    // Azure and Together don't support `tool_choice: "required"`
-    if provider.model_provider_name == "azure" || provider.model_provider_name == "together" {
+    // Azure, Together, and SGLang don't support `tool_choice: "required"`
+    if provider.model_provider_name == "azure"
+        || provider.model_provider_name == "together"
+        || provider.model_provider_name == "sglang"
+    {
         return;
     }
 
     let episode_id = Uuid::now_v7();
-
+    let extra_headers = get_extra_headers();
     let payload = json!({
         "function_name": "weather_helper",
         "episode_id": episode_id,
@@ -4321,6 +4342,7 @@ pub async fn test_tool_use_tool_choice_required_inference_request_with_provider(
         "tool_choice": "required",
         "stream": false,
         "variant_name": provider.variant_name,
+        "extra_headers": extra_headers.headers,
     });
 
     let response = Client::new()
@@ -4579,8 +4601,11 @@ pub async fn check_tool_use_tool_choice_required_inference_response(
 pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    // Azure and Together don't support `tool_choice: "required"`
-    if provider.model_provider_name == "azure" || provider.model_provider_name == "together" {
+    // Azure, Together, and SGLang don't support `tool_choice: "required"`
+    if provider.model_provider_name == "azure"
+        || provider.model_provider_name == "together"
+        || provider.model_provider_name == "sglang"
+    {
         return;
     }
 
@@ -4590,7 +4615,7 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
     }
 
     let episode_id = Uuid::now_v7();
-
+    let extra_headers = get_extra_headers();
     let payload = json!({
         "function_name": "weather_helper",
         "episode_id": episode_id,
@@ -4605,6 +4630,7 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
         "tool_choice": "required",
         "stream": true,
         "variant_name": provider.variant_name,
+        "extra_headers": extra_headers.headers,
     });
 
     let mut event_source = Client::new()
@@ -4916,7 +4942,7 @@ pub async fn test_tool_use_tool_choice_none_inference_request_with_provider(
     }
 
     let episode_id = Uuid::now_v7();
-
+    let extra_headers = get_extra_headers();
     let payload = json!({
         "function_name": "weather_helper",
         "episode_id": episode_id,
@@ -4931,6 +4957,7 @@ pub async fn test_tool_use_tool_choice_none_inference_request_with_provider(
         "tool_choice": "none",
         "stream": false,
         "variant_name": provider.variant_name,
+        "extra_headers": extra_headers.headers,
     });
 
     let response = Client::new()
@@ -4955,6 +4982,7 @@ pub async fn test_tool_use_tool_choice_none_inference_request_with_provider(
     .await;
 }
 
+// Test that the model doesn't emit a tool call when tool_choice is none
 pub async fn check_tool_use_tool_choice_none_inference_response(
     response_json: Value,
     provider: &E2ETestProvider,
@@ -4977,9 +5005,14 @@ pub async fn check_tool_use_tool_choice_none_inference_response(
     assert!(!content.iter().any(|block| block["type"] == "tool_call"));
     let content_block = content
         .iter()
-        .find(|block| block["type"] == "text")
+        // Gemini 2.5 Pro will sometimes emit 'executableCode' blocks, which we turn into 'unknown' blocks
+        .find(|block| block["type"] == "text" || block["type"] == "unknown")
         .unwrap();
-    assert!(content_block.get("text").unwrap().as_str().is_some());
+    if content_block["type"] == "unknown" {
+        assert!(content_block.get("data").is_some());
+    } else {
+        assert!(content_block.get("text").unwrap().as_str().is_some());
+    }
 
     let usage = response_json.get("usage").unwrap();
     let usage = usage.as_object().unwrap();
@@ -5141,9 +5174,9 @@ pub async fn check_tool_use_tool_choice_none_inference_response(
     let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
     let first = output.first().unwrap();
     match first {
-        ContentBlock::Text(_text) => {}
+        ContentBlock::Text(_) | ContentBlock::Unknown { .. } => {}
         _ => {
-            panic!("Expected a text block, got {first:?}");
+            panic!("Expected a text or unknown block, got {first:?}");
         }
     }
 }
@@ -5151,6 +5184,11 @@ pub async fn check_tool_use_tool_choice_none_inference_response(
 pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    // Gemini 2.5 Pro will produce 'executableCode' blocks for this test, which we don't support
+    // in streaming mode (since we don't have "unknown" streaming chunks)
+    if provider.model_name.starts_with("gemini-2.5-pro") {
+        return;
+    }
     // OpenAI O1 doesn't support streaming responses
     if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
         return;
@@ -5165,6 +5203,7 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
         return;
     }
     let episode_id = Uuid::now_v7();
+    let extra_headers = get_extra_headers();
 
     let payload = json!({
         "function_name": "weather_helper",
@@ -5180,6 +5219,7 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
         "tool_choice": "none",
         "stream": true,
         "variant_name": provider.variant_name,
+        "extra_headers": extra_headers.headers,
     });
 
     let mut event_source = Client::new()
@@ -5463,6 +5503,8 @@ pub async fn test_tool_use_tool_choice_specific_inference_request_with_provider(
         return;
     }
 
+    let extra_headers = get_extra_headers();
+
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -5496,6 +5538,7 @@ pub async fn test_tool_use_tool_choice_specific_inference_request_with_provider(
         ],
         "stream": false,
         "variant_name": provider.variant_name,
+        "extra_headers": extra_headers.headers,
     });
 
     let response = Client::new()
@@ -5800,6 +5843,7 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
     }
 
     let episode_id = Uuid::now_v7();
+    let extra_headers = get_extra_headers();
 
     let payload = json!({
         "function_name": "weather_helper",
@@ -5832,6 +5876,7 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
         "tool_choice": {"specific": "self_destruct"},
         "stream": true,
         "variant_name": provider.variant_name,
+        "extra_headers": extra_headers.headers,
     });
 
     let mut event_source = Client::new()
@@ -6181,6 +6226,7 @@ pub async fn test_tool_use_allowed_tools_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
     let episode_id = Uuid::now_v7();
+    let extra_headers = get_extra_headers();
 
     let payload = json!({
         "function_name": "basic_test",
@@ -6197,6 +6243,7 @@ pub async fn test_tool_use_allowed_tools_inference_request_with_provider(
         "allowed_tools": ["get_humidity"],
         "stream": false,
         "variant_name": provider.variant_name,
+        "extra_headers": extra_headers.headers,
     });
 
     let response = Client::new()
@@ -6445,7 +6492,7 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
     }
 
     let episode_id = Uuid::now_v7();
-
+    let extra_headers = get_extra_headers();
     let payload = json!({
         "function_name": "basic_test",
         "episode_id": episode_id,
@@ -6461,6 +6508,7 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
         "allowed_tools": ["get_humidity"],
         "stream": true,
         "variant_name": provider.variant_name,
+        "extra_headers": extra_headers.headers,
     });
 
     let mut event_source = Client::new()
@@ -6936,6 +6984,8 @@ pub async fn check_tool_use_multi_turn_inference_response(
     assert!(inference_params.get("seed").is_none());
     let max_tokens = if provider.model_name.starts_with("o1") {
         1000
+    } else if provider.model_name.starts_with("gemini-2.5-pro") {
+        500
     } else {
         100
     };
@@ -7080,7 +7130,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
                             "type": "tool_call",
                             "id": "123456789",
                             "name": "get_temperature",
-                            "arguments": "{\"location\": \"Tokyo\"}"
+                            "arguments": "{\"location\": \"Tokyo\", \"units\": \"celsius\"}"
                         }
                     ]
                 },
@@ -7213,7 +7263,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
                         "type": "tool_call",
                         "id": "123456789",
                         "name": "get_temperature",
-                        "arguments": "{\"location\": \"Tokyo\"}"
+                        "arguments": "{\"location\": \"Tokyo\", \"units\": \"celsius\"}"
                     }
                 ]
             },
@@ -7251,13 +7301,18 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
+    let max_tokens = if provider.model_name.starts_with("gemini-2.5-pro") {
+        500
+    } else {
+        100
+    };
     assert_eq!(
         inference_params
             .get("max_tokens")
             .unwrap()
             .as_u64()
             .unwrap(),
-        100
+        max_tokens
     );
 
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
@@ -7337,7 +7392,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
             content: vec![ContentBlock::ToolCall(ToolCall {
                 id: "123456789".to_string(),
                 name: "get_temperature".to_string(),
-                arguments: "{\"location\": \"Tokyo\"}".to_string(),
+                arguments: "{\"location\": \"Tokyo\", \"units\": \"celsius\"}".to_string(),
             })],
         },
         RequestMessage {
@@ -8882,6 +8937,8 @@ pub async fn check_json_mode_inference_response(
     assert!(inference_params.get("seed").is_none());
     let max_tokens = if provider.model_name.starts_with("o1") {
         1000
+    } else if provider.model_name.starts_with("gemini-2.5-pro") {
+        500
     } else {
         100
     };
@@ -9137,6 +9194,8 @@ pub async fn check_dynamic_json_mode_inference_response(
     assert!(inference_params.get("seed").is_none());
     let max_tokens = if provider.model_name.starts_with("o1") {
         1000
+    } else if provider.model_name.starts_with("gemini-2.5-pro") {
+        500
     } else {
         100
     };
@@ -9385,13 +9444,18 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
+    let max_tokens = if provider.model_name.starts_with("gemini-2.5-pro") {
+        500
+    } else {
+        100
+    };
     assert_eq!(
         inference_params
             .get("max_tokens")
             .unwrap()
             .as_u64()
             .unwrap(),
-        100
+        max_tokens
     );
 
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
@@ -9506,6 +9570,14 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
     // currently fails. It's fine to skip it, since we really care about testing the sagemaker
     // wrapper code, not whatever container we happen to be wrapping.
     if provider.model_provider_name == "aws_sagemaker" {
+        return;
+    }
+
+    // The 2.5 Pro model always seems to think before responding, even with
+    // {"generationConfig": {"thinkingConfig": {"thinkingBudget": 0 }}
+    // This prevents us from setting a low max_tokens, since the thinking tokens will
+    // use up all of the output tokens before an actual response is generated.
+    if provider.model_name.starts_with("gemini-2.5-pro") {
         return;
     }
 

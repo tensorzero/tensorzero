@@ -105,7 +105,7 @@ impl Migration for Migration0003<'_> {
         Ok(false)
     }
 
-    async fn apply(&self) -> Result<(), Error> {
+    async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         // Create the `FeedbackTag` table
         let query = r#"
             CREATE TABLE IF NOT EXISTS FeedbackTag

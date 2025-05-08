@@ -22,6 +22,7 @@ export function TagsTable({ tags }: TagsTableProps) {
     "tensorzero::evaluation_name",
     "tensorzero::dataset_name",
     "tensorzero::evaluator_inference_id",
+    "tensorzero::dynamic_evaluation_run_id",
   ];
   // The following 2 keys only get links if the evaluation or dataset name is present
   // Since that information is not guaranteed to be present,
@@ -65,6 +66,9 @@ export function TagsTable({ tags }: TagsTableProps) {
           break;
         case "tensorzero::evaluator_inference_id":
           navigate(`/observability/inferences/${value}`);
+          break;
+        case "tensorzero::dynamic_evaluation_run_id":
+          navigate(`/dynamic_evaluations/runs/${value}`);
           break;
       }
     }

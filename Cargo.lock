@@ -1625,6 +1625,7 @@ dependencies = [
  "tensorzero-internal",
  "tokio",
  "tracing",
+ "tracing-opentelemetry-instrumentation-sdk",
  "tracing-subscriber",
 ]
 
@@ -2191,6 +2192,19 @@ name = "indoc"
 version = "2.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f4c7245a08504955605670dbf141fceab975f15ca21570696aebe9d2e71576bd"
+
+[[package]]
+name = "init-tracing-opentelemetry"
+version = "0.28.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c4843647fdf645bf1bddd187a09f635cef7b44e30ff7972b95e734ccd896df85"
+dependencies = [
+ "opentelemetry",
+ "opentelemetry_sdk",
+ "thiserror 2.0.12",
+ "tracing",
+ "tracing-opentelemetry",
+]
 
 [[package]]
 name = "ipnet"
@@ -2933,6 +2947,8 @@ dependencies = [
  "rand 0.9.1",
  "serde_json",
  "thiserror 2.0.12",
+ "tokio",
+ "tokio-stream",
  "tracing",
 ]
 
@@ -4116,6 +4132,7 @@ dependencies = [
  "async-stream",
  "clap",
  "futures",
+ "git2",
  "lazy_static",
  "object_store",
  "pyo3",
@@ -4178,6 +4195,7 @@ dependencies = [
  "hex",
  "http 1.3.1",
  "image",
+ "init-tracing-opentelemetry",
  "itertools 0.14.0",
  "jsonschema",
  "jsonwebtoken",

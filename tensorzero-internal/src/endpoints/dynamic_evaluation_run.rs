@@ -35,6 +35,8 @@ pub struct DynamicEvaluationRunParams {
     pub project_name: Option<String>,
     #[serde(default)]
     pub display_name: Option<String>,
+    #[serde(default)]
+    pub internal: bool, // For internal use only
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -59,7 +61,7 @@ pub async fn dynamic_evaluation_run(
     }: AppStateData,
     params: DynamicEvaluationRunParams,
 ) -> Result<DynamicEvaluationRunResponse, Error> {
-    validate_tags(&params.tags, false)?;
+    validate_tags(&params.tags, params.internal)?;
     validate_variant_pins(&params.variants, &config)?;
     let run_id = Uuid::now_v7();
     write_dynamic_evaluation_run(
@@ -81,8 +83,11 @@ pub struct DynamicEvaluationRunEpisodePathParams {
 
 #[derive(Debug, Default, Deserialize, Serialize)]
 pub struct DynamicEvaluationRunEpisodeParams {
+    // This has been deprecated in favor of `task_name`.
     #[serde(default)]
     pub datapoint_name: Option<String>,
+    #[serde(default)]
+    pub task_name: Option<String>,
     #[serde(default)]
     pub tags: HashMap<String, String>,
 }
@@ -120,9 +125,10 @@ pub async fn dynamic_evaluation_run_episode(
         "tensorzero::dynamic_evaluation_run_id".to_string(),
         run_id_str,
     );
+    let task_name = get_task_name(params.task_name, params.datapoint_name)?;
     write_dynamic_evaluation_run_episode(
         &clickhouse_connection_info,
-        params.datapoint_name.as_deref(),
+        task_name.as_deref(),
         tags,
         run_id,
         episode_id,
@@ -342,4 +348,58 @@ async fn lookup_dynamic_evaluation_run(
             })
         })?;
     Ok(Some(dynamic_evaluation_run))
+}
+
+fn get_task_name(
+    task_name: Option<String>,
+    datapoint_name: Option<String>,
+) -> Result<Option<String>, Error> {
+    match (task_name, datapoint_name) {
+        (Some(task_name), None) => Ok(Some(task_name)),
+        (None, Some(datapoint_name)) => {
+            tracing::warn!("`datapoint_name` is deprecated in favor of `task_name`. Please change your usage to `task_name`");
+            Ok(Some(datapoint_name))
+        }
+        (None, None) => Ok(None),
+        (Some(_), Some(_)) => Err(Error::new(ErrorDetails::InvalidRequest {
+            message: "task_name and datapoint_name cannot both be provided".to_string(),
+        })),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use tracing_test::traced_test;
+
+    use super::*;
+
+    #[test]
+    #[traced_test]
+    fn test_get_task_name() {
+        let task_name = get_task_name(Some("task_name".to_string()), None);
+        assert_eq!(task_name, Ok(Some("task_name".to_string())));
+
+        assert_eq!(
+            get_task_name(
+                Some("task_name".to_string()),
+                Some("datapoint_name".to_string())
+            ),
+            Err(Error::new(ErrorDetails::InvalidRequest {
+                message: "task_name and datapoint_name cannot both be provided".to_string(),
+            }))
+        );
+        assert!(!logs_contain(
+            "`datapoint_name` is deprecated in favor of `task_name`. Please change your usage to `task_name`"
+        ));
+    }
+
+    #[test]
+    #[traced_test]
+    fn test_get_task_name_deprecation_warning() {
+        let task_name = get_task_name(None, Some("datapoint_name".to_string()));
+        assert_eq!(task_name, Ok(Some("datapoint_name".to_string())));
+        assert!(logs_contain(
+            "`datapoint_name` is deprecated in favor of `task_name`. Please change your usage to `task_name`"
+        ));
+    }
 }
