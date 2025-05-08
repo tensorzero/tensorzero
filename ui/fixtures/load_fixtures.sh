@@ -19,7 +19,7 @@ clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --
 clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database tensorzero_ui_fixtures --query "INSERT INTO ModelInference FROM INFILE './s3-fixtures/large_model_inference.parquet' FORMAT Parquet"
 
 # Give ClickHouse some time to make the writes visible
-sleep 1
+sleep 2
 
 ./check-fixtures.sh
 
