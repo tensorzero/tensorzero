@@ -37,6 +37,7 @@ from openai import AsyncOpenAI, OpenAI
 from pytest import FixtureRequest
 from tensorzero import (
     AsyncTensorZeroGateway,
+    ChatInferenceDatapointInput,
     ChatInferenceResponse,
     DynamicEvaluationRunResponse,
     FeedbackResponse,
@@ -44,6 +45,7 @@ from tensorzero import (
     ImageBase64,
     ImageUrl,
     InferenceChunk,
+    JsonInferenceDatapointInput,
     JsonInferenceResponse,
     RawText,
     TensorZeroError,
@@ -2871,6 +2873,243 @@ def test_sync_json_function_null_response(sync_client: TensorZeroGateway):
     assert isinstance(result, JsonInferenceResponse)
     assert result.output.raw is None
     assert result.output.parsed is None
+
+
+def test_sync_bulk_insert_delete_datapoints(sync_client: TensorZeroGateway):
+    datapoints = [
+        ChatInferenceDatapointInput(
+            function_name="basic_test",
+            input={
+                "system": {"assistant_name": "foo"},
+                "messages": [
+                    {"role": "user", "content": [{"type": "text", "text": "bar"}]}
+                ],
+            },
+            output=[{"type": "text", "text": "foobar"}],
+            allowed_tools=None,
+            additional_tools=None,
+            tool_choice="auto",
+            parallel_tool_calls=False,
+            tags=None,
+        ),
+        ChatInferenceDatapointInput(
+            function_name="basic_test",
+            input={
+                "system": {"assistant_name": "Dummy"},
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [{"type": "text", "text": "My synthetic input"}],
+                    }
+                ],
+            },
+            output=[
+                {
+                    "type": "tool_call",
+                    "name": "get_temperature",
+                    "arguments": {"location": "New York", "units": "fahrenheit"},
+                }
+            ],
+            additional_tools=[
+                {
+                    "description": "Get the current temperature in a given location",
+                    "parameters": {
+                        "$schema": "http://json-schema.org/draft-07/schema#",
+                        "type": "object",
+                        "properties": {
+                            "location": {
+                                "type": "string",
+                                "description": 'The location to get the temperature for (e.g. "New York")',
+                            },
+                            "units": {
+                                "type": "string",
+                                "description": 'The units to get the temperature in (must be "fahrenheit" or "celsius")',
+                                "enum": ["fahrenheit", "celsius"],
+                            },
+                        },
+                        "required": ["location"],
+                        "additionalProperties": False,
+                    },
+                    "name": "get_temperature",
+                    "strict": False,
+                }
+            ],
+            tool_choice="auto",
+            parallel_tool_calls=False,
+            allowed_tools=None,
+            tags=None,
+        ),
+        JsonInferenceDatapointInput(
+            function_name="json_success",
+            input={
+                "system": {"assistant_name": "foo"},
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [{"type": "text", "arguments": {"country": "US"}}],
+                    }
+                ],
+            },
+            output={"answer": "Hello"},
+            output_schema=None,
+            tags=None,
+        ),
+        JsonInferenceDatapointInput(
+            function_name="json_success",
+            input={
+                "system": {"assistant_name": "foo"},
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [{"type": "text", "arguments": {"country": "US"}}],
+                    }
+                ],
+            },
+            output={"response": "Hello"},
+            output_schema={
+                "type": "object",
+                "properties": {"response": {"type": "string"}},
+            },
+            tags=None,
+        ),
+    ]
+    datapoint_ids = sync_client.bulk_insert_datapoints(
+        dataset_name="test", datapoints=datapoints
+    )
+    assert len(datapoint_ids) == 4
+    assert isinstance(datapoint_ids[0], UUID)
+    assert isinstance(datapoint_ids[1], UUID)
+    assert isinstance(datapoint_ids[2], UUID)
+    assert isinstance(datapoint_ids[3], UUID)
+
+    sync_client.delete_datapoint(dataset_name="test", datapoint_id=datapoint_ids[0])
+    sync_client.delete_datapoint(dataset_name="test", datapoint_id=datapoint_ids[1])
+    sync_client.delete_datapoint(dataset_name="test", datapoint_id=datapoint_ids[2])
+    sync_client.delete_datapoint(dataset_name="test", datapoint_id=datapoint_ids[3])
+
+
+@pytest.mark.asyncio
+async def test_async_bulk_insert_delete_datapoints(
+    async_client: AsyncTensorZeroGateway,
+):
+    datapoints = [
+        ChatInferenceDatapointInput(
+            function_name="basic_test",
+            input={
+                "system": {"assistant_name": "foo"},
+                "messages": [
+                    {"role": "user", "content": [{"type": "text", "text": "bar"}]}
+                ],
+            },
+            output=[{"type": "text", "text": "foobar"}],
+            allowed_tools=None,
+            additional_tools=None,
+            tool_choice="auto",
+            parallel_tool_calls=False,
+            tags=None,
+        ),
+        ChatInferenceDatapointInput(
+            function_name="basic_test",
+            input={
+                "system": {"assistant_name": "Dummy"},
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [{"type": "text", "text": "My synthetic input"}],
+                    }
+                ],
+            },
+            output=[
+                {
+                    "type": "tool_call",
+                    "name": "get_temperature",
+                    "arguments": {"location": "New York", "units": "fahrenheit"},
+                }
+            ],
+            additional_tools=[
+                {
+                    "description": "Get the current temperature in a given location",
+                    "parameters": {
+                        "$schema": "http://json-schema.org/draft-07/schema#",
+                        "type": "object",
+                        "properties": {
+                            "location": {
+                                "type": "string",
+                                "description": 'The location to get the temperature for (e.g. "New York")',
+                            },
+                            "units": {
+                                "type": "string",
+                                "description": 'The units to get the temperature in (must be "fahrenheit" or "celsius")',
+                                "enum": ["fahrenheit", "celsius"],
+                            },
+                        },
+                        "required": ["location"],
+                        "additionalProperties": False,
+                    },
+                    "name": "get_temperature",
+                    "strict": False,
+                }
+            ],
+            tool_choice="auto",
+            parallel_tool_calls=False,
+            allowed_tools=None,
+            tags=None,
+        ),
+        JsonInferenceDatapointInput(
+            function_name="json_success",
+            input={
+                "system": {"assistant_name": "foo"},
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [{"type": "text", "arguments": {"country": "US"}}],
+                    }
+                ],
+            },
+            output={"answer": "Hello"},
+            output_schema=None,
+            tags=None,
+        ),
+        JsonInferenceDatapointInput(
+            function_name="json_success",
+            input={
+                "system": {"assistant_name": "foo"},
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [{"type": "text", "arguments": {"country": "US"}}],
+                    }
+                ],
+            },
+            output={"response": "Hello"},
+            output_schema={
+                "type": "object",
+                "properties": {"response": {"type": "string"}},
+            },
+            tags=None,
+        ),
+    ]
+    datapoint_ids = await async_client.bulk_insert_datapoints(
+        dataset_name="test", datapoints=datapoints
+    )
+    assert len(datapoint_ids) == 4
+    assert isinstance(datapoint_ids[0], UUID)
+    assert isinstance(datapoint_ids[1], UUID)
+    assert isinstance(datapoint_ids[2], UUID)
+    assert isinstance(datapoint_ids[3], UUID)
+
+    await async_client.delete_datapoint(
+        dataset_name="test", datapoint_id=datapoint_ids[0]
+    )
+    await async_client.delete_datapoint(
+        dataset_name="test", datapoint_id=datapoint_ids[1]
+    )
+    await async_client.delete_datapoint(
+        dataset_name="test", datapoint_id=datapoint_ids[2]
+    )
+    await async_client.delete_datapoint(
+        dataset_name="test", datapoint_id=datapoint_ids[3]
+    )
 
 
 def test_sync_invalid_input(sync_client: TensorZeroGateway):
