@@ -74,7 +74,7 @@ impl Migration for Migration0027<'_> {
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         let create_index_query = r#"
-            ALTER TABLE TagInference ADD INDEX inference_id_index inference_id TYPE bloom_filter GRANULARITY 1;
+            ALTER TABLE TagInference ADD INDEX IF NOT EXISTS inference_id_index inference_id TYPE bloom_filter GRANULARITY 1;
         "#;
         let _ = self
             .clickhouse
@@ -90,7 +90,7 @@ impl Migration for Migration0027<'_> {
             .await?;
 
         let create_index_query = r#"
-            ALTER TABLE ChatInference ADD INDEX inference_id_index id TYPE bloom_filter GRANULARITY 1;
+            ALTER TABLE ChatInference ADD INDEX IF NOT EXISTS inference_id_index id TYPE bloom_filter GRANULARITY 1;
         "#;
         let _ = self
             .clickhouse
@@ -106,7 +106,7 @@ impl Migration for Migration0027<'_> {
             .await?;
 
         let create_index_query = r#"
-            ALTER TABLE JsonInference ADD INDEX inference_id_index id TYPE bloom_filter GRANULARITY 1;
+            ALTER TABLE JsonInference ADD INDEX IF NOT EXISTS inference_id_index id TYPE bloom_filter GRANULARITY 1;
         "#;
         let _ = self
             .clickhouse
@@ -122,7 +122,7 @@ impl Migration for Migration0027<'_> {
             .await?;
 
         let create_index_query = r#"
-            ALTER TABLE ChatInferenceDatapoint ADD INDEX id_index id TYPE bloom_filter GRANULARITY 1;
+            ALTER TABLE ChatInferenceDatapoint ADD INDEX IF NOT EXISTS id_index id TYPE bloom_filter GRANULARITY 1;
         "#;
         let _ = self
             .clickhouse
@@ -138,7 +138,7 @@ impl Migration for Migration0027<'_> {
             .await?;
 
         let create_index_query = r#"
-            ALTER TABLE JsonInferenceDatapoint ADD INDEX id_index id TYPE bloom_filter GRANULARITY 1;
+            ALTER TABLE JsonInferenceDatapoint ADD INDEX IF NOT EXISTS id_index id TYPE bloom_filter GRANULARITY 1;
         "#;
         let _ = self
             .clickhouse
