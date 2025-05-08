@@ -4,7 +4,7 @@ use axum::middleware::Next;
 use axum::response::Response;
 use axum::routing::{delete, get, post, put};
 use axum::Router;
-use axum_tracing_opentelemetry::middleware::{OtelAxumLayer, OtelInResponseLayer};
+use axum_tracing_opentelemetry::middleware::OtelAxumLayer;
 use clap::Parser;
 use mimalloc::MiMalloc;
 use std::fmt::Display;
@@ -82,8 +82,9 @@ async fn main() {
     let args = Args::parse();
     // Set up logs and metrics immediately, so that we can use `tracing`.
     // OTLP will be enabled based on the config file
-    let otel_handle =
-        observability::setup_logs(true, args.log_format).expect_pretty("Failed to set up logs");
+    let otel_handle = observability::setup_logs(true, args.log_format)
+        .await
+        .expect_pretty("Failed to set up logs");
 
     let git_sha = tensorzero_internal::built_info::GIT_COMMIT_HASH_SHORT.unwrap_or("unknown");
 
@@ -191,8 +192,9 @@ async fn main() {
             post(endpoints::openai_compatible::inference_handler),
         )
         .route("/feedback", post(endpoints::feedback::feedback_handler))
-        // Everything above these two layers has OpenTelemetry tracing enabled
-        .layer(OtelInResponseLayer)
+        // Everything above this layer has OpenTelemetry tracing enabled
+        // Note - we do *not* attach a `OtelInResponseLayer`, as this seems to be incorrect according to the W3C Trace Context spec
+        // (the only response header is `traceresponse` for a completed trace)
         .layer(OtelAxumLayer::default())
         // Everything below the Otel layers does not have OpenTelemetry tracing enabled
         .route("/status", get(endpoints::status::status_handler))

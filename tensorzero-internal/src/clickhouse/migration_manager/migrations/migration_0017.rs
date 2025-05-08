@@ -48,7 +48,7 @@ impl Migration for Migration0017<'_> {
         Ok(!input_tokens_column_exists || !output_tokens_column_exists)
     }
 
-    async fn apply(&self) -> Result<(), Error> {
+    async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         // Add the `input_tokens` and `output_tokens` columns to the `ModelInferenceCache` table
         let query = r#"
             ALTER TABLE ModelInferenceCache

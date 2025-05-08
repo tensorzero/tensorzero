@@ -39,7 +39,7 @@ impl Migration for Migration0012<'_> {
         Ok(!chat_inference_dataset_table_exists || !json_inference_dataset_table_exists)
     }
 
-    async fn apply(&self) -> Result<(), Error> {
+    async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         // Create the `ChatInferenceDataset` table
         let query = r#"
             CREATE TABLE IF NOT EXISTS ChatInferenceDataset

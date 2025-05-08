@@ -25,7 +25,7 @@ impl Migration for Migration0019<'_> {
         Ok(!chat_extra_body_column_exists || !json_extra_body_column_exists)
     }
 
-    async fn apply(&self) -> Result<(), Error> {
+    async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         self.clickhouse
             .run_query_synchronous(
                 "ALTER TABLE ChatInference ADD COLUMN IF NOT EXISTS extra_body Nullable(String)"
