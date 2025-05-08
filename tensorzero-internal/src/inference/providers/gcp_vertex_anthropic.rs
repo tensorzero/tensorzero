@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::io::Write;
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
@@ -12,6 +13,7 @@ use reqwest::StatusCode;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
+use serde_json::value::RawValue;
 use serde_json::Value;
 use tokio::time::Instant;
 use url::Url;
@@ -47,11 +49,9 @@ use super::gcp_vertex_gemini::{default_api_key_location, GCPVertexCredentials};
 use super::helpers::{inject_extra_request_data, peek_first_chunk};
 use super::openai::convert_stream_error;
 
-/// Implements a subset of the GCP Vertex Gemini API as documented [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/generateContent) for non-streaming
-/// and [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/streamGenerateContent) for streaming
-#[expect(unused)]
 const PROVIDER_NAME: &str = "GCP Vertex Anthropic";
 const PROVIDER_TYPE: &str = "gcp_vertex_anthropic";
+const INFERENCE_ID_LABEL: &str = "tensorzero::inference_id";
 
 #[derive(Debug)]
 pub struct GCPVertexAnthropicProvider {
@@ -139,7 +139,6 @@ impl GCPVertexAnthropicProvider {
         raw_response: String,
         api_key: &GCPVertexCredentials,
         dynamic_api_keys: &InferenceCredentials,
-        batch_request: &BatchRequestRow<'_>,
     ) -> Result<ProviderBatchInferenceResponse, Error> {
         match output_data {
             GCPVertexBatchResponseOutputInfo::Gcs {
@@ -173,13 +172,7 @@ impl GCPVertexAnthropicProvider {
                         raw_response,
                         file_id: store_and_path.path.to_string(),
                     },
-                    |r| {
-                        make_provider_batch_inference_output(
-                            r,
-                            &batch_request.model_name,
-                            &batch_request.model_provider_name,
-                        )
-                    },
+                    |r| make_provider_batch_inference_output(r),
                 )
                 .await
             }
@@ -376,9 +369,14 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
         let mut raw_requests = Vec::with_capacity(requests.len());
         let mut jsonl_data = Vec::new();
         for request in requests {
+            let inference_id = Uuid::now_v7();
+            let mut labels = HashMap::new();
+            labels.insert(INFERENCE_ID_LABEL.to_string(), inference_id.to_string());
+
             let request_body = GCPVertexAnthropicRequestBody::new(request)?;
             let line = serde_json::to_string(&GCPVertexBatchLine {
                 request: request_body,
+                labels,
             })
             .map_err(|e| {
                 Error::new(ErrorDetails::Serialization {
@@ -658,7 +656,6 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
                         raw_response,
                         &self.credentials,
                         dynamic_api_keys,
-                        batch_request,
                     )
                     .await?;
                 Ok(PollBatchInferenceResponse::Completed(batch_response))
@@ -682,6 +679,8 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
 #[derive(Serialize)]
 struct GCPVertexBatchLine<'a> {
     request: GCPVertexAnthropicRequestBody<'a>,
+    #[serde(default)]
+    labels: HashMap<String, String>,
 }
 
 #[derive(Deserialize)]
@@ -775,7 +774,20 @@ enum GCPVertexJobState {
 // For parsing batch response lines
 #[derive(Debug, Deserialize)]
 struct GCPVertexAnthropicBatchResponseLine {
-    prediction: GCPVertexAnthropicResponse,
+    request: Box<RawValue>,
+    response: GCPVertexAnthropicResponse,
+}
+
+#[derive(Debug, Deserialize)]
+struct GCPVertexAnthropicRequestMinimal {
+    #[serde(default)]
+    labels: HashMap<String, String>,
+}
+
+impl GCPVertexAnthropicRequestMinimal {
+    fn deserialize(json: &RawValue) -> Result<Self, serde_json::Error> {
+        serde_json::from_str(json.get())
+    }
 }
 
 // Helper functions for batch operations
@@ -860,31 +872,51 @@ fn join_cloud_paths(base: &str, suffix: &str) -> String {
 
 // Helper for creating provider batch inference output
 fn make_provider_batch_inference_output(
-    response_line: GCPVertexAnthropicBatchResponseLine,
-    model_name: &str,
-    model_provider_name: &str,
+    line: GCPVertexAnthropicBatchResponseLine,
 ) -> Result<ProviderBatchInferenceOutput, Error> {
-    // Create a ContentBlockOutput from the response text
-    let content_block = ContentBlockOutput::Text(Text {
-        text: if let Some(first_content) = response_line.prediction.content.first() {
-            match first_content {
-                GCPVertexAnthropicContentBlock::Text { text } => text.clone(),
-                _ => format!("[Unsupported content type from GCP Vertex Anthropic]"),
-            }
-        } else {
-            format!("[Empty response from GCP Vertex Anthropic]")
-        },
-    });
+    let request = GCPVertexAnthropicRequestMinimal::deserialize(&*line.request).map_err(|e| {
+        Error::new(ErrorDetails::Serialization {
+            message: format!("Error deserializing batch request: {e}"),
+        })
+    })?;
+    let raw_response = serde_json::to_string(&line.response).map_err(|e| {
+        Error::new(ErrorDetails::Serialization {
+            message: format!("Error serializing batch response: {e}"),
+        })
+    })?;
+    let inference_id = request.labels.get(INFERENCE_ID_LABEL).ok_or_else(|| {
+        Error::new(ErrorDetails::InternalError {
+            message: format!("Missing {INFERENCE_ID_LABEL} label on GCP batch request"),
+        })
+    })?;
 
-    let inference_id = Uuid::now_v7(); // GCP doesn't provide a unique ID per item
-    let raw_response = serde_json::to_string(&response_line.prediction).unwrap_or_default();
+    // Create content blocks from response
+    let content_blocks = line
+        .response
+        .content
+        .iter()
+        .map(|block| TryFrom::try_from(block.clone()))
+        .collect::<Result<Vec<ContentBlockOutput>, _>>()?;
+
+    // Get usage info from response
+    let usage = line.response.usage.clone().into();
+
+    // Determine finish reason
+    let stop_reason = line
+        .response
+        .stop_reason
+        .map(|stop_reason| stop_reason.into());
 
     Ok(ProviderBatchInferenceOutput {
-        id: inference_id,
-        output: vec![content_block],
+        id: Uuid::parse_str(inference_id).map_err(|e| {
+            Error::new(ErrorDetails::InternalError {
+                message: format!("Invalid inference ID: {e}"),
+            })
+        })?,
+        output: content_blocks,
         raw_response,
-        usage: Usage::from(response_line.prediction.usage),
-        finish_reason: None,
+        usage,
+        finish_reason: stop_reason,
     })
 }
 
