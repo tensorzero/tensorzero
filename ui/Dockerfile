@@ -45,9 +45,7 @@ COPY . /build
 
 WORKDIR /build/ui/app/utils/minijinja
 RUN curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
-RUN --mount=type=cache,id=tensorzero-evaluations-release,sharing=shared,target=/usr/local/cargo/registry \
-    --mount=type=cache,id=tensorzero-evaluations-release,sharing=shared,target=/usr/local/cargo/git \
-    --mount=type=cache,id=tensorzero-evaluations-release,sharing=shared,target=/sccache \
+RUN --mount=type=cache,id=tensorzero-evaluations-release,sharing=shared,target=/sccache \
     wasm-pack build --features console_error_panic_hook
 
 # ========== evaluations-build-env ==========
@@ -62,9 +60,7 @@ WORKDIR /tensorzero
 
 ARG CARGO_BUILD_FLAGS=""
 
-RUN --mount=type=cache,id=tensorzero-evaluations-release,sharing=shared,target=/usr/local/cargo/registry \
-    --mount=type=cache,id=tensorzero-evaluations-release,sharing=shared,target=/usr/local/cargo/git \
-    --mount=type=cache,id=tensorzero-evaluations-release,sharing=shared,target=/sccache \
+RUN --mount=type=cache,id=tensorzero-evaluations-release,sharing=shared,target=/sccache \
     cargo build --release -p evaluations $CARGO_BUILD_FLAGS && \
     sccache --show-stats && \
     cp -r /tensorzero/target/release /release
@@ -93,9 +89,7 @@ WORKDIR /build/optimizations-server
 # UV_PYTHON_DOWNLOADS=never
 # https://hynek.me/articles/docker-uv/
 ENV UV_COMPILE_BYTECODE=1
-RUN --mount=type=cache,id=tensorzero-evaluations-release,sharing=shared,target=/usr/local/cargo/registry \
-    --mount=type=cache,id=tensorzero-evaluations-release,sharing=shared,target=/usr/local/cargo/git \
-    --mount=type=cache,id=tensorzero-evaluations-release,sharing=shared,target=/sccache \
+RUN --mount=type=cache,id=tensorzero-evaluations-release,sharing=shared,target=/sccache \
     uv --verbose sync --locked --no-dev
 
 # ========== ui ==========
