@@ -4,6 +4,7 @@
 deny = [
     { name = "native-tls" },
     { name = "openssl" },
+    { name = "openssl-sys"}
 ]
 
 [advisories]
