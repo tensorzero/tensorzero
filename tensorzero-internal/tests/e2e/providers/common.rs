@@ -213,23 +213,22 @@ macro_rules! generate_provider_tests {
         $crate::make_gateway_test_functions!(test_simple_inference_request);
 
 
-
-        #[tokio::test]
-        async fn test_reasoning_inference_request_simple() {
+        async fn test_reasoning_inference_request_simple(client: tensorzero::Client) {
             let providers = $func().await.reasoning_inference;
             for provider in providers {
-                test_reasoning_inference_request_simple_with_provider(provider).await;
+                test_reasoning_inference_request_simple_with_provider(provider, &client).await;
             }
         }
+        $crate::make_gateway_test_functions!(test_reasoning_inference_request_simple);
 
 
-        #[tokio::test]
-        async fn test_streaming_reasoning_inference_request_simple() {
+        async fn test_streaming_reasoning_inference_request_simple(client: tensorzero::Client) {
             let providers = $func().await.reasoning_inference;
             for provider in providers {
-                test_streaming_reasoning_inference_request_simple_with_provider(provider).await;
+                test_streaming_reasoning_inference_request_simple_with_provider(provider, &client).await;
             }
         }
+        $crate::make_gateway_test_functions!(test_streaming_reasoning_inference_request_simple);
 
         #[tokio::test]
         async fn test_bad_auth_extra_headers() {
