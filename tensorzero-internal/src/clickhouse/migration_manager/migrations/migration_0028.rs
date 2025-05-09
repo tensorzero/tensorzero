@@ -225,26 +225,16 @@ impl Migration for Migration0028<'_> {
                 ),
                 chat_inference AS (
                     SELECT function_name, variant_name, episode_id, id, output FROM ChatInference
-                    WHERE function_name IN (
-                        SELECT function_name FROM inference_by_id
-                    )
-                    AND variant_name IN (
-                        SELECT variant_name FROM inference_by_id
-                    )
-                    AND episode_id IN (
-                        SELECT episode_id FROM inference_by_id
+                    WHERE (function_name, variant_name, episode_id) IN (
+                        SELECT function_name, variant_name, episode_id 
+                        FROM inference_by_id
                     )
                 ),
                 json_inference AS (
                     SELECT function_name, variant_name, episode_id, id, output FROM JsonInference
-                    WHERE function_name IN (
-                        SELECT function_name FROM inference_by_id
-                    )
-                    AND variant_name IN (
-                        SELECT variant_name FROM inference_by_id
-                    )
-                    AND episode_id IN (
-                        SELECT episode_id FROM inference_by_id
+                    WHERE (function_name, variant_name, episode_id) IN (
+                        SELECT function_name, variant_name, episode_id 
+                        FROM inference_by_id
                     )
                 )
             SELECT
