@@ -436,7 +436,8 @@ jobs:
         run: cat e2e_logs.txt
 
   ui-tests:
-    runs-on: ubuntu-latest
+    # We run on Namespace so that we have cache volumes for our s3-fixtures directory
+    runs-on: namespace-profile-tensorzero-2x8
     permissions:
       # Permission to checkout the repository
       contents: read
@@ -469,6 +470,9 @@ jobs:
         uses: namespacelabs/nscloud-setup-buildx-action@v0
         continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
+
       - name: Install pnpm
         uses: pnpm/action-setup@v4
         with:
@@ -478,6 +482,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22.9.0"
+
+      - name: Cache s3-fixtures
+        uses: namespacelabs/nscloud-cache-action@v1
+        with:
+          path: |
+            ./ui/fixtures/s3-fixtures
 
       - name: Install wasm-pack
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
@@ -508,6 +518,11 @@ jobs:
           TENSORZERO_GATEWAY_URL: http://localhost:3000
         run: pnpm test
 
+      - name: Print ui tests logs
+        if: always()
+        working-directory: ui
+        run: docker compose -f fixtures/docker-compose.yml logs -t
+
   ui-tests-e2e:
     runs-on: namespace-profile-tensorzero-8x16
     # We currently only run this job when we have secrets available, since we need to use an S3 object_store
@@ -532,6 +547,9 @@ jobs:
       # We allow the namespace builder setup to fail on Dependabot PRs and PRs from forks
       # (where the oidc token is not available)
 
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
+
       - name: Install pnpm
         uses: pnpm/action-setup@v4
         with:
@@ -545,6 +563,12 @@ jobs:
       - name: Install dependencies
         working-directory: ui
         run: pnpm install --frozen-lockfile
+
+      - name: Cache s3-fixtures
+        uses: namespacelabs/nscloud-cache-action@v1
+        with:
+          path: |
+            ./ui/fixtures/s3-fixtures
 
       - name: Build ui container
         # Enable feedback in the UI for this job so the playwright tests can use it

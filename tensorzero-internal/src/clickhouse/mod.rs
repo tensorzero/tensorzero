@@ -14,6 +14,7 @@ pub mod migration_manager;
 #[cfg(any(test, feature = "e2e_tests"))]
 pub mod test_helpers;
 
+use crate::error::DisplayOrDebugGateway;
 use crate::error::{Error, ErrorDetails};
 
 #[derive(Debug, Clone)]
@@ -233,14 +234,14 @@ impl ClickHouseConnectionInfo {
                     .await
                     .map_err(|e| {
                         Error::new(ErrorDetails::ClickHouseQuery {
-                            message: e.to_string(),
+                            message: DisplayOrDebugGateway::new(e).to_string(),
                         })
                     })?;
                 let status = response.status();
 
                 let response_body = response.text().await.map_err(|e| {
                     Error::new(ErrorDetails::ClickHouseQuery {
-                        message: e.to_string(),
+                        message: DisplayOrDebugGateway::new(e).to_string(),
                     })
                 })?;
 
