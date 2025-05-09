@@ -170,15 +170,26 @@ export function runEvaluation(
       // stdoutBuffer now contains any incomplete line (or nothing)
     });
 
-    // Handle stderr data and accumulate errors
+    // Handle stderr data and process it line-by-line
     child.stderr.on("data", (data) => {
-      const errorMsg = data.toString();
-      stderrBuffer += errorMsg;
-      if (evaluationRunId) {
-        runningEvaluations[evaluationRunId].errors.unshift({
-          message: `Process error: ${errorMsg.trim()}`,
-        });
+      // Add new data to our buffer
+      stderrBuffer += data.toString();
+
+      // Process complete lines
+      let newlineIndex;
+      while ((newlineIndex = stderrBuffer.indexOf("\n")) !== -1) {
+        // Extract a complete line
+        const line = stderrBuffer.substring(0, newlineIndex).trim();
+        // Remove the processed line from the buffer
+        stderrBuffer = stderrBuffer.substring(newlineIndex + 1);
+        // Accumulate the error
+        if (evaluationRunId) {
+          runningEvaluations[evaluationRunId].errors.unshift({
+            message: `Process error: ${line}`,
+          });
+        }
       }
+      // stderrBuffer now contains any incomplete line (or nothing)
     });
 
     // Handle process errors (e.g., if the process couldn't be spawned)
