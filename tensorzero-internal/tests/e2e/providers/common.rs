@@ -246,13 +246,13 @@ macro_rules! generate_provider_tests {
         }
         $crate::make_gateway_test_functions!(test_shorthand_inference_request);
 
-        #[tokio::test]
-        async fn test_simple_streaming_inference_request() {
+        async fn test_simple_streaming_inference_request(client: tensorzero::Client) {
             let providers = $func().await.simple_inference;
             for provider in providers {
-                test_simple_streaming_inference_request_with_provider(provider).await;
+                test_simple_streaming_inference_request_with_provider(provider, &client).await;
             }
         }
+        $crate::make_gateway_test_functions!(test_simple_streaming_inference_request);
 
         #[tokio::test]
         async fn test_streaming_invalid_request() {
@@ -2383,19 +2383,22 @@ pub async fn test_streaming_invalid_request_with_provider(provider: E2ETestProvi
     }
 }
 
-pub async fn test_simple_streaming_inference_request_with_provider(provider: E2ETestProvider) {
+pub async fn test_simple_streaming_inference_request_with_provider(
+    provider: E2ETestProvider,
+    client: &tensorzero::Client,
+) {
     let episode_id = Uuid::now_v7();
     let tag_value = Uuid::now_v7().to_string();
     // Generate random u32
     let seed = rand::rng().random_range(0..u32::MAX);
 
     let original_content = test_simple_streaming_inference_request_with_provider_cache(
-        &provider, episode_id, seed, &tag_value, false,
+        &provider, episode_id, seed, &tag_value, false, client,
     )
     .await;
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     let cached_content = test_simple_streaming_inference_request_with_provider_cache(
-        &provider, episode_id, seed, &tag_value, true,
+        &provider, episode_id, seed, &tag_value, true, client,
     )
     .await;
     assert_eq!(original_content, cached_content);
@@ -2407,57 +2410,61 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     seed: u32,
     tag_value: &str,
     check_cache: bool,
+    client: &tensorzero::Client,
 ) -> String {
-    let extra_headers = get_extra_headers();
-    let payload = json!({
-        "function_name": "basic_test",
-        "variant_name": provider.variant_name,
-        "episode_id": episode_id,
-        "input":
-            {
-               "system": {"assistant_name": format!("Dr. Mehta #{seed}")},
-               "messages": [
-                {
-                    "role": "user",
-                    "content": "What is the name of the capital city of Japan?"
-                }
-            ]},
-        "stream": true,
-        "tags": {"key": tag_value},
-        "cache_options": {"enabled": "on", "lookback_s": 10},
-        "extra_headers": extra_headers.headers,
-    });
-
-    let mut event_source = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .eventsource()
+    let response = client
+        .inference(ClientInferenceParams {
+            function_name: Some("basic_test".to_string()),
+            variant_name: Some(provider.variant_name.clone()),
+            episode_id: Some(episode_id),
+            input: ClientInput {
+                system: Some(json!({"assistant_name": format!("Dr. Mehta #{seed}")})),
+                messages: vec![ClientInputMessage {
+                    role: Role::User,
+                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                        text: "What is the name of the capital city of Japan?".to_string(),
+                    })],
+                }],
+            },
+            tags: [(
+                "key".to_string(), 
+                tag_value.to_string()
+            )]
+            .into_iter()
+            .collect(),
+            cache_options: CacheParamsOptions {
+                enabled: CacheEnabledMode::On,
+                max_age_s: Some(10),
+                ..Default::default()
+            },
+            extra_headers: get_extra_headers(),
+            stream: Some(true),
+            ..Default::default()
+        })
+        .await
         .unwrap();
 
+    let tensorzero::InferenceOutput::Streaming(mut streaming_response) = response else {
+        panic!("Expected streaming response");
+    };
+    
     let mut chunks = vec![];
-    let mut found_done_chunk = false;
-    while let Some(event) = event_source.next().await {
-        let event = event.unwrap();
-        match event {
-            Event::Open => continue,
-            Event::Message(message) => {
-                if message.data == "[DONE]" {
-                    found_done_chunk = true;
-                    break;
-                }
-                chunks.push(message.data);
-            }
-        }
+    
+    while let Some(chunk) = streaming_response.next().await {
+        let chunk = chunk.unwrap();
+        let chunk_json = serde_json::to_value(&chunk).unwrap();
+        chunks.push(serde_json::to_string(&chunk_json).unwrap());
     }
-    assert!(found_done_chunk);
+    
+    assert!(!chunks.is_empty());
 
     let mut inference_id: Option<Uuid> = None;
     let mut full_content = String::new();
     let mut input_tokens = 0;
     let mut output_tokens = 0;
     let mut finish_reason: Option<String> = None;
-    for chunk in chunks.clone() {
-        let chunk_json: Value = serde_json::from_str(&chunk).unwrap();
+    for chunk_str in chunks.clone() {
+        let chunk_json: Value = serde_json::from_str(&chunk_str).unwrap();
 
         println!("API response chunk: {chunk_json:#?}");
 
@@ -2531,7 +2538,7 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     assert_eq!(id_uuid, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, payload["function_name"]);
+    assert_eq!(function_name, "basic_test");
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
