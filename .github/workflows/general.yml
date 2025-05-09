@@ -102,7 +102,7 @@ jobs:
     runs-on: ${{ matrix.platform.runner }}
     strategy:
       matrix:
-        # We don't test on linux x86_64, because our main 'validate' step already does that
+        # We don't test on linux x86_64 glibc, because our main 'validate' step already does that
         # For now, we just check that the build works on our other supported platforms -
         # we don't run any tests.
         platform:
@@ -114,6 +114,12 @@ jobs:
             target: x86_64
           - runner: macos-14
             target: aarch64
+          - runner: ubuntu-24.04
+            target: x86_64
+            manylinux: musllinux_1_2
+          - runner: ubuntu-24.04-arm
+            target: aarch64
+            manylinux: musllinux_1_2
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
@@ -125,6 +131,7 @@ jobs:
         with:
           working-directory: clients/python-pyo3
           args: --find-interpreter
+          manylinux: ${{ matrix.platform.manylinux }}
 
   build-windows:
     runs-on: windows-latest
