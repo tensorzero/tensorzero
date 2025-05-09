@@ -1093,6 +1093,50 @@ async def test_dynamic_json_mode_inference_openai(async_client):
 
 
 @pytest.mark.asyncio
+async def test_dynamic_json_mode_inference_openai_deprecated(async_client):
+    episode_id = str(uuid7())
+    output_schema = {
+        "type": "object",
+        "properties": {"response": {"type": "string"}},
+        "required": ["response"],
+        "additionalProperties": False,
+    }
+    serialized_output_schema = json.dumps(output_schema)
+    # This response format is deprecated and will be rejected in a future TensorZero release.
+    response_format = {
+        "type": "json_schema",
+        "json_schema": output_schema,
+    }
+    messages = [
+        {
+            "role": "system",
+            "content": [
+                {"assistant_name": "Dr. Mehta", "schema": serialized_output_schema}
+            ],
+        },
+        {"role": "user", "content": [{"country": "Japan"}]},
+    ]
+    result = await async_client.chat.completions.create(
+        extra_body={
+            "tensorzero::episode_id": episode_id,
+            "tensorzero::variant_name": "openai",
+        },
+        messages=messages,
+        model="tensorzero::function_name::dynamic_json",
+        response_format=response_format,
+    )
+    assert (
+        result.model == "tensorzero::function_name::dynamic_json::variant_name::openai"
+    )
+    assert result.episode_id == episode_id
+    json_content = json.loads(result.choices[0].message.content)
+    assert "tokyo" in json_content["response"].lower()
+    assert result.choices[0].message.tool_calls is None
+    assert result.usage.prompt_tokens > 50
+    assert result.usage.completion_tokens > 0
+
+
+@pytest.mark.asyncio
 async def test_async_multi_system_prompt(async_client):
     messages = [
         {

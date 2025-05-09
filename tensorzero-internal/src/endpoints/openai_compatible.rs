@@ -173,8 +173,15 @@ enum OpenAICompatibleMessage {
 #[serde(rename_all = "snake_case")]
 enum OpenAICompatibleResponseFormat {
     Text,
-    JsonSchema { json_schema: JsonSchemaInfo },
+    JsonSchema { json_schema: JsonSchemaInfoOption },
     JsonObject,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[serde(untagged)]
+enum JsonSchemaInfoOption {
+    JsonSchema(JsonSchemaInfo),
+    DeprecatedJsonSchema(Value),
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -182,7 +189,8 @@ struct JsonSchemaInfo {
     name: String,
     description: Option<String>,
     schema: Option<Value>,
-    strict: Option<bool>,
+    #[serde(default)]
+    strict: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -473,7 +481,13 @@ impl Params {
             parallel_tool_calls: openai_compatible_params.parallel_tool_calls,
         };
         let output_schema = match openai_compatible_params.response_format {
-            Some(OpenAICompatibleResponseFormat::JsonSchema { json_schema }) => json_schema.schema,
+            Some(OpenAICompatibleResponseFormat::JsonSchema { json_schema }) => match json_schema {
+                JsonSchemaInfoOption::JsonSchema(json_schema) => json_schema.schema,
+                JsonSchemaInfoOption::DeprecatedJsonSchema(value) => {
+                    tracing::warn!("Deprecation Warning: Please provide the correct `name`, `description`, `schema`, and `strict` fields in the `json_schema` field in the response format. Simply providing a JSON schema in this field will be rejected in a future TensorZero release.");
+                    Some(value)
+                }
+            },
             _ => None,
         };
         Ok(Params {
