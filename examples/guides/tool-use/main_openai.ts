@@ -13,7 +13,7 @@ const response = await client.chat.completions.create({
   messages,
 });
 
-console.log(response);
+console.log(JSON.stringify(response, null, 2));
 
 // The model can return multiple content blocks, including tool calls
 // In a real application, you'd be stricter about validating the response
@@ -37,4 +37,4 @@ const response2 = await client.chat.completions.create({
   messages,
 });
 
-console.log(response2);
+console.log(JSON.stringify(response2, null, 2));
