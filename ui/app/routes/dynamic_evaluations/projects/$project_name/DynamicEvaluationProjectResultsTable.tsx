@@ -199,6 +199,7 @@ export function DynamicEvaluationProjectResultsTable({
                                         optimize={
                                           config.metrics[metric_name].optimize
                                         }
+                                        isHumanFeedback={false}
                                       />
                                     </>
                                   ) : (
