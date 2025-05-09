@@ -1336,8 +1336,13 @@ struct GCPVertexAnthropicError {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 struct GCPVertexAnthropicErrorBody {
-    r#type: String,
+    #[serde(default)]
+    r#type: Option<String>,
     message: String,
+    #[serde(default)]
+    code: Option<u32>,
+    #[serde(default)]
+    status: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -2425,8 +2430,10 @@ mod tests {
     #[test]
     fn test_handle_anthropic_error() {
         let error_body = GCPVertexAnthropicErrorBody {
-            r#type: "error".to_string(),
+            r#type: Some("error".to_string()),
             message: "test_message".to_string(),
+            code: None,
+            status: None,
         };
         let response_code = StatusCode::BAD_REQUEST;
         let result = handle_anthropic_error(response_code, error_body.clone());
@@ -2438,7 +2445,7 @@ mod tests {
                 status_code: Some(response_code),
                 provider_type: PROVIDER_TYPE.to_string(),
                 raw_request: None,
-                raw_response: Some("{\"type\":\"error\",\"message\":\"test_message\"}".to_string()),
+                raw_response: Some(serde_json::to_string(&error_body).unwrap()),
             }
         );
         let response_code = StatusCode::UNAUTHORIZED;
@@ -2451,7 +2458,7 @@ mod tests {
                 status_code: Some(response_code),
                 provider_type: PROVIDER_TYPE.to_string(),
                 raw_request: None,
-                raw_response: Some("{\"type\":\"error\",\"message\":\"test_message\"}".to_string()),
+                raw_response: Some(serde_json::to_string(&error_body).unwrap()),
             }
         );
         let response_code = StatusCode::TOO_MANY_REQUESTS;
@@ -2464,7 +2471,7 @@ mod tests {
                 status_code: Some(response_code),
                 provider_type: PROVIDER_TYPE.to_string(),
                 raw_request: None,
-                raw_response: Some("{\"type\":\"error\",\"message\":\"test_message\"}".to_string()),
+                raw_response: Some(serde_json::to_string(&error_body).unwrap()),
             }
         );
         let response_code = StatusCode::NOT_FOUND;
@@ -2476,7 +2483,7 @@ mod tests {
             ErrorDetails::InferenceServer {
                 message: "test_message".to_string(),
                 raw_request: None,
-                raw_response: Some("{\"type\":\"error\",\"message\":\"test_message\"}".to_string()),
+                raw_response: Some(serde_json::to_string(&error_body).unwrap()),
                 provider_type: PROVIDER_TYPE.to_string()
             }
         );
@@ -2488,7 +2495,7 @@ mod tests {
             ErrorDetails::InferenceServer {
                 message: "test_message".to_string(),
                 raw_request: None,
-                raw_response: Some("{\"type\":\"error\",\"message\":\"test_message\"}".to_string()),
+                raw_response: Some(serde_json::to_string(&error_body).unwrap()),
                 provider_type: PROVIDER_TYPE.to_string()
             }
         );
@@ -3117,6 +3124,29 @@ mod tests {
                     text: "Here is the JSON requested:\n{",
                 }
             )]
+        );
+    }
+
+    #[test]
+    fn test_handle_gcp_quota_error() {
+        let error_body = GCPVertexAnthropicErrorBody {
+            r#type: None,
+            message: "Quota exceeded for aiplatform.googleapis.com/online_prediction_requests_per_base_model with base model: anthropic-claude-3-5-haiku. Please submit a quota increase request.".to_string(),
+            code: Some(429),
+            status: Some("RESOURCE_EXHAUSTED".to_string()),
+        };
+        let response_code = StatusCode::TOO_MANY_REQUESTS;
+        let result = handle_anthropic_error(response_code, error_body.clone());
+        let details = result.unwrap_err().get_owned_details();
+        assert_eq!(
+            details,
+            ErrorDetails::InferenceClient {
+                message: "Quota exceeded for aiplatform.googleapis.com/online_prediction_requests_per_base_model with base model: anthropic-claude-3-5-haiku. Please submit a quota increase request.".to_string(),
+                status_code: Some(response_code),
+                provider_type: PROVIDER_TYPE.to_string(),
+                raw_request: None,
+                raw_response: Some(serde_json::to_string(&error_body).unwrap()),
+            }
         );
     }
 }
