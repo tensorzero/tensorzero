@@ -16,6 +16,8 @@ permissions:
 jobs:
   build-wheels:
     uses: ./.github/workflows/pypi-publish-reusable.yml
+    permissions:
+      id-token: write
 
   release:
     name: Release
