@@ -80,6 +80,9 @@ export function runEvaluation(
   return new Promise<EvaluationStartInfo>((resolve, reject) => {
     // Spawn a child process to run the evaluations command
     const child = spawn(command[0], command.slice(1));
+    // We also want to forward stderr to the parent process
+    // so it shows up in container logs.
+    child.stderr.pipe(process.stderr);
 
     // Variables to track state
     let evaluationRunId: string | null = null;
