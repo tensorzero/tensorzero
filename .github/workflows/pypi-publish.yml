@@ -4,8 +4,6 @@ name: Publish PyO3 client to PyPI
 
 on:
   workflow_dispatch:
-  pull_request:
-    branches: ["main"]    
   release:
     types: [published]
 
