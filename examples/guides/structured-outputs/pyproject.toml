@@ -1,0 +1,5 @@
+[project]
+name = "tensorzero-examples-guides-structured-outputs"
+version = "0.0.0"
+requires-python = ">=3.12"
+dependencies = ["openai>=1.78.0", "tensorzero"]

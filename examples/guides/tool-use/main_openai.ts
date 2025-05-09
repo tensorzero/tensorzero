@@ -1,10 +1,11 @@
 import OpenAI from "openai";
+import { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 
 const client = new OpenAI({
   baseURL: "http://localhost:3000/openai/v1",
 });
 
-const messages: any[] = [
+const messages: ChatCompletionMessageParam[] = [
   { role: "user", content: "What is the weather in Tokyo (°F)?" },
 ];
 
