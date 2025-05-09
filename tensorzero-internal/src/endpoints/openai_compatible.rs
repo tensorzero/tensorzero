@@ -173,8 +173,16 @@ enum OpenAICompatibleMessage {
 #[serde(rename_all = "snake_case")]
 enum OpenAICompatibleResponseFormat {
     Text,
-    JsonSchema { json_schema: Value },
+    JsonSchema { json_schema: JsonSchemaInfo },
     JsonObject,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+struct JsonSchemaInfo {
+    name: String,
+    description: Option<String>,
+    schema: Option<Value>,
+    strict: Option<bool>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -465,7 +473,7 @@ impl Params {
             parallel_tool_calls: openai_compatible_params.parallel_tool_calls,
         };
         let output_schema = match openai_compatible_params.response_format {
-            Some(OpenAICompatibleResponseFormat::JsonSchema { json_schema }) => Some(json_schema),
+            Some(OpenAICompatibleResponseFormat::JsonSchema { json_schema }) => json_schema.schema,
             _ => None,
         };
         Ok(Params {
