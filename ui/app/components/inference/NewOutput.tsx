@@ -72,21 +72,27 @@ export function OutputContent({ output, outputSchema }: OutputProps) {
         {(activeTab) => (
           <SnippetContent>
             {activeTab === "parsed" ? (
-              <CodeMessage
-                content={
-                  output.parsed
-                    ? JSON.stringify(output.parsed, null, 2)
-                    : "The inference output failed to parse against the schema."
-                }
-                showLineNumbers={true}
-              />
+              <SnippetMessage>
+                <CodeMessage
+                  content={
+                    output.parsed
+                      ? JSON.stringify(output.parsed, null, 2)
+                      : "The inference output failed to parse against the schema."
+                  }
+                  showLineNumbers={true}
+                />
+              </SnippetMessage>
             ) : activeTab === "raw" ? (
-              <CodeMessage content={output.raw} showLineNumbers={true} />
+              <SnippetMessage>
+                <CodeMessage content={output.raw} showLineNumbers={true} />
+              </SnippetMessage>
             ) : (
-              <CodeMessage
-                content={JSON.stringify(outputSchema, null, 2)}
-                showLineNumbers={true}
-              />
+              <SnippetMessage>
+                <CodeMessage
+                  content={JSON.stringify(outputSchema, null, 2)}
+                  showLineNumbers={true}
+                />
+              </SnippetMessage>
             )}
           </SnippetContent>
         )}

@@ -2,7 +2,7 @@ import {
   queryInferenceTable,
   queryInferenceTableBounds,
   countInferencesByFunction,
-} from "~/utils/clickhouse/inference";
+} from "~/utils/clickhouse/inference.server";
 import type { Route } from "./+types/route";
 import InferencesTable from "./InferencesTable";
 import { data, isRouteErrorResponse, useNavigate } from "react-router";

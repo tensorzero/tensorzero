@@ -2,7 +2,7 @@ import {
   countInferencesForFunction,
   queryInferenceTableBoundsByFunctionName,
   queryInferenceTableByFunctionName,
-} from "~/utils/clickhouse/inference";
+} from "~/utils/clickhouse/inference.server";
 import type { Route } from "./+types/route";
 import {
   data,

@@ -2,7 +2,7 @@ import {
   queryEpisodeTable,
   queryEpisodeTableBounds,
   countEpisodes,
-} from "~/utils/clickhouse/inference";
+} from "~/utils/clickhouse/inference.server";
 import type { Route } from "./+types/route";
 import EpisodesTable from "./EpisodesTable";
 import { data, isRouteErrorResponse, useNavigate } from "react-router";
