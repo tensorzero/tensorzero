@@ -63,7 +63,7 @@ export function ModelInferencesTable({
       </Table>
 
       <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
-        <SheetContent className="bg-bg-secondary w-full overflow-y-auto p-0 sm:max-w-xl md:max-w-2xl lg:max-w-3xl">
+        <SheetContent className="bg-bg-secondary w-full min-w-[85vw] overflow-y-auto p-0">
           {selectedInference && (
             <ModelInferenceItem inference={selectedInference} />
           )}
