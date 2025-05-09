@@ -4,6 +4,8 @@ use opentelemetry::trace::TracerProvider as _;
 use opentelemetry::KeyValue;
 use opentelemetry_sdk::trace::{SdkTracerProvider, SpanExporter};
 use opentelemetry_sdk::Resource;
+use tracing::level_filters::LevelFilter;
+use tracing_subscriber::layer::Filter;
 use tracing_subscriber::{filter, Registry};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, Layer};
 
@@ -45,7 +47,10 @@ fn internal_build_otel_layer<T: SpanExporter + 'static>(
     }
     let provider = provider.build();
     let tracer = provider.tracer("tensorzero");
-    Ok(tracing_opentelemetry::layer().with_tracer(tracer))
+    opentelemetry::global::set_tracer_provider(provider.clone());
+    Ok(tracing_opentelemetry::layer()
+        .with_tracer(tracer)
+        .with_level(true))
 }
 
 /// Creates an OpenTelemetry export layer. This layer is disabled by default,
@@ -62,24 +67,35 @@ fn internal_build_otel_layer<T: SpanExporter + 'static>(
 pub fn build_opentelemetry_layer<T: SpanExporter + 'static>(
     override_exporter: Option<T>,
 ) -> Result<(DelayedOtelEnableHandle, impl Layer<Registry>), Error> {
-    let (otel_reload_layer, reload_handle) = tracing_subscriber::reload::Layer::new(None);
+    let (otel_reload_filter, reload_handle) = tracing_subscriber::reload::Layer::new(Box::new(
+        LevelFilter::OFF,
+    )
+        as Box<dyn Filter<_> + Send + Sync>);
 
-    // Avoid exposing all of our internal spans, as we don't want customers to start depending on them.
-    // We only expose spans that explicitly contain field prefixed with "http." or "otel."
-    // For example, `#[instrument(fields(otel.name = "my_otel_name"))]` will be exported
-    let filter = filter::filter_fn(|metadata| {
-        metadata
-            .fields()
-            .iter()
-            .any(|field| field.name().starts_with("http.") || field.name().starts_with("otel."))
-    });
+    let base_otel_layer = internal_build_otel_layer(override_exporter)?;
 
     let delayed_enable = DelayedOtelEnableHandle {
         enable_cb: Box::new(move || {
-            let base_otel_layer = internal_build_otel_layer(override_exporter)?;
+            // Only register the propagator if we actually enabled OTEL.
+            // This means that the `traceparent` and `tracestate` headers will only be added
+            // to outgoing requests using the propagator if OTEL is actually enabled.
+            init_tracing_opentelemetry::init_propagator().map_err(|e| {
+                Error::new(ErrorDetails::Observability {
+                    message: format!("Failed to initialize OTLP propagator: {e}"),
+                })
+            })?;
+            // Avoid exposing all of our internal spans, as we don't want customers to start depending on them.
+            // We only expose spans that explicitly contain field prefixed with "http." or "otel."
+            // For example, `#[instrument(fields(otel.name = "my_otel_name"))]` will be exported
+            let filter = filter::filter_fn(|metadata| {
+                metadata.fields().iter().any(|field| {
+                    field.name().starts_with("http.") || field.name().starts_with("otel.")
+                })
+            });
+
             reload_handle
                 .modify(|l| {
-                    *l = Some(base_otel_layer);
+                    *l = Box::new(filter);
                 })
                 .map_err(|e| {
                     Error::new(ErrorDetails::Observability {
@@ -89,12 +105,15 @@ pub fn build_opentelemetry_layer<T: SpanExporter + 'static>(
             Ok(())
         }),
     };
-    // Note - we apply our filter on top of the reloadable layer.
-    // We cannot apply the filter inside of the reloadable layer (e.g. directly on the otel layer),
-    // as this will produce a panic due to https://github.com/tokio-rs/tracing/issues/1629
-    // This is slightly less efficient when OTEL is disabled (since we'll apply a filter and then
-    // invoke a no-op layer), but it shouldn't matter in practice.
-    Ok((delayed_enable, otel_reload_layer.with_filter(filter)))
+    Ok((
+        delayed_enable,
+        // Note - we *must* use the `tracing_opentelemetry` (without it being wrapped in a reloadable layer)
+        // due to https://github.com/tokio-rs/tracing-opentelemetry/issues/121
+        // We attach a reloadable filter, which we use to start exporting spans when `delayed_enable` is called.
+        // This means that we unconditionally construct the `tracing_opentelemetry` layer,
+        // (including the batch exporter), which will just end being unused if OTEL exporting is disabled.
+        base_otel_layer.with_filter(otel_reload_filter),
+    ))
 }
 
 /// A handle produced by `build_opentelemetry_layer` to allow enabling the OTEL layer
@@ -122,7 +141,14 @@ impl DelayedOtelEnableHandle {
 }
 
 /// Set up logs
-pub fn setup_logs(debug: bool, log_format: LogFormat) -> Result<DelayedOtelEnableHandle, Error> {
+/// Strictly speaking, this does not need to be an async function.
+/// However, the call to `build_opentelemetry_layer` requires a Tokio runtime,
+/// so marking this function as async makes it clear to callers that they need to
+/// be in an async context.
+pub async fn setup_logs(
+    debug: bool,
+    log_format: LogFormat,
+) -> Result<DelayedOtelEnableHandle, Error> {
     let default_level = if debug { "debug,warn" } else { "warn" };
     // Get the current log level from the environment variable `RUST_LOG`
     let log_level = tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {

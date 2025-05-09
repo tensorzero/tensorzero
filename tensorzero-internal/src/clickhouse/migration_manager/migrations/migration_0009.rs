@@ -10,7 +10,6 @@ use async_trait::async_trait;
 /// This migration allows us to efficiently query feedback tables by their target IDs.
 pub struct Migration0009<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
-    pub clean_start: bool,
 }
 
 #[async_trait]
@@ -57,7 +56,7 @@ impl Migration for Migration0009<'_> {
         Ok(false)
     }
 
-    async fn apply(&self) -> Result<(), Error> {
+    async fn apply(&self, clean_start: bool) -> Result<(), Error> {
         // Only gets used when we are not doing a clean start
         let view_offset = Duration::from_secs(15);
         let view_timestamp = (std::time::SystemTime::now()
@@ -89,7 +88,7 @@ impl Migration for Migration0009<'_> {
             .await?;
         // Create the materialized view for the `BooleanMetricFeedbackByTargetId` table from BooleanMetricFeedback
         // If we are not doing a clean start, we need to add a where clause to the view to only include rows that have been created after the view_timestamp
-        let view_where_clause = if !self.clean_start {
+        let view_where_clause = if !clean_start {
             format!("WHERE UUIDv7ToDateTime(id) >= toDateTime(toUnixTimestamp({view_timestamp}))")
         } else {
             String::new()
@@ -200,7 +199,7 @@ impl Migration for Migration0009<'_> {
 
         // Create the materialized view for the `FloatMetricFeedbackByTargetId` table from FloatMetricFeedback
         // If we are not doing a clean start, we need to add a where clause to the view to only include rows that have been created after the view_timestamp
-        let view_where_clause = if !self.clean_start {
+        let view_where_clause = if !clean_start {
             format!("WHERE UUIDv7ToDateTime(id) >= toDateTime(toUnixTimestamp({view_timestamp}))")
         } else {
             String::new()
@@ -223,7 +222,7 @@ impl Migration for Migration0009<'_> {
         let _ = self.clickhouse.run_query_synchronous(query, None).await?;
 
         // Insert the data from the original tables into the new table (we do this concurrently since it could theoretically take a long time)
-        if !self.clean_start {
+        if !clean_start {
             // Sleep for the duration specified by view_offset to allow the materialized views to catch up
             tokio::time::sleep(view_offset).await;
             let insert_boolean_metric_feedback = async {

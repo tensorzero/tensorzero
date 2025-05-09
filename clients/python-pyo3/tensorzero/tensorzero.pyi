@@ -16,6 +16,7 @@ import uuid_utils
 
 import tensorzero.internal_optimizations_server_types as iost
 from tensorzero import (
+    ChatInferenceDatapointInput,
     DynamicEvaluationRunEpisodeResponse,
     DynamicEvaluationRunResponse,
     ExtraBody,
@@ -23,6 +24,7 @@ from tensorzero import (
     InferenceChunk,
     InferenceInput,
     InferenceResponse,
+    JsonInferenceDatapointInput,
 )
 
 class BaseTensorZeroGateway:
@@ -176,6 +178,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         self,
         *,
         run_id: str | UUID | uuid_utils.UUID,
+        task_name: Optional[str] = None,
         datapoint_name: Optional[str] = None,
         tags: Optional[Dict[str, str]] = None,
     ) -> DynamicEvaluationRunEpisodeResponse:
@@ -183,9 +186,39 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         Make a POST request to the /dynamic_evaluation_run_episode endpoint.
 
         :param run_id: The run ID to use for the dynamic evaluation run.
+        :param task_name: The name of the task to use for the dynamic evaluation run.
         :param datapoint_name: The name of the datapoint to use for the dynamic evaluation run.
+                    Deprecated: use `task_name` instead.
         :param tags: A dictionary of tags to add to the dynamic evaluation run.
         :return: A `DynamicEvaluationRunEpisodeResponse` instance ({"episode_id": str}).
+        """
+
+    def bulk_insert_datapoints(
+        self,
+        *,
+        dataset_name: str,
+        datapoints: List[
+            Union[ChatInferenceDatapointInput, JsonInferenceDatapointInput]
+        ],
+    ) -> List[UUID]:
+        """
+        Make a POST request to the /datasets/{dataset_name}/datapoints/bulk endpoint.
+
+        :param dataset_name: The name of the dataset to insert the datapoints into.
+        :param datapoints: A list of datapoints to insert.
+        """
+
+    def delete_datapoint(
+        self,
+        *,
+        dataset_name: str,
+        datapoint_id: UUID,
+    ) -> None:
+        """
+        Make a DELETE request to the /datasets/{dataset_name}/datapoints/{datapoint_id} endpoint.
+
+        :param dataset_name: The name of the dataset to delete the datapoint from.
+        :param datapoint_id: The ID of the datapoint to delete.
         """
 
     def close(self) -> None:
@@ -353,6 +386,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         self,
         *,
         run_id: str | UUID | uuid_utils.UUID,
+        task_name: Optional[str] = None,
         datapoint_name: Optional[str] = None,
         tags: Optional[Dict[str, str]] = None,
     ) -> DynamicEvaluationRunEpisodeResponse:
@@ -360,9 +394,39 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         Make a POST request to the /dynamic_evaluation_run_episode endpoint.
 
         :param run_id: The run ID to use for the dynamic evaluation run.
+        :param task_name: The name of the task to use for the dynamic evaluation run.
         :param datapoint_name: The name of the datapoint to use for the dynamic evaluation run.
+                    Deprecated: use `task_name` instead.
         :param tags: A dictionary of tags to add to the dynamic evaluation run.
         :return: A `DynamicEvaluationRunEpisodeResponse` instance ({"episode_id": str}).
+        """
+
+    async def bulk_insert_datapoints(
+        self,
+        *,
+        dataset_name: str,
+        datapoints: List[
+            Union[ChatInferenceDatapointInput, JsonInferenceDatapointInput]
+        ],
+    ) -> List[UUID]:
+        """
+        Make a POST request to the /datasets/{dataset_name}/datapoints/bulk endpoint.
+
+        :param dataset_name: The name of the dataset to insert the datapoints into.
+        :param datapoints: A list of datapoints to insert.
+        """
+
+    async def delete_datapoint(
+        self,
+        *,
+        dataset_name: str,
+        datapoint_id: UUID,
+    ) -> None:
+        """
+        Make a DELETE request to the /datasets/{dataset_name}/datapoints/{datapoint_id} endpoint.
+
+        :param dataset_name: The name of the dataset to delete the datapoint from.
+        :param datapoint_id: The ID of the datapoint to delete.
         """
 
     async def close(self) -> None:

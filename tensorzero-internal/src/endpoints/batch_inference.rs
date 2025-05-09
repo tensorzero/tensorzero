@@ -261,7 +261,7 @@ pub async fn start_batch_inference_handler(
             .start_batch_inference(
                 &resolved_inputs,
                 &inference_models,
-                function,
+                &function,
                 &inference_configs,
                 &inference_clients,
                 variant_inference_params,
@@ -365,7 +365,7 @@ pub async fn poll_batch_inference_handler(
                 &clickhouse_connection_info,
                 &batch_request,
                 &path_params,
-                function,
+                &function,
             )
             .await?;
             let response = PollInferenceResponse::Completed(response);

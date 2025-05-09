@@ -182,12 +182,12 @@ location = "us-central1"
 project_id = "tensorzero-public"
 
 
-[models."gemini-1.5-pro-001"]
+[models."gemini-2.5-pro-preview-05-06"]
 routing = ["gcp_vertex_gemini"]
 
-[models."gemini-1.5-pro-001".providers.gcp_vertex_gemini]
+[models."gemini-2.5-pro-preview-05-06".providers.gcp_vertex_gemini]
 type = "gcp_vertex_gemini"
-model_id = "gemini-1.5-pro-001"
+model_id = "gemini-2.5-pro-preview-05-06"
 location = "us-central1"
 project_id = "tensorzero-public"
 
@@ -208,19 +208,19 @@ type = "google_ai_studio_gemini"
 model_name = "gemini-2.0-flash-lite"
 api_key_location = "dynamic::google_ai_studio_api_key"
 
-[models."gemini-1.5-pro"]
+[models."gemini-2.5-pro"]
 routing = ["google_ai_studio_gemini"]
 
-[models."gemini-1.5-pro".providers.google_ai_studio_gemini]
+[models."gemini-2.5-pro".providers.google_ai_studio_gemini]
 type = "google_ai_studio_gemini"
-model_name = "gemini-1.5-pro"
+model_name = "gemini-2.5-pro-preview-05-06"
 
-[models."gemini-1.5-pro-dynamic"]
+[models."gemini-2.5-pro-dynamic"]
 routing = ["google_ai_studio_gemini"]
 
-[models."gemini-1.5-pro-dynamic".providers.google_ai_studio_gemini]
+[models."gemini-2.5-pro-dynamic".providers.google_ai_studio_gemini]
 type = "google_ai_studio_gemini"
-model_name = "gemini-1.5-pro"
+model_name = "gemini-2.5-pro-preview-05-06"
 api_key_location = "dynamic::google_ai_studio_api_key"
 
 [models."llama3.3-70b-instruct-fireworks"]
@@ -281,12 +281,12 @@ routing = ["together"]
 type = "together"
 model_name = "meta-llama/Meta-Llama-3.1-405B-Instruct-Turbo"
 
-[models."google/gemma-3-1b-it"]
+[models."Qwen/Qwen2.5-1.5B-Instruct"]
 routing = ["sglang"]
 
-[models."google/gemma-3-1b-it".providers.sglang]
+[models."Qwen/Qwen2.5-1.5B-Instruct".providers.sglang]
 type = "sglang"
-model_name = "google/gemma-3-1b-it"
+model_name = "Qwen/Qwen2.5-1.5B-Instruct"
 api_base = "https://tensorzero--sglang-inference-sglang-inference.modal.run/v1/"
 
 [models."smol-lm-instruct-vllm"]
@@ -758,9 +758,9 @@ extra_headers = [{ name = "Authorization", value = "invalid_gcp_vertex_auth" }]
 
 [functions.basic_test.variants.gcp-vertex-gemini-pro]
 type = "chat_completion"
-model = "gemini-1.5-pro-001"
+model = "gemini-2.5-pro-preview-05-06"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-max_tokens = 100
+max_tokens = 500
 
 [functions.basic_test.variants.google-ai-studio-gemini-flash-8b]
 type = "chat_completion"
@@ -794,17 +794,17 @@ model = "google_ai_studio_gemini::gemini-2.0-flash-lite"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
-[functions.basic_test.variants.google-ai-studio-gemini-1_5-pro]
+[functions.basic_test.variants.google-ai-studio-gemini-2_5-pro]
 type = "chat_completion"
-model = "gemini-1.5-pro"
+model = "gemini-2.5-pro"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-max_tokens = 100
+max_tokens = 500
 
-[functions.basic_test.variants.google-ai-studio-gemini-1_5-pro-dynamic]
+[functions.basic_test.variants.google-ai-studio-gemini-2_5-pro-dynamic]
 type = "chat_completion"
-model = "gemini-1.5-pro-dynamic"
+model = "gemini-2.5-pro-dynamic"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-max_tokens = 100
+max_tokens = 500
 
 [functions.basic_test.variants.gcp-vertex-haiku]
 type = "chat_completion"
@@ -982,13 +982,13 @@ max_tokens = 100
 
 [functions.basic_test.variants.sglang]
 type = "chat_completion"
-model = "google/gemma-3-1b-it"
+model = "Qwen/Qwen2.5-1.5B-Instruct"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
 [functions.basic_test.variants.sglang-extra-body]
 type = "chat_completion"
-model = "google/gemma-3-1b-it"
+model = "Qwen/Qwen2.5-1.5B-Instruct"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 extra_body = [{ pointer = "/temperature", value = 0.123 }]
@@ -1360,19 +1360,19 @@ max_tokens = 100
 
 [functions.json_success.variants.gcp-vertex-gemini-pro]
 type = "chat_completion"
-model = "gemini-1.5-pro-001"
+model = "gemini-2.5-pro-preview-05-06"
 system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "on"
-max_tokens = 100
+max_tokens = 500
 
 [functions.json_success.variants.gcp-vertex-gemini-pro-implicit]
 type = "chat_completion"
-model = "gemini-1.5-pro-001"
+model = "gemini-2.5-pro-preview-05-06"
 system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "implicit_tool"
-max_tokens = 100
+max_tokens = 500
 
 [functions.json_success.variants.gcp-vertex-haiku]
 type = "chat_completion"
@@ -1423,21 +1423,21 @@ user_template = "../../fixtures/config/functions/json_success/prompt/user_templa
 json_mode = "implicit_tool"
 max_tokens = 100
 
-[functions.json_success.variants.google-ai-studio-gemini-1_5-pro]
+[functions.json_success.variants.google-ai-studio-gemini-2_5-pro]
 type = "chat_completion"
-model = "gemini-1.5-pro"
+model = "gemini-2.5-pro"
 system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "on"
-max_tokens = 100
+max_tokens = 500
 
-[functions.json_success.variants.google-ai-studio-gemini-1_5-pro-implicit]
+[functions.json_success.variants.google-ai-studio-gemini-2_5-pro-implicit]
 type = "chat_completion"
-model = "gemini-1.5-pro"
+model = "gemini-2.5-pro"
 system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "implicit_tool"
-max_tokens = 100
+max_tokens = 500
 
 [functions.json_success.variants.json_reasoner]
 type = "chat_completion"
@@ -1544,7 +1544,7 @@ max_tokens = 100
 
 [functions.json_success.variants.sglang]
 type = "chat_completion"
-model = "google/gemma-3-1b-it"
+model = "Qwen/Qwen2.5-1.5B-Instruct"
 system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "on"
@@ -1552,7 +1552,7 @@ max_tokens = 100
 
 [functions.json_success.variants.sglang-strict]
 type = "chat_completion"
-model = "google/gemma-3-1b-it"
+model = "Qwen/Qwen2.5-1.5B-Instruct"
 system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 max_tokens = 100
@@ -1698,7 +1698,7 @@ max_tokens = 100
 
 [functions.json_success.variants.gcp_vertex_gemini_pro_json_mode_off]
 type = "chat_completion"
-model = "gemini-1.5-pro-001"
+model = "gemini-2.5-pro-preview-05-06"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "off"
@@ -1722,7 +1722,7 @@ max_tokens = 100
 
 [functions.json_success.variants.google_ai_studio_gemini_pro_002_json_mode_off]
 type = "chat_completion"
-model = "gemini-1.5-pro"
+model = "gemini-2.5-pro-preview-05-06"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "off"
@@ -1754,7 +1754,7 @@ max_tokens = 100
 
 [functions.json_success.variants.sglang_json_mode_off]
 type = "chat_completion"
-model = "google/gemma-3-1b-it"
+model = "Qwen/Qwen2.5-1.5B-Instruct"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "off"
@@ -1928,19 +1928,19 @@ max_tokens = 100
 
 [functions.dynamic_json.variants.gcp-vertex-gemini-pro]
 type = "chat_completion"
-model = "gemini-1.5-pro-001"
+model = "gemini-2.5-pro-preview-05-06"
 system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
 json_mode = "on"
-max_tokens = 100
+max_tokens = 500
 
 [functions.dynamic_json.variants.gcp-vertex-gemini-pro-implicit]
 type = "chat_completion"
-model = "gemini-1.5-pro-001"
+model = "gemini-2.5-pro-preview-05-06"
 system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
 json_mode = "implicit_tool"
-max_tokens = 100
+max_tokens = 500
 
 [functions.dynamic_json.variants.google-ai-studio-gemini-flash-8b]
 type = "chat_completion"
@@ -1966,21 +1966,21 @@ user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_templa
 json_mode = "implicit_tool"
 max_tokens = 100
 
-[functions.dynamic_json.variants.google-ai-studio-gemini-1_5-pro]
+[functions.dynamic_json.variants.google-ai-studio-gemini-2_5-pro]
 type = "chat_completion"
-model = "gemini-1.5-pro"
+model = "gemini-2.5-pro"
 system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
 json_mode = "on"
-max_tokens = 100
+max_tokens = 500
 
-[functions.dynamic_json.variants.google-ai-studio-gemini-1_5-pro-implicit]
+[functions.dynamic_json.variants.google-ai-studio-gemini-2_5-pro-implicit]
 type = "chat_completion"
-model = "gemini-1.5-pro"
+model = "gemini-2.5-pro"
 system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
 json_mode = "implicit_tool"
-max_tokens = 100
+max_tokens = 500
 
 [functions.dynamic_json.variants.gcp-vertex-haiku]
 type = "chat_completion"
@@ -2065,7 +2065,7 @@ json_mode = "strict"
 
 [functions.dynamic_json.variants.sglang]
 type = "chat_completion"
-model = "google/gemma-3-1b-it"
+model = "Qwen/Qwen2.5-1.5B-Instruct"
 system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
 json_mode = "strict"
@@ -2073,7 +2073,7 @@ max_tokens = 100
 
 [functions.dynamic_json.variants.sglang-strict]
 type = "chat_completion"
-model = "google/gemma-3-1b-it"
+model = "Qwen/Qwen2.5-1.5B-Instruct"
 system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
 max_tokens = 100
@@ -2345,9 +2345,9 @@ max_tokens = 100
 
 [functions.weather_helper.variants.gcp-vertex-gemini-pro]
 type = "chat_completion"
-model = "gemini-1.5-pro-001"
+model = "gemini-2.5-pro-preview-05-06"
 system_template = "../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
-max_tokens = 100
+max_tokens = 500
 
 [functions.weather_helper.variants.google-ai-studio-gemini-flash-8b]
 type = "chat_completion"
@@ -2355,11 +2355,11 @@ model = "gemini-2.0-flash-lite"
 system_template = "../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
 max_tokens = 100
 
-[functions.weather_helper.variants.google-ai-studio-gemini-1_5-pro]
+[functions.weather_helper.variants.google-ai-studio-gemini-2_5-pro]
 type = "chat_completion"
-model = "gemini-1.5-pro"
+model = "gemini-2.5-pro"
 system_template = "../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
-max_tokens = 100
+max_tokens = 500
 
 [functions.weather_helper.variants.gcp-vertex-haiku]
 type = "chat_completion"
@@ -2388,6 +2388,12 @@ max_tokens = 1000
 [functions.weather_helper.variants.together-tool]
 type = "chat_completion"
 model = "llama3.1-405b-instruct-turbo-together"
+system_template = "../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.weather_helper.variants.sglang]
+type = "chat_completion"
+model = "Qwen/Qwen2.5-1.5B-Instruct"
 system_template = "../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
 max_tokens = 100
 

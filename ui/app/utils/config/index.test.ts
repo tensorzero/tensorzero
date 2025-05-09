@@ -48,7 +48,9 @@ test("parse e2e config", async () => {
   const gcpVertexGeminiProVariant =
     jsonTestFunction.variants["gcp-vertex-gemini-pro"];
   if (gcpVertexGeminiProVariant.type === "chat_completion") {
-    expect(gcpVertexGeminiProVariant.model).toBe("gemini-1.5-pro-001");
+    expect(gcpVertexGeminiProVariant.model).toBe(
+      "gemini-2.5-pro-preview-05-06",
+    );
   } else {
     throw new Error("GCP Vertex Gemini Pro variant not found");
   }

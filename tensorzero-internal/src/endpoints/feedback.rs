@@ -290,11 +290,11 @@ async fn write_demonstration(
         &connection_info,
         inference_id,
         &function_name,
-        function_config,
+        &function_config,
     )
     .await?;
     let parsed_value =
-        validate_parse_demonstration(function_config, value, dynamic_demonstration_info).await?;
+        validate_parse_demonstration(&function_config, value, dynamic_demonstration_info).await?;
     let string_value = serde_json::to_string(&parsed_value).map_err(|e| {
         Error::new(ErrorDetails::InvalidRequest {
             message: format!("Failed to serialize parsed value to json: {e}"),

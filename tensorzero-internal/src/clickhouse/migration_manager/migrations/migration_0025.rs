@@ -29,7 +29,7 @@ impl Migration for Migration0025<'_> {
         Ok(!dynamic_evaluation_run_table_exists || !dynamic_evaluation_run_episode_table_exists)
     }
 
-    async fn apply(&self) -> Result<(), Error> {
+    async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         let query = r#"
             CREATE TABLE IF NOT EXISTS DynamicEvaluationRun
                 (
