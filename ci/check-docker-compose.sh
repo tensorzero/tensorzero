@@ -7,7 +7,7 @@ if [[ "$dir_path" == */cursor ]]; then
 fi
 
 cd "$dir_path"
-docker compose -f "$1" up --wait --wait-timeout 30
+docker compose -f "$1" up --wait --wait-timeout 120
 status=$?
 if [ $status -ne 0 ]; then
   echo "Docker Compose failed for $1 with status $status"
