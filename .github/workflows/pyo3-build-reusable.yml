@@ -1,0 +1,162 @@
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  linux:
+    runs-on: ${{ matrix.platform.runner }}
+    strategy:
+      matrix:
+        platform:
+          - runner: ubuntu-24.04
+            target: x86_64
+          - runner: ubuntu-24.04-arm
+            target: aarch64
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38
+        with:
+          python-version: 3.x
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/0.6.4/install.sh | sh
+      - name: Build wheels
+        uses: PyO3/maturin-action@b3709a81b3e175ce3ede866725776fee42465311
+        with:
+          working-directory: ./clients/python-pyo3
+          target: ${{ matrix.platform.target }}
+          args: --release --out dist --find-interpreter
+          sccache: "true"
+          manylinux: auto
+      - name: Upload wheels
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: wheels-linux-${{ matrix.platform.target }}
+          path: ./clients/python-pyo3/dist
+      - name: Check built wheel
+        run: |
+          ./ci/check-local-wheel.sh ./clients/python-pyo3/dist/tensorzero*.whl
+
+  musllinux:
+    runs-on: ${{ matrix.platform.runner }}
+    strategy:
+      matrix:
+        platform:
+          - runner: ubuntu-24.04
+            target: x86_64
+          - runner: ubuntu-24.04-arm
+            target: aarch64
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38
+        with:
+          python-version: 3.x
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/0.6.4/install.sh | sh
+      - name: Build wheels
+        uses: PyO3/maturin-action@b3709a81b3e175ce3ede866725776fee42465311
+        with:
+          working-directory: ./clients/python-pyo3
+          target: ${{ matrix.platform.target }}
+          args: --release --out dist --find-interpreter
+          sccache: "true"
+          manylinux: musllinux_1_2
+      - name: Upload wheels
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: wheels-musllinux-${{ matrix.platform.target }}
+          path: ./clients/python-pyo3/dist
+      - name: Check built musl wheel
+        run: |
+          ./ci/check-musl-wheel.sh ./clients/python-pyo3/dist/tensorzero*.whl
+
+  windows:
+    runs-on: ${{ matrix.platform.runner }}
+    strategy:
+      matrix:
+        platform:
+          - runner: windows-latest
+            target: x64
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38
+        with:
+          python-version: 3.x
+          architecture: ${{ matrix.platform.target }}
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/0.6.4/install.sh | sh
+        shell: bash
+      - name: Build wheels
+        uses: PyO3/maturin-action@b3709a81b3e175ce3ede866725776fee42465311
+        with:
+          working-directory: ./clients/python-pyo3
+          target: ${{ matrix.platform.target }}
+          args: --release --out dist --find-interpreter
+          sccache: "true"
+      - name: Upload wheels
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: wheels-windows-${{ matrix.platform.target }}
+          path: ./clients/python-pyo3/dist
+      - name: Check built wheel
+        run: |
+          ./ci/check-local-wheel.sh ./clients/python-pyo3/dist/tensorzero*.whl
+        shell: bash
+
+  macos:
+    runs-on: ${{ matrix.platform.runner }}
+    strategy:
+      matrix:
+        platform:
+          - runner: macos-13
+            target: x86_64
+          - runner: macos-14
+            target: aarch64
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38
+        with:
+          python-version: 3.x
+
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/0.6.4/install.sh | sh
+
+      - name: Build wheels
+        uses: PyO3/maturin-action@b3709a81b3e175ce3ede866725776fee42465311
+        with:
+          working-directory: ./clients/python-pyo3
+          target: ${{ matrix.platform.target }}
+          args: --release --out dist --find-interpreter
+          sccache: "true"
+
+      - name: Upload wheels
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: wheels-macos-${{ matrix.platform.target }}
+          path: ./clients/python-pyo3/dist
+      - name: Check built wheel
+        run: |
+          ./ci/check-local-wheel.sh ./clients/python-pyo3/dist/tensorzero*.whl
+
+  sdist:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Build sdist
+        uses: PyO3/maturin-action@b3709a81b3e175ce3ede866725776fee42465311
+        with:
+          working-directory: ./clients/python-pyo3
+          command: sdist
+          args: --out dist
+      - name: Upload sdist
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: wheels-sdist
+          path: ./clients/python-pyo3/dist
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/0.6.4/install.sh | sh
+      - name: Check local sdist
+        run: |
+          ./ci/check-local-wheel.sh ./clients/python-pyo3/dist/tensorzero-*.tar.gz
