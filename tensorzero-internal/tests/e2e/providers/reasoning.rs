@@ -8,7 +8,10 @@ use reqwest_eventsource::Event;
 use reqwest_eventsource::RequestBuilderExt;
 use serde_json::json;
 use serde_json::Value;
-use tensorzero::Role;
+use tensorzero::{
+    ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent, Role,
+};
+use tensorzero_internal::inference::types::TextKind;
 use tensorzero_internal::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_inference_tags_clickhouse,
     select_json_inference_clickhouse, select_model_inference_clickhouse,
@@ -17,36 +20,43 @@ use tensorzero_internal::inference::types::ContentBlockOutput;
 use tensorzero_internal::inference::types::{ContentBlock, RequestMessage};
 use uuid::Uuid;
 
-pub async fn test_reasoning_inference_request_simple_with_provider(provider: E2ETestProvider) {
+pub async fn test_reasoning_inference_request_simple_with_provider(
+    provider: E2ETestProvider,
+    client: &tensorzero::Client,
+) {
     let episode_id = Uuid::now_v7();
 
-    let payload = json!({
-        "function_name": "basic_test",
-        "variant_name": provider.variant_name,
-        "episode_id": episode_id,
-        "input":
-            {
-               "system": {"assistant_name": "Dr. Mehta"},
-               "messages": [
-                {
-                    "role": "user",
-                    "content": "What is the capital city of Japan?"
-                }
-            ]},
-        "stream": false,
-        "tags": {"foo": "bar"},
-    });
-
-    let response = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .send()
+    let response = client
+        .inference(ClientInferenceParams {
+            function_name: Some("basic_test".to_string()),
+            variant_name: Some(provider.variant_name.clone()),
+            episode_id: Some(episode_id),
+            input: ClientInput {
+                system: Some(json!({"assistant_name": "Dr. Mehta"})),
+                messages: vec![ClientInputMessage {
+                    role: Role::User,
+                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                        text: "What is the capital city of Japan?".to_string(),
+                    })],
+                }],
+            },
+            tags: [("foo".to_string(), "bar".to_string())]
+                .into_iter()
+                .collect(),
+            ..Default::default()
+        })
         .await
         .unwrap();
 
-    // Check that the API response is ok
-    assert_eq!(response.status(), StatusCode::OK);
-    let response_json = response.json::<Value>().await.unwrap();
+    // Process the response
+    let response_json = match response {
+        tensorzero::InferenceOutput::NonStreaming(response) => {
+            serde_json::to_value(&response).unwrap()
+        },
+        tensorzero::InferenceOutput::Streaming(_) => {
+            panic!("Unexpected streaming response");
+        }
+    };
 
     println!("API response: {response_json:#?}");
 
@@ -248,54 +258,49 @@ pub async fn test_reasoning_inference_request_simple_with_provider(provider: E2E
 
 pub async fn test_streaming_reasoning_inference_request_simple_with_provider(
     provider: E2ETestProvider,
+    client: &tensorzero::Client,
 ) {
-    use reqwest_eventsource::{Event, RequestBuilderExt};
     use serde_json::Value;
-
-    use crate::common::get_gateway_endpoint;
 
     let episode_id = Uuid::now_v7();
     let tag_value = Uuid::now_v7().to_string();
 
-    let payload = json!({
-        "function_name": "basic_test",
-        "variant_name": provider.variant_name,
-        "episode_id": episode_id,
-        "input":
-            {
-               "system": {"assistant_name": "Dr. Mehta"},
-               "messages": [
-                {
-                    "role": "user",
-                    "content": "What is the capital city of Japan?"
-                }
-            ]},
-        "stream": true,
-        "tags": {"key": tag_value},
-    });
-
-    let mut event_source = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .eventsource()
+    let response = client
+        .inference(ClientInferenceParams {
+            function_name: Some("basic_test".to_string()),
+            variant_name: Some(provider.variant_name.clone()),
+            episode_id: Some(episode_id),
+            input: ClientInput {
+                system: Some(json!({"assistant_name": "Dr. Mehta"})),
+                messages: vec![ClientInputMessage {
+                    role: Role::User,
+                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                        text: "What is the capital city of Japan?".to_string(),
+                    })],
+                }],
+            },
+            tags: [("key".to_string(), tag_value.clone())]
+                .into_iter()
+                .collect(),
+            stream: Some(true),
+            ..Default::default()
+        })
+        .await
         .unwrap();
 
     let mut chunks = vec![];
-    let mut found_done_chunk = false;
-    while let Some(event) = event_source.next().await {
-        let event = event.unwrap();
-        match event {
-            Event::Open => continue,
-            Event::Message(message) => {
-                if message.data == "[DONE]" {
-                    found_done_chunk = true;
-                    break;
-                }
-                chunks.push(message.data);
-            }
-        }
+    
+    let tensorzero::InferenceOutput::Streaming(mut streaming_response) = response else {
+        panic!("Expected streaming response");
+    };
+    
+    while let Some(chunk) = streaming_response.next().await {
+        let chunk = chunk.unwrap();
+        let chunk_json = serde_json::to_value(&chunk).unwrap();
+        chunks.push(serde_json::to_string(&chunk_json).unwrap());
     }
-    assert!(found_done_chunk);
+    
+    assert!(!chunks.is_empty());
 
     let mut inference_id: Option<Uuid> = None;
     let mut full_content = String::new();
@@ -368,7 +373,7 @@ pub async fn test_streaming_reasoning_inference_request_simple_with_provider(
     assert_eq!(id_uuid, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, payload["function_name"]);
+    assert_eq!(function_name, "basic_test");
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
