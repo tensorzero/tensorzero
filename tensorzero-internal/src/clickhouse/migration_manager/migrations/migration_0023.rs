@@ -12,6 +12,9 @@ use super::check_table_exists;
 /// We also create two materialized views that automatically write to StaticEvaluationHumanFeedback when
 /// FloatMetricFeedback and BooleanMetricFeedback are updated with new feedback that contains both
 /// tensorzero::datapoint_id and tensorzero::human_feedback tags.
+///
+/// NOTE: The views in this table are StaticEvaluationHumanFeedbackFloatView and StaticEvaluationHumanFeedbackBooleanView.
+/// Thew views created by Migration 0028 are StaticEvaluationFloatHumanFeedbackView and StaticEvaluationBooleanHumanFeedbackView.
 pub struct Migration0023<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
 }

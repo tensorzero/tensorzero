@@ -25,6 +25,13 @@ use super::check_table_exists;
 ///   3. Create the new views with a timestamp of the migration timestamp + 10 seconds
 ///   4. Wait 10 seconds
 ///   5. Insert the data from the missing 10 seconds into the new table.
+///
+///
+/// NOTE: The views created by this migration are StaticEvaluationFloatHumanFeedbackView and StaticEvaluationBooleanHumanFeedbackView.
+/// The views created by Migration 0023 are StaticEvaluationHumanFeedbackFloatView and StaticEvaluationHumanFeedbackBooleanView.s
+///
+/// NOTE: The two views created by this migration are required to be separate as ClickHouse only triggers materialized views
+/// on the first table to appear.
 pub struct Migration0028<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
 }
@@ -57,13 +64,21 @@ impl Migration for Migration0028<'_> {
             MIGRATION_ID,
         )
         .await?;
-        let materialized_view_exists = check_table_exists(
+        let float_materialized_view_exists = check_table_exists(
             self.clickhouse,
-            "StaticEvaluationHumanFeedbackView",
+            "StaticEvaluationFloatHumanFeedbackView",
             MIGRATION_ID,
         )
         .await?;
-        Ok(!human_feedback_table_exists || !materialized_view_exists)
+        let boolean_materialized_view_exists = check_table_exists(
+            self.clickhouse,
+            "StaticEvaluationBooleanHumanFeedbackView",
+            MIGRATION_ID,
+        )
+        .await?;
+        Ok(!human_feedback_table_exists
+            || !float_materialized_view_exists
+            || !boolean_materialized_view_exists)
     }
 
     async fn apply(&self, clean_start: bool) -> Result<(), Error> {
@@ -108,10 +123,10 @@ impl Migration for Migration0028<'_> {
         // Create the materialized view for FloatMetricFeedback
         let query = format!(
             r#"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS StaticEvaluationHumanFeedbackView
+            CREATE MATERIALIZED VIEW IF NOT EXISTS StaticEvaluationFloatHumanFeedbackView
             TO StaticEvaluationHumanFeedback
             AS
-                WITH human_feedback AS (
+                WITH float_human_feedback AS (
                     SELECT
                         metric_name,
                         toUUID(tags['tensorzero::datapoint_id']) AS datapoint_id,
@@ -127,27 +142,12 @@ impl Migration for Migration0028<'_> {
                         mapContains(tags, 'tensorzero::human_feedback')
                         AND mapContains(tags, 'tensorzero::datapoint_id')
                         {view_timestamp_where_clause}
-                    UNION ALL
-                    SELECT
-                        metric_name,
-                        toUUID(tags['tensorzero::datapoint_id']) AS datapoint_id,
-                        toJSONString(value) AS value,
-                        id AS feedback_id,
-                        target_id,
-                        toUUID(tags['tensorzero::evaluator_inference_id']) AS evaluator_inference_id
-                        -- we enforce in the feedback endpoint that this is present
-                        -- if the tensorzero::datapoint_id is present and the tensorzero::human_feedback
-                        -- tag is present.
-                    FROM BooleanMetricFeedback
-                    WHERE
-                        mapContains(tags, 'tensorzero::human_feedback')
-                        AND mapContains(tags, 'tensorzero::datapoint_id')
-                        {view_timestamp_where_clause}
+
                 ),
                 inference_by_id AS (
                     SELECT id_uint, function_name, function_type, variant_name, episode_id FROM InferenceById
                     WHERE id_uint IN (
-                        SELECT toUInt128(target_id) FROM human_feedback
+                        SELECT toUInt128(target_id) FROM float_human_feedback
                     )
                 ),
                 chat_inference AS (
@@ -182,7 +182,90 @@ impl Migration for Migration0028<'_> {
                 f.value AS value,
                 f.feedback_id AS feedback_id,
                 f.evaluator_inference_id AS evaluator_inference_id
-            FROM human_feedback f
+            FROM float_human_feedback f
+            INNER JOIN inference_by_id i ON
+                toUInt128(f.target_id) = i.id_uint
+            LEFT JOIN chat_inference ci ON
+                i.function_type = 'chat' AND
+                i.function_name = ci.function_name AND
+                i.variant_name = ci.variant_name AND
+                i.episode_id = ci.episode_id AND
+                f.target_id = ci.id
+            LEFT JOIN json_inference ji ON
+                i.function_type = 'json' AND
+                i.function_name = ji.function_name AND
+                i.variant_name = ji.variant_name AND
+                i.episode_id = ji.episode_id AND
+                f.target_id = ji.id;
+        "#
+        );
+        self.clickhouse
+            .run_query_synchronous(query.to_string(), None)
+            .await?;
+
+        // Create the materialized view for BooleanMetricFeedback
+        let query = format!(
+            r#"
+            CREATE MATERIALIZED VIEW IF NOT EXISTS StaticEvaluationBooleanHumanFeedbackView
+            TO StaticEvaluationHumanFeedback
+            AS
+                WITH boolean_human_feedback AS (
+                    SELECT
+                       metric_name,
+                       toUUID(tags['tensorzero::datapoint_id']) AS datapoint_id,
+                       toJSONString(value) AS value,
+                       id AS feedback_id,
+                       target_id,
+                       toUUID(tags['tensorzero::evaluator_inference_id']) AS evaluator_inference_id
+                       -- we enforce in the feedback endpoint that this is present
+                       -- if the tensorzero::datapoint_id is present and the tensorzero::human_feedback
+                       -- tag is present.
+                   FROM BooleanMetricFeedback
+                   WHERE
+                       mapContains(tags, 'tensorzero::human_feedback')
+                       AND mapContains(tags, 'tensorzero::datapoint_id')
+                       {view_timestamp_where_clause}
+
+                ),
+                inference_by_id AS (
+                    SELECT id_uint, function_name, function_type, variant_name, episode_id FROM InferenceById
+                    WHERE id_uint IN (
+                        SELECT toUInt128(target_id) FROM boolean_human_feedback
+                    )
+                ),
+                chat_inference AS (
+                    SELECT function_name, variant_name, episode_id, id, output FROM ChatInference
+                    WHERE function_name IN (
+                        SELECT function_name FROM inference_by_id
+                    )
+                    AND variant_name IN (
+                        SELECT variant_name FROM inference_by_id
+                    )
+                    AND episode_id IN (
+                        SELECT episode_id FROM inference_by_id
+                    )
+                ),
+                json_inference AS (
+                    SELECT function_name, variant_name, episode_id, id, output FROM JsonInference
+                    WHERE function_name IN (
+                        SELECT function_name FROM inference_by_id
+                    )
+                    AND variant_name IN (
+                        SELECT variant_name FROM inference_by_id
+                    )
+                    AND episode_id IN (
+                        SELECT episode_id FROM inference_by_id
+                    )
+                )
+            SELECT
+                f.metric_name as metric_name,
+                f.datapoint_id as datapoint_id,
+                -- Select output based on function_type determined via InferenceById join
+                if(i.function_type = 'chat', ci.output, ji.output) AS output,
+                f.value AS value,
+                f.feedback_id AS feedback_id,
+                f.evaluator_inference_id AS evaluator_inference_id
+            FROM boolean_human_feedback f
             INNER JOIN inference_by_id i ON
                 toUInt128(f.target_id) = i.id_uint
             LEFT JOIN chat_inference ci ON
@@ -222,7 +305,6 @@ impl Migration for Migration0028<'_> {
                 AND UUIDv7ToDateTime(feedback_id) >= toDateTime(toUnixTimestamp({current_timestamp}))"#
             );
 
-            // Insert the data from the missing 10 seconds into the new table.
             let query = format!(
                 r#"
                 WITH human_feedback AS (
@@ -243,20 +325,21 @@ impl Migration for Migration0028<'_> {
                         {insert_timestamp_where_clause}
                     UNION ALL
                     SELECT
-                        metric_name,
-                        toUUID(tags['tensorzero::datapoint_id']) AS datapoint_id,
-                        toJSONString(value) AS value,
-                        id AS feedback_id,
-                        target_id,
-                        toUUID(tags['tensorzero::evaluator_inference_id']) AS evaluator_inference_id
-                        -- we enforce in the feedback endpoint that this is present
-                        -- if the tensorzero::datapoint_id is present and the tensorzero::human_feedback
-                        -- tag is present.
+                       metric_name,
+                       toUUID(tags['tensorzero::datapoint_id']) AS datapoint_id,
+                       toJSONString(value) AS value,
+                       id AS feedback_id,
+                       target_id,
+                       toUUID(tags['tensorzero::evaluator_inference_id']) AS evaluator_inference_id
+                       -- we enforce in the feedback endpoint that this is present
+                       -- if the tensorzero::datapoint_id is present and the tensorzero::human_feedback
+                       -- tag is present.
                     FROM BooleanMetricFeedback
                     WHERE
-                        mapContains(tags, 'tensorzero::human_feedback')
-                        AND mapContains(tags, 'tensorzero::datapoint_id')
-                        {insert_timestamp_where_clause}
+                       mapContains(tags, 'tensorzero::human_feedback')
+                       AND mapContains(tags, 'tensorzero::datapoint_id')
+                       {insert_timestamp_where_clause}
+
                 ),
                 inference_by_id AS (
                     SELECT id_uint, function_name, function_type, variant_name, episode_id FROM InferenceById
@@ -323,8 +406,10 @@ impl Migration for Migration0028<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        r#"DROP TABLE IF EXISTS StaticEvaluationHumanFeedback;
-        DROP MATERIALIZED VIEW IF EXISTS StaticEvaluationHumanFeedbackView;
+        r#"
+        DROP MATERIALIZED VIEW IF EXISTS StaticEvaluationFloatHumanFeedbackView;
+        DROP MATERIALIZED VIEW IF EXISTS StaticEvaluationBooleanHumanFeedbackView;
+        DROP TABLE IF EXISTS StaticEvaluationHumanFeedback;
         "#
         .to_string()
     }
