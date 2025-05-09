@@ -52,24 +52,27 @@ response = client.chat.completions.create(
     response_format={
         "type": "json_schema",
         "json_schema": {
-            "$schema": "http://json-schema.org/draft-07/schema#",
-            "type": "object",
-            "properties": {
-                "people": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "name": {"type": "string"},
-                            "title": {"type": "string"},
+            "name": "extract_names",
+            "schema": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                    "people": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "name": {"type": "string"},
+                                "title": {"type": "string"},
+                            },
+                            "required": ["name", "title"],
+                            "additionalProperties": False,
                         },
-                        "required": ["name", "title"],
-                        "additionalProperties": False,
                     },
                 },
+                "required": ["people"],
+                "additionalProperties": False,
             },
-            "required": ["people"],
-            "additionalProperties": False,
         },
     },
 )

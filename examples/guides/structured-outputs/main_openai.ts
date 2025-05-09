@@ -1,62 +1,76 @@
 import OpenAI from "openai";
-import { ChatCompletionMessageParam } from "openai/resources/chat/completions";
-import { ResponseFormatJSONSchema } from "openai/resources/shared";
 
-const messages: ChatCompletionMessageParam[] = [
-  {
-    role: "system",
-    content:
-      "You are a helpful math tutor. Guide the user through the solution step by step.",
-  },
-  { role: "user", content: "how can I solve 8x + 7 = -23" },
-];
+const UNSTRUCTURED_TEXT = `
+Tech giant TensorZero announced on Tuesday the acquisition of AI startup Anthropic for $1.2 trillion.
+The deal, expected to close by the end of Q3 2027, will help TensorZero expand its machine learning capabilities according to CEO Gabriel Bianconi.
+"This strategic acquisition positions us to better serve the open source community," Bianconi stated during a press conference in New York.
+Anthropic, founded in 2021 by Dario Amodei and Daniela Amodei, reported $85 billion in revenue last year and currently employs over 2000 people globally.
+`.trim();
 
-const response_format: ResponseFormatJSONSchema = {
-  type: "json_schema",
-  json_schema: {
-    name: "math_response",
-    ...{
-      type: "object",
-      properties: {
-        steps: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              explanation: { type: "string" },
-              output: { type: "string" },
-            },
-            required: ["explanation", "output"],
-            additionalProperties: false,
-          },
-        },
-        final_answer: { type: "string" },
-      },
-      required: ["steps", "final_answer"],
-      additionalProperties: false,
-    },
-    strict: true,
-  },
-};
-
-const openai = new OpenAI({});
+const openai = new OpenAI();
 
 const response = await openai.chat.completions.create({
-  model: "gpt-4o-2024-08-06",
-  messages,
-  response_format,
+  model: "tensorzero::function_name::extract_names",
+  messages: [
+    {
+      role: "user",
+      content: UNSTRUCTURED_TEXT,
+    },
+  ],
 });
 
 console.log(JSON.stringify(response, null, 2));
+console.log();
 
-const openait0 = new OpenAI({
-  baseURL: "http://localhost:3000/openai/v1",
+const stream = await openai.chat.completions.create({
+  model: "tensorzero::function_name::extract_names",
+  messages: [
+    {
+      role: "user",
+      content: UNSTRUCTURED_TEXT,
+    },
+  ],
+  stream: true,
 });
 
-const response2 = await openait0.chat.completions.create({
-  model: "tensorzero::model_name::openai::gpt-4o-2024-08-06",
-  messages,
-  response_format,
+for await (const chunk of stream) {
+  console.log(JSON.stringify(chunk, null, 2));
+}
+
+const response2 = await openai.chat.completions.create({
+  model: "tensorzero::function_name::extract_names",
+  messages: [
+    {
+      role: "user",
+      content: UNSTRUCTURED_TEXT,
+    },
+  ],
+  response_format: {
+    type: "json_schema",
+    json_schema: {
+      name: "extract_names",
+      schema: {
+        $schema: "http://json-schema.org/draft-07/schema#",
+        type: "object",
+        properties: {
+          people: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                name: { type: "string" },
+                title: { type: "string" },
+              },
+              required: ["name", "title"],
+              additionalProperties: false,
+            },
+          },
+        },
+        required: ["people"],
+        additionalProperties: false,
+      },
+    },
+  },
 });
 
 console.log(JSON.stringify(response2, null, 2));
