@@ -17,6 +17,7 @@ jobs:
   build-wheels:
     uses: ./.github/workflows/pyo3-build-reusable.yml
     permissions:
+      contents: read
       id-token: write
 
   release:
