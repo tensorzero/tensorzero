@@ -194,6 +194,7 @@ pub async fn run_evaluation(
         task_id_to_datapoint_id.insert(abort_handle.id(), datapoint_id);
     }
 
+    panic!("dsfadsfadsfadsfadsfadsfhjgdfjhgge;gdfs2348483");
     // Collect results
     let mut evaluation_stats = EvaluationStats::new(args.format, dataset_len);
 

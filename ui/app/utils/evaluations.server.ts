@@ -87,6 +87,7 @@ export function runEvaluation(
 
     // Buffer for incomplete lines
     let stdoutBuffer = "";
+    let stderrBuffer = "";
 
     // Record the start time of the evaluation
     const startTime = new Date();
@@ -166,7 +167,16 @@ export function runEvaluation(
       // stdoutBuffer now contains any incomplete line (or nothing)
     });
 
-    // Ignore stderr completely
+    // Handle stderr data and accumulate errors
+    child.stderr.on("data", (data) => {
+      const errorMsg = data.toString();
+      stderrBuffer += errorMsg;
+      if (evaluationRunId) {
+        runningEvaluations[evaluationRunId].errors.unshift({
+          message: `Process error: ${errorMsg.trim()}`,
+        });
+      }
+    });
 
     // Handle process errors (e.g., if the process couldn't be spawned)
     child.on("error", (error) => {
@@ -177,7 +187,7 @@ export function runEvaluation(
 
     // Handle process completion
     child.on("close", (code) => {
-      // Process any remaining data in the buffer
+      // Process any remaining data in the stdout buffer
       if (stdoutBuffer.trim()) {
         processCompleteLine(stdoutBuffer.trim());
       }
@@ -188,16 +198,23 @@ export function runEvaluation(
 
         // Add exit code info if not successful
         if (code !== 0) {
-          runningEvaluations[evaluationRunId].errors.push({
-            message: `Process exited with code ${code}`,
-          });
+          if (stderrBuffer.trim()) {
+            runningEvaluations[evaluationRunId].errors.push({
+              message: `Error: ${stderrBuffer.trim()}`,
+            });
+          } else {
+            runningEvaluations[evaluationRunId].errors.push({
+              message: `Process exited with code ${code}`,
+            });
+          }
         }
       }
 
       if (!initialDataReceived) {
         reject(
           new Error(
-            `Process exited with code ${code} without producing output`,
+            stderrBuffer.trim() ||
+              `Process exited with code ${code} without producing output`,
           ),
         );
       }
