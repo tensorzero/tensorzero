@@ -14,13 +14,13 @@ all_tables["FloatMetricFeedback"]="./s3-fixtures/small_float_metric_feedback.par
 all_tables["FloatMetricFeedbackByTargetId"]="./s3-fixtures/small_float_metric_feedback.parquet"
 all_tables["CommentFeedback"]="./s3-fixtures/small_comment_feedback.parquet"
 all_tables["DemonstrationFeedback"]="./s3-fixtures/small_demonstration_feedback.parquet"
-all_tables["ChatInference"]="./s3-fixtures/small_chat_inference_examples.jsonl ./s3-fixtures/large_chat_inference.parquet"
-all_tables["ModelInference"]="./s3-fixtures/model_inference_examples.jsonl ./s3-fixtures/large_model_inference.parquet"
+all_tables["ChatInference"]="./s3-fixtures/small_chat_inference.parquet ./s3-fixtures/large_chat_inference.parquet"
+all_tables["ModelInference"]="./s3-fixtures/small_model_inference.parquet ./s3-fixtures/large_model_inference.parquet"
 all_tables["ChatInferenceDatapoint FINAL"]="./s3-fixtures/small_chat_inference_datapoint.parquet"
 all_tables["JsonInferenceDatapoint FINAL"]="./s3-fixtures/small_json_inference_datapoint.parquet"
 all_tables["ModelInferenceCache"]="./s3-fixtures/small_model_inference_cache.parquet"
 all_tables["DynamicEvaluationRun"]="./s3-fixtures/small_dynamic_evaluation_run.parquet"
-all_tables["DynamicEvaluationRunEpisode"]="./s3-fixtures/small_dynamic_evaluation_run_episode_examples.jsonl"
+all_tables["DynamicEvaluationRunEpisode"]="./s3-fixtures/small_dynamic_evaluation_run_episode.parquet"
 
 # Track if there's any mismatch
 mismatch=0
