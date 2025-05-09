@@ -13,7 +13,22 @@ import requests
 
 # Constants
 PART_SIZE = 8388608
-FIXTURES = ["large_chat_inference.parquet", "large_model_inference.parquet"]
+FIXTURES = [
+    "small_boolean_metric_feedback.parquet",
+    "small_chat_inference_datapoint.parquet",
+    "small_chat_inference.parquet",
+    "small_comment_feedback.parquet",
+    "small_demonstration_feedback.parquet",
+    "small_dynamic_evaluation_run_episode.parquet",
+    "small_dynamic_evaluation_run.parquet",
+    "small_float_metric_feedback.parquet",
+    "small_json_inference_datapoint.parquet",
+    "small_json_inference.parquet",
+    "small_model_inference_cache.parquet",
+    "small_model_inference.parquet",
+    "large_chat_inference.parquet",
+    "large_model_inference.parquet"
+    ]
 R2_BUCKET = "https://pub-147e9850a60643208c411e70b636e956.r2.dev"
 S3_FIXTURES_DIR = Path("./s3-fixtures")
 
