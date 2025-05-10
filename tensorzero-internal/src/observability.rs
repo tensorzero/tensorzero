@@ -6,7 +6,7 @@ use opentelemetry_sdk::trace::{SdkTracerProvider, SpanExporter};
 use opentelemetry_sdk::Resource;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::layer::Filter;
-use tracing_subscriber::{filter, Registry};
+use tracing_subscriber::{filter, EnvFilter, Registry};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, Layer};
 
 use crate::error::{Error, ErrorDetails};
@@ -140,20 +140,93 @@ impl DelayedOtelEnableHandle {
     }
 }
 
-/// Set up logs
+pub struct DelayedDebugLogs {
+    enable_cb: Box<dyn FnOnce() -> Result<(), Error> + Send + Sync>,
+}
+
+impl DelayedDebugLogs {
+    pub fn enable_debug(self) -> Result<(), Error> {
+        (self.enable_cb)()
+    }
+}
+
+/// A handle produced by `setup_logs` that allows updating some configuration values after logging has been initialized.
+/// This allows us to use the following pattern in the gateway:
+/// 1. Enable logging with some default (verbose) settings
+/// 2. Deserialize the config file (`tracing::*` macros will work at this point)
+/// 3. Update the logging configuration based on the deserialized config file (e.g. `gateway.debug = true`)
+pub struct DelayedLogConfig {
+    pub delayed_otel: DelayedOtelEnableHandle,
+    pub delayed_debug_logs: DelayedDebugLogs,
+}
+
+/// This is used when `gateway.debug` is `false` and `RUST_LOG` is not set
+const DEFAULT_GATEWAY_NON_DEBUG_DIRECTIVES: &str = "warn,gateway=info,tensorzero_internal=info";
+/// This is used when `gateway.debug` is `true` and `RUST_LOG` is not set
+const DEFAULT_GATEWAY_DEBUG_DIRECTIVES: &str =
+    "warn,gateway=debug,tensorzero_internal=debug,tower_http::trace=debug";
+
+/// Set up logging (including the necessary layers for OpenTelemtry exporting)
+///
+/// This does *not* actually enable OTEL exporting - you must use the returned
+/// `DelayedOtelEnableHandle` to turn on exporting. This two-step approach is
+/// needed because we need to initialize the tracing Registry before parsing
+/// the config file (so that we can log errors during config file parsing),
+/// but the parsed config file determines whether OTEL is enabled.
+///
+/// The priority for our logging configuration is:
+/// 1. If `RUST_LOG` is set, use it verbatim, ignoring everything else
+/// 2. If `gateway.debug` is set in the config file, use `DEFAULT_GATEWAY_DEBUG_DIRECTIVES`
+/// 3. Otherwise, use `DEFAULT_GATEWAY_NON_DEBUG_DIRECTIVES`
+///
+/// The case of unset `RUST_LOG` and `gateway.debug = true` is special:
+/// We initialize our filter with `DEFAULT_GATEWAY_NON_DEBUG_DIRECTIVES`,
+/// and then later override it (with `DelayedDebugLogs`) to `DEFAULT_GATEWAY_DEBUG_DIRECTIVES`
+/// This allows us to still see warnings/errors that occur during config file parsing.
+///
+/// In all other cases, the filter is set once during initialization, and then never changed.
+///
 /// Strictly speaking, this does not need to be an async function.
 /// However, the call to `build_opentelemetry_layer` requires a Tokio runtime,
 /// so marking this function as async makes it clear to callers that they need to
 /// be in an async context.
-pub async fn setup_logs(
-    debug: bool,
-    log_format: LogFormat,
-) -> Result<DelayedOtelEnableHandle, Error> {
-    let default_level = if debug { "debug,warn" } else { "warn" };
-    // Get the current log level from the environment variable `RUST_LOG`
-    let log_level = tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-        format!("warn,gateway={default_level},tensorzero_internal={default_level}").into()
-    });
+pub async fn setup_observability(log_format: LogFormat) -> Result<DelayedLogConfig, Error> {
+    let env_var_name = "RUST_LOG";
+    let has_env_var = std::env::var(env_var_name).is_ok();
+
+    let default_debug_filter = EnvFilter::builder()
+        .parse(DEFAULT_GATEWAY_DEBUG_DIRECTIVES)
+        .map_err(|e| {
+            Error::new(ErrorDetails::InternalError {
+                message: format!(
+                    "Failed to parse internal debug directives - this should never happen: {e}"
+                ),
+            })
+        })?;
+
+    // If the `RUST_LOG` env var is set, then use it as our filter.
+    // Otherwise, use the default non-debug directives (which might later get overridden to DEFAULT_GATEWAY_DEBUG_DIRECTIVES
+    // using the `update_log_level` handle).
+    let base_filter = if has_env_var {
+        EnvFilter::builder()
+            .with_env_var(env_var_name)
+            .from_env()
+            .map_err(|e| {
+                Error::new(ErrorDetails::Observability {
+                    message: format!("Invalid `{env_var_name}` environment variable: {e}"),
+                })
+            })?
+    } else {
+        EnvFilter::builder()
+            .parse(DEFAULT_GATEWAY_NON_DEBUG_DIRECTIVES)
+            .map_err(|e| {
+                Error::new(ErrorDetails::InternalError {
+                    message: format!("Failed to parse internal non-debug directives - this should never happen: {e}"),
+                })
+            })?
+    };
+
+    let (log_level, update_log_level) = tracing_subscriber::reload::Layer::new(base_filter);
 
     let log_layer = match log_format {
         LogFormat::Pretty => {
@@ -163,14 +236,39 @@ pub async fn setup_logs(
     };
 
     // We need to provide a dummy generic parameter to satisfy the compiler
-    let (delayed_enable, otel_layer) =
+    let (delayed_otel, otel_layer) =
         build_opentelemetry_layer::<opentelemetry_otlp::SpanExporter>(None)?;
 
     tracing_subscriber::registry()
         .with(otel_layer)
         .with(log_layer.with_filter(log_level))
         .init();
-    Ok(delayed_enable)
+
+    // If `RUST_LOG` is explicitly set, it takes precedence over `gateway.debug`,
+    // so we return a no-op `DelayedDebugLogs` handle.
+    let delayed_debug_logs = if has_env_var {
+        DelayedDebugLogs {
+            enable_cb: Box::new(|| Ok(())),
+        }
+    } else {
+        DelayedDebugLogs {
+            enable_cb: Box::new(move || {
+                update_log_level
+                    .modify(move |l| {
+                        *l = default_debug_filter;
+                    })
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::Observability {
+                            message: format!("Failed to update log level: {e}"),
+                        })
+                    })
+            }),
+        }
+    };
+    Ok(DelayedLogConfig {
+        delayed_otel,
+        delayed_debug_logs,
+    })
 }
 
 /// Set up Prometheus metrics exporter
