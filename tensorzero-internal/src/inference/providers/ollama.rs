@@ -233,7 +233,7 @@ impl InferenceProvider for OllamaProvider {
                 response,
                 raw_response,
                 latency,
-                request: request_body,
+                raw_request: raw_request.clone(),
                 generic_request: request,
             }
             .try_into()?)
@@ -460,7 +460,7 @@ struct OllamaRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    max_tokens: Option<u32>,
+    max_completion_tokens: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     seed: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -469,15 +469,17 @@ struct OllamaRequest<'a> {
     presence_penalty: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     frequency_penalty: Option<f32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    response_format: Option<OllamaResponseFormat>,
     stream: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     stream_options: Option<StreamOptions>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    response_format: Option<OllamaResponseFormat>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<Vec<OpenAITool<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_choice: Option<OpenAIToolChoice<'a>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    parallel_tool_calls: Option<bool>,
 }
 
 impl<'a> OllamaRequest<'a> {
@@ -485,17 +487,6 @@ impl<'a> OllamaRequest<'a> {
         model: &'a str,
         request: &'a ModelInferenceRequest<'_>,
     ) -> Result<OllamaRequest<'a>, Error> {
-        let ModelInferenceRequest {
-            temperature,
-            max_tokens,
-            seed,
-            top_p,
-            presence_penalty,
-            frequency_penalty,
-            stream,
-            ..
-        } = *request;
-
         let stream_options = match request.stream {
             true => Some(StreamOptions {
                 include_usage: true,
@@ -507,21 +498,22 @@ impl<'a> OllamaRequest<'a> {
 
         let messages = prepare_openai_messages(request)?;
 
-        let (tools, tool_choice, _) = prepare_openai_tools(request);
+        let (tools, tool_choice, parallel_tool_calls) = prepare_openai_tools(request);
         Ok(OllamaRequest {
             messages,
             model,
-            temperature,
-            max_tokens,
-            seed,
-            top_p,
-            response_format,
-            presence_penalty,
-            frequency_penalty,
-            stream,
+            temperature: request.temperature,
+            max_completion_tokens: request.max_tokens,
+            seed: request.seed,
+            top_p: request.top_p,
+            presence_penalty: request.presence_penalty,
+            frequency_penalty: request.frequency_penalty,
+            stream: request.stream,
             stream_options,
+            response_format,
             tools,
             tool_choice,
+            parallel_tool_calls,
         })
     }
 }
@@ -562,7 +554,7 @@ struct OllamaResponseWithMetadata<'a> {
     response: OpenAIResponse,
     raw_response: String,
     latency: Latency,
-    request: serde_json::Value,
+    raw_request: String,
     generic_request: &'a ModelInferenceRequest<'a>,
 }
 
@@ -572,7 +564,7 @@ impl<'a> TryFrom<OllamaResponseWithMetadata<'a>> for ProviderInferenceResponse {
         let OllamaResponseWithMetadata {
             mut response,
             latency,
-            request: request_body,
+            raw_request,
             generic_request,
             raw_response,
         } = value;
@@ -583,7 +575,7 @@ impl<'a> TryFrom<OllamaResponseWithMetadata<'a>> for ProviderInferenceResponse {
                     "Response has invalid number of choices {}, Expected 1",
                     response.choices.len()
                 ),
-                raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                raw_request: Some(serde_json::to_string(&raw_request).unwrap_or_default()),
                 raw_response: Some(raw_response.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
             }
@@ -601,7 +593,7 @@ impl<'a> TryFrom<OllamaResponseWithMetadata<'a>> for ProviderInferenceResponse {
             .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                 message: "Response has no choices (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
                 provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                raw_request: Some(serde_json::to_string(&raw_request).unwrap_or_default()),
                 raw_response: Some(raw_response.clone()),
             }))?;
         let mut content: Vec<ContentBlockOutput> = Vec::new();
@@ -613,7 +605,7 @@ impl<'a> TryFrom<OllamaResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 content.push(ContentBlockOutput::ToolCall(tool_call.into()));
             }
         }
-        let raw_request = serde_json::to_string(&request_body).map_err(|e| {
+        let raw_request = serde_json::to_string(&raw_request).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!(
                     "Error serializing request body as JSON: {}",
@@ -722,4 +714,337 @@ impl<'a> TryFrom<OllamaEmbeddingResponseWithMetadata<'a>> for EmbeddingProviderR
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use std::borrow::Cow;
+    use std::time::Duration;
 
+    use uuid::Uuid;
+
+    use super::*;
+
+    use crate::inference::providers::openai::{
+        OpenAIFinishReason, OpenAIResponseChoice, OpenAIResponseMessage, OpenAIResponseToolCall,
+        OpenAIToolType, OpenAIUsage, SpecificToolChoice, SpecificToolFunction,
+    };
+    use crate::inference::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
+    use crate::inference::types::{
+        FinishReason, FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role,
+    };
+    #[test]
+    fn test_ollama_api_base() {
+        assert_eq!(
+            OLLAMA_DEFAULT_BASE_URL.as_str(),
+            "http://localhost:11434/v1/"
+        );
+    }
+
+    #[test]
+    fn test_ollama_request_new() {
+        // Test basic request
+        let basic_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![
+                RequestMessage {
+                    role: Role::User,
+                    content: vec!["Hello".to_string().into()],
+                },
+                RequestMessage {
+                    role: Role::Assistant,
+                    content: vec!["Hi there!".to_string().into()],
+                },
+            ],
+            system: None,
+            tool_config: None,
+            temperature: Some(0.7),
+            max_tokens: Some(100),
+            seed: Some(69),
+            top_p: Some(0.9),
+            presence_penalty: Some(0.1),
+            frequency_penalty: Some(0.2),
+            stream: true,
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            function_type: FunctionType::Chat,
+            output_schema: None,
+            extra_body: Default::default(),
+            ..Default::default()
+        };
+        let ollama_request = OllamaRequest::new("mistral", &basic_request).unwrap();
+
+        assert_eq!(ollama_request.model, "mistral");
+        assert_eq!(ollama_request.messages.len(), 2);
+        assert_eq!(ollama_request.temperature, Some(0.7));
+        assert_eq!(ollama_request.max_completion_tokens, Some(100));
+        assert_eq!(ollama_request.seed, Some(69));
+        assert_eq!(ollama_request.top_p, Some(0.9));
+        assert_eq!(ollama_request.presence_penalty, Some(0.1));
+        assert_eq!(ollama_request.frequency_penalty, Some(0.2));
+        assert!(ollama_request.stream);
+        assert_eq!(ollama_request.response_format, None);
+        assert!(ollama_request.tools.is_none());
+        assert_eq!(ollama_request.tool_choice, None);
+        assert!(ollama_request.parallel_tool_calls.is_none());
+
+        // Test request with tools and JSON mode
+        let request_with_tools = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["What's the weather?".to_string().into()],
+            }],
+            system: None,
+            temperature: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            max_tokens: None,
+            seed: None,
+            stream: false,
+            json_mode: ModelInferenceRequestJsonMode::On,
+            tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
+            function_type: FunctionType::Chat,
+            output_schema: None,
+            extra_body: Default::default(),
+            ..Default::default()
+        };
+
+        let ollama_request = OllamaRequest::new("mistral", &request_with_tools).unwrap();
+
+        assert_eq!(ollama_request.model, "mistral");
+        assert_eq!(ollama_request.messages.len(), 2); // We'll add a system message containing Json to fit OpenAI requirements
+        assert_eq!(ollama_request.temperature, None);
+        assert_eq!(ollama_request.max_completion_tokens, None);
+        assert_eq!(ollama_request.seed, None);
+        assert_eq!(ollama_request.top_p, None);
+        assert_eq!(ollama_request.presence_penalty, None);
+        assert_eq!(ollama_request.frequency_penalty, None);
+        assert!(!ollama_request.stream);
+        assert_eq!(
+            ollama_request.response_format,
+            Some(OllamaResponseFormat::JsonObject)
+        );
+        assert!(ollama_request.tools.is_some());
+        let tools = ollama_request.tools.as_ref().unwrap();
+        assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
+        assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
+        assert_eq!(
+            ollama_request.tool_choice,
+            Some(OpenAIToolChoice::Specific(SpecificToolChoice {
+                r#type: OpenAIToolType::Function,
+                function: SpecificToolFunction {
+                    name: WEATHER_TOOL.name(),
+                }
+            }))
+        );
+
+        // Test request with strict JSON mode with no output schema
+        let request_with_tools = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["What's the weather?".to_string().into()],
+            }],
+            system: None,
+            temperature: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            max_tokens: None,
+            seed: None,
+            stream: false,
+            json_mode: ModelInferenceRequestJsonMode::Strict,
+            tool_config: None,
+            function_type: FunctionType::Chat,
+            output_schema: None,
+            extra_body: Default::default(),
+            ..Default::default()
+        };
+
+        let ollama_request = OllamaRequest::new("mistral", &request_with_tools).unwrap();
+
+        assert_eq!(ollama_request.model, "mistral");
+        assert_eq!(ollama_request.messages.len(), 1);
+        assert_eq!(ollama_request.temperature, None);
+        assert_eq!(ollama_request.max_completion_tokens, None);
+        assert_eq!(ollama_request.seed, None);
+        assert!(!ollama_request.stream);
+        assert_eq!(ollama_request.top_p, None);
+        assert_eq!(ollama_request.presence_penalty, None);
+        assert_eq!(ollama_request.frequency_penalty, None);
+        // Resolves to normal JSON mode since no schema is provided (this shouldn't really happen in practice)
+        assert_eq!(
+            ollama_request.response_format,
+            Some(OllamaResponseFormat::JsonObject)
+        );
+
+        // Test request with strict JSON mode with an output schema
+        let output_schema = json!({});
+        let request_with_tools = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["What's the weather?".to_string().into()],
+            }],
+            system: None,
+            temperature: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            max_tokens: None,
+            seed: None,
+            stream: false,
+            json_mode: ModelInferenceRequestJsonMode::Strict,
+            tool_config: None,
+            function_type: FunctionType::Chat,
+            output_schema: Some(&output_schema),
+            extra_body: Default::default(),
+            ..Default::default()
+        };
+
+        let ollama_request = OllamaRequest::new("mistral", &request_with_tools).unwrap();
+
+        assert_eq!(ollama_request.model, "mistral");
+        assert_eq!(ollama_request.messages.len(), 1);
+        assert_eq!(ollama_request.temperature, None);
+        assert_eq!(ollama_request.max_completion_tokens, None);
+        assert_eq!(ollama_request.seed, None);
+        assert!(!ollama_request.stream);
+        assert_eq!(ollama_request.top_p, None);
+        assert_eq!(ollama_request.presence_penalty, None);
+        assert_eq!(ollama_request.frequency_penalty, None);
+        let expected_schema = serde_json::json!({"name": "response", "strict": true, "schema": {}});
+        assert_eq!(
+            ollama_request.response_format,
+            Some(OllamaResponseFormat::JsonSchema {
+                json_schema: expected_schema,
+            })
+        );
+    }
+
+    #[test]
+    fn test_try_from_ollama_credentials() {
+        // Test Static credentials
+        let generic = Credential::Static(SecretString::from("test_key"));
+        let creds = OllamaCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, OllamaCredentials::Static(_)));
+
+        // Test Dynamic credentials
+        let generic = Credential::Dynamic("key_name".to_string());
+        let creds = OllamaCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, OllamaCredentials::Dynamic(_)));
+
+        // Test None credentials
+        let generic = Credential::None;
+        let creds = OllamaCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, OllamaCredentials::None));
+
+        // Test Missing credentials
+        let generic = Credential::Missing;
+        let creds = OllamaCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, OllamaCredentials::None));
+
+        // Test invalid credential type
+        let generic = Credential::FileContents(SecretString::from("test"));
+        let result = OllamaCredentials::try_from(generic);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err().get_owned_details(),
+            ErrorDetails::Config { message } if message.contains("Invalid api_key_location")
+        ));
+    }
+
+    #[test]
+    fn test_try_from_ollama_response() {
+        // Test case 1: Valid response with content
+        let valid_response = OpenAIResponse {
+            choices: vec![OpenAIResponseChoice {
+                index: 0,
+                message: OpenAIResponseMessage {
+                    content: Some("Hello, world!".to_string()),
+                    tool_calls: None,
+                },
+                finish_reason: OpenAIFinishReason::Stop,
+            }],
+            usage: OpenAIUsage {
+                prompt_tokens: 10,
+                completion_tokens: 20,
+                total_tokens: 30,
+            },
+        };
+
+        let generic_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["test_user".to_string().into()],
+            }],
+            system: None,
+            temperature: Some(0.5),
+            max_tokens: Some(100),
+            seed: Some(69),
+            top_p: Some(0.9),
+            presence_penalty: Some(0.1),
+            frequency_penalty: Some(0.2),
+            stream: false,
+            json_mode: ModelInferenceRequestJsonMode::On,
+            tool_config: None,
+            function_type: FunctionType::Chat,
+            output_schema: None,
+            extra_body: Default::default(),
+            ..Default::default()
+        };
+
+        let request_body = OllamaRequest {
+            messages: vec![],
+            model: "mistral",
+            temperature: Some(0.5),
+            top_p: Some(0.5),
+            presence_penalty: Some(0.5),
+            frequency_penalty: Some(0.5),
+            max_completion_tokens: Some(100),
+            seed: Some(69),
+            stream: false,
+            response_format: Some(OllamaResponseFormat::Text),
+            stream_options: None,
+            tools: None,
+            tool_choice: None,
+            parallel_tool_calls: None,
+        };
+        let raw_request = serde_json::to_string(&request_body).unwrap();
+        let raw_response = "test_response".to_string();
+        let result = ProviderInferenceResponse::try_from(OllamaResponseWithMetadata {
+            response: valid_response,
+            latency: Latency::NonStreaming {
+                response_time: Duration::from_millis(100),
+            },
+            raw_request: raw_request.clone(),
+            generic_request: &generic_request,
+            raw_response: raw_response.clone(),
+        });
+        assert!(result.is_ok());
+        let inference_response = result.unwrap();
+        assert_eq!(
+            inference_response.output,
+            vec!["Hello, world!".to_string().into()]
+        );
+        assert_eq!(inference_response.usage.input_tokens, 10);
+        assert_eq!(inference_response.usage.output_tokens, 20);
+        assert_eq!(inference_response.finish_reason, Some(FinishReason::Stop));
+        assert_eq!(
+            inference_response.latency,
+            Latency::NonStreaming {
+                response_time: Duration::from_millis(100)
+            }
+        );
+        assert_eq!(inference_response.raw_request, raw_request);
+        assert_eq!(inference_response.raw_response, raw_response);
+        assert_eq!(inference_response.system, None);
+        assert_eq!(
+            inference_response.input_messages,
+            vec![RequestMessage {
+                role: Role::User,
+                content: vec!["test_user".to_string().into()],
+            }]
+        );
+    }
+}
