@@ -1,0 +1,13 @@
+[models.gpt_4_1_mini]
+routing = ["openrouter"]
+
+[models.gpt_4_1_mini.providers.openrouter]
+type = "openrouter"
+model_name = "openai/gpt-4.1-mini"
+
+[functions.my_function_name]
+type = "chat"
+
+[functions.my_function_name.variants.my_variant_name]
+type = "chat_completion"
+model = "gpt_4_1_mini"
