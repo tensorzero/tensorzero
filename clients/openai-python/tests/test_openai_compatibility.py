@@ -730,6 +730,77 @@ async def test_async_json_success(async_client):
 
 
 @pytest.mark.asyncio
+async def test_async_json_success_strict(async_client):
+    messages = [
+        {"role": "system", "content": [{"assistant_name": "Alfred Pennyworth"}]},
+        {"role": "user", "content": [{"country": "Japan"}]},
+    ]
+    episode_id = str(uuid7())
+    response_format = {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "test",
+            "description": "test",
+            "schema": {
+                "type": "object",
+                "properties": {"response": {"type": "string"}},
+                "required": ["response"],
+                "additionalProperties": False,
+                "strict": True,
+            },
+        },
+    }
+    result = await async_client.chat.completions.create(
+        extra_body={
+            "tensorzero::episode_id": episode_id,
+            "tensorzero::variant_name": "test-diff-schema",
+        },
+        messages=messages,
+        model="tensorzero::function_name::json_success",
+        response_format=response_format,
+    )
+    assert (
+        result.model
+        == "tensorzero::function_name::json_success::variant_name::test-diff-schema"
+    )
+    assert result.episode_id == episode_id
+    assert result.choices[0].message.content == '{"response":"Hello"}'
+    assert result.choices[0].message.tool_calls is None
+    assert result.usage.prompt_tokens == 10
+    assert result.usage.completion_tokens == 10
+
+
+@pytest.mark.asyncio
+async def test_async_json_success_json_object(async_client):
+    messages = [
+        {"role": "system", "content": [{"assistant_name": "Alfred Pennyworth"}]},
+        {"role": "user", "content": [{"country": "Japan"}]},
+    ]
+    episode_id = str(uuid7())
+    response_format = {
+        "type": "json_object",
+    }
+    result = await async_client.chat.completions.create(
+        extra_body={
+            "tensorzero::episode_id": episode_id,
+            "tensorzero::variant_name": "test-diff-schema",
+        },
+        messages=messages,
+        model="tensorzero::function_name::json_success",
+        response_format=response_format,
+    )
+    assert (
+        result.model
+        == "tensorzero::function_name::json_success::variant_name::test-diff-schema"
+    )
+    assert result.episode_id == episode_id
+    assert result.choices[0].message.content == '{"response":"Hello"}'
+    assert result.choices[0].message.tool_calls is None
+    assert result.usage.prompt_tokens == 10
+    assert result.usage.completion_tokens == 10
+
+
+@pytest.mark.asyncio
 async def test_async_json_success_override(async_client):
     # Check that if we pass a string to a function with an input schema it is 400
     # We will add explicit support for raw text in the OpenAI API later
@@ -933,6 +1004,14 @@ async def test_dynamic_json_mode_inference_body_param_openai(async_client):
         "required": ["response"],
         "additionalProperties": False,
     }
+    response_format = {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "test",
+            "description": "test",
+            "schema": output_schema,
+        },
+    }
     serialized_output_schema = json.dumps(output_schema)
     messages = [
         {
@@ -953,7 +1032,7 @@ async def test_dynamic_json_mode_inference_body_param_openai(async_client):
         },
         messages=messages,
         model="tensorzero::function_name::dynamic_json",
-        response_format={"type": "json_schema", "json_schema": output_schema},
+        response_format=response_format,
     )
     assert (
         result.model == "tensorzero::function_name::dynamic_json::variant_name::openai"
@@ -976,6 +1055,14 @@ async def test_dynamic_json_mode_inference_openai(async_client):
         "additionalProperties": False,
     }
     serialized_output_schema = json.dumps(output_schema)
+    response_format = {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "test",
+            "description": "test",
+            "schema": output_schema,
+        },
+    }
     messages = [
         {
             "role": "system",
@@ -992,7 +1079,51 @@ async def test_dynamic_json_mode_inference_openai(async_client):
         },
         messages=messages,
         model="tensorzero::function_name::dynamic_json",
-        response_format={"type": "json_schema", "json_schema": output_schema},
+        response_format=response_format,
+    )
+    assert (
+        result.model == "tensorzero::function_name::dynamic_json::variant_name::openai"
+    )
+    assert result.episode_id == episode_id
+    json_content = json.loads(result.choices[0].message.content)
+    assert "tokyo" in json_content["response"].lower()
+    assert result.choices[0].message.tool_calls is None
+    assert result.usage.prompt_tokens > 50
+    assert result.usage.completion_tokens > 0
+
+
+@pytest.mark.asyncio
+async def test_dynamic_json_mode_inference_openai_deprecated(async_client):
+    episode_id = str(uuid7())
+    output_schema = {
+        "type": "object",
+        "properties": {"response": {"type": "string"}},
+        "required": ["response"],
+        "additionalProperties": False,
+    }
+    serialized_output_schema = json.dumps(output_schema)
+    # This response format is deprecated and will be rejected in a future TensorZero release.
+    response_format = {
+        "type": "json_schema",
+        "json_schema": output_schema,
+    }
+    messages = [
+        {
+            "role": "system",
+            "content": [
+                {"assistant_name": "Dr. Mehta", "schema": serialized_output_schema}
+            ],
+        },
+        {"role": "user", "content": [{"country": "Japan"}]},
+    ]
+    result = await async_client.chat.completions.create(
+        extra_body={
+            "tensorzero::episode_id": episode_id,
+            "tensorzero::variant_name": "openai",
+        },
+        messages=messages,
+        model="tensorzero::function_name::dynamic_json",
+        response_format=response_format,
     )
     assert (
         result.model == "tensorzero::function_name::dynamic_json::variant_name::openai"

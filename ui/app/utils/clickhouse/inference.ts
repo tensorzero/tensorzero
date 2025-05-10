@@ -253,6 +253,8 @@ export async function queryEpisodeTable(params: {
   };
   if (!before && !after) {
     // No before/after => just the most recent page_size items
+    // The weird 'WHERE' clause lowers the peak memory usage (and also seems to speed up the query),
+    // though it unfortunately still does a full table scan.
     query = `
       SELECT
         uint_to_uuid(episode_id_uint) as episode_id,
@@ -261,6 +263,7 @@ export async function queryEpisodeTable(params: {
         formatDateTime(max(UUIDv7ToDateTime(uint_to_uuid(id_uint))), '%Y-%m-%dT%H:%i:%SZ') as end_time,
         uint_to_uuid(max(id_uint)) as last_inference_id
       FROM InferenceByEpisodeId FINAL
+      WHERE episode_id_uint in (SELECT DISTINCT ON (episode_id) toUInt128(episode_id) FROM InferenceById FINAL ORDER BY id_uint DESC LIMIT {page_size:UInt32})
       GROUP BY episode_id
       ORDER BY toUInt128(last_inference_id) DESC
       LIMIT {page_size:UInt32}
