@@ -279,6 +279,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
         <BasicInfo
           inference={inference}
           inferenceUsage={getTotalInferenceUsage(model_inferences)}
+          modelInferences={model_inferences}
         />
 
         {actionError && (

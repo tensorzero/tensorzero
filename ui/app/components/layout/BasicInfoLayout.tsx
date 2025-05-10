@@ -5,7 +5,7 @@ interface BasicInfoLayoutProps {
 }
 
 export function BasicInfoLayout({ children }: BasicInfoLayoutProps) {
-  return <div className="flex flex-col gap-2">{children}</div>;
+  return <div className="flex flex-col gap-4 md:gap-2">{children}</div>;
 }
 
 interface BasicInfoItemProps {
@@ -13,7 +13,7 @@ interface BasicInfoItemProps {
 }
 
 export function BasicInfoItem({ children }: BasicInfoItemProps) {
-  return <div className="flex flex-row">{children}</div>;
+  return <div className="flex flex-col md:flex-row gap-0.5">{children}</div>;
 }
 
 interface BasicInfoItemTitleProps {
@@ -22,7 +22,7 @@ interface BasicInfoItemTitleProps {
 
 export function BasicInfoItemTitle({ children }: BasicInfoItemTitleProps) {
   return (
-    <div className="text-fg-secondary w-32 py-1 text-left text-sm">
+    <div className="text-fg-secondary w-full md:w-32 flex-shrink-0 md:py-1 text-left text-sm">
       {children}
     </div>
   );
@@ -34,7 +34,7 @@ interface BasicInfoItemContentProps {
 
 export function BasicInfoItemContent({ children }: BasicInfoItemContentProps) {
   return (
-    <div className="text-fg-primary ml-6 flex-1 text-left text-sm">
+    <div className="text-fg-primary flex flex-wrap gap-x-4 gap-y-0.5 md:gap-1">
       {children}
     </div>
   );
