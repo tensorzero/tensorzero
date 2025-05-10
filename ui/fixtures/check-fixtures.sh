@@ -14,8 +14,8 @@ all_tables["FloatMetricFeedback"]="float_metric_feedback_examples.jsonl"
 all_tables["FloatMetricFeedbackByTargetId"]="float_metric_feedback_examples.jsonl"
 all_tables["CommentFeedback"]="comment_feedback_examples.jsonl"
 all_tables["DemonstrationFeedback"]="demonstration_feedback_examples.jsonl"
-all_tables["ChatInference"]="chat_inference_examples.jsonl"
-all_tables["ModelInference"]="model_inference_examples.jsonl"
+all_tables["ChatInference"]="chat_inference_examples.jsonl ./s3-fixtures/large_chat_inference.parquet"
+all_tables["ModelInference"]="model_inference_examples.jsonl ./s3-fixtures/large_model_inference.parquet"
 all_tables["ChatInferenceDatapoint FINAL"]="chat_inference_datapoint_examples.jsonl"
 all_tables["JsonInferenceDatapoint FINAL"]="json_inference_datapoint_examples.jsonl"
 all_tables["ModelInferenceCache"]="model_inference_cache_examples.jsonl"
@@ -39,18 +39,31 @@ for table in "${!all_tables[@]}"; do
 
     # Get the list of files for this table
     read -r -a files <<< "${all_tables[$table]}"
+    echo "Files: ${files[@]}"
 
     # Count total non-empty lines across all source files
     total_file_count=0
     for file in "${files[@]}"; do
         if [ -f "$file" ]; then
-            file_count=$(grep -v '^[[:space:]]*$' "$file" | wc -l)
-            echo "  - $file: $file_count rows"
-            total_file_count=$((total_file_count + file_count))
+            if [[ "$file" == *.parquet ]]; then
+                # For parquet files, use parquet-tools to count rows
+                if command -v parquet-tools &> /dev/null; then
+                    file_count=$(parquet-tools inspect "$file" | grep "num_rows:" | awk '{print $2}')
+                    echo "  - $file: $file_count rows (parquet)"
+                else
+                    echo "  - WARNING: parquet-tools not installed, cannot count rows in $file"
+                    mismatch=1
+                fi
+            else
+                # For regular text files, count non-empty lines
+                file_count=$(grep -v '^[[:space:]]*$' "$file" | wc -l)
+                echo "  - $file: $file_count rows"
+            fi
         else
-            echo "  - WARNING: File $file not found"
+            echo "  - WARNING: File $file not found in current directory or s3-fixtures/"
             mismatch=1
         fi
+        total_file_count=$(($total_file_count + $file_count))
     done
 
     # Compare counts

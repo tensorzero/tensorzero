@@ -1,9 +1,10 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, future::Future, pin::Pin};
 
 use axum::{
     extract::{Path, State},
     Json,
 };
+use futures::future;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -13,28 +14,21 @@ use crate::{
     clickhouse::{ClickHouseConnectionInfo, ExternalDataInfo},
     config_parser::Config,
     error::{Error, ErrorDetails},
-    function::{FunctionConfig, FunctionConfigChat},
+    function::FunctionConfig,
     gateway_util::{AppState, StructuredJson},
     inference::types::{
-        batch::{
-            deserialize_json_string, deserialize_optional_json_string, BatchOutputSchemasWithSize,
-        },
+        batch::{deserialize_json_string, deserialize_optional_json_string},
         ChatInferenceDatabaseInsert, ContentBlockChatOutput, FetchContext, Input,
         JsonInferenceDatabaseInsert, JsonInferenceOutput, ResolvedInput,
     },
-    tool::{
-        BatchDynamicToolParams, BatchDynamicToolParamsWithSize, DynamicToolParams,
-        ToolCallConfigDatabaseInsert, ToolChoice,
-    },
+    tool::{DynamicToolParams, ToolCallConfigDatabaseInsert},
     uuid_util::validate_tensorzero_uuid,
 };
 use tracing::instrument;
 
 pub const CLICKHOUSE_DATETIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S%.6f";
-use super::{
-    batch_inference::{BatchOutputSchemas, BatchTags},
-    feedback::{validate_parse_demonstration, DemonstrationOutput, DynamicDemonstrationInfo},
-    inference::DEFAULT_FUNCTION_NAME,
+use super::feedback::{
+    validate_parse_demonstration, DemonstrationOutput, DynamicDemonstrationInfo,
 };
 
 #[derive(Debug, Deserialize)]
@@ -306,10 +300,11 @@ pub async fn update_datapoint_handler(
             message: format!("Failed to deserialize `function_name`: {e}"),
         })
     })?;
-    let function_config =
-        get_possibly_default_function(&function_data.function_name, &app_state.config)?;
+    let function_config = app_state
+        .config
+        .get_function(&function_data.function_name)?;
 
-    match *function_config {
+    match **function_config {
         FunctionConfig::Chat(_) => {
             let chat: SyntheticChatInferenceDatapoint =
                 serde_json::from_value(params).map_err(|e| {
@@ -442,37 +437,10 @@ pub async fn update_datapoint_handler(
     }))
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct CreateDatapointParams {
-    // the function name
-    pub function_name: String,
-    // the input for each datapoint
-    pub input: Vec<Input>,
-    // the output for each datapoint
-    // This can be None globally or include nulls for datapoints that
-    // should not have an output
-    #[serde(default)]
-    pub output: Option<Vec<Option<Value>>>,
-    // the tags for each datapoint
-    #[serde(default)]
-    pub tags: Option<BatchTags>,
-    // dynamic information about tool calling. Don't directly include `dynamic_tool_params` in `Params`.
-    #[serde(flatten)]
-    pub dynamic_tool_params: BatchDynamicToolParams,
-    // `dynamic_tool_params` includes the following fields, passed at the top level of `Params`:
-    // If provided, the inference will only use the specified tools (a subset of the function's tools)
-    // allowed_tools: Option<Vec<Option<Vec<String>>>>,
-    // If provided, the inference will use the specified tools in addition to the function's tools
-    // additional_tools: Option<Vec<Option<Vec<Tool>>>>,
-    // If provided, the inference will use the specified tool choice
-    // tool_choice: Option<Vec<Option<ToolChoice>>>,
-    // If true, the inference will use parallel tool calls
-    // parallel_tool_calls: Option<Vec<Option<bool>>>,
-    // If provided for a JSON inference, the inference will use the specified output schema instead of the
-    // configured one. We only lazily validate this schema.
-    #[serde(default)]
-    pub output_schemas: Option<BatchOutputSchemas>,
+    pub datapoints: Vec<Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -487,15 +455,16 @@ pub async fn create_datapoint_handler(
     State(app_state): AppState,
     Path(path_params): Path<CreateDatapointPathParams>,
     StructuredJson(params): StructuredJson<CreateDatapointParams>,
-) -> Result<(), Error> {
-    create_datapoint(
+) -> Result<Json<Vec<Uuid>>, Error> {
+    let datapoint_ids = create_datapoint(
         path_params.dataset_name,
         params,
         &app_state.config,
         &app_state.http_client,
         &app_state.clickhouse_connection_info,
     )
-    .await
+    .await?;
+    Ok(Json(datapoint_ids))
 }
 
 pub async fn create_datapoint(
@@ -504,58 +473,64 @@ pub async fn create_datapoint(
     config: &Config<'_>,
     http_client: &Client,
     clickhouse: &ClickHouseConnectionInfo,
-) -> Result<(), Error> {
+) -> Result<Vec<Uuid>, Error> {
     validate_dataset_name(&dataset_name)?;
-    let function_config = get_possibly_default_function(&params.function_name, config)?;
-    let num_datapoints = params.input.len();
-    if num_datapoints == 0 {
-        return Err(Error::new(ErrorDetails::InvalidRequest {
-            message: "No inputs provided".to_string(),
-        }));
-    }
-    // Validate the inputs
-    params.input.iter().enumerate().try_for_each(|(i, input)| {
-        function_config.validate_input(input).map_err(|e| {
-            Error::new(ErrorDetails::BatchInputValidation {
-                index: i,
-                message: e.to_string(),
-            })
-        })
-    })?;
-
-    // These validate that the other parameters are the same length as the input.
-    let batch_datapoint_output: Vec<Option<Value>> = BatchDatapointOutputWithSize {
-        output: params.output,
-        size: num_datapoints,
-    }
-    .try_into()?;
-
-    let batch_dynamic_tool_params: Vec<DynamicToolParams> =
-        BatchDynamicToolParamsWithSize(params.dynamic_tool_params, num_datapoints).try_into()?;
-    let batch_dynamic_output_schemas: Vec<Option<Value>> =
-        BatchOutputSchemasWithSize(params.output_schemas, num_datapoints).try_into()?;
-    let tool_configs = batch_dynamic_tool_params
-        .into_iter()
-        .map(|dynamic_tool_params| {
-            function_config.prepare_tool_config(dynamic_tool_params, &config.tools)
-        })
-        .collect::<Result<Vec<_>, _>>()?;
+    let mut chat_datapoints = Vec::with_capacity(params.datapoints.len());
+    let mut json_datapoints = Vec::with_capacity(params.datapoints.len());
     let fetch_context = FetchContext {
         client: http_client,
         object_store_info: &config.object_store_info,
     };
-    match &*function_config {
-        FunctionConfig::Chat(_) => {
-            let mut datapoints = Vec::with_capacity(num_datapoints);
-            // Validate all the datapoints (output and tool params), then write them to ClickHouse
-            for (i, input) in params.input.into_iter().enumerate() {
-                let resolved_input = input.resolve(&fetch_context).await?;
+    let mut datapoint_ids = Vec::with_capacity(params.datapoints.len());
+    for (i, datapoint) in params.datapoints.into_iter().enumerate() {
+        let function_name = datapoint
+            .get("function_name")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::InvalidRequest {
+                    message: format!("Expected function name for datapoint {i}"),
+                })
+            })?;
+        let function_config = config.get_function(function_name).map_err(|e| {
+            Error::new(ErrorDetails::InvalidRequest {
+                message: format!("Failed to get function config for datapoint {i}: {e}"),
+            })
+        })?;
+        match &**function_config {
+            FunctionConfig::Chat(_) => {
+                let chat: ChatInferenceDatapointInput =
+                    serde_json::from_value(datapoint).map_err(|e| {
+                        Error::new(ErrorDetails::InvalidRequest {
+                            message: format!("Failed to deserialize chat datapoint {i}: {e}"),
+                        })
+                    })?;
+                // Validate the input
+                function_config.validate_input(&chat.input).map_err(|e| {
+                    Error::new(ErrorDetails::InvalidRequest {
+                        message: format!("Failed to validate chat input for datapoint {i}: {e}"),
+                    })
+                })?;
+                let resolved_input = chat.input.resolve(&fetch_context).await.map_err(|e| {
+                    Error::new(ErrorDetails::InternalError {
+                        message: format!("Failed to resolve chat input for datapoint {i}: {e}"),
+                    })
+                })?;
+                // Prepare the tool config
+                let tool_config =
+                    function_config.prepare_tool_config(chat.dynamic_tool_params, &config.tools)?;
                 let dynamic_demonstration_info =
-                    DynamicDemonstrationInfo::Chat(tool_configs[i].clone().unwrap_or_default());
-                let output = if let Some(output) = batch_datapoint_output[i].clone() {
+                    DynamicDemonstrationInfo::Chat(tool_config.clone().unwrap_or_default());
+                // Validate the output
+                let output = if let Some(output) = chat.output {
                     let validated_output = validate_parse_demonstration(
                         &function_config,
-                        &output,
+                        &serde_json::to_value(output).map_err(|e| {
+                            Error::new(ErrorDetails::Serialization {
+                                message: format!(
+                                    "Failed to serialize chat output for datapoint {i}: {e}"
+                                ),
+                            })
+                        })?,
                         dynamic_demonstration_info,
                     )
                     .await
@@ -576,50 +551,57 @@ pub async fn create_datapoint(
                 } else {
                     None
                 };
-                let tags = params
-                    .tags
-                    .as_ref()
-                    .and_then(|tags| tags.get(i).cloned())
-                    .flatten();
-                let datapoint = ChatInferenceDatapoint {
+                let datapoint_id = Uuid::now_v7();
+                datapoint_ids.push(datapoint_id);
+                chat_datapoints.push(ChatInferenceDatapoint {
                     dataset_name: dataset_name.clone(),
-                    function_name: params.function_name.clone(),
-                    id: Uuid::now_v7(),
+                    function_name: chat.function_name,
+                    id: datapoint_id,
                     episode_id: None,
                     input: resolved_input,
                     output,
-                    tool_params: tool_configs[i].as_ref().map(|x| x.clone().into()),
-                    tags,
+                    tool_params: tool_config.as_ref().map(|x| x.clone().into()),
+                    tags: chat.tags,
                     auxiliary: "".to_string(),
                     is_deleted: false,
                     source_inference_id: None,
                     staled_at: None,
-                };
-                datapoints.push(datapoint);
+                })
             }
-            // Actually write the datapoints to ClickHouse
-            put_deduped_chat_datapoints(clickhouse, &datapoints).await?;
-            Ok(())
-        }
-        FunctionConfig::Json(json_function_config) => {
-            let mut datapoints = Vec::with_capacity(num_datapoints);
-            for (i, input) in params.input.into_iter().enumerate() {
-                let resolved_input = input.resolve(&fetch_context).await?;
-                // Validate the outputs against the output schema
-                let output_schema = batch_dynamic_output_schemas.get(i).ok_or_else(|| {
+            FunctionConfig::Json(json_function_config) => {
+                let json: JsonInferenceDatapointInput =
+                    serde_json::from_value(datapoint).map_err(|e| {
+                        Error::new(ErrorDetails::InvalidRequest {
+                            message: format!("Failed to deserialize json datapoint {i}: {e}"),
+                        })
+                    })?;
+                // Validate the input
+                function_config.validate_input(&json.input).map_err(|e| {
                     Error::new(ErrorDetails::InvalidRequest {
-                        message: format!("Expected output schema or None for datapoint {i}"),
+                        message: format!("Failed to validate input for datapoint {i}: {e}"),
                     })
                 })?;
-                let output_schema = output_schema
-                    .as_ref()
-                    .unwrap_or(json_function_config.output_schema.value);
+                let resolved_input = json.input.resolve(&fetch_context).await.map_err(|e| {
+                    Error::new(ErrorDetails::InternalError {
+                        message: format!("Failed to resolve input for datapoint {i}: {e}"),
+                    })
+                })?;
+                // Validate the outputs against the output schema
+                let output_schema = json
+                    .output_schema
+                    .unwrap_or(json_function_config.output_schema.value.clone());
                 let dynamic_demonstration_info =
                     DynamicDemonstrationInfo::Json(output_schema.clone());
-                let output = if let Some(output) = batch_datapoint_output[i].clone() {
+                let output = if let Some(output) = json.output {
                     let validated_output = validate_parse_demonstration(
                         &function_config,
-                        &output,
+                        &serde_json::to_value(output).map_err(|e| {
+                            Error::new(ErrorDetails::Serialization {
+                                message: format!(
+                                    "Failed to serialize json output for datapoint {i}: {e}"
+                                ),
+                            })
+                        })?,
                         dynamic_demonstration_info,
                     )
                     .await
@@ -645,32 +627,46 @@ pub async fn create_datapoint(
                 } else {
                     None
                 };
-                let tags = params
-                    .tags
-                    .as_ref()
-                    .and_then(|tags| tags.get(i).cloned())
-                    .flatten();
+                let datapoint_id = Uuid::now_v7();
+                datapoint_ids.push(datapoint_id);
                 let datapoint = JsonInferenceDatapoint {
                     dataset_name: dataset_name.clone(),
-                    function_name: params.function_name.clone(),
-                    id: Uuid::now_v7(),
+                    function_name: json.function_name,
+                    id: datapoint_id,
                     episode_id: None,
                     input: resolved_input,
                     output,
-                    output_schema: output_schema.clone(),
-                    tags,
+                    output_schema,
+                    tags: json.tags,
                     auxiliary: "".to_string(),
                     is_deleted: false,
                     source_inference_id: None,
                     staled_at: None,
                 };
-                datapoints.push(datapoint);
+                json_datapoints.push(datapoint);
             }
-            // Actually write the datapoints to ClickHouse
-            put_deduped_json_datapoints(clickhouse, &datapoints).await?;
-            Ok(())
         }
     }
+
+    #[expect(clippy::type_complexity)]
+    let mut futures_vec: Vec<Pin<Box<dyn Future<Output = Result<u64, Error>> + Send>>> = Vec::new();
+
+    if !chat_datapoints.is_empty() {
+        futures_vec.push(Box::pin(put_deduped_chat_datapoints(
+            clickhouse,
+            &chat_datapoints,
+        )));
+    }
+    if !json_datapoints.is_empty() {
+        futures_vec.push(Box::pin(put_deduped_json_datapoints(
+            clickhouse,
+            &json_datapoints,
+        )));
+    }
+
+    // Run all futures concurrently and propagate any error
+    future::try_join_all(futures_vec).await?;
+    Ok(datapoint_ids)
 }
 
 #[derive(Debug, Deserialize)]
@@ -864,6 +860,35 @@ impl Datapoint {
     }
 }
 
+/// These input datapoints are used as input typesby the `create_datapoint` endpoint
+/// The distinction here is that they do not include the `dataset_name` field,
+/// which is instead specified as a path parameter.
+/// We also use Input rather than ResolvedInput because the input is not resolved
+/// when created.
+/// We also do not allow users to specify the `id` or `episode_id` fields.
+#[derive(Debug, Deserialize, Serialize)]
+pub struct ChatInferenceDatapointInput {
+    pub function_name: String,
+    pub input: Input,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output: Option<Value>,
+    #[serde(flatten)]
+    pub dynamic_tool_params: DynamicToolParams,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tags: Option<HashMap<String, String>>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct JsonInferenceDatapointInput {
+    pub function_name: String,
+    pub input: Input,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output: Option<Value>,
+    pub output_schema: Option<Value>, // Default to the function's output schema
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tags: Option<HashMap<String, String>>,
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 pub struct ChatInferenceDatapoint {
     pub dataset_name: String,
@@ -1055,26 +1080,6 @@ pub struct SyntheticJsonInferenceDatapoint {
     pub auxiliary: String,
     #[serde(default)]
     pub source_inference_id: Option<Uuid>,
-}
-
-fn get_possibly_default_function(
-    function_name: &str,
-    config: &Config,
-) -> Result<Arc<FunctionConfig>, Error> {
-    if function_name == DEFAULT_FUNCTION_NAME {
-        Ok(Arc::new(FunctionConfig::Chat(FunctionConfigChat {
-            variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: None,
-            tools: vec![],
-            tool_choice: ToolChoice::None,
-            parallel_tool_calls: None,
-            description: None,
-        })))
-    } else {
-        config.get_function(function_name).cloned()
-    }
 }
 
 fn validate_dataset_name(dataset_name: &str) -> Result<(), Error> {

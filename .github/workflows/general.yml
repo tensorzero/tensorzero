@@ -99,32 +99,7 @@ jobs:
         run: ./ci/check-all-docker-compose.sh
 
   check-pyo3-build:
-    runs-on: ${{ matrix.platform.runner }}
-    strategy:
-      matrix:
-        # We don't test on linux x86_64, because our main 'validate' step already does that
-        # For now, we just check that the build works on our other supported platforms -
-        # we don't run any tests.
-        platform:
-          - runner: ubuntu-22.04-arm
-            target: aarch64
-          - runner: windows-latest
-            target: x64
-          - runner: macos-13
-            target: x86_64
-          - runner: macos-14
-            target: aarch64
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
-        with:
-          cache-provider: "buildjet"
-          save-if: ${{ github.event_name == 'merge_group' }}
-      - name: "TensorZero PyO3 Client: Build"
-        uses: PyO3/maturin-action@b3709a81b3e175ce3ede866725776fee42465311
-        with:
-          working-directory: clients/python-pyo3
-          args: --find-interpreter
+    uses: ./.github/workflows/pyo3-build-reusable.yml
 
   build-windows:
     runs-on: windows-latest
@@ -436,7 +411,8 @@ jobs:
         run: cat e2e_logs.txt
 
   ui-tests:
-    runs-on: ubuntu-latest
+    # We run on Namespace so that we have cache volumes for our s3-fixtures directory
+    runs-on: namespace-profile-tensorzero-2x8
     permissions:
       # Permission to checkout the repository
       contents: read
@@ -469,6 +445,9 @@ jobs:
         uses: namespacelabs/nscloud-setup-buildx-action@v0
         continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
+
       - name: Install pnpm
         uses: pnpm/action-setup@v4
         with:
@@ -478,6 +457,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22.9.0"
+
+      - name: Cache s3-fixtures
+        uses: namespacelabs/nscloud-cache-action@v1
+        with:
+          path: |
+            ./ui/fixtures/s3-fixtures
 
       - name: Install wasm-pack
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
@@ -508,6 +493,11 @@ jobs:
           TENSORZERO_GATEWAY_URL: http://localhost:3000
         run: pnpm test
 
+      - name: Print ui tests logs
+        if: always()
+        working-directory: ui
+        run: docker compose -f fixtures/docker-compose.yml logs -t
+
   ui-tests-e2e:
     runs-on: namespace-profile-tensorzero-8x16
     # We currently only run this job when we have secrets available, since we need to use an S3 object_store
@@ -532,6 +522,9 @@ jobs:
       # We allow the namespace builder setup to fail on Dependabot PRs and PRs from forks
       # (where the oidc token is not available)
 
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
+
       - name: Install pnpm
         uses: pnpm/action-setup@v4
         with:
@@ -545,6 +538,12 @@ jobs:
       - name: Install dependencies
         working-directory: ui
         run: pnpm install --frozen-lockfile
+
+      - name: Cache s3-fixtures
+        uses: namespacelabs/nscloud-cache-action@v1
+        with:
+          path: |
+            ./ui/fixtures/s3-fixtures
 
       - name: Build ui container
         # Enable feedback in the UI for this job so the playwright tests can use it

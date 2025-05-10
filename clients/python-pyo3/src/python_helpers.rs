@@ -141,13 +141,14 @@ pub fn deserialize_from_pyobj<'a, T: serde::de::DeserializeOwned>(
         })?
         .call(py, (obj,), Some(&kwargs))?;
     let json_str: Cow<'_, str> = json_str_obj.extract(py)?;
-    let val = serde_json::from_str::<T>(json_str.as_ref());
+    let mut deserializer = serde_json::Deserializer::from_str(json_str.as_ref());
+    let val: Result<T, _> = serde_path_to_error::deserialize(&mut deserializer);
     match val {
         Ok(val) => Ok(val),
         Err(e) => Err(tensorzero_internal_error(
             py,
             &format!(
-                "Failed to deserialize JSON to {}: {:?}",
+                "Failed to deserialize JSON to {}: {}",
                 std::any::type_name::<T>(),
                 e
             ),

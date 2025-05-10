@@ -11,6 +11,7 @@ test("dynamic evaluation project page should render and show correct information
   ).toBeVisible();
   // Click on the run selector
   await page.getByText("Select dynamic evaluation runs to compare...").click();
+  await page.waitForTimeout(1000);
   // Check that the run selector has the correct runs
   await expect(page.getByText("aac7e7")).toBeVisible();
   await expect(page.getByText("8fddbd")).toBeVisible();
