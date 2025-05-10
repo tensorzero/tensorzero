@@ -534,31 +534,30 @@ func TestStreamingInference(t *testing.T) {
 		assert.Contains(t, err.Error(), "404 Not Found \"Unknown function: does_not_exist\"", "Error should indicate 404 Not Found")
 	})
 	// TODO: [test_async_inference_streaming_missing_function]
-	// t.Run("it should handle streaming inference with a missing function", func(t *testing.T) {
-	// 	episodeID, _ := uuid.NewV7()
+	t.Run("it should handle streaming inference with a missing function", func(t *testing.T) {
+		episodeID, _ := uuid.NewV7()
 
-	// 	messages := []openai.ChatCompletionMessageParamUnion{
-	// 		{OfSystem: OldFormatSystemMessageWithAssistant(t, "Alfred Pennyworth")},
-	// 		openai.UserMessage("Hello"),
-	// 	}
+		messages := []openai.ChatCompletionMessageParamUnion{
+			{OfSystem: OldFormatSystemMessageWithAssistant(t, "Alfred Pennyworth")},
+			openai.UserMessage("Hello"),
+		}
 
-	// 	req := &openai.ChatCompletionNewParams{
-	// 		Model:    "tensorzero::function_name::", // missing function
-	// 		Messages: messages,
-	// 	}
-	// 	addEpisodeIDToRequest(t, req, episodeID)
+		req := &openai.ChatCompletionNewParams{
+			Model:    "tensorzero::function_name::", // missing function
+			Messages: messages,
+		}
+		addEpisodeIDToRequest(t, req, episodeID)
 
-	// 	// Send the request and expect an error
-	// 	_, err := client.Chat.Completions.New(ctx, *req)
-	// 	fmt.Println("########Error####", err)
-	// 	require.Error(t, err, "Expected an error for nonexistent function")
+		// Send the request and expect an error
+		_, err := client.Chat.Completions.New(ctx, *req)
+		require.Error(t, err, "Expected an error for nonexistent function")
 
-	// 	// Validate the error
-	// 	var apiErr *openai.Error
-	// 	require.ErrorAs(t, err, &apiErr, "Expected error to be of type APIError")
-	// 	// assert.Equal(t, 404, apiErr.StatusCode, "Expected status code 404")
-	// 	// assert.Equal(t, "Error code: 404 - {'error': 'Unknown function: does_not_exist'}", apiErr.Error())
-	// })
+		// Validate the error
+		var apiErr *openai.Error
+		assert.ErrorAs(t, err, &apiErr, "Expected error to be of type APIError")
+		assert.Equal(t, 400, apiErr.StatusCode, "Expected status code 404")
+		assert.Contains(t, apiErr.Error(), "400 Bad Request", "Error should indicate 400 Bad Request")
+	})
 	// TODO: [test_async_inference_streaming_missing_model]
 	// TODO: [test_async_inference_streaming_malformed_function]
 	// TODO: [test_async_inference_streaming_malformed_input]
