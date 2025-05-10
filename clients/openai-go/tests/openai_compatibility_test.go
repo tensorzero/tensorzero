@@ -19,7 +19,6 @@ package tests
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -576,14 +575,13 @@ func TestStreamingInference(t *testing.T) {
 
 		// Send the request and expect an error
 		_, err := client.Chat.Completions.New(ctx, *req)
-		fmt.Println(err)
 		require.Error(t, err, "Expected an error for nonexistent function")
 
 		// Validate the error
 		var apiErr *openai.Error
 		assert.ErrorAs(t, err, &apiErr, "Expected error to be of type APIError")
 		assert.Equal(t, 400, apiErr.StatusCode, "Expected status code 404")
-		// assert.Contains(t, apiErr.Error(), "400 Bad Request", "Error should indicate 400 Bad Request")
+		assert.Contains(t, apiErr.Error(), "400 Bad Request \"Invalid request to OpenAI-compatible endpoint", "Error should indicate invalid request to OpenAI compartible endpoint")
 	})
 	// TODO: [test_async_inference_streaming_malformed_input]
 	// TODO: [test_async_inference_streaming_missing_model]
