@@ -1,0 +1,6 @@
+[project]
+name = "helicone"
+version = "0.0.0"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["openai>=1.77.0", "tensorzero"]
