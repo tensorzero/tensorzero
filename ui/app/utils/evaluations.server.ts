@@ -80,6 +80,9 @@ export function runEvaluation(
   return new Promise<EvaluationStartInfo>((resolve, reject) => {
     // Spawn a child process to run the evaluations command
     const child = spawn(command[0], command.slice(1));
+    // We also want to forward stderr to the parent process
+    // so it shows up in container logs.
+    child.stderr.pipe(process.stderr);
 
     // Variables to track state
     let evaluationRunId: string | null = null;
@@ -87,6 +90,7 @@ export function runEvaluation(
 
     // Buffer for incomplete lines
     let stdoutBuffer = "";
+    let stderrBuffer = "";
 
     // Record the start time of the evaluation
     const startTime = new Date();
@@ -166,7 +170,27 @@ export function runEvaluation(
       // stdoutBuffer now contains any incomplete line (or nothing)
     });
 
-    // Ignore stderr completely
+    // Handle stderr data and process it line-by-line
+    child.stderr.on("data", (data) => {
+      // Add new data to our buffer
+      stderrBuffer += data.toString();
+
+      // Process complete lines
+      let newlineIndex;
+      while ((newlineIndex = stderrBuffer.indexOf("\n")) !== -1) {
+        // Extract a complete line
+        const line = stderrBuffer.substring(0, newlineIndex).trim();
+        // Remove the processed line from the buffer
+        stderrBuffer = stderrBuffer.substring(newlineIndex + 1);
+        // Accumulate the error
+        if (evaluationRunId) {
+          runningEvaluations[evaluationRunId].errors.unshift({
+            message: `Process error: ${line}`,
+          });
+        }
+      }
+      // stderrBuffer now contains any incomplete line (or nothing)
+    });
 
     // Handle process errors (e.g., if the process couldn't be spawned)
     child.on("error", (error) => {
@@ -177,7 +201,7 @@ export function runEvaluation(
 
     // Handle process completion
     child.on("close", (code) => {
-      // Process any remaining data in the buffer
+      // Process any remaining data in the stdout buffer
       if (stdoutBuffer.trim()) {
         processCompleteLine(stdoutBuffer.trim());
       }
@@ -188,16 +212,23 @@ export function runEvaluation(
 
         // Add exit code info if not successful
         if (code !== 0) {
-          runningEvaluations[evaluationRunId].errors.push({
-            message: `Process exited with code ${code}`,
-          });
+          if (stderrBuffer.trim()) {
+            runningEvaluations[evaluationRunId].errors.push({
+              message: `Error: ${stderrBuffer.trim()}`,
+            });
+          } else {
+            runningEvaluations[evaluationRunId].errors.push({
+              message: `Process exited with code ${code}`,
+            });
+          }
         }
       }
 
       if (!initialDataReceived) {
         reject(
           new Error(
-            `Process exited with code ${code} without producing output`,
+            stderrBuffer.trim() ||
+              `Process exited with code ${code} without producing output`,
           ),
         );
       }
