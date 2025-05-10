@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/invopop/jsonschema"
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
 	"github.com/openai/openai-go/packages/param"
@@ -48,6 +49,19 @@ func TestMain(m *testing.M) {
 
 	// Run the tests and exit with the result code
 	os.Exit(m.Run())
+}
+
+func GenerateSchema[T any]() interface{} {
+	// t.Helper()
+	// Structured Outputs uses a subset of JSON schema.
+	// These flags are necessary to comply with that subset.
+	reflector := jsonschema.Reflector{
+		AllowAdditionalProperties: false,
+		DoNotReference:            true,
+	}
+	var v T
+	schema := reflector.Reflect(v)
+	return schema
 }
 
 func OldFormatSystemMessageWithAssistant(t *testing.T, assistant_name string) *openai.ChatCompletionSystemMessageParam {
@@ -193,12 +207,12 @@ func TestBasicInference(t *testing.T) {
 		resp, err := client.Chat.Completions.New(ctx, *req)
 		require.Error(t, err, "Expected a validation error due to schema mismatch")
 
+		fmt.Println(resp.RawJSON())
 		// Validate the error message
 		expectedSubstring := "cannot unmarshal"
 		require.Contains(t, err.Error(), expectedSubstring, "Error message should mention unmarshal failure")
 		fmt.Println("Validation error simulated:", err.Error())
 	})
-
 	// TODO: [test_async_inference_cache]
 }
 
