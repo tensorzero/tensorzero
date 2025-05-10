@@ -605,12 +605,44 @@ func TestStreamingInference(t *testing.T) {
 		// Validate the error
 		var apiErr *openai.Error
 		assert.ErrorAs(t, err, &apiErr, "Expected error to be of type APIError")
-		// assert.Equal(t, 400, apiErr.StatusCode, "Expected status code 404")
-		// assert.Contains(t, apiErr.Error(), "400 Bad Request \"Invalid request to OpenAI-compatible endpoint", "Error should indicate invalid request to OpenAI compartible endpoint")
+		assert.Equal(t, 400, apiErr.StatusCode, "Expected status code 404")
+		assert.Contains(t, apiErr.Error(), "missing field `model`", "Error should indicate model field is missing")
 	})
 	// TODO: [test_async_inference_streaming_malformed_input]
+	t.Run("it should handle streaming inference with a missing model", func(t *testing.T) {
+		episodeID, _ := uuid.NewV7()
 
-	//TODO: [test_async_json_streaming] //line 558
+		sysMsg := param.OverrideObj[openai.ChatCompletionSystemMessageParam](map[string]interface{}{
+			"content": []map[string]interface{}{
+				{"name_of_assistant": "Alfred Pennyworth"},
+			},
+			"role": "system",
+		})
+
+		messages := []openai.ChatCompletionMessageParamUnion{
+			{OfSystem: &sysMsg}, //malformed sys message
+			openai.UserMessage("Hello"),
+		}
+
+		req := &openai.ChatCompletionNewParams{
+			Messages: messages,
+			Model:    "tensorzero::function_name::basic_test",
+			StreamOptions: openai.ChatCompletionStreamOptionsParam{
+				IncludeUsage: openai.Bool(true),
+			},
+		}
+		addEpisodeIDToRequest(t, req, episodeID)
+
+		// Send the request and expect an error
+		_, err := client.Chat.Completions.New(ctx, *req)
+		require.Error(t, err, "Expected an error for nonexistent function")
+
+		// Validate the error
+		var apiErr *openai.Error
+		assert.ErrorAs(t, err, &apiErr, "Expected error to be of type APIError")
+		assert.Equal(t, 400, apiErr.StatusCode, "Expected status code 404")
+		assert.Contains(t, apiErr.Error(), "JSON Schema validation failed", "Error should indicate JSON schema validation failed")
+	})
 }
 
 func TestToolCallingInference(t *testing.T) {
