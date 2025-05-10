@@ -19,6 +19,7 @@ package tests
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -155,6 +156,49 @@ func TestBasicInference(t *testing.T) {
 
 	})
 	// TODO: [test_async_basic_inference_json_schema]
+	t.Run("it should handle basic inference with JSON schema validation and throw proper validation error", func(t *testing.T) {
+		episodeID, _ := uuid.NewV7()
+
+		// Define the messages
+		messages := []openai.ChatCompletionMessageParamUnion{
+			{OfSystem: OldFormatSystemMessageWithAssistant(t, "Alfred Pennyworth")},
+			openai.UserMessage("Hello"),
+		}
+
+		// Define a dummy model with an intentionally incorrect schema
+		type DummyModel struct {
+			Name int `json:"name"` // Intentionally incorrect type for testing
+		}
+
+		// Generate the JSON schema for the DummyModel
+		var DummyModelResponseSchema = GenerateSchema[DummyModel]()
+		schemaParam := openai.ResponseFormatJSONSchemaJSONSchemaParam{
+			Name:   "dummy_model",
+			Schema: DummyModelResponseSchema, // Generated JSON schema for DummyModel
+			Strict: openai.Bool(true),
+		}
+
+		// Create the request
+		req := &openai.ChatCompletionNewParams{
+			Model:    "tensorzero::function_name::basic_test",
+			Messages: messages,
+			ResponseFormat: openai.ChatCompletionNewParamsResponseFormatUnion{
+				OfJSONSchema: &openai.ResponseFormatJSONSchemaParam{JSONSchema: schemaParam},
+			},
+			Temperature: openai.Float(0.4),
+		}
+		addEpisodeIDToRequest(t, req, episodeID)
+
+		// Send the request and expect a validation error
+		resp, err := client.Chat.Completions.New(ctx, *req)
+		require.Error(t, err, "Expected a validation error due to schema mismatch")
+
+		// Validate the error message
+		expectedSubstring := "cannot unmarshal"
+		require.Contains(t, err.Error(), expectedSubstring, "Error message should mention unmarshal failure")
+		fmt.Println("Validation error simulated:", err.Error())
+	})
+
 	// TODO: [test_async_inference_cache]
 }
 
