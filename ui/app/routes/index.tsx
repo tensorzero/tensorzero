@@ -12,7 +12,7 @@ import {
   Globe,
   Documentation,
   Dataset,
-  Evaluation,
+  GridCheck,
 } from "~/components/icons/Icons";
 import {
   countInferencesByFunction,
@@ -162,7 +162,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             />
             <FeatureCard
               source="/evaluations"
-              icon={Evaluation}
+              icon={GridCheck}
               title="Evaluations"
               description={`${numEvaluations} evaluations, ${numEvaluationRuns} runs`}
             />
