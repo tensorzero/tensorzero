@@ -813,6 +813,6 @@ export async function countEpisodes(): Promise<number> {
     query,
     format: "JSONEachRow",
   });
-  const rows = await resultSet.json<{ count: number }>();
-  return rows[0].count;
+  const rows = await resultSet.json<{ count: string }>();
+  return Number(rows[0].count);
 }
