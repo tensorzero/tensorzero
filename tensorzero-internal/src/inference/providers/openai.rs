@@ -80,6 +80,12 @@ impl OpenAIProvider {
             PROVIDER_TYPE,
             &DEFAULT_CREDENTIALS,
         )?;
+
+        // Check if the api_base has the `/chat/completions` suffix and warn if it does
+        if let Some(api_base) = &api_base {
+            check_api_base_suffix(api_base);
+        }
+
         Ok(OpenAIProvider {
             model_name,
             api_base,
@@ -89,6 +95,25 @@ impl OpenAIProvider {
 
     pub fn model_name(&self) -> &str {
         &self.model_name
+    }
+}
+
+/// Checks if the provided OpenAI API base URL has `/chat/completions` suffix and warns if it does.
+///
+/// This check exists because a common mistake when configuring OpenAI API endpoints is to include
+/// `/chat/completions` in the base URL. The gateway automatically appends this path when making requests,
+/// so including it in the base URL results in an invalid endpoint like:
+/// `http://localhost:1234/v1/chat/completions/chat/completions`
+///
+/// For example:
+/// - Correct: `http://localhost:1234/v1` or `http://localhost:1234/openai/v1/`
+/// - Incorrect: `http://localhost:1234/v1/chat/completions`
+pub fn check_api_base_suffix(api_base: &Url) {
+    let path = api_base.path();
+    if path.ends_with("/chat/completions") || path.ends_with("/chat/completions/") {
+        tracing::warn!(
+            "The gateway automatically appends `/chat/completions` to the `api_base`. You provided `{api_base}` which is likely incorrect. Please remove the `/chat/completions` suffix from `api_base`.",
+        );
     }
 }
 
@@ -2217,20 +2242,15 @@ struct OpenAIBatchFileResponse {
 
 #[cfg(test)]
 mod tests {
-
-    use std::borrow::Cow;
-
     use serde_json::json;
+    use std::borrow::Cow;
+    use tracing_test::traced_test;
 
-    use crate::{
-        inference::{
-            providers::test_helpers::{
-                MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL, WEATHER_TOOL_CONFIG,
-            },
-            types::{FunctionType, RequestMessage},
-        },
-        tool::ToolCallConfig,
+    use crate::inference::providers::test_helpers::{
+        MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL, WEATHER_TOOL_CONFIG,
     };
+    use crate::inference::types::{FunctionType, RequestMessage};
+    use crate::tool::ToolCallConfig;
 
     use super::*;
 
@@ -3570,5 +3590,82 @@ mod tests {
             serialized,
             r#"{"content":[{"type":"text","text":"My first message"},{"type":"text","text":"My second message"}]}"#
         );
+    }
+
+    #[test]
+    #[traced_test]
+    fn test_check_api_base_suffix() {
+        // Valid cases (should not warn)
+        check_api_base_suffix(&Url::parse("http://localhost:1234/").unwrap());
+        check_api_base_suffix(&Url::parse("http://localhost:1234/openai/").unwrap());
+        check_api_base_suffix(&Url::parse("http://localhost:1234/openai/v1").unwrap());
+        check_api_base_suffix(&Url::parse("http://localhost:1234/openai/v1/").unwrap());
+        check_api_base_suffix(&Url::parse("http://localhost:1234/v1/").unwrap());
+        check_api_base_suffix(&Url::parse("http://localhost:1234/v2").unwrap());
+        check_api_base_suffix(&Url::parse("http://localhost:1234/v2/").unwrap());
+
+        // Invalid cases (should warn)
+        let url1 = Url::parse("http://localhost:1234/chat/completions").unwrap();
+        check_api_base_suffix(&url1);
+        assert!(logs_contain("automatically appends `/chat/completions`"));
+        assert!(logs_contain(url1.as_ref()));
+
+        let url2 = Url::parse("http://localhost:1234/chat/completions/").unwrap();
+        check_api_base_suffix(&url2);
+        assert!(logs_contain("automatically appends `/chat/completions`"));
+        assert!(logs_contain(url2.as_ref()));
+
+        let url3 = Url::parse("http://localhost:1234/v1/chat/completions").unwrap();
+        check_api_base_suffix(&url3);
+        assert!(logs_contain("automatically appends `/chat/completions`"));
+        assert!(logs_contain(url3.as_ref()));
+
+        let url4 = Url::parse("http://localhost:1234/v1/chat/completions/").unwrap();
+        check_api_base_suffix(&url4);
+        assert!(logs_contain("automatically appends `/chat/completions`"));
+        assert!(logs_contain(url4.as_ref()));
+    }
+
+    #[test]
+    #[traced_test]
+    fn test_openai_provider_new_api_base_check() {
+        let model_name = "test-model".to_string();
+        let api_key_location = Some(CredentialLocation::None);
+
+        // Valid cases (should not warn)
+        let _ = OpenAIProvider::new(
+            model_name.clone(),
+            Some(Url::parse("http://localhost:1234/v1/").unwrap()),
+            api_key_location.clone(),
+        )
+        .unwrap();
+
+        let _ = OpenAIProvider::new(
+            model_name.clone(),
+            Some(Url::parse("http://localhost:1234/v1").unwrap()),
+            api_key_location.clone(),
+        )
+        .unwrap();
+
+        // Invalid cases (should warn)
+        let invalid_url_1 = Url::parse("http://localhost:1234/chat/completions").unwrap();
+        let _ = OpenAIProvider::new(
+            model_name.clone(),
+            Some(invalid_url_1.clone()),
+            api_key_location.clone(),
+        )
+        .unwrap();
+        assert!(logs_contain("automatically appends `/chat/completions`"));
+        assert!(logs_contain(invalid_url_1.as_ref()));
+
+        let invalid_url_2 = Url::parse("http://localhost:1234/v1/chat/completions/").unwrap();
+        let _ = OpenAIProvider::new(
+            model_name.clone(),
+            Some(invalid_url_2.clone()),
+            api_key_location.clone(),
+        )
+        .unwrap();
+        assert!(logs_contain("automatically appends `/chat/completions`"));
+        assert!(logs_contain(invalid_url_2.as_ref()));
     }
 }

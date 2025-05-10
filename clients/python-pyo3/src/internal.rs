@@ -27,9 +27,12 @@ pub fn get_template_config(
     function_name: &str,
     variant_name: &str,
 ) -> PyResult<Py<PyDict>> {
-    let variant_config = config
+    let function_config = config
         .get_function(function_name)
         .map_err(|e| convert_error(py, TensorZeroError::Other { source: e.into() }))?
+        .into_owned();
+
+    let variant_config = function_config
         .variants()
         .get(variant_name)
         .ok_or_else(|| {

@@ -505,7 +505,7 @@ fn find_function(params: &Params, config: &Config) -> Result<(Arc<FunctionConfig
     match (&params.function_name, &params.model_name) {
         // Get the function config or return an error if it doesn't exist
         (Some(function_name), None) => Ok((
-            config.get_function(function_name)?.clone(),
+            config.get_function(function_name)?.into_owned(),
             function_name.to_string(),
         )),
         (None, Some(model_name)) => {

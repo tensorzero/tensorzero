@@ -11,11 +11,15 @@ import { useConfig } from "~/context/config";
 import { AlertDialog } from "~/components/ui/AlertDialog";
 
 interface TableItemShortUuidProps {
-  id: string;
+  id: string | null;
   link?: string;
 }
 
 function TableItemShortUuid({ id, link }: TableItemShortUuidProps) {
+  if (id === null) {
+    return <span className="text-fg-muted">—</span>;
+  }
+
   const content = (
     <span
       className="inline-block max-w-[80px] overflow-hidden align-middle font-mono whitespace-nowrap"
@@ -85,9 +89,7 @@ function TableItemFunction({
       <TooltipProvider delayDuration={400}>
         <Tooltip>
           <TooltipTrigger asChild>
-            <div
-              className={`${functionIconConfig.iconBg} p-0.5 rounded-sm`}
-            >
+            <div className={`${functionIconConfig.iconBg} rounded-sm p-0.5`}>
               {functionIconConfig.icon}
             </div>
           </TooltipTrigger>
@@ -99,7 +101,7 @@ function TableItemFunction({
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
-      <span className="text-fg-primary inline-block truncate group-hover:text-gray-500 transition-colors duration-300">
+      <span className="text-fg-primary inline-block truncate transition-colors duration-300 group-hover:text-gray-500">
         {functionName}
       </span>
     </>
@@ -108,10 +110,7 @@ function TableItemFunction({
   if (link) {
     if (functionConfig) {
       return (
-        <Link
-          to={link}
-          className={`${baseClasses} cursor-pointer group`}
-        >
+        <Link to={link} className={`${baseClasses} group cursor-pointer`}>
           {content}
         </Link>
       );

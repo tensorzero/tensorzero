@@ -33,7 +33,7 @@ impl Migration for Migration0011<'_> {
         Ok(!table_exists || !cached_column_exists)
     }
 
-    async fn apply(&self) -> Result<(), Error> {
+    async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         // Create the `ModelInferenceCache` table
         let query = r#"
             CREATE TABLE IF NOT EXISTS ModelInferenceCache

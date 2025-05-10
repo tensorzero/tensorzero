@@ -67,7 +67,13 @@ export default function FunctionsTable({
             <TableEmptyState message="No functions found" />
           ) : (
             mergedFunctions.map(
-              ({ function_name, count, max_timestamp, type, variantsCount }) => (
+              ({
+                function_name,
+                count,
+                max_timestamp,
+                type,
+                variantsCount,
+              }) => (
                 <TableRow key={function_name} id={function_name}>
                   <TableCell className="max-w-[200px] lg:max-w-none">
                     <TableItemFunction

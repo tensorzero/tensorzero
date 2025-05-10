@@ -71,7 +71,7 @@ impl Migration for Migration0026<'_> {
             || !dynamic_evaluation_run_by_project_name_view_exists)
     }
 
-    async fn apply(&self) -> Result<(), Error> {
+    async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         let query = r#"
             CREATE TABLE IF NOT EXISTS DynamicEvaluationRunEpisodeByRunId
                 (

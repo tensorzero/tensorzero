@@ -10,7 +10,11 @@ import {
 } from "~/components/ui/table";
 import { VariantLink } from "~/components/function/variant/VariantLink";
 import type { EvaluationInfoResult } from "~/utils/clickhouse/evaluations";
-import { TableItemTime, TableItemFunction } from "~/components/ui/TableItems";
+import {
+  TableItemTime,
+  TableItemFunction,
+  TableItemShortUuid,
+} from "~/components/ui/TableItems";
 import { useConfig } from "~/context/config";
 
 export default function EvaluationRunsTable({
@@ -37,7 +41,8 @@ export default function EvaluationRunsTable({
             <TableEmptyState message="No evaluation runs found" />
           ) : (
             evaluationRuns.map((evaluationRun) => {
-              const functionConfig = config.functions[evaluationRun.function_name];
+              const functionConfig =
+                config.functions[evaluationRun.function_name];
               const functionType = functionConfig?.type;
 
               return (
@@ -46,14 +51,10 @@ export default function EvaluationRunsTable({
                   id={evaluationRun.evaluation_run_id}
                 >
                   <TableCell className="max-w-[200px]">
-                    <Link
-                      to={`/evaluations/${evaluationRun.evaluation_name}?evaluation_run_ids=${evaluationRun.evaluation_run_id}`}
-                      className="block no-underline"
-                    >
-                      <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
-                        {evaluationRun.evaluation_run_id}
-                      </code>
-                    </Link>
+                    <TableItemShortUuid
+                      id={evaluationRun.evaluation_run_id}
+                      link={`/evaluations/${evaluationRun.evaluation_name}?evaluation_run_ids=${evaluationRun.evaluation_run_id}`}
+                    />
                   </TableCell>
                   <TableCell className="max-w-[200px]">
                     <Link
