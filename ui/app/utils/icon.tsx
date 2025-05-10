@@ -1,9 +1,4 @@
-import {
-  TypeChat,
-  TypeJson,
-  QuestionMark,
-  Functions,
-} from "~/components/icons/Icons";
+import { TypeChat, TypeJson, QuestionMark } from "~/components/icons/Icons";
 import type { ReactNode } from "react";
 
 export type IconConfig = {
@@ -20,7 +15,6 @@ export type IconConfig = {
 export function getFunctionTypeIcon(functionType: string): IconConfig {
   switch (functionType?.toLowerCase()) {
     case "chat":
-    case "conversation":
       return {
         icon: <TypeChat className="text-fg-type-chat" />,
         iconBg: "bg-bg-type-chat",
@@ -32,17 +26,11 @@ export function getFunctionTypeIcon(functionType: string): IconConfig {
         iconBg: "bg-bg-type-json",
         label: "Function type: JSON",
       };
-    case "?":
+    default:
       return {
         icon: <QuestionMark className="text-neutral-600" />,
         iconBg: "bg-neutral-100",
         label: "Function type: Unknown",
-      };
-    default:
-      return {
-        icon: <Functions className="text-neutral-600" />,
-        iconBg: "bg-neutral-100",
-        label: "Function type is not specified",
       };
   }
 }
