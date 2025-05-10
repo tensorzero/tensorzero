@@ -568,7 +568,7 @@ func TestStreamingInference(t *testing.T) {
 		}
 
 		req := &openai.ChatCompletionNewParams{
-			Model:    "chatgpt", // missing function
+			Model:    "chatgpt", // malformed function
 			Messages: messages,
 		}
 		addEpisodeIDToRequest(t, req, episodeID)
@@ -583,8 +583,32 @@ func TestStreamingInference(t *testing.T) {
 		assert.Equal(t, 400, apiErr.StatusCode, "Expected status code 404")
 		assert.Contains(t, apiErr.Error(), "400 Bad Request \"Invalid request to OpenAI-compatible endpoint", "Error should indicate invalid request to OpenAI compartible endpoint")
 	})
-	// TODO: [test_async_inference_streaming_malformed_input]
 	// TODO: [test_async_inference_streaming_missing_model]
+	t.Run("it should handle streaming inference with a missing model", func(t *testing.T) {
+		episodeID, _ := uuid.NewV7()
+
+		messages := []openai.ChatCompletionMessageParamUnion{
+			{OfSystem: OldFormatSystemMessageWithAssistant(t, "Alfred Pennyworth")},
+			openai.UserMessage("Hello"),
+		}
+
+		req := &openai.ChatCompletionNewParams{
+			Messages: messages,
+			// Missing model
+		}
+		addEpisodeIDToRequest(t, req, episodeID)
+
+		// Send the request and expect an error
+		_, err := client.Chat.Completions.New(ctx, *req)
+		require.Error(t, err, "Expected an error for nonexistent function")
+
+		// Validate the error
+		var apiErr *openai.Error
+		assert.ErrorAs(t, err, &apiErr, "Expected error to be of type APIError")
+		// assert.Equal(t, 400, apiErr.StatusCode, "Expected status code 404")
+		// assert.Contains(t, apiErr.Error(), "400 Bad Request \"Invalid request to OpenAI-compatible endpoint", "Error should indicate invalid request to OpenAI compartible endpoint")
+	})
+	// TODO: [test_async_inference_streaming_malformed_input]
 
 	//TODO: [test_async_json_streaming] //line 558
 }
