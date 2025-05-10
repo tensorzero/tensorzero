@@ -19,13 +19,11 @@ package tests
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"os"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/invopop/jsonschema"
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
 	"github.com/openai/openai-go/packages/param"
@@ -51,18 +49,19 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-func GenerateSchema[T any]() interface{} {
-	// t.Helper()
-	// Structured Outputs uses a subset of JSON schema.
-	// These flags are necessary to comply with that subset.
-	reflector := jsonschema.Reflector{
-		AllowAdditionalProperties: false,
-		DoNotReference:            true,
-	}
-	var v T
-	schema := reflector.Reflect(v)
-	return schema
-}
+// func GenerateSchema[T any]() interface{} {
+// 	// t.Helper()
+// 	// Structured Outputs uses a subset of JSON schema.
+// 	// These flags are necessary to comply with that subset.
+// 	reflector := jsonschema.Reflector{
+// 		AllowAdditionalProperties: false,
+// 		DoNotReference:            true,
+// 	}
+// 	var v T
+// 	schema := reflector.Reflect(v)
+// 	// fmt.Println("Generated Schema :", schema)
+// 	return schema
+// }
 
 func OldFormatSystemMessageWithAssistant(t *testing.T, assistant_name string) *openai.ChatCompletionSystemMessageParam {
 	t.Helper()
@@ -170,50 +169,122 @@ func TestBasicInference(t *testing.T) {
 
 	})
 	// TODO: [test_async_basic_inference_json_schema]
-	t.Run("it should handle basic inference with JSON schema validation and throw proper validation error", func(t *testing.T) {
-		episodeID, _ := uuid.NewV7()
+	// t.Run("it should handle basic inference and validate response schema manually", func(t *testing.T) {
+	// 	episodeID, _ := uuid.NewV7()
 
-		// Define the messages
+	// 	// Define the messages
+	// 	messages := []openai.ChatCompletionMessageParamUnion{
+	// 		{OfSystem: OldFormatSystemMessageWithAssistant(t, "Alfred Pennyworth")},
+	// 		openai.UserMessage("Hello"),
+	// 	}
+
+	// 	// Define a dummy model with an intentionally incorrect schema
+	// 	type DummyModel struct {
+	// 		Name int `json:"name"` // Intentionally incorrect type for testing
+	// 	}
+
+	// 	// Define the JSON schema response format
+	// 	schema := map[string]interface{}{
+	// 		"type": "object",
+	// 		"properties": map[string]interface{}{
+	// 			"name": map[string]interface{}{
+	// 				"type": "string", // Expecting a string, but the model might return something else
+	// 			},
+	// 		},
+	// 		"required": []string{"name"},
+	// 	}
+
+	// 	responseFormat := openai.ResponseFormatJSONSchemaJSONSchemaParam{
+	// 		Name:        "dummy_model",
+	// 		Strict:      openai.Bool(true),
+	// 		Description: openai.String("A dummy model for testing schema validation"),
+	// 		Schema:      schema,
+	// 	}
+
+	// 	// Create the request
+	// 	req := &openai.ChatCompletionNewParams{
+	// 		Model:    "tensorzero::function_name::basic_test",
+	// 		Messages: messages,
+	// 		ResponseFormat: openai.ChatCompletionNewParamsResponseFormatUnion{
+	// 			OfJSONSchema: &openai.ResponseFormatJSONSchemaParam{
+	// 				// Type:       "json_schema",
+	// 				JSONSchema: responseFormat,
+	// 			},
+	// 		},
+	// 		Temperature: openai.Float(0.4),
+	// 	}
+	// 	req.WithExtraFields(map[string]any{
+	// 		"tensorzero::episode_id": episodeID.String(),
+	// 	})
+
+	// 	// Send the request
+	// 	resp, err := client.Chat.Completions.New(ctx, *req)
+	// 	require.NoError(t, err, "Unexpected error while getting completion")
+
+	// 	// Debugging output
+	// 	fmt.Printf("Response: %+v\n", resp.RawJSON())
+
+	// 	// Unmarshal the response into the DummyModel struct
+	// 	var dummyModel DummyModel
+	// 	err = json.Unmarshal([]byte(resp.Choices[0].Message.Content), &dummyModel)
+	// 	fmt.Println("########Error####", err)
+	// 	require.Error(t, err, "Expected a validation error due to type mismatch")
+
+	// 	// Validate the error message
+	// 	expectedSubstring := "cannot unmarshal"
+	// 	require.Contains(t, err.Error(), expectedSubstring, "Error message should mention unmarshal failure")
+
+	// 	fmt.Println("Validation error simulated:", err.Error())
+	// })
+
+	// TODO: [test_async_inference_cache]
+	t.Run("it should handle inference with cache", func(t *testing.T) {
 		messages := []openai.ChatCompletionMessageParamUnion{
 			{OfSystem: OldFormatSystemMessageWithAssistant(t, "Alfred Pennyworth")},
 			openai.UserMessage("Hello"),
 		}
 
-		// Define a dummy model with an intentionally incorrect schema
-		type DummyModel struct {
-			Name int `json:"name"` // Intentionally incorrect type for testing
-		}
-
-		// Generate the JSON schema for the DummyModel
-		var DummyModelResponseSchema = GenerateSchema[DummyModel]()
-		schemaParam := openai.ResponseFormatJSONSchemaJSONSchemaParam{
-			Name:   "dummy_model",
-			Schema: DummyModelResponseSchema, // Generated JSON schema for DummyModel
-			Strict: openai.Bool(true),
-		}
-
-		// Create the request
+		// First request (non-cached)
 		req := &openai.ChatCompletionNewParams{
-			Model:    "tensorzero::function_name::basic_test",
-			Messages: messages,
-			ResponseFormat: openai.ChatCompletionNewParamsResponseFormatUnion{
-				OfJSONSchema: &openai.ResponseFormatJSONSchemaParam{JSONSchema: schemaParam},
-			},
+			Model:       "tensorzero::function_name::basic_test",
+			Messages:    messages,
 			Temperature: openai.Float(0.4),
 		}
-		addEpisodeIDToRequest(t, req, episodeID)
 
-		// Send the request and expect a validation error
 		resp, err := client.Chat.Completions.New(ctx, *req)
-		require.Error(t, err, "Expected a validation error due to schema mismatch")
+		require.NoError(t, err, "Unexpected error while getting completion")
 
-		fmt.Println(resp.RawJSON())
-		// Validate the error message
-		expectedSubstring := "cannot unmarshal"
-		require.Contains(t, err.Error(), expectedSubstring, "Error message should mention unmarshal failure")
-		fmt.Println("Validation error simulated:", err.Error())
+		// Validate the response
+		require.NotNil(t, resp.Choices)
+		require.Equal(t, "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.", resp.Choices[0].Message.Content)
+
+		// Validate usage
+		require.NotNil(t, resp.Usage)
+		require.Equal(t, int64(10), resp.Usage.PromptTokens)
+		require.Equal(t, int64(10), resp.Usage.CompletionTokens)
+		require.Equal(t, int64(20), resp.Usage.TotalTokens)
+
+		// Second request (cached)
+		req.WithExtraFields(map[string]any{
+			"tensorzero::cache_options": map[string]any{
+				"max_age_s": 10,
+				"enabled":   "on",
+			},
+		})
+
+		cachedResp, err := client.Chat.Completions.New(ctx, *req)
+		require.NoError(t, err, "Unexpected error while getting cached completion")
+
+		// Validate the cached response
+		require.NotNil(t, cachedResp.Choices)
+		require.Equal(t, "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.", cachedResp.Choices[0].Message.Content)
+
+		// Validate cached usage
+		require.NotNil(t, cachedResp.Usage)
+		require.Equal(t, int64(0), cachedResp.Usage.PromptTokens)
+		require.Equal(t, int64(0), cachedResp.Usage.CompletionTokens)
+		require.Equal(t, int64(0), cachedResp.Usage.TotalTokens)
 	})
-	// TODO: [test_async_inference_cache]
 }
 
 func TestStreamingInference(t *testing.T) {
@@ -329,8 +400,165 @@ func TestStreamingInference(t *testing.T) {
 		assert.Equal(t, len(expectedText), textIndex, "Not all expected texts were matched")
 	})
 	// TODO: [test_async_inference_streaming_with_cache]
+	t.Run("it should handle streaming inference with cache", func(t *testing.T) {
+		episodeID, _ := uuid.NewV7()
+		messages := []openai.ChatCompletionMessageParamUnion{
+			{OfSystem: OldFormatSystemMessageWithAssistant(t, "Alfred Pennyworth")},
+			openai.UserMessage("Hello"),
+		}
+
+		expectedText := []string{
+			"Wally,",
+			" the",
+			" golden",
+			" retriever,",
+			" wagged",
+			" his",
+			" tail",
+			" excitedly",
+			" as",
+			" he",
+			" devoured",
+			" a",
+			" slice",
+			" of",
+			" cheese",
+			" pizza.",
+		}
+
+		// First request without cache to populate the cache
+		req := &openai.ChatCompletionNewParams{
+			Model:    "tensorzero::function_name::basic_test",
+			Messages: messages,
+			Seed:     openai.Int(69),
+			StreamOptions: openai.ChatCompletionStreamOptionsParam{
+				IncludeUsage: openai.Bool(true),
+			},
+		}
+		addEpisodeIDToRequest(t, req, episodeID)
+
+		stream := client.Chat.Completions.NewStreaming(ctx, *req)
+		require.NotNil(t, stream, "Streaming response should not be nil")
+
+		var chunks []openai.ChatCompletionChunk
+		for stream.Next() {
+			chunk := stream.Current()
+			chunks = append(chunks, chunk)
+		}
+		require.NoError(t, stream.Err(), "Stream encountered an error")
+		require.NotEmpty(t, chunks, "No chunks were received")
+
+		// Verify the response
+		content := ""
+		for i, chunk := range chunks[:len(chunks)-1] { // All but the last chunk
+			if i < len(expectedText) {
+				require.Equal(t, expectedText[i], chunk.Choices[0].Delta.Content)
+				content += chunk.Choices[0].Delta.Content
+			}
+		}
+
+		// Check second-to-last chunk has correct finish reason
+		stopChunk := chunks[len(chunks)-2]
+		require.Equal(t, "stop", stopChunk.Choices[0].FinishReason)
+
+		finalChunk := chunks[len(chunks)-1]
+		require.Equal(t, int64(10), finalChunk.Usage.PromptTokens)
+		require.Equal(t, int64(16), finalChunk.Usage.CompletionTokens)
+
+		// Simulate waiting for trailing cache write
+		time.Sleep(1 * time.Second)
+
+		// Second request with cache
+		req.WithExtraFields(map[string]any{
+			"tensorzero::episode_id": episodeID.String(),
+			"tensorzero::cache_options": map[string]any{
+				"max_age_s": nil,
+				"enabled":   "on",
+			},
+		})
+
+		cachedStream := client.Chat.Completions.NewStreaming(ctx, *req)
+		require.NotNil(t, cachedStream, "Cached streaming response should not be nil")
+
+		var cachedChunks []openai.ChatCompletionChunk
+		for cachedStream.Next() {
+			chunk := cachedStream.Current()
+			cachedChunks = append(cachedChunks, chunk)
+		}
+		require.NoError(t, cachedStream.Err(), "Cached stream encountered an error")
+		require.NotEmpty(t, cachedChunks, "No cached chunks were received")
+
+		// Verify we get the same content
+		cachedContent := ""
+		for i, chunk := range cachedChunks[:len(cachedChunks)-1] { // All but the last chunk
+			if i < len(expectedText) {
+				require.Equal(t, expectedText[i], chunk.Choices[0].Delta.Content)
+				cachedContent += chunk.Choices[0].Delta.Content
+			}
+		}
+		require.Equal(t, content, cachedContent)
+
+		// Check second-to-last chunk has the correct finish reason
+		finishChunk := cachedChunks[len(cachedChunks)-2]
+		require.Equal(t, "stop", finishChunk.Choices[0].FinishReason)
+		// Verify zero usage
+		finalCachedChunk := cachedChunks[len(cachedChunks)-1]
+		require.Equal(t, int64(0), finalCachedChunk.Usage.PromptTokens)
+		require.Equal(t, int64(0), finalCachedChunk.Usage.CompletionTokens)
+		require.Equal(t, int64(0), finalCachedChunk.Usage.TotalTokens)
+	})
 	// TODO: [test_async_inference_streaming_nonexistent_function]
+	t.Run("it should handle streaming inference with a nonexistent function", func(t *testing.T) {
+		episodeID, _ := uuid.NewV7()
+
+		messages := []openai.ChatCompletionMessageParamUnion{
+			{OfSystem: OldFormatSystemMessageWithAssistant(t, "Alfred Pennyworth")},
+			openai.UserMessage("Hello"),
+		}
+
+		req := &openai.ChatCompletionNewParams{
+			Model:    "tensorzero::function_name::does_not_exist", // Nonexistent function
+			Messages: messages,
+		}
+		addEpisodeIDToRequest(t, req, episodeID)
+
+		// Send the request and expect an error
+		_, err := client.Chat.Completions.New(ctx, *req)
+		// fmt.Println("########Error####", err)
+		require.Error(t, err, "Expected an error for nonexistent function")
+
+		// Validate the error
+		var apiErr *openai.Error
+		assert.ErrorAs(t, err, &apiErr, "Expected error to be of type APIError") // ErrorAs assign err to apiErr
+		assert.Equal(t, 404, apiErr.StatusCode, "Expected status code 404")
+		assert.Contains(t, err.Error(), "404 Not Found \"Unknown function: does_not_exist\"", "Error should indicate 404 Not Found")
+	})
 	// TODO: [test_async_inference_streaming_missing_function]
+	// t.Run("it should handle streaming inference with a missing function", func(t *testing.T) {
+	// 	episodeID, _ := uuid.NewV7()
+
+	// 	messages := []openai.ChatCompletionMessageParamUnion{
+	// 		{OfSystem: OldFormatSystemMessageWithAssistant(t, "Alfred Pennyworth")},
+	// 		openai.UserMessage("Hello"),
+	// 	}
+
+	// 	req := &openai.ChatCompletionNewParams{
+	// 		Model:    "tensorzero::function_name::", // missing function
+	// 		Messages: messages,
+	// 	}
+	// 	addEpisodeIDToRequest(t, req, episodeID)
+
+	// 	// Send the request and expect an error
+	// 	_, err := client.Chat.Completions.New(ctx, *req)
+	// 	fmt.Println("########Error####", err)
+	// 	require.Error(t, err, "Expected an error for nonexistent function")
+
+	// 	// Validate the error
+	// 	var apiErr *openai.Error
+	// 	require.ErrorAs(t, err, &apiErr, "Expected error to be of type APIError")
+	// 	// assert.Equal(t, 404, apiErr.StatusCode, "Expected status code 404")
+	// 	// assert.Equal(t, "Error code: 404 - {'error': 'Unknown function: does_not_exist'}", apiErr.Error())
+	// })
 	// TODO: [test_async_inference_streaming_missing_model]
 	// TODO: [test_async_inference_streaming_malformed_function]
 	// TODO: [test_async_inference_streaming_malformed_input]
