@@ -285,6 +285,72 @@ func TestBasicInference(t *testing.T) {
 		require.Equal(t, int64(0), cachedResp.Usage.CompletionTokens)
 		require.Equal(t, int64(0), cachedResp.Usage.TotalTokens)
 	})
+	// TODO [should handle json success with non-deprecated format]
+	t.Run("it should handle JSON success with non-deprecated format", func(t *testing.T) {
+		episodeID, _ := uuid.NewV7()
+
+		sysMsg := param.OverrideObj[openai.ChatCompletionSystemMessageParam](map[string]interface{}{
+			"content": []map[string]interface{}{
+				{
+					"type": "text",
+					"tensorzero::arguments": map[string]interface{}{
+						"assistant_name": "Alfred Pennyworth",
+					},
+				},
+			},
+			"role": "system",
+		})
+
+		userMsg := param.OverrideObj[openai.ChatCompletionUserMessageParam](map[string]interface{}{
+			"content": []map[string]interface{}{
+				{
+					"type": "text",
+					"tensorzero::arguments": map[string]interface{}{
+						"country": "Japan",
+					},
+				},
+			},
+			"role": "user",
+		})
+
+		messages := []openai.ChatCompletionMessageParamUnion{
+			{OfSystem: &sysMsg},
+			{OfUser: &userMsg},
+		}
+
+		// Create the request
+		req := &openai.ChatCompletionNewParams{
+			Model:    "tensorzero::function_name::json_success",
+			Messages: messages,
+		}
+		req.WithExtraFields(map[string]any{
+			"tensorzero::episode_id": episodeID.String(),
+		})
+
+		resp, err := client.Chat.Completions.New(ctx, *req)
+		require.NoError(t, err, "API request failed")
+
+		// Validate the model
+		assert.Equal(t, "tensorzero::function_name::json_success::variant_name::test", resp.Model)
+
+		// Validate the episode ID
+		if extra, ok := resp.JSON.ExtraFields["episode_id"]; ok {
+			var responseEpisodeID string
+			err := json.Unmarshal([]byte(extra.Raw()), &responseEpisodeID)
+			require.NoError(t, err, "Failed to parse episode_id from response extras")
+			assert.Equal(t, episodeID.String(), responseEpisodeID)
+		} else {
+			t.Errorf("Key 'tensorzero::episode_id' not found in response extras")
+		}
+
+		// Validate the response content
+		assert.Equal(t, `{"answer":"Hello"}`, resp.Choices[0].Message.Content)
+		// Validate tool calls
+		assert.Nil(t, resp.Choices[0].Message.ToolCalls, "Tool calls should be nil")
+		// Validate usage
+		assert.Equal(t, int64(10), resp.Usage.PromptTokens)
+		assert.Equal(t, int64(10), resp.Usage.CompletionTokens)
+	})
 }
 
 func TestStreamingInference(t *testing.T) {
