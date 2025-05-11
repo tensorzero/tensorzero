@@ -181,7 +181,6 @@ impl InferenceProvider for OllamaProvider {
                 ),
             })
         })?;
-
         let res = request_builder
             .body(raw_request.clone())
             .header(reqwest::header::CONTENT_TYPE, "application/json")
@@ -192,7 +191,7 @@ impl InferenceProvider for OllamaProvider {
                 Error::new(ErrorDetails::InferenceClient {
                     status_code: e.status(),
                     message: format!(
-                        "Error sending request to OpenAI: {}",
+                        "Error sending request to Ollama: {}",
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
@@ -233,7 +232,7 @@ impl InferenceProvider for OllamaProvider {
                 response,
                 raw_response,
                 latency,
-                raw_request: raw_request.clone(),
+                request: request_body,
                 generic_request: request,
             }
             .try_into()?)
@@ -554,7 +553,7 @@ struct OllamaResponseWithMetadata<'a> {
     response: OpenAIResponse,
     raw_response: String,
     latency: Latency,
-    raw_request: String,
+    request: serde_json::Value,
     generic_request: &'a ModelInferenceRequest<'a>,
 }
 
@@ -564,7 +563,7 @@ impl<'a> TryFrom<OllamaResponseWithMetadata<'a>> for ProviderInferenceResponse {
         let OllamaResponseWithMetadata {
             mut response,
             latency,
-            raw_request,
+            request: request_body,
             generic_request,
             raw_response,
         } = value;
@@ -575,7 +574,7 @@ impl<'a> TryFrom<OllamaResponseWithMetadata<'a>> for ProviderInferenceResponse {
                     "Response has invalid number of choices {}, Expected 1",
                     response.choices.len()
                 ),
-                raw_request: Some(serde_json::to_string(&raw_request).unwrap_or_default()),
+                raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                 raw_response: Some(raw_response.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
             }
@@ -593,7 +592,7 @@ impl<'a> TryFrom<OllamaResponseWithMetadata<'a>> for ProviderInferenceResponse {
             .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                 message: "Response has no choices (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
                 provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: Some(serde_json::to_string(&raw_request).unwrap_or_default()),
+                raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                 raw_response: Some(raw_response.clone()),
             }))?;
         let mut content: Vec<ContentBlockOutput> = Vec::new();
@@ -605,7 +604,7 @@ impl<'a> TryFrom<OllamaResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 content.push(ContentBlockOutput::ToolCall(tool_call.into()));
             }
         }
-        let raw_request = serde_json::to_string(&raw_request).map_err(|e| {
+        let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!(
                     "Error serializing request body as JSON: {}",
@@ -955,7 +954,6 @@ mod tests {
 
     #[test]
     fn test_try_from_ollama_response() {
-        // Test case 1: Valid response with content
         let valid_response = OpenAIResponse {
             choices: vec![OpenAIResponseChoice {
                 index: 0,
@@ -1017,7 +1015,10 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
             },
-            raw_request: raw_request.clone(),
+            request: serde_json::to_value(
+                OllamaRequest::new("test-model", &generic_request).unwrap(),
+            )
+            .unwrap(),
             generic_request: &generic_request,
             raw_response: raw_response.clone(),
         });
@@ -1036,7 +1037,6 @@ mod tests {
                 response_time: Duration::from_millis(100)
             }
         );
-        assert_eq!(inference_response.raw_request, raw_request);
         assert_eq!(inference_response.raw_response, raw_response);
         assert_eq!(inference_response.system, None);
         assert_eq!(
