@@ -885,4 +885,89 @@ func TestToolCallingInference(t *testing.T) {
 		}
 	})
 
+	t.Run("it should handle dynamic tool use inference with OpenAI", func(t *testing.T) {
+		episodeID, _ := uuid.NewV7()
+
+		// Define the messages
+		messages := []openai.ChatCompletionMessageParamUnion{
+			{OfSystem: OldFormatSystemMessageWithAssistant(t, "Dr. Mehta")},
+			openai.UserMessage("What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function."),
+		}
+
+		tools := []openai.ChatCompletionToolParam{
+			{
+				Function: openai.FunctionDefinitionParam{
+					Name:        "get_temperature",
+					Description: openai.String("Get the current temperature in a given location"),
+					Parameters: openai.FunctionParameters{
+						"type": "object",
+						"properties": map[string]interface{}{
+							"location": map[string]string{
+								"type":        "string",
+								"description": "The location to get the temperature for (e.g. 'New York')",
+							},
+							"units": map[string]interface{}{
+								"type":        "string",
+								"description": "The units to get the temperature in (must be 'fahrenheit' or 'celsius')",
+								"enum":        []string{"fahrenheit", "celsius"},
+							},
+						},
+						"required":             []string{"location"},
+						"additionalProperties": false,
+					},
+				},
+			},
+		}
+
+		req := &openai.ChatCompletionNewParams{
+			Model:    "tensorzero::function_name::basic_test",
+			Messages: messages,
+			Tools:    tools,
+		}
+		req.WithExtraFields(map[string]any{
+			"tensorzero::episode_id":   episodeID.String(),
+			"tensorzero::variant_name": "openai",
+		})
+
+		resp, err := client.Chat.Completions.New(ctx, *req)
+		require.NoError(t, err, "API request failed")
+
+		// Validate the model
+		assert.Equal(t, "tensorzero::function_name::basic_test::variant_name::openai", resp.Model)
+
+		// Validate the episode ID
+		if extra, ok := resp.JSON.ExtraFields["episode_id"]; ok {
+			var responseEpisodeID string
+			err := json.Unmarshal([]byte(extra.Raw()), &responseEpisodeID)
+			require.NoError(t, err, "Failed to parse episode_id from response extras")
+			assert.Equal(t, episodeID.String(), responseEpisodeID)
+		} else {
+			t.Errorf("Key 'tensorzero::episode_id' not found in response extras")
+		}
+
+		// Validate the response content
+		assert.Empty(t, resp.Choices[0].Message.Content, "Message content should be nil")
+
+		// // Validate tool calls
+		require.NotNil(t, resp.Choices[0].Message.ToolCalls, "Tool calls should not be nil")
+		require.Len(t, resp.Choices[0].Message.ToolCalls, 1, "There should be exactly one tool call")
+
+		toolCall := resp.Choices[0].Message.ToolCalls[0]
+		assert.Equal(t, "function", string(toolCall.Type), "Tool call type should be 'function'")
+		assert.Equal(t, "get_temperature", toolCall.Function.Name, "Function name should be 'get_temperature'")
+
+		var arguments map[string]interface{}
+		err = json.Unmarshal([]byte(toolCall.Function.Arguments), &arguments)
+		require.NoError(t, err, "Failed to parse tool call arguments")
+		assert.Equal(t, map[string]interface{}{
+			"location": "Tokyo",
+			"units":    "celsius",
+		}, arguments, "Tool call arguments do not match")
+
+		// Validate usage
+		require.NotNil(t, resp.Usage, "Usage should not be nil")
+		assert.Greater(t, resp.Usage.PromptTokens, int64(100), "Prompt tokens should be greater than 100")
+		assert.Greater(t, resp.Usage.CompletionTokens, int64(10), "Completion tokens should be greater than 10")
+	})
+
 }
