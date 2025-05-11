@@ -9,6 +9,7 @@ test("dynamic evaluation project page should render and show correct information
   await expect(
     page.getByText("Select dynamic evaluation runs to compare..."),
   ).toBeVisible();
+  await page.waitForTimeout(500);
   // Click on the run selector
   await page.getByText("Select dynamic evaluation runs to compare...").click();
   await page.waitForTimeout(1000);
@@ -17,9 +18,12 @@ test("dynamic evaluation project page should render and show correct information
   await expect(page.getByText("8fddbd")).toBeVisible();
   // Select 2 runs
   await page.getByText("aac7e7").click();
+  await page.waitForTimeout(500);
   await page.getByText("8fddbd").click();
+  await page.waitForTimeout(500);
   // Click away from the run selector
   await page.click("body");
+  await page.waitForTimeout(500);
   // Check that the results table is visible
   await expect(page.getByText("Task Name")).toBeVisible();
   // Check that the results table has the correct columns

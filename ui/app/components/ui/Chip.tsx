@@ -33,20 +33,30 @@ const Chip: React.FC<ChipProps> = ({
     "inline-flex text-sm text-fg-primary py-1 px-0 md:px-2 gap-1.5 rounded-md whitespace-nowrap overflow-hidden";
   const hoverClasses = link ? "md:hover:bg-bg-hover cursor-pointer" : "";
   const fontClasses = font === "mono" ? "font-mono" : "font-sans";
-  const combinedClasses = clsx(baseClasses, hoverClasses, fontClasses, className);
+  const combinedClasses = clsx(
+    baseClasses,
+    hoverClasses,
+    fontClasses,
+    className,
+  );
 
   const content = (
     <>
       {icon && (
         <div
-          className={clsx(iconBg, "md:ml-[-2px] flex size-5 items-center justify-center rounded-sm flex-shrink-0")}
+          className={clsx(
+            iconBg,
+            "flex size-5 flex-shrink-0 items-center justify-center rounded-sm md:ml-[-2px]",
+          )}
         >
           {icon}
         </div>
       )}
       <span className="text-fg-primary truncate">{label}</span>
       {secondaryLabel && (
-        <span className="text-fg-tertiary pl-0.5 truncate">{secondaryLabel}</span>
+        <span className="text-fg-tertiary truncate pl-0.5">
+          {secondaryLabel}
+        </span>
       )}
     </>
   );

@@ -109,32 +109,32 @@ export default function BasicInfo({
       <BasicInfoItem>
         <BasicInfoItemTitle>Usage</BasicInfoItemTitle>
         <BasicInfoItemContent>
+          <Chip
+            icon={<Input className="text-fg-tertiary" />}
+            label={`${inferenceUsage?.input_tokens ?? ""} tok`}
+            tooltip="Input Tokens"
+          />
+          <Chip
+            icon={<Output className="text-fg-tertiary" />}
+            label={`${inferenceUsage?.output_tokens ?? ""} tok`}
+            tooltip="Output Tokens"
+          />
+          <Chip
+            icon={<Timer className="text-fg-tertiary" />}
+            label={`${inference.processing_time_ms} ms`}
+            tooltip="Processing Time"
+          />
+          {(cacheStatus === "FULL" || cacheStatus === "PARTIAL") && (
             <Chip
-              icon={<Input className="text-fg-tertiary" />}
-              label={`${inferenceUsage?.input_tokens ?? ""} tok`}
-              tooltip="Input Tokens"
+              icon={<Cached className="text-fg-tertiary" />}
+              label={cacheStatus === "FULL" ? "Cached" : "Partially Cached"}
+              tooltip={
+                cacheStatus === "FULL"
+                  ? "All model inferences were cached by TensorZero"
+                  : "Some model inferences were cached by TensorZero"
+              }
             />
-            <Chip
-              icon={<Output className="text-fg-tertiary" />}
-              label={`${inferenceUsage?.output_tokens ?? ""} tok`}
-              tooltip="Output Tokens"
-            />
-            <Chip
-              icon={<Timer className="text-fg-tertiary" />}
-              label={`${inference.processing_time_ms} ms`}
-              tooltip="Processing Time"
-            />
-            {(cacheStatus === "FULL" || cacheStatus === "PARTIAL") && (
-              <Chip
-                icon={<Cached className="text-fg-tertiary" />}
-                label={cacheStatus === "FULL" ? "Cached" : "Partially Cached"}
-                tooltip={
-                  cacheStatus === "FULL"
-                    ? "All model inferences were cached by TensorZero"
-                    : "Some model inferences were cached by TensorZero"
-                }
-              />
-            )}
+          )}
         </BasicInfoItemContent>
       </BasicInfoItem>
 
