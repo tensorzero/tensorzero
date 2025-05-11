@@ -13,7 +13,13 @@ import {
   SectionHeader,
   SectionsGroup,
 } from "~/components/layout/PageLayout";
-import { Timer, Input, Output, Calendar } from "~/components/icons/Icons";
+import {
+  Timer,
+  Input,
+  Output,
+  Calendar,
+  Cached,
+} from "~/components/icons/Icons";
 import Chip from "~/components/ui/Chip";
 import { formatDateWithSeconds, getTimestampTooltipData } from "~/utils/date";
 import {
@@ -76,6 +82,13 @@ export function ModelInferenceItem({ inference }: ModelInferenceItemProps) {
                   label={`${inference.response_time_ms} ms`}
                   tooltip="Response Time"
                 />
+                {inference.cached && (
+                  <Chip
+                    icon={<Cached className="text-fg-tertiary" />}
+                    label="Cached"
+                    tooltip="Model Inference was cached by TensorZero"
+                  />
+                )}
               </div>
             </BasicInfoItemContent>
           </BasicInfoItem>

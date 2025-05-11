@@ -5,11 +5,16 @@ use async_trait::async_trait;
 
 use super::check_table_exists;
 
+/// NOTE: This migration is BANNED in favor of migration_0028.
+///
 /// This migration adds a table StaticEvaluationHumanFeedback that stores human feedback in an easy-to-reference format.
 /// This is technically an auxiliary table as the primary store is still the various feedback tables.
 /// We also create two materialized views that automatically write to StaticEvaluationHumanFeedback when
 /// FloatMetricFeedback and BooleanMetricFeedback are updated with new feedback that contains both
 /// tensorzero::datapoint_id and tensorzero::human_feedback tags.
+///
+/// NOTE: The views in this table are StaticEvaluationHumanFeedbackFloatView and StaticEvaluationHumanFeedbackBooleanView.
+/// Thew views created by Migration 0028 are StaticEvaluationFloatHumanFeedbackView and StaticEvaluationBooleanHumanFeedbackView.
 pub struct Migration0023<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
 }
@@ -53,7 +58,7 @@ impl Migration for Migration0023<'_> {
             || !boolean_materialized_view_exists)
     }
 
-    async fn apply(&self) -> Result<(), Error> {
+    async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         self.clickhouse
             .run_query_synchronous(
                 r#"CREATE TABLE IF NOT EXISTS StaticEvaluationHumanFeedback (

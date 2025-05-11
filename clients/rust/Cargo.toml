@@ -25,6 +25,9 @@ pyo3 = { workspace = true, optional = true }
 tracing = { workspace = true }
 tokio = { workspace = true }
 serde-untagged = { workspace = true }
+git2 = { workspace = true }
+serde_path_to_error = { workspace = true }
+tensorzero-derive = { path = "../../tensorzero-derive" }
 
 [lints]
 workspace = true

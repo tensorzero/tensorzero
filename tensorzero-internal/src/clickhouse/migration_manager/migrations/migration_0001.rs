@@ -62,7 +62,7 @@ impl Migration for Migration0001<'_> {
         Ok(false)
     }
 
-    async fn apply(&self) -> Result<(), Error> {
+    async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         // Only gets used when we are not doing a clean start
         let view_offset = Duration::from_secs(15);
         let view_timestamp = (std::time::SystemTime::now()

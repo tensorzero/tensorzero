@@ -184,6 +184,15 @@ jobs:
         run: |
           pnpm run test
 
+      - name: Install Go
+        uses: actions/setup-go@29694d72cd5e7ef3b09496b39f28a942af47737e
+        with:
+          go-version: "1.24"
+
+      - name: "Go: OpenAI Client: test"
+        working-directory: clients/openai-go/tests
+        run: go test -v
+
       - name: "Python: Recipes: pytest"
         working-directory: recipes
         run: |

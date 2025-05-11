@@ -8,11 +8,15 @@ import {
 import { formatDate } from "~/utils/date";
 
 interface TableItemShortUuidProps {
-  id: string;
+  id: string | null;
   link?: string;
 }
 
 function TableItemShortUuid({ id, link }: TableItemShortUuidProps) {
+  if (id === null) {
+    return <span className="text-fg-muted">—</span>;
+  }
+
   const content = (
     <span
       className="inline-block max-w-[80px] overflow-hidden align-middle font-mono whitespace-nowrap"

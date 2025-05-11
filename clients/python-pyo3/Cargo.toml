@@ -25,6 +25,7 @@ pyo3-async-runtimes = { version = "0.24.0", features = ["tokio-runtime"] }
 reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+serde_path_to_error.workspace = true
 tensorzero_rust = { package = "tensorzero", path = "../rust", features = [
     "pyo3",
 ] }

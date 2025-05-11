@@ -130,29 +130,28 @@ export default function CurationMetricSelector<
                       <span>None</span>
                     </div>
                   </SelectItem>
-                  {Object.entries(config.metrics)
-                    .filter(([name]) => validMetrics.has(name))
-                    .map(([name, metric]) => {
-                      const metricFeedback = metricsFetcher.data?.metrics.find(
-                        (m) => m.metric_name === name,
-                      );
+                  {Object.entries(config.metrics).map(([name, metric]) => {
+                    const metricFeedback = metricsFetcher.data?.metrics.find(
+                      (m) => m.metric_name === name,
+                    );
 
-                      return (
-                        <SelectItem key={name} value={name}>
-                          <div className="flex w-full items-center justify-between">
-                            <span>{name}</span>
-                            <div className="ml-2 flex items-center gap-2">
-                              {metricFeedback && (
-                                <Badge className="bg-gray-200 text-gray-800 dark:bg-gray-900 dark:text-gray-300">
-                                  Count: {metricFeedback.feedback_count}
-                                </Badge>
-                              )}
-                              <MetricBadges metric={metric} />
-                            </div>
+                    return (
+                      <SelectItem key={name} value={name}>
+                        <div className="flex w-full items-center justify-between">
+                          <span>{name}</span>
+                          <div className="ml-2 flex items-center gap-2">
+                            <Badge className="bg-gray-200 text-gray-800 dark:bg-gray-900 dark:text-gray-300">
+                              Count:{" "}
+                              {metricFeedback
+                                ? metricFeedback.feedback_count
+                                : 0}
+                            </Badge>
+                            <MetricBadges metric={metric} />
                           </div>
-                        </SelectItem>
-                      );
-                    })}
+                        </div>
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
 
