@@ -1476,6 +1476,11 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
             // check that an error occurs
             assert!(!res["error"].as_str().unwrap().is_empty());
         }
+        "ollama" => {
+            // We produce an error by setting a bad 'Content-Length', so just
+            // check that an error occurs
+            assert!(!res["error"].as_str().unwrap().is_empty());
+        }
         _ => {
             panic!("Got error: {res}");
         }
@@ -9493,7 +9498,7 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
     // in our tensorzero.toml. ollama doesn't support 'max_completion_tokens', so this test
     // currently fails. It's fine to skip it, since we really care about testing the sagemaker
     // wrapper code, not whatever container we happen to be wrapping.
-    if provider.model_provider_name == "aws_sagemaker" {
+    if provider.model_provider_name == "aws_sagemaker" || provider.model_provider_name == "ollama" {
         return;
     }
 
