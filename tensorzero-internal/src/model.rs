@@ -1455,6 +1455,7 @@ const SHORTHAND_MODEL_PREFIXES: &[&str] = &[
     "openai::",
     "together::",
     "xai::",
+    "ollama::",
     "dummy::",
 ];
 
