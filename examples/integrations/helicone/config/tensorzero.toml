@@ -1,0 +1,31 @@
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                  GENERAL                                   │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+# Disable observability to keep this example minimal (not recommended in production)
+[gateway]
+observability.enabled = false
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                   MODELS                                   │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[models.helicone_gpt_4o_mini]
+routing = ["helicone"]
+
+[models.helicone_gpt_4o_mini.providers.helicone]
+# Helicone offers an OpenAI-compatible API, so we set `type = "openai"`
+type = "openai"
+api_base = "https://oai.helicone.ai/v1"
+model_name = "gpt-4o-mini"
+api_key_location = "env::OPENAI_API_KEY"
+
+[models.helicone_grok_3]
+routing = ["helicone"]
+
+[models.helicone_grok_3.providers.helicone]
+# Helicone offers an OpenAI-compatible API, so we set `type = "openai"`
+type = "openai"
+api_base = "https://x.helicone.ai/v1"
+model_name = "grok-3"
+api_key_location = "env::XAI_API_KEY"
