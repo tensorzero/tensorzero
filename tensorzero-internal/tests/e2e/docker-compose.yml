@@ -44,8 +44,8 @@ services:
     #command: --set=extensions.jaeger_storage.backends.some_store.memory.max_traces=1
     command: --config /jaeger/config.yaml
     ports:
-      - 16686:16686 # Browser UI
-      - 4317:4317
-      - 4318:4318
-      - 5778:5778
-      - 9411:9411
+      - "16686:16686" # Browser UI
+      - "4317:4317"
+      - "4318:4318"
+      - "5778:5778"
+      - "9411:9411"

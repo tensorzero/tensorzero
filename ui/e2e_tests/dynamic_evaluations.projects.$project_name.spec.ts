@@ -13,11 +13,7 @@ test("dynamic evaluation project page should render and show correct information
   await page.waitForTimeout(500);
   // Click on the run selector
   await page.getByText("Select dynamic evaluation runs to compare...").click();
-
-  // Wait for the dropdown options to be loaded
-  await page.waitForSelector('[role="option"]');
-  await page.waitForTimeout(500);
-
+  await page.waitForTimeout(1000);
   // Check that the run selector has the correct runs
   await expect(page.getByText("aac7e7")).toBeVisible();
   await expect(page.getByText("8fddbd")).toBeVisible();

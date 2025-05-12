@@ -61,7 +61,7 @@ impl Migration for Migration0004<'_> {
         }
     }
 
-    async fn apply(&self) -> Result<(), Error> {
+    async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         // Add a column `system` to the `ModelInference` table
         let query = r#"
             ALTER TABLE ModelInference
