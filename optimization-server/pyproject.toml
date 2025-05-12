@@ -1,5 +1,5 @@
 [project]
-name = "optimizations_server"
+name = "optimization_server"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"

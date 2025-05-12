@@ -26,31 +26,19 @@ WORKDIR /app
 
 RUN pnpm install --frozen-lockfile --prod
 
-# ========== rust-sccache-env ==========
-
-FROM rust:latest AS rust-sccache-env
-ENV SCCACHE_VERSION=v0.10.0
-RUN wget https://github.com/mozilla/sccache/releases/download/${SCCACHE_VERSION}/sccache-${SCCACHE_VERSION}-x86_64-unknown-linux-musl.tar.gz && \
-    tar -xzf sccache-${SCCACHE_VERSION}-x86_64-unknown-linux-musl.tar.gz && \
-    mv sccache-${SCCACHE_VERSION}-x86_64-unknown-linux-musl/sccache /usr/local/bin/ && \
-    chmod +x /usr/local/bin/sccache && \
-    rm -rf sccache-${SCCACHE_VERSION}-x86_64-unknown-linux-musl sccache-${SCCACHE_VERSION}-x86_64-unknown-linux-musl.tar.gz
-ENV RUSTC_WRAPPER=sccache SCCACHE_DIR=/sccache
-
 # ========== minijinja-build-env ==========
 
-FROM rust-sccache-env AS minijinja-build-env
+FROM rust:latest AS minijinja-build-env
 
 COPY . /build
 
 WORKDIR /build/ui/app/utils/minijinja
 RUN curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
-RUN --mount=type=cache,id=tensorzero-evaluations-release,sharing=shared,target=/sccache \
-    wasm-pack build --features console_error_panic_hook
+RUN wasm-pack build --features console_error_panic_hook
 
 # ========== evaluations-build-env ==========
 
-FROM rust-sccache-env AS evaluations-build-env
+FROM rust:latest AS evaluations-build-env
 
 RUN apt-get update && apt-get install -y clang libc++-dev && rm -rf /var/lib/apt/lists/*
 
@@ -60,9 +48,10 @@ WORKDIR /tensorzero
 
 ARG CARGO_BUILD_FLAGS=""
 
-RUN --mount=type=cache,id=tensorzero-evaluations-release,sharing=shared,target=/sccache \
+RUN --mount=type=cache,id=tensorzero-evaluations-release,sharing=shared,target=/usr/local/cargo/registry \
+    --mount=type=cache,id=tensorzero-evaluations-release,sharing=shared,target=/usr/local/cargo/git \
+    --mount=type=cache,id=tensorzero-evaluations-release,sharing=shared,target=/sccache \
     cargo build --release -p evaluations $CARGO_BUILD_FLAGS && \
-    sccache --show-stats && \
     cp -r /tensorzero/target/release /release
 
 
@@ -80,17 +69,18 @@ WORKDIR /app
 
 RUN pnpm run build
 
-FROM rust-sccache-env AS python-build-env
+# ========== python-build-env ==========
+
+FROM rust:latest AS python-build-env
 RUN apt-get update && apt-get install -y python3
 COPY --from=ghcr.io/astral-sh/uv:0.6.6 /uv /uvx /bin/
 COPY . /build
-WORKDIR /build/optimizations-server
+WORKDIR /build/optimization-server
 # TODO - figure out how to cache the rust build here
 # UV_PYTHON_DOWNLOADS=never
 # https://hynek.me/articles/docker-uv/
 ENV UV_COMPILE_BYTECODE=1
-RUN --mount=type=cache,id=tensorzero-evaluations-release,sharing=shared,target=/sccache \
-    uv --verbose sync --locked --no-dev
+RUN uv  --verbose sync --locked --no-dev
 
 # ========== ui ==========
 
@@ -106,9 +96,9 @@ COPY ./ui/entrypoint.sh /app/entrypoint.sh
 
 RUN chmod +x /app/entrypoint.sh
 
-COPY ./optimizations-server /build/optimizations-server
+COPY ./optimization-server /build/optimization-server
 COPY --from=python-build-env /build/clients/python-pyo3 /build/clients/python-pyo3
-COPY --from=python-build-env /build/optimizations-server/.venv  /build/optimizations-server/.venv
+COPY --from=python-build-env /build/optimization-server/.venv  /build/optimization-server/.venv
 # Workaround for uv issue
 #COPY ./clients/python-pyo3 /clients/python-pyo3
 

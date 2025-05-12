@@ -16,6 +16,20 @@ export function SnippetLayout({ children }: SnippetLayoutProps) {
   );
 }
 
+// Heading component
+interface SnippetHeadingProps {
+  heading: string;
+}
+
+export function SnippetHeading({ heading }: SnippetHeadingProps) {
+  return <h3 className="px-5 pt-5 pb-2 text-lg font-medium">{heading}</h3>;
+}
+
+// Divider component
+export function SnippetDivider() {
+  return <div className="border-border h-px w-full border-t py-1" />;
+}
+
 // Content component
 interface SnippetContentProps {
   children: ReactNode;
@@ -78,11 +92,41 @@ export function SnippetContent({
 
 // Message component
 interface SnippetMessageProps {
-  children: ReactNode;
+  variant?: "default" | "input";
+  children?: ReactNode;
+  role?: string;
 }
 
-export function SnippetMessage({ children }: SnippetMessageProps) {
-  return <div className="space-y-2">{children}</div>;
+export function SnippetMessage({
+  variant = "default",
+  children,
+  role,
+}: SnippetMessageProps) {
+  // Handle input variant
+  if (variant === "input") {
+    return (
+      <div className="relative w-full">
+        <div className="bg-bg-primary flex w-full flex-col gap-1 overflow-hidden rounded-lg px-5 py-2">
+          <div className="text-sm font-medium text-purple-600 capitalize">
+            {role}
+          </div>
+          <div className="my-1 flex">
+            <div className="border-border mr-4 self-stretch border-l"></div>
+            <div className="flex flex-1 flex-col gap-4">{children}</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Default variant - simple wrapper with padding
+  return (
+    <div className="relative w-full">
+      <div className="bg-bg-primary w-full overflow-hidden rounded-lg p-5">
+        {children}
+      </div>
+    </div>
+  );
 }
 
 // Tab components

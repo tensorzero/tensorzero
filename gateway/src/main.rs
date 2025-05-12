@@ -13,6 +13,7 @@ use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::signal;
+use tower_http::trace::TraceLayer;
 
 use tensorzero_internal::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_internal::config_parser::Config;
@@ -82,7 +83,7 @@ async fn main() {
     let args = Args::parse();
     // Set up logs and metrics immediately, so that we can use `tracing`.
     // OTLP will be enabled based on the config file
-    let otel_handle = observability::setup_logs(true, args.log_format)
+    let delayed_log_config = observability::setup_observability(args.log_format)
         .await
         .expect_pretty("Failed to set up logs");
 
@@ -130,7 +131,14 @@ async fn main() {
         Arc::new(Config::default())
     };
 
-    // Note - we only enable OTLP after config file parsing/loading is complete,
+    if config.gateway.debug {
+        delayed_log_config
+            .delayed_debug_logs
+            .enable_debug()
+            .expect_pretty("Failed to enable debug logs");
+    }
+
+    // Note: We only enable OTLP after config file parsing/loading is complete,
     // so that the config file can control whether OTLP is enabled or not.
     // This means that any tracing spans created before this point will not be exported to OTLP.
     // For now, this is fine, as we only ever export spans for inference/batch/feedback requests,
@@ -142,15 +150,18 @@ async fn main() {
         if std::env::var("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT").is_err() {
             // This makes it easier to run the gateway in local development and CI
             if cfg!(feature = "e2e_tests") {
-                tracing::warn!("Running without explicit `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` env var in e2e tests mode")
+                tracing::warn!("Running without explicit `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` environment variable in e2e tests mode.");
             } else {
-                tracing::error!("[gateway.export.otlp.traces] has `enabled = true`, but env var `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` is not set. Please set it to the OTLP endpoint (e.g. `http://localhost:4317`)");
+                tracing::error!("The `gateway.export.otlp.traces.enabled` configuration option is `true`, but environment variable `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` is not set. Please set it to the OTLP endpoint (e.g. `http://localhost:4317`).");
                 std::process::exit(1);
             }
         }
-        otel_handle
+
+        delayed_log_config
+            .delayed_otel
             .enable_otel()
             .expect_pretty("Failed to enable OpenTelemetry");
+
         tracing::info!("Enabled OpenTelemetry OTLP export");
     }
 
@@ -234,6 +245,10 @@ async fn main() {
         .fallback(endpoints::fallback::handle_404)
         .layer(axum::middleware::from_fn(add_version_header))
         .layer(DefaultBodyLimit::max(100 * 1024 * 1024)) // increase the default body limit from 2MB to 100MB
+        // Note - this is intentionally *not* used by our OTEL exporter (it creates a span without any `http.` or `otel.` fields)
+        // This is only used to output request/response information to our logs
+        // OTEL exporting is done by the `OtelAxumLayer` above, which is only enabled for certain routes (and includes much more information)
+        .layer(TraceLayer::new_for_http())
         .with_state(app_state);
 
     // Bind to the socket address specified in the config, or default to 0.0.0.0:3000
@@ -256,6 +271,10 @@ async fn main() {
             std::process::exit(1);
         }
     };
+    // This will give us the chosen port if the user specified a port of 0
+    let actual_bind_address = listener
+        .local_addr()
+        .expect_pretty("Failed to get bind address from listener");
 
     let config_path_pretty = if let Some(path) = &config_path {
         format!("config file `{}`", path.to_string_lossy())
@@ -264,7 +283,7 @@ async fn main() {
     };
 
     tracing::info!(
-        "TensorZero Gateway is listening on {bind_address} with {config_path_pretty} and observability {observability_enabled_pretty}.",
+        "TensorZero Gateway is listening on {actual_bind_address} with {config_path_pretty} and observability {observability_enabled_pretty}.",
     );
 
     axum::serve(listener, router)

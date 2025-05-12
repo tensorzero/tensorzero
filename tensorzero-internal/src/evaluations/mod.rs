@@ -73,7 +73,7 @@ pub struct ExactMatchConfig {
     pub cutoff: Option<f32>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize)]
 pub struct LLMJudgeConfig {
     pub input_format: LLMJudgeInputFormat,
     pub output_type: LLMJudgeOutputType,

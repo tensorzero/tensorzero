@@ -6,9 +6,9 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from tensorzero import AsyncTensorZeroGateway
 
-from optimizations_server.sft.common import FineTuningRequest
-from optimizations_server.sft.fireworks_sft import FireworksSFTJob
-from optimizations_server.sft.openai_sft import BaseSFTJob, OpenAISFTJob
+from optimization_server.sft.common import FineTuningRequest
+from optimization_server.sft.fireworks_sft import FireworksSFTJob
+from optimization_server.sft.openai_sft import BaseSFTJob, OpenAISFTJob
 
 logging.basicConfig(
     format="%(asctime)s.%(msecs)03dZ  %(levelname)-5s %(name)s: %(message)s",
