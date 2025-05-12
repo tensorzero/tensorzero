@@ -213,8 +213,6 @@ fn contains_bad_scheme_err(e: &impl StdError) -> bool {
 pub struct UninitializedGatewayConfig {
     pub bind_address: Option<std::net::SocketAddr>,
     #[serde(default)]
-    pub disable_observability: bool,
-    #[serde(default)]
     pub observability: ObservabilityConfig,
     #[serde(default)]
     pub debug: bool,
@@ -227,26 +225,9 @@ pub struct UninitializedGatewayConfig {
 impl TryFrom<UninitializedGatewayConfig> for GatewayConfig {
     type Error = Error;
     fn try_from(config: UninitializedGatewayConfig) -> Result<Self, Self::Error> {
-        let enabled = match (config.disable_observability, config.observability.enabled) {
-            (true, Some(_)) => {
-                return Err(Error::new(ErrorDetails::Config {
-                    message: "Configuration flag `gateway.disable_observability` and `gateway.observability.enabled` are mutually exclusive. We are deprecating `gateway.disable_observability` in favor of `gateway.observability.enabled`. See https://github.com/tensorzero/tensorzero/issues/797 on GitHub for details.".to_string(),
-                }));
-            }
-            (true, None) => {
-                tracing::warn!("Deprecation Warning: The configuration flag `gateway.disable_observability` is deprecated in favor of `gateway.observability.enabled`. See https://github.com/tensorzero/tensorzero/issues/797 on GitHub for details.");
-                Some(false)
-            }
-            (false, Some(enabled)) => Some(enabled),
-            (false, None) => None,
-        };
-
         Ok(Self {
             bind_address: config.bind_address,
-            observability: ObservabilityConfig {
-                enabled,
-                async_writes: config.observability.async_writes,
-            },
+            observability: config.observability,
             export: config.export,
             debug: config.debug,
             enable_template_filesystem_access: config.enable_template_filesystem_access,
