@@ -153,14 +153,14 @@ impl Migration for Migration0028<'_> {
                 chat_inference AS (
                     SELECT function_name, variant_name, episode_id, id, output FROM ChatInference
                     WHERE (function_name, variant_name, episode_id) IN (
-                        SELECT function_name, variant_name, episode_id 
+                        SELECT function_name, variant_name, episode_id
                         FROM inference_by_id
                     )
                 ),
                 json_inference AS (
                     SELECT function_name, variant_name, episode_id, id, output FROM JsonInference
                     WHERE (function_name, variant_name, episode_id) IN (
-                        SELECT function_name, variant_name, episode_id 
+                        SELECT function_name, variant_name, episode_id
                         FROM inference_by_id
                     )
                 )
@@ -226,14 +226,14 @@ impl Migration for Migration0028<'_> {
                 chat_inference AS (
                     SELECT function_name, variant_name, episode_id, id, output FROM ChatInference
                     WHERE (function_name, variant_name, episode_id) IN (
-                        SELECT function_name, variant_name, episode_id 
+                        SELECT function_name, variant_name, episode_id
                         FROM inference_by_id
                     )
                 ),
                 json_inference AS (
                     SELECT function_name, variant_name, episode_id, id, output FROM JsonInference
                     WHERE (function_name, variant_name, episode_id) IN (
-                        SELECT function_name, variant_name, episode_id 
+                        SELECT function_name, variant_name, episode_id
                         FROM inference_by_id
                     )
                 )
@@ -330,14 +330,14 @@ impl Migration for Migration0028<'_> {
                 chat_inference AS (
                     SELECT function_name, variant_name, episode_id, id, output FROM ChatInference
                     WHERE (function_name, variant_name, episode_id) IN (
-                        SELECT function_name, variant_name, episode_id 
+                        SELECT function_name, variant_name, episode_id
                         FROM inference_by_id
                     )
                 ),
                 json_inference AS (
                     SELECT function_name, variant_name, episode_id, id, output FROM JsonInference
                     WHERE (function_name, variant_name, episode_id) IN (
-                        SELECT function_name, variant_name, episode_id 
+                        SELECT function_name, variant_name, episode_id
                         FROM inference_by_id
                     )
                 )
@@ -377,8 +377,8 @@ impl Migration for Migration0028<'_> {
 
     fn rollback_instructions(&self) -> String {
         r#"
-        DROP MATERIALIZED VIEW IF EXISTS StaticEvaluationFloatHumanFeedbackView;
-        DROP MATERIALIZED VIEW IF EXISTS StaticEvaluationBooleanHumanFeedbackView;
+        DROP VIEW IF EXISTS StaticEvaluationFloatHumanFeedbackView;
+        DROP VIEW IF EXISTS StaticEvaluationBooleanHumanFeedbackView;
         DROP TABLE IF EXISTS StaticEvaluationHumanFeedback;
         "#
         .to_string()
