@@ -6,7 +6,7 @@ from typing import Any, List, Tuple
 from minijinja import Environment, TemplateError
 from pydantic import BaseModel, Field
 from tensorzero import System
-from tensorzero.internal_optimizations_server_types import Sample
+from tensorzero.internal_optimization_server_types import Sample
 from typing_extensions import TypedDict
 
 

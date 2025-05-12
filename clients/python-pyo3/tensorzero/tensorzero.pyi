@@ -14,7 +14,7 @@ from uuid import UUID
 
 import uuid_utils
 
-import tensorzero.internal_optimizations_server_types as iost
+import tensorzero.internal_optimization_server_types as iost
 from tensorzero import (
     ChatInferenceDatapointInput,
     DynamicEvaluationRunEpisodeResponse,
