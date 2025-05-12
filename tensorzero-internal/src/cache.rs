@@ -364,6 +364,11 @@ pub async fn cache_lookup(
         max_age_s,
     )
     .await?;
+    if result.is_none() {
+        #[expect(clippy::unwrap_used)]
+        let pretty_request = serde_json::to_string_pretty(request.request).unwrap();
+        println!("Cache miss for request: {pretty_request}");
+    }
     Ok(result.map(|result| {
         ModelInferenceResponse::from_cache(result, request.request, request.provider_name)
     }))
@@ -380,11 +385,6 @@ pub async fn cache_lookup_streaming(
         max_age_s,
     )
     .await?;
-    if result.is_none() {
-        #[expect(clippy::unwrap_used)]
-        let pretty_request = serde_json::to_string_pretty(request.request).unwrap();
-        println!("Cache miss for request: {pretty_request}");
-    }
     Ok(result.map(|result| StreamResponse::from_cache(result, Arc::from(request.provider_name))))
 }
 
