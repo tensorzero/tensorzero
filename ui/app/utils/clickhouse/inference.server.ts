@@ -480,6 +480,7 @@ async function parseInferenceRow(
 ): Promise<ParsedInferenceRow> {
   const input = inputSchema.parse(JSON.parse(row.input));
   const resolvedInput = await resolveInput(input);
+  const extra_body = row.extra_body ? JSON.parse(row.extra_body) : undefined;
   if (row.function_type === "chat") {
     return {
       ...row,
@@ -494,6 +495,7 @@ async function parseInferenceRow(
           : z
               .record(z.string(), z.unknown())
               .parse(JSON.parse(row.tool_params)),
+      extra_body,
     };
   } else {
     return {
@@ -506,6 +508,7 @@ async function parseInferenceRow(
       output_schema: z
         .record(z.string(), z.unknown())
         .parse(JSON.parse(row.output_schema)),
+      extra_body,
     };
   }
 }
