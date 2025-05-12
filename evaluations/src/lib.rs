@@ -171,6 +171,13 @@ pub async fn run_evaluation(
                 })
                 .await?,
             );
+            #[expect(clippy::unwrap_used)]
+            let string_input = serde_json::to_string_pretty(&input).unwrap();
+            if string_input.contains("Mauricio") {
+                #[expect(clippy::unwrap_used)]
+                let pretty_input = serde_json::to_string_pretty(&input).unwrap();
+                println!("input: {pretty_input}");
+            }
 
             let evaluation_result = evaluate_inference(
                 EvaluateInferenceParams {
