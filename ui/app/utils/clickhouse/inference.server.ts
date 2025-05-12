@@ -523,7 +523,7 @@ export async function queryInferenceById(
             function_name,
             variant_name,
             episode_id,
-            function_type
+            function_type,
         FROM InferenceById FINAL
         WHERE id_uint = toUInt128({id:UUID})
         LIMIT 1
@@ -541,7 +541,8 @@ export async function queryInferenceById(
         NULL AS output_schema, -- Placeholder for JSON column
         formatDateTime(c.timestamp, '%Y-%m-%dT%H:%i:%SZ') AS timestamp,
         c.tags,
-        'chat' AS function_type
+        'chat' AS function_type,
+        c.extra_body
     FROM ChatInference c
     WHERE
         'chat' = (SELECT function_type FROM inference)
@@ -565,7 +566,8 @@ export async function queryInferenceById(
         j.output_schema,
         formatDateTime(j.timestamp, '%Y-%m-%dT%H:%i:%SZ') AS timestamp,
         j.tags,
-        'json' AS function_type
+        'json' AS function_type,
+        j.extra_body
     FROM JsonInference j
     WHERE
         'json' = (SELECT function_type FROM inference)

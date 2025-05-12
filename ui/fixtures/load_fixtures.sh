@@ -15,8 +15,8 @@ clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --
 clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database tensorzero_ui_fixtures --query "INSERT INTO DynamicEvaluationRunEpisode FORMAT JSONEachRow" < dynamic_evaluation_run_episode_examples.jsonl
 
 uv run ./download-fixtures.py
-clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database tensorzero_ui_fixtures --query "INSERT INTO ChatInference FROM INFILE './s3-fixtures/large_chat_inference.parquet' FORMAT Parquet"
-clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database tensorzero_ui_fixtures --query "INSERT INTO ModelInference FROM INFILE './s3-fixtures/large_model_inference.parquet' FORMAT Parquet"
+# clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database tensorzero_ui_fixtures --query "INSERT INTO ChatInference FROM INFILE './s3-fixtures/large_chat_inference.parquet' FORMAT Parquet"
+# clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database tensorzero_ui_fixtures --query "INSERT INTO ModelInference FROM INFILE './s3-fixtures/large_model_inference.parquet' FORMAT Parquet"
 
 # Give ClickHouse some time to make the writes visible
 sleep 2
