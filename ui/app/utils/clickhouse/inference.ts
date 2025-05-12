@@ -9,6 +9,31 @@ import {
   type ContentBlockOutput,
   type JsonInferenceOutput,
 } from "./common";
+import { JSONValueSchema } from "../tensorzero";
+
+export const providerInferenceExtraBodySchema = z.object({
+  model_provider_name: z.string(),
+  pointer: z.string(),
+  value: JSONValueSchema,
+});
+export type ProviderInferenceExtraBody = z.infer<
+  typeof providerInferenceExtraBodySchema
+>;
+
+export const variantInferenceExtraBodySchema = z.object({
+  variant_name: z.string(),
+  pointer: z.string(),
+  value: JSONValueSchema,
+});
+export type VariantInferenceExtraBody = z.infer<
+  typeof variantInferenceExtraBodySchema
+>;
+
+export const inferenceExtraBodySchema = z.union([
+  providerInferenceExtraBodySchema,
+  variantInferenceExtraBodySchema,
+]);
+export type InferenceExtraBody = z.infer<typeof inferenceExtraBodySchema>;
 
 export const inferenceByIdRowSchema = z
   .object({
@@ -46,6 +71,7 @@ export const chatInferenceRowSchema = z.object({
   inference_params: z.string(),
   processing_time_ms: z.number(),
   timestamp: z.string().datetime(),
+  extra_body: z.string().nullable(),
   tags: z.record(z.string(), z.string()).default({}),
 });
 
@@ -62,6 +88,7 @@ export const jsonInferenceRowSchema = z.object({
   inference_params: z.string(),
   processing_time_ms: z.number(),
   timestamp: z.string().datetime(),
+  extra_body: z.string().nullable(),
   tags: z.record(z.string(), z.string()).default({}),
 });
 
@@ -84,12 +111,14 @@ export const parsedChatInferenceRowSchema = chatInferenceRowSchema
     output: true,
     inference_params: true,
     tool_params: true,
+    extra_body: true,
   })
   .extend({
     input: inputSchema,
     output: z.array(contentBlockOutputSchema),
     inference_params: z.record(z.string(), z.unknown()),
     tool_params: z.record(z.string(), z.unknown()),
+    extra_body: inferenceExtraBodySchema.nullable(),
   });
 
 export type ParsedChatInferenceRow = z.infer<
@@ -102,12 +131,14 @@ export const parsedJsonInferenceRowSchema = jsonInferenceRowSchema
     output: true,
     inference_params: true,
     output_schema: true,
+    extra_body: true,
   })
   .extend({
     input: inputSchema,
     output: jsonInferenceOutputSchema,
     inference_params: z.record(z.string(), z.unknown()),
     output_schema: z.record(z.string(), z.unknown()),
+    extra_body: inferenceExtraBodySchema.nullable(),
   });
 
 export type ParsedJsonInferenceRow = z.infer<
