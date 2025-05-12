@@ -274,8 +274,8 @@ impl Migration for Migration0021<'_> {
     fn rollback_instructions(&self) -> String {
         "\
         -- Drop the materialized views\n\
-        DROP MATERIALIZED VIEW IF EXISTS TagChatInferenceView;\n\
-        DROP MATERIALIZED VIEW IF EXISTS TagJsonInferenceView;\n\
+        DROP VIEW IF EXISTS TagChatInferenceView;\n\
+        DROP VIEW IF EXISTS TagJsonInferenceView;\n\
         \n
         -- Drop the `TagInference` table\n\
         DROP TABLE IF EXISTS TagInference;
