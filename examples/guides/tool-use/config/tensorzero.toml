@@ -1,0 +1,20 @@
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                 FUNCTIONS                                  │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[functions.weather_chatbot]
+type = "chat"
+tools = ["get_temperature"]
+
+[functions.weather_chatbot.variants.baseline]
+type = "chat_completion"
+model = "openai::gpt-4o-mini"
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                  TOOLS                                     │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[tools.get_temperature]
+description = "Get the current temperature for a given location."
+parameters = "tools/get_temperature.json"
+strict = true

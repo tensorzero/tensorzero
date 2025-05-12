@@ -1,4 +1,7 @@
-import type { ParsedInferenceRow } from "~/utils/clickhouse/inference";
+import type {
+  ParsedInferenceRow,
+  ParsedModelInferenceRow,
+} from "~/utils/clickhouse/inference";
 import { useConfig } from "~/context/config";
 import type { InferenceUsage } from "~/utils/clickhouse/helpers";
 import {
@@ -8,7 +11,13 @@ import {
   BasicInfoItemContent,
 } from "~/components/layout/BasicInfoLayout";
 import Chip from "~/components/ui/Chip";
-import { Timer, Calendar, Input, Output } from "~/components/icons/Icons";
+import {
+  Timer,
+  Calendar,
+  Input,
+  Output,
+  Cached,
+} from "~/components/icons/Icons";
 import { formatDateWithSeconds, getTimestampTooltipData } from "~/utils/date";
 import { getFunctionTypeIcon } from "~/utils/icon";
 
@@ -29,11 +38,13 @@ const createTimestampTooltip = (timestamp: string | number | Date) => {
 interface BasicInfoProps {
   inference: ParsedInferenceRow;
   inferenceUsage?: InferenceUsage;
+  modelInferences?: ParsedModelInferenceRow[];
 }
 
 export default function BasicInfo({
   inference,
   inferenceUsage,
+  modelInferences = [],
 }: BasicInfoProps) {
   const config = useConfig();
   const variantType =
@@ -45,6 +56,16 @@ export default function BasicInfo({
 
   // Get function icon and background
   const functionIconConfig = getFunctionTypeIcon(inference.function_type);
+
+  // Determine cache status from model inferences
+  const hasCachedInferences = modelInferences.some((mi) => mi.cached);
+  const allCached =
+    modelInferences.length > 0 && modelInferences.every((mi) => mi.cached);
+  const cacheStatus = allCached
+    ? "FULL"
+    : hasCachedInferences
+      ? "PARTIAL"
+      : "NONE";
 
   return (
     <BasicInfoLayout>
@@ -88,7 +109,6 @@ export default function BasicInfo({
       <BasicInfoItem>
         <BasicInfoItemTitle>Usage</BasicInfoItemTitle>
         <BasicInfoItemContent>
-          <div className="flex flex-row gap-1">
             <Chip
               icon={<Input className="text-fg-tertiary" />}
               label={`${inferenceUsage?.input_tokens ?? ""} tok`}
@@ -104,7 +124,17 @@ export default function BasicInfo({
               label={`${inference.processing_time_ms} ms`}
               tooltip="Processing Time"
             />
-          </div>
+            {(cacheStatus === "FULL" || cacheStatus === "PARTIAL") && (
+              <Chip
+                icon={<Cached className="text-fg-tertiary" />}
+                label={cacheStatus === "FULL" ? "Cached" : "Partially Cached"}
+                tooltip={
+                  cacheStatus === "FULL"
+                    ? "All model inferences were cached by TensorZero"
+                    : "Some model inferences were cached by TensorZero"
+                }
+              />
+            )}
         </BasicInfoItemContent>
       </BasicInfoItem>
 

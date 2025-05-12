@@ -1415,7 +1415,7 @@ dependencies = [
 
 [[package]]
 name = "evaluations"
-version = "2025.5.0"
+version = "2025.5.2"
 dependencies = [
  "anyhow",
  "clap",
@@ -1615,15 +1615,18 @@ dependencies = [
 
 [[package]]
 name = "gateway"
-version = "2025.5.0"
+version = "2025.5.2"
 dependencies = [
  "axum",
  "axum-tracing-opentelemetry",
  "clap",
  "mimalloc",
+ "reqwest",
  "serde",
+ "tempfile",
  "tensorzero-internal",
  "tokio",
+ "tower-http",
  "tracing",
  "tracing-opentelemetry-instrumentation-sdk",
  "tracing-subscriber",
@@ -1695,8 +1698,6 @@ dependencies = [
  "libc",
  "libgit2-sys",
  "log",
- "openssl-probe",
- "openssl-sys",
  "url",
 ]
 
@@ -2330,9 +2331,7 @@ checksum = "e1dcb20f84ffcdd825c7a311ae347cce604a6f084a767dec4a4929829645290e"
 dependencies = [
  "cc",
  "libc",
- "libssh2-sys",
  "libz-sys",
- "openssl-sys",
  "pkg-config",
 ]
 
@@ -2354,20 +2353,6 @@ checksum = "ec9d6fac27761dabcd4ee73571cdb06b7022dc99089acbe5435691edffaac0f4"
 dependencies = [
  "cc",
  "libc",
-]
-
-[[package]]
-name = "libssh2-sys"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "220e4f05ad4a218192533b300327f5150e809b54c4ec83b5a1d91833601811b9"
-dependencies = [
- "cc",
- "libc",
- "libz-sys",
- "openssl-sys",
- "pkg-config",
- "vcpkg",
 ]
 
 [[package]]
@@ -2579,7 +2564,7 @@ dependencies = [
 
 [[package]]
 name = "minijinja-bindings"
-version = "2025.5.0"
+version = "2025.5.2"
 dependencies = [
  "console_error_panic_hook",
  "minijinja",
@@ -2841,18 +2826,6 @@ name = "openssl-probe"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d05e27ee213611ffe7d6348b942e8f942b37114c00cc03cec254295a4a17852e"
-
-[[package]]
-name = "openssl-sys"
-version = "0.9.107"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8288979acd84749c744a9014b4382d42b8f7b2592847b5afb2ed29e5d16ede07"
-dependencies = [
- "cc",
- "libc",
- "pkg-config",
- "vcpkg",
-]
 
 [[package]]
 name = "opentelemetry"
@@ -4170,7 +4143,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-internal"
-version = "2025.5.0"
+version = "2025.5.2"
 dependencies = [
  "async-stream",
  "async-trait",
@@ -4240,7 +4213,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-python"
-version = "2025.5.0"
+version = "2025.5.2"
 dependencies = [
  "futures",
  "pyo3",
