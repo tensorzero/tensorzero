@@ -32,7 +32,7 @@ import httpx
 from minijinja import Environment
 from pydantic import BaseModel, ConfigDict
 from tensorzero import AsyncTensorZeroGateway
-from tensorzero.internal_optimizations_server_types import Sample
+from tensorzero.internal_optimization_server_types import Sample
 from typing_extensions import TypedDict
 from uuid_utils import uuid7
 
