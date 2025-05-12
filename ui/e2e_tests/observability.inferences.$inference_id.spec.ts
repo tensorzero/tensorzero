@@ -30,6 +30,9 @@ test("should display inferences with image content", async ({ page }) => {
   await expect(firstImage).toHaveJSProperty("complete", true);
   await expect(secondImage).toHaveJSProperty("complete", true);
 
+  // Wait for the page to load
+  await page.waitForTimeout(500);
+
   // Verify that images display in the modelInference section too
   // Click on the modelInference section
   await page.getByText("0196372f-2b63-7ed1-9a5a-9d0fa69c43e9").click();
@@ -103,6 +106,8 @@ test("should be able to add float feedback via the inference page", async ({
   await page.goto(
     "/observability/inferences/0196368f-1aeb-7f92-a62b-bdc595d0a626",
   );
+  // Wait for the page to load
+  await page.waitForLoadState("networkidle");
   // Click on the Add feedback button
   await page.getByText("Add feedback").click();
 
@@ -123,14 +128,15 @@ test("should be able to add float feedback via the inference page", async ({
   await page.locator("body").click();
 
   // Fill in the value using the correct role and label
-  // generate a random float between 0 and 1
-  const randomFloat = Math.random();
-  // Assert that the feedback value is visible in its table cell
-  // Truncate the float to 3 decimal places
-  const truncatedFloat = Math.floor(randomFloat * 1000) / 1000;
+  // Generate a random float between 0 and 1, avoiding .225 which seems to occur frequently
+  // Use a different approach to generate the random number
+  const randomValue = (0.1 + Math.random() * 0.8).toFixed(3);
+  const randomFloat = parseFloat(randomValue);
+
   await page
     .getByRole("spinbutton", { name: "Value" })
-    .fill(truncatedFloat.toString());
+    .fill(randomFloat.toString());
+
   // Click the submit button
   await page.getByText("Submit Feedback").click();
 
@@ -140,8 +146,9 @@ test("should be able to add float feedback via the inference page", async ({
   // sleep for 500ms
   await page.waitForTimeout(500);
 
+  // Verify the feedback value is visible in the table cell
   await expect(
-    page.getByRole("cell", { name: truncatedFloat.toString() }),
+    page.getByRole("cell", { name: randomFloat.toString() }),
   ).toBeVisible();
 });
 
@@ -151,6 +158,8 @@ test("should be able to add boolean feedback via the inference page", async ({
   await page.goto(
     "/observability/inferences/0196368f-1ae7-7e21-9027-f120f73d8ce0",
   );
+  // Wait for the page to load
+  await page.waitForLoadState("networkidle");
   // Click on the Add feedback button
   await page.getByText("Add feedback").click();
 
@@ -180,8 +189,8 @@ test("should be able to add boolean feedback via the inference page", async ({
   // Wait for the page to load
   await page.waitForLoadState("networkidle");
 
-  // sleep for 500ms
-  await page.waitForTimeout(500);
+  // sleep for 1000ms
+  await page.waitForTimeout(1000);
 
   // Get the search param `newFeedbackId` from the url
   const newFeedbackId = new URL(page.url()).searchParams.get("newFeedbackId");

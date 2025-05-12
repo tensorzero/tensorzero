@@ -42,7 +42,6 @@ export default function BasicInfo({
   const filteredTags = Object.entries(dynamicEvaluationRun.tags).filter(
     ([k]) => !k.startsWith("tensorzero::"),
   );
-  console.log(filteredTags);
 
   const commitHash = dynamicEvaluationRun.tags["tensorzero::git_commit_hash"];
 
@@ -111,7 +110,7 @@ export default function BasicInfo({
           <BasicInfoItemContent>
             <div className="flex flex-wrap gap-1">
               {filteredTags.map(([k, v]) => (
-                <KVChip k={k} v={v} />
+                <KVChip key={k} k={k} v={v} />
               ))}
             </div>
           </BasicInfoItemContent>

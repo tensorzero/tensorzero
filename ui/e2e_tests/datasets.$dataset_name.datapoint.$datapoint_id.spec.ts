@@ -12,9 +12,9 @@ test("should show the datapoint detail page", async ({ page }) => {
 });
 
 test("should be able to edit and save a datapoint", async ({ page }) => {
-  await page.goto(
-    "/datasets/foo/datapoint/0193514c-ec40-7911-ad63-460bb9c861e1",
-  );
+  await page.goto("/datasets/foo");
+  // Click on the first element of the ID column
+  await page.locator("table tbody tr:first-child td:first-child").click();
   // Wait for the page to load
   await page.waitForLoadState("networkidle");
   await expect(page.getByText("Input")).toBeVisible();
