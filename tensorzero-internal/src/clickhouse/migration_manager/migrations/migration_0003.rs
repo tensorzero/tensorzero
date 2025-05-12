@@ -239,10 +239,10 @@ impl Migration for Migration0003<'_> {
     fn rollback_instructions(&self) -> String {
         "\
             -- Drop the materialized views\n\
-            DROP MATERIALIZED VIEW IF EXISTS BooleanMetricFeedbackTagView;\n\
-            DROP MATERIALIZED VIEW IF EXISTS CommentFeedbackTagView;\n\
-            DROP MATERIALIZED VIEW IF EXISTS DemonstrationFeedbackTagView;\n\
-            DROP MATERIALIZED VIEW IF EXISTS FloatMetricFeedbackTagView;\n\
+            DROP VIEW IF EXISTS BooleanMetricFeedbackTagView;\n\
+            DROP VIEW IF EXISTS CommentFeedbackTagView;\n\
+            DROP VIEW IF EXISTS DemonstrationFeedbackTagView;\n\
+            DROP VIEW IF EXISTS FloatMetricFeedbackTagView;\n\
             \n\
             -- Drop the table\n\
             DROP TABLE IF EXISTS FeedbackTag;\n\
