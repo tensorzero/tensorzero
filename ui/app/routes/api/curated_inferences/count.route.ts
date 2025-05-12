@@ -4,7 +4,7 @@ import {
   countCuratedInferences,
   countFeedbacksForMetric,
 } from "~/utils/clickhouse/curation.server";
-import { countInferencesForFunction } from "~/utils/clickhouse/inference";
+import { countInferencesForFunction } from "~/utils/clickhouse/inference.server";
 import { getConfig } from "~/utils/config/index.server";
 
 /// Count the number of inferences, feedbacks, and curated inferences for a given function and metric

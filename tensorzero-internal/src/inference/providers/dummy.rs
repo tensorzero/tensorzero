@@ -120,6 +120,7 @@ lazy_static! {
 }
 pub static DUMMY_JSON_RESPONSE_RAW: &str = r#"{"answer":"Hello"}"#;
 pub static DUMMY_JSON_GOODBYE_RESPONSE_RAW: &str = r#"{"answer":"Goodbye"}"#;
+pub static DUMMY_JSON_RESPONSE_RAW_DIFF_SCHEMA: &str = r#"{"response":"Hello"}"#;
 pub static DUMMY_JSON_COT_RESPONSE_RAW: &str =
     r#"{"thinking":"hmmm", "response": {"answer":"tokyo!"}}"#;
 pub static DUMMY_INFER_USAGE: Usage = Usage {
@@ -265,6 +266,7 @@ impl InferenceProvider for DummyProvider {
             "json" => vec![DUMMY_JSON_RESPONSE_RAW.to_string().into()],
             "json_goodbye" => vec![DUMMY_JSON_GOODBYE_RESPONSE_RAW.to_string().into()],
             "json_cot" => vec![DUMMY_JSON_COT_RESPONSE_RAW.to_string().into()],
+            "json_diff_schema" => vec![DUMMY_JSON_RESPONSE_RAW_DIFF_SCHEMA.to_string().into()],
             "json_beatles_1" => vec![r#"{"names":["John", "George"]}"#.to_string().into()],
             "json_beatles_2" => vec![r#"{"names":["Paul", "Ringo"]}"#.to_string().into()],
             "best_of_n_0" => {
