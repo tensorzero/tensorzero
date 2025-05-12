@@ -1,5 +1,6 @@
 import {
   type ContentBlockOutput,
+  CountSchema,
   type JsonInferenceOutput,
   modelInferenceInputMessageSchema,
   type TableBounds,
@@ -18,6 +19,7 @@ import {
   episodeByIdSchema,
   inferenceByIdRowSchema,
   modelInferenceRowSchema,
+  parsedModelInferenceRowSchema,
   parseInferenceOutput,
   type EpisodeByIdRow,
   type InferenceByIdRow,
@@ -443,7 +445,8 @@ export async function countInferencesForFunction(
     query_params: { function_name },
   });
   const rows = await resultSet.json<{ count: number }>();
-  return rows[0].count;
+  const parsedRows = CountSchema.parse(rows);
+  return parsedRows.count;
 }
 
 export async function countInferencesForVariant(
@@ -459,20 +462,22 @@ export async function countInferencesForVariant(
     query_params: { function_name, variant_name },
   });
   const rows = await resultSet.json<{ count: number }>();
-  return rows[0].count;
+  const parsedRows = CountSchema.parse(rows);
+  return parsedRows.count;
 }
 
 export async function countInferencesForEpisode(
   episode_id: string,
 ): Promise<number> {
-  const query = `SELECT COUNT() AS count FROM InferenceByEpisodeId FINAL WHERE episode_id_uint = toUInt128(toUUID({episode_id:String}))`;
+  const query = `SELECT toUInt32(COUNT()) AS count FROM InferenceByEpisodeId FINAL WHERE episode_id_uint = toUInt128(toUUID({episode_id:String}))`;
   const resultSet = await clickhouseClient.query({
     query,
     format: "JSONEachRow",
     query_params: { episode_id },
   });
   const rows = await resultSet.json<{ count: string }>();
-  return Number(rows[0].count);
+  const parsedRows = CountSchema.parse(rows);
+  return parsedRows.count;
 }
 
 async function parseInferenceRow(
@@ -591,11 +596,12 @@ async function parseModelInferenceRow(
     .array(modelInferenceInputMessageSchema)
     .parse(JSON.parse(row.input_messages));
   const resolvedMessages = await resolveModelInferenceMessages(parsedMessages);
-  return {
+  const processedRow = {
     ...row,
     input_messages: resolvedMessages,
     output: z.array(contentBlockSchema).parse(JSON.parse(row.output)),
   };
+  return parsedModelInferenceRowSchema.parse(processedRow);
 }
 
 export async function queryModelInferencesByInferenceId(
@@ -661,5 +667,6 @@ export async function countEpisodes(): Promise<number> {
     format: "JSONEachRow",
   });
   const rows = await resultSet.json<{ count: string }>();
-  return Number(rows[0].count);
+  const parsedRows = CountSchema.parse(rows);
+  return parsedRows.count;
 }

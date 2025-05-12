@@ -1,4 +1,5 @@
 import { clickhouseClient } from "./client.server";
+import { CountSchema } from "./common";
 import {
   dynamicEvaluationProjectSchema,
   dynamicEvaluationRunEpisodeWithFeedbackSchema,
@@ -91,7 +92,8 @@ export async function countDynamicEvaluationRuns(): Promise<number> {
   `;
   const result = await clickhouseClient.query({ query, format: "JSONEachRow" });
   const rows = await result.json<{ count: number }>();
-  return rows[0].count;
+  const parsedRows = CountSchema.parse(rows);
+  return parsedRows.count;
 }
 
 /**
@@ -307,7 +309,8 @@ export async function countDynamicEvaluationProjects(): Promise<number> {
 `;
   const result = await clickhouseClient.query({ query, format: "JSONEachRow" });
   const rows = await result.json<{ count: number }>();
-  return rows[0].count;
+  const parsedRows = CountSchema.parse(rows);
+  return parsedRows.count;
 }
 
 export async function searchDynamicEvaluationRuns(
@@ -532,5 +535,6 @@ export async function countDynamicEvaluationRunEpisodesByTaskName(
     query_params: { runIds },
   });
   const rows = await result.json<{ count: number }>();
-  return rows[0].count;
+  const parsedRows = CountSchema.parse(rows);
+  return parsedRows.count;
 }

@@ -1,4 +1,4 @@
-import { type TableBounds, TableBoundsSchema } from "./common";
+import { CountSchema, type TableBounds, TableBoundsSchema } from "./common";
 import { data } from "react-router";
 import { clickhouseClient } from "./client.server";
 import { z } from "zod";
@@ -156,7 +156,8 @@ export async function countBooleanMetricFeedbackByTargetId(
     query_params: { target_id },
   });
   const rows = await resultSet.json<{ count: string }>();
-  return Number(rows[0].count);
+  const parsedRows = CountSchema.parse(rows);
+  return parsedRows.count;
 }
 
 export const commentFeedbackRowSchema = z.object({
@@ -305,7 +306,8 @@ export async function countCommentFeedbackByTargetId(
     query_params: { target_id },
   });
   const rows = await resultSet.json<{ count: string }>();
-  return Number(rows[0].count);
+  const parsedRows = CountSchema.parse(rows);
+  return parsedRows.count;
 }
 
 export const demonstrationFeedbackRowSchema = z.object({
@@ -453,7 +455,8 @@ export async function countDemonstrationFeedbackByInferenceId(
     query_params: { inference_id },
   });
   const rows = await resultSet.json<{ count: string }>();
-  return Number(rows[0].count);
+  const parsedRows = CountSchema.parse(rows);
+  return parsedRows.count;
 }
 
 export const floatMetricFeedbackRowSchema = z
@@ -611,7 +614,8 @@ export async function countFloatMetricFeedbackByTargetId(
     query_params: { target_id },
   });
   const rows = await resultSet.json<{ count: string }>();
-  return Number(rows[0].count);
+  const parsedRows = CountSchema.parse(rows);
+  return parsedRows.count;
 }
 export const feedbackRowSchema = z.discriminatedUnion("type", [
   booleanMetricFeedbackRowSchema,
