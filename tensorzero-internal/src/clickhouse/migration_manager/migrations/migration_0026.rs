@@ -138,8 +138,8 @@ impl Migration for Migration0026<'_> {
     fn rollback_instructions(&self) -> String {
         "\
         -- Drop the materialized views\n\
-        DROP MATERIALIZED VIEW IF EXISTS DynamicEvaluationRunEpisodeByRunIdView;\n\
-        DROP MATERIALIZED VIEW IF EXISTS DynamicEvaluationRunByProjectNameView;\n\
+        DROP VIEW IF EXISTS DynamicEvaluationRunEpisodeByRunIdView;\n\
+        DROP VIEW IF EXISTS DynamicEvaluationRunByProjectNameView;\n\
         -- Drop the tables\n\
         DROP TABLE IF EXISTS DynamicEvaluationRunEpisodeByRunId;\n\
         DROP TABLE IF EXISTS DynamicEvaluationRunByProjectName;
