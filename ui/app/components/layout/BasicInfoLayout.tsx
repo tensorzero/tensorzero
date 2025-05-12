@@ -13,7 +13,7 @@ interface BasicInfoItemProps {
 }
 
 export function BasicInfoItem({ children }: BasicInfoItemProps) {
-  return <div className="flex flex-col md:flex-row gap-0.5">{children}</div>;
+  return <div className="flex flex-col gap-0.5 md:flex-row">{children}</div>;
 }
 
 interface BasicInfoItemTitleProps {
@@ -22,7 +22,7 @@ interface BasicInfoItemTitleProps {
 
 export function BasicInfoItemTitle({ children }: BasicInfoItemTitleProps) {
   return (
-    <div className="text-fg-secondary w-full md:w-32 flex-shrink-0 md:py-1 text-left text-sm">
+    <div className="text-fg-secondary w-full flex-shrink-0 text-left text-sm md:w-32 md:py-1">
       {children}
     </div>
   );

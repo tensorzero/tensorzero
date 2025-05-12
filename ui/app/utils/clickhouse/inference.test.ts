@@ -15,8 +15,8 @@ import {
   queryInferenceTableBoundsByFunctionName,
   queryInferenceTableBoundsByVariantName,
   queryModelInferencesByInferenceId,
-} from "./inference";
-import { countInferencesForFunction } from "./inference";
+} from "./inference.server";
+import { countInferencesForFunction } from "./inference.server";
 import type {
   ContentBlockOutput,
   JsonInferenceOutput,

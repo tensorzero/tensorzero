@@ -1,5 +1,5 @@
 import type { ParsedModelInferenceRow } from "~/utils/clickhouse/inference";
-import ModelInput from "~/components/model/ModelInput";
+import InputSnippet from "~/components/inference/InputSnippet";
 import {
   BasicInfoLayout,
   BasicInfoItem,
@@ -13,12 +13,19 @@ import {
   SectionHeader,
   SectionsGroup,
 } from "~/components/layout/PageLayout";
-import { Timer, Input, Output, Calendar, Cached } from "~/components/icons/Icons";
+import {
+  Timer,
+  Input,
+  Output,
+  Calendar,
+  Cached,
+} from "~/components/icons/Icons";
 import Chip from "~/components/ui/Chip";
 import { formatDateWithSeconds, getTimestampTooltipData } from "~/utils/date";
 import {
   SnippetLayout,
   SnippetContent,
+  SnippetMessage,
 } from "~/components/layout/SnippetLayout";
 import { CodeMessage } from "~/components/layout/SnippetContent";
 
@@ -115,9 +122,11 @@ export function ModelInferenceItem({ inference }: ModelInferenceItemProps) {
       <SectionsGroup>
         <SectionLayout>
           <SectionHeader heading="Input" />
-          <ModelInput
-            input_messages={inference.input_messages}
-            system={inference.system}
+          <InputSnippet
+            input={{
+              system: inference.system,
+              messages: inference.input_messages,
+            }}
           />
         </SectionLayout>
 
@@ -125,10 +134,12 @@ export function ModelInferenceItem({ inference }: ModelInferenceItemProps) {
           <SectionHeader heading="Output" />
           <SnippetLayout>
             <SnippetContent maxHeight={400}>
-              <CodeMessage
-                showLineNumbers
-                content={JSON.stringify(inference.output, null, 2)}
-              />
+              <SnippetMessage>
+                <CodeMessage
+                  showLineNumbers
+                  content={JSON.stringify(inference.output, null, 2)}
+                />
+              </SnippetMessage>
             </SnippetContent>
           </SnippetLayout>
         </SectionLayout>
@@ -137,20 +148,22 @@ export function ModelInferenceItem({ inference }: ModelInferenceItemProps) {
           <SectionHeader heading="Raw Request" />
           <SnippetLayout>
             <SnippetContent maxHeight={400}>
-              <CodeMessage
-                showLineNumbers
-                content={(() => {
-                  try {
-                    return JSON.stringify(
-                      JSON.parse(inference.raw_request),
-                      null,
-                      2,
-                    );
-                  } catch {
-                    return inference.raw_request;
-                  }
-                })()}
-              />
+              <SnippetMessage>
+                <CodeMessage
+                  showLineNumbers
+                  content={(() => {
+                    try {
+                      return JSON.stringify(
+                        JSON.parse(inference.raw_request),
+                        null,
+                        2,
+                      );
+                    } catch {
+                      return inference.raw_request;
+                    }
+                  })()}
+                />
+              </SnippetMessage>
             </SnippetContent>
           </SnippetLayout>
         </SectionLayout>
@@ -159,20 +172,22 @@ export function ModelInferenceItem({ inference }: ModelInferenceItemProps) {
           <SectionHeader heading="Raw Response" />
           <SnippetLayout>
             <SnippetContent maxHeight={400}>
-              <CodeMessage
-                showLineNumbers
-                content={(() => {
-                  try {
-                    return JSON.stringify(
-                      JSON.parse(inference.raw_response),
-                      null,
-                      2,
-                    );
-                  } catch {
-                    return inference.raw_response;
-                  }
-                })()}
-              />
+              <SnippetMessage>
+                <CodeMessage
+                  showLineNumbers
+                  content={(() => {
+                    try {
+                      return JSON.stringify(
+                        JSON.parse(inference.raw_response),
+                        null,
+                        2,
+                      );
+                    } catch {
+                      return inference.raw_response;
+                    }
+                  })()}
+                />
+              </SnippetMessage>
             </SnippetContent>
           </SnippetLayout>
         </SectionLayout>
