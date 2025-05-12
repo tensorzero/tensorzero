@@ -239,8 +239,8 @@ export async function countRowsForDataset(
     query_params,
   });
   const rows = await resultSet.json<{ count: number }>();
-  const parsedRows = CountSchema.parse(rows);
-  return parsedRows.count;
+  const parsedRows = rows.map((row) => CountSchema.parse(row));
+  return parsedRows[0].count;
 }
 
 /**
@@ -322,8 +322,8 @@ export async function getNumberOfDatasets(): Promise<number> {
     format: "JSONEachRow",
   });
   const rows = await resultSet.json<{ count: number }>();
-  const parsedRows = CountSchema.parse(rows);
-  return parsedRows.count;
+  const parsedRows = rows.map((row) => CountSchema.parse(row));
+  return parsedRows[0].count;
 }
 /**
  * Executes an INSERT INTO ... SELECT ... query to insert rows into the dataset table.
@@ -690,8 +690,8 @@ export async function countDatapointsForDatasetFunction(
     query_params: { dataset_name, function_name, table },
   });
   const rows = await resultSet.json<{ count: number }>();
-  const parsedRows = CountSchema.parse(rows);
-  return parsedRows.count;
+  const parsedRows = rows.map((row) => CountSchema.parse(row));
+  return parsedRows[0].count;
 }
 
 function validateDatasetName(dataset_name: string) {

@@ -445,8 +445,8 @@ export async function countInferencesForFunction(
     query_params: { function_name },
   });
   const rows = await resultSet.json<{ count: number }>();
-  const parsedRows = CountSchema.parse(rows);
-  return parsedRows.count;
+  const parsedRows = rows.map((row) => CountSchema.parse(row));
+  return parsedRows[0].count;
 }
 
 export async function countInferencesForVariant(
@@ -462,8 +462,8 @@ export async function countInferencesForVariant(
     query_params: { function_name, variant_name },
   });
   const rows = await resultSet.json<{ count: number }>();
-  const parsedRows = CountSchema.parse(rows);
-  return parsedRows.count;
+  const parsedRows = rows.map((row) => CountSchema.parse(row));
+  return parsedRows[0].count;
 }
 
 export async function countInferencesForEpisode(
@@ -476,8 +476,8 @@ export async function countInferencesForEpisode(
     query_params: { episode_id },
   });
   const rows = await resultSet.json<{ count: string }>();
-  const parsedRows = CountSchema.parse(rows);
-  return parsedRows.count;
+  const parsedRows = rows.map((row) => CountSchema.parse(row));
+  return parsedRows[0].count;
 }
 
 async function parseInferenceRow(

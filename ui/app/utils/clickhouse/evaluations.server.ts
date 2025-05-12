@@ -374,8 +374,8 @@ export async function countDatapointsForEvaluation(
     },
   });
   const rows = await result.json<{ count: number }>();
-  const parsedRows = CountSchema.parse(rows);
-  return parsedRows.count;
+  const parsedRows = rows.map((row) => CountSchema.parse(row));
+  return parsedRows[0].count;
 }
 
 export async function countTotalEvaluationRuns() {
@@ -387,8 +387,8 @@ export async function countTotalEvaluationRuns() {
     format: "JSONEachRow",
   });
   const rows = await result.json<{ count: number }>();
-  const parsedRows = CountSchema.parse(rows);
-  return parsedRows.count;
+  const parsedRows = rows.map((row) => CountSchema.parse(row));
+  return parsedRows[0].count;
 }
 
 export async function getEvaluationRunInfo(

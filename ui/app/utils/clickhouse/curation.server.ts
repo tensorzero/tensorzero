@@ -164,7 +164,7 @@ async function queryAllInferencesForFunction(
   max_samples: number | undefined,
 ): Promise<ParsedInferenceExample[]> {
   const limitClause = max_samples ? `LIMIT ${max_samples}` : "";
-  const query = `SELECT * FROM ${inference_table_name} WHERE function_name = {function_name:String} ${limitClause}`;
+  const query = `SELECT variant_name, input, output, episode_id  FROM ${inference_table_name} WHERE function_name = {function_name:String} ${limitClause}`;
   const resultSet = await clickhouseClient.query({
     query,
     format: "JSONEachRow",

@@ -91,9 +91,9 @@ export async function countDynamicEvaluationRuns(): Promise<number> {
     SELECT toUInt32(count()) as count FROM DynamicEvaluationRun
   `;
   const result = await clickhouseClient.query({ query, format: "JSONEachRow" });
-  const rows = await result.json<{ count: number }>();
-  const parsedRows = CountSchema.parse(rows);
-  return parsedRows.count;
+  const rows = await result.json<{ count: number }[]>();
+  const parsedRows = rows.map((row) => CountSchema.parse(row));
+  return parsedRows[0].count;
 }
 
 /**
@@ -308,9 +308,9 @@ export async function countDynamicEvaluationProjects(): Promise<number> {
   WHERE project_name IS NOT NULL
 `;
   const result = await clickhouseClient.query({ query, format: "JSONEachRow" });
-  const rows = await result.json<{ count: number }>();
-  const parsedRows = CountSchema.parse(rows);
-  return parsedRows.count;
+  const rows = await result.json<{ count: number }[]>();
+  const parsedRows = rows.map((row) => CountSchema.parse(row));
+  return parsedRows[0].count;
 }
 
 export async function searchDynamicEvaluationRuns(
@@ -534,7 +534,7 @@ export async function countDynamicEvaluationRunEpisodesByTaskName(
     format: "JSONEachRow",
     query_params: { runIds },
   });
-  const rows = await result.json<{ count: number }>();
-  const parsedRows = CountSchema.parse(rows);
-  return parsedRows.count;
+  const rows = await result.json<{ count: number }[]>();
+  const parsedRows = rows.map((row) => CountSchema.parse(row));
+  return parsedRows[0].count;
 }
