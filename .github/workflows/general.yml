@@ -98,8 +98,8 @@ jobs:
       - name: Check all docker-compose.yml files
         run: ./ci/check-all-docker-compose.sh
 
-  check-pyo3-build:
-    uses: ./.github/workflows/pyo3-build-reusable.yml
+  check-python-client-build:
+    uses: ./.github/workflows/python-client-build.yml
 
   build-windows:
     runs-on: windows-latest
@@ -608,7 +608,7 @@ jobs:
       [
         clickhouse-tests-cloud,
         check-docker-compose,
-        check-pyo3-build,
+        check-python-client-build,
         build-windows,
         validate,
         clickhouse-tests,
