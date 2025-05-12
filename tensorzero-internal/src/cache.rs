@@ -381,6 +381,7 @@ pub async fn cache_lookup_streaming(
     )
     .await?;
     if result.is_none() {
+        #[expect(clippy::unwrap_used)]
         let pretty_request = serde_json::to_string_pretty(request.request).unwrap();
         println!("Cache miss for request: {pretty_request}");
     }
