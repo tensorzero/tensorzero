@@ -128,24 +128,7 @@ pub(crate) async fn evaluate_inference(
                         }
                         Ok(result.value_owned())
                     }
-                    Err(e) => {
-                        println!("Error running evaluator {evaluator_name}: {e}");
-                        #[expect(clippy::unwrap_used)]
-                        let pretty_datapoint = serde_json::to_string_pretty(&datapoint).unwrap();
-                        println!("datapoint: {pretty_datapoint}");
-                        #[expect(clippy::unwrap_used)]
-                        let pretty_input = serde_json::to_string_pretty(&input).unwrap();
-                        println!("input: {pretty_input}");
-                        #[expect(clippy::unwrap_used)]
-                        let pretty_inference_response =
-                            serde_json::to_string_pretty(&inference_response).unwrap();
-                        println!("inference_response: {pretty_inference_response}");
-                        #[expect(clippy::unwrap_used)]
-                        let pretty_evaluation_config =
-                            serde_json::to_string_pretty(&evaluation_config).unwrap();
-                        println!("evaluation_config: {pretty_evaluation_config}");
-                        Err(e)
-                    }
+                    Err(e) => Err(e),
                 };
 
                 (evaluator_name, evaluation_result)

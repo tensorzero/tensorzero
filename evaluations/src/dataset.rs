@@ -56,14 +56,5 @@ pub async fn query_dataset(
                 .collect()
         }
     };
-    for datapoint in datapoints.iter() {
-        #[expect(clippy::unwrap_used)]
-        let input_string = serde_json::to_string_pretty(datapoint.input()).unwrap();
-        if input_string.contains("Mauricio") {
-            #[expect(clippy::unwrap_used)]
-            let pretty_datapoint = serde_json::to_string_pretty(datapoint).unwrap();
-            println!("datapoint: {pretty_datapoint}");
-        }
-    }
     Ok(datapoints)
 }

@@ -77,7 +77,6 @@ export function runEvaluation(
     inferenceCache,
   ];
 
-  console.log("Running evaluation", command.join(" "));
   return new Promise<EvaluationStartInfo>((resolve, reject) => {
     // Spawn a child process to run the evaluations command
     const child = spawn(command[0], command.slice(1));
