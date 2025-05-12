@@ -149,15 +149,15 @@ export async function queryBooleanMetricFeedbackBoundsByTargetId(params: {
 export async function countBooleanMetricFeedbackByTargetId(
   target_id: string,
 ): Promise<number> {
-  const query = `SELECT COUNT() AS count FROM BooleanMetricFeedbackByTargetId WHERE target_id = {target_id:String}`;
+  const query = `SELECT toUInt32(COUNT()) AS count FROM BooleanMetricFeedbackByTargetId WHERE target_id = {target_id:String}`;
   const resultSet = await clickhouseClient.query({
     query,
     format: "JSONEachRow",
     query_params: { target_id },
   });
-  const rows = await resultSet.json<{ count: string }>();
-  const parsedRows = CountSchema.parse(rows);
-  return parsedRows.count;
+  const rows = await resultSet.json<{ count: number }>();
+  const parsedRows = rows.map((row) => CountSchema.parse(row));
+  return parsedRows[0].count;
 }
 
 export const commentFeedbackRowSchema = z.object({

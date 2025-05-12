@@ -657,7 +657,7 @@ export async function countInferencesByFunction(): Promise<
 }
 
 export async function countEpisodes(): Promise<number> {
-  const query = `SELECT COUNT(DISTINCT episode_id) as count FROM (
+  const query = `SELECT toUInt32(COUNT(DISTINCT episode_id)) as count FROM (
     SELECT episode_id FROM ChatInference
     UNION ALL
     SELECT episode_id FROM JsonInference
@@ -666,7 +666,7 @@ export async function countEpisodes(): Promise<number> {
     query,
     format: "JSONEachRow",
   });
-  const rows = await resultSet.json<{ count: string }>();
-  const parsedRows = CountSchema.parse(rows);
-  return parsedRows.count;
+  const rows = await resultSet.json<{ count: number }>();
+  const parsedRows = rows.map((row) => CountSchema.parse(row));
+  return parsedRows[0].count;
 }
