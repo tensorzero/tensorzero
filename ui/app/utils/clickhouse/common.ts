@@ -287,3 +287,8 @@ export const TableBoundsSchema = z.object({
   last_id: z.string().uuid().nullable(), // UUIDv7 string
 });
 export type TableBounds = z.infer<typeof TableBoundsSchema>;
+
+export const CountSchema = z.object({
+  count: z.number(),
+});
+export type Count = z.infer<typeof CountSchema>;

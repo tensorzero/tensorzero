@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { MetricConfig, MetricConfigOptimize } from "../config/metric";
 import {
   contentBlockOutputSchema,
+  CountSchema,
   getInferenceTableName,
   InferenceJoinKey,
   InferenceTableName,
@@ -14,6 +15,8 @@ import type { FunctionConfig } from "../config/function";
 import { getComparisonOperator } from "../config/metric";
 import {
   getInferenceJoinKey,
+  parsedChatExampleSchema,
+  parsedJsonInferenceExampleSchema,
   type InferenceExample,
   type ParsedChatInferenceExample,
   type ParsedInferenceExample,
@@ -301,7 +304,8 @@ async function countMetricData(
     },
   });
   const rows = await resultSet.json<{ count: number }>();
-  return rows[0].count;
+  const parsedRows = rows.map((row) => CountSchema.parse(row));
+  return parsedRows[0].count;
 }
 
 async function queryDemonstrationDataForFunction(
@@ -372,7 +376,8 @@ export async function countDemonstrationDataForFunction(
     },
   });
   const rows = await resultSet.json<{ count: number }>();
-  return rows[0].count;
+  const parsedRows = rows.map((row) => CountSchema.parse(row));
+  return parsedRows[0].count;
 }
 
 function parseInferenceExamples(
@@ -381,13 +386,17 @@ function parseInferenceExamples(
   function_name: string,
 ): ParsedChatInferenceExample[] | ParsedJsonInferenceExample[] {
   if (tableName === "ChatInference") {
-    return rows.map((row) => ({
+    const processedRows = rows.map((row) => ({
       ...row,
       input: inputSchema.parse(JSON.parse(row.input)),
       output: z.array(contentBlockOutputSchema).parse(JSON.parse(row.output)),
     })) as ParsedChatInferenceExample[];
+    const parsedRows = processedRows.map((row) =>
+      parsedChatExampleSchema.parse(row),
+    );
+    return parsedRows;
   } else {
-    return rows.map((row) => {
+    const processedRows = rows.map((row) => {
       if (function_name.startsWith("tensorzero::llm_judge::")) {
         row.output = handle_llm_judge_output(row.output);
       }
@@ -397,6 +406,10 @@ function parseInferenceExamples(
         output: jsonInferenceOutputSchema.parse(JSON.parse(row.output)),
       };
     }) as ParsedJsonInferenceExample[];
+    const parsedRows = processedRows.map((row) =>
+      parsedJsonInferenceExampleSchema.parse(row),
+    );
+    return parsedRows;
   }
 }
 
