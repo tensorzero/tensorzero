@@ -512,9 +512,9 @@ jobs:
     strategy:
       matrix:
         feature_flag:
-          - behavior: node-optimizations-server
+          - behavior: node-optimization-server
             enable_python: 0
-          - behavior: python-optimizations-server
+          - behavior: python-optimization-server
             enable_python: 1
     steps:
       - uses: actions/checkout@v4
