@@ -113,8 +113,11 @@ async fn test_clickhouse_migration_manager() {
 
             // The latest migration should get applied, since we haven't run it before
             let name = migrations[migration_num].name();
-            assert!(logs_contain(&format!("Applying migration: {name}")));
-            assert!(logs_contain(&format!("Migration succeeded: {name}")));
+            // Migration 0029 will not be applied since 0023 is turned off.
+            if name != "Migration0029" {
+                assert!(logs_contain(&format!("Applying migration: {name}")));
+                assert!(logs_contain(&format!("Migration succeeded: {name}")));
+            }
             assert!(!logs_contain("Failed to apply migration"));
             assert!(!logs_contain("Failed migration success check"));
             assert!(!logs_contain("Failed to verify migration"));
@@ -151,7 +154,7 @@ async fn test_clickhouse_migration_manager() {
         // will throw an error if it doesn't.
         // This must be an array literal, so that the macro can generate a function
         // for each element in the array.
-        [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]
+        [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]
     );
     run_all(&migrations).await;
 
