@@ -138,7 +138,7 @@ async fn main() {
             .expect_pretty("Failed to enable debug logs");
     }
 
-    // Note - we only enable OTLP after config file parsing/loading is complete,
+    // Note: We only enable OTLP after config file parsing/loading is complete,
     // so that the config file can control whether OTLP is enabled or not.
     // This means that any tracing spans created before this point will not be exported to OTLP.
     // For now, this is fine, as we only ever export spans for inference/batch/feedback requests,
@@ -150,16 +150,18 @@ async fn main() {
         if std::env::var("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT").is_err() {
             // This makes it easier to run the gateway in local development and CI
             if cfg!(feature = "e2e_tests") {
-                tracing::warn!("Running without explicit `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` env var in e2e tests mode")
+                tracing::warn!("Running without explicit `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` environment variable in e2e tests mode.");
             } else {
-                tracing::error!("[gateway.export.otlp.traces] has `enabled = true`, but env var `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` is not set. Please set it to the OTLP endpoint (e.g. `http://localhost:4317`)");
+                tracing::error!("The `gateway.export.otlp.traces.enabled` configuration option is `true`, but environment variable `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` is not set. Please set it to the OTLP endpoint (e.g. `http://localhost:4317`).");
                 std::process::exit(1);
             }
         }
+
         delayed_log_config
             .delayed_otel
             .enable_otel()
             .expect_pretty("Failed to enable OpenTelemetry");
+
         tracing::info!("Enabled OpenTelemetry OTLP export");
     }
 
