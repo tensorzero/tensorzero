@@ -380,6 +380,10 @@ pub async fn cache_lookup_streaming(
         max_age_s,
     )
     .await?;
+    if result.is_none() {
+        let pretty_request = serde_json::to_string_pretty(request.request).unwrap();
+        println!("Cache miss for request: {pretty_request}");
+    }
     Ok(result.map(|result| StreamResponse::from_cache(result, Arc::from(request.provider_name))))
 }
 
@@ -440,6 +444,7 @@ pub async fn cache_lookup_inner<T: CacheOutput + DeserializeOwned>(
         .run_query_synchronous(query.to_string(), Some(&query_params))
         .await?;
     if result.is_empty() {
+        println!("No result from cache lookup with short key {short_cache_key}");
         return Ok(None);
     }
     let result: CacheData<T> = serde_json::from_str(&result).map_err(|e| {
