@@ -6,7 +6,7 @@ use std::{
     sync::Arc,
 };
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tensorzero_derive::TensorZeroDeserialize;
 
 use crate::{
@@ -34,18 +34,18 @@ pub const LLM_JUDGE_FLOAT_OUTPUT_SCHEMA_TEXT: &str =
 pub const LLM_JUDGE_BOOLEAN_OUTPUT_SCHEMA_TEXT: &str =
     include_str!("llm_judge_boolean_output_schema.json");
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct StaticEvaluationConfig {
     pub evaluators: HashMap<String, EvaluatorConfig>,
     pub function_name: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub enum EvaluationConfig {
     Static(StaticEvaluationConfig),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub enum EvaluatorConfig {
     ExactMatch(ExactMatchConfig),
     LLMJudge(LLMJudgeConfig),
@@ -67,13 +67,13 @@ impl EvaluatorConfig {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct ExactMatchConfig {
     #[serde(default)]
     pub cutoff: Option<f32>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct LLMJudgeConfig {
     pub input_format: LLMJudgeInputFormat,
     pub output_type: LLMJudgeOutputType,
@@ -82,13 +82,13 @@ pub struct LLMJudgeConfig {
     pub cutoff: Option<f32>,
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
 pub struct LLMJudgeIncludeConfig {
     #[serde(default)]
     pub reference_output: bool,
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LLMJudgeInputFormat {
     #[default]
@@ -96,7 +96,7 @@ pub enum LLMJudgeInputFormat {
     Messages,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LLMJudgeOutputType {
     Float,
@@ -112,7 +112,7 @@ impl From<LLMJudgeOutputType> for MetricConfigType {
     }
 }
 
-#[derive(Clone, Copy, Debug, Deserialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LLMJudgeOptimize {
     Min,
