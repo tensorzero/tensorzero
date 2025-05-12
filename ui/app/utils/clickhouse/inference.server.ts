@@ -523,7 +523,7 @@ export async function queryInferenceById(
             function_name,
             variant_name,
             episode_id,
-            function_type,
+            function_type
         FROM InferenceById FINAL
         WHERE id_uint = toUInt128({id:UUID})
         LIMIT 1
