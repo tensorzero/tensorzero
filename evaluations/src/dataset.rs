@@ -60,7 +60,7 @@ pub async fn query_dataset(
         #[expect(clippy::unwrap_used)]
         let input_string = serde_json::to_string_pretty(datapoint.input()).unwrap();
         if input_string.contains("Mauricio") {
-            println!("datapoint: {:?}", datapoint);
+            println!("datapoint: {datapoint}");
         }
     }
     Ok(datapoints)
