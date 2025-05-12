@@ -448,13 +448,13 @@ export async function queryDemonstrationFeedbackBoundsByInferenceId(params: {
 export async function countDemonstrationFeedbackByInferenceId(
   inference_id: string,
 ): Promise<number> {
-  const query = `SELECT COUNT() AS count FROM DemonstrationFeedbackByInferenceId WHERE inference_id = {inference_id:String}`;
+  const query = `SELECT toUInt32(COUNT()) AS count FROM DemonstrationFeedbackByInferenceId WHERE inference_id = {inference_id:String}`;
   const resultSet = await clickhouseClient.query({
     query,
     format: "JSONEachRow",
     query_params: { inference_id },
   });
-  const rows = await resultSet.json<{ count: string }>();
+  const rows = await resultSet.json<{ count: number }>();
   const parsedRows = rows.map((row) => CountSchema.parse(row));
   return parsedRows[0].count;
 }
@@ -607,13 +607,13 @@ export async function queryFloatMetricFeedbackBoundsByTargetId(params: {
 export async function countFloatMetricFeedbackByTargetId(
   target_id: string,
 ): Promise<number> {
-  const query = `SELECT COUNT() AS count FROM FloatMetricFeedbackByTargetId WHERE target_id = {target_id:String}`;
+  const query = `SELECT toUInt32(COUNT()) AS count FROM FloatMetricFeedbackByTargetId WHERE target_id = {target_id:String}`;
   const resultSet = await clickhouseClient.query({
     query,
     format: "JSONEachRow",
     query_params: { target_id },
   });
-  const rows = await resultSet.json<{ count: string }>();
+  const rows = await resultSet.json<{ count: number }>();
   const parsedRows = rows.map((row) => CountSchema.parse(row));
   return parsedRows[0].count;
 }
