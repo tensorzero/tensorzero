@@ -181,6 +181,7 @@ impl InferenceProvider for OllamaProvider {
                 ),
             })
         })?;
+
         let res = request_builder
             .body(raw_request.clone())
             .header(reqwest::header::CONTENT_TYPE, "application/json")
@@ -199,7 +200,7 @@ impl InferenceProvider for OllamaProvider {
                     raw_response: None,
                 })
             })?;
-
+            
         if res.status().is_success() {
             let raw_response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
@@ -723,7 +724,7 @@ mod tests {
     use super::*;
 
     use crate::inference::providers::openai::{
-        OpenAIFinishReason, OpenAIResponseChoice, OpenAIResponseMessage, OpenAIResponseToolCall,
+        OpenAIFinishReason, OpenAIResponseChoice, OpenAIResponseMessage,
         OpenAIToolType, OpenAIUsage, SpecificToolChoice, SpecificToolFunction,
     };
     use crate::inference::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
@@ -1008,7 +1009,7 @@ mod tests {
             tool_choice: None,
             parallel_tool_calls: None,
         };
-        let raw_request = serde_json::to_string(&request_body).unwrap();
+        let _raw_request = serde_json::to_string(&request_body).unwrap();
         let raw_response = "test_response".to_string();
         let result = ProviderInferenceResponse::try_from(OllamaResponseWithMetadata {
             response: valid_response,
