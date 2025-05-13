@@ -16,6 +16,7 @@ import {
   queryInferenceTableBoundsByVariantName,
   queryModelInferencesByInferenceId,
   getAdjacentInferenceIds,
+  getAdjacentEpisodeIds,
 } from "./inference.server";
 import { countInferencesForFunction } from "./inference.server";
 import type {
@@ -554,10 +555,10 @@ describe("getAdjacentInferenceIds", () => {
     const adjacentInferenceIds = await getAdjacentInferenceIds(
       "01942e26-910b-7ab1-a645-46bc4463a001",
     );
-    expect(adjacentInferenceIds.previous_inference_id).toBe(
+    expect(adjacentInferenceIds.previous_id).toBe(
       "01942e26-9026-76e0-bf84-27038739ec33",
     );
-    expect(adjacentInferenceIds.next_inference_id).toBe(
+    expect(adjacentInferenceIds.next_id).toBe(
       "01942e26-9128-71d2-bed6-aee96bb3e181",
     );
   });
@@ -574,8 +575,8 @@ describe("getAdjacentInferenceIds", () => {
     const adjacentInferenceIds = await getAdjacentInferenceIds(
       firstInferenceId.data[0].first_inference_id,
     );
-    expect(adjacentInferenceIds.previous_inference_id).toBeNull();
-    expect(adjacentInferenceIds.next_inference_id).toBe(
+    expect(adjacentInferenceIds.previous_id).toBeNull();
+    expect(adjacentInferenceIds.next_id).toBe(
       "01934c9a-be70-7d72-a722-744cb572eb49",
     );
   });
@@ -592,9 +593,61 @@ describe("getAdjacentInferenceIds", () => {
     const adjacentInferenceIds = await getAdjacentInferenceIds(
       lastInferenceId.data[0].last_inference_id,
     );
-    expect(adjacentInferenceIds.previous_inference_id).toBe(
+    expect(adjacentInferenceIds.previous_id).toBe(
       "0196a0ea-d197-76d0-b6fc-15778589a4da",
     );
-    expect(adjacentInferenceIds.next_inference_id).toBeNull();
+    expect(adjacentInferenceIds.next_id).toBeNull();
+  });
+});
+
+describe("getAdjacentEpisodeIds", () => {
+  test("returns adjacent episode ids", async () => {
+    const adjacentEpisodeIds = await getAdjacentEpisodeIds(
+      "01942e26-549f-7153-ac56-dd1d23d30f8c",
+    );
+    expect(adjacentEpisodeIds.previous_id).toBe(
+      "01942e26-5392-7652-ad59-734198888520",
+    );
+    expect(adjacentEpisodeIds.next_id).toBe(
+      "01942e26-54a2-71d1-ad80-3629b6cb18a3",
+    );
+  });
+
+  test("returns null for previous episode id if current episode is first", async () => {
+    const resultSet = await clickhouseClient.query({
+      query:
+        "SELECT uint_to_uuid(min(episode_id_uint)) as first_episode_id FROM InferenceByEpisodeId",
+      format: "JSON",
+    });
+    const firstEpisodeId = await resultSet.json<{
+      first_episode_id: string;
+    }>();
+
+    const adjacentEpisodeIds = await getAdjacentEpisodeIds(
+      firstEpisodeId.data[0].first_episode_id,
+    );
+    expect(adjacentEpisodeIds.previous_id).toBeNull();
+    expect(adjacentEpisodeIds.next_id).toBe(
+      "0192ced0-9486-7491-9b60-42dd2ef9194e",
+    );
+  });
+
+  test("returns null for next episode id if current episode is last", async () => {
+    const resultSet = await clickhouseClient.query({
+      query:
+        "SELECT uint_to_uuid(max(episode_id_uint)) as last_episode_id FROM InferenceByEpisodeId",
+      format: "JSON",
+    });
+    const lastEpisodeId = await resultSet.json<{
+      last_episode_id: string;
+    }>();
+
+    const adjacentEpisodeIds = await getAdjacentEpisodeIds(
+      lastEpisodeId.data[0].last_episode_id,
+    );
+    expect(adjacentEpisodeIds.previous_id).toBe(
+      "0aaeef58-3633-7f27-9393-65bd98491026",
+    );
+    expect(adjacentEpisodeIds.next_id).toBeNull();
   });
 });

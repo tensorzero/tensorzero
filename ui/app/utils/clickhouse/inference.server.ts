@@ -21,8 +21,8 @@ import {
   modelInferenceRowSchema,
   parsedModelInferenceRowSchema,
   parseInferenceOutput,
-  adjacentInferenceIdsSchema,
-  type AdjacentInferenceIds,
+  adjacentIdsSchema,
+  type AdjacentIds,
   type EpisodeByIdRow,
   type InferenceByIdRow,
   type InferenceRow,
@@ -680,26 +680,49 @@ export async function countEpisodes(): Promise<number> {
 
 export async function getAdjacentInferenceIds(
   currentInferenceId: string,
-): Promise<AdjacentInferenceIds> {
+): Promise<AdjacentIds> {
   // TODO (soon): add the ability to pass filters by some fields
-  // TODO test the min and max element here
   const query = `
     SELECT
       NULLIF(
         (SELECT uint_to_uuid(max(id_uint)) FROM InferenceById WHERE id_uint < toUInt128({current_inference_id:UUID})),
         toUUID('00000000-0000-0000-0000-000000000000')
-      ) as previous_inference_id,
+      ) as previous_id,
       NULLIF(
         (SELECT uint_to_uuid(min(id_uint)) FROM InferenceById WHERE id_uint > toUInt128({current_inference_id:UUID})),
         toUUID('00000000-0000-0000-0000-000000000000')
-      ) as next_inference_id
+      ) as next_id
   `;
   const resultSet = await clickhouseClient.query({
     query,
     format: "JSONEachRow",
     query_params: { current_inference_id: currentInferenceId },
   });
-  const rows = await resultSet.json<AdjacentInferenceIds>();
-  const parsedRows = rows.map((row) => adjacentInferenceIdsSchema.parse(row));
+  const rows = await resultSet.json<AdjacentIds>();
+  const parsedRows = rows.map((row) => adjacentIdsSchema.parse(row));
+  return parsedRows[0];
+}
+
+export async function getAdjacentEpisodeIds(
+  currentEpisodeId: string,
+): Promise<AdjacentIds> {
+  const query = `
+    SELECT
+      NULLIF(
+        (SELECT DISTINCT uint_to_uuid(max(episode_id_uint)) FROM InferenceByEpisodeId WHERE episode_id_uint < toUInt128({current_episode_id:UUID})),
+        toUUID('00000000-0000-0000-0000-000000000000')
+      ) as previous_id,
+      NULLIF(
+        (SELECT DISTINCT uint_to_uuid(min(episode_id_uint)) FROM InferenceByEpisodeId WHERE episode_id_uint > toUInt128({current_episode_id:UUID})),
+        toUUID('00000000-0000-0000-0000-000000000000')
+      ) as next_id
+  `;
+  const resultSet = await clickhouseClient.query({
+    query,
+    format: "JSONEachRow",
+    query_params: { current_episode_id: currentEpisodeId },
+  });
+  const rows = await resultSet.json<AdjacentIds>();
+  const parsedRows = rows.map((row) => adjacentIdsSchema.parse(row));
   return parsedRows[0];
 }
