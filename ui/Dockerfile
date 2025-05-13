@@ -67,16 +67,15 @@ COPY --from=development-dependencies-env /app/node_modules /app/node_modules
 
 WORKDIR /app
 
-ENV VITE_TENSORZERO_UI_FF_ENABLE_FEEDBACK=1
-
-
 RUN pnpm run build
+
+# ========== python-build-env ==========
 
 FROM rust:latest AS python-build-env
 RUN apt-get update && apt-get install -y python3
 COPY --from=ghcr.io/astral-sh/uv:0.6.6 /uv /uvx /bin/
 COPY . /build
-WORKDIR /build/optimizations-server
+WORKDIR /build/optimization-server
 # TODO - figure out how to cache the rust build here
 # UV_PYTHON_DOWNLOADS=never
 # https://hynek.me/articles/docker-uv/
@@ -97,11 +96,11 @@ COPY ./ui/entrypoint.sh /app/entrypoint.sh
 
 RUN chmod +x /app/entrypoint.sh
 
-COPY ./optimizations-server /build/optimizations-server
-COPY --from=python-build-env /build/clients/python-pyo3 /build/clients/python-pyo3
-COPY --from=python-build-env /build/optimizations-server/.venv  /build/optimizations-server/.venv
+COPY ./optimization-server /build/optimization-server
+COPY --from=python-build-env /build/clients/python /build/clients/python
+COPY --from=python-build-env /build/optimization-server/.venv  /build/optimization-server/.venv
 # Workaround for uv issue
-#COPY ./clients/python-pyo3 /clients/python-pyo3
+#COPY ./clients/python /clients/python
 
 USER ui
 

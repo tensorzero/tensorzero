@@ -1,7 +1,7 @@
 import {
   queryInferenceById,
   queryModelInferencesByInferenceId,
-} from "~/utils/clickhouse/inference";
+} from "~/utils/clickhouse/inference.server";
 import {
   pollForFeedbackItem,
   queryDemonstrationFeedbackByInferenceId,
@@ -20,7 +20,7 @@ import {
 } from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
 import BasicInfo from "./InferenceBasicInfo";
-import Input from "~/components/inference/Input";
+import InputSnippet from "~/components/inference/InputSnippet";
 import Output from "~/components/inference/NewOutput";
 import FeedbackTable from "~/components/feedback/FeedbackTable";
 import { addHumanFeedback, tensorZeroClient } from "~/utils/tensorzero.server";
@@ -52,9 +52,6 @@ import { AddToDatasetButton } from "./AddToDatasetButton";
 import { HumanFeedbackButton } from "~/components/feedback/HumanFeedbackButton";
 import { HumanFeedbackModal } from "~/components/feedback/HumanFeedbackModal";
 import { HumanFeedbackForm } from "~/components/feedback/HumanFeedbackForm";
-
-const FF_ENABLE_FEEDBACK =
-  import.meta.env.VITE_TENSORZERO_UI_FF_ENABLE_FEEDBACK === "1";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { inference_id } = params;
@@ -282,6 +279,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
         <BasicInfo
           inference={inference}
           inferenceUsage={getTotalInferenceUsage(model_inferences)}
+          modelInferences={model_inferences}
         />
 
         {actionError && (
@@ -303,30 +301,28 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
             onDatasetSelect={handleAddToDataset}
             hasDemonstration={hasDemonstration}
           />
-          {FF_ENABLE_FEEDBACK && (
-            <HumanFeedbackModal
-              onOpenChange={(open) =>
-                setOpenModal(open ? "human-feedback" : null)
-              }
-              isOpen={openModal === "human-feedback"}
-              trigger={<HumanFeedbackButton />}
-            >
-              <Form method="post" onSubmit={() => setOpenModal(null)}>
-                <input type="hidden" name="_action" value="addFeedback" />
-                <HumanFeedbackForm
-                  inferenceId={inference.id}
-                  inferenceOutput={inference.output}
-                />
-              </Form>
-            </HumanFeedbackModal>
-          )}
+          <HumanFeedbackModal
+            onOpenChange={(open) =>
+              setOpenModal(open ? "human-feedback" : null)
+            }
+            isOpen={openModal === "human-feedback"}
+            trigger={<HumanFeedbackButton />}
+          >
+            <Form method="post" onSubmit={() => setOpenModal(null)}>
+              <input type="hidden" name="_action" value="addFeedback" />
+              <HumanFeedbackForm
+                inferenceId={inference.id}
+                inferenceOutput={inference.output}
+              />
+            </Form>
+          </HumanFeedbackModal>
         </ActionBar>
       </PageHeader>
 
       <SectionsGroup>
         <SectionLayout>
           <SectionHeader heading="Input" />
-          <Input input={inference.input} />
+          <InputSnippet input={inference.input} />
         </SectionLayout>
 
         <SectionLayout>

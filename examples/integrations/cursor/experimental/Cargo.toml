@@ -7,12 +7,13 @@ edition = "2021"
 workspace = true
 
 [dependencies]
+git2 = { workspace = true }
 tokio = { workspace = true }
 clap = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
-git2 = "0.20.1"
-tree-sitter = "0.25.3"
+tracing-subscriber = { workspace = true }
+tree-sitter = "0.25.4"
 tree-sitter-rust = "0.24.0"
 tree-sitter-typescript = "0.23.2"
 tree-sitter-python = "0.23.6"

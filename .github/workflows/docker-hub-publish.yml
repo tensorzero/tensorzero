@@ -5,7 +5,7 @@ name: Publish docker images
 on:
   workflow_dispatch:
   release:
-    types: [published]
+    types: [released]
   push:
     branches: ["main"]
 

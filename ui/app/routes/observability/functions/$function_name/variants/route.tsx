@@ -16,7 +16,7 @@ import {
   countInferencesForVariant,
   queryInferenceTableBoundsByVariantName,
   queryInferenceTableByVariantName,
-} from "~/utils/clickhouse/inference";
+} from "~/utils/clickhouse/inference.server";
 import {
   getVariantPerformances,
   type TimeWindowUnit,

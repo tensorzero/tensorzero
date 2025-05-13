@@ -22,95 +22,82 @@ use migrations::migration_0019::Migration0019;
 use migrations::migration_0020::Migration0020;
 use migrations::migration_0021::Migration0021;
 use migrations::migration_0022::Migration0022;
-use migrations::migration_0023::Migration0023;
 use migrations::migration_0024::Migration0024;
 use migrations::migration_0025::Migration0025;
+use migrations::migration_0026::Migration0026;
+use migrations::migration_0027::Migration0027;
+use migrations::migration_0028::Migration0028;
+use migrations::migration_0029::Migration0029;
+
+/// Constructs (but does not run) a vector of all our database migrations.
+/// This is the single source of truth for all migration - it's used during startup to migrate
+/// the database, and in our ClickHouse tests to verify that the migrations apply correctly
+/// to a fresh database.
+pub fn make_all_migrations(
+    clickhouse: &ClickHouseConnectionInfo,
+) -> Vec<Box<dyn Migration + Send + Sync + '_>> {
+    vec![
+        Box::new(Migration0000 { clickhouse }),
+        // BANNED: This migration is no longer needed because it is deleted and replaced by migration 0010
+        // Box::new(Migration0001 { clickhouse }),
+        Box::new(Migration0002 { clickhouse }),
+        Box::new(Migration0003 { clickhouse }),
+        Box::new(Migration0004 { clickhouse }),
+        Box::new(Migration0005 { clickhouse }),
+        Box::new(Migration0006 { clickhouse }),
+        // BANNED: This migration is no longer needed because it is deleted and replaced by migration 0013
+        // Box::new(Migration0007 { clickhouse }),
+        Box::new(Migration0008 { clickhouse }),
+        Box::new(Migration0009 { clickhouse }),
+        // BANNED: This migration is no longer needed because it is deleted and replaced by migration 0013
+        // Box::new(Migration0010 { clickhouse }),
+        Box::new(Migration0011 { clickhouse }),
+        // BANNED: This migration is no longer needed because it is deleted and replaced by migration 0014
+        // Box::new(Migration0012 { clickhouse }),
+        // BANNED: This migration is no longer needed because it is deleted and replaced by migration 0021
+        // Box::new(Migration0013 { clickhouse }),
+        // BANNED: This migration is no longer needed because it is deleted and replaced by migration 0016
+        // Box::new(Migration0014 { clickhouse }),
+        Box::new(Migration0015 { clickhouse }),
+        Box::new(Migration0016 { clickhouse }),
+        Box::new(Migration0017 { clickhouse }),
+        Box::new(Migration0018 { clickhouse }),
+        Box::new(Migration0019 { clickhouse }),
+        Box::new(Migration0020 { clickhouse }),
+        Box::new(Migration0021 { clickhouse }),
+        Box::new(Migration0022 { clickhouse }),
+        Box::new(Migration0024 { clickhouse }),
+        Box::new(Migration0025 { clickhouse }),
+        Box::new(Migration0026 { clickhouse }),
+        Box::new(Migration0027 { clickhouse }),
+        Box::new(Migration0028 { clickhouse }),
+        Box::new(Migration0029 { clickhouse }),
+    ]
+}
 
 pub async fn run(clickhouse: &ClickHouseConnectionInfo) -> Result<(), Error> {
     clickhouse.health().await?;
     // This is a no-op if the database already exists
     clickhouse.create_database().await?;
-    // If the first migration needs to run, we are starting from scratch and don't need to wait for data to migrate
-    let clean_start = run_migration(&Migration0000 { clickhouse }).await?;
-    // BANNED: This migration is no longer needed because it is deleted and replaced by migration 0010
-    // run_migration(&Migration0001 {
-    //     clickhouse,
-    //     clean_start,
-    // })
-    // .await?;
-    run_migration(&Migration0002 { clickhouse }).await?;
-    run_migration(&Migration0003 { clickhouse }).await?;
-    run_migration(&Migration0004 { clickhouse }).await?;
-    run_migration(&Migration0005 { clickhouse }).await?;
-    run_migration(&Migration0006 { clickhouse }).await?;
-    // BANNED: This migration is no longer needed because it is deleted and replaced by migration 0013
-    // run_migration(&Migration0007 {
-    //     clickhouse,
-    //     clean_start,
-    // })
-    // .await?;
-    run_migration(&Migration0008 { clickhouse }).await?;
-    run_migration(&Migration0009 {
-        clickhouse,
-        clean_start,
-    })
-    .await?;
-    // BANNED: This migration is no longer needed because it is deleted and replaced by migration 0013
-    // run_migration(&Migration0010 {
-    //     clickhouse,
-    //     clean_start,
-    // })
-    // .await?;
-    run_migration(&Migration0011 { clickhouse }).await?;
-    // BANNED: This migration is no longer needed because it is deleted and replaced by migration 0014
-    // run_migration(&Migration0012 { clickhouse }).await?;
-    // BANNED: This migration is no longer needed because it is deleted and replaced by migration 0021
-    // run_migration(&Migration0013 {
-    //     clickhouse,
-    //     clean_start,
-    // })
-    // .await?;
-    // BANNED: This migration is no longer needed because it is deleted and replaced by migration 0016
-    // run_migration(&Migration0014 { clickhouse }).await?;
-    run_migration(&Migration0015 { clickhouse }).await?;
-    run_migration(&Migration0016 { clickhouse }).await?;
-    run_migration(&Migration0017 { clickhouse }).await?;
-    run_migration(&Migration0018 { clickhouse }).await?;
-    run_migration(&Migration0019 { clickhouse }).await?;
-    run_migration(&Migration0020 {
-        clickhouse,
-        clean_start,
-    })
-    .await?;
-    run_migration(&Migration0021 {
-        clickhouse,
-        clean_start,
-    })
-    .await?;
-    run_migration(&Migration0022 { clickhouse }).await?;
-    run_migration(&Migration0023 { clickhouse }).await?;
-    run_migration(&Migration0024 { clickhouse }).await?;
-    run_migration(&Migration0025 { clickhouse }).await?;
-    // NOTE:
-    // When we add more migrations, we need to add a test that applies them in a cumulative (N^2) way.
-    //
-    // In sequence:
-    // - Migration0000
-    // - Migration0000 (noop), Migration0001
-    // - Migration0000 (noop), Migration0001 (noop), Migration0002
-    //
-    // We need to check that previous migrations return false for should_apply() (i.e. are noops).
-    //
-    // You should expand gateway::tests::e2e::clickhouse_migration_manager::clickhouse_migration_manager
-    // to test this.
 
+    let migrations = make_all_migrations(clickhouse);
+
+    // If the first migration needs to run, we are starting from scratch and don't need to wait for data to migrate
+    // The value we pass in for 'clean_start' is ignored for the first migration
+    let clean_start = run_migration(&*migrations[0], false).await?;
+    for migration in &migrations[1..] {
+        run_migration(&**migration, clean_start).await?;
+    }
     Ok(())
 }
 
 /// Returns Err(e) if the migration fails to apply.
 /// Returns Ok(false) if the migration should not apply.
 /// Returns Ok(true) if the migration succeeds.
-pub async fn run_migration(migration: &(impl Migration + ?Sized)) -> Result<bool, Error> {
+pub async fn run_migration(
+    migration: &(impl Migration + ?Sized),
+    clean_start: bool,
+) -> Result<bool, Error> {
     migration.can_apply().await?;
 
     if migration.should_apply().await? {
@@ -119,7 +106,7 @@ pub async fn run_migration(migration: &(impl Migration + ?Sized)) -> Result<bool
 
         tracing::info!("Applying migration: {migration_name}");
 
-        if let Err(e) = migration.apply().await {
+        if let Err(e) = migration.apply(clean_start).await {
             tracing::error!(
                 "Failed to apply migration: {migration_name}\n\n===== Rollback Instructions =====\n\n{}",
                 migration.rollback_instructions()
@@ -207,7 +194,7 @@ mod tests {
             Ok(self.should_apply_result)
         }
 
-        async fn apply(&self) -> Result<(), Error> {
+        async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
             self.called_apply
                 .store(true, std::sync::atomic::Ordering::Relaxed);
             if self.apply_result {
@@ -237,7 +224,7 @@ mod tests {
         let mock_migration = MockMigration::default();
 
         // First check that method succeeds
-        assert!(run_migration(&mock_migration).await.is_ok());
+        assert!(run_migration(&mock_migration, false).await.is_ok());
 
         // Check that we called every method
         assert!(mock_migration
@@ -262,7 +249,7 @@ mod tests {
         };
 
         // First check that the method fails
-        assert!(run_migration(&mock_migration).await.is_err());
+        assert!(run_migration(&mock_migration, false).await.is_err());
 
         // Check that we called every method
         assert!(mock_migration
@@ -287,7 +274,7 @@ mod tests {
         };
 
         // First check that the method succeeds
-        assert!(run_migration(&mock_migration).await.is_ok());
+        assert!(run_migration(&mock_migration, false).await.is_ok());
 
         // Check that we called every method
         assert!(mock_migration
@@ -312,7 +299,7 @@ mod tests {
         };
 
         // First check that the method fails
-        assert!(run_migration(&mock_migration).await.is_err());
+        assert!(run_migration(&mock_migration, false).await.is_err());
 
         // Check that we called every method
         assert!(mock_migration
@@ -337,7 +324,7 @@ mod tests {
         };
 
         // First check that the method fails
-        assert!(run_migration(&mock_migration).await.is_err());
+        assert!(run_migration(&mock_migration, false).await.is_err());
 
         // Check that we called every method
         assert!(mock_migration

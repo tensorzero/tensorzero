@@ -8,10 +8,9 @@ import {
   TableEmptyState,
 } from "~/components/ui/table";
 import type { InferenceByIdRow } from "~/utils/clickhouse/inference";
-import { Link } from "react-router";
 import { FunctionLink } from "~/components/function/FunctionLink";
 import { VariantLink } from "~/components/function/variant/VariantLink";
-import { TableItemTime } from "~/components/ui/TableItems";
+import { TableItemShortUuid, TableItemTime } from "~/components/ui/TableItems";
 
 export default function EpisodeInferenceTable({
   inferences,
@@ -35,14 +34,10 @@ export default function EpisodeInferenceTable({
           inferences.map((inference) => (
             <TableRow key={inference.id} id={inference.id}>
               <TableCell className="max-w-[200px]">
-                <Link
-                  to={`/observability/inferences/${inference.id}`}
-                  className="block no-underline"
-                >
-                  <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
-                    {inference.id}
-                  </code>
-                </Link>
+                <TableItemShortUuid
+                  id={inference.id}
+                  link={`/observability/inferences/${inference.id}`}
+                />
               </TableCell>
               <TableCell>
                 <FunctionLink functionName={inference.function_name}>

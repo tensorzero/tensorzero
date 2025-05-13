@@ -21,8 +21,8 @@ async fn get_providers() -> E2ETestProviders {
         },
         E2ETestProvider {
             supports_batch_inference: false,
-            variant_name: "google-ai-studio-gemini-pro-002".to_string(),
-            model_name: "gemini-1.5-pro-002".into(),
+            variant_name: "google-ai-studio-gemini-2_5-pro".to_string(),
+            model_name: "gemini-2.5-pro".into(),
             model_provider_name: "google_ai_studio_gemini".into(),
             credentials: HashMap::new(),
         },
@@ -61,8 +61,8 @@ async fn get_providers() -> E2ETestProviders {
         },
         E2ETestProvider {
             supports_batch_inference: false,
-            variant_name: "google-ai-studio-gemini-pro-002-dynamic".to_string(),
-            model_name: "gemini-1.5-pro-002-dynamic".into(),
+            variant_name: "google-ai-studio-gemini-2_5-pro-dynamic".to_string(),
+            model_name: "gemini-2.5-pro-dynamic".into(),
             model_provider_name: "google_ai_studio_gemini".into(),
             credentials,
         },
@@ -93,15 +93,15 @@ async fn get_providers() -> E2ETestProviders {
         },
         E2ETestProvider {
             supports_batch_inference: false,
-            variant_name: "google-ai-studio-gemini-pro-002".to_string(),
-            model_name: "gemini-1.5-pro-002".into(),
+            variant_name: "google-ai-studio-gemini-2_5-pro".to_string(),
+            model_name: "gemini-2.5-pro".into(),
             model_provider_name: "google_ai_studio_gemini".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
             supports_batch_inference: false,
-            variant_name: "google-ai-studio-gemini-pro-002-implicit".to_string(),
-            model_name: "gemini-1.5-pro-002".into(),
+            variant_name: "google-ai-studio-gemini-2_5-pro-implicit".to_string(),
+            model_name: "gemini-2.5-pro".into(),
             model_provider_name: "google_ai_studio_gemini".into(),
             credentials: HashMap::new(),
         },
@@ -144,7 +144,6 @@ async fn get_providers() -> E2ETestProviders {
         json_mode_inference: json_providers.clone(),
         json_mode_off_inference: json_mode_off_providers.clone(),
         image_inference: image_providers,
-
         shorthand_inference: shorthand_providers.clone(),
     }
 }

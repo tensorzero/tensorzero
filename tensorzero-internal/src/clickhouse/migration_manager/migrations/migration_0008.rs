@@ -98,7 +98,7 @@ impl Migration for Migration0008<'_> {
         Ok(false)
     }
 
-    async fn apply(&self) -> Result<(), Error> {
+    async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         // Add a `raw_request` column, a `raw_response` column, a `function_name` column and a `variant_name` column
         // to the `BatchRequest` table
         let query = r#"

@@ -2,7 +2,7 @@ import {
   countInferencesForEpisode,
   queryInferenceTableBoundsByEpisodeId,
   queryInferenceTableByEpisodeId,
-} from "~/utils/clickhouse/inference";
+} from "~/utils/clickhouse/inference.server";
 import {
   countFeedbackByTargetId,
   pollForFeedbackItem,
@@ -35,9 +35,6 @@ import { ActionBar } from "~/components/layout/ActionBar";
 import { HumanFeedbackButton } from "~/components/feedback/HumanFeedbackButton";
 import { HumanFeedbackModal } from "~/components/feedback/HumanFeedbackModal";
 import { HumanFeedbackForm } from "~/components/feedback/HumanFeedbackForm";
-
-const FF_ENABLE_FEEDBACK =
-  import.meta.env.VITE_TENSORZERO_UI_FF_ENABLE_FEEDBACK === "1";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { episode_id } = params;
@@ -199,20 +196,18 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   return (
     <PageLayout>
       <PageHeader label="Episode" name={episode_id}>
-        {FF_ENABLE_FEEDBACK && (
-          <ActionBar>
-            <HumanFeedbackModal
-              isOpen={isModalOpen}
-              onOpenChange={setIsModalOpen}
-              trigger={<HumanFeedbackButton />}
-            >
-              <Form method="post" onSubmit={() => setIsModalOpen(false)}>
-                <input type="hidden" name="_action" value="addFeedback" />
-                <HumanFeedbackForm episodeId={episode_id} />
-              </Form>
-            </HumanFeedbackModal>
-          </ActionBar>
-        )}
+        <ActionBar>
+          <HumanFeedbackModal
+            isOpen={isModalOpen}
+            onOpenChange={setIsModalOpen}
+            trigger={<HumanFeedbackButton />}
+          >
+            <Form method="post" onSubmit={() => setIsModalOpen(false)}>
+              <input type="hidden" name="_action" value="addFeedback" />
+              <HumanFeedbackForm episodeId={episode_id} />
+            </Form>
+          </HumanFeedbackModal>
+        </ActionBar>
       </PageHeader>
 
       <SectionsGroup>

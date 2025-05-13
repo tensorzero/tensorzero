@@ -1239,7 +1239,7 @@ impl ModelProvider {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum CredentialLocation {
     /// Environment variable containing the actual credential
     Env(String),

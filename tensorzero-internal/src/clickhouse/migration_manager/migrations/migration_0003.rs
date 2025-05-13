@@ -105,7 +105,7 @@ impl Migration for Migration0003<'_> {
         Ok(false)
     }
 
-    async fn apply(&self) -> Result<(), Error> {
+    async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         // Create the `FeedbackTag` table
         let query = r#"
             CREATE TABLE IF NOT EXISTS FeedbackTag
@@ -239,10 +239,10 @@ impl Migration for Migration0003<'_> {
     fn rollback_instructions(&self) -> String {
         "\
             -- Drop the materialized views\n\
-            DROP MATERIALIZED VIEW IF EXISTS BooleanMetricFeedbackTagView;\n\
-            DROP MATERIALIZED VIEW IF EXISTS CommentFeedbackTagView;\n\
-            DROP MATERIALIZED VIEW IF EXISTS DemonstrationFeedbackTagView;\n\
-            DROP MATERIALIZED VIEW IF EXISTS FloatMetricFeedbackTagView;\n\
+            DROP VIEW IF EXISTS BooleanMetricFeedbackTagView;\n\
+            DROP VIEW IF EXISTS CommentFeedbackTagView;\n\
+            DROP VIEW IF EXISTS DemonstrationFeedbackTagView;\n\
+            DROP VIEW IF EXISTS FloatMetricFeedbackTagView;\n\
             \n\
             -- Drop the table\n\
             DROP TABLE IF EXISTS FeedbackTag;\n\

@@ -1006,6 +1006,15 @@ describe("OpenAI Compatibility", () => {
       required: ["response"],
       additionalProperties: false,
     };
+    const response_format = {
+      type: "json_schema" as const,
+      json_schema: {
+        name: "test",
+        description: "test",
+        schema: outputSchema,
+        strict: true,
+      },
+    };
 
     const serializedOutputSchema = JSON.stringify(outputSchema);
     const messages: ChatCompletionMessageParam[] = [
@@ -1033,10 +1042,7 @@ describe("OpenAI Compatibility", () => {
     const result = await client.chat.completions.create({
       messages,
       model: "tensorzero::function_name::dynamic_json",
-      response_format: {
-        type: "json_schema",
-        json_schema: { name: "json_schema", ...outputSchema }, // the Node client requires a `name` field here...?
-      },
+      response_format,
       // @ts-expect-error - custom TensorZero property
       "tensorzero::episode_id": episodeId,
       "tensorzero::variant_name": "openai",
@@ -1382,29 +1388,29 @@ it("should handle extra headers parameter", async () => {
     // @ts-expect-error - custom TensorZero property
     "tensorzero::extra_headers": [
       {
-        "model_provider_name": "tensorzero::model_name::dummy::echo_extra_info::provider_name::dummy",
-        "name": "x-my-extra-header",
-        "value": "my-extra-header-value",
+        model_provider_name:
+          "tensorzero::model_name::dummy::echo_extra_info::provider_name::dummy",
+        name: "x-my-extra-header",
+        value: "my-extra-header-value",
       },
     ],
-    messages: [
-      { role: "user", content: "Hello, world!" },
-    ],
+    messages: [{ role: "user", content: "Hello, world!" }],
     model: "tensorzero::model_name::dummy::echo_extra_info",
   });
 
   expect(result.model).toBe("tensorzero::model_name::dummy::echo_extra_info");
   expect(JSON.parse(result.choices[0].message.content!)).toEqual({
-    "extra_body": { "inference_extra_body": [] },
-    "extra_headers": {
-      "inference_extra_headers": [
+    extra_body: { inference_extra_body: [] },
+    extra_headers: {
+      inference_extra_headers: [
         {
-          "model_provider_name": "tensorzero::model_name::dummy::echo_extra_info::provider_name::dummy",
-          "name": "x-my-extra-header",
-          "value": "my-extra-header-value",
-        }
+          model_provider_name:
+            "tensorzero::model_name::dummy::echo_extra_info::provider_name::dummy",
+          name: "x-my-extra-header",
+          value: "my-extra-header-value",
+        },
       ],
-      "variant_extra_headers": null,
+      variant_extra_headers: null,
     },
   });
 });
@@ -1414,32 +1420,31 @@ it("should handle extra body parameter", async () => {
     // @ts-expect-error - custom TensorZero property
     "tensorzero::extra_body": [
       {
-        "model_provider_name": "tensorzero::model_name::dummy::echo_extra_info::provider_name::dummy",
-        "pointer": "/thinking",
-        "value": {
-          "type": "enabled",
-          "budget_tokens": 1024,
+        model_provider_name:
+          "tensorzero::model_name::dummy::echo_extra_info::provider_name::dummy",
+        pointer: "/thinking",
+        value: {
+          type: "enabled",
+          budget_tokens: 1024,
         },
       },
     ],
-    messages: [
-      { role: "user", content: "Hello, world!" },
-    ],
+    messages: [{ role: "user", content: "Hello, world!" }],
     model: "tensorzero::model_name::dummy::echo_extra_info",
   });
 
   expect(result.model).toBe("tensorzero::model_name::dummy::echo_extra_info");
   expect(JSON.parse(result.choices[0].message.content!)).toEqual({
-    "extra_body": {
-      "inference_extra_body": [
+    extra_body: {
+      inference_extra_body: [
         {
-          "model_provider_name": "tensorzero::model_name::dummy::echo_extra_info::provider_name::dummy",
-          "pointer": "/thinking",
-          "value": { "type": "enabled", "budget_tokens": 1024 },
-        }
-      ]
+          model_provider_name:
+            "tensorzero::model_name::dummy::echo_extra_info::provider_name::dummy",
+          pointer: "/thinking",
+          value: { type: "enabled", budget_tokens: 1024 },
+        },
+      ],
     },
-    "extra_headers": { "variant_extra_headers": null, "inference_extra_headers": [] },
+    extra_headers: { variant_extra_headers: null, inference_extra_headers: [] },
   });
 });
-

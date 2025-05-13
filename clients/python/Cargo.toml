@@ -1,0 +1,42 @@
+[package]
+# This is the name of the Rust crate (which shows up in the cargo output)
+# It's named 'tensorzero-python' to avoid confusion with the Rust client
+# (which has a crate name of 'tensorzero')
+name = "tensorzero-python"
+version.workspace = true
+edition = "2021"
+license = "Apache-2.0"
+
+[lints]
+workspace = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+# This is used by 'maturin' as the name of the Python package
+# This is 'tensorzero' (unsuffixed), so that Python code can write 'import tensorzero'
+name = "tensorzero"
+crate-type = ["cdylib"]
+
+[dependencies]
+tensorzero-internal = { path = "../../tensorzero-internal" }
+futures = { workspace = true }
+pyo3 = { workspace = true }
+pyo3-async-runtimes = { version = "0.24.0", features = ["tokio-runtime"] }
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_path_to_error.workspace = true
+tensorzero_rust = { package = "tensorzero", path = "../rust", features = [
+    "pyo3",
+] }
+tokio.workspace = true
+tracing = { workspace = true, features = ["release_max_level_debug"] }
+url.workspace = true
+uuid.workspace = true
+
+[features]
+# Forward these features to the rust client, so that the embedded gateway
+# has the `e2e_tests` feature enabled when we run our e2e tests
+# We also set 'pyo3/extension-module' so that 'maturin develop --features e2e_tests'
+# will work correctly.
+e2e_tests = ["tensorzero_rust/e2e_tests", "pyo3/extension-module"]

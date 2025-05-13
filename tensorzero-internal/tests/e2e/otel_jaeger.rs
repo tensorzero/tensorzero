@@ -5,14 +5,36 @@ use chrono::Duration;
 use chrono::SecondsFormat;
 use chrono::Utc;
 use http::StatusCode;
+use opentelemetry::SpanId;
+use opentelemetry::TraceId;
+use opentelemetry_sdk::trace::IdGenerator;
+use opentelemetry_sdk::trace::RandomIdGenerator;
 use serde_json::{json, Value};
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
 
-// TODO - investigate why this test is sometimes flaky when running locally
+#[derive(Debug, Copy, Clone)]
+struct ExistingTraceData {
+    trace_id: TraceId,
+    span_id: SpanId,
+}
+
 #[tokio::test]
-pub async fn test_jaeger_trace_export() {
+async fn test_jaeger_trace_export_no_parent() {
+    test_jaeger_trace_export(None).await;
+}
+
+#[tokio::test]
+async fn test_jaeger_trace_export_with_parent() {
+    let id_gen = RandomIdGenerator::default();
+    let trace_id = id_gen.new_trace_id();
+    let span_id = id_gen.new_span_id();
+    test_jaeger_trace_export(Some(ExistingTraceData { trace_id, span_id })).await;
+}
+
+// TODO - investigate why this test is sometimes flaky when running locally
+async fn test_jaeger_trace_export(existing_trace_parent: Option<ExistingTraceData>) {
     let episode_id = Uuid::now_v7();
     let client = reqwest::Client::new();
 
@@ -32,12 +54,19 @@ pub async fn test_jaeger_trace_export() {
         "tags": {"foo": "bar"},
     });
 
-    let response = client
+    let mut builder = client
         .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .send()
-        .await
-        .unwrap();
+        .json(&payload);
+
+    let existing_trace_header = existing_trace_parent
+        // Version 00, with the 'sampled' flag set to 1
+        .map(|trace_parent| format!("00-{}-{}-01", trace_parent.trace_id, trace_parent.span_id));
+
+    if let Some(existing_trace_header) = &existing_trace_header {
+        builder = builder.header("traceparent", existing_trace_header);
+    }
+
+    let response = builder.send().await.unwrap();
 
     // Check that the API response is ok
     assert_eq!(response.status(), StatusCode::OK);
@@ -59,9 +88,13 @@ pub async fn test_jaeger_trace_export() {
     let jaeger_traces = jaeger_result.json::<Value>().await.unwrap();
     println!("Response: {jaeger_traces}");
     let mut target_span = None;
-    'outer: for resource_span in jaeger_traces["result"]["resourceSpans"].as_array().unwrap() {
+
+    let mut span_by_id = HashMap::new();
+
+    for resource_span in jaeger_traces["result"]["resourceSpans"].as_array().unwrap() {
         for scope_span in resource_span["scopeSpans"].as_array().unwrap() {
             for span in scope_span["spans"].as_array().unwrap() {
+                span_by_id.insert(span["spanId"].as_str().unwrap(), span.clone());
                 if span["name"] == "function_inference" {
                     println!("Found function_inference span: {span:?}");
                     let attrs = span["attributes"].as_array().unwrap();
@@ -74,7 +107,6 @@ pub async fn test_jaeger_trace_export() {
                                     panic!("Found multiple function_inference spans with inference id: {inference_id}");
                                 } else {
                                     target_span = Some(span.clone());
-                                    break 'outer;
                                 }
                             }
                         }
@@ -84,10 +116,11 @@ pub async fn test_jaeger_trace_export() {
         }
     }
 
-    // Just check one span - we already have more comprehensive tests that check the exact spans
+    // Just check a couple of spans - we already have more comprehensive tests that check the exact spans
     // send to the global `opentelemetry` exporter.
-    let function_inference_span = target_span
-        .expect("No function_inference span found with matching inference_id: {inference_id}");
+    let function_inference_span = target_span.unwrap_or_else(|| {
+        panic!("No function_inference span found with matching inference_id: {inference_id}")
+    });
     assert_eq!(function_inference_span["name"], "function_inference");
     assert_eq!(function_inference_span["kind"], 1);
     let attrs: HashMap<&str, serde_json::Value> = function_inference_span["attributes"]
@@ -100,4 +133,21 @@ pub async fn test_jaeger_trace_export() {
     println!("Attrs: {attrs:?}");
 
     assert_eq!(attrs["function_name"]["stringValue"], "basic_test");
+
+    let parent_id = function_inference_span["parentSpanId"].as_str().unwrap();
+    let parent_span = span_by_id.get(parent_id).unwrap();
+
+    assert_eq!(parent_span["name"], "POST /inference");
+    assert_eq!(attrs["level"]["stringValue"], "INFO");
+
+    if let Some(existing_trace_parent) = existing_trace_parent {
+        assert_eq!(
+            parent_span["traceId"],
+            existing_trace_parent.trace_id.to_string()
+        );
+        assert_eq!(
+            parent_span["parentSpanId"],
+            existing_trace_parent.span_id.to_string()
+        );
+    }
 }
