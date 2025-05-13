@@ -8,7 +8,11 @@ on:
     types: [released]
   push:
     branches: ["main"]
-
+  pull_request:
+    paths:
+      - '.github/workflows/docker-hub-publish.yml'
+      - '**/Dockerfile'
+  
 env:
   DOCKERHUB_USER: tensorzero
 

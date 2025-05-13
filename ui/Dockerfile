@@ -36,7 +36,8 @@ wget https://github.com/mozilla/sccache/releases/download/${SCCACHE_VERSION}/scc
     mv sccache-${SCCACHE_VERSION}-${SCCACHE_PLATFORM}/sccache /usr/local/bin/ && \
     chmod +x /usr/local/bin/sccache && \
     rm -rf sccache-${SCCACHE_VERSION}-${SCCACHE_PLATFORM} sccache-${SCCACHE_VERSION}-${SCCACHE_PLATFORM}.tar.gz
-ENV RUSTC_WRAPPER=sccache SCCACHE_DIR=/sccache
+# Set enormous cache size to prevent eviction (which breaks concurrent sccache builds)
+ENV RUSTC_WRAPPER=sccache SCCACHE_DIR=/sccache SCCACHE_CACHE_SIZE=100000000GB
 
 # ========== minijinja-build-env ==========
 
