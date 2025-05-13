@@ -439,7 +439,6 @@ pub async fn test_streaming_reasoning_inference_request_simple_with_provider(
     assert!(processing_time_ms > 0);
 
     let tags = result.get("tags").unwrap().as_object().unwrap();
-    assert_eq!(tags.len(), 1);
     assert_eq!(tags.get("key").unwrap().as_str().unwrap(), tag_value);
 
     // Check ClickHouse - ModelInference Table

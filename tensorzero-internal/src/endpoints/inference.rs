@@ -269,6 +269,10 @@ pub async fn inference(
             }
             .into());
         }
+        params.tags.insert(
+            "tensorzero::variant_pinned".to_string(),
+            variant_name.to_string(),
+        );
     } else {
         // Remove all zero-weight variants - these can only be used if explicitly pinned above
         candidate_variant_names.retain(|name| {

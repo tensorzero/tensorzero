@@ -1960,10 +1960,18 @@ pub async fn check_simple_inference_response(
     let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
     assert_eq!(clickhouse_content, content);
 
+    let tags = result.get("tags").unwrap().as_object().unwrap();
     if !is_batch {
-        let tags = result.get("tags").unwrap().as_object().unwrap();
         assert_eq!(tags.get("foo").unwrap().as_str().unwrap(), "bar");
     }
+    // Since the variant was pinned, the variant_pinned tag should be present
+    assert_eq!(
+        tags.get("tensorzero::variant_pinned")
+            .unwrap()
+            .as_str()
+            .unwrap(),
+        provider.variant_name
+    );
 
     let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
     assert!(tool_params.is_empty());
@@ -2547,7 +2555,6 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     assert!(processing_time_ms > 0);
 
     let tags = result.get("tags").unwrap().as_object().unwrap();
-    assert_eq!(tags.len(), 1);
     assert_eq!(tags.get("key").unwrap().as_str().unwrap(), tag_value);
 
     // Check ClickHouse - ModelInference Table
