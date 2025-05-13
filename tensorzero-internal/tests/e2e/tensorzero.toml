@@ -1205,6 +1205,19 @@ system_template = "../../fixtures/config/functions/basic_test/prompt/system_temp
 max_tokens = 100
 json_mode = "strict"
 
+[functions.json_success_no_input_schema]
+type = "json"
+system_schema = "../../fixtures/config/functions/basic_test/system_schema.json"
+output_schema = "../../fixtures/config/functions/basic_test/output_schema.json"
+
+[functions.json_success_no_input_schema.variants.test]
+type = "chat_completion"
+weight = 1
+model = "json"
+system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+max_tokens = 100
+json_mode = "strict"
+
 [functions.json_success]
 type = "json"
 system_schema = "../../fixtures/config/functions/basic_test/system_schema.json"
