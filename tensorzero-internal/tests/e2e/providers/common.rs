@@ -2312,6 +2312,11 @@ pub async fn test_streaming_invalid_request_with_provider(provider: E2ETestProvi
                 "pointer": "/messages/0/content",
                 "value": 123,
             },
+            {
+                "variant_name": "ollama",
+                "pointer": "/messages/0/content",
+                "value": 123,
+            },
         ],
         "extra_headers": extra_headers.headers,
     });
@@ -2336,7 +2341,8 @@ pub async fn test_streaming_invalid_request_with_provider(provider: E2ETestProvi
         assert!(
             err_msg.contains("top_p")
                 || err_msg.contains("topP")
-                || err_msg.contains("temperature"),
+                || err_msg.contains("temperature")
+                || err_msg.contains("invalid message content type: float64"), //in case of "ollama" provider we break the request by setting incorrect messages.content 
             "Unexpected error message: {resp}"
         );
     }
@@ -3762,6 +3768,12 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
 pub async fn test_tool_use_tool_choice_auto_unused_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    //NOTE: The openai compatible ollama api does not support tool_choice yet so disabling this
+    // https://github.com/ollama/ollama/blob/4ec7445a6f678b6efc773bb9fa886d7c9b075577/docs/openai.md#supported-request-fields
+    if provider.model_provider_name == "ollama" {
+        return;
+    }
+
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -4017,6 +4029,13 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
     if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
         return;
     }
+
+    //NOTE: The openai compatible ollama api does not support tool_choice yet so disabling this
+    // https://github.com/ollama/ollama/blob/4ec7445a6f678b6efc773bb9fa886d7c9b075577/docs/openai.md#supported-request-fields
+    if provider.model_provider_name == "ollama" {
+        return;
+    }
+
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -4587,6 +4606,12 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
         return;
     }
 
+    //NOTE: The openai compatible ollama api does not support tool_choice yet so disabling this
+    // https://github.com/ollama/ollama/blob/4ec7445a6f678b6efc773bb9fa886d7c9b075577/docs/openai.md#supported-request-fields
+    if provider.model_provider_name == "ollama" {
+        return;
+    }
+
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -4913,6 +4938,11 @@ pub async fn test_tool_use_tool_choice_none_inference_request_with_provider(
         return;
     }
 
+    //NOTE: The openai compatible ollama api does not support tool_choice yet so disabling this
+    // https://github.com/ollama/ollama/blob/4ec7445a6f678b6efc773bb9fa886d7c9b075577/docs/openai.md#supported-request-fields
+    if provider.model_provider_name == "ollama" {
+        return;
+    }
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -5162,6 +5192,13 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
     if provider.model_provider_name == "xai" {
         return;
     }
+
+    //NOTE: The openai compatible ollama api does not support tool_choice yet so disabling this
+    // https://github.com/ollama/ollama/blob/4ec7445a6f678b6efc773bb9fa886d7c9b075577/docs/openai.md#supported-request-fields
+    if provider.model_provider_name == "ollama" {
+        return;
+    }
+
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
