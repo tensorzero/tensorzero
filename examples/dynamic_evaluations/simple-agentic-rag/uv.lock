@@ -1510,7 +1510,7 @@ wheels = [
 
 [[package]]
 name = "tensorzero"
-source = { directory = "../../../clients/python-pyo3" }
+source = { directory = "../../../clients/python" }
 dependencies = [
     { name = "httpx" },
     { name = "typing-extensions" },
@@ -1552,7 +1552,7 @@ requires-dist = [
     { name = "ipykernel" },
     { name = "jupyter" },
     { name = "markdownify" },
-    { name = "tensorzero", directory = "../../../clients/python-pyo3" },
+    { name = "tensorzero", directory = "../../../clients/python" },
     { name = "wikipedia" },
 ]
 

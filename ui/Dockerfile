@@ -97,10 +97,10 @@ COPY ./ui/entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 
 COPY ./optimization-server /build/optimization-server
-COPY --from=python-build-env /build/clients/python-pyo3 /build/clients/python-pyo3
+COPY --from=python-build-env /build/clients/python /build/clients/python
 COPY --from=python-build-env /build/optimization-server/.venv  /build/optimization-server/.venv
 # Workaround for uv issue
-#COPY ./clients/python-pyo3 /clients/python-pyo3
+#COPY ./clients/python /clients/python
 
 USER ui
 

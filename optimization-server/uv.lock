@@ -688,7 +688,7 @@ requires-dist = [
     { name = "minijinja" },
     { name = "openai" },
     { name = "pydantic" },
-    { name = "tensorzero", editable = "../clients/python-pyo3" },
+    { name = "tensorzero", editable = "../clients/python" },
     { name = "tiktoken", specifier = ">=0.9.0" },
     { name = "typing-extensions", specifier = ">=4.13.1" },
     { name = "uuid-utils" },
@@ -1136,7 +1136,7 @@ wheels = [
 
 [[package]]
 name = "tensorzero"
-source = { editable = "../clients/python-pyo3" }
+source = { editable = "../clients/python" }
 dependencies = [
     { name = "httpx" },
     { name = "typing-extensions" },

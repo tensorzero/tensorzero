@@ -300,7 +300,7 @@ where
     F::Output: Ungil,
 {
     // The Tokio runtime is managed by `pyo3_async_runtimes` - the entrypoint to
-    // our crate (`python-pyo3`) is the `pymodule` function, rather than
+    // our crate (`python`) is the `pymodule` function, rather than
     // a `#[tokio::main]` function, so we need `pyo3_async_runtimes` to keep track of
     // a Tokio runtime for us.
     py.allow_threads(|| pyo3_async_runtimes::tokio::get_runtime().block_on(fut))
