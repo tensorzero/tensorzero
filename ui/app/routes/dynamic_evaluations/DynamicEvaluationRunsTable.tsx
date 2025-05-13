@@ -9,12 +9,12 @@ import {
   TableEmptyState,
 } from "~/components/ui/table";
 import { formatDate } from "~/utils/date";
-import type { DynamicEvaluationRun } from "~/utils/clickhouse/dynamic_evaluations";
+import type { DynamicEvaluationRunWithEpisodeCount } from "~/utils/clickhouse/dynamic_evaluations";
 
 export default function DynamicEvaluationRunsTable({
   dynamicEvaluationRuns,
 }: {
-  dynamicEvaluationRuns: DynamicEvaluationRun[];
+  dynamicEvaluationRuns: DynamicEvaluationRunWithEpisodeCount[];
 }) {
   return (
     <div>
@@ -24,6 +24,7 @@ export default function DynamicEvaluationRunsTable({
             <TableHead>Name</TableHead>
             <TableHead>ID</TableHead>
             <TableHead>Project</TableHead>
+            <TableHead>Number of Episodes</TableHead>
             <TableHead>Timestamp</TableHead>
           </TableRow>
         </TableHeader>
@@ -58,6 +59,7 @@ export default function DynamicEvaluationRunsTable({
                     {run.project_name}
                   </code>
                 </TableCell>
+                <TableCell>{run.num_episodes}</TableCell>
                 <TableCell>{formatDate(new Date(run.timestamp))}</TableCell>
               </TableRow>
             ))
