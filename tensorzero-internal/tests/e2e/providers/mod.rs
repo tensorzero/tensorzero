@@ -20,3 +20,4 @@ mod tgi;
 mod together;
 mod vllm;
 mod xai;
+mod ollama;
