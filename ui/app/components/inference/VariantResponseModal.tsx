@@ -91,9 +91,10 @@ export function VariantResponseModal({
             {response.output && (
               <div className="flex-1">
                 <NewOutput
-                  output={response.output}
-                  outputSchema={
-                    "output_schema" in item ? item.output_schema : undefined
+                  output={
+                    "output_schema" in item && item.output_schema
+                      ? { ...response.output, schema: item.output_schema }
+                      : response.output
                   }
                 />
               </div>
