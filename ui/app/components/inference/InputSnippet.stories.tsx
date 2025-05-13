@@ -302,7 +302,7 @@ export const MultiTurnParallelToolUse: Story = {
   },
 };
 
-export const StructuredInputs: Story = {
+export const TextWithArguments: Story = {
   args: {
     input: {
       system: "Write a haiku about the topic provided by the user.",
