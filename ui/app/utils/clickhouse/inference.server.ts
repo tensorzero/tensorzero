@@ -1,5 +1,6 @@
 import {
   type ContentBlockOutput,
+  CountSchema,
   type JsonInferenceOutput,
   modelInferenceInputMessageSchema,
   type TableBounds,
@@ -18,6 +19,7 @@ import {
   episodeByIdSchema,
   inferenceByIdRowSchema,
   modelInferenceRowSchema,
+  parsedModelInferenceRowSchema,
   parseInferenceOutput,
   type EpisodeByIdRow,
   type InferenceByIdRow,
@@ -443,7 +445,8 @@ export async function countInferencesForFunction(
     query_params: { function_name },
   });
   const rows = await resultSet.json<{ count: number }>();
-  return rows[0].count;
+  const parsedRows = rows.map((row) => CountSchema.parse(row));
+  return parsedRows[0].count;
 }
 
 export async function countInferencesForVariant(
@@ -459,20 +462,22 @@ export async function countInferencesForVariant(
     query_params: { function_name, variant_name },
   });
   const rows = await resultSet.json<{ count: number }>();
-  return rows[0].count;
+  const parsedRows = rows.map((row) => CountSchema.parse(row));
+  return parsedRows[0].count;
 }
 
 export async function countInferencesForEpisode(
   episode_id: string,
 ): Promise<number> {
-  const query = `SELECT COUNT() AS count FROM InferenceByEpisodeId FINAL WHERE episode_id_uint = toUInt128(toUUID({episode_id:String}))`;
+  const query = `SELECT toUInt32(COUNT()) AS count FROM InferenceByEpisodeId FINAL WHERE episode_id_uint = toUInt128(toUUID({episode_id:String}))`;
   const resultSet = await clickhouseClient.query({
     query,
     format: "JSONEachRow",
     query_params: { episode_id },
   });
   const rows = await resultSet.json<{ count: string }>();
-  return Number(rows[0].count);
+  const parsedRows = rows.map((row) => CountSchema.parse(row));
+  return parsedRows[0].count;
 }
 
 async function parseInferenceRow(
@@ -480,6 +485,7 @@ async function parseInferenceRow(
 ): Promise<ParsedInferenceRow> {
   const input = inputSchema.parse(JSON.parse(row.input));
   const resolvedInput = await resolveInput(input);
+  const extra_body = row.extra_body ? JSON.parse(row.extra_body) : undefined;
   if (row.function_type === "chat") {
     return {
       ...row,
@@ -494,6 +500,7 @@ async function parseInferenceRow(
           : z
               .record(z.string(), z.unknown())
               .parse(JSON.parse(row.tool_params)),
+      extra_body,
     };
   } else {
     return {
@@ -506,6 +513,7 @@ async function parseInferenceRow(
       output_schema: z
         .record(z.string(), z.unknown())
         .parse(JSON.parse(row.output_schema)),
+      extra_body,
     };
   }
 }
@@ -538,7 +546,8 @@ export async function queryInferenceById(
         NULL AS output_schema, -- Placeholder for JSON column
         formatDateTime(c.timestamp, '%Y-%m-%dT%H:%i:%SZ') AS timestamp,
         c.tags,
-        'chat' AS function_type
+        'chat' AS function_type,
+        c.extra_body
     FROM ChatInference c
     WHERE
         'chat' = (SELECT function_type FROM inference)
@@ -562,7 +571,8 @@ export async function queryInferenceById(
         j.output_schema,
         formatDateTime(j.timestamp, '%Y-%m-%dT%H:%i:%SZ') AS timestamp,
         j.tags,
-        'json' AS function_type
+        'json' AS function_type,
+        j.extra_body
     FROM JsonInference j
     WHERE
         'json' = (SELECT function_type FROM inference)
@@ -591,11 +601,12 @@ async function parseModelInferenceRow(
     .array(modelInferenceInputMessageSchema)
     .parse(JSON.parse(row.input_messages));
   const resolvedMessages = await resolveModelInferenceMessages(parsedMessages);
-  return {
+  const processedRow = {
     ...row,
     input_messages: resolvedMessages,
     output: z.array(contentBlockSchema).parse(JSON.parse(row.output)),
   };
+  return parsedModelInferenceRowSchema.parse(processedRow);
 }
 
 export async function queryModelInferencesByInferenceId(
@@ -651,7 +662,7 @@ export async function countInferencesByFunction(): Promise<
 }
 
 export async function countEpisodes(): Promise<number> {
-  const query = `SELECT COUNT(DISTINCT episode_id) as count FROM (
+  const query = `SELECT toUInt32(COUNT(DISTINCT episode_id)) as count FROM (
     SELECT episode_id FROM ChatInference
     UNION ALL
     SELECT episode_id FROM JsonInference
@@ -660,6 +671,7 @@ export async function countEpisodes(): Promise<number> {
     query,
     format: "JSONEachRow",
   });
-  const rows = await resultSet.json<{ count: string }>();
-  return Number(rows[0].count);
+  const rows = await resultSet.json<{ count: number }>();
+  const parsedRows = rows.map((row) => CountSchema.parse(row));
+  return parsedRows[0].count;
 }
