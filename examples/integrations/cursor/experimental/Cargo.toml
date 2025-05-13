@@ -12,7 +12,7 @@ tokio = { workspace = true }
 clap = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
-tree-sitter = "0.25.3"
+tree-sitter = "0.25.4"
 tree-sitter-rust = "0.24.0"
 tree-sitter-typescript = "0.23.2"
 tree-sitter-python = "0.23.6"

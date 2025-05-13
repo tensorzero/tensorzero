@@ -18,7 +18,7 @@ clap = { workspace = true }
 serde = { workspace = true }
 axum-tracing-opentelemetry = "0.28.0"
 tracing-opentelemetry-instrumentation-sdk = { version = "0.28.0", features = ["tracing_level_info"] }
-tower-http = { version = "0.6.2", features = ["trace"] }
+tower-http = { version = "0.6.4", features = ["trace"] }
 
 [lints]
 workspace = true
@@ -29,4 +29,4 @@ default = []
 
 [dev-dependencies]
 reqwest.workspace = true
-tempfile = "3.19.1"
+tempfile = "3.20.0"
