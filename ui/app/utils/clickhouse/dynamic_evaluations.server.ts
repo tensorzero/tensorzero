@@ -52,7 +52,7 @@ export async function getDynamicEvaluationRuns(
       variant_pins,
       tags,
       project_name,
-      num_episodes,
+      COALESCE(num_episodes, 0) AS num_episodes,
       timestamp
     FROM FilteredDynamicEvaluationRuns
     LEFT JOIN DynamicEvaluationRunsEpisodeCounts USING run_id_uint
