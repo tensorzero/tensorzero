@@ -28,14 +28,14 @@ jobs:
           - runner: ubuntu-24.04-arm
             target: linux/arm64
         container:
-          # Set the container name to a '-dev' name when this workflow is invoked by a push event
-          # Otherwise, use the unsuffixed name (which will be invoked by a release or manual dispatch)
+          # Give the container name to a '-dev' normally - only use the unsuffixed name when we're releasing,
+          # or when this workflow is invoked by a manual dispatch
           # Unfortunately, we can't use 'env' in 'strategy.matrix'
-          - name: ${{ github.event_name == 'push' && 'ui-dev' || 'ui' }}
+          - name: ${{ (github.event_name == 'release' || github.event_name == 'workflow_dispatch') && 'ui' || 'ui-dev' }}
             path: ui
-          - name: ${{ github.event_name == 'push' && 'gateway-dev' || 'gateway' }}
+          - name: ${{ (github.event_name == 'release' || github.event_name == 'workflow_dispatch') && 'gateway' || 'gateway-dev' }}
             path: gateway
-          - name: ${{ github.event_name == 'push' && 'evaluations-dev' || 'evaluations' }}
+          - name: ${{ (github.event_name == 'release' || github.event_name == 'workflow_dispatch') && 'evaluations' || 'evaluations-dev' }}
             path: evaluations
 
     permissions:
