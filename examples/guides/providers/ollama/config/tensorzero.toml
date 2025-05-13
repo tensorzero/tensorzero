@@ -1,0 +1,14 @@
+[models."llama3.2"]
+routing = ["ollama"]
+
+[models."llama3.2".providers.ollama]
+type = "ollama"
+model_name = "llama3.2"
+api_key_location="none"
+
+[functions.my_function_name]
+type = "chat"
+
+[functions.my_function_name.variants.my_variant_name]
+type = "chat_completion"
+model = "llama3.2"
