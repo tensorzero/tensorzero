@@ -368,12 +368,10 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
           </SectionLayout>
         )}
 
-        {Object.keys(inference.tags).length > 0 && (
-          <SectionLayout>
-            <SectionHeader heading="Tags" />
-            <TagsTable tags={inference.tags} />
-          </SectionLayout>
-        )}
+        <SectionLayout>
+          <SectionHeader heading="Tags" />
+          <TagsTable tags={inference.tags} />
+        </SectionLayout>
 
         <SectionLayout>
           <SectionHeader heading="Model Inferences" />
