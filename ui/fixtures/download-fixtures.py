@@ -13,7 +13,12 @@ import requests
 
 # Constants
 PART_SIZE = 8388608
-FIXTURES = ["large_chat_inference.parquet", "large_model_inference.parquet", "large_json_inference.parquet", "large_json_model_inference.parquet"]
+FIXTURES = [
+    "large_chat_inference.parquet",
+    "large_model_inference.parquet",
+    "large_json_inference.parquet",
+    "large_json_model_inference.parquet",
+]
 R2_BUCKET = "https://pub-147e9850a60643208c411e70b636e956.r2.dev"
 S3_FIXTURES_DIR = Path("./s3-fixtures")
 
