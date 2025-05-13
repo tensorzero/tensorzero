@@ -34,22 +34,24 @@ export function CommitHash({ tags }: CommitHashProps) {
     <TooltipProvider delayDuration={100}>
       <Tooltip>
         <TooltipTrigger asChild>
-          <div className="inline-block">
-            {commitLink ? (
-              displayBranch ? (
-                <KVChip
-                  k={displayBranch}
-                  v={shortHash}
-                  k_href={branchLink}
-                  v_href={commitLink}
-                />
-              ) : (
-                <Code>{shortHash}</Code>
-              )
+          {commitLink ? (
+            displayBranch ? (
+              <KVChip
+                k={displayBranch}
+                v={shortHash}
+                k_href={branchLink}
+                v_href={commitLink}
+              />
             ) : (
-              <Code>{shortHash}</Code>
-            )}
-          </div>
+              <Code className="flex items-center gap-1 rounded bg-gray-100 px-2 py-0.5 font-mono text-xs">
+                {shortHash}
+              </Code>
+            )
+          ) : (
+            <Code className="flex items-center gap-1 rounded bg-gray-100 px-2 py-0.5 font-mono text-xs">
+              {shortHash}
+            </Code>
+          )}
         </TooltipTrigger>
         <TooltipContent>
           <div style={{ minWidth: 220 }}>
