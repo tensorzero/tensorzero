@@ -1,19 +1,25 @@
 use async_trait::async_trait;
 
-use super::check_table_exists;
+use super::{check_table_exists, table_is_nonempty};
 use crate::clickhouse::migration_manager::migration_trait::Migration;
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::error::{Error, ErrorDetails};
 
-/// This migration adds the `DynamicRunEpisodeByRunId` table and the
-/// `DynamicRunEpisodeByRunIdView` materialized view.
+/// This migration adds the `DynamicEvaluationRunEpisodeByRunId` table and the
+/// `DynamicEvaluationRunEpisodeByRunIdView` materialized view.
 /// It also adds the `DynamicEvaluationRunByProjectName` table and the
 /// `DynamicEvaluationRunByProjectNameView` materialized view.
 /// These support consumption of dynamic evaluations indexed by run id and project name.
-/// The `DynamicRunEpisodeByRunId` table contains the same data as the
+/// The `DynamicEvaluationRunEpisodeByRunId` table contains the same data as the
 /// `DynamicEvaluationRunEpisode` table with different indexing.
 /// The `DynamicEvaluationRunByProjectName` table contains the same data as the
 /// `DynamicEvaluationRun` table with different indexing.
+///
+/// NOTE: This migration initializes the views as mentioned without doing an insert step.
+/// At the time we included these migrations we had not yet released the Dynamic Evaluations feature
+/// so there should not be data in the source tables `DynamicEvaluationRunEpisode` or
+/// `DynamicEvaluationRun`.
+/// We therefore check that these tables are empty if we need to apply the migration.
 pub struct Migration0026<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
 }
@@ -72,6 +78,22 @@ impl Migration for Migration0026<'_> {
     }
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
+        // First we check that DynamicEvaluationRun and DynamicEvaluationRunEpisode are empty.
+        if table_is_nonempty(self.clickhouse, "DynamicEvaluationRun", "0026").await? {
+            return Err(ErrorDetails::ClickHouseMigration {
+                id: "0026".to_string(),
+                message: "DynamicEvaluationRun table is not empty".to_string(),
+            }
+            .into());
+        }
+        if table_is_nonempty(self.clickhouse, "DynamicEvaluationRunEpisode", "0026").await? {
+            return Err(ErrorDetails::ClickHouseMigration {
+                id: "0026".to_string(),
+                message: "DynamicEvaluationRunEpisode table is not empty".to_string(),
+            }
+            .into());
+        }
+
         let query = r#"
             CREATE TABLE IF NOT EXISTS DynamicEvaluationRunEpisodeByRunId
                 (
