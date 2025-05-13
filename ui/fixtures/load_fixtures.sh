@@ -20,6 +20,10 @@ clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --
 df -h
 clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database tensorzero_ui_fixtures --query "INSERT INTO JsonInference FROM INFILE './s3-fixtures/large_json_inference.parquet' FORMAT Parquet"
 df -h
+clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database tensorzero_ui_fixtures --query "OPTIMIZE TABLE ChatInference"
+df -h
+clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database tensorzero_ui_fixtures --query "OPTIMIZE TABLE JsonInference"
+df -h
 clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database tensorzero_ui_fixtures --query "INSERT INTO ModelInference FROM INFILE './s3-fixtures/large_model_inference.parquet' FORMAT Parquet"
 df -h
 clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database tensorzero_ui_fixtures --query "INSERT INTO ModelInference FROM INFILE './s3-fixtures/large_json_model_inference.parquet' FORMAT Parquet"
