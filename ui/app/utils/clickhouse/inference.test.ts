@@ -594,7 +594,7 @@ describe("getAdjacentInferenceIds", () => {
       lastInferenceId.data[0].last_inference_id,
     );
     expect(adjacentInferenceIds.previous_id).toBe(
-      "0196a0ea-d197-76d0-b6fc-15778589a4da",
+      "0196ca1e-2a1f-73f3-8ea6-d8d22b78cce5",
     );
     expect(adjacentInferenceIds.next_id).toBeNull();
   });
