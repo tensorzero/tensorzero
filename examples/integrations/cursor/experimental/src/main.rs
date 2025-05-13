@@ -14,7 +14,7 @@
 
 use std::{collections::HashMap, path::PathBuf};
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use clap::Parser;
 use cursorzero::clickhouse::InferenceInfo;
 use cursorzero::ted::minimum_ted;
@@ -32,6 +32,7 @@ use serde_json::json;
 use tensorzero::{ClientBuilder, ClientBuilderMode, FeedbackParams};
 use tensorzero_internal::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_internal::inference::types::ContentBlockChatOutput;
+use tracing_subscriber::{EnvFilter, FmtSubscriber};
 use tree_sitter::Tree;
 use url::Url;
 use uuid::Uuid;
@@ -46,6 +47,15 @@ struct Cli {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let subscriber = FmtSubscriber::builder()
+        .with_env_filter(
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
+        )
+        .finish();
+    #[expect(clippy::expect_used)]
+    tracing::subscriber::set_global_default(subscriber)
+        .expect("Failed to set global default subscriber");
+
     let args = Cli::parse();
     let repo = Repository::discover(args.path)?;
     let commit = get_last_commit_from_repo(&repo)?;
@@ -80,10 +90,18 @@ async fn main() -> Result<()> {
         inferences.iter().map(|i| (i.id, i)).collect();
     let mut inference_trees: HashMap<Uuid, Vec<TreeInfo>> = HashMap::new();
     for inference in inferences.iter() {
-        let code_blocks =
-            parse_cursor_output(&inference.input, &inference.output).with_context(|| {
-                format!("Error parsing cursor output for inference {}", inference.id)
-            })?;
+        // If the parsing fails (meaning the inference doesn't look like something we recognize),
+        // we log a warning and skip the inference.
+        let code_blocks = match parse_cursor_output(&inference.input, &inference.output) {
+            Ok(code_blocks) => code_blocks,
+            Err(e) => {
+                tracing::warn!(
+                    "Skipping inference {} because it doesn't look like a cursor response: {e}",
+                    inference.id
+                );
+                continue;
+            }
+        };
         for code_block in code_blocks {
             let tree = parse_hunk(&code_block.content, &code_block.language_extension).ok();
             if let Some(tree) = tree {
