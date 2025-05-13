@@ -485,6 +485,7 @@ async function parseInferenceRow(
 ): Promise<ParsedInferenceRow> {
   const input = inputSchema.parse(JSON.parse(row.input));
   const resolvedInput = await resolveInput(input);
+  const extra_body = row.extra_body ? JSON.parse(row.extra_body) : undefined;
   if (row.function_type === "chat") {
     return {
       ...row,
@@ -499,6 +500,7 @@ async function parseInferenceRow(
           : z
               .record(z.string(), z.unknown())
               .parse(JSON.parse(row.tool_params)),
+      extra_body,
     };
   } else {
     return {
@@ -511,6 +513,7 @@ async function parseInferenceRow(
       output_schema: z
         .record(z.string(), z.unknown())
         .parse(JSON.parse(row.output_schema)),
+      extra_body,
     };
   }
 }
@@ -543,7 +546,8 @@ export async function queryInferenceById(
         NULL AS output_schema, -- Placeholder for JSON column
         formatDateTime(c.timestamp, '%Y-%m-%dT%H:%i:%SZ') AS timestamp,
         c.tags,
-        'chat' AS function_type
+        'chat' AS function_type,
+        c.extra_body
     FROM ChatInference c
     WHERE
         'chat' = (SELECT function_type FROM inference)
@@ -567,7 +571,8 @@ export async function queryInferenceById(
         j.output_schema,
         formatDateTime(j.timestamp, '%Y-%m-%dT%H:%i:%SZ') AS timestamp,
         j.tags,
-        'json' AS function_type
+        'json' AS function_type,
+        j.extra_body
     FROM JsonInference j
     WHERE
         'json' = (SELECT function_type FROM inference)
