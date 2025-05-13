@@ -6,7 +6,19 @@ import type { Config } from "~/utils/config";
 
 const config: Config = {
   gateway: {
-    disable_observability: false,
+    observability: {
+      enabled: true,
+      async_writes: false,
+    },
+    export: {
+      otlp: {
+        traces: {
+          enabled: false,
+        },
+      },
+    },
+    debug: false,
+    enable_template_filesystem_access: false,
   },
   models: {},
   embedding_models: {},

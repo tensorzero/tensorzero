@@ -45,14 +45,18 @@ pub struct Config<'c> {
     pub provider_types: ProviderTypesConfig,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Deserialize)]
 pub struct GatewayConfig {
     pub bind_address: Option<std::net::SocketAddr>,
+    #[serde(default)]
     pub observability: ObservabilityConfig,
+    #[serde(default)]
     pub debug: bool,
     /// If `true`, allow minijinja to read from the filesystem (within the tree of the config file) for '{% include %}'
     /// Defaults to `false`
+    #[serde(default)]
     pub enable_template_filesystem_access: bool,
+    #[serde(default)]
     pub export: ExportConfig,
 }
 
@@ -206,58 +210,9 @@ fn contains_bad_scheme_err(e: &impl StdError) -> bool {
     format!("{e:?}").contains("BadScheme")
 }
 
-/// Note: This struct and the impl below can be removed in favor of a derived impl for Deserialize once we have removed the `disable_observability` flag
-/// TODO (#797): Remove this once we have removed the `disable_observability` flag
-#[derive(Debug, Default, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct UninitializedGatewayConfig {
-    pub bind_address: Option<std::net::SocketAddr>,
-    #[serde(default)]
-    pub disable_observability: bool,
-    #[serde(default)]
-    pub observability: ObservabilityConfig,
-    #[serde(default)]
-    pub debug: bool,
-    #[serde(default)]
-    pub enable_template_filesystem_access: bool,
-    #[serde(default)]
-    pub export: ExportConfig,
-}
-
-impl TryFrom<UninitializedGatewayConfig> for GatewayConfig {
-    type Error = Error;
-    fn try_from(config: UninitializedGatewayConfig) -> Result<Self, Self::Error> {
-        let enabled = match (config.disable_observability, config.observability.enabled) {
-            (true, Some(_)) => {
-                return Err(Error::new(ErrorDetails::Config {
-                    message: "Configuration flag `gateway.disable_observability` and `gateway.observability.enabled` are mutually exclusive. We are deprecating `gateway.disable_observability` in favor of `gateway.observability.enabled`. See https://github.com/tensorzero/tensorzero/issues/797 on GitHub for details.".to_string(),
-                }));
-            }
-            (true, None) => {
-                tracing::warn!("Deprecation Warning: The configuration flag `gateway.disable_observability` is deprecated in favor of `gateway.observability.enabled`. See https://github.com/tensorzero/tensorzero/issues/797 on GitHub for details.");
-                Some(false)
-            }
-            (false, Some(enabled)) => Some(enabled),
-            (false, None) => None,
-        };
-
-        Ok(Self {
-            bind_address: config.bind_address,
-            observability: ObservabilityConfig {
-                enabled,
-                async_writes: config.observability.async_writes,
-            },
-            export: config.export,
-            debug: config.debug,
-            enable_template_filesystem_access: config.enable_template_filesystem_access,
-        })
-    }
-}
-
 #[derive(Debug, Default, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct ObservabilityConfig {
-    #[serde(default)]
     pub enabled: Option<bool>,
     #[serde(default)]
     pub async_writes: bool,
@@ -369,11 +324,6 @@ impl<'c> Config<'c> {
         }
         let uninitialized_config = UninitializedConfig::try_from(table)?;
 
-        let gateway = uninitialized_config
-            .gateway
-            .unwrap_or_default()
-            .try_into()?;
-
         let templates = TemplateConfig::new();
 
         let functions = uninitialized_config
@@ -415,7 +365,7 @@ impl<'c> Config<'c> {
         let object_store_info = ObjectStoreInfo::new(uninitialized_config.object_storage)?;
 
         let mut config = Config {
-            gateway,
+            gateway: uninitialized_config.gateway,
             models: models.try_into().map_err(|e| {
                 Error::new(ErrorDetails::Config {
                     message: format!("Failed to load models: {e}"),
@@ -675,7 +625,8 @@ pub trait LoadableConfig<T> {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct UninitializedConfig {
-    pub gateway: Option<UninitializedGatewayConfig>,
+    #[serde(default)]
+    pub gateway: GatewayConfig,
     #[serde(default)]
     pub models: HashMap<Arc<str>, UninitializedModelConfig>, // model name => model config
     #[serde(default)]

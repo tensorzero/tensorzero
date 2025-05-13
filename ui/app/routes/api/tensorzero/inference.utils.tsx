@@ -179,11 +179,14 @@ export function prepareInferenceActionRequest(
     request = prepareDefaultFunctionRequest(args.resource, args.variant);
   } else {
     const tensorZeroInput = resolvedInputToTensorZeroInput(args.resource.input);
+    const extra_body =
+      args.source === "inference" ? args.resource.extra_body : undefined;
     request = {
       function_name: args.resource.function_name,
       input: tensorZeroInput,
       variant_name: args.variant,
       dryrun: true,
+      extra_body,
     };
   }
 
