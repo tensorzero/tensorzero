@@ -548,11 +548,11 @@ jobs:
         working-directory: ui
         run: pnpm install --frozen-lockfile
 
-      - name: Cache s3-fixtures
-        uses: namespacelabs/nscloud-cache-action@v1
-        with:
-          path: |
-            ./ui/fixtures/s3-fixtures
+      #- name: Cache s3-fixtures
+      #  uses: namespacelabs/nscloud-cache-action@v1
+      #  with:
+      #    path: |
+      #      ./ui/fixtures/s3-fixtures
 
       - name: Build ui container
         # Enable feedback in the UI for this job so the playwright tests can use it
