@@ -15,6 +15,8 @@ import {
   ParsedChatInferenceDatapointRowSchema,
   ParsedJsonInferenceDatapointRowSchema,
 } from "./datasets";
+import type { AdjacentIds } from "./inference";
+import { adjacentIdsSchema } from "./inference";
 import {
   contentBlockOutputSchema,
   CountSchema,
@@ -698,4 +700,35 @@ function validateDatasetName(dataset_name: string) {
   if (dataset_name === "builder" || dataset_name.startsWith("tensorzero::")) {
     throw new Error("Invalid dataset name");
   }
+}
+
+export async function getAdjacentDatapointIds(
+  dataset_name: string,
+  datapoint_id: string,
+): Promise<AdjacentIds> {
+  const query = `
+    WITH DatasetIds AS (
+      SELECT toUInt128(id) as id_uint FROM ChatInferenceDatapoint WHERE dataset_name = {dataset_name:String}
+      UNION ALL
+      SELECT toUInt128(id) as id_uint FROM JsonInferenceDatapoint WHERE dataset_name = {dataset_name:String}
+    )
+    SELECT
+      NULLIF(
+      (SELECT uint_to_uuid(min(id_uint)) FROM DatasetIds WHERE id_uint > toUInt128({datapoint_id:UUID})),
+      toUUID('00000000-0000-0000-0000-000000000000')
+      ) as next_id,
+      NULLIF(
+        (SELECT uint_to_uuid(max(id_uint)) FROM DatasetIds WHERE id_uint < toUInt128({datapoint_id:UUID})),
+        toUUID('00000000-0000-0000-0000-000000000000')
+      ) as previous_id
+    FROM DatasetIds
+  `;
+  const resultSet = await clickhouseClient.query({
+    query,
+    format: "JSONEachRow",
+    query_params: { dataset_name, datapoint_id },
+  });
+  const rows = await resultSet.json<AdjacentIds>();
+  const parsedRows = rows.map((row) => adjacentIdsSchema.parse(row));
+  return parsedRows[0];
 }
