@@ -328,11 +328,10 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
         <SectionLayout>
           <SectionHeader heading="Output" />
           <Output
-            output={inference.output}
-            outputSchema={
+            output={
               inference.function_type === "json"
-                ? inference.output_schema
-                : undefined
+                ? { ...inference.output, schema: inference.output_schema }
+                : inference.output
             }
           />
         </SectionLayout>

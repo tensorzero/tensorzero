@@ -241,9 +241,9 @@ export type JsonInferenceOutput = z.infer<typeof jsonInferenceOutputSchema>;
 export const toolCallOutputSchema = z
   .object({
     type: z.literal("tool_call"),
-    arguments: z.any().optional(), // Value type from Rust maps to any in TS
+    arguments: z.any().nullable().default(null),
     id: z.string(),
-    name: z.string().optional(),
+    name: z.string().nullable().default(null),
     raw_arguments: z.string(),
     raw_name: z.string(),
   })
