@@ -1475,6 +1475,11 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
             // check that an error occurs
             assert!(!res["error"].as_str().unwrap().is_empty());
         }
+        "ollama" => {
+            // We produce an error by setting a bad 'Content-Length', so just
+            // check that an error occurs
+            assert!(!res["error"].as_str().unwrap().is_empty());
+        }
         _ => {
             panic!("Got error: {res}");
         }
@@ -2310,6 +2315,11 @@ pub async fn test_streaming_invalid_request_with_provider(provider: E2ETestProvi
                 "pointer": "/messages/0/content",
                 "value": 123,
             },
+            {
+                "variant_name": "ollama",
+                "pointer": "/messages/0/content",
+                "value": 123,
+            },
         ],
         "extra_headers": extra_headers.headers,
     });
@@ -2334,7 +2344,8 @@ pub async fn test_streaming_invalid_request_with_provider(provider: E2ETestProvi
         assert!(
             err_msg.contains("top_p")
                 || err_msg.contains("topP")
-                || err_msg.contains("temperature"),
+                || err_msg.contains("temperature")
+                || err_msg.contains("invalid message content type: float64"), //in case of "ollama" provider we break the request by setting incorrect messages.content 
             "Unexpected error message: {resp}"
         );
     }
@@ -3775,6 +3786,12 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
 pub async fn test_tool_use_tool_choice_auto_unused_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    //NOTE: The openai compatible ollama api does not support tool_choice yet so disabling this
+    // https://github.com/ollama/ollama/blob/4ec7445a6f678b6efc773bb9fa886d7c9b075577/docs/openai.md#supported-request-fields
+    if provider.model_provider_name == "ollama" {
+        return;
+    }
+
     let episode_id = Uuid::now_v7();
     let extra_headers = get_extra_headers();
     let payload = json!({
@@ -4036,6 +4053,13 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
     if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
         return;
     }
+
+    //NOTE: The openai compatible ollama api does not support tool_choice yet so disabling this
+    // https://github.com/ollama/ollama/blob/4ec7445a6f678b6efc773bb9fa886d7c9b075577/docs/openai.md#supported-request-fields
+    if provider.model_provider_name == "ollama" {
+        return;
+    }
+
     let episode_id = Uuid::now_v7();
     let extra_headers = get_extra_headers();
     let payload = json!({
@@ -4614,6 +4638,12 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
         return;
     }
 
+    //NOTE: The openai compatible ollama api does not support tool_choice yet so disabling this
+    // https://github.com/ollama/ollama/blob/4ec7445a6f678b6efc773bb9fa886d7c9b075577/docs/openai.md#supported-request-fields
+    if provider.model_provider_name == "ollama" {
+        return;
+    }
+
     let episode_id = Uuid::now_v7();
     let extra_headers = get_extra_headers();
     let payload = json!({
@@ -4941,6 +4971,11 @@ pub async fn test_tool_use_tool_choice_none_inference_request_with_provider(
         return;
     }
 
+    //NOTE: The openai compatible ollama api does not support tool_choice yet so disabling this
+    // https://github.com/ollama/ollama/blob/4ec7445a6f678b6efc773bb9fa886d7c9b075577/docs/openai.md#supported-request-fields
+    if provider.model_provider_name == "ollama" {
+        return;
+    }
     let episode_id = Uuid::now_v7();
     let extra_headers = get_extra_headers();
     let payload = json!({
@@ -5202,6 +5237,13 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
     if provider.model_provider_name == "xai" {
         return;
     }
+
+    //NOTE: The openai compatible ollama api does not support tool_choice yet so disabling this
+    // https://github.com/ollama/ollama/blob/4ec7445a6f678b6efc773bb9fa886d7c9b075577/docs/openai.md#supported-request-fields
+    if provider.model_provider_name == "ollama" {
+        return;
+    }
+
     let episode_id = Uuid::now_v7();
     let extra_headers = get_extra_headers();
 
@@ -9569,7 +9611,7 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
     // in our tensorzero.toml. ollama doesn't support 'max_completion_tokens', so this test
     // currently fails. It's fine to skip it, since we really care about testing the sagemaker
     // wrapper code, not whatever container we happen to be wrapping.
-    if provider.model_provider_name == "aws_sagemaker" {
+    if provider.model_provider_name == "aws_sagemaker" || provider.model_provider_name == "ollama" {
         return;
     }
 

@@ -24,6 +24,7 @@ use crate::inference::providers::google_ai_studio_gemini::GoogleAIStudioGeminiPr
 
 use crate::inference::providers::helpers::peek_first_chunk;
 use crate::inference::providers::hyperbolic::HyperbolicProvider;
+use crate::inference::providers::ollama::OllamaProvider;
 use crate::inference::providers::sglang::SGLangProvider;
 use crate::inference::providers::tgi::TGIProvider;
 use crate::inference::types::batch::{
@@ -514,6 +515,7 @@ impl ModelProvider {
             ProviderConfig::TGI(_) => "tgi",
             ProviderConfig::SGLang(_) => "sglang",
             ProviderConfig::DeepSeek(_) => "deepseek",
+            ProviderConfig::Ollama(_) => "ollama",
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfig::Dummy(_) => "dummy",
         }
@@ -537,6 +539,7 @@ impl ModelProvider {
             ProviderConfig::Together(provider) => Some(provider.model_name()),
             ProviderConfig::VLLM(provider) => Some(provider.model_name()),
             ProviderConfig::XAI(provider) => Some(provider.model_name()),
+            ProviderConfig::Ollama(provider) => Some(provider.model_name()),
             // TGI doesn't have a meaningful model name
             ProviderConfig::TGI(_) => None,
             ProviderConfig::SGLang(provider) => Some(provider.model_name()),
@@ -583,6 +586,7 @@ pub enum ProviderConfig {
     Together(TogetherProvider),
     VLLM(VLLMProvider),
     XAI(XAIProvider),
+    Ollama(OllamaProvider),
     #[cfg(any(test, feature = "e2e_tests"))]
     Dummy(DummyProvider),
 }
@@ -701,6 +705,11 @@ pub(super) enum UninitializedProviderConfig {
     },
     DeepSeek {
         model_name: String,
+        api_key_location: Option<CredentialLocation>,
+    },
+    Ollama {
+        model_name: String,
+        api_base: Option<Url>,
         api_key_location: Option<CredentialLocation>,
     },
     #[cfg(any(test, feature = "e2e_tests"))]
@@ -845,6 +854,13 @@ impl UninitializedProviderConfig {
                 model_name,
                 api_key_location,
             } => ProviderConfig::XAI(XAIProvider::new(model_name, api_key_location)?),
+            UninitializedProviderConfig::Ollama {
+                model_name,
+                api_base,
+                api_key_location,
+            } => {
+                ProviderConfig::Ollama(OllamaProvider::new(model_name, api_base, api_key_location)?)
+            }
             UninitializedProviderConfig::SGLang {
                 model_name,
                 api_base,
@@ -923,6 +939,9 @@ impl ModelProvider {
             }
             ProviderConfig::VLLM(provider) => provider.infer(request, client, api_keys, self).await,
             ProviderConfig::XAI(provider) => provider.infer(request, client, api_keys, self).await,
+            ProviderConfig::Ollama(provider) => {
+                provider.infer(request, client, api_keys, self).await
+            }
             ProviderConfig::TGI(provider) => provider.infer(request, client, api_keys, self).await,
             ProviderConfig::DeepSeek(provider) => {
                 provider.infer(request, client, api_keys, self).await
@@ -986,6 +1005,9 @@ impl ModelProvider {
                 provider.infer_stream(request, client, api_keys, self).await
             }
             ProviderConfig::XAI(provider) => {
+                provider.infer_stream(request, client, api_keys, self).await
+            }
+            ProviderConfig::Ollama(provider)=>{
                 provider.infer_stream(request, client, api_keys, self).await
             }
             ProviderConfig::VLLM(provider) => {
@@ -1082,6 +1104,11 @@ impl ModelProvider {
                     .await
             }
             ProviderConfig::XAI(provider) => {
+                provider
+                    .start_batch_inference(requests, client, api_keys)
+                    .await
+            }
+            ProviderConfig::Ollama(provider)=>{
                 provider
                     .start_batch_inference(requests, client, api_keys)
                     .await
@@ -1188,6 +1215,11 @@ impl ModelProvider {
                     .await
             }
             ProviderConfig::XAI(provider) => {
+                provider
+                    .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
+                    .await
+            }
+            ProviderConfig::Ollama(provider)=>{
                 provider
                     .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
                     .await
@@ -1423,6 +1455,7 @@ const SHORTHAND_MODEL_PREFIXES: &[&str] = &[
     "openai::",
     "together::",
     "xai::",
+    "ollama::",
     "dummy::",
 ];
 
@@ -1453,6 +1486,7 @@ impl ShorthandModelConfig for ModelConfig {
                 crate::inference::providers::together::default_parse_think_blocks(),
             )?),
             "xai" => ProviderConfig::XAI(XAIProvider::new(model_name, None)?),
+            "ollama" => ProviderConfig::Ollama(OllamaProvider::new(model_name, None, None)?),
             #[cfg(any(test, feature = "e2e_tests"))]
             "dummy" => ProviderConfig::Dummy(DummyProvider::new(model_name, None)?),
             _ => {
