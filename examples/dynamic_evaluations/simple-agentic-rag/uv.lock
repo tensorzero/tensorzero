@@ -1510,29 +1510,22 @@ wheels = [
 
 [[package]]
 name = "tensorzero"
-source = { directory = "../../../clients/python" }
+version = "2025.5.3"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
     { name = "typing-extensions" },
     { name = "uuid-utils" },
 ]
-
-[package.metadata]
-requires-dist = [
-    { name = "httpx", specifier = ">=0.27.0" },
-    { name = "typing-extensions", specifier = ">=4.12.2" },
-    { name = "uuid-utils", specifier = ">=0.9.0" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "maturin" },
-    { name = "mypy" },
-    { name = "openai" },
-    { name = "pyright" },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "pytest-xdist" },
+sdist = { url = "https://files.pythonhosted.org/packages/f4/40/e769f0fd8026bdabc40ca0fabb3fbb44072de5587d1197d45bd12498f50c/tensorzero-2025.5.3.tar.gz", hash = "sha256:107f10f042456ab82b0bf8ca06d9153b9697bc3f38a88d5e5566441277bcaf1c", size = 868339 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/07/6f/c625ebdc55ddbd4552721b25e1c3d112672f7eaf76527950fbce3334efc2/tensorzero-2025.5.3-cp39-abi3-macosx_10_12_x86_64.whl", hash = "sha256:20dde938f714b12e7a4f30887ae5fddc62956e193ba3d222daa917b606fef68a", size = 13269629 },
+    { url = "https://files.pythonhosted.org/packages/1c/85/8221e17594016abd14eeee06dad4c9f204916bb845fb77ed40a0082b9b32/tensorzero-2025.5.3-cp39-abi3-macosx_11_0_arm64.whl", hash = "sha256:433051068bd7d0089f789300e5537b1a9e881af46dc5ba2d9f49de1f30882645", size = 12563614 },
+    { url = "https://files.pythonhosted.org/packages/27/57/11ed4613ea0c0a6b535e31229a9db7f5cd3024753141cd42c4c32fc2b450/tensorzero-2025.5.3-cp39-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:4f24ee72952f2aa11301daaaa0eb9dfe17fc7ad7b0e6281e61b78d46e2d0b1e3", size = 12990355 },
+    { url = "https://files.pythonhosted.org/packages/51/d6/2cdde0d01ab4af1d012409b14c1b85ace59649b49338c3630db184713ba4/tensorzero-2025.5.3-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:793420fcd5433c7c5435c471df0e392f0c6331860a927f542165236c102a3506", size = 13919112 },
+    { url = "https://files.pythonhosted.org/packages/27/e3/aac78072358c1bc7baba9926ca83b138348d71e35e2547deef1215d88807/tensorzero-2025.5.3-cp39-abi3-musllinux_1_2_aarch64.whl", hash = "sha256:39417be1bceab8ce3614e864acc5ee591e50c316628a11842232e0096ca92221", size = 13092327 },
+    { url = "https://files.pythonhosted.org/packages/07/52/9ab166dac8034fb94443bd929006e35d84e0120facb7dcc71215c3a7417c/tensorzero-2025.5.3-cp39-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:0b2a8dffbb7155ded256c6091c877d858383fd54083dfaa5971ffe28b6c8eccd", size = 14134870 },
+    { url = "https://files.pythonhosted.org/packages/d2/24/978ad0148f13196fe9b3e9bfec005a896fd81e0c2aac5c6eed53f4dfa2f3/tensorzero-2025.5.3-cp39-abi3-win_amd64.whl", hash = "sha256:3870c1b8a55e30c0adb05214ec1cf9d38b954c36b8db13167b4c8bf62e5a452d", size = 13832129 },
 ]
 
 [[package]]
@@ -1552,7 +1545,7 @@ requires-dist = [
     { name = "ipykernel" },
     { name = "jupyter" },
     { name = "markdownify" },
-    { name = "tensorzero", directory = "../../../clients/python" },
+    { name = "tensorzero" },
     { name = "wikipedia" },
 ]
 
