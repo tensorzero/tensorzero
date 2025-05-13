@@ -17,7 +17,7 @@ import {
   ToolResultMessage,
   ImageMessage,
   ImageErrorMessage,
-  StructuredTextMessage,
+  TextMessageWithArguments,
   RawTextMessage,
   TextMessage,
   EmptyMessage,
@@ -31,7 +31,7 @@ function renderContentBlock(block: ResolvedInputMessageContent, index: number) {
   switch (block.type) {
     case "text": {
       if (typeof block.value === "object") {
-        return <StructuredTextMessage key={index} content={block.value} />;
+        return <TextMessageWithArguments key={index} content={block.value} />;
       }
 
       // Try to parse JSON strings
@@ -39,7 +39,9 @@ function renderContentBlock(block: ResolvedInputMessageContent, index: number) {
         try {
           const parsedJson = JSON.parse(block.value);
           if (typeof parsedJson === "object") {
-            return <StructuredTextMessage key={index} content={parsedJson} />;
+            return (
+              <TextMessageWithArguments key={index} content={parsedJson} />
+            );
           }
         } catch {
           // Not valid JSON, continue with regular text message
