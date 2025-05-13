@@ -12,9 +12,12 @@ import {
   type DatapointRow,
   type DatasetQueryParams,
   type ParsedDatasetRow,
+  ParsedChatInferenceDatapointRowSchema,
+  ParsedJsonInferenceDatapointRowSchema,
 } from "./datasets";
 import {
   contentBlockOutputSchema,
+  CountSchema,
   inputSchema,
   jsonInferenceOutputSchema,
 } from "./common";
@@ -236,7 +239,8 @@ export async function countRowsForDataset(
     query_params,
   });
   const rows = await resultSet.json<{ count: number }>();
-  return rows[0].count;
+  const parsedRows = rows.map((row) => CountSchema.parse(row));
+  return parsedRows[0].count;
 }
 
 /**
@@ -318,7 +322,8 @@ export async function getNumberOfDatasets(): Promise<number> {
     format: "JSONEachRow",
   });
   const rows = await resultSet.json<{ count: number }>();
-  return rows[0].count;
+  const parsedRows = rows.map((row) => CountSchema.parse(row));
+  return parsedRows[0].count;
 }
 /**
  * Executes an INSERT INTO ... SELECT ... query to insert rows into the dataset table.
@@ -537,7 +542,7 @@ async function parseDatapointRow(row: DatapointRow): Promise<ParsedDatasetRow> {
   const resolvedInput = await resolveInput(parsedInput);
   if ("tool_params" in row) {
     // Chat inference row
-    return {
+    const processedRow = {
       ...row,
       input: resolvedInput,
       output: row.output
@@ -551,9 +556,10 @@ async function parseDatapointRow(row: DatapointRow): Promise<ParsedDatasetRow> {
               .parse(JSON.parse(row.tool_params)),
       tags: row.tags,
     };
+    return ParsedChatInferenceDatapointRowSchema.parse(processedRow);
   } else {
     // JSON inference row
-    return {
+    const processedRow = {
       ...row,
       input: resolvedInput,
       output: row.output
@@ -563,6 +569,7 @@ async function parseDatapointRow(row: DatapointRow): Promise<ParsedDatasetRow> {
         .record(z.string(), z.unknown())
         .parse(JSON.parse(row.output_schema)),
     };
+    return ParsedJsonInferenceDatapointRowSchema.parse(processedRow);
   }
 }
 
@@ -683,7 +690,8 @@ export async function countDatapointsForDatasetFunction(
     query_params: { dataset_name, function_name, table },
   });
   const rows = await resultSet.json<{ count: number }>();
-  return rows[0].count;
+  const parsedRows = rows.map((row) => CountSchema.parse(row));
+  return parsedRows[0].count;
 }
 
 function validateDatasetName(dataset_name: string) {
