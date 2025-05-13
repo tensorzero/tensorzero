@@ -412,7 +412,7 @@ jobs:
 
   ui-tests:
     # We run on Namespace so that we have cache volumes for our s3-fixtures directory
-    runs-on: namespace-profile-tensorzero-2x8
+    runs-on: namespace-profile-tensorzero-4x16
     permissions:
       # Permission to checkout the repository
       contents: read
@@ -497,6 +497,14 @@ jobs:
         if: always()
         working-directory: ui
         run: docker compose -f fixtures/docker-compose.yml logs -t
+
+      - name: Print ClickHouse error logs
+        if: always()
+        run: docker exec fixtures-clickhouse-1 cat /var/log/clickhouse-server/clickhouse-server.err.log
+
+      - name: Print ClickHouse trace logs
+        if: always()
+        run: docker exec fixtures-clickhouse-1 cat /var/log/clickhouse-server/clickhouse-server.log
 
   ui-tests-e2e:
     runs-on: namespace-profile-tensorzero-8x16
