@@ -24,7 +24,7 @@ export default function DynamicEvaluationRunsTable({
             <TableHead>Name</TableHead>
             <TableHead>ID</TableHead>
             <TableHead>Project</TableHead>
-            <TableHead>Number of Episodes</TableHead>
+            <TableHead>Episodes</TableHead>
             <TableHead>Timestamp</TableHead>
           </TableRow>
         </TableHeader>
