@@ -201,3 +201,10 @@ export const parsedModelInferenceRowSchema = modelInferenceRowSchema
 export type ParsedModelInferenceRow = z.infer<
   typeof parsedModelInferenceRowSchema
 >;
+
+export const adjacentInferenceIdsSchema = z.object({
+  previous_inference_id: z.string().uuid().nullable(),
+  next_inference_id: z.string().uuid().nullable(),
+});
+
+export type AdjacentInferenceIds = z.infer<typeof adjacentInferenceIdsSchema>;

@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { describe, expect, test } from "vitest";
 import {
   countInferencesForEpisode,
   queryEpisodeTable,
@@ -15,6 +15,7 @@ import {
   queryInferenceTableBoundsByFunctionName,
   queryInferenceTableBoundsByVariantName,
   queryModelInferencesByInferenceId,
+  getAdjacentInferenceIds,
 } from "./inference.server";
 import { countInferencesForFunction } from "./inference.server";
 import type {
@@ -22,6 +23,7 @@ import type {
   JsonInferenceOutput,
   TextContent,
 } from "./common";
+import { clickhouseClient } from "./client.server";
 
 // Test countInferencesForFunction
 test("countInferencesForFunction returns correct counts", async () => {
@@ -545,4 +547,54 @@ test("queryModelInferencesByInferenceId", async () => {
   expect(firstInference.output.length).toBe(1);
   expect(firstInference.output[0].type).toBe("text");
   expect(!firstInference.cached);
+});
+
+describe("getAdjacentInferenceIds", () => {
+  test("returns adjacent inference ids", async () => {
+    const adjacentInferenceIds = await getAdjacentInferenceIds(
+      "01942e26-910b-7ab1-a645-46bc4463a001",
+    );
+    expect(adjacentInferenceIds.previous_inference_id).toBe(
+      "01942e26-9026-76e0-bf84-27038739ec33",
+    );
+    expect(adjacentInferenceIds.next_inference_id).toBe(
+      "01942e26-9128-71d2-bed6-aee96bb3e181",
+    );
+  });
+
+  test("returns null for previous inference id if current inference is first", async () => {
+    const resultSet = await clickhouseClient.query({
+      query:
+        "SELECT uint_to_uuid(min(id_uint)) as first_inference_id FROM InferenceById",
+      format: "JSON",
+    });
+    const firstInferenceId = await resultSet.json<{
+      first_inference_id: string;
+    }>();
+    const adjacentInferenceIds = await getAdjacentInferenceIds(
+      firstInferenceId.data[0].first_inference_id,
+    );
+    expect(adjacentInferenceIds.previous_inference_id).toBeNull();
+    expect(adjacentInferenceIds.next_inference_id).toBe(
+      "01934c9a-be70-7d72-a722-744cb572eb49",
+    );
+  });
+
+  test("returns null for next inference id if current inference is last", async () => {
+    const resultSet = await clickhouseClient.query({
+      query:
+        "SELECT uint_to_uuid(max(id_uint)) as last_inference_id FROM InferenceById",
+      format: "JSON",
+    });
+    const lastInferenceId = await resultSet.json<{
+      last_inference_id: string;
+    }>();
+    const adjacentInferenceIds = await getAdjacentInferenceIds(
+      lastInferenceId.data[0].last_inference_id,
+    );
+    expect(adjacentInferenceIds.previous_inference_id).toBe(
+      "0196a0ea-d197-76d0-b6fc-15778589a4da",
+    );
+    expect(adjacentInferenceIds.next_inference_id).toBeNull();
+  });
 });

@@ -21,6 +21,8 @@ import {
   modelInferenceRowSchema,
   parsedModelInferenceRowSchema,
   parseInferenceOutput,
+  adjacentInferenceIdsSchema,
+  type AdjacentInferenceIds,
   type EpisodeByIdRow,
   type InferenceByIdRow,
   type InferenceRow,
@@ -674,4 +676,30 @@ export async function countEpisodes(): Promise<number> {
   const rows = await resultSet.json<{ count: number }>();
   const parsedRows = rows.map((row) => CountSchema.parse(row));
   return parsedRows[0].count;
+}
+
+export async function getAdjacentInferenceIds(
+  currentInferenceId: string,
+): Promise<AdjacentInferenceIds> {
+  // TODO (soon): add the ability to pass filters by some fields
+  // TODO test the min and max element here
+  const query = `
+    SELECT
+      NULLIF(
+        (SELECT uint_to_uuid(max(id_uint)) FROM InferenceById WHERE id_uint < toUInt128({current_inference_id:UUID})),
+        toUUID('00000000-0000-0000-0000-000000000000')
+      ) as previous_inference_id,
+      NULLIF(
+        (SELECT uint_to_uuid(min(id_uint)) FROM InferenceById WHERE id_uint > toUInt128({current_inference_id:UUID})),
+        toUUID('00000000-0000-0000-0000-000000000000')
+      ) as next_inference_id
+  `;
+  const resultSet = await clickhouseClient.query({
+    query,
+    format: "JSONEachRow",
+    query_params: { current_inference_id: currentInferenceId },
+  });
+  const rows = await resultSet.json<AdjacentInferenceIds>();
+  const parsedRows = rows.map((row) => adjacentInferenceIdsSchema.parse(row));
+  return parsedRows[0];
 }
