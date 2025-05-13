@@ -7,7 +7,7 @@ test("parse e2e config", async () => {
   );
   expect(validatedConfig).toBeDefined();
   // Test something in the gateway config
-  expect(validatedConfig.gateway.bind_address).toBe("0.0.0.0:3000");
+  expect(validatedConfig.gateway?.bind_address).toBe("0.0.0.0:3000");
 
   // Test something in the model config
   const azureProvider =

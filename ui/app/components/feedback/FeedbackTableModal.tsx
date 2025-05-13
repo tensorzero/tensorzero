@@ -8,8 +8,11 @@ import {
 import {
   SnippetLayout,
   SnippetContent,
+  SnippetMessage,
 } from "~/components/layout/SnippetLayout";
-import { CodeMessage, TextMessage } from "~/components/layout/SnippetContent";
+import { TextMessage } from "~/components/layout/SnippetContent";
+import { parseInferenceOutput } from "~/utils/clickhouse/inference";
+import NewOutput from "~/components/inference/NewOutput";
 
 interface FeedbackTableModalProps {
   feedback: FeedbackRow;
@@ -28,7 +31,9 @@ export function CommentModal({ feedback }: FeedbackTableModalProps) {
         <SectionLayout>
           <SnippetLayout>
             <SnippetContent maxHeight="Content">
-              <TextMessage content={feedback.value} />
+              <SnippetMessage>
+                <TextMessage content={feedback.value} />
+              </SnippetMessage>
             </SnippetContent>
           </SnippetLayout>
         </SectionLayout>
@@ -42,17 +47,16 @@ export function DemonstrationModal({ feedback }: FeedbackTableModalProps) {
     return <div>Invalid demonstration feedback</div>;
   }
 
+  // Try to parse the demonstration value as JSON for the parsed property
+  const parsedOutput = parseInferenceOutput(feedback.value);
+
   return (
     <PageLayout>
       <PageHeader label="Demonstration" name={feedback.id} />
 
       <SectionsGroup>
         <SectionLayout>
-          <SnippetLayout>
-            <SnippetContent maxHeight="Content">
-              <CodeMessage showLineNumbers content={feedback.value} />
-            </SnippetContent>
-          </SnippetLayout>
+          <NewOutput output={parsedOutput} />
         </SectionLayout>
       </SectionsGroup>
     </PageLayout>

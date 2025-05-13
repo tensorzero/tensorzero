@@ -1,7 +1,7 @@
 import {
   queryInferenceById,
   queryModelInferencesByInferenceId,
-} from "~/utils/clickhouse/inference";
+} from "~/utils/clickhouse/inference.server";
 import {
   pollForFeedbackItem,
   queryDemonstrationFeedbackByInferenceId,
@@ -20,7 +20,7 @@ import {
 } from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
 import BasicInfo from "./InferenceBasicInfo";
-import Input from "~/components/inference/Input";
+import InputSnippet from "~/components/inference/InputSnippet";
 import Output from "~/components/inference/NewOutput";
 import FeedbackTable from "~/components/feedback/FeedbackTable";
 import { addHumanFeedback, tensorZeroClient } from "~/utils/tensorzero.server";
@@ -322,7 +322,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
       <SectionsGroup>
         <SectionLayout>
           <SectionHeader heading="Input" />
-          <Input input={inference.input} />
+          <InputSnippet input={inference.input} />
         </SectionLayout>
 
         <SectionLayout>

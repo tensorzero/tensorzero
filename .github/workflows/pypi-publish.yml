@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   build-wheels:
-    uses: ./.github/workflows/pyo3-build-reusable.yml
+    uses: ./.github/workflows/python-client-build.yml
     permissions:
       contents: read
       id-token: write
@@ -31,7 +31,7 @@ jobs:
       # Used to generate artifact attestation
       attestations: write
     # Download all of the wheel artifacts published by the other jobs,
-    # and publish them to PyPi as a new release, using the `upload-pyo3.sh` script.
+    # and publish them to PyPi as a new release, using the `upload-python-client.sh` script.
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e
@@ -43,8 +43,8 @@ jobs:
       - name: Publish to real PyPI (only on GitHub release)
         if: ${{ github.event_name == 'release' }}
         run: |
-          ./ci/upload-pyo3.sh pypi
+          ./ci/upload-python-client.sh pypi
 
       - name: Publish to TestPyPI
         run: |
-          ./ci/upload-pyo3.sh testpypi
+          ./ci/upload-python-client.sh testpypi

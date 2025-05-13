@@ -1,24 +1,39 @@
-import z from "zod";
-import {
-  type ContentBlockOutput,
-  type JsonInferenceOutput,
-  modelInferenceInputMessageSchema,
-  resolvedInputMessageSchema,
-  resolvedInputSchema,
-  type TableBounds,
-  TableBoundsSchema,
-} from "./common";
+import { z } from "zod";
 import {
   contentBlockOutputSchema,
   contentBlockSchema,
-  getInferenceTableName,
   inputSchema,
   jsonInferenceOutputSchema,
+  resolvedInputMessageSchema,
+  resolvedInputSchema,
+  type ContentBlockOutput,
+  type JsonInferenceOutput,
 } from "./common";
-import { data } from "react-router";
-import type { FunctionConfig } from "../config/function";
-import { clickhouseClient } from "./client.server";
-import { resolveInput, resolveModelInferenceMessages } from "../resolve.server";
+import { JSONValueSchema } from "../tensorzero";
+
+export const providerInferenceExtraBodySchema = z.object({
+  model_provider_name: z.string(),
+  pointer: z.string(),
+  value: JSONValueSchema,
+});
+export type ProviderInferenceExtraBody = z.infer<
+  typeof providerInferenceExtraBodySchema
+>;
+
+export const variantInferenceExtraBodySchema = z.object({
+  variant_name: z.string(),
+  pointer: z.string(),
+  value: JSONValueSchema,
+});
+export type VariantInferenceExtraBody = z.infer<
+  typeof variantInferenceExtraBodySchema
+>;
+
+export const inferenceExtraBodySchema = z.union([
+  providerInferenceExtraBodySchema,
+  variantInferenceExtraBodySchema,
+]);
+export type InferenceExtraBody = z.infer<typeof inferenceExtraBodySchema>;
 
 export const inferenceByIdRowSchema = z
   .object({
@@ -33,191 +48,6 @@ export const inferenceByIdRowSchema = z
 
 export type InferenceByIdRow = z.infer<typeof inferenceByIdRowSchema>;
 
-/**
- * Query a table of at most `page_size` Inferences from ChatInference or JsonInference that are
- * before the given `before` ID or after the given `after` ID. If `episode_id` is provided,
- * we only return rows from that specific episode.
- *
- * - If `before` and `after` are both not provided, returns the most recent `page_size` Inferences.
- * - If `before` and `after` are both provided, throw an error.
- * - If `before` is provided, returns the most recent `page_size` Inferences before the given `before` ID.
- * - If `after` is provided, returns the earliest `page_size` Inferences after the given `after` ID.
- *
- * All returned data should be ordered by `id` in descending order.
- */
-export async function queryInferenceTable(params: {
-  page_size: number;
-  before?: string; // UUIDv7 string
-  after?: string; // UUIDv7 string
-  /**
-   * Extra WHERE clauses, e.g. ["episode_id = {episode_id:UUID}", "variant_name = {variant:String}"]
-   * Use param placeholders if you want to avoid manual string interpolation.
-   */
-  extraWhere?: string[];
-  /**
-   * Extra query parameters, mapping placeholders (like "episode_id") => actual values
-   */
-  extraParams?: Record<string, string | number>;
-}): Promise<InferenceByIdRow[]> {
-  const { page_size, before, after, extraWhere, extraParams } = params;
-
-  if (before && after) {
-    throw new Error("Cannot specify both 'before' and 'after' parameters");
-  }
-
-  // We'll build up WHERE clauses incrementally
-  const whereClauses: string[] = [];
-
-  // Base query params
-  const query_params: Record<string, string | number> = {
-    page_size,
-  };
-
-  // Add the built-in before/after logic
-  if (before) {
-    whereClauses.push("id_uint < toUInt128(toUUID({before:String}))");
-    query_params.before = before;
-  }
-  if (after) {
-    whereClauses.push("id_uint > toUInt128(toUUID({after:String}))");
-    query_params.after = after;
-  }
-
-  // Merge in caller-supplied where clauses
-  if (extraWhere && extraWhere.length) {
-    whereClauses.push(...extraWhere);
-  }
-
-  // Merge in caller-supplied params
-  if (extraParams) {
-    Object.entries(extraParams).forEach(([key, value]) => {
-      query_params[key] = value;
-    });
-  }
-
-  // We'll build the actual WHERE portion here (if any).
-  const combinedWhere = whereClauses.length
-    ? `WHERE ${whereClauses.join(" AND ")}`
-    : "";
-
-  let query: string;
-  if (!before && !after) {
-    // No "before"/"after" => get the most recent page_size items
-    query = `
-      SELECT
-        uint_to_uuid(id_uint) as id,
-        function_name,
-        variant_name,
-        episode_id,
-        function_type,
-        formatDateTime(UUIDv7ToDateTime(uint_to_uuid(id_uint)), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
-      FROM InferenceById FINAL
-      ${combinedWhere}
-      ORDER BY id_uint DESC
-      LIMIT {page_size:UInt32}
-    `;
-  } else if (before) {
-    // "Most recent" page_size before given ID
-    query = `
-      SELECT
-        uint_to_uuid(id_uint) as id,
-        function_name,
-        variant_name,
-        episode_id,
-        function_type,
-        formatDateTime(UUIDv7ToDateTime(uint_to_uuid(id_uint)), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
-      FROM InferenceById FINAL
-      ${combinedWhere}
-      ORDER BY id_uint DESC
-      LIMIT {page_size:UInt32}
-    `;
-  } else {
-    // "Earliest" page_size after given ID => subselect ascending, then reorder descending
-    query = `
-      SELECT
-        id,
-        function_name,
-        variant_name,
-        episode_id,
-        function_type,
-        formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
-      FROM
-      (
-        SELECT
-          uint_to_uuid(id_uint) as id,
-          id_uint,
-          function_name,
-          variant_name,
-          episode_id,
-          function_type,
-          formatDateTime(UUIDv7ToDateTime(uint_to_uuid(id_uint)), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
-        FROM InferenceById FINAL
-        ${combinedWhere}
-        ORDER BY id_uint ASC
-        LIMIT {page_size:UInt32}
-      )
-      ORDER BY id_uint DESC
-    `;
-  }
-
-  try {
-    const resultSet = await clickhouseClient.query({
-      query,
-      format: "JSONEachRow",
-      query_params,
-    });
-    const rows = await resultSet.json<InferenceByIdRow>();
-    return z.array(inferenceByIdRowSchema).parse(rows);
-  } catch (error) {
-    console.error(error);
-    throw data("Error querying inference table", { status: 500 });
-  }
-}
-
-export async function queryInferenceTableBounds(params?: {
-  extraWhere?: string[];
-  extraParams?: Record<string, string | number>;
-}): Promise<TableBounds> {
-  const { extraWhere = [], extraParams = {} } = params ?? {};
-
-  // Build WHERE clause
-  const whereClauses = [...extraWhere];
-  const whereClause =
-    whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
-
-  const query = `
-  SELECT
-    (SELECT uint_to_uuid(id_uint) FROM InferenceById FINAL WHERE id_uint = (SELECT MIN(id_uint) FROM InferenceById FINAL ${whereClause})) AS first_id,
-    (SELECT uint_to_uuid(id_uint) FROM InferenceById FINAL WHERE id_uint = (SELECT MAX(id_uint) FROM InferenceById FINAL ${whereClause})) AS last_id
-  FROM InferenceById FINAL
-  LIMIT 1
-  `;
-
-  try {
-    const resultSet = await clickhouseClient.query({
-      query,
-      format: "JSONEachRow",
-      query_params: extraParams,
-    });
-
-    const rows = await resultSet.json<TableBounds>();
-    if (!rows.length) {
-      return {
-        first_id: null,
-        last_id: null,
-      };
-    }
-
-    return TableBoundsSchema.parse(rows[0]);
-  } catch (error) {
-    console.error("Failed to query inference table bounds:", error);
-    return {
-      first_id: null,
-      last_id: null,
-    };
-  }
-}
-
 export const episodeByIdSchema = z
   .object({
     episode_id: z.string().uuid(),
@@ -230,268 +60,6 @@ export const episodeByIdSchema = z
 
 export type EpisodeByIdRow = z.infer<typeof episodeByIdSchema>;
 
-/// Query a table of at most `page_size` Episodes that are before the given `before` ID or after the given `after` ID.
-/// Important: The ordering is on the last inference in the episode, not the first (we want to show the freshest episodes first)
-/// So we should paginate on the last_inference_ids not the Episode IDs
-/// If `before` and `after` are both not provided, the query will return the most recent `page_size` Inferences.
-/// If `before` and `after` are both provided, we will throw an error.
-/// If `before` is provided, the query will return the most recent `page_size` Inferences before the given `before` ID.
-/// If `after` is provided, the query will return the earliest `page_size` Inferences after the given `after` ID.
-/// All returned data should be ordered by `id` in descending order.
-export async function queryEpisodeTable(params: {
-  page_size: number;
-  before?: string; // UUIDv7 string
-  after?: string; // UUIDv7 string
-}): Promise<EpisodeByIdRow[]> {
-  const { page_size, before, after } = params;
-  if (before && after) {
-    throw new Error("Cannot specify both 'before' and 'after' parameters");
-  }
-  let query = "";
-  const query_params: Record<string, string | number> = {
-    page_size,
-  };
-  if (!before && !after) {
-    // No before/after => just the most recent page_size items
-    // The weird 'WHERE' clause lowers the peak memory usage (and also seems to speed up the query),
-    // though it unfortunately still does a full table scan.
-    query = `
-      SELECT
-        uint_to_uuid(episode_id_uint) as episode_id,
-        toUInt32(count(*)) as count,
-        formatDateTime(min(UUIDv7ToDateTime(uint_to_uuid(id_uint))), '%Y-%m-%dT%H:%i:%SZ') as start_time,
-        formatDateTime(max(UUIDv7ToDateTime(uint_to_uuid(id_uint))), '%Y-%m-%dT%H:%i:%SZ') as end_time,
-        uint_to_uuid(max(id_uint)) as last_inference_id
-      FROM InferenceByEpisodeId FINAL
-      WHERE episode_id_uint in (SELECT DISTINCT ON (episode_id) toUInt128(episode_id) FROM InferenceById FINAL ORDER BY id_uint DESC LIMIT {page_size:UInt32})
-      GROUP BY episode_id
-      ORDER BY toUInt128(last_inference_id) DESC
-      LIMIT {page_size:UInt32}
-    `;
-  } else if (before) {
-    query = `
-      SELECT
-        uint_to_uuid(episode_id_uint) as episode_id,
-        toUInt32(count(*)) as count,
-        formatDateTime(min(UUIDv7ToDateTime(uint_to_uuid(id_uint))), '%Y-%m-%dT%H:%i:%SZ') as start_time,
-        formatDateTime(max(UUIDv7ToDateTime(uint_to_uuid(id_uint))), '%Y-%m-%dT%H:%i:%SZ') as end_time,
-        uint_to_uuid(max(id_uint)) as last_inference_id
-      FROM InferenceByEpisodeId FINAL
-      GROUP BY episode_id
-      HAVING toUInt128(last_inference_id) < toUInt128(toUUID({before:String}))
-      ORDER BY toUInt128(last_inference_id) DESC
-      LIMIT {page_size:UInt32}
-    `;
-    query_params.before = before;
-  } else if (after) {
-    query = `
-      SELECT
-        episode_id,
-        count,
-        start_time,
-        end_time,
-        last_inference_id
-      FROM
-      (
-        SELECT
-          uint_to_uuid(episode_id_uint) as episode_id,
-          toUInt32(count(*)) as count,
-          formatDateTime(min(UUIDv7ToDateTime(uint_to_uuid(id_uint))), '%Y-%m-%dT%H:%i:%SZ') as start_time,
-          formatDateTime(max(UUIDv7ToDateTime(uint_to_uuid(id_uint))), '%Y-%m-%dT%H:%i:%SZ') as end_time,
-          uint_to_uuid(max(id_uint)) as last_inference_id,
-          max(id_uint) as last_inference_id_uint
-        FROM InferenceByEpisodeId FINAL
-        GROUP BY episode_id
-        HAVING last_inference_id_uint > toUInt128(toUUID({after:String}))
-        ORDER BY last_inference_id_uint ASC
-        LIMIT {page_size:UInt32}
-      )
-      ORDER BY last_inference_id_uint DESC
-    `;
-    query_params.after = after;
-  }
-
-  try {
-    const resultSet = await clickhouseClient.query({
-      query,
-      format: "JSONEachRow",
-      query_params,
-    });
-    const rows = await resultSet.json<EpisodeByIdRow>();
-    const episodeIds = rows.map((episode) => episode.episode_id);
-    const uniqueIds = new Set(episodeIds);
-    if (uniqueIds.size !== rows.length) {
-      console.warn(
-        `Found duplicate episode IDs: ${rows.length - uniqueIds.size} duplicates detected`,
-      );
-    }
-    return z.array(episodeByIdSchema).parse(rows);
-  } catch (error) {
-    console.error(error);
-    throw data("Error querying episode table", { status: 500 });
-  }
-}
-
-/// NOTE: these are the last inference IDs of the episodes that have the earliest and latest last inferences,
-/// i.e. the first and last episodes in the table sort order
-/// You should still paginate on the Inference IDs not the Episode IDs
-export async function queryEpisodeTableBounds(): Promise<TableBounds> {
-  const query = `
-    SELECT
-     (SELECT uint_to_uuid(id_uint) FROM InferenceByEpisodeId FINAL WHERE id_uint = (SELECT MIN(id_uint) FROM InferenceByEpisodeId FINAL)) AS first_id,
-     (SELECT uint_to_uuid(id_uint) FROM InferenceByEpisodeId FINAL WHERE id_uint = (SELECT MAX(id_uint) FROM InferenceByEpisodeId FINAL)) AS last_id
-    FROM InferenceByEpisodeId FINAL
-    LIMIT 1
-  `;
-  try {
-    const resultSet = await clickhouseClient.query({
-      query,
-      format: "JSONEachRow",
-    });
-    const rows = await resultSet.json<TableBounds>();
-    if (!rows.length) {
-      return {
-        first_id: null,
-        last_id: null,
-      };
-    }
-    return TableBoundsSchema.parse(rows[0]);
-  } catch (error) {
-    console.error(error);
-    throw data("Error querying inference table bounds", { status: 500 });
-  }
-}
-
-export async function queryInferenceTableByEpisodeId(params: {
-  episode_id: string;
-  page_size: number;
-  before?: string;
-  after?: string;
-}): Promise<InferenceByIdRow[]> {
-  return queryInferenceTable({
-    page_size: params.page_size,
-    before: params.before,
-    after: params.after,
-    extraWhere: ["episode_id = {episode_id:String}"],
-    extraParams: { episode_id: params.episode_id },
-  });
-}
-
-export async function queryInferenceTableBoundsByEpisodeId(params: {
-  episode_id: string;
-}): Promise<TableBounds> {
-  return queryInferenceTableBounds({
-    extraWhere: ["episode_id = {episode_id:String}"],
-    extraParams: { episode_id: params.episode_id },
-  });
-}
-
-export async function queryInferenceTableByFunctionName(params: {
-  function_name: string;
-  page_size: number;
-  before?: string;
-  after?: string;
-}): Promise<InferenceByIdRow[]> {
-  return queryInferenceTable({
-    page_size: params.page_size,
-    before: params.before,
-    after: params.after,
-    extraWhere: ["function_name = {function_name:String}"],
-    extraParams: { function_name: params.function_name },
-  });
-}
-
-export async function queryInferenceTableBoundsByFunctionName(params: {
-  function_name: string;
-}): Promise<TableBounds> {
-  return queryInferenceTableBounds({
-    extraWhere: ["function_name = {function_name:String}"],
-    extraParams: { function_name: params.function_name },
-  });
-}
-
-export async function queryInferenceTableByVariantName(params: {
-  function_name: string;
-  variant_name: string;
-  page_size: number;
-  before?: string;
-  after?: string;
-}): Promise<InferenceByIdRow[]> {
-  return queryInferenceTable({
-    page_size: params.page_size,
-    before: params.before,
-    after: params.after,
-    extraWhere: [
-      "function_name = {function_name:String}",
-      "variant_name = {variant_name:String}",
-    ],
-    extraParams: {
-      function_name: params.function_name,
-      variant_name: params.variant_name,
-    },
-  });
-}
-
-export async function queryInferenceTableBoundsByVariantName(params: {
-  function_name: string;
-  variant_name: string;
-}): Promise<TableBounds> {
-  return queryInferenceTableBounds({
-    extraWhere: [
-      "function_name = {function_name:String}",
-      "variant_name = {variant_name:String}",
-    ],
-    extraParams: {
-      function_name: params.function_name,
-      variant_name: params.variant_name,
-    },
-  });
-}
-
-export async function countInferencesForFunction(
-  function_name: string,
-  function_config: FunctionConfig,
-): Promise<number> {
-  const inference_table_name = getInferenceTableName(function_config);
-  const query = `SELECT toUInt32(COUNT()) AS count FROM ${inference_table_name} WHERE function_name = {function_name:String}`;
-  const resultSet = await clickhouseClient.query({
-    query,
-    format: "JSONEachRow",
-    query_params: { function_name },
-  });
-  const rows = await resultSet.json<{ count: number }>();
-  return rows[0].count;
-}
-
-export async function countInferencesForVariant(
-  function_name: string,
-  function_config: FunctionConfig,
-  variant_name: string,
-): Promise<number> {
-  const inference_table_name = getInferenceTableName(function_config);
-  const query = `SELECT toUInt32(COUNT()) AS count FROM ${inference_table_name} WHERE function_name = {function_name:String} AND variant_name = {variant_name:String}`;
-  const resultSet = await clickhouseClient.query({
-    query,
-    format: "JSONEachRow",
-    query_params: { function_name, variant_name },
-  });
-  const rows = await resultSet.json<{ count: number }>();
-  return rows[0].count;
-}
-
-export async function countInferencesForEpisode(
-  episode_id: string,
-): Promise<number> {
-  const query = `SELECT COUNT() AS count FROM InferenceByEpisodeId FINAL WHERE episode_id_uint = toUInt128(toUUID({episode_id:String}))`;
-  const resultSet = await clickhouseClient.query({
-    query,
-    format: "JSONEachRow",
-    query_params: { episode_id },
-  });
-  const rows = await resultSet.json<{ count: string }>();
-  return Number(rows[0].count);
-}
-
 export const chatInferenceRowSchema = z.object({
   id: z.string().uuid(),
   function_name: z.string(),
@@ -503,6 +71,7 @@ export const chatInferenceRowSchema = z.object({
   inference_params: z.string(),
   processing_time_ms: z.number(),
   timestamp: z.string().datetime(),
+  extra_body: z.string().nullable(),
   tags: z.record(z.string(), z.string()).default({}),
 });
 
@@ -519,6 +88,7 @@ export const jsonInferenceRowSchema = z.object({
   inference_params: z.string(),
   processing_time_ms: z.number(),
   timestamp: z.string().datetime(),
+  extra_body: z.string().nullable(),
   tags: z.record(z.string(), z.string()).default({}),
 });
 
@@ -541,12 +111,14 @@ export const parsedChatInferenceRowSchema = chatInferenceRowSchema
     output: true,
     inference_params: true,
     tool_params: true,
+    extra_body: true,
   })
   .extend({
     input: inputSchema,
     output: z.array(contentBlockOutputSchema),
     inference_params: z.record(z.string(), z.unknown()),
     tool_params: z.record(z.string(), z.unknown()),
+    extra_body: inferenceExtraBodySchema.nullable(),
   });
 
 export type ParsedChatInferenceRow = z.infer<
@@ -559,12 +131,14 @@ export const parsedJsonInferenceRowSchema = jsonInferenceRowSchema
     output: true,
     inference_params: true,
     output_schema: true,
+    extra_body: true,
   })
   .extend({
     input: inputSchema,
     output: jsonInferenceOutputSchema,
     inference_params: z.record(z.string(), z.unknown()),
     output_schema: z.record(z.string(), z.unknown()),
+    extra_body: inferenceExtraBodySchema.nullable(),
   });
 
 export type ParsedJsonInferenceRow = z.infer<
@@ -592,115 +166,6 @@ export function parseInferenceOutput(
     return z.array(contentBlockOutputSchema).parse(parsed);
   }
   return jsonInferenceOutputSchema.parse(parsed);
-}
-
-async function parseInferenceRow(
-  row: InferenceRow,
-): Promise<ParsedInferenceRow> {
-  const input = inputSchema.parse(JSON.parse(row.input));
-  const resolvedInput = await resolveInput(input);
-  if (row.function_type === "chat") {
-    return {
-      ...row,
-      input: resolvedInput,
-      output: parseInferenceOutput(row.output) as ContentBlockOutput[],
-      inference_params: z
-        .record(z.string(), z.unknown())
-        .parse(JSON.parse(row.inference_params)),
-      tool_params:
-        row.tool_params === ""
-          ? {}
-          : z
-              .record(z.string(), z.unknown())
-              .parse(JSON.parse(row.tool_params)),
-    };
-  } else {
-    return {
-      ...row,
-      input: resolvedInput,
-      output: parseInferenceOutput(row.output) as JsonInferenceOutput,
-      inference_params: z
-        .record(z.string(), z.unknown())
-        .parse(JSON.parse(row.inference_params)),
-      output_schema: z
-        .record(z.string(), z.unknown())
-        .parse(JSON.parse(row.output_schema)),
-    };
-  }
-}
-
-export async function queryInferenceById(
-  id: string,
-): Promise<ParsedInferenceRow | null> {
-  const query = `
-    WITH inference AS (
-        SELECT
-            id_uint,
-            function_name,
-            variant_name,
-            episode_id,
-            function_type
-        FROM InferenceById FINAL
-        WHERE id_uint = toUInt128({id:UUID})
-        LIMIT 1
-    )
-    SELECT
-        c.id,
-        c.function_name,
-        c.variant_name,
-        c.episode_id,
-        c.input,
-        c.output,
-        c.tool_params,
-        c.inference_params,
-        c.processing_time_ms,
-        NULL AS output_schema, -- Placeholder for JSON column
-        formatDateTime(c.timestamp, '%Y-%m-%dT%H:%i:%SZ') AS timestamp,
-        c.tags,
-        'chat' AS function_type
-    FROM ChatInference c
-    WHERE
-        'chat' = (SELECT function_type FROM inference)
-        AND c.function_name IN (SELECT function_name FROM inference)
-        AND c.variant_name IN (SELECT variant_name FROM inference)
-        AND c.episode_id IN (SELECT episode_id FROM inference)
-        AND c.id = {id:UUID}
-
-    UNION ALL
-
-    SELECT
-        j.id,
-        j.function_name,
-        j.variant_name,
-        j.episode_id,
-        j.input,
-        j.output,
-        NULL AS tool_params, -- Placeholder for Chat column
-        j.inference_params,
-        j.processing_time_ms,
-        j.output_schema,
-        formatDateTime(j.timestamp, '%Y-%m-%dT%H:%i:%SZ') AS timestamp,
-        j.tags,
-        'json' AS function_type
-    FROM JsonInference j
-    WHERE
-        'json' = (SELECT function_type FROM inference)
-        AND j.function_name IN (SELECT function_name FROM inference)
-        AND j.variant_name IN (SELECT variant_name FROM inference)
-        AND j.episode_id IN (SELECT episode_id FROM inference)
-        AND j.id = {id:UUID}
-  `;
-
-  const resultSet = await clickhouseClient.query({
-    query,
-    format: "JSONEachRow",
-    query_params: { id },
-  });
-  const rows = await resultSet.json<InferenceRow>();
-  const firstRow = rows[0];
-  if (!firstRow) return null;
-  const parsedRow = await parseInferenceRow(firstRow);
-  return parsedRow;
 }
 
 export const modelInferenceRowSchema = z.object({
@@ -736,83 +201,3 @@ export const parsedModelInferenceRowSchema = modelInferenceRowSchema
 export type ParsedModelInferenceRow = z.infer<
   typeof parsedModelInferenceRowSchema
 >;
-
-async function parseModelInferenceRow(
-  row: ModelInferenceRow,
-): Promise<ParsedModelInferenceRow> {
-  const parsedMessages = z
-    .array(modelInferenceInputMessageSchema)
-    .parse(JSON.parse(row.input_messages));
-  const resolvedMessages = await resolveModelInferenceMessages(parsedMessages);
-  return {
-    ...row,
-    input_messages: resolvedMessages,
-    output: z.array(contentBlockSchema).parse(JSON.parse(row.output)),
-  };
-}
-
-export async function queryModelInferencesByInferenceId(
-  id: string,
-): Promise<ParsedModelInferenceRow[]> {
-  const query = `
-    SELECT *, formatDateTime(timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp FROM ModelInference WHERE inference_id = {id:String}
-  `;
-  const resultSet = await clickhouseClient.query({
-    query,
-    format: "JSONEachRow",
-    query_params: { id },
-  });
-  const rows = await resultSet.json<ModelInferenceRow>();
-  const validatedRows = z.array(modelInferenceRowSchema).parse(rows);
-  const parsedRows = await Promise.all(
-    validatedRows.map(parseModelInferenceRow),
-  );
-  return parsedRows;
-}
-
-const functionCountInfoSchema = z.object({
-  function_name: z.string(),
-  max_timestamp: z.string().datetime(),
-  count: z.number(),
-});
-
-export type FunctionCountInfo = z.infer<typeof functionCountInfoSchema>;
-
-export async function countInferencesByFunction(): Promise<
-  FunctionCountInfo[]
-> {
-  const query = `SELECT
-        function_name,
-        formatDateTime(max(timestamp), '%Y-%m-%dT%H:%i:%SZ') AS max_timestamp,
-        toUInt32(count()) AS count
-    FROM (
-        SELECT function_name, timestamp
-        FROM ChatInference
-        UNION ALL
-        SELECT function_name, timestamp
-        FROM JsonInference
-    )
-    GROUP BY function_name
-    ORDER BY max_timestamp DESC`;
-  const resultSet = await clickhouseClient.query({
-    query,
-    format: "JSONEachRow",
-  });
-  const rows = await resultSet.json<FunctionCountInfo[]>();
-  const validatedRows = z.array(functionCountInfoSchema).parse(rows);
-  return validatedRows;
-}
-
-export async function countEpisodes(): Promise<number> {
-  const query = `SELECT COUNT(DISTINCT episode_id) as count FROM (
-    SELECT episode_id FROM ChatInference
-    UNION ALL
-    SELECT episode_id FROM JsonInference
-  )`;
-  const resultSet = await clickhouseClient.query({
-    query,
-    format: "JSONEachRow",
-  });
-  const rows = await resultSet.json<{ count: string }>();
-  return Number(rows[0].count);
-}

@@ -15,8 +15,8 @@ import {
   queryInferenceTableBoundsByFunctionName,
   queryInferenceTableBoundsByVariantName,
   queryModelInferencesByInferenceId,
-} from "./inference";
-import { countInferencesForFunction } from "./inference";
+} from "./inference.server";
+import { countInferencesForFunction } from "./inference.server";
 import type {
   ContentBlockOutput,
   JsonInferenceOutput,
@@ -38,7 +38,7 @@ test("countInferencesForFunction returns correct counts", async () => {
     tool_choice: "none",
     parallel_tool_calls: false,
   });
-  expect(chatCount).toBe(803);
+  expect(chatCount).toBe(804);
 });
 
 // Test countInferencesForVariant
@@ -61,7 +61,7 @@ test("countInferencesForVariant returns correct counts", async () => {
     },
     "initial_prompt_gpt4o_mini",
   );
-  expect(chatCount).toBe(648);
+  expect(chatCount).toBe(649);
 });
 
 test("queryInferenceTable", async () => {
@@ -301,13 +301,13 @@ test("queryInferenceTableByEpisodeId pages through a sample of results correctly
 test("queryInferenceTableBounds", async () => {
   const bounds = await queryInferenceTableBounds();
   expect(bounds.first_id).toBe("01934c9a-be70-74e2-8e6d-8eb19531638c");
-  expect(bounds.last_id).toBe("0196a0ea-d197-76d0-b6fc-15778589a4da");
+  expect(bounds.last_id).toBe("0196ca1e-2a1f-73f3-8ea6-d95d3f9b8645");
 });
 
 test("queryEpisodeTableBounds", async () => {
   const bounds = await queryEpisodeTableBounds();
   expect(bounds.first_id).toBe("01934c9a-be70-74e2-8e6d-8eb19531638c");
-  expect(bounds.last_id).toBe("0196a0ea-d197-76d0-b6fc-15778589a4da");
+  expect(bounds.last_id).toBe("0196ca1e-2a1f-73f3-8ea6-d95d3f9b8645");
 });
 
 test("queryInferenceTableBounds with episode_id", async () => {
@@ -516,9 +516,9 @@ test("countInferencesByFunction", async () => {
         max_timestamp: "2025-04-15T02:33:10Z",
       },
       {
-        count: 803,
+        count: 804,
         function_name: "write_haiku",
-        max_timestamp: "2025-04-15T02:33:07Z",
+        max_timestamp: "2025-05-12T21:59:20Z",
       },
       {
         count: 1,

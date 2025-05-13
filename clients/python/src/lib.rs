@@ -300,7 +300,7 @@ where
     F::Output: Ungil,
 {
     // The Tokio runtime is managed by `pyo3_async_runtimes` - the entrypoint to
-    // our crate (`python-pyo3`) is the `pymodule` function, rather than
+    // our crate (`python`) is the `pymodule` function, rather than
     // a `#[tokio::main]` function, so we need `pyo3_async_runtimes` to keep track of
     // a Tokio runtime for us.
     py.allow_threads(|| pyo3_async_runtimes::tokio::get_runtime().block_on(fut))
@@ -1291,7 +1291,7 @@ impl AsyncTensorZeroGateway {
     }
 
     /// For internal use only - do not call.
-    // This is a helper function used by `optimizations-server` to get the template config
+    // This is a helper function used by `optimization-server` to get the template config
     // when applying a new prompt template during fine-tuning
     #[pyo3(signature = (*, function_name, variant_name))]
     fn _internal_get_template_config(
@@ -1309,7 +1309,7 @@ impl AsyncTensorZeroGateway {
     }
 
     /// For internal use only - do not call.
-    // This is a helper function used by `optimizations-server` to get inferences used for fine-tuning
+    // This is a helper function used by `optimization-server` to get inferences used for fine-tuning
     #[pyo3(signature = (*, function_name, metric_name=None, threshold=None, max_samples=None))]
     fn _internal_get_curated_inferences(
         this: PyRef<'_, Self>,
