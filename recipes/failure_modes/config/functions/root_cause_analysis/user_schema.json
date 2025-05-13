@@ -1,0 +1,72 @@
+{
+  "type": "object",
+  "properties": {
+    "system_message": {
+      "type": "string",
+      "description": "The system-level prompt that frames the entire analysis task."
+    },
+    "tools_available": {
+      "type": "array",
+      "description": "Optional list of available tools and their descriptions.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The tool's identifier."
+          },
+          "description": {
+            "type": "string",
+            "description": "A brief description of what the tool does."
+          }
+        },
+        "required": ["name", "description"],
+        "additionalProperties": false
+      },
+      "minItems": 0
+    },
+    "messages": {
+      "type": "array",
+      "description": "The complete message history, excluding the system prompt.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": ["user", "assistant"],
+            "description": "The role of the message sender."
+          },
+          "content": {
+            "type": "string",
+            "description": "The textual content of the message."
+          }
+        },
+        "required": ["role", "content"],
+        "additionalProperties": false
+      },
+      "minItems": 1
+    },
+    "feedback": {
+      "type": "array",
+      "description": "List of feedback metrics, each with a name and value.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The name of a feedback metric."
+          },
+          "value": {
+            "type": ["string", "number", "boolean"],
+            "description": "The value of that metric."
+          }
+        },
+        "required": ["name", "value"],
+        "additionalProperties": false
+      },
+      "minItems": 1
+    }
+  },
+  "required": ["system_message", "messages", "feedback"],
+  "additionalProperties": false
+}

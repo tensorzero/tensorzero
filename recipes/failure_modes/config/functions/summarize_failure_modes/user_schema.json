@@ -1,0 +1,20 @@
+{
+    "type": "object",
+    "properties": {
+      "system_template": {
+        "type": "string",
+        "description": "The original system template given to the LLM performing the task."
+      },
+      "root_causes": {
+        "type": "array",
+        "description": "A list of root cause strings aggregated across multiple examples.",
+        "items": {
+          "type": "string",
+          "description": "A root cause explaining a failure."
+        },
+        "minItems": 1
+      }
+    },
+    "required": ["system_template", "root_causes"],
+    "additionalProperties": false
+  }
