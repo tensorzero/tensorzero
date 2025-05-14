@@ -3127,3 +3127,20 @@ def test_sync_invalid_input(sync_client: TensorZeroGateway):
         str(exc_info.value)
         == 'Failed to deserialize JSON to tensorzero::client_input::ClientInput: messages[0].content[0]: invalid type: string "Invalid", expected object at line 1 column 54'
     )
+
+
+def test_sync_multiple_text_blocks(sync_client: TensorZeroGateway):
+    sync_client.inference(
+        model_name="dummy::multiple-text-blocks",
+        input={
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Hello"},
+                        {"type": "text", "text": "world"},
+                    ],
+                }
+            ]
+        },
+    )
