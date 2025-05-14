@@ -34,6 +34,9 @@ pub use client_inference_params::{ClientInferenceParams, ClientSecretString};
 pub use client_input::{ClientInput, ClientInputMessage, ClientInputMessageContent};
 
 pub use tensorzero_internal::cache::CacheParamsOptions;
+pub use tensorzero_internal::endpoints::datasets::{
+    ChatInferenceDatapoint, Datapoint, JsonInferenceDatapoint,
+};
 pub use tensorzero_internal::endpoints::dynamic_evaluation_run::{
     DynamicEvaluationRunParams, DynamicEvaluationRunResponse,
 };
@@ -654,6 +657,73 @@ impl Client {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
                     tensorzero_internal::endpoints::datasets::delete_datapoint(
+                        dataset_name,
+                        datapoint_id,
+                        &gateway.state.clickhouse_connection_info,
+                    )
+                    .await
+                    .map_err(err_to_http)
+                })
+                .await?)
+            }
+        }
+    }
+
+    pub async fn list_datapoints(
+        &self,
+        dataset_name: String,
+        limit: Option<u32>,
+        offset: Option<u32>,
+    ) -> Result<Vec<Datapoint>, TensorZeroError> {
+        match &self.mode {
+            ClientMode::HTTPGateway(client) => {
+                let url = client.base_url.join(&format!("datasets/{dataset_name}/datapoints")).map_err(|e| TensorZeroError::Other {
+                    source: tensorzero_internal::error::Error::new(ErrorDetails::InvalidBaseUrl {
+                        message: format!("Failed to join base URL with /datasets/{dataset_name}/datapoints endpoint: {e}"),
+                    })
+                    .into(),
+                })?;
+                let builder = client.http_client.get(url).query(&[
+                    ("limit", limit.unwrap_or(100).to_string().as_str()),
+                    ("offset", offset.unwrap_or(0).to_string().as_str()),
+                ]);
+                self.parse_http_response(builder.send().await).await
+            }
+            ClientMode::EmbeddedGateway { gateway, timeout } => {
+                Ok(with_embedded_timeout(*timeout, async {
+                    tensorzero_internal::endpoints::datasets::list_datapoints(
+                        dataset_name,
+                        &gateway.state.clickhouse_connection_info,
+                        limit,
+                        offset,
+                    )
+                    .await
+                    .map_err(err_to_http)
+                })
+                .await?)
+            }
+        }
+    }
+
+    pub async fn get_datapoint(
+        &self,
+        dataset_name: String,
+        datapoint_id: Uuid,
+    ) -> Result<Datapoint, TensorZeroError> {
+        match &self.mode {
+            ClientMode::HTTPGateway(client) => {
+                let url = client.base_url.join(&format!("datasets/{dataset_name}/datapoints/{datapoint_id}")).map_err(|e| TensorZeroError::Other {
+                    source: tensorzero_internal::error::Error::new(ErrorDetails::InvalidBaseUrl {
+                        message: format!("Failed to join base URL with /datasets/{dataset_name}/datapoints/{datapoint_id} endpoint: {e}"),
+                    })
+                    .into(),
+                })?;
+                let builder = client.http_client.get(url);
+                self.parse_http_response(builder.send().await).await
+            }
+            ClientMode::EmbeddedGateway { gateway, timeout } => {
+                Ok(with_embedded_timeout(*timeout, async {
+                    tensorzero_internal::endpoints::datasets::get_datapoint(
                         dataset_name,
                         datapoint_id,
                         &gateway.state.clickhouse_connection_info,
