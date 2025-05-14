@@ -909,7 +909,6 @@ pub async fn get_datapoint(
     datapoint_id: Uuid,
     clickhouse: &ClickHouseConnectionInfo,
 ) -> Result<Datapoint, Error> {
-    // TODO: should we check staled_at here?
     let query = r#"
     WITH dataset as (
         SELECT
@@ -953,7 +952,6 @@ pub async fn get_datapoint(
     LIMIT 1
     FORMAT JSONEachRow
     "#;
-    // TODO: test with missing and chat + json datapoints
     let datapoint_id_str = datapoint_id.to_string();
     let params = HashMap::from([
         ("dataset_name", dataset_name.as_str()),
