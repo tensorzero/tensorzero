@@ -1,5 +1,6 @@
 #![allow(clippy::print_stdout)]
 
+use std::cell::Cell;
 use std::future::Future;
 use std::sync::Arc;
 
@@ -319,6 +320,7 @@ async fn test_clickhouse_migration_manager() {
         let migrations = &migrations;
         let clickhouse = &clickhouse;
         async move {
+            let initial_clean_start = Cell::new(true);
             // All of the previous migrations should have already been run
             for (i, migration) in migrations.iter().enumerate().take(migration_num) {
                 let clean_start = migration_manager::run_migration(migration.as_ref(), false)
@@ -340,15 +342,21 @@ async fn test_clickhouse_migration_manager() {
             }
 
             let run_migration = || async {
-                migration_manager::run_migration(migrations[migration_num].as_ref(), false)
-                    .await
-                    .unwrap()
+                migration_manager::run_migration(
+                    migrations[migration_num].as_ref(),
+                    initial_clean_start.get(),
+                )
+                .await
+                .unwrap()
             };
 
             // The latest migration should get applied, since we haven't run it before
             let name = migrations[migration_num].name();
 
             let clean_start = if name == "Migration0020" {
+                // We're going to be inserting data into the tables, so run all subsequent
+                // migrations in non-clean-start mode.
+                initial_clean_start.set(false);
                 run_migration_0020_with_data(clickhouse, run_migration).await
             } else {
                 run_migration().await
