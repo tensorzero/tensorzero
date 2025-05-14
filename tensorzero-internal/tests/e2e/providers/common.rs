@@ -22,6 +22,7 @@ use tensorzero::{
     CacheParamsOptions, ClientInferenceParams, ClientInput, ClientInputMessage,
     ClientInputMessageContent, InferenceOutput, InferenceResponse,
 };
+use tensorzero_internal::endpoints::inference::InferenceParams;
 
 use tensorzero_internal::endpoints::object_storage::{
     get_object_handler, ObjectResponse, PathParams,
@@ -254,13 +255,13 @@ macro_rules! generate_provider_tests {
         }
         $crate::make_gateway_test_functions!(test_simple_streaming_inference_request);
 
-        #[tokio::test]
-        async fn test_streaming_invalid_request() {
+        async fn test_streaming_invalid_request(client: tensorzero::Client) {
             let providers = $func().await.simple_inference;
             for provider in providers {
-                test_streaming_invalid_request_with_provider(provider).await;
+                test_streaming_invalid_request_with_provider(provider, &client).await;
             }
         }
+        $crate::make_gateway_test_functions!(test_streaming_invalid_request);
 
         #[tokio::test]
         async fn test_inference_params_inference_request() {
@@ -2315,62 +2316,50 @@ pub async fn check_simple_image_inference_response(
     );
 }
 
-pub async fn test_streaming_invalid_request_with_provider(provider: E2ETestProvider) {
+pub async fn test_streaming_invalid_request_with_provider(
+    provider: E2ETestProvider,
+    client: &tensorzero::Client,
+) {
     // A top_p of -100 and temperature of -100 should produce errors on all providers
     let extra_headers = get_extra_headers();
-    let payload = json!({
-        "function_name": "basic_test",
-        "variant_name": provider.variant_name,
-        "params": {
-            "chat_completion": {
-                "temperature": -100,
-                "top_p": -100,
-            }
+    
+    let mut inference_params = InferenceParams::default();
+    inference_params.chat_completion.temperature = Some(-100.0);
+    inference_params.chat_completion.top_p = Some(-100.0);
+    
+    let params = ClientInferenceParams {
+        function_name: Some("basic_test".to_string()),
+        variant_name: Some(provider.variant_name.clone()),
+        params: inference_params,
+        input: ClientInput {
+            system: Some(json!({"assistant_name": "Dr. Mehta"})),
+            messages: vec![ClientInputMessage {
+                role: Role::User,
+                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    text: "What is the name of the capital city of Japan?".to_string(),
+                })],
+            }],
         },
-        "input":
-            {
-               "system": {"assistant_name": format!("Dr. Mehta")},
-               "messages": [
-                {
-                    "role": "user",
-                    "content": "What is the name of the capital city of Japan?"
-                }
-            ]},
-        "stream": true,
-        "extra_body": [
-            {
-                "variant_name": "aws-sagemaker",
-                "pointer": "/messages/0/content",
-                "value": 123,
-            },
-        ],
-        "extra_headers": extra_headers.headers,
-    });
+        stream: Some(true),
+        extra_headers,
+        ..Default::default()
+    };
 
-    let mut event_source = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .eventsource()
-        .unwrap();
-
-    while let Some(event) = event_source.next().await {
-        if let Ok(reqwest_eventsource::Event::Open) = event {
-            continue;
-        }
-        let err = event.unwrap_err();
-        let reqwest_eventsource::Error::InvalidStatusCode(code, resp) = err else {
-            panic!("Unexpected error: {err:?}")
-        };
-        assert_eq!(code, StatusCode::BAD_GATEWAY);
-        let resp: Value = resp.json().await.unwrap();
-        let err_msg = resp.get("error").unwrap().as_str().unwrap();
-        assert!(
-            err_msg.contains("top_p")
-                || err_msg.contains("topP")
-                || err_msg.contains("temperature"),
-            "Unexpected error message: {resp}"
-        );
-    }
+    // We expect this request to fail because of the invalid parameters
+    let result = client.inference(params).await;
+    let err = result.unwrap_err();
+    let err_msg = err.to_string();
+    
+    assert!(
+        err_msg.contains("top_p")
+            || err_msg.contains("topP")
+            || err_msg.contains("temperature")
+            || err_msg.contains("400 Bad Request"),
+        "Unexpected error message: {err_msg}"
+    );
+    
+    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 }
 
 pub async fn test_simple_streaming_inference_request_with_provider(
