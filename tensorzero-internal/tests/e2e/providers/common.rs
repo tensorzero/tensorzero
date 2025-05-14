@@ -20,7 +20,7 @@ use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{json, Value};
 use std::future::IntoFuture;
 use tensorzero::{
-    CacheParamsOptions, ClientInferenceParams, ClientInput, ClientInputMessage,
+    ClientInferenceParams, ClientInput, ClientInputMessage,
     ClientInputMessageContent, ClientSecretString, InferenceOutput, InferenceResponse,
 };
 use tensorzero_internal::endpoints::inference::InferenceParams;
@@ -32,7 +32,7 @@ use tensorzero_internal::endpoints::object_storage::{
 use tensorzero_internal::gateway_util::AppStateData;
 use tensorzero_internal::inference::types::TextKind;
 use tensorzero_internal::{
-    cache::CacheEnabledMode,
+    cache::{CacheEnabledMode, CacheParamsOptions},
     inference::types::{
         resolved_input::ImageWithPath,
         storage::{StorageKind, StoragePath},
@@ -273,13 +273,13 @@ macro_rules! generate_provider_tests {
         $crate::make_gateway_test_functions!(test_inference_params_inference_request);
 
 
-        #[tokio::test]
-        async fn test_inference_params_streaming_inference_request() {
+        async fn test_inference_params_streaming_inference_request(client: tensorzero::Client) {
             let providers = $func().await.inference_params_dynamic_credentials;
             for provider in providers {
-                test_inference_params_streaming_inference_request_with_provider(provider).await;
+                test_inference_params_streaming_inference_request_with_provider(provider, &client).await;
             }
         }
+        $crate::make_gateway_test_functions!(test_inference_params_streaming_inference_request);
 
 
         async fn test_tool_use_tool_choice_auto_used_inference_request(client: tensorzero::Client) {
@@ -309,31 +309,31 @@ macro_rules! generate_provider_tests {
         $crate::make_gateway_test_functions!(test_tool_use_tool_choice_auto_unused_inference_request);
 
 
-        #[tokio::test]
-        async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request() {
+        async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request(client: tensorzero::Client) {
             let providers = $func().await.tool_use_inference;
             for provider in providers {
-                test_tool_use_tool_choice_auto_unused_streaming_inference_request_with_provider(provider).await;
+                test_tool_use_tool_choice_auto_unused_streaming_inference_request_with_provider(provider, &client).await;
             }
         }
+        $crate::make_gateway_test_functions!(test_tool_use_tool_choice_auto_unused_streaming_inference_request);
 
 
-        #[tokio::test]
-        async fn test_tool_use_tool_choice_required_inference_request() {
+        async fn test_tool_use_tool_choice_required_inference_request(client: tensorzero::Client) {
             let providers = $func().await.tool_use_inference;
             for provider in providers {
-                test_tool_use_tool_choice_required_inference_request_with_provider(provider).await;
+                test_tool_use_tool_choice_required_inference_request_with_provider(provider, &client).await;
             }
         }
+        $crate::make_gateway_test_functions!(test_tool_use_tool_choice_required_inference_request);
 
 
-        #[tokio::test]
-        async fn test_tool_use_tool_choice_required_streaming_inference_request() {
+        async fn test_tool_use_tool_choice_required_streaming_inference_request(client: tensorzero::Client) {
             let providers = $func().await.tool_use_inference;
             for provider in providers {
-                test_tool_use_tool_choice_required_streaming_inference_request_with_provider(provider).await;
+                test_tool_use_tool_choice_required_streaming_inference_request_with_provider(provider, &client).await;
             }
         }
+        $crate::make_gateway_test_functions!(test_tool_use_tool_choice_required_streaming_inference_request);
 
 
         #[tokio::test]
@@ -2939,6 +2939,7 @@ pub async fn check_inference_params_response(
 
 pub async fn test_inference_params_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
+    client: &tensorzero::Client,
 ) {
     // Gemini 2.5 Pro gives us 'Penalty is not enabled for models/gemini-2.5-pro-preview-05-06'
     if provider.model_name.starts_with("gemini-2.5-pro") {
@@ -2946,63 +2947,57 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
     }
     let episode_id = Uuid::now_v7();
     let extra_headers = get_extra_headers();
-    let payload = json!({
-        "function_name": "basic_test",
-        "variant_name": provider.variant_name,
-        "episode_id": episode_id,
-        "input":
-            {
-               "system": {"assistant_name": "Dr. Mehta"},
-               "messages": [
-                {
-                    "role": "user",
-                    "content": "What is the name of the capital city of Japan?"
-                }
-            ]},
-        "params": {
-            "chat_completion": {
-                "temperature": 0.9,
-                "seed": 1337,
-                "max_tokens": 120,
-                "top_p": 0.9,
-                "presence_penalty": 0.1,
-                "frequency_penalty": 0.2,
-            }
-        },
-        "stream": true,
-        "credentials": provider.credentials,
-        "extra_headers": extra_headers.headers,
-    });
+    
+    let mut inference_params = InferenceParams::default();
+    inference_params.chat_completion.temperature = Some(0.9);
+    inference_params.chat_completion.seed = Some(1337);
+    inference_params.chat_completion.max_tokens = Some(120);
+    inference_params.chat_completion.top_p = Some(0.9);
+    inference_params.chat_completion.presence_penalty = Some(0.1);
+    inference_params.chat_completion.frequency_penalty = Some(0.2);
 
-    let mut event_source = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .eventsource()
-        .unwrap();
+    let params = ClientInferenceParams {
+        function_name: Some("basic_test".to_string()),
+        variant_name: Some(provider.variant_name.clone()),
+        episode_id: Some(episode_id),
+        input: ClientInput {
+            system: Some(json!({"assistant_name": "Dr. Mehta"})),
+            messages: vec![ClientInputMessage {
+                role: Role::User,
+                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    text: "What is the name of the capital city of Japan?".to_string(),
+                })],
+            }],
+        },
+        params: inference_params,
+        stream: Some(true),
+        credentials: provider
+            .credentials
+            .clone()
+            .into_iter()
+            .map(|(k, v)| (k, ClientSecretString(SecretString::new(v.into()))))
+            .collect(),
+        extra_headers,
+        ..Default::default()
+    };
+
+    let response = client.inference(params).await.unwrap();
+
+    let tensorzero::InferenceOutput::Streaming(mut stream) = response else {
+        panic!("Expected streaming response");
+    };
 
     let mut chunks = vec![];
-    let mut found_done_chunk = false;
-    while let Some(event) = event_source.next().await {
-        let event = event.unwrap();
-        match event {
-            Event::Open => continue,
-            Event::Message(message) => {
-                if message.data == "[DONE]" {
-                    found_done_chunk = true;
-                    break;
-                }
-                chunks.push(message.data);
-            }
-        }
+    while let Some(event) = stream.next().await {
+        let chunk = event.unwrap();
+        chunks.push(serde_json::to_value(&chunk).unwrap());
     }
-    assert!(found_done_chunk);
 
     let mut inference_id: Option<Uuid> = None;
     let mut full_content = String::new();
     let mut input_tokens = 0;
     let mut output_tokens = 0;
-    for chunk in chunks.clone() {
-        let chunk_json: Value = serde_json::from_str(&chunk).unwrap();
+    for chunk_json in chunks.clone() {
 
         println!("API response chunk: {chunk_json:#?}");
 
@@ -3062,7 +3057,7 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
     assert_eq!(id_uuid, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, payload["function_name"]);
+    assert_eq!(function_name, "basic_test");
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -4072,6 +4067,7 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
 /// This ensures that ToolChoice::Auto is working as expected.
 pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
+    client: &tensorzero::Client,
 ) {
     // Together doesn't correctly produce streaming tool call chunks (it produces text chunks with the raw tool call).
     if provider.model_provider_name == "together" {
@@ -4084,52 +4080,48 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
     }
     let episode_id = Uuid::now_v7();
     let extra_headers = get_extra_headers();
-    let payload = json!({
-        "function_name": "weather_helper",
-        "episode_id": episode_id,
-        "input":{
-            "system": {"assistant_name": "Dr. Mehta"},
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "What is your name?"
-                }
-            ]},
-        "stream": true,
-        "variant_name": provider.variant_name,
-        "extra_headers": extra_headers.headers,
-    });
+    
+    let response = client.inference(tensorzero::ClientInferenceParams {
+        function_name: Some("weather_helper".to_string()),
+        model_name: None,
+        variant_name: Some(provider.variant_name.clone()),
+        episode_id: Some(episode_id),
+        input: tensorzero::ClientInput {
+            system: Some(json!({"assistant_name": "Dr. Mehta"})),
+            messages: vec![tensorzero::ClientInputMessage {
+                role: Role::User,
+                content: vec![tensorzero::ClientInputMessageContent::Text(TextKind::Text { 
+                    text: "What is your name?".to_string() 
+                })],
+            }],
+        },
+        stream: Some(true),
+        credentials: provider
+            .credentials
+            .clone()
+            .into_iter()
+            .map(|(k, v)| (k, ClientSecretString(SecretString::new(v.into()))))
+            .collect(),
+        extra_headers,
+        ..Default::default()
+    }).await.unwrap();
 
-    let mut event_source = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .eventsource()
-        .unwrap();
+    let tensorzero::InferenceOutput::Streaming(mut stream) = response else {
+        panic!("Expected streaming response");
+    };
 
     let mut chunks = vec![];
-    let mut found_done_chunk = false;
-    while let Some(event) = event_source.next().await {
-        let event = event.unwrap();
-        match event {
-            Event::Open => continue,
-            Event::Message(message) => {
-                if message.data == "[DONE]" {
-                    found_done_chunk = true;
-                    break;
-                }
-                chunks.push(message.data);
-            }
-        }
+    while let Some(event) = stream.next().await {
+        let chunk = event.unwrap();
+        chunks.push(serde_json::to_value(&chunk).unwrap());
     }
-    assert!(found_done_chunk);
 
     let mut inference_id = None;
     let mut full_text = String::new();
     let mut input_tokens = 0;
     let mut output_tokens = 0;
 
-    for chunk in chunks {
-        let chunk_json: Value = serde_json::from_str(&chunk).unwrap();
+    for chunk_json in chunks {
 
         println!("API response chunk: {chunk_json:#?}");
 
@@ -4363,6 +4355,7 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
 
 pub async fn test_tool_use_tool_choice_required_inference_request_with_provider(
     provider: E2ETestProvider,
+    client: &tensorzero::Client,
 ) {
     // Azure, Together, and SGLang don't support `tool_choice: "required"`
     if provider.model_provider_name == "azure"
@@ -4374,42 +4367,50 @@ pub async fn test_tool_use_tool_choice_required_inference_request_with_provider(
 
     let episode_id = Uuid::now_v7();
     let extra_headers = get_extra_headers();
-    let payload = json!({
-        "function_name": "weather_helper",
-        "episode_id": episode_id,
-        "input":{
-            "system": {"assistant_name": "Dr. Mehta"},
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "What is your name?"
-                }
-            ]},
-        "tool_choice": "required",
-        "stream": false,
-        "variant_name": provider.variant_name,
-        "extra_headers": extra_headers.headers,
-    });
 
-    let response = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .send()
-        .await
-        .unwrap();
+    let response = client.inference(tensorzero::ClientInferenceParams {
+        function_name: Some("weather_helper".to_string()),
+        model_name: None,
+        variant_name: Some(provider.variant_name.clone()),
+        episode_id: Some(episode_id),
+        input: tensorzero::ClientInput {
+            system: Some(json!({"assistant_name": "Dr. Mehta"})),
+            messages: vec![tensorzero::ClientInputMessage {
+                role: Role::User,
+                content: vec![tensorzero::ClientInputMessageContent::Text(TextKind::Text { 
+                    text: "What is your name?".to_string() 
+                })],
+            }],
+        },
+        stream: Some(false),
+        credentials: provider
+            .credentials
+            .clone()
+            .into_iter()
+            .map(|(k, v)| (k, ClientSecretString(SecretString::new(v.into()))))
+            .collect(),
+        extra_headers,
+        dynamic_tool_params: tensorzero::DynamicToolParams {
+            tool_choice: Some(tensorzero_internal::tool::ToolChoice::Required),
+            ..Default::default()
+        },
+        ..Default::default()
+    }).await.unwrap();
 
-    // Check if the API response is fine
-    assert_eq!(response.status(), StatusCode::OK);
-    let response_json = response.json::<Value>().await.unwrap();
-
-    println!("API response: {response_json:#?}");
-    check_tool_use_tool_choice_required_inference_response(
-        response_json,
-        &provider,
-        Some(episode_id),
-        false,
-    )
-    .await;
+    match response {
+        tensorzero::InferenceOutput::NonStreaming(response) => {
+            let response_json = serde_json::to_value(&response).unwrap();
+            println!("API response: {response_json:#?}");
+            check_tool_use_tool_choice_required_inference_response(
+                response_json,
+                &provider,
+                Some(episode_id),
+                false,
+            )
+            .await;
+        }
+        _ => panic!("Expected non-streaming response"),
+    }
 }
 
 pub async fn check_tool_use_tool_choice_required_inference_response(
@@ -4646,6 +4647,7 @@ pub async fn check_tool_use_tool_choice_required_inference_response(
 
 pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
+    client: &tensorzero::Client,
 ) {
     // Azure, Together, and SGLang don't support `tool_choice: "required"`
     if provider.model_provider_name == "azure"
@@ -4662,45 +4664,45 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
 
     let episode_id = Uuid::now_v7();
     let extra_headers = get_extra_headers();
-    let payload = json!({
-        "function_name": "weather_helper",
-        "episode_id": episode_id,
-        "input":{
-            "system": {"assistant_name": "Dr. Mehta"},
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "What is your name?"
-                }
-            ]},
-        "tool_choice": "required",
-        "stream": true,
-        "variant_name": provider.variant_name,
-        "extra_headers": extra_headers.headers,
-    });
+    
+    let response = client.inference(tensorzero::ClientInferenceParams {
+        function_name: Some("weather_helper".to_string()),
+        model_name: None,
+        variant_name: Some(provider.variant_name.clone()),
+        episode_id: Some(episode_id),
+        input: tensorzero::ClientInput {
+            system: Some(json!({"assistant_name": "Dr. Mehta"})),
+            messages: vec![tensorzero::ClientInputMessage {
+                role: Role::User,
+                content: vec![tensorzero::ClientInputMessageContent::Text(TextKind::Text { 
+                    text: "What is your name?".to_string() 
+                })],
+            }],
+        },
+        stream: Some(true),
+        credentials: provider
+            .credentials
+            .clone()
+            .into_iter()
+            .map(|(k, v)| (k, ClientSecretString(SecretString::new(v.into()))))
+            .collect(),
+        extra_headers,
+        dynamic_tool_params: tensorzero::DynamicToolParams {
+            tool_choice: Some(tensorzero_internal::tool::ToolChoice::Required),
+            ..Default::default()
+        },
+        ..Default::default()
+    }).await.unwrap();
 
-    let mut event_source = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .eventsource()
-        .unwrap();
+    let tensorzero::InferenceOutput::Streaming(mut stream) = response else {
+        panic!("Expected streaming response");
+    };
 
     let mut chunks = vec![];
-    let mut found_done_chunk = false;
-    while let Some(event) = event_source.next().await {
-        let event = event.unwrap();
-        match event {
-            Event::Open => continue,
-            Event::Message(message) => {
-                if message.data == "[DONE]" {
-                    found_done_chunk = true;
-                    break;
-                }
-                chunks.push(message.data);
-            }
-        }
+    while let Some(event) = stream.next().await {
+        let chunk = event.unwrap();
+        chunks.push(serde_json::to_value(&chunk).unwrap());
     }
-    assert!(found_done_chunk);
 
     let mut inference_id = None;
     let mut tool_id: Option<String> = None;
@@ -4708,8 +4710,7 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
     let mut input_tokens = 0;
     let mut output_tokens = 0;
 
-    for chunk in chunks {
-        let chunk_json: Value = serde_json::from_str(&chunk).unwrap();
+    for chunk_json in chunks {
 
         println!("API response chunk: {chunk_json:#?}");
 
