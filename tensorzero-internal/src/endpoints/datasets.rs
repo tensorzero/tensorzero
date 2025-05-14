@@ -1,7 +1,7 @@
 use std::{collections::HashMap, future::Future, pin::Pin};
 
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     Json,
 };
 use futures::future;
@@ -15,7 +15,7 @@ use crate::{
     config_parser::Config,
     error::{Error, ErrorDetails},
     function::FunctionConfig,
-    gateway_util::{AppState, StructuredJson},
+    gateway_util::{AppState, AppStateData, StructuredJson},
     inference::types::{
         batch::{deserialize_json_string, deserialize_optional_json_string},
         ChatInferenceDatabaseInsert, ContentBlockChatOutput, FetchContext, Input,
@@ -735,6 +735,83 @@ pub async fn delete_datapoint(
     chat_result?;
 
     Ok(())
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ListDatapointsQueryParams {
+    limit: Option<u32>,
+    offset: Option<u32>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ListDatapointsPathParams {
+    dataset_name: String,
+}
+
+#[axum::debug_handler(state = AppStateData)]
+pub async fn list_datapoints_handler(
+    State(app_state): AppState,
+    Path(path_params): Path<ListDatapointsPathParams>,
+    Query(query_params): Query<ListDatapointsQueryParams>,
+) -> Result<Json<Vec<Datapoint>>, Error> {
+    list_datapoints(
+        path_params.dataset_name,
+        &app_state.clickhouse_connection_info,
+        query_params.limit,
+        query_params.offset,
+    )
+    .await
+    .map(Json)
+}
+
+#[tracing::instrument(name = "list_datapoints", skip(clickhouse))]
+pub async fn list_datapoints(
+    dataset_name: String,
+    clickhouse: &ClickHouseConnectionInfo,
+    limit: Option<u32>,
+    offset: Option<u32>,
+) -> Result<Vec<Datapoint>, Error> {
+    let query = r#"
+    WITH dataset as (
+        SELECT * FROM ChatInferenceDatapoint
+        WHERE dataset_name = {dataset_name: String}
+        UNION ALL
+        SELECT * FROM JsonInferenceDatapoint
+        WHERE dataset_name = {dataset_name: String}
+    )
+    SELECT * FROM dataset
+    ORDER BY id DESC
+    LIMIT {limit: u32}
+    OFFSET {offset: u32}
+    FORMAT JSONEachRow
+    "#;
+    let limit = limit.unwrap_or(100);
+    let offset = offset.unwrap_or(0);
+    let limit_str = limit.to_string();
+    let offset_str = offset.to_string();
+
+    let params = HashMap::from([
+        ("dataset_name", dataset_name.as_str()),
+        ("limit", limit_str.as_str()),
+        ("offset", offset_str.as_str()),
+    ]);
+
+    let result = clickhouse
+        .run_query_synchronous(query.to_string(), Some(&params))
+        .await?;
+
+    let datapoints: Vec<ClickHouseDatapoint> = serde_json::from_str(&result).map_err(|e| {
+        Error::new(ErrorDetails::ClickHouseDeserialization {
+            message: format!("Failed to deserialize datapoints: {e}"),
+        })
+    })?;
+
+    let datapoints: Vec<Datapoint> = datapoints
+        .into_iter()
+        .map(|datapoint| Datapoint::from(datapoint))
+        .collect();
+
+    Ok(datapoints)
 }
 
 pub struct BatchDatapointOutputWithSize {
