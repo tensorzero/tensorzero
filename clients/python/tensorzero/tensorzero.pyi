@@ -16,7 +16,7 @@ import uuid_utils
 
 import tensorzero.internal_optimization_server_types as iost
 from tensorzero import (
-    ChatInferenceDatapointInput,
+    ChatDatapointInsert,
     DynamicEvaluationRunEpisodeResponse,
     DynamicEvaluationRunResponse,
     ExtraBody,
@@ -24,7 +24,7 @@ from tensorzero import (
     InferenceChunk,
     InferenceInput,
     InferenceResponse,
-    JsonInferenceDatapointInput,
+    JsonDatapointInsert,
 )
 
 class BaseTensorZeroGateway:
@@ -197,9 +197,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         self,
         *,
         dataset_name: str,
-        datapoints: List[
-            Union[ChatInferenceDatapointInput, JsonInferenceDatapointInput]
-        ],
+        datapoints: List[Union[ChatDatapointInsert, JsonDatapointInsert]],
     ) -> List[UUID]:
         """
         Make a POST request to the /datasets/{dataset_name}/datapoints/bulk endpoint.
@@ -405,9 +403,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         self,
         *,
         dataset_name: str,
-        datapoints: List[
-            Union[ChatInferenceDatapointInput, JsonInferenceDatapointInput]
-        ],
+        datapoints: List[Union[ChatDatapointInsert, JsonDatapointInsert]],
     ) -> List[UUID]:
         """
         Make a POST request to the /datasets/{dataset_name}/datapoints/bulk endpoint.

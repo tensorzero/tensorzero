@@ -498,12 +498,11 @@ pub async fn create_datapoint(
         })?;
         match &**function_config {
             FunctionConfig::Chat(_) => {
-                let chat: ChatInferenceDatapointInput =
-                    serde_json::from_value(datapoint).map_err(|e| {
-                        Error::new(ErrorDetails::InvalidRequest {
-                            message: format!("Failed to deserialize chat datapoint {i}: {e}"),
-                        })
-                    })?;
+                let chat: ChatDatapointInsert = serde_json::from_value(datapoint).map_err(|e| {
+                    Error::new(ErrorDetails::InvalidRequest {
+                        message: format!("Failed to deserialize chat datapoint {i}: {e}"),
+                    })
+                })?;
                 // Validate the input
                 function_config.validate_input(&chat.input).map_err(|e| {
                     Error::new(ErrorDetails::InvalidRequest {
@@ -569,12 +568,11 @@ pub async fn create_datapoint(
                 })
             }
             FunctionConfig::Json(json_function_config) => {
-                let json: JsonInferenceDatapointInput =
-                    serde_json::from_value(datapoint).map_err(|e| {
-                        Error::new(ErrorDetails::InvalidRequest {
-                            message: format!("Failed to deserialize json datapoint {i}: {e}"),
-                        })
-                    })?;
+                let json: JsonDatapointInsert = serde_json::from_value(datapoint).map_err(|e| {
+                    Error::new(ErrorDetails::InvalidRequest {
+                        message: format!("Failed to deserialize json datapoint {i}: {e}"),
+                    })
+                })?;
                 // Validate the input
                 function_config.validate_input(&json.input).map_err(|e| {
                     Error::new(ErrorDetails::InvalidRequest {
@@ -867,7 +865,7 @@ impl Datapoint {
 /// when created.
 /// We also do not allow users to specify the `id` or `episode_id` fields.
 #[derive(Debug, Deserialize, Serialize)]
-pub struct ChatInferenceDatapointInput {
+pub struct ChatDatapointInsert {
     pub function_name: String,
     pub input: Input,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -879,7 +877,7 @@ pub struct ChatInferenceDatapointInput {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-pub struct JsonInferenceDatapointInput {
+pub struct JsonDatapointInsert {
     pub function_name: String,
     pub input: Input,
     #[serde(skip_serializing_if = "Option::is_none")]

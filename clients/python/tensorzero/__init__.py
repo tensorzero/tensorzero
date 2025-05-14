@@ -7,7 +7,8 @@ from .client import AsyncTensorZeroGateway, BaseTensorZeroGateway, TensorZeroGat
 from .tensorzero import _start_http_gateway as _start_http_gateway
 from .types import (
     BaseTensorZeroError,
-    ChatInferenceDatapointInput,
+    ChatDatapointInsert,
+    ChatInferenceDatapointInput,  # DEPRECATED
     ChatInferenceResponse,
     ContentBlock,
     DynamicEvaluationRunEpisodeResponse,
@@ -20,7 +21,8 @@ from .types import (
     InferenceChunk,
     InferenceInput,
     InferenceResponse,
-    JsonInferenceDatapointInput,
+    JsonDatapointInsert,
+    JsonInferenceDatapointInput,  # DEPRECATED
     JsonInferenceOutput,
     JsonInferenceResponse,
     Message,
@@ -41,8 +43,9 @@ __all__ = [
     "AsyncTensorZeroGateway",
     "BaseTensorZeroError",
     "BaseTensorZeroGateway",
+    "ChatDatapointInsert",
+    "ChatInferenceDatapointInput",  # DEPRECATED
     "ChatInferenceResponse",
-    "ChatInferenceDatapointInput",
     "ContentBlock",
     "DynamicEvaluationRunEpisodeResponse",
     "DynamicEvaluationRunResponse",
@@ -54,9 +57,10 @@ __all__ = [
     "InferenceChunk",
     "InferenceInput",
     "InferenceResponse",
+    "JsonDatapointInsert",
+    "JsonInferenceDatapointInput",  # DEPRECATED
     "JsonInferenceOutput",
     "JsonInferenceResponse",
-    "JsonInferenceDatapointInput",
     "Message",
     "patch_openai_client",
     "RawText",
