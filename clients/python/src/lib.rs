@@ -21,7 +21,7 @@ use pyo3::{
     IntoPyObjectExt,
 };
 use python_helpers::{
-    deserialize_from_pyobj, parse_dynamic_evaluation_run_episode_response,
+    deserialize_from_pyobj, parse_datapoint, parse_dynamic_evaluation_run_episode_response,
     parse_dynamic_evaluation_run_response, parse_feedback_response, parse_inference_chunk,
     parse_inference_response, parse_tool, python_uuid_to_uuid, serialize_to_dict,
 };
@@ -835,6 +835,54 @@ impl TensorZeroGateway {
         let fut = client.delete_datapoint(dataset_name, datapoint_id);
         tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))
     }
+
+    /// Make a GET request to the /datasets/{dataset_name}/datapoints/{datapoint_id} endpoint.
+    ///
+    /// :param dataset_name: The name of the dataset to get the datapoint from.
+    /// :param datapoint_id: The ID of the datapoint to get.
+    /// :return: A `Datapoint` object.
+    #[pyo3(signature = (*, dataset_name, datapoint_id))]
+    fn get_datapoint(
+        this: PyRef<'_, Self>,
+        dataset_name: String,
+        datapoint_id: Bound<'_, PyAny>,
+    ) -> PyResult<Py<PyAny>> {
+        let client = this.as_super().client.clone();
+        let datapoint_id = python_uuid_to_uuid("datapoint_id", datapoint_id)?;
+        let fut = client.get_datapoint(dataset_name, datapoint_id);
+        let resp = tokio_block_on_without_gil(this.py(), fut);
+        // TODO: test error handling in python for 404 case
+        match resp {
+            Ok(resp) => parse_datapoint(this.py(), resp),
+            Err(e) => Err(convert_error(this.py(), e)),
+        }
+    }
+
+    /// Make a GET request to the /datasets/{dataset_name}/datapoints endpoint.
+    ///
+    /// :param dataset_name: The name of the dataset to get the datapoints from.
+    /// :return: A list of `Datapoint` objects.
+    #[pyo3(signature = (*, dataset_name, limit=None, offset=None))]
+    fn list_datapoints(
+        this: PyRef<'_, Self>,
+        dataset_name: String,
+        limit: Option<u32>,
+        offset: Option<u32>,
+    ) -> PyResult<Bound<'_, PyList>> {
+        let client = this.as_super().client.clone();
+        let fut = client.list_datapoints(dataset_name, limit, offset);
+        let resp = tokio_block_on_without_gil(this.py(), fut);
+        match resp {
+            Ok(resp) => {
+                let datapoints = resp
+                    .into_iter()
+                    .map(|x| parse_datapoint(this.py(), x))
+                    .collect::<Result<Vec<_>, _>>()?;
+                PyList::new(this.py(), datapoints)
+            }
+            Err(e) => Err(convert_error(this.py(), e)),
+        }
+    }
 }
 
 #[pyclass(extends=BaseTensorZeroGateway)]
@@ -1285,6 +1333,55 @@ impl AsyncTensorZeroGateway {
             let res = client.delete_datapoint(dataset_name, datapoint_id).await;
             Python::with_gil(|py| match res {
                 Ok(_) => Ok(()),
+                Err(e) => Err(convert_error(py, e)),
+            })
+        })
+    }
+
+    /// Make a GET request to the /datasets/{dataset_name}/datapoints/{datapoint_id} endpoint.
+    ///
+    /// :param dataset_name: The name of the dataset to get the datapoint from.
+    /// :param datapoint_id: The ID of the datapoint to get.
+    /// :return: A `Datapoint` object.
+    #[pyo3(signature = (*, dataset_name, datapoint_id))]
+    fn get_datapoint<'a>(
+        this: PyRef<'a, Self>,
+        dataset_name: String,
+        datapoint_id: Bound<'a, PyAny>,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        let client = this.as_super().client.clone();
+        let datapoint_id = python_uuid_to_uuid("datapoint_id", datapoint_id)?;
+        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
+            let res = client.get_datapoint(dataset_name, datapoint_id).await;
+            Python::with_gil(|py| match res {
+                Ok(resp) => parse_datapoint(py, resp),
+                Err(e) => Err(convert_error(py, e)),
+            })
+        })
+    }
+
+    /// Make a GET request to the /datasets/{dataset_name}/datapoints endpoint.
+    ///
+    /// :param dataset_name: The name of the dataset to get the datapoints from.
+    /// :return: A list of `Datapoint` objects.
+    #[pyo3(signature = (*, dataset_name, limit=None, offset=None))]
+    fn list_datapoints(
+        this: PyRef<'_, Self>,
+        dataset_name: String,
+        limit: Option<u32>,
+        offset: Option<u32>,
+    ) -> PyResult<Bound<'_, PyAny>> {
+        let client = this.as_super().client.clone();
+        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
+            let res = client.list_datapoints(dataset_name, limit, offset).await;
+            Python::with_gil(|py| match res {
+                Ok(resp) => {
+                    let datapoints = resp
+                        .into_iter()
+                        .map(|x| parse_datapoint(py, x))
+                        .collect::<Result<Vec<_>, _>>()?;
+                    Ok(PyList::new(py, datapoints)?.unbind())
+                }
                 Err(e) => Err(convert_error(py, e)),
             })
         })

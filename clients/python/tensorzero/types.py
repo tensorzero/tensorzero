@@ -468,3 +468,58 @@ class JsonInferenceDatapointInput(JsonDatapointInsert):
             stacklevel=2,
         )
         super().__init__(*args, **kwargs)
+
+
+@dataclass
+class Tool:
+    description: str
+    parameters: Any
+    name: str
+    strict: bool
+
+
+@dataclass
+class ToolParams:
+    tools_available: List[Tool]
+    tool_choice: str
+    parallel_tool_calls: Optional[bool]
+
+
+@dataclass
+class ChatInferenceDatapoint:
+    dataset_name: str
+    function_name: str
+    id: UUID
+    episode_id: Optional[UUID]
+    input: InferenceInput  # Should be ResolvedInput
+    output: Optional[List[ContentBlock]]
+    tool_params: Optional[ToolParams]
+    tags: Optional[Dict[str, str]]
+    auxiliary: str
+    source_inference_id: Optional[UUID]
+    staled_at: Optional[str]
+
+
+@dataclass
+class JsonInferenceDatapoint:
+    dataset_name: str
+    function_name: str
+    id: UUID
+    episode_id: Optional[UUID]
+    input: InferenceInput
+    output: Optional[JsonInferenceOutput]
+    output_schema: Optional[Any]
+    tags: Optional[Dict[str, str]]
+    auxiliary: str
+    source_inference_id: Optional[UUID]
+    staled_at: Optional[str]
+
+
+type Datapoint = ChatInferenceDatapoint | JsonInferenceDatapoint
+
+
+def parse_datapoint(data: Dict[str, Any]) -> Datapoint:
+    if "tool_params" in data:
+        return ChatInferenceDatapoint(**data)
+    else:
+        return JsonInferenceDatapoint(**data)

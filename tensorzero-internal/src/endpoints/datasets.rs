@@ -773,11 +773,13 @@ pub async fn list_datapoints(
 ) -> Result<Vec<Datapoint>, Error> {
     let query = r#"
     WITH dataset as (
-        SELECT * FROM ChatInferenceDatapoint
+        SELECT * FROM ChatInferenceDatapoint FINAL
         WHERE dataset_name = {dataset_name: String}
+        AND staled_at IS NULL
         UNION ALL
-        SELECT * FROM JsonInferenceDatapoint
+        SELECT * FROM JsonInferenceDatapoint FINAL
         WHERE dataset_name = {dataset_name: String}
+        AND staled_at IS NULL
     )
     SELECT * FROM dataset
     ORDER BY id DESC
@@ -868,10 +870,11 @@ pub async fn get_datapoint(
     datapoint_id: Uuid,
     clickhouse: &ClickHouseConnectionInfo,
 ) -> Result<Datapoint, Error> {
+    // TODO: should we check staled_at here?
     let query = r#"
-    SELECT * FROM ChatInferenceDatapoint
+    SELECT * FROM ChatInferenceDatapoint FINAL
     UNION ALL
-    SELECT * FROM JsonInferenceDatapoint
+    SELECT * FROM JsonInferenceDatapoint FINAL
     WHERE dataset_name = {dataset_name: String} AND id = {datapoint_id: UUID}
     "#;
     // TODO: test with missing and chat + json datapoints
