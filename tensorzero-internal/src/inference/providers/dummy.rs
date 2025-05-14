@@ -214,7 +214,7 @@ impl InferenceProvider for DummyProvider {
             .into());
         }
         if self.model_name == "multiple-text-blocks" {
-            // The first message must have multiple text blocks or we error
+            // The first message must have 2 text blocks or we error
             let first_message = &request.messages[0];
             let first_message_text_content = first_message
                 .content

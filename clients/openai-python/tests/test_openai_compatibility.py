@@ -1438,7 +1438,7 @@ async def test_async_json_function_null_response(async_client):
 @pytest.mark.asyncio
 async def test_async_json_function_multiple_text_blocks(async_client):
     """
-    Test that a JSON inference with multiple text blocks in the message works as expected.
+    Test that a JSON inference with 2 text blocks in the message works as expected.
     """
     result = await async_client.chat.completions.create(
         model="tensorzero::model_name::dummy::multiple-text-blocks",
