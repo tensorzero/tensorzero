@@ -3191,3 +3191,20 @@ async def test_get_nonexistent_datapoint(async_client: AsyncTensorZeroGateway):
         )
     assert "Datapoint not found for" in str(exc_info.value)
     assert "404" in str(exc_info.value)
+
+
+def test_sync_multiple_text_blocks(sync_client: TensorZeroGateway):
+    sync_client.inference(
+        model_name="dummy::multiple-text-blocks",
+        input={
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Hello"},
+                        {"type": "text", "text": "world"},
+                    ],
+                }
+            ]
+        },
+    )
