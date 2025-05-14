@@ -3503,7 +3503,7 @@ async fn check_json_cot_inference_response(
     }
 }
 
-/// Test that a json inference with null response (i.e. no generated content blocks) works as expected.
+/// Test that a json inference with 2 text blocks in the message works as expected.
 #[tokio::test]
 async fn test_multiple_text_blocks_in_message() {
     let payload = json!({
