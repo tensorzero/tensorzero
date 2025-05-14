@@ -971,3 +971,44 @@ func TestToolCallingInference(t *testing.T) {
 	})
 
 }
+
+func TestImageInference(t *testing.T) {
+	t.Run("it should handle image inference", func(t *testing.T) {
+		episodeID, _ := uuid.NewV7()
+
+		usrMsg := openai.UserMessage([]openai.ChatCompletionContentPartUnionParam{
+			openai.ImageContentPart(openai.ChatCompletionContentPartImageImageURLParam{
+				URL: "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
+			}),
+			openai.TextContentPart("Output exactly two words describing the image"),
+		})
+		messages := []openai.ChatCompletionMessageParamUnion{
+			usrMsg,
+		}
+
+		req := &openai.ChatCompletionNewParams{
+			Model:    "tensorzero::model_name::openai::gpt-4o-mini",
+			Messages: messages,
+		}
+		addEpisodeIDToRequest(t, req, episodeID)
+
+		resp, err := client.Chat.Completions.New(ctx, *req)
+		require.NoError(t, err, "API request failed")
+
+		// Validate the model
+		assert.Equal(t, "tensorzero::model_name::openai::gpt-4o-mini", resp.Model)
+
+		// Validate the episode ID
+		if extra, ok := resp.JSON.ExtraFields["episode_id"]; ok {
+			var responseEpisodeID string
+			err := json.Unmarshal([]byte(extra.Raw()), &responseEpisodeID)
+			require.NoError(t, err, "Failed to parse episode_id from response extras")
+			assert.Equal(t, episodeID.String(), responseEpisodeID)
+		} else {
+			t.Errorf("Key 'tensorzero::episode_id' not found in response extras")
+		}
+
+		// Validate the response content
+		assert.Contains(t, resp.Choices[0].Message.Content, "crab")
+	})
+}
