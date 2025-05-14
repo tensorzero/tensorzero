@@ -61,9 +61,9 @@ from tensorzero import (
 )
 from tensorzero.types import (
     ChatChunk,
-    ChatInferenceDatapoint,
+    ChatDatapoint,
     JsonChunk,
-    JsonInferenceDatapoint,
+    JsonDatapoint,
     ProviderExtraBody,
     Thought,
     ToolCallChunk,
@@ -3110,7 +3110,7 @@ async def test_async_bulk_insert_delete_datapoints(
         dataset_name=dataset_name, datapoint_id=datapoint_ids[0]
     )
     print(datapoint)
-    assert isinstance(datapoint, ChatInferenceDatapoint)
+    assert isinstance(datapoint, ChatDatapoint)
     assert datapoint.function_name == "basic_test"
     assert datapoint.input == {
         "system": {"assistant_name": "foo"},
@@ -3122,7 +3122,7 @@ async def test_async_bulk_insert_delete_datapoints(
     datapoint = await async_client.get_datapoint(
         dataset_name=dataset_name, datapoint_id=datapoint_ids[2]
     )
-    assert isinstance(datapoint, JsonInferenceDatapoint)
+    assert isinstance(datapoint, JsonDatapoint)
     assert datapoint.function_name == "json_success"
     assert datapoint.input == {
         "system": {"assistant_name": "foo"},
@@ -3141,12 +3141,8 @@ async def test_async_bulk_insert_delete_datapoints(
     )
     assert len(listed_datapoints) == 4
     # Assert that there are 2 chat and 2 json datapoints
-    chat_datapoints = [
-        dp for dp in listed_datapoints if isinstance(dp, ChatInferenceDatapoint)
-    ]
-    json_datapoints = [
-        dp for dp in listed_datapoints if isinstance(dp, JsonInferenceDatapoint)
-    ]
+    chat_datapoints = [dp for dp in listed_datapoints if isinstance(dp, ChatDatapoint)]
+    json_datapoints = [dp for dp in listed_datapoints if isinstance(dp, JsonDatapoint)]
     assert len(chat_datapoints) == 2
     assert len(json_datapoints) == 2
 

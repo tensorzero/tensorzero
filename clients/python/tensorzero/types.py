@@ -486,7 +486,7 @@ class ToolParams:
 
 
 @dataclass
-class ChatInferenceDatapoint:
+class ChatDatapoint:
     dataset_name: str
     function_name: str
     id: UUID
@@ -502,7 +502,7 @@ class ChatInferenceDatapoint:
 
 
 @dataclass
-class JsonInferenceDatapoint:
+class JsonDatapoint:
     dataset_name: str
     function_name: str
     id: UUID
@@ -517,11 +517,11 @@ class JsonInferenceDatapoint:
     is_deleted: bool = False
 
 
-Datapoint = Union[ChatInferenceDatapoint, JsonInferenceDatapoint]
+Datapoint = Union[ChatDatapoint, JsonDatapoint]
 
 
 def parse_datapoint(data: Dict[str, Any]) -> Datapoint:
     if "output_schema" in data:
-        return JsonInferenceDatapoint(**data)
+        return JsonDatapoint(**data)
     else:
-        return ChatInferenceDatapoint(**data)
+        return ChatDatapoint(**data)
