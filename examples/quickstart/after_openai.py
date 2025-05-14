@@ -1,21 +1,12 @@
 from openai import OpenAI
 
-with OpenAI() as client:
+with OpenAI(base_url="http://localhost:3000/openai/v1") as client:
     response = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model="tensorzero::function_name::generate_haiku",
         messages=[
             {
                 "role": "user",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": "Write a haiku about artificial intelligence.",
-                    },
-                    {
-                        "type": "text",
-                        "text": "In german.",
-                    },
-                ],
+                "content": "Write a haiku about artificial intelligence.",
             }
         ],
     )
