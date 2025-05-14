@@ -521,7 +521,6 @@ Datapoint = Union[ChatInferenceDatapoint, JsonInferenceDatapoint]
 
 
 def parse_datapoint(data: Dict[str, Any]) -> Datapoint:
-    print(data)
     if "output_schema" in data:
         return JsonInferenceDatapoint(**data)
     else:

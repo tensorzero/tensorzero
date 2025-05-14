@@ -3185,9 +3185,10 @@ async def test_list_nonexistent_dataset(async_client: AsyncTensorZeroGateway):
 
 @pytest.mark.asyncio
 async def test_get_nonexistent_datapoint(async_client: AsyncTensorZeroGateway):
+    datapoint_id: UUID = uuid7()  # type: ignore
     with pytest.raises(TensorZeroError) as exc_info:
         await async_client.get_datapoint(
-            dataset_name="nonexistent_dataset", datapoint_id=uuid7()
+            dataset_name="nonexistent_dataset", datapoint_id=datapoint_id
         )
     assert "Datapoint not found for" in str(exc_info.value)
     assert "404" in str(exc_info.value)

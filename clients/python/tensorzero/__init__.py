@@ -11,6 +11,7 @@ from .types import (
     ChatInferenceDatapointInput,  # DEPRECATED
     ChatInferenceResponse,
     ContentBlock,
+    Datapoint,
     DynamicEvaluationRunEpisodeResponse,
     DynamicEvaluationRunResponse,
     ExtraBody,
@@ -47,6 +48,7 @@ __all__ = [
     "ChatInferenceDatapointInput",  # DEPRECATED
     "ChatInferenceResponse",
     "ContentBlock",
+    "Datapoint",
     "DynamicEvaluationRunEpisodeResponse",
     "DynamicEvaluationRunResponse",
     "ExtraBody",

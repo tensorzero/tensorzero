@@ -851,7 +851,6 @@ impl TensorZeroGateway {
         let datapoint_id = python_uuid_to_uuid("datapoint_id", datapoint_id)?;
         let fut = client.get_datapoint(dataset_name, datapoint_id);
         let resp = tokio_block_on_without_gil(this.py(), fut);
-        // TODO: test error handling in python for 404 case
         match resp {
             Ok(resp) => parse_datapoint(this.py(), resp),
             Err(e) => Err(convert_error(this.py(), e)),
