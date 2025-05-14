@@ -372,40 +372,40 @@ macro_rules! generate_provider_tests {
         $crate::make_gateway_test_functions!(test_tool_use_tool_choice_specific_streaming_inference_request);
 
 
-        #[tokio::test]
-        async fn test_tool_use_allowed_tools_inference_request() {
+        async fn test_tool_use_allowed_tools_inference_request(client: tensorzero::Client) {
             let providers = $func().await.tool_use_inference;
             for provider in providers {
-                test_tool_use_allowed_tools_inference_request_with_provider(provider).await;
+                test_tool_use_allowed_tools_inference_request_with_provider(provider, &client).await;
             }
         }
+        $crate::make_gateway_test_functions!(test_tool_use_allowed_tools_inference_request);
 
 
-        #[tokio::test]
-        async fn test_tool_use_allowed_tools_streaming_inference_request() {
+        async fn test_tool_use_allowed_tools_streaming_inference_request(client: tensorzero::Client) {
             let providers = $func().await.tool_use_inference;
             for provider in providers {
-                test_tool_use_allowed_tools_streaming_inference_request_with_provider(provider).await;
+                test_tool_use_allowed_tools_streaming_inference_request_with_provider(provider, &client).await;
             }
         }
+        $crate::make_gateway_test_functions!(test_tool_use_allowed_tools_streaming_inference_request);
 
 
-        #[tokio::test]
-        async fn test_tool_multi_turn_inference_request() {
+        async fn test_tool_multi_turn_inference_request(client: tensorzero::Client) {
             let providers = $func().await.tool_multi_turn_inference;
             for provider in providers {
-                test_tool_multi_turn_inference_request_with_provider(provider).await;
+                test_tool_multi_turn_inference_request_with_provider(provider, &client).await;
             }
         }
+        $crate::make_gateway_test_functions!(test_tool_multi_turn_inference_request);
 
 
-        #[tokio::test]
-        async fn test_tool_multi_turn_streaming_inference_request() {
+        async fn test_tool_multi_turn_streaming_inference_request(client: tensorzero::Client) {
             let providers = $func().await.tool_multi_turn_inference;
             for provider in providers {
-                test_tool_multi_turn_streaming_inference_request_with_provider(provider).await;
+                test_tool_multi_turn_streaming_inference_request_with_provider(provider, &client).await;
             }
         }
+        $crate::make_gateway_test_functions!(test_tool_multi_turn_streaming_inference_request);
 
         async fn test_dynamic_tool_use_inference_request(client: tensorzero::Client) {
             let providers = $func().await.dynamic_tool_use_inference;
@@ -424,13 +424,13 @@ macro_rules! generate_provider_tests {
         $crate::make_gateway_test_functions!(test_dynamic_tool_use_streaming_inference_request);
 
 
-        #[tokio::test]
-        async fn test_parallel_tool_use_inference_request() {
+        async fn test_parallel_tool_use_inference_request(client: tensorzero::Client) {
             let providers = $func().await.parallel_tool_use_inference;
             for provider in providers {
-                test_parallel_tool_use_inference_request_with_provider(provider).await;
+                test_parallel_tool_use_inference_request_with_provider(provider, &client).await;
             }
         }
+        $crate::make_gateway_test_functions!(test_parallel_tool_use_inference_request);
 
 
         #[tokio::test]
@@ -6283,47 +6283,55 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
 
 pub async fn test_tool_use_allowed_tools_inference_request_with_provider(
     provider: E2ETestProvider,
+    client: &tensorzero::Client,
 ) {
     let episode_id = Uuid::now_v7();
     let extra_headers = get_extra_headers();
 
-    let payload = json!({
-        "function_name": "basic_test",
-        "episode_id": episode_id,
-        "input":{
-            "system": {"assistant_name": "Dr. Mehta"},
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "What can you tell me about the weather in Tokyo (e.g. temperature, humidity, wind)? Use the provided tools and return what you can (not necessarily everything)."
-                }
-            ]},
-        "tool_choice": "required",
-        "allowed_tools": ["get_humidity"],
-        "stream": false,
-        "variant_name": provider.variant_name,
-        "extra_headers": extra_headers.headers,
-    });
+    let response = client.inference(tensorzero::ClientInferenceParams {
+        function_name: Some("basic_test".to_string()),
+        model_name: None,
+        variant_name: Some(provider.variant_name.clone()),
+        episode_id: Some(episode_id),
+        input: tensorzero::ClientInput {
+            system: Some(json!({"assistant_name": "Dr. Mehta"})),
+            messages: vec![tensorzero::ClientInputMessage {
+                role: Role::User,
+                content: vec![tensorzero::ClientInputMessageContent::Text(TextKind::Text { 
+                    text: "What can you tell me about the weather in Tokyo (e.g. temperature, humidity, wind)? Use the provided tools and return what you can (not necessarily everything).".to_string() 
+                })],
+            }],
+        },
+        stream: Some(false),
+        credentials: provider
+            .credentials
+            .clone()
+            .into_iter()
+            .map(|(k, v)| (k, ClientSecretString(SecretString::new(v.into()))))
+            .collect(),
+        extra_headers,
+        dynamic_tool_params: tensorzero::DynamicToolParams {
+            tool_choice: Some(tensorzero_internal::tool::ToolChoice::Required),
+            allowed_tools: Some(vec!["get_humidity".to_string()]),
+            ..Default::default()
+        },
+        ..Default::default()
+    }).await.unwrap();
 
-    let response = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .send()
-        .await
-        .unwrap();
-
-    // Check if the API response is fine
-    assert_eq!(response.status(), StatusCode::OK);
-    let response_json = response.json::<Value>().await.unwrap();
-
-    println!("API response: {response_json:#?}");
-    check_tool_use_tool_choice_allowed_tools_inference_response(
-        response_json,
-        &provider,
-        Some(episode_id),
-        false,
-    )
-    .await;
+    match response {
+        tensorzero::InferenceOutput::NonStreaming(response) => {
+            let response_json = serde_json::to_value(&response).unwrap();
+            println!("API response: {response_json:#?}");
+            check_tool_use_tool_choice_allowed_tools_inference_response(
+                response_json,
+                &provider,
+                Some(episode_id),
+                false,
+            )
+            .await;
+        }
+        _ => panic!("Expected non-streaming response"),
+    }
 }
 
 pub async fn check_tool_use_tool_choice_allowed_tools_inference_response(
@@ -6540,6 +6548,7 @@ pub async fn check_tool_use_tool_choice_allowed_tools_inference_response(
 
 pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
+    client: &tensorzero::Client,
 ) {
     // Together doesn't correctly produce streaming tool call chunks (it produces text chunks with the raw tool call).
     if provider.model_provider_name == "together" {
@@ -6552,46 +6561,46 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
 
     let episode_id = Uuid::now_v7();
     let extra_headers = get_extra_headers();
-    let payload = json!({
-        "function_name": "basic_test",
-        "episode_id": episode_id,
-        "input":{
-            "system": {"assistant_name": "Dr. Mehta"},
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "What can you tell me about the weather in Tokyo (e.g. temperature, humidity, wind)? Use the provided tools and return what you can (not necessarily everything)."
-                }
-            ]},
-        "tool_choice": "required",
-        "allowed_tools": ["get_humidity"],
-        "stream": true,
-        "variant_name": provider.variant_name,
-        "extra_headers": extra_headers.headers,
-    });
 
-    let mut event_source = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .eventsource()
-        .unwrap();
+    let response = client.inference(tensorzero::ClientInferenceParams {
+        function_name: Some("basic_test".to_string()),
+        model_name: None,
+        variant_name: Some(provider.variant_name.clone()),
+        episode_id: Some(episode_id),
+        input: tensorzero::ClientInput {
+            system: Some(json!({"assistant_name": "Dr. Mehta"})),
+            messages: vec![tensorzero::ClientInputMessage {
+                role: Role::User,
+                content: vec![tensorzero::ClientInputMessageContent::Text(TextKind::Text { 
+                    text: "What can you tell me about the weather in Tokyo (e.g. temperature, humidity, wind)? Use the provided tools and return what you can (not necessarily everything).".to_string() 
+                })],
+            }],
+        },
+        stream: Some(true),
+        credentials: provider
+            .credentials
+            .clone()
+            .into_iter()
+            .map(|(k, v)| (k, ClientSecretString(SecretString::new(v.into()))))
+            .collect(),
+        extra_headers,
+        dynamic_tool_params: tensorzero::DynamicToolParams {
+            tool_choice: Some(tensorzero_internal::tool::ToolChoice::Required),
+            allowed_tools: Some(vec!["get_humidity".to_string()]),
+            ..Default::default()
+        },
+        ..Default::default()
+    }).await.unwrap();
+
+    let tensorzero::InferenceOutput::Streaming(mut stream) = response else {
+        panic!("Expected streaming response");
+    };
 
     let mut chunks = vec![];
-    let mut found_done_chunk = false;
-    while let Some(event) = event_source.next().await {
-        let event = event.unwrap();
-        match event {
-            Event::Open => continue,
-            Event::Message(message) => {
-                if message.data == "[DONE]" {
-                    found_done_chunk = true;
-                    break;
-                }
-                chunks.push(message.data);
-            }
-        }
+    while let Some(event) = stream.next().await {
+        let chunk = event.unwrap();
+        chunks.push(serde_json::to_value(&chunk).unwrap());
     }
-    assert!(found_done_chunk);
 
     let mut inference_id = None;
     let mut tool_id: Option<String> = None;
@@ -6599,8 +6608,7 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
     let mut input_tokens = 0;
     let mut output_tokens = 0;
 
-    for chunk in chunks {
-        let chunk_json: Value = serde_json::from_str(&chunk).unwrap();
+    for chunk_json in chunks {
 
         println!("API response chunk: {chunk_json:#?}");
 
@@ -6863,7 +6871,10 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
     }
 }
 
-pub async fn test_tool_multi_turn_inference_request_with_provider(provider: E2ETestProvider) {
+pub async fn test_tool_multi_turn_inference_request_with_provider(
+    provider: E2ETestProvider,
+    client: &tensorzero::Client,
+) {
     // NOTE: The xAI API returns an error for multi-turn tool use when the assistant message only has tool_calls but no content.
     // The xAI team has acknowledged the issue and is working on a fix.
     // We skip this test for xAI until the fix is deployed.
@@ -6879,57 +6890,53 @@ pub async fn test_tool_multi_turn_inference_request_with_provider(provider: E2ET
 
     let episode_id = Uuid::now_v7();
 
-    let payload = json!({
-       "function_name": "weather_helper",
-        "episode_id": episode_id,
-        "input":{
-            "system": {"assistant_name": "Dr. Mehta"},
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."
+    let response = client.inference(tensorzero::ClientInferenceParams {
+        function_name: Some("weather_helper".to_string()),
+        model_name: None,
+        variant_name: Some(provider.variant_name.clone()),
+        episode_id: Some(episode_id),
+        input: tensorzero::ClientInput {
+            system: Some(json!({"assistant_name": "Dr. Mehta"})),
+            messages: vec![
+                tensorzero::ClientInputMessage {
+                    role: Role::User,
+                    content: vec![tensorzero::ClientInputMessageContent::Text(TextKind::Text { 
+                        text: "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool.".to_string() 
+                    })],
                 },
-                {
-                    "role": "assistant",
-                    "content": [
-                        {
-                            "type": "tool_call",
-                            "id": "123456789",
-                            "name": "get_temperature",
-                            "arguments": {"location": "Tokyo", "units": "celsius"}
-                        }
-                    ]
+                tensorzero::ClientInputMessage {
+                    role: Role::Assistant,
+                    content: vec![tensorzero::ClientInputMessageContent::ToolCall(tensorzero_internal::tool::ToolCallInput {
+                        id: "123456789".to_string(),
+                        name: Some("get_temperature".to_string()),
+                        raw_name: None,
+                        arguments: Some(json!({"location": "Tokyo", "units": "celsius"})),
+                        raw_arguments: None,
+                    })],
                 },
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "tool_result",
-                            "id": "123456789",
-                            "name": "get_temperature",
-                            "result": "70"
-                        }
-                    ]
+                tensorzero::ClientInputMessage {
+                    role: Role::User,
+                    content: vec![tensorzero::ClientInputMessageContent::ToolResult(tensorzero_internal::tool::ToolResult {
+                        id: "123456789".to_string(),
+                        name: "get_temperature".to_string(),
+                        result: "70".to_string(),
+                    })],
                 }
-            ]},
-        "variant_name": provider.variant_name,
-        "stream": false,
-    });
+            ],
+        },
+        stream: Some(false),
+        ..Default::default()
+    }).await.unwrap();
 
-    let response = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .send()
-        .await
-        .unwrap();
-
-    // Check that the API response is ok
-    assert_eq!(response.status(), StatusCode::OK);
-    let response_json = response.json::<Value>().await.unwrap();
-
-    println!("API response: {response_json:#?}");
-    check_tool_use_multi_turn_inference_response(response_json, &provider, Some(episode_id), false)
-        .await;
+    match response {
+        tensorzero::InferenceOutput::NonStreaming(response) => {
+            let response_json = serde_json::to_value(&response).unwrap();
+            println!("API response: {response_json:#?}");
+            check_tool_use_multi_turn_inference_response(response_json, &provider, Some(episode_id), false)
+                .await;
+        }
+        _ => panic!("Expected non-streaming response"),
+    }
 }
 
 pub async fn check_tool_use_multi_turn_inference_response(
@@ -7151,6 +7158,7 @@ pub async fn check_tool_use_multi_turn_inference_response(
 
 pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
+    client: &tensorzero::Client,
 ) {
     // Together doesn't correctly produce streaming tool call chunks (it produces text chunks with the raw tool call).
     if provider.model_provider_name == "together" {
@@ -7172,72 +7180,59 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
 
     let episode_id = Uuid::now_v7();
 
-    let payload = json!({
-       "function_name": "weather_helper",
-        "episode_id": episode_id,
-        "input":{
-            "system": {"assistant_name": "Dr. Mehta"},
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."
+    let response = client.inference(tensorzero::ClientInferenceParams {
+        function_name: Some("weather_helper".to_string()),
+        model_name: None,
+        variant_name: Some(provider.variant_name.clone()),
+        episode_id: Some(episode_id),
+        input: tensorzero::ClientInput {
+            system: Some(json!({"assistant_name": "Dr. Mehta"})),
+            messages: vec![
+                tensorzero::ClientInputMessage {
+                    role: Role::User,
+                    content: vec![tensorzero::ClientInputMessageContent::Text(TextKind::Text { 
+                        text: "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool.".to_string() 
+                    })],
                 },
-                {
-                    "role": "assistant",
-                    "content": [
-                        {
-                            "type": "tool_call",
-                            "id": "123456789",
-                            "name": "get_temperature",
-                            "arguments": "{\"location\": \"Tokyo\", \"units\": \"celsius\"}"
-                        }
-                    ]
+                tensorzero::ClientInputMessage {
+                    role: Role::Assistant,
+                    content: vec![tensorzero::ClientInputMessageContent::ToolCall(tensorzero_internal::tool::ToolCallInput {
+                        id: "123456789".to_string(),
+                        name: Some("get_temperature".to_string()),
+                        raw_name: None,
+                        arguments: None,
+                        raw_arguments: Some("{\"location\": \"Tokyo\", \"units\": \"celsius\"}".to_string()),
+                    })],
                 },
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "tool_result",
-                            "id": "123456789",
-                            "name": "get_temperature",
-                            "result": "30"
-                        }
-                    ]
+                tensorzero::ClientInputMessage {
+                    role: Role::User,
+                    content: vec![tensorzero::ClientInputMessageContent::ToolResult(tensorzero_internal::tool::ToolResult {
+                        id: "123456789".to_string(),
+                        name: "get_temperature".to_string(),
+                        result: "30".to_string(),
+                    })],
                 }
-            ]},
-        "variant_name": provider.variant_name,
-        "stream": true,
-    });
+            ],
+        },
+        stream: Some(true),
+        ..Default::default()
+    }).await.unwrap();
 
-    let mut event_source = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .eventsource()
-        .unwrap();
+    let tensorzero::InferenceOutput::Streaming(mut stream) = response else {
+        panic!("Expected streaming response");
+    };
 
     let mut chunks = vec![];
-    let mut found_done_chunk = false;
-    while let Some(event) = event_source.next().await {
-        let event = event.unwrap();
-        match event {
-            Event::Open => continue,
-            Event::Message(message) => {
-                if message.data == "[DONE]" {
-                    found_done_chunk = true;
-                    break;
-                }
-                chunks.push(message.data);
-            }
-        }
+    while let Some(event) = stream.next().await {
+        let chunk = event.unwrap();
+        chunks.push(serde_json::to_value(&chunk).unwrap());
     }
-    assert!(found_done_chunk);
 
     let mut inference_id: Option<Uuid> = None;
     let mut full_content = String::new();
     let mut input_tokens = 0;
     let mut output_tokens = 0;
-    for chunk in chunks.clone() {
-        let chunk_json: Value = serde_json::from_str(&chunk).unwrap();
+    for chunk_json in chunks.clone() {
 
         println!("API response chunk: {chunk_json:#?}");
 
@@ -8123,45 +8118,49 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     }
 }
 
-pub async fn test_parallel_tool_use_inference_request_with_provider(provider: E2ETestProvider) {
+pub async fn test_parallel_tool_use_inference_request_with_provider(
+    provider: E2ETestProvider,
+    client: &tensorzero::Client,
+) {
     let episode_id = Uuid::now_v7();
 
-    let payload = json!({
-        "function_name": "weather_helper_parallel",
-        "episode_id": episode_id,
-        "input":{
-            "system": {"assistant_name": "Dr. Mehta"},
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "What is the weather like in Tokyo (in Celsius)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions."
-                }
-            ]},
-        "parallel_tool_calls": true,
-        "stream": false,
-        "variant_name": provider.variant_name,
-    });
+    let response = client.inference(tensorzero::ClientInferenceParams {
+        function_name: Some("weather_helper_parallel".to_string()),
+        model_name: None,
+        variant_name: Some(provider.variant_name.clone()),
+        episode_id: Some(episode_id),
+        input: tensorzero::ClientInput {
+            system: Some(json!({"assistant_name": "Dr. Mehta"})),
+            messages: vec![tensorzero::ClientInputMessage {
+                role: Role::User,
+                content: vec![tensorzero::ClientInputMessageContent::Text(TextKind::Text { 
+                    text: "What is the weather like in Tokyo (in Celsius)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions.".to_string() 
+                })],
+            }],
+        },
+        stream: Some(false),
+        dynamic_tool_params: tensorzero::DynamicToolParams {
+            parallel_tool_calls: Some(true),
+            ..Default::default()
+        },
+        ..Default::default()
+    }).await.unwrap();
 
-    let response = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .send()
-        .await
-        .unwrap();
-
-    // Check if the API response is fine
-    assert_eq!(response.status(), StatusCode::OK);
-    let response_json = response.json::<Value>().await.unwrap();
-
-    println!("API response: {response_json:#?}");
-    check_parallel_tool_use_inference_response(
-        response_json,
-        &provider,
-        Some(episode_id),
-        false,
-        Value::Bool(true),
-    )
-    .await;
+    match response {
+        tensorzero::InferenceOutput::NonStreaming(response) => {
+            let response_json = serde_json::to_value(&response).unwrap();
+            println!("API response: {response_json:#?}");
+            check_parallel_tool_use_inference_response(
+                response_json,
+                &provider,
+                Some(episode_id),
+                false,
+                Value::Bool(true),
+            )
+            .await;
+        }
+        _ => panic!("Expected non-streaming response"),
+    }
 }
 
 pub async fn check_parallel_tool_use_inference_response(
