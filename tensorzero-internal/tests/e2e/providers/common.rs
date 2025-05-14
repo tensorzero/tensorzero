@@ -300,13 +300,13 @@ macro_rules! generate_provider_tests {
         $crate::make_gateway_test_functions!(test_tool_use_tool_choice_auto_used_streaming_inference_request);
 
 
-        #[tokio::test]
-        async fn test_tool_use_tool_choice_auto_unused_inference_request() {
+        async fn test_tool_use_tool_choice_auto_unused_inference_request(client: tensorzero::Client) {
             let providers = $func().await.tool_use_inference;
             for provider in providers {
-                test_tool_use_tool_choice_auto_unused_inference_request_with_provider(provider).await;
+                test_tool_use_tool_choice_auto_unused_inference_request_with_provider(provider, &client).await;
             }
         }
+        $crate::make_gateway_test_functions!(test_tool_use_tool_choice_auto_unused_inference_request);
 
 
         #[tokio::test]
@@ -3821,45 +3821,44 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
 /// This ensures that ToolChoice::Auto is working as expected.
 pub async fn test_tool_use_tool_choice_auto_unused_inference_request_with_provider(
     provider: E2ETestProvider,
+    client: &tensorzero::Client,
 ) {
     let episode_id = Uuid::now_v7();
-    let extra_headers = get_extra_headers();
-    let payload = json!({
-        "function_name": "weather_helper",
-        "episode_id": episode_id,
-        "input":{
-            "system": {"assistant_name": "Dr. Mehta"},
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "What is your name?"
-                }
-            ]},
-        "stream": false,
-        "variant_name": provider.variant_name,
-        "extra_headers": extra_headers.headers,
-    });
 
-    let response = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .send()
-        .await
-        .unwrap();
+    let response = client.inference(tensorzero::ClientInferenceParams {
+        function_name: Some("weather_helper".to_string()),
+        model_name: None,
+        variant_name: Some(provider.variant_name.clone()),
+        episode_id: Some(episode_id),
+        input: tensorzero::ClientInput {
+            system: Some(json!({"assistant_name": "Dr. Mehta"})),
+            messages: vec![tensorzero::ClientInputMessage {
+                role: Role::User,
+                content: vec![tensorzero::ClientInputMessageContent::Text(TextKind::Text { text: "What is your name?".to_string() })],
+            }],
+        },
+        stream: Some(false),
+        ..Default::default()
+    }).await.unwrap();
 
-    // Check if the API response is fine
-    assert_eq!(response.status(), StatusCode::OK);
-    let response_json = response.json::<Value>().await.unwrap();
+    match response {
+        tensorzero::InferenceOutput::NonStreaming(response) => {
+            let response_json = serde_json::to_value(&response).unwrap();
 
-    println!("API response: {response_json:#?}");
+            println!("API response: {response_json:#?}");
 
-    check_tool_use_tool_choice_auto_unused_inference_response(
-        response_json,
-        &provider,
-        Some(episode_id),
-        false,
-    )
-    .await;
+            check_tool_use_tool_choice_auto_unused_inference_response(
+                response_json,
+                &provider,
+                Some(episode_id),
+                false,
+            )
+            .await;
+        }
+        tensorzero::InferenceOutput::Streaming(_) => {
+            panic!("Unexpected streaming response");
+        }
+    }
 }
 
 pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
