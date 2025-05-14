@@ -18,8 +18,11 @@ package tests
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -1010,5 +1013,54 @@ func TestImageInference(t *testing.T) {
 
 		// Validate the response content
 		assert.Contains(t, resp.Choices[0].Message.Content, "crab")
+	})
+
+	t.Run("it should handle multi-block image_base64", func(t *testing.T) {
+		episodeID, _ := uuid.NewV7()
+
+		// Read image and convert to base64
+		imagePath := "g:/tensorzero/tensorzero-internal/tests/e2e/providers/ferris.png"
+		imageData, err := os.ReadFile(imagePath)
+		require.NoError(t, err, "Failed to read image file")
+		imageBase64 := base64.StdEncoding.EncodeToString(imageData)
+
+		// Define the messages
+		usrMsg := openai.UserMessage([]openai.ChatCompletionContentPartUnionParam{
+			openai.TextContentPart("Output exactly two words describing the image"),
+			openai.ImageContentPart(openai.ChatCompletionContentPartImageImageURLParam{
+				URL: fmt.Sprintf("data:image/png;base64,%s", imageBase64),
+			}),
+		})
+		messages := []openai.ChatCompletionMessageParamUnion{
+			usrMsg,
+		}
+
+		// Create the request
+		req := &openai.ChatCompletionNewParams{
+			Model:    "tensorzero::model_name::openai::gpt-4o-mini",
+			Messages: messages,
+		}
+		addEpisodeIDToRequest(t, req, episodeID)
+
+		// Send the request
+		resp, err := client.Chat.Completions.New(ctx, *req)
+		require.NoError(t, err, "API request failed")
+
+		// Validate the model
+		assert.Equal(t, "tensorzero::model_name::openai::gpt-4o-mini", resp.Model)
+
+		// Validate the episode ID
+		if extra, ok := resp.JSON.ExtraFields["episode_id"]; ok {
+			var responseEpisodeID string
+			err := json.Unmarshal([]byte(extra.Raw()), &responseEpisodeID)
+			require.NoError(t, err, "Failed to parse episode_id from response extras")
+			assert.Equal(t, episodeID.String(), responseEpisodeID)
+		} else {
+			t.Errorf("Key 'tensorzero::episode_id' not found in response extras")
+		}
+
+		// Validate the response content
+		require.NotNil(t, resp.Choices[0].Message.Content, "Message content should not be nil")
+		assert.Contains(t, strings.ToLower(resp.Choices[0].Message.Content), "crab", "Response should contain 'crab'")
 	})
 }
