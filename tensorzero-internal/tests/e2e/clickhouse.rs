@@ -78,7 +78,7 @@ async fn run_migration_0020_with_data<R: Future<Output = bool>, F: FnOnce() -> R
     run_migration: F,
 ) -> bool {
     // Insert data so that we test the migration re-creates the tables properly.
-    let s3_fixtures_path = format!("{MANIFEST_PATH}/../ui/fixtures/s3-fixtures");
+    let s3_fixtures_path: String = format!("{MANIFEST_PATH}/../ui/fixtures/s3-fixtures");
 
     let ClickHouseConnectionInfo::Production {
         database_url,
@@ -90,7 +90,10 @@ async fn run_migration_0020_with_data<R: Future<Output = bool>, F: FnOnce() -> R
     };
 
     let url = url::Url::parse(database_url.expose_secret()).unwrap();
-    let host = url.host_str().unwrap();
+    let mut host = url.host_str().unwrap();
+    if host == "localhost" || host == "127.0.0.1" {
+        host = "host.docker.internal";
+    }
     let username = url.username();
     let password = url.password().unwrap_or("");
 
@@ -99,16 +102,29 @@ async fn run_migration_0020_with_data<R: Future<Output = bool>, F: FnOnce() -> R
         ("large_chat_inference.parquet", "ChatInference"),
         ("large_json_inference.parquet", "JsonInference"),
     ] {
-        let mut command = tokio::process::Command::new("clickhouse-client");
-        command.arg("--host").arg(host);
-        command.arg("--user").arg(username);
-        command.arg("--password").arg(password);
-        command.arg("--database").arg(database);
-        command.arg("--query").arg(format!(
-            r#"
-        INSERT INTO {table} FROM INFILE '{s3_fixtures_path}/{file}' FORMAT Parquet
+        let mut command = tokio::process::Command::new("docker");
+        command.args(&[
+            "run",
+            "--add-host=host.docker.internal:host-gateway",
+            "-v",
+            &format!("{s3_fixtures_path}:/s3-fixtures"),
+            "clickhouse/clickhouse-server:25.4-alpine",
+            "clickhouse-client",
+            "--host",
+            host,
+            "--user",
+            username,
+            "--password",
+            password,
+            "--database",
+            database,
+            "--query",
+            &format!(
+                r#"
+        INSERT INTO {table} FROM INFILE '/s3-fixtures/{file}' FORMAT Parquet
     "#
-        ));
+            ),
+        ]);
         assert!(
             command.spawn().unwrap().wait().await.unwrap().success(),
             "Failed to insert {table}"

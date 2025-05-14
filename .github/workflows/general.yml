@@ -47,9 +47,6 @@ jobs:
       - name: Download ClickHouse fixtures
         run: uv run ./ui/fixtures/download-fixtures.py
 
-      - name: Install clickhouse-client
-        run: sudo apt-get update && sudo apt-get install -y clickhouse-client
-
       - name: Delete old ClickHouse cloud dbs
         run: ./ci/delete-clickhouse-dbs.sh
 
@@ -383,9 +380,6 @@ jobs:
       - name: Download ClickHouse fixtures
         run: uv run ./ui/fixtures/download-fixtures.py
 
-      - name: Install clickhouse-client
-        run: sudo apt-get update && sudo apt-get install -y clickhouse-client
-    
       - name: Set up TENSORZERO_CLICKHOUSE_URL for E2E tests
         run: |
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
