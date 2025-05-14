@@ -103,7 +103,7 @@ async fn run_migration_0020_with_data<R: Future<Output = bool>, F: FnOnce() -> R
         ("large_json_inference.parquet", "JsonInference"),
     ] {
         let mut command = tokio::process::Command::new("docker");
-        command.args(&[
+        command.args([
             "run",
             "--add-host=host.docker.internal:host-gateway",
             "-v",
