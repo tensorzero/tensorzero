@@ -969,7 +969,6 @@ pub async fn get_datapoint(
             datapoint_id,
         }));
     }
-    println!("result: {result}");
     let datapoint: ClickHouseDatapoint = serde_json::from_str(&result).map_err(|e| {
         Error::new(ErrorDetails::ClickHouseDeserialization {
             message: format!("Failed to deserialize datapoint: {e}"),
