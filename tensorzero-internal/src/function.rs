@@ -345,7 +345,6 @@ fn get_json_output_from_content_blocks(
 /// The validation is done based on the input's role and the function's schemas.
 /// We first validate the system message (if it exists)
 /// Next we validate all messages containing text blocks.
-/// If there are multiple text or raw text blocks in a message we reject.
 fn validate_all_text_input(
     system_schema: Option<&StaticJSONSchema>,
     user_schema: Option<&StaticJSONSchema>,
@@ -364,52 +363,20 @@ fn validate_all_text_input(
     }?;
     for (index, message) in input.messages.iter().enumerate() {
         // Only for Text blocks, not RawText blocks since we don't validate those
-        let mut content: Option<Cow<'_, Value>> = None;
-        let mut text_seen = false;
         for block in message.content.iter() {
-            match block {
-                InputMessageContent::Text(kind) => {
-                    // Throw an error if we have multiple text blocks in a message
-                    if text_seen {
-                        return Err(Error::new(ErrorDetails::InvalidMessage {
-                            message: format!(
-                                "Message at index {index} has multiple text content blocks"
-                            ),
-                        }));
+            if let InputMessageContent::Text(kind) = block {
+                let content = match kind {
+                    TextKind::Arguments { arguments } => {
+                        Cow::Owned(Value::Object(arguments.clone()))
                     }
-                    content = Some(match kind {
-                        TextKind::Arguments { arguments } => {
-                            Cow::Owned(Value::Object(arguments.clone()))
-                        }
-                        TextKind::Text { text } => Cow::Owned(Value::String(text.clone())),
-                        TextKind::LegacyValue { value } => Cow::Borrowed(value),
-                    });
-                    text_seen = true;
-                }
-                InputMessageContent::RawText { .. } => {
-                    // Throw an error if we have multiple raw text blocks in a message
-                    if text_seen {
-                        return Err(Error::new(ErrorDetails::InvalidMessage {
-                            message: format!(
-                                "Message at index {index} has multiple text content blocks"
-                            ),
-                        }));
-                    }
-                    text_seen = true;
-                }
-                _ => {}
-            }
-        }
-        if let Some(content) = content {
-            match &message.role {
-                Role::Assistant => validate_single_message(
-                    &content,
-                    assistant_schema,
-                    Some((index, &message.role)),
-                )?,
-                Role::User => {
-                    validate_single_message(&content, user_schema, Some((index, &message.role)))?
-                }
+                    TextKind::Text { text } => Cow::Owned(Value::String(text.clone())),
+                    TextKind::LegacyValue { value } => Cow::Borrowed(value),
+                };
+                let schema = match &message.role {
+                    Role::Assistant => assistant_schema,
+                    Role::User => user_schema,
+                };
+                validate_single_message(&content, schema, Some((index, &message.role)))?;
             }
         }
     }
@@ -640,6 +607,7 @@ mod tests {
         );
 
         // Test case for multiple text content blocks in one message
+        // This is allowed behavior
         let messages = vec![
             InputMessage {
                 role: Role::User,
@@ -658,13 +626,7 @@ mod tests {
             messages,
         };
 
-        let validation_result = function_config.validate_input(&input);
-        assert_eq!(
-            validation_result.unwrap_err(),
-            Error::new(ErrorDetails::InvalidMessage {
-                message: "Message at index 0 has multiple text content blocks".to_string(),
-            })
-        );
+        function_config.validate_input(&input).unwrap();
     }
 
     #[test]
@@ -967,6 +929,7 @@ mod tests {
 
     #[test]
     fn test_validate_input_chat_multiple_text_blocks() {
+        // We test that we allow multiple text blocks in a message as long as they pass the schema if present
         let chat_config = FunctionConfigChat {
             variants: HashMap::new(),
             system_schema: None,
@@ -1002,14 +965,18 @@ mod tests {
             messages,
         };
 
-        let validation_result = function_config.validate_input(&input);
-        assert_eq!(
-            validation_result.unwrap_err(),
-            ErrorDetails::InvalidMessage {
-                message: "Message at index 0 has multiple text content blocks".to_string(),
-            }
-            .into()
-        );
+        function_config.validate_input(&input).unwrap();
+        let user_schema = create_test_schema();
+        let assistant_schema = create_test_schema();
+        let chat_config = FunctionConfigChat {
+            variants: HashMap::new(),
+            system_schema: None,
+            user_schema: Some(user_schema),
+            assistant_schema: Some(assistant_schema),
+            tools: vec![],
+            ..Default::default()
+        };
+        let function_config = FunctionConfig::Chat(chat_config);
 
         let messages = vec![
             InputMessage {
@@ -1018,9 +985,12 @@ mod tests {
                     InputMessageContent::Text(TextKind::Arguments {
                         arguments: json!({ "name": "user name" }).as_object().unwrap().clone(),
                     }),
-                    InputMessageContent::RawText {
-                        value: "raw text".to_string(),
-                    },
+                    InputMessageContent::Text(TextKind::Arguments {
+                        arguments: json!({ "name": "extra content" })
+                            .as_object()
+                            .unwrap()
+                            .clone(),
+                    }),
                 ],
             },
             InputMessage {
@@ -1039,14 +1009,7 @@ mod tests {
             messages,
         };
 
-        let validation_result = function_config.validate_input(&input).unwrap_err();
-        assert_eq!(
-            validation_result,
-            ErrorDetails::InvalidMessage {
-                message: "Message at index 0 has multiple text content blocks".to_string(),
-            }
-            .into()
-        );
+        function_config.validate_input(&input).unwrap();
     }
 
     #[test]

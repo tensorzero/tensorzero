@@ -213,6 +213,25 @@ impl InferenceProvider for DummyProvider {
             }
             .into());
         }
+        if self.model_name == "multiple-text-blocks" {
+            // The first message must have multiple text blocks or we error
+            let first_message = &request.messages[0];
+            let first_message_text_content = first_message
+                .content
+                .iter()
+                .filter(|block| matches!(block, ContentBlock::Text(_)))
+                .collect::<Vec<_>>();
+            if first_message_text_content.len() != 2 {
+                return Err(ErrorDetails::InferenceClient {
+                    message: "First message must have exactly two text blocks".to_string(),
+                    raw_request: Some("raw request".to_string()),
+                    raw_response: None,
+                    status_code: None,
+                    provider_type: PROVIDER_TYPE.to_string(),
+                }
+                .into());
+            }
+        }
 
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         if self.model_name == "test_key" {

@@ -25,8 +25,8 @@ use tensorzero_internal::{
             DUMMY_STREAMING_TOOL_RESPONSE, DUMMY_TOOL_RESPONSE,
         },
         types::{
-            ContentBlock, ContentBlockOutput, Image, ImageKind, RequestMessage, Role, Text,
-            TextKind,
+            ContentBlock, ContentBlockOutput, Image, ImageKind, RequestMessage, ResolvedInput,
+            ResolvedInputMessageContent, Role, Text, TextKind,
         },
     },
     tool::{ToolCall, ToolCallInput},
@@ -3501,4 +3501,61 @@ async fn check_json_cot_inference_response(
             panic!("Expected a text block, got {:?}", output[0]);
         }
     }
+}
+
+/// Test that a json inference with null response (i.e. no generated content blocks) works as expected.
+#[tokio::test]
+async fn test_multiple_text_blocks_in_message() {
+    let payload = json!({
+        "model_name": "dummy::multiple-text-blocks",
+        "input": {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "content"
+                        },
+                        {
+                            "type": "text",
+                            "text": "extra content"
+                        }
+                    ]
+                },
+            ]
+        },
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    // Check Response is OK, then fields in order
+    assert_eq!(response.status(), StatusCode::OK);
+    let response = response.json::<Value>().await.unwrap();
+    let inference_id = response.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+    // Get the ClickHouse inference
+    let clickhouse = get_clickhouse().await;
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    // Check that the inference has multiple content blocks
+    let input = result.get("input").unwrap().as_str().unwrap();
+    let input: ResolvedInput = serde_json::from_str(input).unwrap();
+    assert_eq!(input.messages.len(), 1);
+    assert_eq!(input.messages[0].content.len(), 2);
+    assert!(matches!(
+        input.messages[0].content[0],
+        ResolvedInputMessageContent::Text { .. }
+    ));
+    assert!(matches!(
+        input.messages[0].content[1],
+        ResolvedInputMessageContent::Text { .. }
+    ));
 }
