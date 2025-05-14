@@ -28,6 +28,8 @@ test("should be able to add float feedback from the evaluation datapoint result 
   await page.locator('div[role="dialog"]').waitFor({
     state: "visible",
   });
+  // sleep for 500ms
+  await page.waitForTimeout(500);
 
   // Fill in the float value
   // Generate a random float between 0 and 1 with 3 decimal places
@@ -35,7 +37,8 @@ test("should be able to add float feedback from the evaluation datapoint result 
   await page
     .getByRole("spinbutton", { name: /Value/i })
     .fill(randomFloat.toString());
-
+  // sleep for 500ms
+  await page.waitForTimeout(500);
   // Click on the "Save" button
   await page.locator('button[type="submit"]').click();
 
