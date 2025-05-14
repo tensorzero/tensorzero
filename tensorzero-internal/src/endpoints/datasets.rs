@@ -829,7 +829,9 @@ pub async fn list_datapoints(
     let result = clickhouse
         .run_query_synchronous(query.to_string(), Some(&params))
         .await?;
-
+    if result.is_empty() {
+        return Ok(vec![]);
+    }
     let result_lines = result.trim().split("\n").collect::<Vec<&str>>();
 
     let datapoints: Result<Vec<ClickHouseDatapoint>, _> = result_lines
@@ -961,7 +963,13 @@ pub async fn get_datapoint(
     let result = clickhouse
         .run_query_synchronous(query.to_string(), Some(&params))
         .await?;
-
+    if result.is_empty() {
+        return Err(Error::new(ErrorDetails::DatapointNotFound {
+            dataset_name,
+            datapoint_id,
+        }));
+    }
+    println!("result: {result}");
     let datapoint: ClickHouseDatapoint = serde_json::from_str(&result).map_err(|e| {
         Error::new(ErrorDetails::ClickHouseDeserialization {
             message: format!("Failed to deserialize datapoint: {e}"),

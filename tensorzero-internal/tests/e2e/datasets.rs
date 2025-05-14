@@ -2532,3 +2532,36 @@ async fn test_datapoint_insert_null_output_json() {
     });
     assert_eq!(datapoint, expected);
 }
+
+#[tokio::test]
+async fn test_list_datapoints_nonexistent_dataset() {
+    let client = Client::new();
+    let dataset_name = format!("nonexistent-dataset-{}", Uuid::now_v7());
+
+    let resp = client
+        .get(get_gateway_endpoint(&format!(
+            "/datasets/{dataset_name}/datapoints",
+        )))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let datapoints: Vec<ChatInferenceDatapoint> = resp.json().await.unwrap();
+    assert!(datapoints.is_empty());
+}
+
+#[tokio::test]
+async fn test_get_nonexistent_datapoint() {
+    let client = Client::new();
+    let dataset_name = format!("test-dataset-{}", Uuid::now_v7());
+    let datapoint_id = Uuid::now_v7();
+
+    let resp = client
+        .get(get_gateway_endpoint(&format!(
+            "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+        )))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+}
