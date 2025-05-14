@@ -61,7 +61,9 @@ from tensorzero import (
 )
 from tensorzero.types import (
     ChatChunk,
+    ChatInferenceDatapoint,
     JsonChunk,
+    JsonInferenceDatapoint,
     ProviderExtraBody,
     Thought,
     ToolCallChunk,
@@ -3093,8 +3095,9 @@ async def test_async_bulk_insert_delete_datapoints(
             tags=None,
         ),
     ]
+    dataset_name = f"test_{uuid7()}"
     datapoint_ids = await async_client.bulk_insert_datapoints(
-        dataset_name="test", datapoints=datapoints
+        dataset_name=dataset_name, datapoints=datapoints
     )
     assert len(datapoint_ids) == 4
     assert isinstance(datapoint_ids[0], UUID)
@@ -3102,17 +3105,62 @@ async def test_async_bulk_insert_delete_datapoints(
     assert isinstance(datapoint_ids[2], UUID)
     assert isinstance(datapoint_ids[3], UUID)
 
+    # Get a chat datapoint
+    datapoint = await async_client.get_datapoint(
+        dataset_name=dataset_name, datapoint_id=datapoint_ids[0]
+    )
+    print(datapoint)
+    assert isinstance(datapoint, ChatInferenceDatapoint)
+    assert datapoint.function_name == "basic_test"
+    assert datapoint.input == {
+        "system": {"assistant_name": "foo"},
+        "messages": [{"role": "user", "content": [{"type": "text", "value": "bar"}]}],
+    }
+    assert datapoint.output == [{"type": "text", "text": "foobar"}]
+
+    # Get a json datapoint
+    datapoint = await async_client.get_datapoint(
+        dataset_name=dataset_name, datapoint_id=datapoint_ids[2]
+    )
+    assert isinstance(datapoint, JsonInferenceDatapoint)
+    assert datapoint.function_name == "json_success"
+    assert datapoint.input == {
+        "system": {"assistant_name": "foo"},
+        "messages": [
+            {"role": "user", "content": [{"type": "text", "value": {"country": "US"}}]}
+        ],
+    }
+    assert datapoint.output == {
+        "parsed": {"answer": "Hello"},
+        "raw": '{"answer":"Hello"}',
+    }
+
+    # List datapoints
+    listed_datapoints = await async_client.list_datapoints(
+        dataset_name=dataset_name,
+    )
+    assert len(listed_datapoints) == 4
+    # Assert that there are 2 chat and 2 json datapoints
+    chat_datapoints = [
+        dp for dp in listed_datapoints if isinstance(dp, ChatInferenceDatapoint)
+    ]
+    json_datapoints = [
+        dp for dp in listed_datapoints if isinstance(dp, JsonInferenceDatapoint)
+    ]
+    assert len(chat_datapoints) == 2
+    assert len(json_datapoints) == 2
+
     await async_client.delete_datapoint(
-        dataset_name="test", datapoint_id=datapoint_ids[0]
+        dataset_name=dataset_name, datapoint_id=datapoint_ids[0]
     )
     await async_client.delete_datapoint(
-        dataset_name="test", datapoint_id=datapoint_ids[1]
+        dataset_name=dataset_name, datapoint_id=datapoint_ids[1]
     )
     await async_client.delete_datapoint(
-        dataset_name="test", datapoint_id=datapoint_ids[2]
+        dataset_name=dataset_name, datapoint_id=datapoint_ids[2]
     )
     await async_client.delete_datapoint(
-        dataset_name="test", datapoint_id=datapoint_ids[3]
+        dataset_name=dataset_name, datapoint_id=datapoint_ids[3]
     )
 
 
@@ -3127,3 +3175,19 @@ def test_sync_invalid_input(sync_client: TensorZeroGateway):
         str(exc_info.value)
         == 'Failed to deserialize JSON to tensorzero::client_input::ClientInput: messages[0].content[0]: invalid type: string "Invalid", expected object at line 1 column 54'
     )
+
+
+@pytest.mark.asyncio
+async def test_list_nonexistent_dataset(async_client: AsyncTensorZeroGateway):
+    res = await async_client.list_datapoints(dataset_name="nonexistent_dataset")
+    assert res == []
+
+
+@pytest.mark.asyncio
+async def test_get_nonexistent_datapoint(async_client: AsyncTensorZeroGateway):
+    with pytest.raises(TensorZeroError) as exc_info:
+        await async_client.get_datapoint(
+            dataset_name="nonexistent_dataset", datapoint_id=uuid7()
+        )
+    assert "Datapoint not found for" in str(exc_info.value)
+    assert "404" in str(exc_info.value)

@@ -493,11 +493,12 @@ class ChatInferenceDatapoint:
     episode_id: Optional[UUID]
     input: InferenceInput  # Should be ResolvedInput
     output: Optional[List[ContentBlock]]
-    tool_params: Optional[ToolParams]
-    tags: Optional[Dict[str, str]]
-    auxiliary: str
-    source_inference_id: Optional[UUID]
-    staled_at: Optional[str]
+    tool_params: Optional[ToolParams] = None
+    tags: Optional[Dict[str, str]] = None
+    auxiliary: str = ""
+    source_inference_id: Optional[UUID] = None
+    staled_at: Optional[str] = None
+    is_deleted: bool = False
 
 
 @dataclass
@@ -508,18 +509,20 @@ class JsonInferenceDatapoint:
     episode_id: Optional[UUID]
     input: InferenceInput
     output: Optional[JsonInferenceOutput]
-    output_schema: Optional[Any]
-    tags: Optional[Dict[str, str]]
-    auxiliary: str
-    source_inference_id: Optional[UUID]
-    staled_at: Optional[str]
+    output_schema: Optional[Any] = None
+    tags: Optional[Dict[str, str]] = None
+    auxiliary: str = ""
+    source_inference_id: Optional[UUID] = None
+    staled_at: Optional[str] = None
+    is_deleted: bool = False
 
 
-type Datapoint = ChatInferenceDatapoint | JsonInferenceDatapoint
+Datapoint = Union[ChatInferenceDatapoint, JsonInferenceDatapoint]
 
 
 def parse_datapoint(data: Dict[str, Any]) -> Datapoint:
-    if "tool_params" in data:
-        return ChatInferenceDatapoint(**data)
-    else:
+    print(data)
+    if "output_schema" in data:
         return JsonInferenceDatapoint(**data)
+    else:
+        return ChatInferenceDatapoint(**data)
