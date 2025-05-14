@@ -37,6 +37,7 @@ from openai import AsyncOpenAI, OpenAI
 from pytest import FixtureRequest
 from tensorzero import (
     AsyncTensorZeroGateway,
+    ChatDatapointInsert,
     ChatInferenceDatapointInput,
     ChatInferenceResponse,
     DynamicEvaluationRunResponse,
@@ -45,6 +46,7 @@ from tensorzero import (
     ImageBase64,
     ImageUrl,
     InferenceChunk,
+    JsonDatapointInsert,
     JsonInferenceDatapointInput,
     JsonInferenceResponse,
     RawText,
@@ -2877,7 +2879,7 @@ def test_sync_json_function_null_response(sync_client: TensorZeroGateway):
 
 def test_sync_bulk_insert_delete_datapoints(sync_client: TensorZeroGateway):
     datapoints = [
-        ChatInferenceDatapointInput(
+        ChatDatapointInsert(
             function_name="basic_test",
             input={
                 "system": {"assistant_name": "foo"},
@@ -2892,6 +2894,7 @@ def test_sync_bulk_insert_delete_datapoints(sync_client: TensorZeroGateway):
             parallel_tool_calls=False,
             tags=None,
         ),
+        # Ensure deprecated ChatInferenceDatapointInput is still supported
         ChatInferenceDatapointInput(
             function_name="basic_test",
             input={
@@ -2939,7 +2942,7 @@ def test_sync_bulk_insert_delete_datapoints(sync_client: TensorZeroGateway):
             allowed_tools=None,
             tags=None,
         ),
-        JsonInferenceDatapointInput(
+        JsonDatapointInsert(
             function_name="json_success",
             input={
                 "system": {"assistant_name": "foo"},
@@ -2954,6 +2957,7 @@ def test_sync_bulk_insert_delete_datapoints(sync_client: TensorZeroGateway):
             output_schema=None,
             tags=None,
         ),
+        # Ensure deprecated JsonInferenceDatapointInput is still supported
         JsonInferenceDatapointInput(
             function_name="json_success",
             input={
@@ -2993,7 +2997,7 @@ async def test_async_bulk_insert_delete_datapoints(
     async_client: AsyncTensorZeroGateway,
 ):
     datapoints = [
-        ChatInferenceDatapointInput(
+        ChatDatapointInsert(
             function_name="basic_test",
             input={
                 "system": {"assistant_name": "foo"},
@@ -3008,7 +3012,7 @@ async def test_async_bulk_insert_delete_datapoints(
             parallel_tool_calls=False,
             tags=None,
         ),
-        ChatInferenceDatapointInput(
+        ChatDatapointInsert(
             function_name="basic_test",
             input={
                 "system": {"assistant_name": "Dummy"},
@@ -3055,7 +3059,7 @@ async def test_async_bulk_insert_delete_datapoints(
             allowed_tools=None,
             tags=None,
         ),
-        JsonInferenceDatapointInput(
+        JsonDatapointInsert(
             function_name="json_success",
             input={
                 "system": {"assistant_name": "foo"},
@@ -3070,7 +3074,7 @@ async def test_async_bulk_insert_delete_datapoints(
             output_schema=None,
             tags=None,
         ),
-        JsonInferenceDatapointInput(
+        JsonDatapointInsert(
             function_name="json_success",
             input={
                 "system": {"assistant_name": "foo"},
