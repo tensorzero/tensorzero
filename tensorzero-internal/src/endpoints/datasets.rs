@@ -773,18 +773,46 @@ pub async fn list_datapoints(
 ) -> Result<Vec<Datapoint>, Error> {
     let query = r#"
     WITH dataset as (
-        SELECT * FROM ChatInferenceDatapoint FINAL
+        SELECT
+            dataset_name,
+            function_name,
+            id,
+            episode_id,
+            input,
+            output,
+            tool_params,
+            '\N' as output_schema, -- for column alignment in UNION ALL
+            tags,
+            auxiliary,
+            source_inference_id,
+            is_deleted,
+            staled_at
+        FROM ChatInferenceDatapoint FINAL
         WHERE dataset_name = {dataset_name: String}
         AND staled_at IS NULL
         UNION ALL
-        SELECT * FROM JsonInferenceDatapoint FINAL
+        SELECT
+            dataset_name,
+            function_name,
+            id,
+            episode_id,
+            input,
+            output,
+            '\N' as tool_params, -- for column alignment in UNION ALL
+            output_schema,
+            tags,
+            auxiliary,
+            source_inference_id,
+            is_deleted,
+            staled_at
+        FROM JsonInferenceDatapoint FINAL
         WHERE dataset_name = {dataset_name: String}
         AND staled_at IS NULL
     )
     SELECT * FROM dataset
     ORDER BY id DESC
-    LIMIT {limit: u32}
-    OFFSET {offset: u32}
+    LIMIT {limit: UInt32}
+    OFFSET {offset: UInt32}
     FORMAT JSONEachRow
     "#;
     let limit = limit.unwrap_or(100);
@@ -802,11 +830,20 @@ pub async fn list_datapoints(
         .run_query_synchronous(query.to_string(), Some(&params))
         .await?;
 
-    let datapoints: Vec<ClickHouseDatapoint> = serde_json::from_str(&result).map_err(|e| {
-        Error::new(ErrorDetails::ClickHouseDeserialization {
-            message: format!("Failed to deserialize datapoints: {e}"),
-        })
-    })?;
+    let result_lines = result.trim().split("\n").collect::<Vec<&str>>();
+
+    let datapoints: Result<Vec<ClickHouseDatapoint>, _> = result_lines
+        .iter()
+        .map(|line| serde_json::from_str(line))
+        .collect();
+    let datapoints = match datapoints {
+        Ok(datapoints) => datapoints,
+        Err(e) => {
+            return Err(Error::new(ErrorDetails::InvalidRequest {
+                message: format!("Failed to deserialize datapoints: {e}"),
+            }));
+        }
+    };
 
     let datapoints: Vec<Datapoint> = datapoints.into_iter().map(Datapoint::from).collect();
 
@@ -872,10 +909,47 @@ pub async fn get_datapoint(
 ) -> Result<Datapoint, Error> {
     // TODO: should we check staled_at here?
     let query = r#"
-    SELECT * FROM ChatInferenceDatapoint FINAL
-    UNION ALL
-    SELECT * FROM JsonInferenceDatapoint FINAL
-    WHERE dataset_name = {dataset_name: String} AND id = {datapoint_id: UUID}
+    WITH dataset as (
+        SELECT
+            dataset_name,
+            function_name,
+            id,
+            episode_id,
+            input,
+            output,
+            tool_params,
+            '\N' as output_schema, -- for column alignment in UNION ALL
+            tags,
+            auxiliary,
+            source_inference_id,
+            is_deleted,
+            staled_at
+        FROM ChatInferenceDatapoint FINAL
+        WHERE dataset_name = {dataset_name: String}
+        AND staled_at IS NULL
+        UNION ALL
+        SELECT
+            dataset_name,
+            function_name,
+            id,
+            episode_id,
+            input,
+            output,
+            '\N' as tool_params, -- for column alignment in UNION ALL
+            output_schema,
+            tags,
+            auxiliary,
+            source_inference_id,
+            is_deleted,
+            staled_at
+        FROM JsonInferenceDatapoint FINAL
+        WHERE dataset_name = {dataset_name: String}
+        AND staled_at IS NULL
+    )
+    SELECT * FROM dataset
+    WHERE id = {datapoint_id: UUID}
+    LIMIT 1
+    FORMAT JSONEachRow
     "#;
     // TODO: test with missing and chat + json datapoints
     let datapoint_id_str = datapoint_id.to_string();
@@ -1016,7 +1090,7 @@ pub struct JsonDatapointInsert {
     pub tags: Option<HashMap<String, String>>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, PartialEq, Serialize)]
 pub struct ChatInferenceDatapoint {
     pub dataset_name: String,
     pub function_name: String,
@@ -1037,7 +1111,7 @@ pub struct ChatInferenceDatapoint {
     pub staled_at: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, PartialEq, Serialize)]
 pub struct JsonInferenceDatapoint {
     pub dataset_name: String,
     pub function_name: String,
