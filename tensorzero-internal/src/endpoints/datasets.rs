@@ -806,10 +806,7 @@ pub async fn list_datapoints(
         })
     })?;
 
-    let datapoints: Vec<Datapoint> = datapoints
-        .into_iter()
-        .map(|datapoint| Datapoint::from(datapoint))
-        .collect();
+    let datapoints: Vec<Datapoint> = datapoints.into_iter().map(Datapoint::from).collect();
 
     Ok(datapoints)
 }
@@ -843,6 +840,58 @@ impl TryFrom<BatchDatapointOutputWithSize> for Vec<Option<Value>> {
             Ok(output)
         }
     }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct GetDatapointPathParams {
+    dataset_name: String,
+    datapoint_id: Uuid,
+}
+
+#[axum::debug_handler(state = AppStateData)]
+pub async fn get_datapoint_handler(
+    State(app_state): AppState,
+    Path(path_params): Path<GetDatapointPathParams>,
+) -> Result<Json<Datapoint>, Error> {
+    get_datapoint(
+        path_params.dataset_name,
+        path_params.datapoint_id,
+        &app_state.clickhouse_connection_info,
+    )
+    .await
+    .map(Json)
+}
+
+#[tracing::instrument(name = "get_datapoint", skip(clickhouse))]
+pub async fn get_datapoint(
+    dataset_name: String,
+    datapoint_id: Uuid,
+    clickhouse: &ClickHouseConnectionInfo,
+) -> Result<Datapoint, Error> {
+    let query = r#"
+    SELECT * FROM ChatInferenceDatapoint
+    UNION ALL
+    SELECT * FROM JsonInferenceDatapoint
+    WHERE dataset_name = {dataset_name: String} AND id = {datapoint_id: UUID}
+    "#;
+    // TODO: test with missing and chat + json datapoints
+    let datapoint_id_str = datapoint_id.to_string();
+    let params = HashMap::from([
+        ("dataset_name", dataset_name.as_str()),
+        ("datapoint_id", datapoint_id_str.as_str()),
+    ]);
+
+    let result = clickhouse
+        .run_query_synchronous(query.to_string(), Some(&params))
+        .await?;
+
+    let datapoint: ClickHouseDatapoint = serde_json::from_str(&result).map_err(|e| {
+        Error::new(ErrorDetails::ClickHouseDeserialization {
+            message: format!("Failed to deserialize datapoint: {e}"),
+        })
+    })?;
+
+    Ok(Datapoint::from(datapoint))
 }
 
 #[derive(Debug, Deserialize)]
