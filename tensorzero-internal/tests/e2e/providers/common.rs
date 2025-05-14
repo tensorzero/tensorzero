@@ -1555,7 +1555,6 @@ pub async fn test_simple_inference_request_with_provider(
             cache_options: CacheParamsOptions {
                 enabled: CacheEnabledMode::On,
                 max_age_s: Some(10),
-                ..Default::default()
             },
             extra_headers: get_extra_headers(),
             ..Default::default()
@@ -2323,11 +2322,11 @@ pub async fn test_streaming_invalid_request_with_provider(
 ) {
     // A top_p of -100 and temperature of -100 should produce errors on all providers
     let extra_headers = get_extra_headers();
-    
+
     let mut inference_params = InferenceParams::default();
     inference_params.chat_completion.temperature = Some(-100.0);
     inference_params.chat_completion.top_p = Some(-100.0);
-    
+
     let params = ClientInferenceParams {
         function_name: Some("basic_test".to_string()),
         variant_name: Some(provider.variant_name.clone()),
@@ -2350,7 +2349,7 @@ pub async fn test_streaming_invalid_request_with_provider(
     let result = client.inference(params).await;
     let err = result.unwrap_err();
     let err_msg = err.to_string();
-    
+
     assert!(
         err_msg.contains("top_p")
             || err_msg.contains("topP")
@@ -2358,7 +2357,7 @@ pub async fn test_streaming_invalid_request_with_provider(
             || err_msg.contains("400 Bad Request"),
         "Unexpected error message: {err_msg}"
     );
-    
+
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 }
@@ -2406,16 +2405,12 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
                     })],
                 }],
             },
-            tags: [(
-                "key".to_string(), 
-                tag_value.to_string()
-            )]
-            .into_iter()
-            .collect(),
+            tags: [("key".to_string(), tag_value.to_string())]
+                .into_iter()
+                .collect(),
             cache_options: CacheParamsOptions {
                 enabled: CacheEnabledMode::On,
                 max_age_s: Some(10),
-                ..Default::default()
             },
             extra_headers: get_extra_headers(),
             stream: Some(true),
@@ -2427,15 +2422,15 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     let tensorzero::InferenceOutput::Streaming(mut streaming_response) = response else {
         panic!("Expected streaming response");
     };
-    
+
     let mut chunks = vec![];
-    
+
     while let Some(chunk) = streaming_response.next().await {
         let chunk = chunk.unwrap();
         let chunk_json = serde_json::to_value(&chunk).unwrap();
         chunks.push(serde_json::to_string(&chunk_json).unwrap());
     }
-    
+
     assert!(!chunks.is_empty());
 
     let mut inference_id: Option<Uuid> = None;
@@ -2679,7 +2674,7 @@ pub async fn test_inference_params_inference_request_with_provider(
     }
     let episode_id = Uuid::now_v7();
     let extra_headers = get_extra_headers();
-    
+
     let mut inference_params = InferenceParams::default();
     inference_params.chat_completion.temperature = Some(0.9);
     inference_params.chat_completion.seed = Some(1337);
@@ -2687,7 +2682,7 @@ pub async fn test_inference_params_inference_request_with_provider(
     inference_params.chat_completion.top_p = Some(0.9);
     inference_params.chat_completion.presence_penalty = Some(0.1);
     inference_params.chat_completion.frequency_penalty = Some(0.2);
-    
+
     let params = ClientInferenceParams {
         function_name: Some("basic_test".to_string()),
         variant_name: Some(provider.variant_name.clone()),
@@ -2703,19 +2698,25 @@ pub async fn test_inference_params_inference_request_with_provider(
         },
         params: inference_params,
         stream: Some(false),
-        credentials: provider.credentials.clone().into_iter().map(|(k, v)| (k, ClientSecretString(SecretString::new(v.into())))).collect(),
+        credentials: provider
+            .credentials
+            .clone()
+            .into_iter()
+            .map(|(k, v)| (k, ClientSecretString(SecretString::new(v.into()))))
+            .collect(),
         extra_headers,
         ..Default::default()
     };
 
     let response = client.inference(params).await.unwrap();
-    
+
     match response {
         tensorzero::InferenceOutput::NonStreaming(response) => {
             let response_json = serde_json::to_value(&response).unwrap();
             println!("API response: {response_json:#?}");
-            check_inference_params_response(response_json, &provider, Some(episode_id), false).await;
-        },
+            check_inference_params_response(response_json, &provider, Some(episode_id), false)
+                .await;
+        }
         _ => panic!("Expected non-streaming response"),
     }
 }
@@ -2785,7 +2786,7 @@ pub async fn check_inference_params_response(
 
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    
+
     // The type might be "text" or "raw_text" depending on whether we're using the client or direct HTTP
     let mut input_to_compare = input.clone();
     if let Some(messages) = input_to_compare.get_mut("messages") {
@@ -2800,7 +2801,7 @@ pub async fn check_inference_params_response(
             }
         }
     }
-    
+
     let mut correct_input = json!({
         "system": {"assistant_name": "Dr. Mehta"},
         "messages": [
@@ -2810,7 +2811,7 @@ pub async fn check_inference_params_response(
             }
         ]
     });
-    
+
     // Set the same placeholder type in the expected input
     if let Some(messages) = correct_input.get_mut("messages") {
         if let Some(message) = messages.as_array_mut().and_then(|m| m.get_mut(0)) {
@@ -2821,7 +2822,7 @@ pub async fn check_inference_params_response(
             }
         }
     }
-    
+
     assert_eq!(input_to_compare, correct_input);
 
     let content_blocks = result.get("output").unwrap().as_str().unwrap();
@@ -3206,7 +3207,7 @@ pub async fn test_tool_use_tool_choice_auto_used_inference_request_with_provider
     client: &tensorzero::Client,
 ) {
     let episode_id = Uuid::now_v7();
-    
+
     let response = client
         .inference(ClientInferenceParams {
             function_name: Some("weather_helper".to_string()),
@@ -3233,7 +3234,7 @@ pub async fn test_tool_use_tool_choice_auto_used_inference_request_with_provider
     let response_json = match response {
         tensorzero::InferenceOutput::NonStreaming(response) => {
             serde_json::to_value(&response).unwrap()
-        },
+        }
         tensorzero::InferenceOutput::Streaming(_) => {
             panic!("Unexpected streaming response");
         }
