@@ -14,7 +14,16 @@ async def main():
                 "messages": [
                     {
                         "role": "user",
-                        "content": "Write a haiku about artificial intelligence.",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": "Write a haiku about artificial intelligence.",
+                            },
+                            {
+                                "type": "text",
+                                "text": "In german.",
+                            },
+                        ],
                     }
                 ]
             },

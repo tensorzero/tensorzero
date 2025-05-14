@@ -407,7 +407,7 @@ def parse_dynamic_evaluation_run_episode_response(
 
 
 @dataclass
-class ChatInferenceDatapointInput:
+class ChatDatapointInsert:
     function_name: str
     input: InferenceInput
     output: Optional[Any] = None
@@ -430,8 +430,19 @@ class ChatInferenceDatapointInput:
         }
 
 
+# CAREFUL: deprecated
+class ChatInferenceDatapointInput(ChatDatapointInsert):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        warnings.warn(
+            "Please use `ChatDatapointInsert` instead of `ChatInferenceDatapointInput`. In a future release, `ChatInferenceDatapointInput` will be removed.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        super().__init__(*args, **kwargs)
+
+
 @dataclass
-class JsonInferenceDatapointInput:
+class JsonDatapointInsert:
     function_name: str
     input: InferenceInput
     output: Optional[Any] = None
@@ -446,3 +457,14 @@ class JsonInferenceDatapointInput:
             "output_schema": self.output_schema,
             "tags": self.tags,
         }
+
+
+# CAREFUL: deprecated
+class JsonInferenceDatapointInput(JsonDatapointInsert):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        warnings.warn(
+            "Please use `JsonDatapointInsert` instead of `JsonInferenceDatapointInput`. In a future release, `JsonInferenceDatapointInput` will be removed.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        super().__init__(*args, **kwargs)
