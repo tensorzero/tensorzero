@@ -47,6 +47,9 @@ jobs:
       - name: Download ClickHouse fixtures
         run: uv run ./ui/fixtures/download-fixtures.py
 
+      - name: Install clickhouse-client
+        run: apt-get update && apt-get install -y clickhouse-client
+
       - name: Delete old ClickHouse cloud dbs
         run: ./ci/delete-clickhouse-dbs.sh
 
@@ -379,6 +382,9 @@ jobs:
 
       - name: Download ClickHouse fixtures
         run: uv run ./ui/fixtures/download-fixtures.py
+
+      - name: Install clickhouse-client
+        run: apt-get update && apt-get install -y clickhouse-client
     
       - name: Set up TENSORZERO_CLICKHOUSE_URL for E2E tests
         run: |
