@@ -161,8 +161,8 @@ impl Migration for Migration0023<'_> {
 
     fn rollback_instructions(&self) -> String {
         r#"DROP TABLE IF EXISTS StaticEvaluationHumanFeedback;
-        DROP MATERIALIZED VIEW IF EXISTS StaticEvaluationHumanFeedbackFloatView;
-        DROP MATERIALIZED VIEW IF EXISTS StaticEvaluationHumanFeedbackBooleanView;
+        DROP VIEW IF EXISTS StaticEvaluationHumanFeedbackFloatView;
+        DROP VIEW IF EXISTS StaticEvaluationHumanFeedbackBooleanView;
         "#
         .to_string()
     }

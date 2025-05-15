@@ -1,18 +1,22 @@
 import { Link } from "react-router";
+import type { HTMLAttributes } from "react";
+
+interface KVChipProps extends HTMLAttributes<HTMLDivElement> {
+  k: string;
+  v: string;
+  k_href?: string;
+  v_href?: string;
+}
 
 export default function KVChip({
   k,
   v,
   k_href,
   v_href,
-}: {
-  k: string;
-  v: string;
-  k_href?: string;
-  v_href?: string;
-}) {
+  ...props
+}: KVChipProps) {
   return (
-    <div className="flex flex-wrap gap-1" key={k}>
+    <div className="flex flex-wrap gap-1" key={k} {...props}>
       <div className="flex items-center gap-1 rounded bg-gray-100 px-2 py-0.5 font-mono text-xs">
         {k_href ? (
           <Link to={k_href} className="text-blue-600 hover:underline">

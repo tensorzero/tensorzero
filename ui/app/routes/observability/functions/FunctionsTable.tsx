@@ -8,7 +8,7 @@ import {
   TableEmptyState,
 } from "~/components/ui/table";
 import type { FunctionConfig } from "~/utils/config/function";
-import type { FunctionCountInfo } from "~/utils/clickhouse/inference";
+import type { FunctionCountInfo } from "~/utils/clickhouse/inference.server";
 import { TableItemTime, TableItemFunction } from "~/components/ui/TableItems";
 
 export default function FunctionsTable({

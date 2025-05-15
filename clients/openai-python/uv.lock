@@ -390,7 +390,7 @@ wheels = [
 
 [[package]]
 name = "tensorzero"
-source = { directory = "../python-pyo3" }
+source = { directory = "../python" }
 dependencies = [
     { name = "httpx" },
     { name = "typing-extensions" },
@@ -435,7 +435,7 @@ dev = [
 requires-dist = [
     { name = "openai" },
     { name = "pydantic" },
-    { name = "tensorzero", directory = "../python-pyo3" },
+    { name = "tensorzero", directory = "../python" },
 ]
 
 [package.metadata.requires-dev]

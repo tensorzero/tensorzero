@@ -133,7 +133,7 @@ impl Migration for Migration0006<'_> {
     fn rollback_instructions(&self) -> String {
         "\
             -- Drop the materialized views\n\
-            DROP MATERIALIZED VIEW IF EXISTS BatchIdByInferenceIdView;\n\
+            DROP VIEW IF EXISTS BatchIdByInferenceIdView;\n\
             \n\
             -- Drop the tables\n\
             DROP TABLE IF EXISTS BatchIdByInferenceId;\n\

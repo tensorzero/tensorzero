@@ -129,7 +129,7 @@ cargo test-unit
 
 1. Launch ClickHouse and the gateway in E2E testing mode (see above).
 
-2. Go to the relevant directory (e.g. `cd clients/python-pyo3`)
+2. Go to the relevant directory (e.g. `cd clients/python`)
 
 3. Create a virtual environment and install the dependencies
 
@@ -189,7 +189,6 @@ TENSORZERO_UI_CONFIG_PATH=<path-to-config-file> # For testing, set to ./fixtures
 With the dependencies running, you can run the tests with `pnpm run test` and the Playwright tests with `pnpm run test-e2e`.
 Similarly, you can start a development server with `pnpm run dev`.
 There may be some Playwright tests in `main` that require feature flags to be on, so be aware of that if they fail for nonobvious reasons.
-
 
 ---
 

@@ -585,8 +585,8 @@ describe("getVariantCounts", () => {
     });
     expect(result).toMatchObject([
       {
-        count: 648,
-        last_used: "2025-04-14T23:09:51.000Z",
+        count: 649,
+        last_used: "2025-05-12T21:59:20.000Z",
         variant_name: "initial_prompt_gpt4o_mini",
       },
       {
