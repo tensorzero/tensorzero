@@ -1,13 +1,11 @@
-use std::{collections::HashMap, future::Future, pin::Pin};
-
-use axum::{
-    extract::{Path, Query, State},
-    Json,
-};
+use axum::extract::{Path, Query, State};
+use axum::Json;
 use futures::future;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::{collections::HashMap, future::Future, pin::Pin};
+use tracing::instrument;
 use uuid::Uuid;
 
 use crate::{
@@ -15,7 +13,7 @@ use crate::{
     config_parser::Config,
     error::{Error, ErrorDetails},
     function::FunctionConfig,
-    gateway_util::{AppState, AppStateData, StructuredJson},
+    gateway_util::{AppState, StructuredJson},
     inference::types::{
         batch::{deserialize_json_string, deserialize_optional_json_string},
         ChatInferenceDatabaseInsert, ContentBlockChatOutput, FetchContext, Input,
@@ -24,12 +22,15 @@ use crate::{
     tool::{DynamicToolParams, ToolCallConfigDatabaseInsert},
     uuid_util::validate_tensorzero_uuid,
 };
-use tracing::instrument;
 
-pub const CLICKHOUSE_DATETIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S%.6f";
+#[cfg(debug_assertions)]
+use crate::gateway_util::AppStateData;
+
 use super::feedback::{
     validate_parse_demonstration, DemonstrationOutput, DynamicDemonstrationInfo,
 };
+
+pub const CLICKHOUSE_DATETIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S%.6f";
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
