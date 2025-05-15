@@ -78,6 +78,23 @@ func OldFormatSystemMessageWithAssistant(t *testing.T, assistant_name string) *o
 	return &sysMsg
 }
 
+func systemMessageWithAssistant(t *testing.T, assistant_name string) *openai.ChatCompletionSystemMessageParam {
+	t.Helper()
+
+	sysMsg := param.OverrideObj[openai.ChatCompletionSystemMessageParam](map[string]interface{}{
+		"content": []map[string]interface{}{
+			{
+				"type": "text",
+				"tensorzero::arguments": map[string]interface{}{
+					"assistant_name": assistant_name,
+				},
+			},
+		},
+		"role": "system",
+	})
+	return &sysMsg
+}
+
 func addEpisodeIDToRequest(t *testing.T, req *openai.ChatCompletionNewParams, episodeID uuid.UUID) {
 	t.Helper()
 	// Add the episode ID to the request as an extra field
@@ -996,11 +1013,9 @@ func TestToolCallingInference(t *testing.T) {
 			"tensorzero::episode_id": episodeID.String(),
 		})
 
-		// Send the request and expect an error
 		_, err := client.Chat.Completions.New(ctx, *req)
 		require.Error(t, err, "Expected an error for invalid input schema")
 
-		fmt.Println("########Error####", err)
 		// Validate the error
 		var apiErr *openai.Error
 		assert.ErrorAs(t, err, &apiErr, "Expected error to be of type APIError")
@@ -1008,6 +1023,64 @@ func TestToolCallingInference(t *testing.T) {
 		assert.Contains(t, apiErr.Error(), "JSON Schema validation failed", "Error should indicate JSON Schema validation failure")
 	})
 
+	t.Run("it should handle multi-turn parallel tool calls", func(t *testing.T) {
+		episodeID, _ := uuid.NewV7()
+
+		messages := []openai.ChatCompletionMessageParamUnion{
+			{OfSystem: systemMessageWithAssistant(t, "Dr. Mehta")},
+			openai.UserMessage("What is the weather like in Tokyo? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions."),
+		}
+
+		req := &openai.ChatCompletionNewParams{
+			Model:             "tensorzero::function_name::weather_helper_parallel",
+			Messages:          messages,
+			ParallelToolCalls: openai.Bool(true),
+		}
+		addEpisodeIDToRequest(t, req, episodeID)
+		req.WithExtraFields(map[string]any{
+			"tensorzero::variant_name": "openai",
+		})
+
+		// Initial request
+		resp, err := client.Chat.Completions.New(ctx, *req)
+		require.NoError(t, err, "API request failed")
+
+		// Validate the assistant's response
+		assistantMessage := resp.Choices[0].Message
+		messages = append(messages, assistantMessage.ToParam())
+		require.NotNil(t, assistantMessage.ToolCalls, "Tool calls should not be nil")
+		require.Len(t, assistantMessage.ToolCalls, 2, "There should be exactly two tool calls")
+
+		// Handle tool calls
+		for _, toolCall := range assistantMessage.ToolCalls {
+			if toolCall.Function.Name == "get_temperature" {
+				messages = append(messages, openai.ToolMessage("70", toolCall.ID))
+			} else if toolCall.Function.Name == "get_humidity" {
+				messages = append(messages, openai.ToolMessage("30", toolCall.ID))
+			} else {
+				t.Fatalf("Unknown tool call: %s", toolCall.Function.Name)
+			}
+		}
+
+		finalReq := &openai.ChatCompletionNewParams{
+			Model:    "tensorzero::function_name::weather_helper_parallel",
+			Messages: messages,
+		}
+		addEpisodeIDToRequest(t, finalReq, episodeID)
+		finalReq.WithExtraFields(map[string]any{
+			"tensorzero::variant_name": "openai",
+		})
+
+		// mullti-turn/final request
+		finalResp, err := client.Chat.Completions.New(ctx, *finalReq)
+		require.NoError(t, err, "API request failed")
+
+		// Validate the final assistant's response
+		finalAssistantMessage := finalResp.Choices[0].Message
+		require.NotNil(t, finalAssistantMessage.Content, "Final assistant message content should not be nil")
+		assert.Contains(t, finalAssistantMessage.Content, "70", "Final response should contain '70'")
+		assert.Contains(t, finalAssistantMessage.Content, "30", "Final response should contain '30'")
+	})
 }
 
 func TestImageInference(t *testing.T) {
