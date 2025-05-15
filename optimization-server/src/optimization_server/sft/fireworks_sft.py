@@ -317,7 +317,6 @@ class FireworksSFTJob(BaseSFTJob):
                     )
 
         except Exception as error:
-            raise
             return FireworksSFTJob(
                 jobPath=self.jobPath,
                 jobStatus="error",
@@ -333,7 +332,10 @@ async def get_fine_tuning_job_details(job_path: str) -> FineTuningJobResponse:
     """Get details about a fine-tuning job"""
     url = f"/v1/{job_path}"
     response = await FIREWORKS_CLIENT.get(url)
-    response.raise_for_status()
+
+    if response.status_code != 200:
+        raise ValueError(f"Failed to get fine-tuning job details: {response.text}")
+
     data = response.text
 
     try:
@@ -463,7 +465,11 @@ async def create_dataset_record(account_id: str, example_count: int) -> str:
     Create a dataset record in Fireworks.
     This is a placeholder for the dataset that gets uploaded in a subsequent call.
     """
-    dataset_id = str(uuid7())
+    # IMPORTANT: Fireworks requires that IDs:
+    #   - Start with a letter
+    #   - Contain only letters, numbers, and hyphens
+    dataset_id = f"t0-{uuid7()}"
+
     url = f"/v1/accounts/{account_id}/datasets"
 
     headers = {
@@ -481,13 +487,16 @@ async def create_dataset_record(account_id: str, example_count: int) -> str:
     }
 
     response = await FIREWORKS_CLIENT.post(url, headers=headers, json=body)
-    response.raise_for_status()
-    response.json()
+
+    if response.status_code != 200:
+        raise ValueError(f"Failed to create dataset record: {response.text}")
+
+    # TODO: we might want to do something with the response?
 
     return dataset_id
 
 
-async def upload_dataset(
+async def upload_dataset(  #
     account_id: str, dataset_id: str, examples: List[FireworksExample]
 ) -> Dict[str, Any]:
     """Upload dataset to Fireworks for fine-tuning"""
@@ -499,10 +508,15 @@ async def upload_dataset(
     files = {"file": ("dataset.jsonl", jsonl_data, "application/jsonl")}
 
     response = await FIREWORKS_CLIENT.post(url, files=files)
-    response.raise_for_status()
+
+    if response.status_code != 200:
+        raise ValueError(f"Failed to upload dataset: {response.text}")
+
     data = response.json()
+
     if not data:
         raise ValueError("Empty response received from upload dataset request")
+
     return data
 
 
