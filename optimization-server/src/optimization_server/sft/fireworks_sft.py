@@ -496,7 +496,7 @@ async def create_dataset_record(account_id: str, example_count: int) -> str:
     return dataset_id
 
 
-async def upload_dataset(  #
+async def upload_dataset(
     account_id: str, dataset_id: str, examples: List[FireworksExample]
 ) -> Dict[str, Any]:
     """Upload dataset to Fireworks for fine-tuning"""
