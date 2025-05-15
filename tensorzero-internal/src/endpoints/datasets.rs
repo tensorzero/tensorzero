@@ -13,7 +13,7 @@ use crate::{
     config_parser::Config,
     error::{Error, ErrorDetails},
     function::FunctionConfig,
-    gateway_util::{AppState, AppStateData, StructuredJson},
+    gateway_util::{AppState, StructuredJson},
     inference::types::{
         batch::{deserialize_json_string, deserialize_optional_json_string},
         ChatInferenceDatabaseInsert, ContentBlockChatOutput, FetchContext, Input,
