@@ -534,9 +534,8 @@ export function tensorzero_inference_to_fireworks_messages(
 // Creates a dataset record in Fireworks.
 // This is a placeholder for the dataset that gets uploaded in a subsequent call.
 // Essentially all this does is make an ID in Fireworks that we reuse.
-// We'll use a UUIDv7
 async function create_dataset_record(accountId: string, exampleCount: number) {
-  const datasetId = v7();
+  const datasetId = `t0-${v7()}`;
   const url = new URL(
     `v1/accounts/${accountId}/datasets`,
     FIREWORKS_API_URL,
