@@ -973,6 +973,41 @@ func TestToolCallingInference(t *testing.T) {
 		assert.Greater(t, resp.Usage.CompletionTokens, int64(10), "Completion tokens should be greater than 10")
 	})
 
+	t.Run("it should reject string input for function with input schema", func(t *testing.T) {
+		episodeID, _ := uuid.NewV7()
+
+		usrMsg := param.OverrideObj[openai.ChatCompletionUserMessageParam](map[string]interface{}{
+			"content": []map[string]interface{}{
+				{"country": "Japan"},
+			},
+			"role": "user",
+		})
+		messages := []openai.ChatCompletionMessageParamUnion{
+			{OfSystem: OldFormatSystemMessageWithAssistant(t, "Alfred Pennyworth")},
+			openai.UserMessage("Hi how are you?"),
+			{OfUser: &usrMsg},
+		}
+
+		req := &openai.ChatCompletionNewParams{
+			Model:    "tensorzero::function_name::json_success",
+			Messages: messages,
+		}
+		req.WithExtraFields(map[string]any{
+			"tensorzero::episode_id": episodeID.String(),
+		})
+
+		// Send the request and expect an error
+		_, err := client.Chat.Completions.New(ctx, *req)
+		require.Error(t, err, "Expected an error for invalid input schema")
+
+		fmt.Println("########Error####", err)
+		// Validate the error
+		var apiErr *openai.Error
+		assert.ErrorAs(t, err, &apiErr, "Expected error to be of type APIError")
+		assert.Equal(t, 400, apiErr.StatusCode, "Expected status code 400")
+		assert.Contains(t, apiErr.Error(), "JSON Schema validation failed", "Error should indicate JSON Schema validation failure")
+	})
+
 }
 
 func TestImageInference(t *testing.T) {
