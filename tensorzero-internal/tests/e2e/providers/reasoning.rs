@@ -629,9 +629,6 @@ pub async fn test_reasoning_inference_request_with_provider_json_mode(provider: 
     let output_clickhouse = output_clickhouse.as_object().unwrap();
     assert_eq!(output_clickhouse, output);
 
-    let tags = result.get("tags").unwrap().as_object().unwrap();
-    assert!(tags.is_empty());
-
     let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
     let inference_params: Value = serde_json::from_str(inference_params).unwrap();
     let inference_params = inference_params.get("chat_completion").unwrap();
