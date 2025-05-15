@@ -21,6 +21,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
 	"testing"
@@ -101,6 +102,43 @@ func addEpisodeIDToRequest(t *testing.T, req *openai.ChatCompletionNewParams, ep
 	req.WithExtraFields(map[string]any{
 		"tensorzero::episode_id": episodeID.String(),
 	})
+}
+
+func sendRequestTzGateway(body map[string]interface{}) (map[string]interface{}, error) {
+	url := "http://127.0.0.1:3000/openai/v1/chat/completions"
+	jsonBody, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request body: %w", err)
+	}
+
+	req, err := http.NewRequest("POST", url, strings.NewReader(string(jsonBody)))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer donotuse")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("HTTP error! status: %d", resp.StatusCode)
+	}
+
+	var responseBody map[string]interface{}
+	err = json.NewDecoder(resp.Body).Decode(&responseBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode response body: %w", err)
+	}
+
+	fmt.Println("Response########", resp)
+	fmt.Println("err########", err)
+	return responseBody, nil
 }
 
 // Test basic inference with old model format
@@ -1081,6 +1119,101 @@ func TestToolCallingInference(t *testing.T) {
 		assert.Contains(t, finalAssistantMessage.Content, "70", "Final response should contain '70'")
 		assert.Contains(t, finalAssistantMessage.Content, "30", "Final response should contain '30'")
 	})
+
+	t.Run("it should handle multi-turn parallel tool calls using TensorZero gateway directly", func(t *testing.T) {
+		episodeID, _ := uuid.NewV7()
+
+		messages := []map[string]interface{}{
+			{
+				"role": "system",
+				"content": []map[string]interface{}{
+					{
+						"type": "text",
+						"tensorzero::arguments": map[string]string{
+							"assistant_name": "Dr. Mehta",
+						},
+					},
+				},
+			},
+			{
+				"role": "user",
+				"content": []map[string]interface{}{
+					{
+						"type": "text",
+						"text": "What is the weather like in Tokyo (in Fahrenheit)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions.",
+					},
+				},
+			},
+		}
+
+		// First request to get tool calls
+		firstRequestBody := map[string]interface{}{
+			"messages":                 messages,
+			"model":                    "tensorzero::function_name::weather_helper_parallel",
+			"parallel_tool_calls":      true,
+			"tensorzero::episode_id":   episodeID.String(),
+			"tensorzero::variant_name": "openai",
+		}
+
+		// Initial request
+		firstResponse, err := sendRequestTzGateway(firstRequestBody)
+		require.NoError(t, err, "First API request failed")
+
+		fmt.Println("First response: ######## ", firstResponse)
+
+		// Validate the assistant's response
+		assistantMessage := firstResponse["choices"].([]interface{})[0].(map[string]interface{})["message"].(map[string]interface{})
+		fmt.Println("Assistant message: ######## ", assistantMessage)
+		messages = append(messages, assistantMessage)
+
+		toolCalls := assistantMessage["tool_calls"].([]interface{})
+		require.Len(t, toolCalls, 2, "There should be exactly two tool calls")
+
+		// Handle tool calls
+		for _, toolCall := range toolCalls {
+			toolCallMap := toolCall.(map[string]interface{})
+			toolName := toolCallMap["function"].(map[string]interface{})["name"].(string)
+			toolCallID := toolCallMap["id"].(string)
+
+			if toolName == "get_temperature" {
+				messages = append(messages, map[string]interface{}{
+					"role": "tool",
+					"content": []map[string]interface{}{
+						{"type": "text", "text": "70"},
+					},
+					"tool_call_id": toolCallID,
+				})
+			} else if toolName == "get_humidity" {
+				messages = append(messages, map[string]interface{}{
+					"role": "tool",
+					"content": []map[string]interface{}{
+						{"type": "text", "text": "30"},
+					},
+					"tool_call_id": toolCallID,
+				})
+			} else {
+				t.Fatalf("Unknown tool call: %s", toolName)
+			}
+		}
+
+		secondRequestBody := map[string]interface{}{
+			"messages":                 messages,
+			"model":                    "tensorzero::function_name::weather_helper_parallel",
+			"tensorzero::episode_id":   episodeID.String(),
+			"tensorzero::variant_name": "openai",
+		}
+
+		secondResponse, err := sendRequestTzGateway(secondRequestBody)
+		require.NoError(t, err, "Second request failed")
+
+		finalAssistantMessage := secondResponse["choices"].([]interface{})[0].(map[string]interface{})["message"].(map[string]interface{})
+		finalContent := finalAssistantMessage["content"].(string)
+
+		// Validate the final assistant's response
+		assert.Contains(t, finalContent, "70", "Final response should contain '70'")
+		assert.Contains(t, finalContent, "30", "Final response should contain '30'")
+	})
+
 }
 
 func TestImageInference(t *testing.T) {
