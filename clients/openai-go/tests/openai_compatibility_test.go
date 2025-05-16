@@ -48,24 +48,9 @@ func TestMain(m *testing.M) {
 		option.WithBaseURL("http://127.0.0.1:3000/openai/v1"),
 		option.WithAPIKey("donotuse"),
 	)
-
 	// Run the tests and exit with the result code
 	os.Exit(m.Run())
 }
-
-// func GenerateSchema[T any]() interface{} {
-// 	// t.Helper()
-// 	// Structured Outputs uses a subset of JSON schema.
-// 	// These flags are necessary to comply with that subset.
-// 	reflector := jsonschema.Reflector{
-// 		AllowAdditionalProperties: false,
-// 		DoNotReference:            true,
-// 	}
-// 	var v T
-// 	schema := reflector.Reflect(v)
-// 	// fmt.Println("Generated Schema :", schema)
-// 	return schema
-// }
 
 func OldFormatSystemMessageWithAssistant(t *testing.T, assistant_name string) *openai.ChatCompletionSystemMessageParam {
 	t.Helper()
@@ -226,76 +211,48 @@ func TestBasicInference(t *testing.T) {
 		assert.Equal(t, "stop", resp.Choices[0].FinishReason)
 
 	})
-	// TODO: [test_async_basic_inference_json_schema]
-	// t.Run("it should handle basic inference and validate response schema manually", func(t *testing.T) {
+	// TODO: [API does not trigger a schema validation]
+	// t.Run("it should handle basic json schema parsing and throw proper validation error", func(t *testing.T) {
 	// 	episodeID, _ := uuid.NewV7()
 
-	// 	// Define the messages
 	// 	messages := []openai.ChatCompletionMessageParamUnion{
 	// 		{OfSystem: OldFormatSystemMessageWithAssistant(t, "Alfred Pennyworth")},
 	// 		openai.UserMessage("Hello"),
 	// 	}
 
-	// 	// Define a dummy model with an intentionally incorrect schema
-	// 	type DummyModel struct {
-	// 		Name int `json:"name"` // Intentionally incorrect type for testing
-	// 	}
-
-	// 	// Define the JSON schema response format
-	// 	schema := map[string]interface{}{
-	// 		"type": "object",
-	// 		"properties": map[string]interface{}{
-	// 			"name": map[string]interface{}{
-	// 				"type": "string", // Expecting a string, but the model might return something else
-	// 			},
+	// 	responseSchema := map[string]interface{}{
+	// 		"name": map[string]interface{}{
+	// 			"type": "int",
 	// 		},
-	// 		"required": []string{"name"},
 	// 	}
 
-	// 	responseFormat := openai.ResponseFormatJSONSchemaJSONSchemaParam{
-	// 		Name:        "dummy_model",
-	// 		Strict:      openai.Bool(true),
-	// 		Description: openai.String("A dummy model for testing schema validation"),
-	// 		Schema:      schema,
-	// 	}
-
-	// 	// Create the request
 	// 	req := &openai.ChatCompletionNewParams{
-	// 		Model:    "tensorzero::function_name::basic_test",
-	// 		Messages: messages,
+	// 		Model:       "tensorzero::function_name::basic_test",
+	// 		Messages:    messages,
+	// 		Temperature: openai.Float(0.4),
 	// 		ResponseFormat: openai.ChatCompletionNewParamsResponseFormatUnion{
 	// 			OfJSONSchema: &openai.ResponseFormatJSONSchemaParam{
-	// 				// Type:       "json_schema",
-	// 				JSONSchema: responseFormat,
+	// 				JSONSchema: openai.ResponseFormatJSONSchemaJSONSchemaParam{
+	// 					Name:        "response_schema",
+	// 					Description: openai.String("Schema for response validation"),
+	// 					Schema:      responseSchema,
+	// 				},
 	// 			},
 	// 		},
-	// 		Temperature: openai.Float(0.4),
 	// 	}
-	// 	req.WithExtraFields(map[string]any{
-	// 		"tensorzero::episode_id": episodeID.String(),
-	// 	})
+	// 	addEpisodeIDToRequest(t, req, episodeID)
 
-	// 	// Send the request
+	// 	// Send the request and expect an error
 	// 	resp, err := client.Chat.Completions.New(ctx, *req)
-	// 	require.NoError(t, err, "Unexpected error while getting completion")
+	// 	fmt.Println("########Response####", resp.RawJSON())
+	// 	require.Error(t, err, "Expected an error for invalid response schema")
 
-	// 	// Debugging output
-	// 	fmt.Printf("Response: %+v\n", resp.RawJSON())
-
-	// 	// Unmarshal the response into the DummyModel struct
-	// 	var dummyModel DummyModel
-	// 	err = json.Unmarshal([]byte(resp.Choices[0].Message.Content), &dummyModel)
-	// 	fmt.Println("########Error####", err)
-	// 	require.Error(t, err, "Expected a validation error due to type mismatch")
-
-	// 	// Validate the error message
-	// 	expectedSubstring := "cannot unmarshal"
-	// 	require.Contains(t, err.Error(), expectedSubstring, "Error message should mention unmarshal failure")
-
-	// 	fmt.Println("Validation error simulated:", err.Error())
+	// 	// Validate the error
+	// 	var apiErr *openai.Error
+	// 	assert.ErrorAs(t, err, &apiErr, "Expected error to be of type APIError")
+	// 	assert.Contains(t, err.Error(), "JSON Schema validation failed", "Error should indicate JSON Schema validation failure")
 	// })
 
-	// TODO: [test_async_inference_cache]
 	t.Run("it should handle inference with cache", func(t *testing.T) {
 		messages := []openai.ChatCompletionMessageParamUnion{
 			{OfSystem: OldFormatSystemMessageWithAssistant(t, "Alfred Pennyworth")},
@@ -343,7 +300,7 @@ func TestBasicInference(t *testing.T) {
 		require.Equal(t, int64(0), cachedResp.Usage.CompletionTokens)
 		require.Equal(t, int64(0), cachedResp.Usage.TotalTokens)
 	})
-	// TODO [should handle json success with non-deprecated format]
+
 	t.Run("it should handle JSON success with non-deprecated format", func(t *testing.T) {
 		episodeID, _ := uuid.NewV7()
 
@@ -554,7 +511,6 @@ func TestBasicInference(t *testing.T) {
 		}
 		assert.Equal(t, expectedContent, content, "Response content does not match expected content")
 	})
-
 }
 
 func TestStreamingInference(t *testing.T) {
@@ -777,7 +733,7 @@ func TestStreamingInference(t *testing.T) {
 		require.Equal(t, int64(0), finalCachedChunk.Usage.CompletionTokens)
 		require.Equal(t, int64(0), finalCachedChunk.Usage.TotalTokens)
 	})
-	// TODO: [test_async_inference_streaming_nonexistent_function]
+
 	t.Run("it should handle streaming inference with a nonexistent function", func(t *testing.T) {
 		episodeID, _ := uuid.NewV7()
 
@@ -803,7 +759,7 @@ func TestStreamingInference(t *testing.T) {
 		assert.Equal(t, 404, apiErr.StatusCode, "Expected status code 404")
 		assert.Contains(t, err.Error(), "404 Not Found \"Unknown function: does_not_exist\"", "Error should indicate 404 Not Found")
 	})
-	// TODO: [test_async_inference_streaming_missing_function]
+
 	t.Run("it should handle streaming inference with a missing function", func(t *testing.T) {
 		episodeID, _ := uuid.NewV7()
 
@@ -828,7 +784,7 @@ func TestStreamingInference(t *testing.T) {
 		assert.Equal(t, 400, apiErr.StatusCode, "Expected status code 404")
 		assert.Contains(t, apiErr.Error(), "400 Bad Request", "Error should indicate 400 Bad Request")
 	})
-	// TODO: [test_async_inference_streaming_malformed_function]
+
 	t.Run("it should handle streaming inference with a malformed function", func(t *testing.T) {
 		episodeID, _ := uuid.NewV7()
 
@@ -853,7 +809,7 @@ func TestStreamingInference(t *testing.T) {
 		assert.Equal(t, 400, apiErr.StatusCode, "Expected status code 404")
 		assert.Contains(t, apiErr.Error(), "400 Bad Request \"Invalid request to OpenAI-compatible endpoint", "Error should indicate invalid request to OpenAI compartible endpoint")
 	})
-	// TODO: [test_async_inference_streaming_missing_model]
+
 	t.Run("it should handle streaming inference with a missing model", func(t *testing.T) {
 		episodeID, _ := uuid.NewV7()
 
@@ -878,7 +834,7 @@ func TestStreamingInference(t *testing.T) {
 		assert.Equal(t, 400, apiErr.StatusCode, "Expected status code 404")
 		assert.Contains(t, apiErr.Error(), "missing field `model`", "Error should indicate model field is missing")
 	})
-	// TODO: [test_async_inference_streaming_malformed_input]
+
 	t.Run("it should handle streaming inference with a missing model", func(t *testing.T) {
 		episodeID, _ := uuid.NewV7()
 
@@ -913,6 +869,112 @@ func TestStreamingInference(t *testing.T) {
 		assert.Equal(t, 400, apiErr.StatusCode, "Expected status code 404")
 		assert.Contains(t, apiErr.Error(), "JSON Schema validation failed", "Error should indicate JSON schema validation failed")
 	})
+
+	t.Run("it should handle JSON streaming", func(t *testing.T) {
+		episodeID, _ := uuid.NewV7()
+
+		userMsg := param.OverrideObj[openai.ChatCompletionUserMessageParam](map[string]interface{}{
+			"content": []map[string]interface{}{
+				{"country": "Japan"},
+			},
+			"role": "user",
+		})
+		messages := []openai.ChatCompletionMessageParamUnion{
+			{OfSystem: OldFormatSystemMessageWithAssistant(t, "Alfred Pennyworth")},
+			{OfUser: &userMsg},
+		}
+
+		// Create the request
+		req := &openai.ChatCompletionNewParams{
+			Model:    "tensorzero::function_name::json_success",
+			Messages: messages,
+			StreamOptions: openai.ChatCompletionStreamOptionsParam{
+				IncludeUsage: openai.Bool(false), // No usage information
+			},
+		}
+		addEpisodeIDToRequest(t, req, episodeID)
+
+		// Start streaming
+		stream := client.Chat.Completions.NewStreaming(ctx, *req)
+		require.NotNil(t, stream, "Streaming response should not be nil")
+
+		expectedText := []string{
+			"Wally,",
+			" the",
+			" golden",
+			" retriever,",
+			" wagged",
+			" his",
+			" tail",
+			" excitedly",
+			" as",
+			" he",
+			" devoured",
+			" a",
+			" slice",
+			" of",
+			" cheese",
+			" pizza.",
+		}
+
+		var allChunks []openai.ChatCompletionChunk
+		for stream.Next() {
+			chunk := stream.Current()
+			allChunks = append(allChunks, chunk)
+			// fmt.Println("########Response####", chunk.RawJSON())
+			// fmt.Println()
+		}
+		require.NoError(t, stream.Err(), "Stream encountered an error")
+		require.NotEmpty(t, allChunks, "No chunks were received")
+
+		// fmt.Println("########Response####", allChunks)
+
+		// Validate the stop chunk
+		stopChunk := allChunks[len(allChunks)-1]
+		assert.Empty(t, stopChunk.Choices[0].Delta.Content)
+		assert.Equal(t, stopChunk.Choices[0].FinishReason, "stop")
+		assert.Empty(t, stopChunk.Usage, "Usage should be empty for streaming with no usage information")
+
+		var previousInferenceID, previousEpisodeID string
+		textIndex := 0
+		// Validate the chunk Content
+		for i := range len(allChunks) - 1 {
+			chunk := allChunks[i]
+			if len(chunk.Choices) == 0 {
+				continue
+			}
+			// Validate the model
+			assert.Equal(t, "tensorzero::function_name::json_success::variant_name::test", chunk.Model, "Model mismatch")
+			// Validate inference ID consistency
+			if previousInferenceID != "" {
+				assert.Equal(t, previousInferenceID, chunk.ID, "Inference ID should remain consistent across chunks")
+			}
+			var chunkResponseEpisodeID string
+			if extra, ok := chunk.JSON.ExtraFields["episode_id"]; ok {
+				err := json.Unmarshal([]byte(extra.Raw()), &chunkResponseEpisodeID)
+				require.NoError(t, err, "Failed to parse episode_id from chunk extras")
+				assert.Equal(t, episodeID.String(), chunkResponseEpisodeID, "Episode ID mismatch")
+			} else {
+				t.Errorf("Key 'tensorzero::episode_id' not found in response extras")
+			}
+			// Validate episode ID consistency
+			if previousEpisodeID != "" {
+				assert.Equal(t, previousEpisodeID, chunkResponseEpisodeID, "Episode ID should remain consistent across chunks")
+			}
+			previousInferenceID = chunk.ID
+			previousEpisodeID = chunkResponseEpisodeID
+
+			// Validating the content
+			content := chunk.Choices[0].Delta.Content
+			if content != "" {
+				assert.Equal(t, expectedText[i], content,
+					"Content mismatch at index %d: expected '%s', got '%s'", i, expectedText[i], content)
+				textIndex++ // inside the scope, not to increment for empty content
+			}
+		}
+		assert.Equal(t, len(expectedText), textIndex, "Not all expected texts were matched")
+	})
+
 }
 
 func TestToolCallingInference(t *testing.T) {
