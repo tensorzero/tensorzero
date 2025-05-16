@@ -432,6 +432,13 @@ macro_rules! generate_provider_tests {
         }
         $crate::make_gateway_test_functions!(test_parallel_tool_use_inference_request);
 
+        async fn test_json_mode_inference_request(client: tensorzero::Client) {
+            let providers = $func().await.json_mode_inference;
+            for provider in providers {
+                test_json_mode_inference_request_with_provider(provider, &client).await;
+            }
+        }
+        $crate::make_gateway_test_functions!(test_json_mode_inference_request);
 
         #[tokio::test]
         async fn test_parallel_tool_use_streaming_inference_request() {
@@ -442,13 +449,7 @@ macro_rules! generate_provider_tests {
         }
 
 
-        #[tokio::test]
-        async fn test_json_mode_inference_request() {
-            let providers = $func().await.json_mode_inference;
-            for provider in providers {
-                test_json_mode_inference_request_with_provider(provider).await;
-            }
-        }
+
 
 
         #[tokio::test]
@@ -8870,40 +8871,47 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
     assert!(tool_call_names.contains(&"get_humidity".to_string()));
 }
 
-pub async fn test_json_mode_inference_request_with_provider(provider: E2ETestProvider) {
+pub async fn test_json_mode_inference_request_with_provider(
+    provider: E2ETestProvider,
+    client: &tensorzero::Client,
+) {
     let episode_id = Uuid::now_v7();
-    let extra_headers = get_extra_headers();
-    let payload = json!({
-        "function_name": "json_success",
-        "variant_name": provider.variant_name,
-        "episode_id": episode_id,
-        "input":
-            {
-               "system": {"assistant_name": "Dr. Mehta"},
-               "messages": [
-                {
-                    "role": "user",
-                    "content": [{"type": "text", "arguments": {"country": "Japan"}}]
-                }
-            ]},
-        "stream": false,
-        "extra_headers": extra_headers.headers,
-    });
 
-    let response = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .send()
-        .await
-        .unwrap();
+    let response = client.inference(tensorzero::ClientInferenceParams {
+        function_name: Some("json_success".to_string()),
+        variant_name: Some(provider.variant_name.clone()),
+        episode_id: Some(episode_id),
+        input: tensorzero::ClientInput {
+            system: Some(json!({"assistant_name": "Dr. Mehta"})),
+            messages: vec![tensorzero::ClientInputMessage {
+                role: Role::User,
+                content: vec![tensorzero::ClientInputMessageContent::Text(TextKind::Arguments { 
+                    arguments: {
+                        let mut map = serde_json::Map::new();
+                        map.insert("country".to_string(), json!("Japan"));
+                        map
+                    }
+                })],
+            }],
+        },
+        stream: Some(false),
+        ..Default::default()
+    }).await.unwrap();
 
-    // Check that the API response is ok
-    assert_eq!(response.status(), StatusCode::OK);
-    let response_json = response.json::<Value>().await.unwrap();
-
-    println!("API response: {response_json:#?}");
-
-    check_json_mode_inference_response(response_json, &provider, Some(episode_id), false).await;
+    match response {
+        tensorzero::InferenceOutput::NonStreaming(response) => {
+            let response_json = serde_json::to_value(&response).unwrap();
+            println!("API response: {response_json:#?}");
+            check_json_mode_inference_response(
+                response_json,
+                &provider,
+                Some(episode_id),
+                false,
+            )
+            .await;
+        }
+        _ => panic!("Expected non-streaming response"),
+    }
 }
 
 pub async fn check_json_mode_inference_response(
