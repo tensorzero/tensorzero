@@ -1109,6 +1109,7 @@ pub struct ChatInferenceDatapoint {
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tags: Option<HashMap<String, String>>,
+    #[serde(skip_serializing, default)] // this will become an object
     pub auxiliary: String,
     pub is_deleted: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1129,6 +1130,7 @@ pub struct JsonInferenceDatapoint {
     pub output_schema: serde_json::Value,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tags: Option<HashMap<String, String>>,
+    #[serde(skip_serializing, default)] // this will become an object
     pub auxiliary: String,
     pub is_deleted: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1283,7 +1285,7 @@ pub struct SyntheticJsonInferenceDatapoint {
     pub output_schema: serde_json::Value,
     #[serde(default)]
     pub tags: Option<HashMap<String, String>>,
-    #[serde(default)]
+    #[serde(skip_serializing)] // this will become an object
     pub auxiliary: String,
     #[serde(default)]
     pub source_inference_id: Option<Uuid>,

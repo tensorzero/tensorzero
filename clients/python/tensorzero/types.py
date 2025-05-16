@@ -485,33 +485,33 @@ class ToolParams:
     parallel_tool_calls: Optional[bool]
 
 
-@dataclass
+@dataclass(kw_only=True)
 class ChatDatapoint:
     dataset_name: str
     function_name: str
     id: UUID
-    episode_id: Optional[UUID]
-    input: InferenceInput  # Should be ResolvedInput
-    output: Optional[List[ContentBlock]]
+    input: InferenceInput
+    episode_id: Optional[UUID] = None
+    output: Optional[List[ContentBlock]] = None
     tool_params: Optional[ToolParams] = None
     tags: Optional[Dict[str, str]] = None
-    auxiliary: str = ""
+    # `auxiliary` is not serialized yet
     source_inference_id: Optional[UUID] = None
     staled_at: Optional[str] = None
     is_deleted: bool = False
 
 
-@dataclass
+@dataclass(kw_only=True)
 class JsonDatapoint:
     dataset_name: str
     function_name: str
     id: UUID
-    episode_id: Optional[UUID]
     input: InferenceInput
-    output: Optional[JsonInferenceOutput]
+    episode_id: Optional[UUID] = None
+    output: Optional[JsonInferenceOutput] = None
     output_schema: Optional[Any] = None
     tags: Optional[Dict[str, str]] = None
-    auxiliary: str = ""
+    # `auxiliary` is not serialized yet
     source_inference_id: Optional[UUID] = None
     staled_at: Optional[str] = None
     is_deleted: bool = False
