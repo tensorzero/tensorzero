@@ -7,10 +7,7 @@ use std::{
 use tensorzero::{Client, ClientBuilder, ClientBuilderMode};
 use tensorzero_internal::{
     clickhouse::test_helpers::{get_clickhouse, CLICKHOUSE_URL},
-    endpoints::datasets::{
-        ClickHouseChatInferenceDatapoint, ClickHouseDatapoint, ClickHouseJsonInferenceDatapoint,
-        Datapoint,
-    },
+    endpoints::datasets::{ClickHouseChatInferenceDatapoint, ClickHouseJsonInferenceDatapoint},
 };
 use uuid::Uuid;
 
