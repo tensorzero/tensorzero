@@ -104,7 +104,9 @@ func addEpisodeIDToRequest(t *testing.T, req *openai.ChatCompletionNewParams, ep
 	})
 }
 
-func sendRequestTzGateway(body map[string]interface{}) (map[string]interface{}, error) {
+func sendRequestTzGateway(t *testing.T, body map[string]interface{}) (map[string]interface{}, error) {
+	// Send a request to the TensorZero gateway
+	t.Helper()
 	url := "http://127.0.0.1:3000/openai/v1/chat/completions"
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
@@ -136,8 +138,6 @@ func sendRequestTzGateway(body map[string]interface{}) (map[string]interface{}, 
 		return nil, fmt.Errorf("failed to decode response body: %w", err)
 	}
 
-	fmt.Println("Response########", resp)
-	fmt.Println("err########", err)
 	return responseBody, nil
 }
 
@@ -409,6 +409,152 @@ func TestBasicInference(t *testing.T) {
 		assert.Equal(t, int64(10), resp.Usage.PromptTokens)
 		assert.Equal(t, int64(10), resp.Usage.CompletionTokens)
 	})
+
+	t.Run("it should handle chat function null response", func(t *testing.T) {
+		messages := []openai.ChatCompletionMessageParamUnion{
+			openai.UserMessage("No yapping!"),
+		}
+
+		req := &openai.ChatCompletionNewParams{
+			Model:    "tensorzero::function_name::null_chat",
+			Messages: messages,
+		}
+
+		resp, err := client.Chat.Completions.New(ctx, *req)
+		require.NoError(t, err, "API request failed")
+
+		// Validate the model
+		assert.Equal(t, "tensorzero::function_name::null_chat::variant_name::variant", resp.Model)
+
+		// Validate the response content
+		assert.Empty(t, resp.Choices[0].Message.Content, "Message content should be nil")
+	})
+
+	t.Run("it should handle json function null response", func(t *testing.T) {
+		messages := []openai.ChatCompletionMessageParamUnion{
+			openai.UserMessage("Extract no data!"),
+		}
+
+		req := &openai.ChatCompletionNewParams{
+			Model:    "tensorzero::function_name::null_json",
+			Messages: messages,
+		}
+
+		resp, err := client.Chat.Completions.New(ctx, *req)
+		require.NoError(t, err, "API request failed")
+
+		// Validate the model
+		assert.Equal(t, "tensorzero::function_name::null_json::variant_name::variant", resp.Model)
+
+		// Validate the response content
+		assert.Nil(t, resp.Choices[0].Message.Content, "Message content should be nil")
+	})
+
+	t.Run("it should handle extra headers parameter", func(t *testing.T) {
+		messages := []openai.ChatCompletionMessageParamUnion{
+			openai.UserMessage("Hello, world!"),
+		}
+
+		req := &openai.ChatCompletionNewParams{
+			Model:    "tensorzero::model_name::dummy::echo_extra_info",
+			Messages: messages,
+		}
+
+		req.WithExtraFields(map[string]any{
+			"tensorzero::extra_headers": []map[string]any{
+				{
+					"model_provider_name": "tensorzero::model_name::dummy::echo_extra_info::provider_name::dummy",
+					"name":                "x-my-extra-header",
+					"value":               "my-extra-header-value",
+				},
+			},
+		})
+
+		resp, err := client.Chat.Completions.New(ctx, *req)
+		require.NoError(t, err, "API request failed")
+
+		// Validate the model
+		assert.Equal(t, "tensorzero::model_name::dummy::echo_extra_info", resp.Model)
+
+		// Validate the response content
+		var content map[string]interface{}
+		err = json.Unmarshal([]byte(resp.Choices[0].Message.Content), &content)
+		require.NoError(t, err, "Failed to parse response content")
+
+		expectedContent := map[string]interface{}{
+			"extra_body": map[string]interface{}{
+				"inference_extra_body": []interface{}{},
+			},
+			"extra_headers": map[string]interface{}{
+				"inference_extra_headers": []interface{}{
+					map[string]interface{}{
+						"model_provider_name": "tensorzero::model_name::dummy::echo_extra_info::provider_name::dummy",
+						"name":                "x-my-extra-header",
+						"value":               "my-extra-header-value",
+					},
+				},
+				"variant_extra_headers": nil,
+			},
+		}
+		assert.Equal(t, expectedContent, content, "Response content does not match expected content")
+	})
+
+	t.Run("it should handle extra body parameter", func(t *testing.T) {
+
+		messages := []openai.ChatCompletionMessageParamUnion{
+			openai.UserMessage("Hello, world!"),
+		}
+
+		// request with extra body
+		req := &openai.ChatCompletionNewParams{
+			Model:    "tensorzero::model_name::dummy::echo_extra_info",
+			Messages: messages,
+		}
+		req.WithExtraFields(map[string]any{
+			"tensorzero::extra_body": []map[string]any{
+				{
+					"model_provider_name": "tensorzero::model_name::dummy::echo_extra_info::provider_name::dummy",
+					"pointer":             "/thinking",
+					"value": map[string]any{
+						"type":          "enabled",
+						"budget_tokens": 1024,
+					},
+				},
+			},
+		})
+
+		resp, err := client.Chat.Completions.New(ctx, *req)
+		require.NoError(t, err, "API request failed")
+
+		// Validate the model
+		assert.Equal(t, "tensorzero::model_name::dummy::echo_extra_info", resp.Model)
+
+		// Validate the response content
+		var content map[string]interface{}
+		err = json.Unmarshal([]byte(resp.Choices[0].Message.Content), &content)
+		require.NoError(t, err, "Failed to parse response content")
+
+		expectedContent := map[string]interface{}{
+			"extra_body": map[string]interface{}{
+				"inference_extra_body": []interface{}{
+					map[string]interface{}{
+						"model_provider_name": "tensorzero::model_name::dummy::echo_extra_info::provider_name::dummy",
+						"pointer":             "/thinking",
+						"value": map[string]interface{}{
+							"type":          "enabled",
+							"budget_tokens": float64(1024),
+						},
+					},
+				},
+			},
+			"extra_headers": map[string]interface{}{
+				"variant_extra_headers":   nil,
+				"inference_extra_headers": []interface{}{},
+			},
+		}
+		assert.Equal(t, expectedContent, content, "Response content does not match expected content")
+	})
+
 }
 
 func TestStreamingInference(t *testing.T) {
@@ -1156,14 +1302,11 @@ func TestToolCallingInference(t *testing.T) {
 		}
 
 		// Initial request
-		firstResponse, err := sendRequestTzGateway(firstRequestBody)
+		firstResponse, err := sendRequestTzGateway(t, firstRequestBody)
 		require.NoError(t, err, "First API request failed")
-
-		fmt.Println("First response: ######## ", firstResponse)
 
 		// Validate the assistant's response
 		assistantMessage := firstResponse["choices"].([]interface{})[0].(map[string]interface{})["message"].(map[string]interface{})
-		fmt.Println("Assistant message: ######## ", assistantMessage)
 		messages = append(messages, assistantMessage)
 
 		toolCalls := assistantMessage["tool_calls"].([]interface{})
@@ -1203,7 +1346,7 @@ func TestToolCallingInference(t *testing.T) {
 			"tensorzero::variant_name": "openai",
 		}
 
-		secondResponse, err := sendRequestTzGateway(secondRequestBody)
+		secondResponse, err := sendRequestTzGateway(t, secondRequestBody)
 		require.NoError(t, err, "Second request failed")
 
 		finalAssistantMessage := secondResponse["choices"].([]interface{})[0].(map[string]interface{})["message"].(map[string]interface{})
