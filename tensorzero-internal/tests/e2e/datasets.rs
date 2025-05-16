@@ -291,10 +291,15 @@ async fn test_create_delete_datapoint_chat() {
         .await
         .unwrap();
     assert!(list_datapoints_response.status().is_success());
-    let list_datapoints = list_datapoints_response
-        .json::<Vec<ChatInferenceDatapoint>>()
-        .await
-        .unwrap();
+    let list_datapoints_json = list_datapoints_response.json::<Vec<Value>>().await.unwrap();
+    // Test that the auxiliary field is not returned by the list datapoints API
+    for datapoint in list_datapoints_json.iter() {
+        assert!(datapoint.get("auxiliary").is_none());
+    }
+    let list_datapoints = list_datapoints_json
+        .into_iter()
+        .map(|datapoint| serde_json::from_value::<ChatInferenceDatapoint>(datapoint).unwrap())
+        .collect::<Vec<_>>();
     assert_eq!(list_datapoints.len(), 3);
 
     for (datapoint, list_datapoint) in datapoints.iter().zip(list_datapoints.iter()) {
@@ -319,10 +324,11 @@ async fn test_create_delete_datapoint_chat() {
             .await
             .unwrap();
         assert!(get_datapoint_response.status().is_success());
-        let get_datapoint = get_datapoint_response
-            .json::<ChatInferenceDatapoint>()
-            .await
-            .unwrap();
+        let get_datapoint_json = get_datapoint_response.json::<Value>().await.unwrap();
+        // Assert that the auxiliary field is not returned by the get datapoint API
+        assert!(get_datapoint_json.get("auxiliary").is_none());
+        let get_datapoint =
+            serde_json::from_value::<ChatInferenceDatapoint>(get_datapoint_json).unwrap();
         assert_eq!(&get_datapoint, datapoint);
 
         // Verify the list datapoint structure and content
@@ -1071,12 +1077,16 @@ async fn test_create_delete_datapoint_json() {
         .await
         .unwrap();
     assert!(list_datapoints_response.status().is_success());
-    let list_datapoints = list_datapoints_response
-        .json::<Vec<JsonInferenceDatapoint>>()
-        .await
-        .unwrap();
+    let list_datapoints = list_datapoints_response.json::<Vec<Value>>().await.unwrap();
     assert_eq!(list_datapoints.len(), 2);
-
+    for datapoint in list_datapoints.iter() {
+        // Test that the auxiliary field is not returned by the list datapoints API
+        assert!(datapoint.get("auxiliary").is_none());
+    }
+    let list_datapoints = list_datapoints
+        .into_iter()
+        .map(|datapoint| serde_json::from_value::<JsonInferenceDatapoint>(datapoint).unwrap())
+        .collect::<Vec<_>>();
     let datapoints = select_json_dataset_clickhouse(&clickhouse, &dataset_name)
         .await
         .unwrap();
@@ -1104,10 +1114,11 @@ async fn test_create_delete_datapoint_json() {
             .await
             .unwrap();
         assert!(get_datapoint_response.status().is_success());
-        let get_datapoint = get_datapoint_response
-            .json::<JsonInferenceDatapoint>()
-            .await
-            .unwrap();
+        let get_datapoint_json = get_datapoint_response.json::<Value>().await.unwrap();
+        // Assert that the auxiliary field is not returned by the get datapoint API
+        assert!(get_datapoint_json.get("auxiliary").is_none());
+        let get_datapoint =
+            serde_json::from_value::<JsonInferenceDatapoint>(get_datapoint_json).unwrap();
         assert_eq!(&get_datapoint, datapoint);
 
         // Verify the list datapoint structure and content
@@ -1545,7 +1556,7 @@ async fn test_datapoint_insert_output_inherit_chat() {
       "output": "[{\"type\":\"text\",\"text\":\"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\"}]",
       "tool_params": "",
       "tags": {},
-      "auxiliary": "{}",
+      "auxiliary": "",
       "is_deleted": false,
       "staled_at": null,
       "source_inference_id": inference_id.to_string(),
@@ -1599,7 +1610,7 @@ async fn test_datapoint_insert_output_inherit_chat() {
       "output": "[{\"type\":\"text\",\"text\":\"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\"}]",
       "tool_params": "",
       "tags": {},
-      "auxiliary": "{}",
+      "auxiliary": "",
       "is_deleted": true,
       "staled_at": null,
       "source_inference_id": inference_id.to_string(),
@@ -1692,7 +1703,7 @@ async fn test_datapoint_insert_output_none_chat() {
       "output": null,
       "tool_params": "",
       "tags": {},
-      "auxiliary": "{}",
+      "auxiliary": "",
       "is_deleted": false,
       "staled_at": null,
       "source_inference_id": inference_id.to_string(),
@@ -1848,7 +1859,7 @@ async fn test_datapoint_insert_output_demonstration_chat() {
       "output": "[{\"type\":\"text\",\"text\":\"My demonstration chat answer\"}]",
       "tool_params": "",
       "tags": {},
-      "auxiliary": "{}",
+      "auxiliary": "",
       "is_deleted": false,
       "staled_at": null,
       "source_inference_id": inference_id.to_string(),
@@ -1938,7 +1949,7 @@ async fn test_datapoint_insert_output_inherit_json() {
       "output": "{\"raw\":\"{\\\"answer\\\":\\\"Hello\\\"}\",\"parsed\":{\"answer\":\"Hello\"}}",
       "output_schema": "{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\"}},\"required\":[\"answer\"],\"additionalProperties\":false}",
       "tags": {},
-      "auxiliary": "{}",
+      "auxiliary": "",
       "is_deleted": false,
       "staled_at": null,
       "source_inference_id": inference_id.to_string(),
@@ -1992,7 +2003,7 @@ async fn test_datapoint_insert_output_inherit_json() {
       "output": "{\"raw\":\"{\\\"answer\\\":\\\"Hello\\\"}\",\"parsed\":{\"answer\":\"Hello\"}}",
       "output_schema": "{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\"}},\"required\":[\"answer\"],\"additionalProperties\":false}",
       "tags": {},
-      "auxiliary": "{}",
+      "auxiliary": "",
       "is_deleted": true,
       "staled_at": null,
       "source_inference_id": inference_id.to_string(),
@@ -2089,7 +2100,7 @@ async fn test_datapoint_insert_output_none_json() {
       "output":null,
       "output_schema": "{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\"}},\"required\":[\"answer\"],\"additionalProperties\":false}",
       "tags": {},
-      "auxiliary": "{}",
+      "auxiliary": "",
       "is_deleted": false,
       "staled_at": null,
       "source_inference_id": inference_id.to_string(),
@@ -2199,7 +2210,7 @@ async fn test_datapoint_insert_output_demonstration_json() {
       "output": "{\"raw\":\"{\\\"answer\\\":\\\"My demonstration answer\\\"}\",\"parsed\":{\"answer\":\"My demonstration answer\"}}",
       "output_schema": "{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\"}},\"required\":[\"answer\"],\"additionalProperties\":false}",
       "tags": {},
-      "auxiliary": "{}",
+      "auxiliary": "",
       "is_deleted": false,
       "staled_at": null,
       "source_inference_id": inference_id.to_string(),
