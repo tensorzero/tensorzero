@@ -30,4 +30,38 @@ export function extractTimestampFromUUIDv7(uuid: string): Date {
   return date;
 }
 
+interface ErrorLike {
+  message: string;
+  name: string;
+  stack?: string;
+  cause?: unknown;
+}
+
+export function isErrorLike(error: unknown): error is ErrorLike {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof error.message === "string" &&
+    "name" in error &&
+    typeof error.name === "string" &&
+    ("stack" in error ? typeof error.stack === "string" : true)
+  );
+}
+
 export class JSONParseError extends SyntaxError {}
+
+export class ServerRequestError extends Error {
+  statusCode: number;
+  constructor(message: string, statusCode: number) {
+    super(message);
+    this.name = "ServerRequestError";
+    this.statusCode = statusCode;
+  }
+}
+
+export function isServerRequestError(
+  error: unknown,
+): error is ServerRequestError {
+  return isErrorLike(error) && error.name === "ServerRequestError";
+}
