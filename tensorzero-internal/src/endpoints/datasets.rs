@@ -1154,7 +1154,7 @@ pub enum ClickHouseDatapoint {
     Json(ClickHouseJsonInferenceDatapoint),
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct ClickHouseChatInferenceDatapoint {
     pub dataset_name: String,
     function_name: String,
@@ -1194,7 +1194,7 @@ impl From<ClickHouseChatInferenceDatapoint> for ChatInferenceDatapoint {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct ClickHouseJsonInferenceDatapoint {
     pub dataset_name: String,
     function_name: String,
