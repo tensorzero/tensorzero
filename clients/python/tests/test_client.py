@@ -3007,12 +3007,6 @@ async def test_async_bulk_insert_delete_datapoints(
                     {"role": "user", "content": [{"type": "text", "text": "bar"}]}
                 ],
             },
-            output=[{"type": "text", "text": "foobar"}],
-            allowed_tools=None,
-            additional_tools=None,
-            tool_choice="auto",
-            parallel_tool_calls=False,
-            tags=None,
         ),
         ChatDatapointInsert(
             function_name="basic_test",
@@ -3072,9 +3066,6 @@ async def test_async_bulk_insert_delete_datapoints(
                     }
                 ],
             },
-            output={"answer": "Hello"},
-            output_schema=None,
-            tags=None,
         ),
         JsonDatapointInsert(
             function_name="json_success",
@@ -3116,7 +3107,7 @@ async def test_async_bulk_insert_delete_datapoints(
         "system": {"assistant_name": "foo"},
         "messages": [{"role": "user", "content": [{"type": "text", "value": "bar"}]}],
     }
-    assert datapoint.output == [{"type": "text", "text": "foobar"}]
+    assert datapoint.output is None
 
     # Get a json datapoint
     datapoint = await async_client.get_datapoint(
@@ -3129,10 +3120,6 @@ async def test_async_bulk_insert_delete_datapoints(
         "messages": [
             {"role": "user", "content": [{"type": "text", "value": {"country": "US"}}]}
         ],
-    }
-    assert datapoint.output == {
-        "parsed": {"answer": "Hello"},
-        "raw": '{"answer":"Hello"}',
     }
 
     # List datapoints

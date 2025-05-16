@@ -1285,7 +1285,7 @@ pub struct SyntheticJsonInferenceDatapoint {
     pub output_schema: serde_json::Value,
     #[serde(default)]
     pub tags: Option<HashMap<String, String>>,
-    #[serde(skip_serializing)] // this will become an object
+    #[serde(skip_serializing, default)] // this will become an object
     pub auxiliary: String,
     #[serde(default)]
     pub source_inference_id: Option<Uuid>,
