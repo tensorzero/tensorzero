@@ -398,11 +398,11 @@ fn handle_reference_output(
         return Ok(None);
     }
     match datapoint {
-        Datapoint::ChatInference(chat_datapoint) => match &chat_datapoint.output {
+        Datapoint::Chat(chat_datapoint) => match &chat_datapoint.output {
             Some(output) => prepare_serialized_chat_output(output).map(Some),
             None => bail!("Datapoint does not contain an output when this is expected"),
         },
-        Datapoint::JsonInference(json_datapoint) => match &json_datapoint.output {
+        Datapoint::Json(json_datapoint) => match &json_datapoint.output {
             Some(output) => prepare_serialized_json_output(output).map(Some),
             None => bail!("Datapoint does not contain an output when this is expected"),
         },
@@ -568,7 +568,7 @@ mod tests {
                 finish_reason: None,
                 episode_id: Uuid::now_v7(),
             }),
-            &Datapoint::ChatInference(ChatInferenceDatapoint {
+            &Datapoint::Chat(ChatInferenceDatapoint {
                 dataset_name: "foo".to_string(),
                 function_name: "foo".to_string(),
                 id: Uuid::now_v7(),
@@ -635,7 +635,7 @@ mod tests {
                 finish_reason: None,
                 episode_id: Uuid::now_v7(),
             }),
-            &Datapoint::ChatInference(ChatInferenceDatapoint {
+            &Datapoint::Chat(ChatInferenceDatapoint {
                 dataset_name: "foo".to_string(),
                 function_name: "foo".to_string(),
                 id: Uuid::now_v7(),
@@ -864,7 +864,7 @@ mod tests {
                 reference_output: false,
             },
         };
-        let datapoint = Datapoint::ChatInference(ChatInferenceDatapoint {
+        let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
             dataset_name: "dataset".to_string(),
             function_name: "function".to_string(),
             id: Uuid::now_v7(),
@@ -894,7 +894,7 @@ mod tests {
                 reference_output: true,
             },
         };
-        let datapoint = Datapoint::ChatInference(ChatInferenceDatapoint {
+        let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
             dataset_name: "dataset".to_string(),
             function_name: "function".to_string(),
             id: Uuid::now_v7(),
@@ -918,7 +918,7 @@ mod tests {
         );
 
         // Test with reference output enabled and present (chat)
-        let datapoint = Datapoint::ChatInference(ChatInferenceDatapoint {
+        let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
             dataset_name: "dataset".to_string(),
             function_name: "function".to_string(),
             id: Uuid::now_v7(),
@@ -943,7 +943,7 @@ mod tests {
         assert_eq!(result, r#"[{"type":"text","text":"Reference text"}]"#);
 
         // Test with reference output enabled and present (json)
-        let datapoint = Datapoint::JsonInference(JsonInferenceDatapoint {
+        let datapoint = Datapoint::Json(JsonInferenceDatapoint {
             dataset_name: "dataset".to_string(),
             function_name: "function".to_string(),
             id: Uuid::now_v7(),
@@ -1046,7 +1046,7 @@ mod tests {
                 finish_reason: None,
                 episode_id: Uuid::now_v7(),
             }),
-            &Datapoint::ChatInference(ChatInferenceDatapoint {
+            &Datapoint::Chat(ChatInferenceDatapoint {
                 dataset_name: "dataset".to_string(),
                 function_name: "function".to_string(),
                 id: Uuid::now_v7(),
@@ -1158,7 +1158,7 @@ mod tests {
                 finish_reason: None,
                 episode_id: Uuid::now_v7(),
             }),
-            &Datapoint::JsonInference(JsonInferenceDatapoint {
+            &Datapoint::Json(JsonInferenceDatapoint {
                 dataset_name: "dataset".to_string(),
                 function_name: "function".to_string(),
                 id: Uuid::now_v7(),
