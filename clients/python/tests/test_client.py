@@ -3121,6 +3121,7 @@ async def test_async_bulk_insert_delete_datapoints(
             {"role": "user", "content": [{"type": "text", "value": {"country": "US"}}]}
         ],
     }
+    assert datapoint.output is None
 
     # List datapoints
     listed_datapoints = await async_client.list_datapoints(
