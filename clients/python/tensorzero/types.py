@@ -485,7 +485,7 @@ class ToolParams:
     parallel_tool_calls: Optional[bool]
 
 
-@dataclass(kw_only=True)
+@dataclass
 class ChatDatapoint:
     dataset_name: str
     function_name: str
@@ -501,7 +501,7 @@ class ChatDatapoint:
     is_deleted: bool = False
 
 
-@dataclass(kw_only=True)
+@dataclass
 class JsonDatapoint:
     dataset_name: str
     function_name: str
