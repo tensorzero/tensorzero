@@ -112,7 +112,7 @@ export async function action({ request }: Route.ActionArgs) {
     url.searchParams.delete("beforeFeedback");
     url.searchParams.delete("afterFeedback");
     url.searchParams.set("newFeedbackId", response.feedback_id);
-    return data<ActionData>({ redirectTo: url.toString() });
+    return data<ActionData>({ redirectTo: url.pathname + url.search });
   } catch (error) {
     if (isServerRequestError(error)) {
       return data<ActionData>(
