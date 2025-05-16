@@ -211,7 +211,7 @@ func TestBasicInference(t *testing.T) {
 		assert.Equal(t, "stop", resp.Choices[0].FinishReason)
 
 	})
-	// TODO: [API does not trigger a schema validation]
+
 	// t.Run("it should handle basic json schema parsing and throw proper validation error", func(t *testing.T) {
 	// 	episodeID, _ := uuid.NewV7()
 
