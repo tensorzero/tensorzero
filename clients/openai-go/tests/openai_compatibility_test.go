@@ -404,7 +404,7 @@ func TestBasicInference(t *testing.T) {
 		assert.Equal(t, "tensorzero::function_name::null_json::variant_name::variant", resp.Model)
 
 		// Validate the response content
-		assert.Nil(t, resp.Choices[0].Message.Content, "Message content should be nil")
+		assert.Empty(t, resp.Choices[0].Message.Content, "Message content should be empty")
 	})
 
 	t.Run("it should handle extra headers parameter", func(t *testing.T) {
@@ -510,6 +510,124 @@ func TestBasicInference(t *testing.T) {
 			},
 		}
 		assert.Equal(t, expectedContent, content, "Response content does not match expected content")
+	})
+
+	t.Run("it should handle json success", func(t *testing.T) {
+		episodeID, _ := uuid.NewV7()
+
+		userMsg := param.OverrideObj[openai.ChatCompletionUserMessageParam](map[string]interface{}{
+			"content": []map[string]interface{}{
+				{"country": "Japan"},
+			},
+			"role": "user",
+		})
+		messages := []openai.ChatCompletionMessageParamUnion{
+			{OfSystem: OldFormatSystemMessageWithAssistant(t, "Alfred Pennyworth")},
+			{OfUser: &userMsg},
+		}
+
+		req := &openai.ChatCompletionNewParams{
+			Model:    "tensorzero::function_name::json_success",
+			Messages: messages,
+		}
+		req.WithExtraFields(map[string]any{
+			"tensorzero::episode_id": episodeID.String(),
+		})
+
+		resp, err := client.Chat.Completions.New(ctx, *req)
+		require.NoError(t, err, "API request failed")
+
+		// Validate the model
+		assert.Equal(t, "tensorzero::function_name::json_success::variant_name::test", resp.Model)
+
+		// Validate the episode ID
+		if extra, ok := resp.JSON.ExtraFields["episode_id"]; ok {
+			var responseEpisodeID string
+			err := json.Unmarshal([]byte(extra.Raw()), &responseEpisodeID)
+			require.NoError(t, err, "Failed to parse episode_id from response extras")
+			assert.Equal(t, episodeID.String(), responseEpisodeID)
+		} else {
+			t.Errorf("Key 'tensorzero::episode_id' not found in response extras")
+		}
+
+		// Validate the response content
+		assert.Equal(t, `{"answer":"Hello"}`, resp.Choices[0].Message.Content)
+		assert.Nil(t, resp.Choices[0].Message.ToolCalls, "Tool calls should be nil")
+
+		// Validate usage
+		assert.Equal(t, int64(10), resp.Usage.PromptTokens)
+		assert.Equal(t, int64(10), resp.Usage.CompletionTokens)
+	})
+
+	t.Run("it should handle json invalid system", func(t *testing.T) {
+		episodeID, _ := uuid.NewV7()
+
+		sysMsg := param.OverrideObj[openai.ChatCompletionSystemMessageParam](map[string]interface{}{
+			"content": []map[string]interface{}{
+				{
+					"type": "image_url",
+					"image_url": map[string]interface{}{
+						"url": "https://example.com/image.jpg",
+					},
+				},
+			},
+			"role": "system",
+		})
+		userMsg := param.OverrideObj[openai.ChatCompletionUserMessageParam](map[string]interface{}{
+			"content": []map[string]interface{}{
+				{"country": "Japan"},
+			},
+			"role": "user",
+		})
+		messages := []openai.ChatCompletionMessageParamUnion{
+			{OfSystem: &sysMsg},
+			{OfUser: &userMsg},
+		}
+
+		req := &openai.ChatCompletionNewParams{
+			Model:    "tensorzero::function_name::json_success",
+			Messages: messages,
+		}
+		req.WithExtraFields(map[string]any{
+			"tensorzero::episode_id": episodeID.String(),
+		})
+
+		_, err := client.Chat.Completions.New(ctx, *req)
+		require.Error(t, err, "Expected an error for invalid system message")
+
+		// Validate the error
+		assert.Contains(t, err.Error(), "System message must be a text content block", "Error should indicate invalid system message")
+	})
+
+	t.Run("it should handle json failure", func(t *testing.T) {
+		episodeID, _ := uuid.NewV7()
+
+		messages := []openai.ChatCompletionMessageParamUnion{
+			{OfSystem: OldFormatSystemMessageWithAssistant(t, "Alfred Pennyworth")},
+			openai.UserMessage("Hello, world!"),
+		}
+
+		req := &openai.ChatCompletionNewParams{
+			Model:    "tensorzero::function_name::json_fail",
+			Messages: messages,
+		}
+		req.WithExtraFields(map[string]any{
+			"tensorzero::episode_id": episodeID.String(),
+		})
+
+		resp, err := client.Chat.Completions.New(ctx, *req)
+		require.NoError(t, err, "API request failed")
+
+		// Validate the model
+		assert.Equal(t, "tensorzero::function_name::json_fail::variant_name::test", resp.Model)
+
+		// Validate the response content
+		assert.Equal(t, "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.", resp.Choices[0].Message.Content)
+		assert.Nil(t, resp.Choices[0].Message.ToolCalls, "Tool calls should be nil")
+
+		// Validate usage
+		assert.Equal(t, int64(10), resp.Usage.PromptTokens)
+		assert.Equal(t, int64(10), resp.Usage.CompletionTokens)
 	})
 }
 
@@ -625,7 +743,7 @@ func TestStreamingInference(t *testing.T) {
 		}
 		assert.Equal(t, len(expectedText), textIndex, "Not all expected texts were matched")
 	})
-	// TODO: [test_async_inference_streaming_with_cache]
+
 	t.Run("it should handle streaming inference with cache", func(t *testing.T) {
 		episodeID, _ := uuid.NewV7()
 		messages := []openai.ChatCompletionMessageParamUnion{
@@ -921,13 +1039,9 @@ func TestStreamingInference(t *testing.T) {
 		for stream.Next() {
 			chunk := stream.Current()
 			allChunks = append(allChunks, chunk)
-			// fmt.Println("########Response####", chunk.RawJSON())
-			// fmt.Println()
 		}
 		require.NoError(t, stream.Err(), "Stream encountered an error")
 		require.NotEmpty(t, allChunks, "No chunks were received")
-
-		// fmt.Println("########Response####", allChunks)
 
 		// Validate the stop chunk
 		stopChunk := allChunks[len(allChunks)-1]
@@ -1154,7 +1268,6 @@ func TestToolCallingInference(t *testing.T) {
 	t.Run("it should handle dynamic tool use inference with OpenAI", func(t *testing.T) {
 		episodeID, _ := uuid.NewV7()
 
-		// Define the messages
 		messages := []openai.ChatCompletionMessageParamUnion{
 			{OfSystem: OldFormatSystemMessageWithAssistant(t, "Dr. Mehta")},
 			openai.UserMessage("What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function."),
@@ -1214,7 +1327,7 @@ func TestToolCallingInference(t *testing.T) {
 		// Validate the response content
 		assert.Empty(t, resp.Choices[0].Message.Content, "Message content should be nil")
 
-		// // Validate tool calls
+		// Validate tool calls
 		require.NotNil(t, resp.Choices[0].Message.ToolCalls, "Tool calls should not be nil")
 		require.Len(t, resp.Choices[0].Message.ToolCalls, 1, "There should be exactly one tool call")
 
