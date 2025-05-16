@@ -521,7 +521,10 @@ Datapoint = Union[ChatDatapoint, JsonDatapoint]
 
 
 def parse_datapoint(data: Dict[str, Any]) -> Datapoint:
-    if "output_schema" in data:
+    datapoint_type = data.pop("type")
+    if datapoint_type == "json":
         return JsonDatapoint(**data)
-    else:
+    elif datapoint_type == "chat":
         return ChatDatapoint(**data)
+    else:
+        raise ValueError(f"Unknown datapoint type: {datapoint_type}")

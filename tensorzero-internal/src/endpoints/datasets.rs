@@ -775,6 +775,7 @@ pub async fn list_datapoints(
     let query = r#"
     WITH dataset as (
         SELECT
+            'chat' as type,
             dataset_name,
             function_name,
             id,
@@ -793,6 +794,7 @@ pub async fn list_datapoints(
         AND staled_at IS NULL
         UNION ALL
         SELECT
+            'json' as type,
             dataset_name,
             function_name,
             id,
@@ -913,6 +915,7 @@ pub async fn get_datapoint(
     let query = r#"
     WITH dataset as (
         SELECT
+            'chat' as type,
             dataset_name,
             function_name,
             id,
@@ -931,6 +934,7 @@ pub async fn get_datapoint(
         AND staled_at IS NULL
         UNION ALL
         SELECT
+            'json' as type,
             dataset_name,
             function_name,
             id,
@@ -1024,45 +1028,45 @@ pub struct CreateDatapointResponse {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-#[serde(untagged)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum Datapoint {
-    ChatInference(ChatInferenceDatapoint),
-    JsonInference(JsonInferenceDatapoint),
+    Chat(ChatInferenceDatapoint),
+    Json(JsonInferenceDatapoint),
 }
 
 impl Datapoint {
     pub fn dataset_name(&self) -> &str {
         match self {
-            Datapoint::ChatInference(datapoint) => &datapoint.dataset_name,
-            Datapoint::JsonInference(datapoint) => &datapoint.dataset_name,
+            Datapoint::Chat(datapoint) => &datapoint.dataset_name,
+            Datapoint::Json(datapoint) => &datapoint.dataset_name,
         }
     }
 
     pub fn input(&self) -> &ResolvedInput {
         match self {
-            Datapoint::ChatInference(datapoint) => &datapoint.input,
-            Datapoint::JsonInference(datapoint) => &datapoint.input,
+            Datapoint::Chat(datapoint) => &datapoint.input,
+            Datapoint::Json(datapoint) => &datapoint.input,
         }
     }
 
     pub fn tool_call_config(&self) -> Option<&ToolCallConfigDatabaseInsert> {
         match self {
-            Datapoint::ChatInference(datapoint) => datapoint.tool_params.as_ref(),
-            Datapoint::JsonInference(_datapoint) => None,
+            Datapoint::Chat(datapoint) => datapoint.tool_params.as_ref(),
+            Datapoint::Json(_datapoint) => None,
         }
     }
 
     pub fn output_schema(&self) -> Option<&serde_json::Value> {
         match self {
-            Datapoint::ChatInference(_datapoint) => None,
-            Datapoint::JsonInference(datapoint) => Some(&datapoint.output_schema),
+            Datapoint::Chat(_datapoint) => None,
+            Datapoint::Json(datapoint) => Some(&datapoint.output_schema),
         }
     }
 
     pub fn id(&self) -> Uuid {
         match self {
-            Datapoint::ChatInference(datapoint) => datapoint.id,
-            Datapoint::JsonInference(datapoint) => datapoint.id,
+            Datapoint::Chat(datapoint) => datapoint.id,
+            Datapoint::Json(datapoint) => datapoint.id,
         }
     }
 }
@@ -1144,7 +1148,7 @@ pub struct JsonInferenceDatapoint {
 /// to be able to handle them naturally, we duplicated the types so that we
 /// can effectively deserialize from ClickHouse as well.
 #[derive(Debug, Deserialize)]
-#[serde(untagged)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum ClickHouseDatapoint {
     Chat(ClickHouseChatInferenceDatapoint),
     Json(ClickHouseJsonInferenceDatapoint),
@@ -1231,8 +1235,8 @@ impl From<ClickHouseJsonInferenceDatapoint> for JsonInferenceDatapoint {
 impl From<ClickHouseDatapoint> for Datapoint {
     fn from(value: ClickHouseDatapoint) -> Self {
         match value {
-            ClickHouseDatapoint::Chat(datapoint) => Datapoint::ChatInference(datapoint.into()),
-            ClickHouseDatapoint::Json(datapoint) => Datapoint::JsonInference(datapoint.into()),
+            ClickHouseDatapoint::Chat(datapoint) => Datapoint::Chat(datapoint.into()),
+            ClickHouseDatapoint::Json(datapoint) => Datapoint::Json(datapoint.into()),
         }
     }
 }
