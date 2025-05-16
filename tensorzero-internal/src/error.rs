@@ -149,6 +149,10 @@ pub enum ErrorDetails {
     ObjectStoreUnconfigured {
         block_type: String,
     },
+    DatapointNotFound {
+        dataset_name: String,
+        datapoint_id: Uuid,
+    },
     DynamicJsonSchema {
         message: String,
     },
@@ -379,6 +383,7 @@ impl ErrorDetails {
             ErrorDetails::ClickHouseQuery { .. } => tracing::Level::ERROR,
             ErrorDetails::ObjectStoreWrite { .. } => tracing::Level::ERROR,
             ErrorDetails::Config { .. } => tracing::Level::ERROR,
+            ErrorDetails::DatapointNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::DynamicJsonSchema { .. } => tracing::Level::WARN,
             ErrorDetails::FileRead { .. } => tracing::Level::ERROR,
             ErrorDetails::GCPCredentials { .. } => tracing::Level::ERROR,
@@ -457,6 +462,7 @@ impl ErrorDetails {
             ErrorDetails::ClickHouseMigration { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ClickHouseQuery { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ObjectStoreUnconfigured { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::DatapointNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::Config { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::DynamicJsonSchema { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::FileRead { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -625,6 +631,15 @@ impl std::fmt::Display for ErrorDetails {
             }
             ErrorDetails::Config { message } => {
                 write!(f, "{message}")
+            }
+            ErrorDetails::DatapointNotFound {
+                dataset_name,
+                datapoint_id,
+            } => {
+                write!(
+                    f,
+                    "Datapoint not found for dataset: {dataset_name} and id: {datapoint_id}"
+                )
             }
             ErrorDetails::DynamicJsonSchema { message } => {
                 write!(

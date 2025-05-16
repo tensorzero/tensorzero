@@ -159,7 +159,7 @@ jobs:
         run: uv python install 3.9
 
       - name: "Python: PyO3 Client: pytest"
-        working-directory: clients/python-pyo3
+        working-directory: clients/python
         run: |
           bash ./test.sh
 

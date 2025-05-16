@@ -1,13 +1,11 @@
-use std::{collections::HashMap, future::Future, pin::Pin};
-
-use axum::{
-    extract::{Path, State},
-    Json,
-};
+use axum::extract::{Path, Query, State};
+use axum::Json;
 use futures::future;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::{collections::HashMap, future::Future, pin::Pin};
+use tracing::instrument;
 use uuid::Uuid;
 
 use crate::{
@@ -24,12 +22,15 @@ use crate::{
     tool::{DynamicToolParams, ToolCallConfigDatabaseInsert},
     uuid_util::validate_tensorzero_uuid,
 };
-use tracing::instrument;
 
-pub const CLICKHOUSE_DATETIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S%.6f";
+#[cfg(debug_assertions)]
+use crate::gateway_util::AppStateData;
+
 use super::feedback::{
     validate_parse_demonstration, DemonstrationOutput, DynamicDemonstrationInfo,
 };
+
+pub const CLICKHOUSE_DATETIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S%.6f";
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -498,12 +499,11 @@ pub async fn create_datapoint(
         })?;
         match &**function_config {
             FunctionConfig::Chat(_) => {
-                let chat: ChatInferenceDatapointInput =
-                    serde_json::from_value(datapoint).map_err(|e| {
-                        Error::new(ErrorDetails::InvalidRequest {
-                            message: format!("Failed to deserialize chat datapoint {i}: {e}"),
-                        })
-                    })?;
+                let chat: ChatDatapointInsert = serde_json::from_value(datapoint).map_err(|e| {
+                    Error::new(ErrorDetails::InvalidRequest {
+                        message: format!("Failed to deserialize chat datapoint {i}: {e}"),
+                    })
+                })?;
                 // Validate the input
                 function_config.validate_input(&chat.input).map_err(|e| {
                     Error::new(ErrorDetails::InvalidRequest {
@@ -569,12 +569,11 @@ pub async fn create_datapoint(
                 })
             }
             FunctionConfig::Json(json_function_config) => {
-                let json: JsonInferenceDatapointInput =
-                    serde_json::from_value(datapoint).map_err(|e| {
-                        Error::new(ErrorDetails::InvalidRequest {
-                            message: format!("Failed to deserialize json datapoint {i}: {e}"),
-                        })
-                    })?;
+                let json: JsonDatapointInsert = serde_json::from_value(datapoint).map_err(|e| {
+                    Error::new(ErrorDetails::InvalidRequest {
+                        message: format!("Failed to deserialize json datapoint {i}: {e}"),
+                    })
+                })?;
                 // Validate the input
                 function_config.validate_input(&json.input).map_err(|e| {
                     Error::new(ErrorDetails::InvalidRequest {
@@ -739,6 +738,121 @@ pub async fn delete_datapoint(
     Ok(())
 }
 
+#[derive(Debug, Deserialize)]
+pub struct ListDatapointsQueryParams {
+    limit: Option<u32>,
+    offset: Option<u32>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ListDatapointsPathParams {
+    dataset_name: String,
+}
+
+#[axum::debug_handler(state = AppStateData)]
+pub async fn list_datapoints_handler(
+    State(app_state): AppState,
+    Path(path_params): Path<ListDatapointsPathParams>,
+    Query(query_params): Query<ListDatapointsQueryParams>,
+) -> Result<Json<Vec<Datapoint>>, Error> {
+    list_datapoints(
+        path_params.dataset_name,
+        &app_state.clickhouse_connection_info,
+        query_params.limit,
+        query_params.offset,
+    )
+    .await
+    .map(Json)
+}
+
+#[tracing::instrument(name = "list_datapoints", skip(clickhouse))]
+pub async fn list_datapoints(
+    dataset_name: String,
+    clickhouse: &ClickHouseConnectionInfo,
+    limit: Option<u32>,
+    offset: Option<u32>,
+) -> Result<Vec<Datapoint>, Error> {
+    let query = r#"
+    WITH dataset as (
+        SELECT
+            dataset_name,
+            function_name,
+            id,
+            episode_id,
+            input,
+            output,
+            tool_params,
+            '\N' as output_schema, -- for column alignment in UNION ALL
+            tags,
+            auxiliary,
+            source_inference_id,
+            is_deleted,
+            staled_at
+        FROM ChatInferenceDatapoint FINAL
+        WHERE dataset_name = {dataset_name: String}
+        AND staled_at IS NULL
+        UNION ALL
+        SELECT
+            dataset_name,
+            function_name,
+            id,
+            episode_id,
+            input,
+            output,
+            '\N' as tool_params, -- for column alignment in UNION ALL
+            output_schema,
+            tags,
+            auxiliary,
+            source_inference_id,
+            is_deleted,
+            staled_at
+        FROM JsonInferenceDatapoint FINAL
+        WHERE dataset_name = {dataset_name: String}
+        AND staled_at IS NULL
+    )
+    SELECT * FROM dataset
+    ORDER BY id DESC
+    LIMIT {limit: UInt32}
+    OFFSET {offset: UInt32}
+    FORMAT JSONEachRow
+    "#;
+    let limit = limit.unwrap_or(100);
+    let offset = offset.unwrap_or(0);
+    let limit_str = limit.to_string();
+    let offset_str = offset.to_string();
+
+    let params = HashMap::from([
+        ("dataset_name", dataset_name.as_str()),
+        ("limit", limit_str.as_str()),
+        ("offset", offset_str.as_str()),
+    ]);
+
+    let result = clickhouse
+        .run_query_synchronous(query.to_string(), Some(&params))
+        .await?;
+    if result.is_empty() {
+        return Ok(vec![]);
+    }
+    let result_lines = result.trim().split("\n").collect::<Vec<&str>>();
+
+    let datapoints: Result<Vec<ClickHouseDatapoint>, _> = result_lines
+        .iter()
+        .map(|line| serde_json::from_str(line))
+        .collect();
+    let datapoints = match datapoints {
+        Ok(datapoints) => datapoints,
+        Err(e) => {
+            return Err(Error::new(ErrorDetails::InvalidRequest {
+                message: format!("Failed to deserialize datapoints: {e}"),
+            }));
+        }
+    };
+
+    let datapoints: Vec<Datapoint> = datapoints.into_iter().map(Datapoint::from).collect();
+
+    Ok(datapoints)
+}
+
 pub struct BatchDatapointOutputWithSize {
     output: Option<Vec<Option<Value>>>,
     size: usize,
@@ -768,6 +882,99 @@ impl TryFrom<BatchDatapointOutputWithSize> for Vec<Option<Value>> {
             Ok(output)
         }
     }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct GetDatapointPathParams {
+    dataset_name: String,
+    datapoint_id: Uuid,
+}
+
+#[axum::debug_handler(state = AppStateData)]
+pub async fn get_datapoint_handler(
+    State(app_state): AppState,
+    Path(path_params): Path<GetDatapointPathParams>,
+) -> Result<Json<Datapoint>, Error> {
+    get_datapoint(
+        path_params.dataset_name,
+        path_params.datapoint_id,
+        &app_state.clickhouse_connection_info,
+    )
+    .await
+    .map(Json)
+}
+
+#[tracing::instrument(name = "get_datapoint", skip(clickhouse))]
+pub async fn get_datapoint(
+    dataset_name: String,
+    datapoint_id: Uuid,
+    clickhouse: &ClickHouseConnectionInfo,
+) -> Result<Datapoint, Error> {
+    let query = r#"
+    WITH dataset as (
+        SELECT
+            dataset_name,
+            function_name,
+            id,
+            episode_id,
+            input,
+            output,
+            tool_params,
+            '\N' as output_schema, -- for column alignment in UNION ALL
+            tags,
+            auxiliary,
+            source_inference_id,
+            is_deleted,
+            staled_at
+        FROM ChatInferenceDatapoint FINAL
+        WHERE dataset_name = {dataset_name: String}
+        AND staled_at IS NULL
+        UNION ALL
+        SELECT
+            dataset_name,
+            function_name,
+            id,
+            episode_id,
+            input,
+            output,
+            '\N' as tool_params, -- for column alignment in UNION ALL
+            output_schema,
+            tags,
+            auxiliary,
+            source_inference_id,
+            is_deleted,
+            staled_at
+        FROM JsonInferenceDatapoint FINAL
+        WHERE dataset_name = {dataset_name: String}
+        AND staled_at IS NULL
+    )
+    SELECT * FROM dataset
+    WHERE id = {datapoint_id: UUID}
+    LIMIT 1
+    FORMAT JSONEachRow
+    "#;
+    let datapoint_id_str = datapoint_id.to_string();
+    let params = HashMap::from([
+        ("dataset_name", dataset_name.as_str()),
+        ("datapoint_id", datapoint_id_str.as_str()),
+    ]);
+
+    let result = clickhouse
+        .run_query_synchronous(query.to_string(), Some(&params))
+        .await?;
+    if result.is_empty() {
+        return Err(Error::new(ErrorDetails::DatapointNotFound {
+            dataset_name,
+            datapoint_id,
+        }));
+    }
+    let datapoint: ClickHouseDatapoint = serde_json::from_str(&result).map_err(|e| {
+        Error::new(ErrorDetails::ClickHouseDeserialization {
+            message: format!("Failed to deserialize datapoint: {e}"),
+        })
+    })?;
+
+    Ok(Datapoint::from(datapoint))
 }
 
 #[derive(Debug, Deserialize)]
@@ -867,7 +1074,7 @@ impl Datapoint {
 /// when created.
 /// We also do not allow users to specify the `id` or `episode_id` fields.
 #[derive(Debug, Deserialize, Serialize)]
-pub struct ChatInferenceDatapointInput {
+pub struct ChatDatapointInsert {
     pub function_name: String,
     pub input: Input,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -879,7 +1086,7 @@ pub struct ChatInferenceDatapointInput {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-pub struct JsonInferenceDatapointInput {
+pub struct JsonDatapointInsert {
     pub function_name: String,
     pub input: Input,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -889,7 +1096,7 @@ pub struct JsonInferenceDatapointInput {
     pub tags: Option<HashMap<String, String>>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, PartialEq, Serialize)]
 pub struct ChatInferenceDatapoint {
     pub dataset_name: String,
     pub function_name: String,
@@ -910,7 +1117,7 @@ pub struct ChatInferenceDatapoint {
     pub staled_at: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, PartialEq, Serialize)]
 pub struct JsonInferenceDatapoint {
     pub dataset_name: String,
     pub function_name: String,

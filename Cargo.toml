@@ -5,7 +5,7 @@ members = [
     "gateway",
     "ui/app/utils/minijinja",
     "clients/rust",
-    "clients/python-pyo3",
+    "clients/python",
     "provider-proxy",
     "evaluations",
     "tensorzero-derive",
@@ -14,7 +14,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "2025.5.2"
+version = "2025.5.5"
 
 [workspace.dependencies]
 reqwest = { version = "0.12.15", features = [
@@ -34,21 +34,21 @@ reqwest-eventsource = "0.6.0"
 async-stream = "0.3.5"
 http = "1.3.1"
 tokio-stream = "0.1.15"
-tokio = { version = "1.44.2", features = ["full"] }
+tokio = { version = "1.45.0", features = ["full"] }
 tracing = { version = "0.1.40", features = ["log"] }
 pyo3 = { version = "0.24.2", features = ["experimental-async", "abi3-py39"] }
 axum = { version = "0.8", features = ["macros"] }
 anyhow = "1.0.98"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter", "fmt"] }
-clap = { version = "4.5.37", features = ["derive"] }
+clap = { version = "4.5.38", features = ["derive"] }
 futures = "0.3.30"
 lazy_static = { version = "1.5.0" }
 url = "2.5.4"
 serde-untagged = "0.1.7"
-object_store = { version = "0.12.0", features = ["serde", "aws", "gcp"] }
+object_store = { version = "0.12.1", features = ["serde", "aws", "gcp"] }
 rand = "0.9.1"
 chrono = { version = "0.4.41", features = ["serde"] }
-git2 = { version = "0.20.1", default-features = false }
+git2 = { version = "0.20.2", default-features = false }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

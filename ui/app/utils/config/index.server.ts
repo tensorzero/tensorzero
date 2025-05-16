@@ -70,7 +70,21 @@ export async function loadConfig(config_path?: string): Promise<Config> {
       );
       // Return a blank config if no file is available.
       return {
-        gateway: { disable_observability: false },
+        gateway: {
+          observability: {
+            enabled: true,
+            async_writes: false,
+          },
+          export: {
+            otlp: {
+              traces: {
+                enabled: true,
+              },
+            },
+          },
+          debug: false,
+          enable_template_filesystem_access: false,
+        },
         models: {},
         embedding_models: {},
         functions: {},
@@ -137,7 +151,7 @@ export async function getConfig() {
 
 export const RawConfig = z
   .object({
-    gateway: GatewayConfig.optional().default({}),
+    gateway: GatewayConfig.optional(),
     models: z.record(z.string(), ModelConfigSchema).optional().default({}),
     embedding_models: z
       .record(z.string(), EmbeddingModelConfigSchema)

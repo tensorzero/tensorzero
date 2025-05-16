@@ -98,33 +98,8 @@ jobs:
       - name: Check all docker-compose.yml files
         run: ./ci/check-all-docker-compose.sh
 
-  check-pyo3-build:
-    runs-on: ${{ matrix.platform.runner }}
-    strategy:
-      matrix:
-        # We don't test on linux x86_64, because our main 'validate' step already does that
-        # For now, we just check that the build works on our other supported platforms -
-        # we don't run any tests.
-        platform:
-          - runner: ubuntu-22.04-arm
-            target: aarch64
-          - runner: windows-latest
-            target: x64
-          - runner: macos-13
-            target: x86_64
-          - runner: macos-14
-            target: aarch64
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
-        with:
-          cache-provider: "buildjet"
-          save-if: ${{ github.event_name == 'merge_group' }}
-      - name: "TensorZero PyO3 Client: Build"
-        uses: PyO3/maturin-action@b3709a81b3e175ce3ede866725776fee42465311
-        with:
-          working-directory: clients/python-pyo3
-          args: --find-interpreter
+  check-python-client-build:
+    uses: ./.github/workflows/python-client-build.yml
 
   build-windows:
     runs-on: windows-latest
@@ -269,19 +244,19 @@ jobs:
           uvx ruff@0.9.0 format --check .
 
       - name: "Python: Pyo3 Client: Build and install dependencies"
-        working-directory: clients/python-pyo3
+        working-directory: clients/python
         run: |
           uv venv
           uv pip sync requirements.txt
 
       - name: "Python: PyO3 Client: pyright"
-        working-directory: clients/python-pyo3
+        working-directory: clients/python
         run: |
           uv pip install pyright==1.1.394
           uv run pyright
 
       - name: "Python: PyO3 Client: stubtest"
-        working-directory: clients/python-pyo3
+        working-directory: clients/python
         run: |
           uv run stubtest tensorzero.tensorzero
 
@@ -437,7 +412,7 @@ jobs:
 
   ui-tests:
     # We run on Namespace so that we have cache volumes for our s3-fixtures directory
-    runs-on: namespace-profile-tensorzero-2x8
+    runs-on: namespace-profile-tensorzero-4x16
     permissions:
       # Permission to checkout the repository
       contents: read
@@ -523,6 +498,14 @@ jobs:
         working-directory: ui
         run: docker compose -f fixtures/docker-compose.yml logs -t
 
+      - name: Print ClickHouse error logs
+        if: always()
+        run: docker exec fixtures-clickhouse-1 cat /var/log/clickhouse-server/clickhouse-server.err.log
+
+      - name: Print ClickHouse trace logs
+        if: always()
+        run: docker exec fixtures-clickhouse-1 cat /var/log/clickhouse-server/clickhouse-server.log
+
   ui-tests-e2e:
     runs-on: namespace-profile-tensorzero-8x16
     # We currently only run this job when we have secrets available, since we need to use an S3 object_store
@@ -537,9 +520,9 @@ jobs:
     strategy:
       matrix:
         feature_flag:
-          - behavior: node-optimizations-server
+          - behavior: node-optimization-server
             enable_python: 0
-          - behavior: python-optimizations-server
+          - behavior: python-optimization-server
             enable_python: 1
     steps:
       - uses: actions/checkout@v4
@@ -633,7 +616,7 @@ jobs:
       [
         clickhouse-tests-cloud,
         check-docker-compose,
-        check-pyo3-build,
+        check-python-client-build,
         build-windows,
         validate,
         clickhouse-tests,

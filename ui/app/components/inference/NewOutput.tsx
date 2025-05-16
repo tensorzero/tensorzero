@@ -16,14 +16,19 @@ NOTE: This is the new output component but it is not editable yet so we are roll
 it out across the UI incrementally.
 */
 
+type ChatInferenceOutputRenderingData = ContentBlockOutput[];
+
+interface JsonInferenceOutputRenderingData extends JsonInferenceOutput {
+  schema?: Record<string, unknown>;
+}
+
 interface OutputProps {
-  output: JsonInferenceOutput | ContentBlockOutput[];
-  outputSchema?: Record<string, unknown>;
+  output: ChatInferenceOutputRenderingData | JsonInferenceOutputRenderingData;
 }
 
 function isJsonInferenceOutput(
   output: OutputProps["output"],
-): output is JsonInferenceOutput {
+): output is JsonInferenceOutputRenderingData {
   return "raw" in output;
 }
 
@@ -42,7 +47,7 @@ function renderContentBlock(block: ContentBlockOutput, index: number) {
   }
 }
 
-export function OutputContent({ output, outputSchema }: OutputProps) {
+export function OutputContent({ output }: OutputProps) {
   if (isJsonInferenceOutput(output)) {
     const tabs: SnippetTab[] = [
       {
@@ -57,7 +62,7 @@ export function OutputContent({ output, outputSchema }: OutputProps) {
     ];
 
     // Add Output Schema tab if available
-    if (outputSchema) {
+    if (output.schema) {
       tabs.push({
         id: "schema",
         label: "Output Schema",
@@ -72,21 +77,27 @@ export function OutputContent({ output, outputSchema }: OutputProps) {
         {(activeTab) => (
           <SnippetContent>
             {activeTab === "parsed" ? (
-              <CodeMessage
-                content={
-                  output.parsed
-                    ? JSON.stringify(output.parsed, null, 2)
-                    : "The inference output failed to parse against the schema."
-                }
-                showLineNumbers={true}
-              />
+              <SnippetMessage>
+                <CodeMessage
+                  content={
+                    output.parsed
+                      ? JSON.stringify(output.parsed, null, 2)
+                      : "The inference output failed to parse against the schema."
+                  }
+                  showLineNumbers={true}
+                />
+              </SnippetMessage>
             ) : activeTab === "raw" ? (
-              <CodeMessage content={output.raw} showLineNumbers={true} />
+              <SnippetMessage>
+                <CodeMessage content={output.raw} showLineNumbers={true} />
+              </SnippetMessage>
             ) : (
-              <CodeMessage
-                content={JSON.stringify(outputSchema, null, 2)}
-                showLineNumbers={true}
-              />
+              <SnippetMessage>
+                <CodeMessage
+                  content={JSON.stringify(output.schema, null, 2)}
+                  showLineNumbers={true}
+                />
+              </SnippetMessage>
             )}
           </SnippetContent>
         )}
@@ -103,10 +114,10 @@ export function OutputContent({ output, outputSchema }: OutputProps) {
   );
 }
 
-export default function Output({ output, outputSchema }: OutputProps) {
+export default function Output({ output }: OutputProps) {
   return (
     <SnippetLayout>
-      <OutputContent output={output} outputSchema={outputSchema} />
+      <OutputContent output={output} />
     </SnippetLayout>
   );
 }
