@@ -11,10 +11,8 @@ import {
 import type { Route } from "./+types/route";
 import {
   data,
-  Form,
   isRouteErrorResponse,
   Link,
-  redirect,
   useFetcher,
   useNavigate,
 } from "react-router";
@@ -52,6 +50,8 @@ import { AddToDatasetButton } from "./AddToDatasetButton";
 import { HumanFeedbackButton } from "~/components/feedback/HumanFeedbackButton";
 import { HumanFeedbackModal } from "~/components/feedback/HumanFeedbackModal";
 import { HumanFeedbackForm } from "~/components/feedback/HumanFeedbackForm";
+import { isServerRequestError } from "~/utils/common";
+import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { inference_id } = params;
@@ -128,48 +128,71 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   };
 }
 
+type ActionData =
+  | { redirectTo: string; error?: never }
+  | { error: string; redirectTo?: never };
+
 export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
   const _action = formData.get("_action");
   switch (_action) {
-    case "addToDataset":
-      return addToDataset(formData);
+    case "addToDataset": {
+      const dataset = formData.get("dataset");
+      const output = formData.get("output");
+      const inference_id = formData.get("inference_id");
+      if (!dataset || !output || !inference_id) {
+        return data<ActionData>(
+          { error: "Missing required fields" },
+          { status: 400 },
+        );
+      }
+      try {
+        const datapoint = await tensorZeroClient.createDatapoint(
+          dataset.toString(),
+          inference_id.toString(),
+          output.toString() as "inherit" | "demonstration" | "none",
+        );
+        return data<ActionData>({
+          redirectTo: `/datasets/${dataset.toString()}/datapoint/${datapoint.id}`,
+        });
+      } catch (error) {
+        console.error(error);
+        return data<ActionData>(
+          {
+            error:
+              "Failed to create datapoint as a datapoint exists with the same `source_inference_id`",
+          },
+          { status: 400 },
+        );
+      }
+    }
     case "addFeedback": {
-      const response = await addHumanFeedback(formData);
-      const url = new URL(request.url);
-      url.searchParams.delete("beforeFeedback");
-      url.searchParams.delete("afterFeedback");
-      url.searchParams.set("newFeedbackId", response.feedback_id);
-      return redirect(url.toString());
+      try {
+        const response = await addHumanFeedback(formData);
+        const url = new URL(request.url);
+        url.searchParams.delete("beforeFeedback");
+        url.searchParams.delete("afterFeedback");
+        url.searchParams.set("newFeedbackId", response.feedback_id);
+        return data<ActionData>({ redirectTo: url.pathname + url.search });
+      } catch (error) {
+        if (isServerRequestError(error)) {
+          return data<ActionData>(
+            { error: error.message },
+            { status: error.statusCode },
+          );
+        }
+        return data<ActionData>(
+          { error: "Unknown server error. Try again." },
+          { status: 500 },
+        );
+      }
     }
     default:
       console.error(`Unknown action: ${_action}`);
-      return null;
-  }
-}
-
-async function addToDataset(formData: FormData) {
-  const dataset = formData.get("dataset");
-  const output = formData.get("output");
-  const inference_id = formData.get("inference_id");
-  if (!dataset || !output || !inference_id) {
-    throw data("Missing required fields", { status: 400 });
-  }
-  try {
-    const datapoint = await tensorZeroClient.createDatapoint(
-      dataset.toString(),
-      inference_id.toString(),
-      output.toString() as "inherit" | "demonstration" | "none",
-    );
-    return redirect(
-      `/datasets/${dataset.toString()}/datapoint/${datapoint.id}`,
-    );
-  } catch (error) {
-    console.error(error);
-    return data(
-      "Failed to create datapoint as a datapoint exists with the same `source_inference_id`",
-      { status: 400 },
-    );
+      return data<ActionData>(
+        { error: "Unknown server action" },
+        { status: 400 },
+      );
   }
 }
 
@@ -227,11 +250,18 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
   const variants = Object.keys(
     config.functions[inference.function_name]?.variants || {},
   );
-  const addToDatasetFetcher = useFetcher();
-  const actionError =
-    addToDatasetFetcher.state === "idle" && addToDatasetFetcher.data
-      ? addToDatasetFetcher.data
+  const addToDatasetFetcher = useFetcher<typeof action>();
+  const addToDatasetError =
+    addToDatasetFetcher.state === "idle" && addToDatasetFetcher.data?.error
+      ? addToDatasetFetcher.data.error
       : null;
+  useEffect(() => {
+    const currentState = addToDatasetFetcher.state;
+    const data = addToDatasetFetcher.data;
+    if (currentState === "idle" && data?.redirectTo) {
+      navigate(data.redirectTo);
+    }
+  }, [addToDatasetFetcher.data, addToDatasetFetcher.state, navigate]);
 
   const handleAddToDataset = (
     dataset: string,
@@ -273,6 +303,20 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
     submit({ data: JSON.stringify(request) });
   };
 
+  const humanFeedbackFetcher = useFetcherWithReset<typeof action>();
+  const humanFeedbackFormError =
+    humanFeedbackFetcher.state === "idle"
+      ? (humanFeedbackFetcher.data?.error ?? null)
+      : null;
+  useEffect(() => {
+    const currentState = humanFeedbackFetcher.state;
+    const data = humanFeedbackFetcher.data;
+    if (currentState === "idle" && data?.redirectTo) {
+      navigate(data.redirectTo, { state: "humanFeedbackRedirect" });
+      setOpenModal(null);
+    }
+  }, [humanFeedbackFetcher.data, humanFeedbackFetcher.state, navigate]);
+
   return (
     <PageLayout>
       <PageHeader label="Inference" name={inference.id}>
@@ -282,11 +326,9 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
           modelInferences={model_inferences}
         />
 
-        {actionError && (
+        {addToDatasetError && (
           <div className="mt-2 inline-block rounded-md bg-red-50 p-2 text-sm text-red-500">
-            {typeof actionError === "string"
-              ? actionError
-              : "An unknown error occurred."}
+            {addToDatasetError}
           </div>
         )}
 
@@ -302,19 +344,31 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
             hasDemonstration={hasDemonstration}
           />
           <HumanFeedbackModal
-            onOpenChange={(open) =>
-              setOpenModal(open ? "human-feedback" : null)
-            }
+            onOpenChange={(isOpen) => {
+              if (humanFeedbackFetcher.state !== "idle") {
+                return;
+              }
+
+              if (!isOpen) {
+                humanFeedbackFetcher.reset();
+              }
+              setOpenModal(isOpen ? "human-feedback" : null);
+            }}
             isOpen={openModal === "human-feedback"}
             trigger={<HumanFeedbackButton />}
           >
-            <Form method="post" onSubmit={() => setOpenModal(null)}>
+            <humanFeedbackFetcher.Form method="post">
               <input type="hidden" name="_action" value="addFeedback" />
               <HumanFeedbackForm
                 inferenceId={inference.id}
                 inferenceOutput={inference.output}
+                formError={humanFeedbackFormError}
+                isSubmitting={
+                  humanFeedbackFetcher.state === "submitting" ||
+                  humanFeedbackFetcher.state === "loading"
+                }
               />
-            </Form>
+            </humanFeedbackFetcher.Form>
           </HumanFeedbackModal>
         </ActionBar>
       </PageHeader>

@@ -1,3 +1,4 @@
+import { ServerRequestError } from "./common";
 import { getConfig } from "./config/index.server";
 import {
   FeedbackRequestSchema,
@@ -18,19 +19,19 @@ export const tensorZeroClient = new TensorZeroClient(
 export async function addHumanFeedback(formData: FormData) {
   const metricName = formData.get("metricName")?.toString();
   if (!metricName) {
-    throw new Error("Metric name is required");
+    throw new ServerRequestError("Metric name is required", 400);
   }
   const config = await getConfig();
   const metric = config.metrics[metricName];
   if (!metric) {
-    throw new Error(`Metric ${metricName} not found`);
+    throw new ServerRequestError(`Metric ${metricName} not found`, 400);
   }
   const metricType = metric.type;
   // Metrics can be of type boolean, float, comment, or demonstration.
   // In this case we need to handle the value differently depending on the metric type.
   const formValue = formData.get("value")?.toString();
   if (!formValue) {
-    throw new Error("Value is required");
+    throw new ServerRequestError("Value is required", 400);
   }
   let value: JSONValue;
   if (metricType === "boolean") {
@@ -42,7 +43,7 @@ export async function addHumanFeedback(formData: FormData) {
   } else if (metricType === "demonstration") {
     value = JSON.parse(formValue);
   } else {
-    throw new Error(`Unsupported metric type: ${metricType}`);
+    throw new ServerRequestError(`Unsupported metric type: ${metricType}`, 400);
   }
   const episodeId = formData.get("episodeId");
   const inferenceId = formData.get("inferenceId");
@@ -59,13 +60,15 @@ export async function addHumanFeedback(formData: FormData) {
   } else if (!datapointId && !evaluatorInferenceId) {
     // Do nothing
   } else {
-    throw new Error(
+    throw new ServerRequestError(
       "Either both or neither of datapointId and evaluatorInferenceId should be provided",
+      400,
     );
   }
   if ((episodeId && inferenceId) || (!episodeId && !inferenceId)) {
-    throw new Error(
+    throw new ServerRequestError(
       "Exactly one of episodeId and inferenceId should be provided",
+      400,
     );
   }
   const feedbackRequest = FeedbackRequestSchema.parse({
