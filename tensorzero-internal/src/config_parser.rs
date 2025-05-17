@@ -649,6 +649,8 @@ struct UninitializedConfig {
 pub struct ProviderTypesConfig {
     #[serde(default)]
     pub gcp_vertex_gemini: Option<GCPProviderTypeConfig>,
+    #[serde(default)]
+    pub gcp_vertex_anthropic: Option<GCPProviderTypeConfig>,
 }
 
 impl UninitializedConfig {
