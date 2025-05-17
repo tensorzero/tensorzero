@@ -1735,7 +1735,6 @@ pub async fn test_tool_use_batch_inference_request_with_provider(provider: E2ETe
         assert_eq!(output_schema, Some(&Value::Null));
 
         let tags = result.get("tags").unwrap().as_object().unwrap();
-        assert_eq!(tags.len(), 1);
         assert_eq!(
             tags.get("test_type").unwrap(),
             &payload["tags"][i]["test_type"]
@@ -2182,8 +2181,7 @@ pub async fn test_allowed_tools_batch_inference_request_with_provider(provider: 
     let output_schema = result.get("output_schema");
     assert_eq!(output_schema, Some(&Value::Null));
 
-    let tags = result.get("tags").unwrap().as_object().unwrap();
-    assert_eq!(tags.len(), 1);
+    result.get("tags").unwrap().as_object().unwrap();
 
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(!raw_request.is_empty());
@@ -2628,7 +2626,6 @@ pub async fn test_multi_turn_parallel_tool_use_batch_inference_request_with_prov
     assert_eq!(output_schema, Some(&Value::Null));
 
     let tags = result.get("tags").unwrap().as_object().unwrap();
-    assert_eq!(tags.len(), 1);
     assert_eq!(
         tags.get("test").unwrap().as_str().unwrap(),
         "multi_turn_parallel_tool_use"
@@ -2834,7 +2831,6 @@ pub async fn test_tool_multi_turn_batch_inference_request_with_provider(provider
     assert_eq!(output_schema, Some(&Value::Null));
 
     let tags = result.get("tags").unwrap().as_object().unwrap();
-    assert_eq!(tags.len(), 1);
     assert_eq!(tags.get("test").unwrap().as_str().unwrap(), "multi_turn");
 
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
@@ -3363,8 +3359,7 @@ pub async fn test_dynamic_tool_use_batch_inference_request_with_provider(
     let output_schema = result.get("output_schema");
     assert_eq!(output_schema, Some(&Value::Null));
 
-    let tags = result.get("tags").unwrap().as_object().unwrap();
-    assert_eq!(tags.len(), 1);
+    result.get("tags").unwrap().as_object().unwrap();
 
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(!raw_request.is_empty());
@@ -3714,8 +3709,7 @@ pub async fn test_parallel_tool_use_batch_inference_request_with_provider(
     let output_schema = result.get("output_schema");
     assert_eq!(output_schema, Some(&Value::Null));
 
-    let tags = result.get("tags").unwrap().as_object().unwrap();
-    assert_eq!(tags.len(), 1);
+    result.get("tags").unwrap().as_object().unwrap();
 
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(!raw_request.is_empty());
@@ -4061,8 +4055,7 @@ pub async fn test_json_mode_batch_inference_request_with_provider(provider: E2ET
     });
     assert_eq!(output_schema, expected_output_schema);
 
-    let tags = result.get("tags").unwrap().as_object().unwrap();
-    assert_eq!(tags.len(), 1);
+    result.get("tags").unwrap().as_object().unwrap();
 
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(!raw_request.is_empty());
@@ -4401,8 +4394,7 @@ pub async fn test_dynamic_json_mode_batch_inference_request_with_provider(
     });
     assert_eq!(output_schema, expected_output_schema);
 
-    let tags = result.get("tags").unwrap().as_object().unwrap();
-    assert_eq!(tags.len(), 1);
+    result.get("tags").unwrap().as_object().unwrap();
 
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(!raw_request.is_empty());

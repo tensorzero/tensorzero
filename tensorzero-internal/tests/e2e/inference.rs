@@ -339,6 +339,9 @@ async fn test_dummy_only_inference_chat_strip_unknown_block_stream() {
     // Check the variant name
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, "test");
+    let tags = result.get("tags").unwrap().as_object().unwrap();
+    // Since the variant was not pinned, the variant_pinned tag should not be present
+    assert!(tags.get("tensorzero::variant_pinned").is_none());
 
     // Check the ModelInference Table
     let result = select_model_inference_clickhouse(&clickhouse, inference_id)
