@@ -13,6 +13,15 @@ export const dynamicEvaluationRunSchema = z
 
 export type DynamicEvaluationRun = z.infer<typeof dynamicEvaluationRunSchema>;
 
+export const dynamicEvaluationRunWithEpisodeCountSchema =
+  dynamicEvaluationRunSchema.extend({
+    num_episodes: z.number().default(0),
+  });
+
+export type DynamicEvaluationRunWithEpisodeCount = z.infer<
+  typeof dynamicEvaluationRunWithEpisodeCountSchema
+>;
+
 export const dynamicEvaluationRunEpisodeWithFeedbackSchema = z
   .object({
     episode_id: z.string().uuid(),
