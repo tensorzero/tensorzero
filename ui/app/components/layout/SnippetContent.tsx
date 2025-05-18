@@ -141,16 +141,17 @@ export function InputTextMessage({ content }: InputTextMessageProps) {
   );
 }
 
-// Structured Text Message component
-interface StructuredTextMessageProps {
+interface TextMessageWithArgumentsProps {
   content: object;
 }
 
-export function StructuredTextMessage({ content }: StructuredTextMessageProps) {
+export function TextMessageWithArguments({
+  content,
+}: TextMessageWithArgumentsProps) {
   return (
     <div className="flex max-w-200 min-w-80 flex-col gap-1.5">
       <Label
-        text="Text (Structured)"
+        text="Text (Arguments)"
         icon={<AlignLeft className="text-fg-muted h-3 w-3" />}
       />
       <pre className="max-w-full font-mono text-sm break-words whitespace-pre-wrap">

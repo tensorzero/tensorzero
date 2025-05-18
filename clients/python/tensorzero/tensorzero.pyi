@@ -16,7 +16,8 @@ import uuid_utils
 
 import tensorzero.internal_optimization_server_types as iost
 from tensorzero import (
-    ChatInferenceDatapointInput,
+    ChatDatapointInsert,
+    Datapoint,
     DynamicEvaluationRunEpisodeResponse,
     DynamicEvaluationRunResponse,
     ExtraBody,
@@ -24,7 +25,7 @@ from tensorzero import (
     InferenceChunk,
     InferenceInput,
     InferenceResponse,
-    JsonInferenceDatapointInput,
+    JsonDatapointInsert,
 )
 
 class BaseTensorZeroGateway:
@@ -197,9 +198,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         self,
         *,
         dataset_name: str,
-        datapoints: List[
-            Union[ChatInferenceDatapointInput, JsonInferenceDatapointInput]
-        ],
+        datapoints: List[Union[ChatDatapointInsert, JsonDatapointInsert]],
     ) -> List[UUID]:
         """
         Make a POST request to the /datasets/{dataset_name}/datapoints/bulk endpoint.
@@ -219,6 +218,36 @@ class TensorZeroGateway(BaseTensorZeroGateway):
 
         :param dataset_name: The name of the dataset to delete the datapoint from.
         :param datapoint_id: The ID of the datapoint to delete.
+        """
+
+    def list_datapoints(
+        self,
+        *,
+        dataset_name: str,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+    ) -> List[Datapoint]:
+        """
+        Make a GET request to the /datasets/{dataset_name}/datapoints endpoint.
+
+        :param dataset_name: The name of the dataset to list the datapoints from.
+        :param limit: The maximum number of datapoints to return.
+        :param offset: The offset to start the list from.
+        :return: A list of `Datapoint` instances.
+        """
+
+    def get_datapoint(
+        self,
+        *,
+        dataset_name: str,
+        datapoint_id: UUID,
+    ) -> Datapoint:
+        """
+        Make a GET request to the /datasets/{dataset_name}/datapoints/{datapoint_id} endpoint.
+
+        :param dataset_name: The name of the dataset to get the datapoint from.
+        :param datapoint_id: The ID of the datapoint to get.
+        :return: A `Datapoint` instance.
         """
 
     def close(self) -> None:
@@ -405,9 +434,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         self,
         *,
         dataset_name: str,
-        datapoints: List[
-            Union[ChatInferenceDatapointInput, JsonInferenceDatapointInput]
-        ],
+        datapoints: List[Union[ChatDatapointInsert, JsonDatapointInsert]],
     ) -> List[UUID]:
         """
         Make a POST request to the /datasets/{dataset_name}/datapoints/bulk endpoint.
@@ -427,6 +454,36 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
 
         :param dataset_name: The name of the dataset to delete the datapoint from.
         :param datapoint_id: The ID of the datapoint to delete.
+        """
+
+    async def list_datapoints(
+        self,
+        *,
+        dataset_name: str,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+    ) -> List[Datapoint]:
+        """
+        Make a GET request to the /datasets/{dataset_name}/datapoints endpoint.
+
+        :param dataset_name: The name of the dataset to list the datapoints from.
+        :param limit: The maximum number of datapoints to return.
+        :param offset: The offset to start the list from.
+        :return: A list of `Datapoint` instances.
+        """
+
+    async def get_datapoint(
+        self,
+        *,
+        dataset_name: str,
+        datapoint_id: UUID,
+    ) -> Datapoint:
+        """
+        Make a GET request to the /datasets/{dataset_name}/datapoints/{datapoint_id} endpoint.
+
+        :param dataset_name: The name of the dataset to get the datapoint from.
+        :param datapoint_id: The ID of the datapoint to get.
+        :return: A `Datapoint` instance.
         """
 
     async def close(self) -> None:

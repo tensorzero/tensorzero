@@ -16,14 +16,19 @@ NOTE: This is the new output component but it is not editable yet so we are roll
 it out across the UI incrementally.
 */
 
+type ChatInferenceOutputRenderingData = ContentBlockOutput[];
+
+interface JsonInferenceOutputRenderingData extends JsonInferenceOutput {
+  schema?: Record<string, unknown>;
+}
+
 interface OutputProps {
-  output: JsonInferenceOutput | ContentBlockOutput[];
-  outputSchema?: Record<string, unknown>;
+  output: ChatInferenceOutputRenderingData | JsonInferenceOutputRenderingData;
 }
 
 function isJsonInferenceOutput(
   output: OutputProps["output"],
-): output is JsonInferenceOutput {
+): output is JsonInferenceOutputRenderingData {
   return "raw" in output;
 }
 
@@ -42,7 +47,7 @@ function renderContentBlock(block: ContentBlockOutput, index: number) {
   }
 }
 
-export function OutputContent({ output, outputSchema }: OutputProps) {
+export function OutputContent({ output }: OutputProps) {
   if (isJsonInferenceOutput(output)) {
     const tabs: SnippetTab[] = [
       {
@@ -57,7 +62,7 @@ export function OutputContent({ output, outputSchema }: OutputProps) {
     ];
 
     // Add Output Schema tab if available
-    if (outputSchema) {
+    if (output.schema) {
       tabs.push({
         id: "schema",
         label: "Output Schema",
@@ -89,7 +94,7 @@ export function OutputContent({ output, outputSchema }: OutputProps) {
             ) : (
               <SnippetMessage>
                 <CodeMessage
-                  content={JSON.stringify(outputSchema, null, 2)}
+                  content={JSON.stringify(output.schema, null, 2)}
                   showLineNumbers={true}
                 />
               </SnippetMessage>
@@ -109,10 +114,10 @@ export function OutputContent({ output, outputSchema }: OutputProps) {
   );
 }
 
-export default function Output({ output, outputSchema }: OutputProps) {
+export default function Output({ output }: OutputProps) {
   return (
     <SnippetLayout>
-      <OutputContent output={output} outputSchema={outputSchema} />
+      <OutputContent output={output} />
     </SnippetLayout>
   );
 }

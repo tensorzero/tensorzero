@@ -8,9 +8,12 @@ import {
   TableEmptyState,
 } from "~/components/ui/table";
 import type { InferenceByIdRow } from "~/utils/clickhouse/inference";
-import { FunctionLink } from "~/components/function/FunctionLink";
 import { VariantLink } from "~/components/function/variant/VariantLink";
-import { TableItemShortUuid, TableItemTime } from "~/components/ui/TableItems";
+import {
+  TableItemTime,
+  TableItemFunction,
+  TableItemShortUuid,
+} from "~/components/ui/TableItems";
 
 export default function EpisodeInferenceTable({
   inferences,
@@ -40,11 +43,11 @@ export default function EpisodeInferenceTable({
                 />
               </TableCell>
               <TableCell>
-                <FunctionLink functionName={inference.function_name}>
-                  <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
-                    {inference.function_name}
-                  </code>
-                </FunctionLink>
+                <TableItemFunction
+                  functionName={inference.function_name}
+                  functionType={inference.function_type}
+                  link={`/observability/functions/${inference.function_name}`}
+                />
               </TableCell>
               <TableCell>
                 <VariantLink

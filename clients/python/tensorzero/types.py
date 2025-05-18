@@ -407,7 +407,7 @@ def parse_dynamic_evaluation_run_episode_response(
 
 
 @dataclass
-class ChatInferenceDatapointInput:
+class ChatDatapointInsert:
     function_name: str
     input: InferenceInput
     output: Optional[Any] = None
@@ -430,8 +430,19 @@ class ChatInferenceDatapointInput:
         }
 
 
+# CAREFUL: deprecated
+class ChatInferenceDatapointInput(ChatDatapointInsert):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        warnings.warn(
+            "Please use `ChatDatapointInsert` instead of `ChatInferenceDatapointInput`. In a future release, `ChatInferenceDatapointInput` will be removed.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        super().__init__(*args, **kwargs)
+
+
 @dataclass
-class JsonInferenceDatapointInput:
+class JsonDatapointInsert:
     function_name: str
     input: InferenceInput
     output: Optional[Any] = None
@@ -446,3 +457,74 @@ class JsonInferenceDatapointInput:
             "output_schema": self.output_schema,
             "tags": self.tags,
         }
+
+
+# CAREFUL: deprecated
+class JsonInferenceDatapointInput(JsonDatapointInsert):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        warnings.warn(
+            "Please use `JsonDatapointInsert` instead of `JsonInferenceDatapointInput`. In a future release, `JsonInferenceDatapointInput` will be removed.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        super().__init__(*args, **kwargs)
+
+
+@dataclass
+class Tool:
+    description: str
+    parameters: Any
+    name: str
+    strict: bool
+
+
+@dataclass
+class ToolParams:
+    tools_available: List[Tool]
+    tool_choice: str
+    parallel_tool_calls: Optional[bool]
+
+
+@dataclass
+class ChatDatapoint:
+    dataset_name: str
+    function_name: str
+    id: UUID
+    input: InferenceInput
+    episode_id: Optional[UUID] = None
+    output: Optional[List[ContentBlock]] = None
+    tool_params: Optional[ToolParams] = None
+    tags: Optional[Dict[str, str]] = None
+    # `auxiliary` is not serialized yet
+    source_inference_id: Optional[UUID] = None
+    staled_at: Optional[str] = None
+    is_deleted: bool = False
+
+
+@dataclass
+class JsonDatapoint:
+    dataset_name: str
+    function_name: str
+    id: UUID
+    input: InferenceInput
+    episode_id: Optional[UUID] = None
+    output: Optional[JsonInferenceOutput] = None
+    output_schema: Optional[Any] = None
+    tags: Optional[Dict[str, str]] = None
+    # `auxiliary` is not serialized yet
+    source_inference_id: Optional[UUID] = None
+    staled_at: Optional[str] = None
+    is_deleted: bool = False
+
+
+Datapoint = Union[ChatDatapoint, JsonDatapoint]
+
+
+def parse_datapoint(data: Dict[str, Any]) -> Datapoint:
+    datapoint_type = data.pop("type")
+    if datapoint_type == "json":
+        return JsonDatapoint(**data)
+    elif datapoint_type == "chat":
+        return ChatDatapoint(**data)
+    else:
+        raise ValueError(f"Unknown datapoint type: {datapoint_type}")

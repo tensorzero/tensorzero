@@ -202,7 +202,7 @@ macro_rules! generate_provider_tests {
         use $crate::providers::common::test_multi_turn_parallel_tool_use_streaming_inference_request_with_provider;
         use $crate::providers::common::test_streaming_invalid_request_with_provider;
         use $crate::providers::common::test_json_mode_off_inference_request_with_provider;
-
+        use $crate::providers::common::test_multiple_text_blocks_in_message_with_provider;
 
         #[tokio::test]
         async fn test_simple_inference_request() {
@@ -211,6 +211,7 @@ macro_rules! generate_provider_tests {
                 test_simple_inference_request_with_provider(provider).await;
             }
         }
+
 
 
         #[tokio::test]
@@ -564,6 +565,15 @@ macro_rules! generate_provider_tests {
                 test_json_mode_off_inference_request_with_provider(provider).await;
             }
         }
+
+        #[tokio::test]
+        async fn test_multiple_text_blocks_in_message() {
+            let providers = $func().await.simple_inference;
+            for provider in providers {
+                test_multiple_text_blocks_in_message_with_provider(provider).await;
+            }
+        }
+
     };
 }
 
@@ -1960,10 +1970,18 @@ pub async fn check_simple_inference_response(
     let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
     assert_eq!(clickhouse_content, content);
 
+    let tags = result.get("tags").unwrap().as_object().unwrap();
     if !is_batch {
-        let tags = result.get("tags").unwrap().as_object().unwrap();
         assert_eq!(tags.get("foo").unwrap().as_str().unwrap(), "bar");
     }
+    // Since the variant was pinned, the variant_pinned tag should be present
+    assert_eq!(
+        tags.get("tensorzero::variant_pinned")
+            .unwrap()
+            .as_str()
+            .unwrap(),
+        provider.variant_name
+    );
 
     let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
     assert!(tool_params.is_empty());
@@ -2547,7 +2565,6 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     assert!(processing_time_ms > 0);
 
     let tags = result.get("tags").unwrap().as_object().unwrap();
-    assert_eq!(tags.len(), 1);
     assert_eq!(tags.get("key").unwrap().as_str().unwrap(), tag_value);
 
     // Check ClickHouse - ModelInference Table
@@ -10626,4 +10643,63 @@ pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETes
     assert!(response_time_ms > 0);
 
     assert!(result.get("ttft_ms").unwrap().is_null());
+}
+
+pub async fn test_multiple_text_blocks_in_message_with_provider(provider: E2ETestProvider) {
+    let episode_id = Uuid::now_v7();
+    let extra_headers = get_extra_headers();
+    let payload = json!({
+        "function_name": "basic_test",
+        "variant_name": provider.variant_name,
+        "episode_id": episode_id,
+        "input":
+            {
+               "system": {"assistant_name": "Dr. Mehta"},
+               "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "What is the name of the capital city"
+                        },
+                        {
+                            "type": "text",
+                            "text": "of Japan?"
+                        }
+                    ]
+                }
+            ]},
+        "stream": false,
+        "tags": {"foo": "bar"},
+        "extra_headers": extra_headers.headers,
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    // Check that the API response is ok
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+
+    println!("API response: {response_json:#?}");
+
+    let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
+    let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
+    assert_eq!(episode_id_response, episode_id);
+
+    let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
+    assert_eq!(variant_name, provider.variant_name);
+
+    let content = response_json.get("content").unwrap().as_array().unwrap();
+    assert_eq!(content.len(), 1);
+    let content_block = content.first().unwrap();
+    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
+    assert_eq!(content_block_type, "text");
+    let content = content_block.get("text").unwrap().as_str().unwrap();
+    assert!(content.to_lowercase().contains("tokyo"));
 }

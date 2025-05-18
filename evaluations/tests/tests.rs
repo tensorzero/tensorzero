@@ -1245,7 +1245,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         },
         variant_name: "test_variant".to_string(),
     });
-    let datapoint = Datapoint::ChatInference(ChatInferenceDatapoint {
+    let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
         input: ResolvedInput {
             system: None,
             messages: vec![ResolvedInputMessage {
@@ -1349,7 +1349,7 @@ async fn test_run_llm_judge_evaluator_chat() {
     assert_eq!(result.value, json!(1));
 
     // Try without output
-    let datapoint = Datapoint::ChatInference(ChatInferenceDatapoint {
+    let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
         input: ResolvedInput {
             system: None,
             messages: vec![ResolvedInputMessage {
@@ -1411,7 +1411,7 @@ async fn test_run_llm_judge_evaluator_json() {
         },
         variant_name: "test_variant".to_string(),
     });
-    let datapoint = Datapoint::JsonInference(JsonInferenceDatapoint {
+    let datapoint = Datapoint::Json(JsonInferenceDatapoint {
         input: ResolvedInput {
             system: None,
             messages: vec![ResolvedInputMessage {
@@ -1516,7 +1516,7 @@ async fn test_run_llm_judge_evaluator_json() {
     assert_eq!(result.value, json!(1));
 
     // Try without output
-    let datapoint = Datapoint::ChatInference(ChatInferenceDatapoint {
+    let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
         input: ResolvedInput {
             system: None,
             messages: vec![ResolvedInputMessage {
