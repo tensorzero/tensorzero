@@ -328,11 +328,10 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
         <SectionLayout>
           <SectionHeader heading="Output" />
           <Output
-            output={inference.output}
-            outputSchema={
+            output={
               inference.function_type === "json"
-                ? inference.output_schema
-                : undefined
+                ? { ...inference.output, schema: inference.output_schema }
+                : inference.output
             }
           />
         </SectionLayout>
@@ -368,12 +367,10 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
           </SectionLayout>
         )}
 
-        {Object.keys(inference.tags).length > 0 && (
-          <SectionLayout>
-            <SectionHeader heading="Tags" />
-            <TagsTable tags={inference.tags} />
-          </SectionLayout>
-        )}
+        <SectionLayout>
+          <SectionHeader heading="Tags" />
+          <TagsTable tags={inference.tags} />
+        </SectionLayout>
 
         <SectionLayout>
           <SectionHeader heading="Model Inferences" />

@@ -11,6 +11,8 @@ import {
   type DynamicEvaluationRunEpisodeWithFeedback,
   type DynamicEvaluationRunStatisticsByMetricName,
   type GroupedDynamicEvaluationRunEpisodeWithFeedback,
+  type DynamicEvaluationRunWithEpisodeCount,
+  dynamicEvaluationRunWithEpisodeCountSchema,
 } from "./dynamic_evaluations";
 
 export async function getDynamicEvaluationRuns(
@@ -18,21 +20,44 @@ export async function getDynamicEvaluationRuns(
   offset: number,
   run_id?: string,
   project_name?: string,
-): Promise<DynamicEvaluationRun[]> {
+): Promise<DynamicEvaluationRunWithEpisodeCount[]> {
   const query = `
+    WITH FilteredDynamicEvaluationRuns AS (
+      SELECT
+          run_display_name as name,
+          uint_to_uuid(run_id_uint) as id,
+          run_id_uint,
+          variant_pins,
+          tags,
+          project_name,
+          formatDateTime(UUIDv7ToDateTime(uint_to_uuid(run_id_uint)), '%Y-%m-%dT%H:%i:%SZ') as timestamp
+      FROM DynamicEvaluationRun
+      ${run_id ? `WHERE toUInt128(toUUID({run_id:String})) = run_id_uint` : ""}
+      ${project_name ? `WHERE project_name = {project_name:String}` : ""}
+      ORDER BY run_id_uint DESC
+      LIMIT {page_size:UInt64}
+      OFFSET {offset:UInt64}
+    ),
+    DynamicEvaluationRunsEpisodeCounts AS (
+      SELECT
+        run_id_uint,
+        toUInt32(count()) as num_episodes
+      FROM DynamicEvaluationRunEpisodeByRunId
+      WHERE run_id_uint IN (SELECT run_id_uint FROM FilteredDynamicEvaluationRuns)
+      GROUP BY run_id_uint
+    )
     SELECT
-      run_display_name as name,
-      uint_to_uuid(run_id_uint) as id,
+      name,
+      id,
       variant_pins,
       tags,
       project_name,
-      formatDateTime(UUIDv7ToDateTime(uint_to_uuid(run_id_uint)), '%Y-%m-%dT%H:%i:%SZ') as timestamp
-    FROM DynamicEvaluationRun
-    ${run_id ? `WHERE toUInt128(toUUID({run_id:String})) = run_id_uint` : ""}
-    ${project_name ? `WHERE project_name = {project_name:String}` : ""}
+      COALESCE(num_episodes, 0) AS num_episodes,
+      timestamp
+    FROM FilteredDynamicEvaluationRuns
+    LEFT JOIN DynamicEvaluationRunsEpisodeCounts USING run_id_uint
     ORDER BY run_id_uint DESC
-    LIMIT {page_size:UInt64} OFFSET {offset:UInt64}
-    `;
+  `;
   const result = await clickhouseClient.query({
     query,
     format: "JSONEachRow",
@@ -43,8 +68,10 @@ export async function getDynamicEvaluationRuns(
       project_name,
     },
   });
-  const rows = await result.json<DynamicEvaluationRun[]>();
-  return rows.map((row) => dynamicEvaluationRunSchema.parse(row));
+  const rows = await result.json<DynamicEvaluationRunWithEpisodeCount[]>();
+  return rows.map((row) =>
+    dynamicEvaluationRunWithEpisodeCountSchema.parse(row),
+  );
 }
 
 export async function getDynamicEvaluationRunsByIds(

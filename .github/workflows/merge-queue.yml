@@ -66,6 +66,9 @@ jobs:
       - name: Install uv
         run: curl -LsSf https://astral.sh/uv/0.6.4/install.sh | sh
 
+      - name: Download ClickHouse fixtures
+        run: uv run ./ui/fixtures/download-fixtures.py
+
       - name: Install pnpm
         uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda
         with:
@@ -127,10 +130,10 @@ jobs:
       # As a separate step, we run just the flaky tests, and allow them to fail.
       # This lets us see if any flaky tests have started succeeding (by looking at the job output),
       # so that we can decide to mark them as non-flaky.
-      - name: Run flaky E2E tests
-        run: |
-          TENSORZERO_E2E_PROXY="http://localhost:3003" cargo test-all --profile ci --no-fail-fast ${{ vars.CARGO_NEXTEST_EXTRA_ARGS }} -E "${{ vars.CARGO_NEXTEST_FLAKY_TESTS }}"
-        continue-on-error: true
+      # - name: Run flaky E2E tests
+      #   run: |
+      #     TENSORZERO_E2E_PROXY="http://localhost:3003" cargo test-all --profile ci --no-fail-fast ${{ vars.CARGO_NEXTEST_EXTRA_ARGS }} -E "${{ vars.CARGO_NEXTEST_FLAKY_TESTS }}"
+      #   continue-on-error: true
 
       - name: Print e2e logs
         if: always()

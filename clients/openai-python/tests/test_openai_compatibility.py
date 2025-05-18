@@ -1433,3 +1433,29 @@ async def test_async_json_function_null_response(async_client):
     )
     assert result.model == "tensorzero::function_name::null_json::variant_name::variant"
     assert result.choices[0].message.content is None
+
+
+@pytest.mark.asyncio
+async def test_async_json_function_multiple_text_blocks(async_client):
+    """
+    Test that a JSON inference with 2 text blocks in the message works as expected.
+    """
+    result = await async_client.chat.completions.create(
+        model="tensorzero::model_name::dummy::multiple-text-blocks",
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "Extract no data!",
+                    },
+                    {
+                        "type": "text",
+                        "text": "Extract data!",
+                    },
+                ],
+            }
+        ],
+    )
+    assert result.model == "tensorzero::model_name::dummy::multiple-text-blocks"

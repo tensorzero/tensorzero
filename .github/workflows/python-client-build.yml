@@ -27,7 +27,7 @@ jobs:
           working-directory: ./clients/python
           target: ${{ matrix.platform.target }}
           args: --release --out dist --find-interpreter
-          sccache: "true"
+          #sccache: "true"
           manylinux: auto
       - name: Upload wheels
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -60,7 +60,7 @@ jobs:
           working-directory: ./clients/python
           target: ${{ matrix.platform.target }}
           args: --release --out dist --find-interpreter
-          sccache: "true"
+          #sccache: "true"
           manylinux: musllinux_1_2
       - name: Upload wheels
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -93,7 +93,7 @@ jobs:
           working-directory: ./clients/python
           target: ${{ matrix.platform.target }}
           args: --release --out dist --find-interpreter
-          sccache: "true"
+          #sccache: "true"
       - name: Upload wheels
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
@@ -128,7 +128,7 @@ jobs:
           working-directory: ./clients/python
           target: ${{ matrix.platform.target }}
           args: --release --out dist --find-interpreter
-          sccache: "true"
+          #sccache: "true"
 
       - name: Upload wheels
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
