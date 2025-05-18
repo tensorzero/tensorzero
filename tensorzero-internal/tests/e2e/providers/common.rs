@@ -20,8 +20,8 @@ use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{json, Value};
 use std::future::IntoFuture;
 use tensorzero::{
-    ClientInferenceParams, ClientInput, ClientInputMessage,
-    ClientInputMessageContent, ClientSecretString, InferenceOutput, InferenceResponse,
+    ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
+    ClientSecretString, InferenceOutput, InferenceResponse,
 };
 use tensorzero_internal::endpoints::inference::InferenceParams;
 
@@ -2948,7 +2948,7 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
     }
     let episode_id = Uuid::now_v7();
     let extra_headers = get_extra_headers();
-    
+
     let mut inference_params = InferenceParams::default();
     inference_params.chat_completion.temperature = Some(0.9);
     inference_params.chat_completion.seed = Some(1337);
@@ -2999,7 +2999,6 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
     let mut input_tokens = 0;
     let mut output_tokens = 0;
     for chunk_json in chunks.clone() {
-
         println!("API response chunk: {chunk_json:#?}");
 
         let chunk_inference_id = chunk_json.get("inference_id").unwrap().as_str().unwrap();
@@ -3821,21 +3820,28 @@ pub async fn test_tool_use_tool_choice_auto_unused_inference_request_with_provid
 ) {
     let episode_id = Uuid::now_v7();
 
-    let response = client.inference(tensorzero::ClientInferenceParams {
-        function_name: Some("weather_helper".to_string()),
-        model_name: None,
-        variant_name: Some(provider.variant_name.clone()),
-        episode_id: Some(episode_id),
-        input: tensorzero::ClientInput {
-            system: Some(json!({"assistant_name": "Dr. Mehta"})),
-            messages: vec![tensorzero::ClientInputMessage {
-                role: Role::User,
-                content: vec![tensorzero::ClientInputMessageContent::Text(TextKind::Text { text: "What is your name?".to_string() })],
-            }],
-        },
-        stream: Some(false),
-        ..Default::default()
-    }).await.unwrap();
+    let response = client
+        .inference(tensorzero::ClientInferenceParams {
+            function_name: Some("weather_helper".to_string()),
+            model_name: None,
+            variant_name: Some(provider.variant_name.clone()),
+            episode_id: Some(episode_id),
+            input: tensorzero::ClientInput {
+                system: Some(json!({"assistant_name": "Dr. Mehta"})),
+                messages: vec![tensorzero::ClientInputMessage {
+                    role: Role::User,
+                    content: vec![tensorzero::ClientInputMessageContent::Text(
+                        TextKind::Text {
+                            text: "What is your name?".to_string(),
+                        },
+                    )],
+                }],
+            },
+            stream: Some(false),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
 
     match response {
         tensorzero::InferenceOutput::NonStreaming(response) => {
@@ -4081,31 +4087,36 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
     }
     let episode_id = Uuid::now_v7();
     let extra_headers = get_extra_headers();
-    
-    let response = client.inference(tensorzero::ClientInferenceParams {
-        function_name: Some("weather_helper".to_string()),
-        model_name: None,
-        variant_name: Some(provider.variant_name.clone()),
-        episode_id: Some(episode_id),
-        input: tensorzero::ClientInput {
-            system: Some(json!({"assistant_name": "Dr. Mehta"})),
-            messages: vec![tensorzero::ClientInputMessage {
-                role: Role::User,
-                content: vec![tensorzero::ClientInputMessageContent::Text(TextKind::Text { 
-                    text: "What is your name?".to_string() 
-                })],
-            }],
-        },
-        stream: Some(true),
-        credentials: provider
-            .credentials
-            .clone()
-            .into_iter()
-            .map(|(k, v)| (k, ClientSecretString(SecretString::new(v.into()))))
-            .collect(),
-        extra_headers,
-        ..Default::default()
-    }).await.unwrap();
+
+    let response = client
+        .inference(tensorzero::ClientInferenceParams {
+            function_name: Some("weather_helper".to_string()),
+            model_name: None,
+            variant_name: Some(provider.variant_name.clone()),
+            episode_id: Some(episode_id),
+            input: tensorzero::ClientInput {
+                system: Some(json!({"assistant_name": "Dr. Mehta"})),
+                messages: vec![tensorzero::ClientInputMessage {
+                    role: Role::User,
+                    content: vec![tensorzero::ClientInputMessageContent::Text(
+                        TextKind::Text {
+                            text: "What is your name?".to_string(),
+                        },
+                    )],
+                }],
+            },
+            stream: Some(true),
+            credentials: provider
+                .credentials
+                .clone()
+                .into_iter()
+                .map(|(k, v)| (k, ClientSecretString(SecretString::new(v.into()))))
+                .collect(),
+            extra_headers,
+            ..Default::default()
+        })
+        .await
+        .unwrap();
 
     let tensorzero::InferenceOutput::Streaming(mut stream) = response else {
         panic!("Expected streaming response");
@@ -4123,7 +4134,6 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
     let mut output_tokens = 0;
 
     for chunk_json in chunks {
-
         println!("API response chunk: {chunk_json:#?}");
 
         let chunk_inference_id = chunk_json.get("inference_id").unwrap().as_str().unwrap();
@@ -4369,34 +4379,39 @@ pub async fn test_tool_use_tool_choice_required_inference_request_with_provider(
     let episode_id = Uuid::now_v7();
     let extra_headers = get_extra_headers();
 
-    let response = client.inference(tensorzero::ClientInferenceParams {
-        function_name: Some("weather_helper".to_string()),
-        model_name: None,
-        variant_name: Some(provider.variant_name.clone()),
-        episode_id: Some(episode_id),
-        input: tensorzero::ClientInput {
-            system: Some(json!({"assistant_name": "Dr. Mehta"})),
-            messages: vec![tensorzero::ClientInputMessage {
-                role: Role::User,
-                content: vec![tensorzero::ClientInputMessageContent::Text(TextKind::Text { 
-                    text: "What is your name?".to_string() 
-                })],
-            }],
-        },
-        stream: Some(false),
-        credentials: provider
-            .credentials
-            .clone()
-            .into_iter()
-            .map(|(k, v)| (k, ClientSecretString(SecretString::new(v.into()))))
-            .collect(),
-        extra_headers,
-        dynamic_tool_params: tensorzero::DynamicToolParams {
-            tool_choice: Some(tensorzero_internal::tool::ToolChoice::Required),
+    let response = client
+        .inference(tensorzero::ClientInferenceParams {
+            function_name: Some("weather_helper".to_string()),
+            model_name: None,
+            variant_name: Some(provider.variant_name.clone()),
+            episode_id: Some(episode_id),
+            input: tensorzero::ClientInput {
+                system: Some(json!({"assistant_name": "Dr. Mehta"})),
+                messages: vec![tensorzero::ClientInputMessage {
+                    role: Role::User,
+                    content: vec![tensorzero::ClientInputMessageContent::Text(
+                        TextKind::Text {
+                            text: "What is your name?".to_string(),
+                        },
+                    )],
+                }],
+            },
+            stream: Some(false),
+            credentials: provider
+                .credentials
+                .clone()
+                .into_iter()
+                .map(|(k, v)| (k, ClientSecretString(SecretString::new(v.into()))))
+                .collect(),
+            extra_headers,
+            dynamic_tool_params: tensorzero::DynamicToolParams {
+                tool_choice: Some(tensorzero_internal::tool::ToolChoice::Required),
+                ..Default::default()
+            },
             ..Default::default()
-        },
-        ..Default::default()
-    }).await.unwrap();
+        })
+        .await
+        .unwrap();
 
     match response {
         tensorzero::InferenceOutput::NonStreaming(response) => {
@@ -4665,35 +4680,40 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
 
     let episode_id = Uuid::now_v7();
     let extra_headers = get_extra_headers();
-    
-    let response = client.inference(tensorzero::ClientInferenceParams {
-        function_name: Some("weather_helper".to_string()),
-        model_name: None,
-        variant_name: Some(provider.variant_name.clone()),
-        episode_id: Some(episode_id),
-        input: tensorzero::ClientInput {
-            system: Some(json!({"assistant_name": "Dr. Mehta"})),
-            messages: vec![tensorzero::ClientInputMessage {
-                role: Role::User,
-                content: vec![tensorzero::ClientInputMessageContent::Text(TextKind::Text { 
-                    text: "What is your name?".to_string() 
-                })],
-            }],
-        },
-        stream: Some(true),
-        credentials: provider
-            .credentials
-            .clone()
-            .into_iter()
-            .map(|(k, v)| (k, ClientSecretString(SecretString::new(v.into()))))
-            .collect(),
-        extra_headers,
-        dynamic_tool_params: tensorzero::DynamicToolParams {
-            tool_choice: Some(tensorzero_internal::tool::ToolChoice::Required),
+
+    let response = client
+        .inference(tensorzero::ClientInferenceParams {
+            function_name: Some("weather_helper".to_string()),
+            model_name: None,
+            variant_name: Some(provider.variant_name.clone()),
+            episode_id: Some(episode_id),
+            input: tensorzero::ClientInput {
+                system: Some(json!({"assistant_name": "Dr. Mehta"})),
+                messages: vec![tensorzero::ClientInputMessage {
+                    role: Role::User,
+                    content: vec![tensorzero::ClientInputMessageContent::Text(
+                        TextKind::Text {
+                            text: "What is your name?".to_string(),
+                        },
+                    )],
+                }],
+            },
+            stream: Some(true),
+            credentials: provider
+                .credentials
+                .clone()
+                .into_iter()
+                .map(|(k, v)| (k, ClientSecretString(SecretString::new(v.into()))))
+                .collect(),
+            extra_headers,
+            dynamic_tool_params: tensorzero::DynamicToolParams {
+                tool_choice: Some(tensorzero_internal::tool::ToolChoice::Required),
+                ..Default::default()
+            },
             ..Default::default()
-        },
-        ..Default::default()
-    }).await.unwrap();
+        })
+        .await
+        .unwrap();
 
     let tensorzero::InferenceOutput::Streaming(mut stream) = response else {
         panic!("Expected streaming response");
@@ -4712,7 +4732,6 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
     let mut output_tokens = 0;
 
     for chunk_json in chunks {
-
         println!("API response chunk: {chunk_json:#?}");
 
         let chunk_inference_id = chunk_json.get("inference_id").unwrap().as_str().unwrap();
@@ -4992,7 +5011,7 @@ pub async fn test_tool_use_tool_choice_none_inference_request_with_provider(
 
     let episode_id = Uuid::now_v7();
     let extra_headers = get_extra_headers();
-    
+
     let response = client.inference(tensorzero::ClientInferenceParams {
         function_name: Some("weather_helper".to_string()),
         model_name: None,
@@ -5002,8 +5021,8 @@ pub async fn test_tool_use_tool_choice_none_inference_request_with_provider(
             system: Some(json!({"assistant_name": "Dr. Mehta"})),
             messages: vec![tensorzero::ClientInputMessage {
                 role: Role::User,
-                content: vec![tensorzero::ClientInputMessageContent::Text(TextKind::Text { 
-                    text: "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool.".to_string() 
+                content: vec![tensorzero::ClientInputMessageContent::Text(TextKind::Text {
+                    text: "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool.".to_string()
                 })],
             }],
         },
@@ -5271,8 +5290,8 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
             system: Some(json!({"assistant_name": "Dr. Mehta"})),
             messages: vec![tensorzero::ClientInputMessage {
                 role: Role::User,
-                content: vec![tensorzero::ClientInputMessageContent::Text(TextKind::Text { 
-                    text: "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool.".to_string() 
+                content: vec![tensorzero::ClientInputMessageContent::Text(TextKind::Text {
+                    text: "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool.".to_string()
                 })],
             }],
         },
@@ -5307,7 +5326,6 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
     let mut output_tokens = 0;
 
     for chunk_json in chunks {
-
         println!("API response chunk: {chunk_json:#?}");
 
         let chunk_inference_id = chunk_json.get("inference_id").unwrap().as_str().unwrap();
@@ -5572,8 +5590,8 @@ pub async fn test_tool_use_tool_choice_specific_inference_request_with_provider(
             system: Some(json!({"assistant_name": "Dr. Mehta"})),
             messages: vec![tensorzero::ClientInputMessage {
                 role: Role::User,
-                content: vec![tensorzero::ClientInputMessageContent::Text(TextKind::Text { 
-                    text: "What is the temperature like in Tokyo (in Celsius)? Use the `get_temperature` tool.".to_string() 
+                content: vec![tensorzero::ClientInputMessageContent::Text(TextKind::Text {
+                    text: "What is the temperature like in Tokyo (in Celsius)? Use the `get_temperature` tool.".to_string()
                 })],
             }],
         },
@@ -5917,8 +5935,8 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
             system: Some(json!({"assistant_name": "Dr. Mehta"})),
             messages: vec![tensorzero::ClientInputMessage {
                 role: Role::User,
-                content: vec![tensorzero::ClientInputMessageContent::Text(TextKind::Text { 
-                    text: "What is the temperature like in Tokyo (in Celsius)? Use the `get_temperature` tool.".to_string() 
+                content: vec![tensorzero::ClientInputMessageContent::Text(TextKind::Text {
+                    text: "What is the temperature like in Tokyo (in Celsius)? Use the `get_temperature` tool.".to_string()
                 })],
             }],
         },
@@ -5970,7 +5988,6 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
     let mut output_tokens = 0;
 
     for chunk_json in chunks {
-
         println!("API response chunk: {chunk_json:#?}");
 
         let chunk_inference_id = chunk_json.get("inference_id").unwrap().as_str().unwrap();
@@ -6298,8 +6315,8 @@ pub async fn test_tool_use_allowed_tools_inference_request_with_provider(
             system: Some(json!({"assistant_name": "Dr. Mehta"})),
             messages: vec![tensorzero::ClientInputMessage {
                 role: Role::User,
-                content: vec![tensorzero::ClientInputMessageContent::Text(TextKind::Text { 
-                    text: "What can you tell me about the weather in Tokyo (e.g. temperature, humidity, wind)? Use the provided tools and return what you can (not necessarily everything).".to_string() 
+                content: vec![tensorzero::ClientInputMessageContent::Text(TextKind::Text {
+                    text: "What can you tell me about the weather in Tokyo (e.g. temperature, humidity, wind)? Use the provided tools and return what you can (not necessarily everything).".to_string()
                 })],
             }],
         },
@@ -6572,8 +6589,8 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
             system: Some(json!({"assistant_name": "Dr. Mehta"})),
             messages: vec![tensorzero::ClientInputMessage {
                 role: Role::User,
-                content: vec![tensorzero::ClientInputMessageContent::Text(TextKind::Text { 
-                    text: "What can you tell me about the weather in Tokyo (e.g. temperature, humidity, wind)? Use the provided tools and return what you can (not necessarily everything).".to_string() 
+                content: vec![tensorzero::ClientInputMessageContent::Text(TextKind::Text {
+                    text: "What can you tell me about the weather in Tokyo (e.g. temperature, humidity, wind)? Use the provided tools and return what you can (not necessarily everything).".to_string()
                 })],
             }],
         },
@@ -6610,7 +6627,6 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
     let mut output_tokens = 0;
 
     for chunk_json in chunks {
-
         println!("API response chunk: {chunk_json:#?}");
 
         let chunk_inference_id = chunk_json.get("inference_id").unwrap().as_str().unwrap();
@@ -6901,8 +6917,8 @@ pub async fn test_tool_multi_turn_inference_request_with_provider(
             messages: vec![
                 tensorzero::ClientInputMessage {
                     role: Role::User,
-                    content: vec![tensorzero::ClientInputMessageContent::Text(TextKind::Text { 
-                        text: "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool.".to_string() 
+                    content: vec![tensorzero::ClientInputMessageContent::Text(TextKind::Text {
+                        text: "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool.".to_string()
                     })],
                 },
                 tensorzero::ClientInputMessage {
@@ -6933,8 +6949,13 @@ pub async fn test_tool_multi_turn_inference_request_with_provider(
         tensorzero::InferenceOutput::NonStreaming(response) => {
             let response_json = serde_json::to_value(&response).unwrap();
             println!("API response: {response_json:#?}");
-            check_tool_use_multi_turn_inference_response(response_json, &provider, Some(episode_id), false)
-                .await;
+            check_tool_use_multi_turn_inference_response(
+                response_json,
+                &provider,
+                Some(episode_id),
+                false,
+            )
+            .await;
         }
         _ => panic!("Expected non-streaming response"),
     }
@@ -7191,8 +7212,8 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
             messages: vec![
                 tensorzero::ClientInputMessage {
                     role: Role::User,
-                    content: vec![tensorzero::ClientInputMessageContent::Text(TextKind::Text { 
-                        text: "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool.".to_string() 
+                    content: vec![tensorzero::ClientInputMessageContent::Text(TextKind::Text {
+                        text: "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool.".to_string()
                     })],
                 },
                 tensorzero::ClientInputMessage {
@@ -7234,7 +7255,6 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     let mut input_tokens = 0;
     let mut output_tokens = 0;
     for chunk_json in chunks.clone() {
-
         println!("API response chunk: {chunk_json:#?}");
 
         let chunk_inference_id = chunk_json.get("inference_id").unwrap().as_str().unwrap();
@@ -8134,8 +8154,8 @@ pub async fn test_parallel_tool_use_inference_request_with_provider(
             system: Some(json!({"assistant_name": "Dr. Mehta"})),
             messages: vec![tensorzero::ClientInputMessage {
                 role: Role::User,
-                content: vec![tensorzero::ClientInputMessageContent::Text(TextKind::Text { 
-                    text: "What is the weather like in Tokyo (in Celsius)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions.".to_string() 
+                content: vec![tensorzero::ClientInputMessageContent::Text(TextKind::Text {
+                    text: "What is the weather like in Tokyo (in Celsius)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions.".to_string()
                 })],
             }],
         },
@@ -8877,38 +8897,38 @@ pub async fn test_json_mode_inference_request_with_provider(
 ) {
     let episode_id = Uuid::now_v7();
 
-    let response = client.inference(tensorzero::ClientInferenceParams {
-        function_name: Some("json_success".to_string()),
-        variant_name: Some(provider.variant_name.clone()),
-        episode_id: Some(episode_id),
-        input: tensorzero::ClientInput {
-            system: Some(json!({"assistant_name": "Dr. Mehta"})),
-            messages: vec![tensorzero::ClientInputMessage {
-                role: Role::User,
-                content: vec![tensorzero::ClientInputMessageContent::Text(TextKind::Arguments { 
-                    arguments: {
-                        let mut map = serde_json::Map::new();
-                        map.insert("country".to_string(), json!("Japan"));
-                        map
-                    }
-                })],
-            }],
-        },
-        stream: Some(false),
-        ..Default::default()
-    }).await.unwrap();
+    let response = client
+        .inference(tensorzero::ClientInferenceParams {
+            function_name: Some("json_success".to_string()),
+            variant_name: Some(provider.variant_name.clone()),
+            episode_id: Some(episode_id),
+            input: tensorzero::ClientInput {
+                system: Some(json!({"assistant_name": "Dr. Mehta"})),
+                messages: vec![tensorzero::ClientInputMessage {
+                    role: Role::User,
+                    content: vec![tensorzero::ClientInputMessageContent::Text(
+                        TextKind::Arguments {
+                            arguments: {
+                                let mut map = serde_json::Map::new();
+                                map.insert("country".to_string(), json!("Japan"));
+                                map
+                            },
+                        },
+                    )],
+                }],
+            },
+            stream: Some(false),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
 
     match response {
         tensorzero::InferenceOutput::NonStreaming(response) => {
             let response_json = serde_json::to_value(&response).unwrap();
             println!("API response: {response_json:#?}");
-            check_json_mode_inference_response(
-                response_json,
-                &provider,
-                Some(episode_id),
-                false,
-            )
-            .await;
+            check_json_mode_inference_response(response_json, &provider, Some(episode_id), false)
+                .await;
         }
         _ => panic!("Expected non-streaming response"),
     }

@@ -11,12 +11,12 @@ use serde_json::Value;
 use tensorzero::{
     ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent, Role,
 };
-use tensorzero_internal::inference::types::TextKind;
 use tensorzero_internal::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_inference_tags_clickhouse,
     select_json_inference_clickhouse, select_model_inference_clickhouse,
 };
 use tensorzero_internal::inference::types::ContentBlockOutput;
+use tensorzero_internal::inference::types::TextKind;
 use tensorzero_internal::inference::types::{ContentBlock, RequestMessage};
 use uuid::Uuid;
 
@@ -52,7 +52,7 @@ pub async fn test_reasoning_inference_request_simple_with_provider(
     let response_json = match response {
         tensorzero::InferenceOutput::NonStreaming(response) => {
             serde_json::to_value(&response).unwrap()
-        },
+        }
         tensorzero::InferenceOutput::Streaming(_) => {
             panic!("Unexpected streaming response");
         }
@@ -289,17 +289,17 @@ pub async fn test_streaming_reasoning_inference_request_simple_with_provider(
         .unwrap();
 
     let mut chunks = vec![];
-    
+
     let tensorzero::InferenceOutput::Streaming(mut streaming_response) = response else {
         panic!("Expected streaming response");
     };
-    
+
     while let Some(chunk) = streaming_response.next().await {
         let chunk = chunk.unwrap();
         let chunk_json = serde_json::to_value(&chunk).unwrap();
         chunks.push(serde_json::to_string(&chunk_json).unwrap());
     }
-    
+
     assert!(!chunks.is_empty());
 
     let mut inference_id: Option<Uuid> = None;
