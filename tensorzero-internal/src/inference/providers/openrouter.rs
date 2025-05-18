@@ -19,8 +19,8 @@ use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
+use crate::inference::types::batch::StartBatchProviderInferenceResponse;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
-use crate::inference::types::batch::{StartBatchProviderInferenceResponse};
 use crate::inference::types::resolved_input::ImageWithPath;
 use crate::inference::types::{
     ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
@@ -36,7 +36,7 @@ use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use crate::inference::providers::helpers::inject_extra_request_data;
 
-use super::provider_trait::{TensorZeroEventError};
+use super::provider_trait::TensorZeroEventError;
 
 lazy_static! {
     static ref OPENROUTER_DEFAULT_BASE_URL: Url = {
@@ -129,8 +129,6 @@ impl OpenRouterCredentials {
         }
     }
 }
-
-
 
 impl InferenceProvider for OpenRouterProvider {
     async fn infer<'a>(
@@ -335,7 +333,7 @@ impl InferenceProvider for OpenRouterProvider {
         )
         .peekable();
         Ok((stream, raw_request))
-    }  
+    }
 
     async fn start_batch_inference<'a>(
         &'a self,
@@ -360,10 +358,7 @@ impl InferenceProvider for OpenRouterProvider {
         }
         .into())
     }
-
 }
-
-
 
 pub async fn convert_stream_error(provider_type: String, e: reqwest_eventsource::Error) -> Error {
     let message = e.to_string();
@@ -1159,8 +1154,6 @@ impl<'a> OpenRouterRequest<'a> {
     }
 }
 
-
-
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub(super) struct OpenRouterUsage {
     pub prompt_tokens: u32,
@@ -1477,15 +1470,6 @@ fn openrouter_to_tensorzero_chunk(
         finish_reason,
     ))
 }
-
-
-
-
-
-
-
-
-
 
 #[cfg(test)]
 mod tests {
