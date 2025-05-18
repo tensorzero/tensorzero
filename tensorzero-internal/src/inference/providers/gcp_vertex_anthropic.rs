@@ -172,7 +172,7 @@ impl GCPVertexAnthropicProvider {
                         raw_response,
                         file_id: store_and_path.path.to_string(),
                     },
-                    |r| make_provider_batch_inference_output(r),
+                    make_provider_batch_inference_output,
                 )
                 .await
             }
@@ -874,7 +874,7 @@ fn join_cloud_paths(base: &str, suffix: &str) -> String {
 fn make_provider_batch_inference_output(
     line: GCPVertexAnthropicBatchResponseLine,
 ) -> Result<ProviderBatchInferenceOutput, Error> {
-    let request = GCPVertexAnthropicRequestMinimal::deserialize(&*line.request).map_err(|e| {
+    let request = GCPVertexAnthropicRequestMinimal::deserialize(&line.request).map_err(|e| {
         Error::new(ErrorDetails::Serialization {
             message: format!("Error deserializing batch request: {e}"),
         })
