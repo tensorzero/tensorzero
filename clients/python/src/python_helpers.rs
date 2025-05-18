@@ -8,7 +8,7 @@ use pyo3::{
     intern,
     prelude::*,
     sync::GILOnceCell,
-    types::{PyAny, PyDict},
+    types::PyDict,
 };
 use tensorzero_internal::endpoints::dynamic_evaluation_run::DynamicEvaluationRunEpisodeResponse;
 use tensorzero_rust::{
@@ -136,41 +136,39 @@ pub fn serialize_to_dict<T: serde::ser::Serialize>(py: Python<'_>, val: T) -> Py
         .call1(py, (json_str.into_pyobject(py)?,))
 }
 
-/// Checks if a type is NotRequired (from typing_extensions or Python 3.11+)
-pub fn is_not_required(py: Python<'_>, obj: &PyAny) -> bool {
-    // Try typing_extensions first, then typing (Python 3.11+)
-    let typing_ext = py.import("typing_extensions").ok();
-    let typing = py.import("typing").ok();
-    if let Some(typing_ext) = typing_ext {
-        if let Ok(not_required) = typing_ext.getattr("NotRequired") {
-            if obj.is(not_required) {
-                return true;
-            }
-        }
-    }
-    if let Some(typing) = typing {
-        if let Ok(not_required) = typing.getattr("NotRequired") {
-            if obj.is(not_required) {
-                return true;
-            }
-        }
-    }
-    false
-}
-
-pub fn deserialize_from_pyobj<T: serde::de::DeserializeOwned>(
-    py: Python<'_>,
-    obj: &PyAny,
+// Converts a Python dictionary/list to json with `json.dumps`,
+/// then deserializes to a Rust type via serde
+pub fn deserialize_from_pyobj<'a, T: serde::de::DeserializeOwned>(
+    py: Python<'a>,
+    obj: &Bound<'a, PyAny>,
 ) -> PyResult<T> {
-    // If the object is NotRequired, raise an error or handle as needed
-    if is_not_required(py, obj) {
-        return Err(PyValueError::new_err(
-            "NotRequired fields should not be treated as Optional. Please provide a value or omit the field.",
-        ));
+    let self_module = PyModule::import(py, "tensorzero.types")?;
+    let to_dict_encoder: Bound<'_, PyAny> = self_module.getattr("ToDictEncoder")?;
+    let kwargs = PyDict::new(py);
+    kwargs.set_item(intern!(py, "cls"), to_dict_encoder)?;
+
+    let json_str_obj = JSON_DUMPS
+        .get(py)
+        .ok_or_else(|| {
+            PyRuntimeError::new_err(
+                "TensorZero: JSON_DUMPS was not initialized. This should never happen",
+            )
+        })?
+        .call(py, (obj,), Some(&kwargs))?;
+    let json_str: Cow<'_, str> = json_str_obj.extract(py)?;
+    let mut deserializer = serde_json::Deserializer::from_str(json_str.as_ref());
+    let val: Result<T, _> = serde_path_to_error::deserialize(&mut deserializer);
+    match val {
+        Ok(val) => Ok(val),
+        Err(e) => Err(tensorzero_internal_error(
+            py,
+            &format!(
+                "Failed to deserialize JSON to {}: {}",
+                std::any::type_name::<T>(),
+                e
+            ),
+        )?),
     }
-    // your existing deserialization logic
-    let json_str = crate::python_helpers::to_json_string(py, obj)?;
-    serde_json::from_str(&json_str).map_err(|e| PyValueError::new_err(format!("Failed to deserialize: {e}")))
 }
 
 pub fn python_uuid_to_uuid(param_name: &str, val: Bound<'_, PyAny>) -> PyResult<Uuid> {
