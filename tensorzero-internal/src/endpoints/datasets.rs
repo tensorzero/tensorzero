@@ -165,7 +165,7 @@ FORMAT JSONEachRow;"#
 async fn insert_from_existing(
     clickhouse: &ClickHouseConnectionInfo,
     path_params: CreatePathParams,
-    existing: &ExistingInference,
+    existing: &ExistingInferenceInfo,
 ) -> Result<Uuid, Error> {
     let inference_data = query_inference_for_datapoint(clickhouse, existing.inference_id).await?;
     let datapoint_id = Uuid::now_v7();
@@ -264,13 +264,13 @@ struct WithFunctionName {
 pub async fn create_from_existing_datapoint_handler(
     State(app_state): AppState,
     Path(path_params): Path<CreatePathParams>,
-    StructuredJson(existing_inference): StructuredJson<ExistingInference>,
+    StructuredJson(existing_inference_info): StructuredJson<ExistingInferenceInfo>,
 ) -> Result<Json<CreateDatapointResponse>, Error> {
     validate_dataset_name(&path_params.dataset_name)?;
     let datapoint_id = insert_from_existing(
         &app_state.clickhouse_connection_info,
         path_params,
-        &existing_inference,
+        &existing_inference_info,
     )
     .await?;
     Ok(Json(CreateDatapointResponse { id: datapoint_id }))
@@ -451,7 +451,7 @@ pub struct CreateDatapointPathParams {
 
 // The handler for the POST `/datasets/:dataset_name/datapoints/bulk` endpoint.
 /// This inserts a new datapoint into `ChatInferenceDatapoint`/`JsonInferenceDatapoint`/
-#[tracing::instrument(name = "create_datapoint_handler", skip(app_state))]
+#[tracing::instrument(name = "create_datapoint_handler", skip(app_state, params))]
 pub async fn create_datapoint_handler(
     State(app_state): AppState,
     Path(path_params): Path<CreateDatapointPathParams>,
@@ -1001,7 +1001,7 @@ pub struct DeletePathParams {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct ExistingInference {
+pub struct ExistingInferenceInfo {
     pub output: OutputKind,
     pub inference_id: Uuid,
 }
