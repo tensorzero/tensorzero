@@ -2467,13 +2467,12 @@ pub async fn test_finish_reason_usage_combination_with_provider(
             && usage.is_some()
         {
             println!(
-                "Found properly combined chunk with both finish_reason and usage: {:?}",
-                chunk
+                "Found properly combined chunk with both finish_reason and usage: {chunk:?}"
             );
         }
 
         // Print the chunks for debugging
-        println!("Chunk {}: {:?}", i, chunk);
+        println!("Chunk {i}: {chunk:?}");
     }
 
     // At the end, we should not have a situation where the last chunk is only usage
