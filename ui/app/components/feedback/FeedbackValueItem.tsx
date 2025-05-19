@@ -37,6 +37,14 @@ function ValueItem({ iconType, children, onClick }: ValueItemProps) {
   );
 }
 
+function ValueItemText({ children }: { children: ReactNode }) {
+  return (
+    <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
+      {children}
+    </span>
+  );
+}
+
 function BooleanItem({
   value,
   status,
@@ -48,7 +56,7 @@ function BooleanItem({
 }) {
   return (
     <ValueItem iconType={status === "default" ? "unknown" : status}>
-      <span>{value ? "True" : "False"}</span>
+      <ValueItemText>{value ? "True" : "False"}</ValueItemText>
       {isHumanFeedback && <UserFeedback />}
     </ValueItem>
   );
@@ -63,7 +71,7 @@ function FloatItem({
 }) {
   return (
     <ValueItem iconType="float">
-      <span>{value.toFixed(3)}</span>
+      <ValueItemText>{value.toFixed(3)}</ValueItemText>
       {isHumanFeedback && <UserFeedback />}
     </ValueItem>
   );
@@ -80,9 +88,7 @@ function CommentItem({
 }) {
   return (
     <ValueItem iconType="comment" onClick={onClick}>
-      <span className="overflow-hidden text-ellipsis whitespace-nowrap">
-        {value}
-      </span>
+      <ValueItemText>{value}</ValueItemText>
       {isHumanFeedback && <UserFeedback />}
     </ValueItem>
   );
@@ -99,9 +105,9 @@ function DemonstrationItem({
 }) {
   return (
     <ValueItem iconType="demonstration" onClick={onClick}>
-      <span className="overflow-hidden font-mono text-ellipsis whitespace-nowrap">
-        {value}
-      </span>
+      <ValueItemText>
+        <span className="font-mono">{value}</span>
+      </ValueItemText>
       {isHumanFeedback && <UserFeedback />}
     </ValueItem>
   );
