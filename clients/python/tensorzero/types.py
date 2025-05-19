@@ -10,13 +10,6 @@ import httpx
 from typing_extensions import NotRequired, TypedDict
 
 
-# Helper used to serialize Python objects to JSON, which may contain dataclasses like `Text`
-# Used by the Rust native module
-class ToDictEncoder(JSONEncoder):
-    def default(self, o: Any) -> Any:
-        return o.to_dict()
-
-
 @dataclass
 class Usage:
     input_tokens: int
@@ -96,11 +89,11 @@ class ImageUrl:
 
 @dataclass
 class ToolCall(ContentBlock):
-    arguments: Optional[Dict[str, Any]]
     id: str
-    name: Optional[str]
     raw_arguments: str
     raw_name: str
+    arguments: Optional[Dict[str, Any]] = None
+    name: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         d: Dict[str, Any] = {
@@ -145,8 +138,8 @@ class FinishReason(str, Enum):
 
 @dataclass
 class JsonInferenceOutput:
-    raw: Optional[str]
-    parsed: Optional[Dict[str, Any]]
+    raw: Optional[str] = None
+    parsed: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -156,7 +149,7 @@ class ChatInferenceResponse:
     variant_name: str
     content: List[ContentBlock]
     usage: Usage
-    finish_reason: Optional[FinishReason]
+    finish_reason: Optional[FinishReason] = None
 
 
 @dataclass
@@ -166,7 +159,7 @@ class JsonInferenceResponse:
     variant_name: str
     output: JsonInferenceOutput
     usage: Usage
-    finish_reason: Optional[FinishReason]
+    finish_reason: Optional[FinishReason] = None
 
 
 class Message(TypedDict):
@@ -271,7 +264,7 @@ class ChatChunk:
     episode_id: UUID
     variant_name: str
     content: List[ContentBlockChunk]
-    usage: Optional[Usage]
+    usage: Optional[Usage] = None
     finish_reason: Optional[FinishReason] = None
 
 
@@ -281,7 +274,7 @@ class JsonChunk:
     episode_id: UUID
     variant_name: str
     raw: str
-    usage: Optional[Usage]
+    usage: Optional[Usage] = None
     finish_reason: Optional[FinishReason] = None
 
 
@@ -366,7 +359,7 @@ class TensorZeroInternalError(BaseTensorZeroError):
 
 
 class TensorZeroError(BaseTensorZeroError):
-    def __init__(self, status_code: int, text: Optional[str]):
+    def __init__(self, status_code: int, text: Optional[str] = None):
         self.text = text
         self.status_code = status_code
         self._response = httpx.Response(status_code=status_code, text=text)
@@ -482,7 +475,7 @@ class Tool:
 class ToolParams:
     tools_available: List[Tool]
     tool_choice: str
-    parallel_tool_calls: Optional[bool]
+    parallel_tool_calls: Optional[bool] = None
 
 
 @dataclass
@@ -528,3 +521,10 @@ def parse_datapoint(data: Dict[str, Any]) -> Datapoint:
         return ChatDatapoint(**data)
     else:
         raise ValueError(f"Unknown datapoint type: {datapoint_type}")
+
+
+# Helper used to serialize Python objects to JSON, which may contain dataclasses like `Text`
+# Used by the Rust native module
+class ToDictEncoder(JSONEncoder):
+    def default(self, o: Any) -> Any:
+        return o.to_dict()
