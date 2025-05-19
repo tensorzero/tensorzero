@@ -570,16 +570,16 @@ fn create_stream(
     async_stream::stream! {
         let mut buffer = vec![];
         let mut pending_finish_chunk: Option<InferenceResultChunk> = None;
-        
+
         while let Some(chunk) = stream.next().await {
             match chunk {
                 Ok(chunk) => {
                     buffer.push(chunk.clone());
-                    
+
                     // If we have a pending finish chunk and this is a usage-only chunk, combine them
                     if let Some(finish_chunk) = pending_finish_chunk.take() {
-                        if chunk.finish_reason().is_none() && 
-                           chunk.usage().is_some() && 
+                        if chunk.finish_reason().is_none() &&
+                           chunk.usage().is_some() &&
                            chunk_has_no_content(&chunk) {
                             // Create a combined chunk with both finish reason and usage
                             let combined_chunk = combine_chunks(finish_chunk, chunk.clone());
@@ -591,7 +591,7 @@ fn create_stream(
                             if let Some(response_chunk) = prepare_response_chunk(&metadata, finish_chunk) {
                                 yield Ok(response_chunk);
                             }
-                            
+
                             // And then yield the current chunk
                             if let Some(response_chunk) = prepare_response_chunk(&metadata, chunk) {
                                 yield Ok(response_chunk);
@@ -610,7 +610,7 @@ fn create_stream(
                 Err(e) => yield Err(e),
             }
         }
-        
+
         // If we have a pending finish chunk at the end, yield it
         if let Some(finish_chunk) = pending_finish_chunk {
             if let Some(response_chunk) = prepare_response_chunk(&metadata, finish_chunk) {
@@ -729,14 +729,19 @@ fn prepare_response_chunk(
 fn chunk_has_no_content(chunk: &InferenceResultChunk) -> bool {
     match chunk {
         InferenceResultChunk::Chat(chat_chunk) => chat_chunk.content.is_empty(),
-        InferenceResultChunk::Json(json_chunk) => json_chunk.raw.is_none() && json_chunk.thought.is_none(),
+        InferenceResultChunk::Json(json_chunk) => {
+            json_chunk.raw.is_none() && json_chunk.thought.is_none()
+        }
     }
 }
 
 // Helper function to combine a finish_reason chunk with a usage chunk
-fn combine_chunks(finish_chunk: InferenceResultChunk, usage_chunk: InferenceResultChunk) -> InferenceResultChunk {
+fn combine_chunks(
+    finish_chunk: InferenceResultChunk,
+    usage_chunk: InferenceResultChunk,
+) -> InferenceResultChunk {
     use crate::inference::types::{ChatInferenceResultChunk, JsonInferenceResultChunk};
-    
+
     match (finish_chunk, usage_chunk) {
         (InferenceResultChunk::Chat(finish), InferenceResultChunk::Chat(usage)) => {
             InferenceResultChunk::Chat(ChatInferenceResultChunk {
@@ -747,7 +752,7 @@ fn combine_chunks(finish_chunk: InferenceResultChunk, usage_chunk: InferenceResu
                 raw_response: finish.raw_response,
                 finish_reason: finish.finish_reason,
             })
-        },
+        }
         (InferenceResultChunk::Json(finish), InferenceResultChunk::Json(usage)) => {
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: finish.raw,
@@ -758,7 +763,7 @@ fn combine_chunks(finish_chunk: InferenceResultChunk, usage_chunk: InferenceResu
                 raw_response: finish.raw_response,
                 finish_reason: finish.finish_reason,
             })
-        },
+        }
         // Mismatched types shouldn't happen, but if they do, prefer the finish chunk
         (finish, _) => finish,
     }
@@ -1205,8 +1210,8 @@ mod tests {
     use uuid::Uuid;
 
     use crate::inference::types::{
-        ChatInferenceResultChunk, ContentBlockChunk, JsonInferenceResultChunk, TextChunk,
-        Usage, FinishReason,
+        ChatInferenceResultChunk, ContentBlockChunk, FinishReason, JsonInferenceResultChunk,
+        TextChunk, Usage,
     };
 
     #[test]
@@ -1310,7 +1315,7 @@ mod tests {
                 let usage = chat.usage.unwrap();
                 assert_eq!(usage.input_tokens, 124);
                 assert_eq!(usage.output_tokens, 178);
-                
+
                 // Verify content from finish_chunk is preserved
                 assert_eq!(chat.content.len(), 1);
                 assert_eq!(chat.created, 0);
@@ -1354,7 +1359,7 @@ mod tests {
                 let usage = json.usage.unwrap();
                 assert_eq!(usage.input_tokens, 124);
                 assert_eq!(usage.output_tokens, 178);
-                
+
                 // Verify content from finish_chunk is preserved
                 assert_eq!(json.raw, Some("final json".to_string()));
                 assert_eq!(json.created, 0);
