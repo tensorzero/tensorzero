@@ -569,15 +569,52 @@ fn create_stream(
 ) -> impl Stream<Item = Result<InferenceResponseChunk, Error>> + Send {
     async_stream::stream! {
         let mut buffer = vec![];
+        let mut pending_finish_chunk: Option<InferenceResultChunk> = None;
+        
         while let Some(chunk) = stream.next().await {
             match chunk {
                 Ok(chunk) => {
                     buffer.push(chunk.clone());
-                    if let Some(chunk) = prepare_response_chunk(&metadata, chunk) {
-                        yield Ok(chunk);
+                    
+                    // If we have a pending finish chunk and this is a usage-only chunk, combine them
+                    if let Some(finish_chunk) = pending_finish_chunk.take() {
+                        if chunk.finish_reason().is_none() && 
+                           chunk.usage().is_some() && 
+                           chunk_has_no_content(&chunk) {
+                            // Create a combined chunk with both finish reason and usage
+                            let combined_chunk = combine_chunks(finish_chunk, chunk.clone());
+                            if let Some(response_chunk) = prepare_response_chunk(&metadata, combined_chunk) {
+                                yield Ok(response_chunk);
+                            }
+                        } else {
+                            // If this isn't a usage-only chunk, yield the pending finish chunk
+                            if let Some(response_chunk) = prepare_response_chunk(&metadata, finish_chunk) {
+                                yield Ok(response_chunk);
+                            }
+                            
+                            // And then yield the current chunk
+                            if let Some(response_chunk) = prepare_response_chunk(&metadata, chunk) {
+                                yield Ok(response_chunk);
+                            }
+                        }
+                    } else if chunk.finish_reason().is_some() {
+                        // Buffer this chunk as it has a finish reason
+                        pending_finish_chunk = Some(chunk);
+                    } else {
+                        // Normal chunk, just yield it
+                        if let Some(response_chunk) = prepare_response_chunk(&metadata, chunk) {
+                            yield Ok(response_chunk);
+                        }
                     }
                 }
                 Err(e) => yield Err(e),
+            }
+        }
+        
+        // If we have a pending finish chunk at the end, yield it
+        if let Some(finish_chunk) = pending_finish_chunk {
+            if let Some(response_chunk) = prepare_response_chunk(&metadata, finish_chunk) {
+                yield Ok(response_chunk);
             }
         }
         if !metadata.dryrun {
@@ -686,6 +723,45 @@ fn prepare_response_chunk(
         metadata.variant_name.clone(),
         metadata.cached,
     )
+}
+
+// Helper function to check if a chunk has no meaningful content
+fn chunk_has_no_content(chunk: &InferenceResultChunk) -> bool {
+    match chunk {
+        InferenceResultChunk::Chat(chat_chunk) => chat_chunk.content.is_empty(),
+        InferenceResultChunk::Json(json_chunk) => json_chunk.raw.is_none() && json_chunk.thought.is_none(),
+    }
+}
+
+// Helper function to combine a finish_reason chunk with a usage chunk
+fn combine_chunks(finish_chunk: InferenceResultChunk, usage_chunk: InferenceResultChunk) -> InferenceResultChunk {
+    use crate::inference::types::{ChatInferenceResultChunk, JsonInferenceResultChunk};
+    
+    match (finish_chunk, usage_chunk) {
+        (InferenceResultChunk::Chat(finish), InferenceResultChunk::Chat(usage)) => {
+            InferenceResultChunk::Chat(ChatInferenceResultChunk {
+                content: finish.content,
+                created: finish.created,
+                usage: usage.usage,
+                latency: finish.latency,
+                raw_response: finish.raw_response,
+                finish_reason: finish.finish_reason,
+            })
+        },
+        (InferenceResultChunk::Json(finish), InferenceResultChunk::Json(usage)) => {
+            InferenceResultChunk::Json(JsonInferenceResultChunk {
+                raw: finish.raw,
+                thought: finish.thought,
+                created: finish.created,
+                usage: usage.usage,
+                latency: finish.latency,
+                raw_response: finish.raw_response,
+                finish_reason: finish.finish_reason,
+            })
+        },
+        // Mismatched types shouldn't happen, but if they do, prefer the finish chunk
+        (finish, _) => finish,
+    }
 }
 
 // Prepares an Event for SSE on the way out of the gateway
@@ -1130,7 +1206,164 @@ mod tests {
 
     use crate::inference::types::{
         ChatInferenceResultChunk, ContentBlockChunk, JsonInferenceResultChunk, TextChunk,
+        Usage, FinishReason,
     };
+
+    #[test]
+    fn test_chunk_has_no_content() {
+        // Test empty chat chunk
+        let empty_chat = InferenceResultChunk::Chat(ChatInferenceResultChunk {
+            content: vec![],
+            created: 0,
+            usage: None,
+            raw_response: "".to_string(),
+            latency: Duration::from_millis(0),
+            finish_reason: None,
+        });
+        assert!(chunk_has_no_content(&empty_chat));
+
+        // Test chat chunk with content
+        let chat_with_content = InferenceResultChunk::Chat(ChatInferenceResultChunk {
+            content: vec![ContentBlockChunk::Text(TextChunk {
+                text: "some content".to_string(),
+                id: "0".to_string(),
+            })],
+            created: 0,
+            usage: None,
+            raw_response: "".to_string(),
+            latency: Duration::from_millis(0),
+            finish_reason: None,
+        });
+        assert!(!chunk_has_no_content(&chat_with_content));
+
+        // Test empty JSON chunk
+        let empty_json = InferenceResultChunk::Json(JsonInferenceResultChunk {
+            raw: None,
+            thought: None,
+            created: 0,
+            usage: None,
+            raw_response: "".to_string(),
+            latency: Duration::from_millis(0),
+            finish_reason: None,
+        });
+        assert!(chunk_has_no_content(&empty_json));
+
+        // Test JSON chunk with raw content
+        let json_with_raw = InferenceResultChunk::Json(JsonInferenceResultChunk {
+            raw: Some("{}".to_string()),
+            thought: None,
+            created: 0,
+            usage: None,
+            raw_response: "".to_string(),
+            latency: Duration::from_millis(0),
+            finish_reason: None,
+        });
+        assert!(!chunk_has_no_content(&json_with_raw));
+
+        // Test JSON chunk with thought content
+        let json_with_thought = InferenceResultChunk::Json(JsonInferenceResultChunk {
+            raw: None,
+            thought: Some("thinking".to_string()),
+            created: 0,
+            usage: None,
+            raw_response: "".to_string(),
+            latency: Duration::from_millis(0),
+            finish_reason: None,
+        });
+        assert!(!chunk_has_no_content(&json_with_thought));
+    }
+
+    #[test]
+    fn test_combine_chunks() {
+        // Test combining chunks with ChatInferenceResultChunk
+        let finish_chunk = InferenceResultChunk::Chat(ChatInferenceResultChunk {
+            content: vec![ContentBlockChunk::Text(TextChunk {
+                text: "final content".to_string(),
+                id: "0".to_string(),
+            })],
+            created: 0,
+            usage: None,
+            raw_response: "finish chunk".to_string(),
+            latency: Duration::from_millis(100),
+            finish_reason: Some(FinishReason::Stop),
+        });
+
+        let usage_chunk = InferenceResultChunk::Chat(ChatInferenceResultChunk {
+            content: vec![],
+            created: 0,
+            usage: Some(Usage {
+                input_tokens: 124,
+                output_tokens: 178,
+            }),
+            raw_response: "usage chunk".to_string(),
+            latency: Duration::from_millis(50),
+            finish_reason: None,
+        });
+
+        let combined = combine_chunks(finish_chunk, usage_chunk);
+
+        match combined {
+            InferenceResultChunk::Chat(chat) => {
+                // Verify the combined chunk has both finish_reason and usage
+                assert_eq!(chat.finish_reason, Some(FinishReason::Stop));
+                assert!(chat.usage.is_some());
+                let usage = chat.usage.unwrap();
+                assert_eq!(usage.input_tokens, 124);
+                assert_eq!(usage.output_tokens, 178);
+                
+                // Verify content from finish_chunk is preserved
+                assert_eq!(chat.content.len(), 1);
+                assert_eq!(chat.created, 0);
+                assert_eq!(chat.raw_response, "finish chunk");
+                assert_eq!(chat.latency.as_millis(), 100);
+            }
+            _ => panic!("Expected ChatInferenceResultChunk"),
+        }
+
+        // Test combining chunks with JsonInferenceResultChunk
+        let finish_chunk = InferenceResultChunk::Json(JsonInferenceResultChunk {
+            raw: Some("final json".to_string()),
+            thought: None,
+            created: 0,
+            usage: None,
+            raw_response: "finish json chunk".to_string(),
+            latency: Duration::from_millis(100),
+            finish_reason: Some(FinishReason::Stop),
+        });
+
+        let usage_chunk = InferenceResultChunk::Json(JsonInferenceResultChunk {
+            raw: None,
+            thought: None,
+            created: 0,
+            usage: Some(Usage {
+                input_tokens: 124,
+                output_tokens: 178,
+            }),
+            raw_response: "usage json chunk".to_string(),
+            latency: Duration::from_millis(50),
+            finish_reason: None,
+        });
+
+        let combined = combine_chunks(finish_chunk, usage_chunk);
+
+        match combined {
+            InferenceResultChunk::Json(json) => {
+                // Verify the combined chunk has both finish_reason and usage
+                assert_eq!(json.finish_reason, Some(FinishReason::Stop));
+                assert!(json.usage.is_some());
+                let usage = json.usage.unwrap();
+                assert_eq!(usage.input_tokens, 124);
+                assert_eq!(usage.output_tokens, 178);
+                
+                // Verify content from finish_chunk is preserved
+                assert_eq!(json.raw, Some("final json".to_string()));
+                assert_eq!(json.created, 0);
+                assert_eq!(json.raw_response, "finish json chunk");
+                assert_eq!(json.latency.as_millis(), 100);
+            }
+            _ => panic!("Expected JsonInferenceResultChunk"),
+        }
+    }
 
     #[tokio::test]
     async fn test_prepare_event() {
