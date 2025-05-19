@@ -43,7 +43,7 @@ export const FunctionConfigChatSchema = baseConfigSchema.extend({
 export const FunctionConfigJsonSchema = baseConfigSchema.extend({
   type: z.literal("json"),
   output_schema: z.custom<SchemaWithContent>().optional(),
-  descritpion: z.string().optional(),
+  description: z.string().optional(),
 });
 
 // Combined FunctionConfig schema
