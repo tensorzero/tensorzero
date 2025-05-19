@@ -25,6 +25,7 @@ use crate::inference::providers::google_ai_studio_gemini::GoogleAIStudioGeminiPr
 
 use crate::inference::providers::helpers::peek_first_chunk;
 use crate::inference::providers::hyperbolic::HyperbolicProvider;
+use crate::inference::providers::provider_trait::WrappedProvider;
 use crate::inference::providers::sglang::SGLangProvider;
 use crate::inference::providers::tgi::TGIProvider;
 use crate::inference::types::batch::{
@@ -596,6 +597,7 @@ pub enum ProviderConfig {
 #[serde(deny_unknown_fields)]
 pub enum HostedProviderKind {
     OpenAI,
+    TGI,
 }
 
 #[derive(Debug, TensorZeroDeserialize, VariantNames)]
@@ -750,17 +752,23 @@ impl UninitializedProviderConfig {
                     return Err(Error::new(ErrorDetails::Config { message: "AWS Sagemaker provider requires a region to be provided, or `allow_auto_detect_region = true`.".to_string() }));
                 }
 
-                let self_hosted = match hosted_provider {
-                    HostedProviderKind::OpenAI => {
-                        OpenAIProvider::new(model_name, None, Some(CredentialLocation::None))?
-                    }
-                };
+                let self_hosted: Box<dyn WrappedProvider + Send + Sync + 'static> =
+                    match hosted_provider {
+                        HostedProviderKind::OpenAI => Box::new(OpenAIProvider::new(
+                            model_name,
+                            None,
+                            Some(CredentialLocation::None),
+                        )?),
+                        HostedProviderKind::TGI => Box::new(TGIProvider::new(
+                            Url::parse("http://tensorzero-unreachable-domain-please-file-a-bug-report.invalid").unwrap(),
+                            Some(CredentialLocation::None),
+                        )?),
+                    };
                 // NB: We need to make an async call here to initialize the AWS Sagemaker client.
 
                 let provider = tokio::task::block_in_place(move || {
                     tokio::runtime::Handle::current().block_on(async {
-                        AWSSagemakerProvider::new(endpoint_name, Box::new(self_hosted), region)
-                            .await
+                        AWSSagemakerProvider::new(endpoint_name, self_hosted, region).await
                     })
                 })?;
 

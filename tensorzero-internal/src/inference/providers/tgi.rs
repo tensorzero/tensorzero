@@ -10,12 +10,13 @@
 ///
 /// In light of this, we have decided to not explicitly support tool calling for TGI and only support JSON mode via `implicit_tool`.
 /// Our implementation currently allows you to use a tool in TGI (nonstreaming), but YMMV.
-use futures::StreamExt;
+use futures::{Stream, StreamExt, TryStreamExt};
 use reqwest::StatusCode;
-use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
+use reqwest_eventsource::{Event, RequestBuilderExt};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::pin::Pin;
 use std::sync::OnceLock;
 use std::time::Duration;
 use tokio::time::Instant;
@@ -26,6 +27,7 @@ use super::openai::{
     convert_stream_error, get_chat_url, prepare_openai_messages, prepare_openai_tools,
     OpenAIRequestMessage, OpenAITool, OpenAIToolChoice, OpenAIToolType, StreamOptions,
 };
+use super::provider_trait::{TensorZeroEventError, WrappedProvider};
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::DisplayOrDebugGateway;
@@ -122,33 +124,81 @@ impl TGICredentials {
     }
 }
 
-impl InferenceProvider for TGIProvider {
-    async fn infer<'a>(
+impl WrappedProvider for TGIProvider {
+    fn make_body<'a>(
         &'a self,
         ModelProviderRequest {
             request,
             provider_name: _,
-            model_name,
+            model_name: _,
         }: ModelProviderRequest<'a>,
+    ) -> Result<serde_json::Value, Error> {
+        // TGI doesn't care about the `model_name` field, so we can hardcode it to "tgi"
+
+        serde_json::to_value(TGIRequest::new(PROVIDER_TYPE, request)?).map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!(
+                    "Error serializing TGI request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
+            })
+        })
+    }
+
+    fn parse_response(
+        &self,
+        request: &ModelInferenceRequest,
+        raw_request: String,
+        raw_response: String,
+        latency: Latency,
+    ) -> Result<ProviderInferenceResponse, Error> {
+        let response = serde_json::from_str(&raw_response).map_err(|e| {
+            Error::new(ErrorDetails::InferenceServer {
+                message: format!(
+                    "Error parsing JSON response: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
+                provider_type: PROVIDER_TYPE.to_string(),
+                raw_request: Some(raw_request.clone()),
+                raw_response: Some(raw_response.clone()),
+            })
+        })?;
+
+        Ok(TGIResponseWithMetadata {
+            response,
+            latency,
+            raw_response,
+            raw_request,
+            generic_request: request,
+        }
+        .try_into()?)
+    }
+
+    fn stream_events(
+        &self,
+        event_source: Pin<
+            Box<dyn Stream<Item = Result<Event, TensorZeroEventError>> + Send + 'static>,
+        >,
+        start_time: Instant,
+    ) -> ProviderInferenceResponseStreamInner {
+        stream_tgi(event_source, start_time)
+    }
+}
+
+impl InferenceProvider for TGIProvider {
+    async fn infer<'a>(
+        &'a self,
+        model_provider_request: ModelProviderRequest<'a>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        // TGI doesn't care about the `model_name` field, so we can hardcode it to "tgi"
-        let mut request_body = serde_json::to_value(TGIRequest::new(PROVIDER_TYPE, request)?)
-            .map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: format!(
-                        "Error serializing TGI request: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                })
-            })?;
+        let mut request_body = self.make_body(model_provider_request)?;
         let headers = inject_extra_request_data(
-            &request.extra_body,
-            &request.extra_headers,
+            &model_provider_request.request.extra_body,
+            &model_provider_request.request.extra_headers,
             model_provider,
-            model_name,
+            model_provider_request.model_name,
             &mut request_body,
         )?;
         let request_url = get_chat_url(&self.api_base)?;
@@ -163,8 +213,11 @@ impl InferenceProvider for TGIProvider {
             request_builder = request_builder.bearer_auth(api_key.expose_secret());
         }
 
+        let raw_request = request_body.to_string();
+
         let res = request_builder
-            .json(&request_body)
+            .body(raw_request.clone())
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
             .headers(headers)
             .send()
             .await
@@ -189,34 +242,20 @@ impl InferenceProvider for TGIProvider {
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: serde_json::to_string(&request_body).ok(),
+                    raw_request: Some(raw_request.clone()),
                     raw_response: None,
-                })
-            })?;
-
-            let response = serde_json::from_str(&raw_response).map_err(|e| {
-                Error::new(ErrorDetails::InferenceServer {
-                    message: format!(
-                        "Error parsing JSON response: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: serde_json::to_string(&request_body).ok(),
-                    raw_response: Some(raw_response.clone()),
                 })
             })?;
 
             let latency = Latency::NonStreaming {
                 response_time: start_time.elapsed(),
             };
-            Ok(TGIResponseWithMetadata {
-                response,
-                latency,
+            self.parse_response(
+                model_provider_request.request,
+                raw_request,
                 raw_response,
-                request: request_body,
-                generic_request: request,
-            }
-            .try_into()?)
+                latency,
+            )
         } else {
             Err(handle_tgi_error(
                 res.status(),
@@ -227,7 +266,7 @@ impl InferenceProvider for TGIProvider {
                             DisplayOrDebugGateway::new(e)
                         ),
                         provider_type: PROVIDER_TYPE.to_string(),
-                        raw_request: serde_json::to_string(&request_body).ok(),
+                        raw_request: Some(raw_request.clone()),
                         raw_response: None,
                     })
                 })?,
@@ -303,7 +342,11 @@ impl InferenceProvider for TGIProvider {
                 })
             })?;
 
-        let stream = stream_tgi(event_source, start_time).peekable();
+        let stream = stream_tgi(
+            event_source.map_err(TensorZeroEventError::EventSource),
+            start_time,
+        )
+        .peekable();
         Ok((stream, raw_request))
     }
 
@@ -333,14 +376,22 @@ impl InferenceProvider for TGIProvider {
 }
 
 fn stream_tgi(
-    mut event_source: EventSource,
+    event_source: impl Stream<Item = Result<Event, TensorZeroEventError>> + Send + 'static,
     start_time: Instant,
 ) -> ProviderInferenceResponseStreamInner {
     Box::pin(async_stream::stream! {
+        futures::pin_mut!(event_source);
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
-                    yield Err(convert_stream_error(PROVIDER_TYPE.to_string(), e).await);
+                    match e {
+                        TensorZeroEventError::TensorZero(e) => {
+                            yield Err(e);
+                        }
+                        TensorZeroEventError::EventSource(e) => {
+                            yield Err(convert_stream_error(PROVIDER_TYPE.to_string(), e).await);
+                        }
+                    }
                 }
                 Ok(event) => match event {
                     Event::Open => continue,
@@ -367,8 +418,6 @@ fn stream_tgi(
                 },
             }
         }
-
-        event_source.close();
     })
 }
 
@@ -463,7 +512,7 @@ struct TGIResponseWithMetadata<'a> {
     response: TGIResponse,
     latency: Latency,
     raw_response: String,
-    request: serde_json::Value,
+    raw_request: String,
     generic_request: &'a ModelInferenceRequest<'a>,
 }
 
@@ -474,7 +523,7 @@ impl<'a> TryFrom<TGIResponseWithMetadata<'a>> for ProviderInferenceResponse {
             mut response,
             latency,
             raw_response,
-            request: request_body,
+            raw_request,
             generic_request,
         } = value;
         if response.choices.len() != 1 {
@@ -484,7 +533,7 @@ impl<'a> TryFrom<TGIResponseWithMetadata<'a>> for ProviderInferenceResponse {
                     response.choices.len()
                 ),
                 provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: serde_json::to_string(&request_body).ok(),
+                raw_request: Some(raw_request.clone()),
                 raw_response: Some(raw_response),
             }
             .into());
@@ -500,7 +549,7 @@ impl<'a> TryFrom<TGIResponseWithMetadata<'a>> for ProviderInferenceResponse {
             .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                 message: "Response has no choices (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
                 provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: serde_json::to_string(&request_body).ok(),
+                raw_request: Some(raw_request.clone()),
                 raw_response: Some(raw_response.clone()),
             }))?;
         let mut content: Vec<ContentBlockOutput> = Vec::new();
@@ -512,14 +561,6 @@ impl<'a> TryFrom<TGIResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 content.push(ContentBlockOutput::ToolCall(tool_call.into()));
             }
         }
-        let raw_request = serde_json::to_string(&request_body).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!(
-                    "Error serializing request body as JSON: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-            })
-        })?;
         let system = generic_request.system.clone();
         let input_messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
@@ -998,8 +1039,11 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_secs(0),
             },
-            request: serde_json::to_value(TGIRequest::new("test-model", &generic_request).unwrap())
-                .unwrap(),
+            raw_request: serde_json::to_value(
+                TGIRequest::new("test-model", &generic_request).unwrap(),
+            )
+            .unwrap()
+            .to_string(),
             generic_request: &generic_request,
         };
         let inference_response: ProviderInferenceResponse =
