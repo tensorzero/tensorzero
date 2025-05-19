@@ -552,7 +552,7 @@ export async function getEvaluationsForDatapoint(
     FROM filtered_inference
     INNER JOIN filtered_datapoint
       ON filtered_datapoint.id = toUUIDOrNull(filtered_inference.tags['tensorzero::datapoint_id'])
-    INNER JOIN filtered_feedback
+    LEFT JOIN filtered_feedback
       ON filtered_feedback.target_id = filtered_inference.id
 
   `;
