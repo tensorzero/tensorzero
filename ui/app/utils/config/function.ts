@@ -36,12 +36,14 @@ export const FunctionConfigChatSchema = baseConfigSchema.extend({
     ])
     .default("none"),
   parallel_tool_calls: z.boolean().default(false),
+  description: z.string().optional(),
 });
 
 // Schema for FunctionConfigJson
 export const FunctionConfigJsonSchema = baseConfigSchema.extend({
   type: z.literal("json"),
   output_schema: z.custom<SchemaWithContent>().optional(),
+  descritpion: z.string().optional(),
 });
 
 // Combined FunctionConfig schema
