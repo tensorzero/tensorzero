@@ -260,7 +260,7 @@ struct WithFunctionName {
 ///
 /// The inference is mostly copied as-is, except for the 'output' field.
 /// Based on the 'output' parameter, the output is copied, ignored, or fetched from a demonstration.
-#[instrument(name = "create_datapoint", skip(app_state))]
+#[instrument(name = "create_datapoint", skip(app_state, existing_inference))]
 pub async fn create_from_existing_datapoint_handler(
     State(app_state): AppState,
     Path(path_params): Path<CreatePathParams>,
@@ -451,7 +451,7 @@ pub struct CreateDatapointPathParams {
 
 // The handler for the POST `/datasets/:dataset_name/datapoints/bulk` endpoint.
 /// This inserts a new datapoint into `ChatInferenceDatapoint`/`JsonInferenceDatapoint`/
-#[tracing::instrument(name = "create_datapoint_handler", skip(app_state))]
+#[tracing::instrument(name = "create_datapoint_handler", skip(app_state, params))]
 pub async fn create_datapoint_handler(
     State(app_state): AppState,
     Path(path_params): Path<CreateDatapointPathParams>,
