@@ -198,6 +198,7 @@ macro_rules! generate_provider_tests {
         use $crate::providers::reasoning::test_reasoning_inference_request_with_provider_json_mode;
         use $crate::providers::reasoning::test_streaming_reasoning_inference_request_with_provider_json_mode;
         use $crate::providers::common::test_short_inference_request_with_provider;
+        use $crate::providers::common::test_finish_reason_usage_combination_with_provider;
         use $crate::providers::common::test_multi_turn_parallel_tool_use_inference_request_with_provider;
         use $crate::providers::common::test_multi_turn_parallel_tool_use_streaming_inference_request_with_provider;
         use $crate::providers::common::test_streaming_invalid_request_with_provider;
@@ -255,6 +256,14 @@ macro_rules! generate_provider_tests {
                 test_simple_streaming_inference_request_with_provider(provider).await;
             }
         }
+
+        async fn test_finish_reason_usage_combination(client: tensorzero::Client) {
+            let providers = $func().await.simple_inference;
+            for provider in providers {
+                test_finish_reason_usage_combination_with_provider(provider, &client).await;
+            }
+        }
+        $crate::make_gateway_test_functions!(test_finish_reason_usage_combination);
 
         #[tokio::test]
         async fn test_streaming_invalid_request() {
@@ -2374,6 +2383,97 @@ pub async fn test_simple_streaming_inference_request_with_provider(provider: E2E
     )
     .await;
     assert_eq!(original_content, cached_content);
+}
+
+pub async fn test_finish_reason_usage_combination_with_provider(
+    provider: E2ETestProvider,
+    client: &tensorzero::Client,
+) {
+    // OpenAI O1 doesn't support streaming responses
+    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
+        return;
+    }
+    let episode_id = Uuid::now_v7();
+    let tag_value = Uuid::now_v7().to_string();
+    let seed = rand::rng().random_range(0..u32::MAX);
+    
+    // Use the Rust client to make streaming request
+    let stream = client.inference(tensorzero::ClientInferenceParams {
+        function_name: Some("basic_test".to_string()),
+        variant_name: Some(provider.variant_name.clone()),
+        episode_id: Some(episode_id),
+        input: tensorzero::ClientInput {
+            system: Some(json!({"assistant_name": format!("Dr. Mehta #{seed}")})),
+            messages: vec![tensorzero::ClientInputMessage {
+                role: Role::User,
+                content: vec![tensorzero::ClientInputMessageContent::Text(TextKind::Text { 
+                    text: "Write a short greeting".to_string() 
+                })],
+            }],
+        },
+        stream: Some(true),
+        tags: HashMap::from([("test".to_string(), tag_value)]),
+        params: tensorzero_internal::endpoints::inference::InferenceParams {
+            chat_completion: tensorzero_internal::endpoints::inference::ChatCompletionInferenceParams {
+                temperature: Some(0.0),
+                seed: Some(seed),
+                ..Default::default()
+            }
+        },
+        ..Default::default()
+    }).await.unwrap();
+
+    // Get the stream from the response
+    let tensorzero::InferenceOutput::Streaming(mut stream) = stream else {
+        panic!("Expected streaming response");
+    };
+
+    // Collect all chunks
+    let mut chunks = Vec::new();
+    while let Some(event) = stream.next().await {
+        let chunk = event.unwrap();
+        chunks.push(serde_json::to_value(&chunk).unwrap());
+    }
+    
+    // Convert chunks to serde_json::Value for easier inspection
+    // Verify that no chunk has both finish_reason and usage, followed by another chunk with the other one
+    let mut last_chunk_had_finish_reason = false;
+    
+    for (i, chunk) in chunks.iter().enumerate() {
+        let finish_reason = chunk.get("finish_reason");
+        let usage = chunk.get("usage");
+        
+        if finish_reason.is_some() && finish_reason != Some(&serde_json::Value::Null) && usage.is_none() {
+            last_chunk_had_finish_reason = true;
+        } else if usage.is_some() && finish_reason.is_none() && last_chunk_had_finish_reason {
+            // This indicates a bug - we have a finish_reason chunk followed by a usage chunk
+            panic!("Found finish_reason chunk followed by usage chunk. Fix not working!");
+        } else {
+            last_chunk_had_finish_reason = false;
+        }
+        
+        // Also check for proper combined chunks (should have both)
+        if finish_reason.is_some() && finish_reason != Some(&serde_json::Value::Null) && usage.is_some() {
+            println!("Found properly combined chunk with both finish_reason and usage: {:?}", chunk);
+        }
+        
+        // Print the chunks for debugging
+        println!("Chunk {}: {:?}", i, chunk);
+    }
+    
+    // At the end, we should not have a situation where the last chunk is only usage
+    if !chunks.is_empty() {
+        let last_chunk = chunks.last().unwrap();
+        if last_chunk.get("usage").is_some() && last_chunk.get("finish_reason").is_none() {
+            // Check if the second-to-last chunk had a finish_reason
+            if chunks.len() > 1 {
+                let second_to_last = &chunks[chunks.len() - 2];
+                if second_to_last.get("finish_reason").is_some() && second_to_last.get("finish_reason") != Some(&serde_json::Value::Null) {
+                    panic!("Last chunk has only usage, while previous chunk had finish_reason. Fix not working!");
+                }
+            }
+        }
+    }
 }
 
 pub async fn test_simple_streaming_inference_request_with_provider_cache(
