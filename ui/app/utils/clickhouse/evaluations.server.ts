@@ -245,7 +245,7 @@ export async function getEvaluationResults(
   FROM filtered_dp dp
   INNER JOIN filtered_inference ci
     ON toUUIDOrNull(ci.tags['tensorzero::datapoint_id']) = dp.id
-  INNER JOIN filtered_feedback feedback
+  LEFT JOIN filtered_feedback feedback
     ON feedback.target_id = ci.id
   ORDER BY toUInt128(datapoint_id) DESC
 
