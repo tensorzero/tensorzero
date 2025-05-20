@@ -95,7 +95,7 @@ They are useful as starting points for custom optimization scripts, educational 
 Since notebooks are hard to maintain and review, we compile them using [Jupytext](https://jupytext.readthedocs.io/en/latest/) from Python source ending in `_nb.py`.
 The command to generate the python script in this format from such a notebook (the reverse direction) is `uvx jupytext@1.17.1 --to py:percent --opt notebook_metadata_filter=-all --opt cell_metadata_filter=-all openai.ipynb`.
 This will generate a Python script called `openai.py` that must be renamed to `openai_nb.py` prior to committing.
-In pre-commit and CI we test that the notebooks match their source python files by a script `ci/compile-check-notebooks.sh`.
+In pre-commit and CI we test that the notebooks match their source python files using a script `ci/compile-check-notebooks.sh`.
 This way we can be certain that the notebooks match their source files.
 You should be aware of this process if you edit or contribute recipes.
 
