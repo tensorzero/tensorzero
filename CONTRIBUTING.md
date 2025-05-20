@@ -90,10 +90,10 @@ Did you have something else in mind? Reach out on Slack or Discord and let us kn
 
 ### Recipes
 
-We maintain a number of optimization recipes as Jupyter notebooks in `recipes/` which serve as manual workflows for optimizing TensorZero function.
+We maintain a number of optimization recipes as Jupyter notebooks in `recipes/` which serve as manual workflows for optimizing TensorZero functions.
 They are useful as starting points for custom optimization scripts, educational material, and a lightweight way for us to add new techniques prior to building them into the UI.
 Since notebooks are hard to maintain and review, we compile them using [Jupytext](https://jupytext.readthedocs.io/en/latest/) from Python source ending in `_nb.py`.
-The command to generate a notebook from such a file is `uvx jupytext@1.17.1 --to py:percent --opt notebook_metadata_filter=-all --opt cell_metadata_filter=-all openai.ipynb`.
+The command to generate the python script in this format from such a notebook (the reverse direction) is `uvx jupytext@1.17.1 --to py:percent --opt notebook_metadata_filter=-all --opt cell_metadata_filter=-all openai.ipynb`.
 This will generate a Python script called `openai.py` that must be renamed to `openai_nb.py` prior to committing.
 In pre-commit and CI we test that the notebooks match their source python files by a script `ci/compile-check-notebooks.sh`.
 This way we can be certain that the notebooks match their source files.
