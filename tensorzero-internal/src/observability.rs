@@ -147,7 +147,7 @@ impl<S: Clone + Send + Sync + 'static> RouterExt<S> for Router<S> {
     /// This is only applied to certain routes (e.g. `/inference`), and
     /// is *not* used to log requests to the console.
     fn apply_otel_http_trace_layer(self) -> Self {
-        pub fn make_span<B>(req: &http::Request<B>) -> Span {
+        fn make_span<B>(req: &http::Request<B>) -> Span {
             // Based on `OtelAxumLayer`. We use `TraceLayer` from `tower-http` instead, as it extends
             // the span to cover the entire response (including sending the full SSE stream).
             let span =
