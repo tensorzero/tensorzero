@@ -39,6 +39,7 @@ env:
 jobs:
   batch-tests:
     uses: ./.github/workflows/batch-test.yml
+    secrets: inherit
   live-tests:
     runs-on: namespace-profile-tensorzero-8x16
 
