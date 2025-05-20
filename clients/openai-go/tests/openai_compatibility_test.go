@@ -212,46 +212,39 @@ func TestBasicInference(t *testing.T) {
 
 	})
 
-	// t.Run("it should handle basic json schema parsing and throw proper validation error", func(t *testing.T) {
-	// 	episodeID, _ := uuid.NewV7()
+	t.Run("it should handle basic json schema parsing and throw proper validation error", func(t *testing.T) {
+		messages := []openai.ChatCompletionMessageParamUnion{
+			{OfSystem: OldFormatSystemMessageWithAssistant(t, "Alfred Pennyworth")},
+			openai.UserMessage("Hello"),
+		}
 
-	// 	messages := []openai.ChatCompletionMessageParamUnion{
-	// 		{OfSystem: OldFormatSystemMessageWithAssistant(t, "Alfred Pennyworth")},
-	// 		openai.UserMessage("Hello"),
-	// 	}
+		responseSchema := map[string]interface{}{
+			"name": "string",
+		}
 
-	// 	responseSchema := map[string]interface{}{
-	// 		"name": map[string]interface{}{
-	// 			"type": "int",
-	// 		},
-	// 	}
+		req := &openai.ChatCompletionNewParams{
+			Model:    "tensorzero::function_name::json_success",
+			Messages: messages,
+			ResponseFormat: openai.ChatCompletionNewParamsResponseFormatUnion{
+				OfJSONSchema: &openai.ResponseFormatJSONSchemaParam{
+					JSONSchema: openai.ResponseFormatJSONSchemaJSONSchemaParam{
+						Name:        "response_schema",
+						Strict:      openai.Bool(true),
+						Description: openai.String("Schema for response validation"),
+						Schema:      responseSchema,
+					},
+				},
+			},
+		}
 
-	// 	req := &openai.ChatCompletionNewParams{
-	// 		Model:       "tensorzero::function_name::basic_test",
-	// 		Messages:    messages,
-	// 		Temperature: openai.Float(0.4),
-	// 		ResponseFormat: openai.ChatCompletionNewParamsResponseFormatUnion{
-	// 			OfJSONSchema: &openai.ResponseFormatJSONSchemaParam{
-	// 				JSONSchema: openai.ResponseFormatJSONSchemaJSONSchemaParam{
-	// 					Name:        "response_schema",
-	// 					Description: openai.String("Schema for response validation"),
-	// 					Schema:      responseSchema,
-	// 				},
-	// 			},
-	// 		},
-	// 	}
-	// 	addEpisodeIDToRequest(t, req, episodeID)
+		_, err := client.Chat.Completions.New(ctx, *req)
+		require.Error(t, err, "Expected to raise Error")
 
-	// 	// Send the request and expect an error
-	// 	resp, err := client.Chat.Completions.New(ctx, *req)
-	// 	fmt.Println("########Response####", resp.RawJSON())
-	// 	require.Error(t, err, "Expected an error for invalid response schema")
-
-	// 	// Validate the error
-	// 	var apiErr *openai.Error
-	// 	assert.ErrorAs(t, err, &apiErr, "Expected error to be of type APIError")
-	// 	assert.Contains(t, err.Error(), "JSON Schema validation failed", "Error should indicate JSON Schema validation failure")
-	// })
+		var apiErr *openai.Error
+		assert.ErrorAs(t, err, &apiErr, "Expected error to be of type APIError")
+		assert.Equal(t, 400, apiErr.StatusCode, "Expected status code 400 Bad Request")
+		assert.Contains(t, err.Error(), "JSON Schema validation failed", "Error should indicate JSON Schema validation failure")
+	})
 
 	t.Run("it should handle inference with cache", func(t *testing.T) {
 		messages := []openai.ChatCompletionMessageParamUnion{
