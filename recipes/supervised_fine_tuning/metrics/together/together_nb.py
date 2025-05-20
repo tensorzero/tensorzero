@@ -1,7 +1,6 @@
 # %%
 # type: ignore
 
-
 # %% [markdown]
 # # Together Supervised Fine-Tuning
 #
@@ -45,9 +44,10 @@ import os
 import subprocess
 import tempfile
 import time
+import warnings
 from pathlib import Path
 from pprint import pprint
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Union
 
 import numpy as np
 import pandas as pd
@@ -234,24 +234,50 @@ df.head()
 
 
 # %%
-def render_message(content: List[Dict[str, Any]], role: str) -> str:
+def warning_message(role: str) -> str:
+    return (
+        f"Together does not support multiple content blocks per message. "
+        f"We have chosen to concatenate the text across all content blocks for the message with role '{role}'. "
+        f"You may want to manually review this behavior."
+    )
+
+
+def render_message(
+    content: List[Dict[str, Any]], role: str, content_key: str = "value"
+) -> List[Dict[str, str]]:
     assert role in ["user", "assistant"], f"Invalid role: {role}"
+    if len(content) > 1:
+        warnings.warn(warning_message(role), UserWarning)
 
-    if len(content) != 1:
-        raise ValueError(f"Message must have exactly one content block: {content}")
+    rendered_content = []
+    for content_block in content:
+        if content_block["type"] == "text":
+            content = content_block[content_key]
+            if not isinstance(content, str):
+                content = env.render_template(role, **content)
+            rendered_content.append(content)
+        elif content_block["type"] == "raw_text":
+            rendered_content.append({"type": "text", "text": content_block["value"]})
+        else:
+            raise ValueError(f"Content block must be of type text: {content}")
 
-    if content[0]["type"] != "text":
-        raise ValueError(f"Content block must be of type text: {content}")
+    return "\n".join(rendered_content)
 
-    content = content[0]["value"]
 
+def render_content_block(
+    content_block: Union[str, Dict[str, Any]], role: str, content_key: str = "value"
+) -> str:
+    if content_block["type"] != "text":
+        raise ValueError(f"Content block must be of type text: {content_block}")
+
+    content = content_block[content_key]
     if isinstance(content, str):
         return content
     else:
         return env.render_template(role, **content)
 
 
-def sample_to_conversational_messages(sample) -> List[Dict[str, str]]:
+def sample_to_conversational_messages(sample) -> List[Dict[str, Any]]:
     function_input = json.loads(sample["input"])
 
     rendered_messages = []
@@ -275,13 +301,8 @@ def sample_to_conversational_messages(sample) -> List[Dict[str, str]]:
     output = json.loads(sample["output"])
 
     if function_type == "chat":
-        if len(output) != 1:
-            raise ValueError(f"Output {output} must have exactly one content block.")
-
-        if output[0]["type"] != "text":
-            raise ValueError(f"Output {output} must be a text block.")
-
-        rendered_messages.append({"role": "assistant", "content": output[0]["text"]})
+        rendered_output = render_message(output, role="assistant", content_key="text")
+        rendered_messages.append({"role": "assistant", "content": rendered_output})
     elif function_type == "json":
         rendered_messages.append({"role": "assistant", "content": output["raw"]})
     else:
