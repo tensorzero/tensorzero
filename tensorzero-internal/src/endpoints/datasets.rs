@@ -451,8 +451,8 @@ pub struct CreateDatapointPathParams {
 
 // The handler for the POST `/datasets/:dataset_name/datapoints/bulk` endpoint.
 /// This inserts a new datapoint into `ChatInferenceDatapoint`/`JsonInferenceDatapoint`/
-#[tracing::instrument(name = "create_datapoint_handler", skip(app_state, params))]
-pub async fn create_datapoint_handler(
+#[tracing::instrument(name = "bulk_insert_datapoints_handler", skip(app_state, params))]
+pub async fn bulk_insert_datapoints_handler(
     State(app_state): AppState,
     Path(path_params): Path<CreateDatapointPathParams>,
     StructuredJson(params): StructuredJson<CreateDatapointParams>,
