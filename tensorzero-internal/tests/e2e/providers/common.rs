@@ -2466,9 +2466,7 @@ pub async fn test_finish_reason_usage_combination_with_provider(
             && finish_reason != Some(&serde_json::Value::Null)
             && usage.is_some()
         {
-            println!(
-                "Found properly combined chunk with both finish_reason and usage: {chunk:?}"
-            );
+            println!("Found properly combined chunk with both finish_reason and usage: {chunk:?}");
         }
 
         // Print the chunks for debugging
