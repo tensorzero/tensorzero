@@ -100,7 +100,7 @@ async fn run_migration_0020_with_data<R: Future<Output = bool>, F: FnOnce() -> R
 
     // We use our latest fixtures - new columns will get ignored when inserting.
     for (file, table) in [
-        ("large_chat_inference.parquet", "ChatInference"),
+        ("large_chat_inference_v2.parquet", "ChatInference"),
         ("large_json_inference.parquet", "JsonInference"),
     ] {
         let mut command = tokio::process::Command::new("docker");
