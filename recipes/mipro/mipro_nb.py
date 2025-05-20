@@ -325,37 +325,40 @@ env = Environment(templates=templates)
 
 
 # %%
-def render_message(content: List[Dict[str, Any]], role: str) -> str:
+def render_message(
+    content: List[Dict[str, Any]], role: str, content_key: str = "value"
+) -> str:
     assert role in ["user", "assistant"], f"Invalid role: {role}"
 
-    if len(content) != 1:
-        raise ValueError(f"Message must have exactly one content block: {content}")
-
+    rendered_content = []
     if role == "user":
-        output = "ENVIRONMENT:\n"
+        rendered_content.append("ENVIRONMENT:")
     else:
-        output = "AGENT:\n"
+        rendered_content.append("AGENT:")
 
-    if content[0]["type"] == "text":
-        value = content[0]["value"]
-        if isinstance(value, str):
-            output += value
+    for block in content:
+        if block["type"] == "text":
+            value = block[content_key]
+            if isinstance(value, str):
+                rendered_content.append(value)
+            else:
+                value = env.render_template(role, **value)  # type: ignore
+                assert isinstance(value, str)
+                rendered_content.append(value)
+        elif block["type"] == "raw_text":
+            rendered_content.append(block["value"])
+        elif block["type"] == "tool_call":
+            del block["id"]
+            del block["type"]
+            rendered_content.append(f"Tool call: {json.dumps(block)}")
+        elif block["type"] == "tool_result":
+            rendered_content.append(f"Tool result: {block['result']}")
         else:
-            value = env.render_template(role, **value)  # type: ignore
-            assert isinstance(value, str)
-            output += value
-    elif content[0]["type"] == "tool_call":
-        del content[0]["id"]
-        del content[0]["type"]
-        output += f"Tool call: {json.dumps(content[0])}"
-    elif content[0]["type"] == "tool_result":
-        output += f"Tool result: {content[0]['result']}"
-    else:
-        raise ValueError(
-            f"Content block must be of type text, tool_call, or tool_result: {content}"
-        )
+            raise ValueError(
+                f"Content block must be of type text, tool_call, or tool_result: {content}"
+            )
 
-    return output
+    return "\n".join(rendered_content)
 
 
 def format_input(sample):
@@ -369,20 +372,24 @@ def format_input(sample):
 
 def format_output(sample):
     output = json.loads(sample["value"])
+
+    rendered_output = []
     if base_function.type == "chat":
-        if len(output) != 1:
-            raise ValueError(f"Output {output} must have exactly one content block.")
-        if output[0]["type"] == "text":
-            return output[0]["text"]
-        elif output[0]["type"] == "tool_call":
-            del output[0]["raw_arguments"]
-            del output[0]["raw_name"]
-            del output[0]["type"]
-            return f"Tool call: {json.dumps(output[0])}"
-        elif output[0]["type"] == "tool_result":
-            return json.dumps(output[0])
-        else:
-            raise ValueError(f"Output {output} must be a text block.")
+        for block in output:
+            if block["type"] == "text":
+                rendered_output.append(block["text"])
+            elif block["type"] == "tool_call":
+                del block["raw_arguments"]
+                del block["raw_name"]
+                del block["type"]
+                rendered_output.append(f"Tool call: {json.dumps(block)}")
+            elif block["type"] == "tool_result":
+                rendered_output.append(json.dumps(block))
+            else:
+                raise ValueError(
+                    f"Output {block} must be a text, tool_call, or tool_result block."
+                )
+            return "\n".join(rendered_output)
     elif base_function.type == "json":
         return output["raw"]
     else:
