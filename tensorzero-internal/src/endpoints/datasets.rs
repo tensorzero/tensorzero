@@ -265,7 +265,7 @@ pub async fn create_from_existing_datapoint_handler(
     State(app_state): AppState,
     Path(path_params): Path<CreatePathParams>,
     StructuredJson(existing_inference_info): StructuredJson<ExistingInferenceInfo>,
-) -> Result<Json<CreateDatapointResponse>, Error> {
+) -> Result<Json<InsertDatapointResponse>, Error> {
     validate_dataset_name(&path_params.dataset_name)?;
     let datapoint_id = insert_from_existing(
         &app_state.clickhouse_connection_info,
@@ -273,7 +273,7 @@ pub async fn create_from_existing_datapoint_handler(
         &existing_inference_info,
     )
     .await?;
-    Ok(Json(CreateDatapointResponse { id: datapoint_id }))
+    Ok(Json(InsertDatapointResponse { id: datapoint_id }))
 }
 
 /// The handler for the PUT `/internal/datasets/:dataset/datapoints/:id"` endpoint.
@@ -289,7 +289,7 @@ pub async fn update_datapoint_handler(
     // This is deserialized as either a `SyntheticChatInferenceDatapoint` or `SyntheticJsonInferenceDatapoint`,
     // based on the type of the function looked up from the `function_name` key.
     StructuredJson(params): StructuredJson<serde_json::Value>,
-) -> Result<Json<CreateDatapointResponse>, Error> {
+) -> Result<Json<InsertDatapointResponse>, Error> {
     validate_tensorzero_uuid(path_params.datapoint_id, "Datapoint")?;
     validate_dataset_name(&path_params.dataset_name)?;
     let fetch_context = FetchContext {
@@ -433,7 +433,7 @@ pub async fn update_datapoint_handler(
             }
         }
     }
-    Ok(Json(CreateDatapointResponse {
+    Ok(Json(InsertDatapointResponse {
         id: path_params.datapoint_id,
     }))
 }
@@ -445,7 +445,7 @@ pub struct InsertDatapointParams {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct CreateDatapointPathParams {
+pub struct InsertDatapointPathParams {
     pub dataset_name: String,
 }
 
@@ -454,7 +454,7 @@ pub struct CreateDatapointPathParams {
 #[tracing::instrument(name = "bulk_insert_datapoints_handler", skip(app_state, params))]
 pub async fn bulk_insert_datapoints_handler(
     State(app_state): AppState,
-    Path(path_params): Path<CreateDatapointPathParams>,
+    Path(path_params): Path<InsertDatapointPathParams>,
     StructuredJson(params): StructuredJson<InsertDatapointParams>,
 ) -> Result<Json<Vec<Uuid>>, Error> {
     let datapoint_ids = insert_datapoint(
@@ -1023,7 +1023,7 @@ impl DatapointKind {
 }
 
 #[derive(Debug, Serialize)]
-pub struct CreateDatapointResponse {
+pub struct InsertDatapointResponse {
     id: Uuid,
 }
 
