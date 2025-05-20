@@ -440,7 +440,7 @@ pub async fn update_datapoint_handler(
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct CreateDatapointParams {
+pub struct InsertDatapointParams {
     pub datapoints: Vec<Value>,
 }
 
@@ -455,7 +455,7 @@ pub struct CreateDatapointPathParams {
 pub async fn bulk_insert_datapoints_handler(
     State(app_state): AppState,
     Path(path_params): Path<CreateDatapointPathParams>,
-    StructuredJson(params): StructuredJson<CreateDatapointParams>,
+    StructuredJson(params): StructuredJson<InsertDatapointParams>,
 ) -> Result<Json<Vec<Uuid>>, Error> {
     let datapoint_ids = insert_datapoint(
         path_params.dataset_name,
@@ -470,7 +470,7 @@ pub async fn bulk_insert_datapoints_handler(
 
 pub async fn insert_datapoint(
     dataset_name: String,
-    params: CreateDatapointParams,
+    params: InsertDatapointParams,
     config: &Config<'_>,
     http_client: &Client,
     clickhouse: &ClickHouseConnectionInfo,
