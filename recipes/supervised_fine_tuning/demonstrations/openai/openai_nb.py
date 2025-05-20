@@ -1,7 +1,4 @@
-# %%
 # type: ignore
-
-
 # %% [markdown]
 # # OpenAI Supervised Fine-Tuning
 #

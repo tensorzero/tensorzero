@@ -1,6 +1,18 @@
-# %%
 # type: ignore
+# %% [markdown]
+# # OpenAI Supervised Fine-Tuning
+#
+# This recipe allows TensorZero users to fine-tune OpenAI models using their own data.
+# Since TensorZero automatically logs all inferences and feedback, it is straightforward to fine-tune a model using your own data and any prompt you want.
+#
 
+# %% [markdown]
+# To get started:
+#
+# - Set the `TENSORZERO_CLICKHOUSE_URL` environment variable. For example: `TENSORZERO_CLICKHOUSE_URL="http://chuser:chpassword@localhost:8123/tensorzero"`
+# - Set the `OPENAI_API_KEY` environment variable.
+# - Update the following parameters:
+#
 
 # %%
 CONFIG_PATH = "../../../../examples/data-extraction-ner/config/tensorzero.toml"
@@ -28,15 +40,6 @@ MAX_TOKENS_PER_EXAMPLE = 65_536
 MODEL_NAME = "gpt-4o-mini-2024-07-18"
 
 # %%
-# Add the `recipes/` directory to the Python path so we can import the `estimate_prompt_length` function
-import os
-import sys
-
-tensorzero_path = os.path.abspath(os.path.join(os.getcwd(), "../../../../"))
-if tensorzero_path not in sys.path:
-    sys.path.append(tensorzero_path)
-
-# %%
 import json
 import os
 import tempfile
@@ -52,8 +55,6 @@ import toml
 from clickhouse_connect import get_client
 from IPython.display import clear_output
 from minijinja import Environment
-
-from recipes.util.openai_validation import estimate_prompt_length
 
 # %% [markdown]
 # Load the TensorZero configuration file.
@@ -291,31 +292,6 @@ def sample_to_openai_messages(sample) -> List[Dict[str, str]]:
 df["openai_messages"] = df.apply(sample_to_openai_messages, axis=1)
 
 df.head()
-
-# %% [markdown]
-# Check the messages format and size.
-
-# %%
-# Check the messages format
-df["estimated_prompt_length"] = df["openai_messages"].apply(
-    lambda entry: estimate_prompt_length(entry["messages"])
-)
-
-num_examples_exceeding_MAX_TOKENS_PER_EXAMPLE = (
-    df["estimated_prompt_length"] > MAX_TOKENS_PER_EXAMPLE
-).sum()
-
-if num_examples_exceeding_MAX_TOKENS_PER_EXAMPLE > 0:
-    print(f"""
-    Warning: Potential datapoint truncation
-
-    As of 2025-02-01, the maximum context length for fine-tuning is 65,536 tokens.
-    Please confirm the latest figures in the OpenAI docs: https://platform.openai.com/docs/guides/fine-tuning
-    Your dataset has {num_examples_exceeding_MAX_TOKENS_PER_EXAMPLE} entries that exceed this length (longest: {MAX_TOKENS_PER_EXAMPLE}).
-    """)
-
-print(f"Average Prompt Length: {df['estimated_prompt_length'].mean():.1f}")
-print(f"Max Prompt Length: {df['estimated_prompt_length'].max():.0f}")
 
 # %% [markdown]
 # Split the data into training and validation sets for fine-tuning.
