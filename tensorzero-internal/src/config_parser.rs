@@ -100,11 +100,11 @@ impl ObjectStoreInfo {
             StorageKind::Filesystem { path } => Some(Arc::new(
                 LocalFileSystem::new_with_prefix(path).map_err(|e| {
                     if !std::fs::exists(path).unwrap_or(false) {
-                        return Error::new(ErrorDetails::Config {
+                        Error::new(ErrorDetails::Config {
                             message: format!(
                                 "Failed to create filesystem object store: path does not exist: {path}"
                             ),
-                        });
+                        })
                     } else {
                         Error::new(ErrorDetails::Config {
                             message: format!(
