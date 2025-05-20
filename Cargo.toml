@@ -49,6 +49,8 @@ object_store = { version = "0.12.1", features = ["serde", "aws", "gcp"] }
 rand = "0.9.1"
 chrono = { version = "0.4.41", features = ["serde"] }
 git2 = { version = "0.20.2", default-features = false }
+tracing-opentelemetry-instrumentation-sdk = { version = "0.28.0", features = ["tracing_level_info"] }
+tower-http = { version = "0.6.4", features = ["trace"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

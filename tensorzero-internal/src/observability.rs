@@ -1,10 +1,15 @@
+use axum::extract::MatchedPath;
+use axum::Router;
 use clap::ValueEnum;
 use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
 use opentelemetry::trace::TracerProvider as _;
 use opentelemetry::KeyValue;
 use opentelemetry_sdk::trace::{SdkTracerProvider, SpanExporter};
 use opentelemetry_sdk::Resource;
+use tower_http::trace::TraceLayer;
 use tracing::level_filters::LevelFilter;
+use tracing::Span;
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 use tracing_subscriber::layer::Filter;
 use tracing_subscriber::{filter, EnvFilter, Registry};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, Layer};
@@ -114,6 +119,57 @@ pub fn build_opentelemetry_layer<T: SpanExporter + 'static>(
         // (including the batch exporter), which will just end being unused if OTEL exporting is disabled.
         base_otel_layer.with_filter(otel_reload_filter),
     ))
+}
+
+/// A helper trait to apply layers to a `Router`.
+/// Without this trait, we would need to write something like:
+/// ```rust
+/// // in `tensorzero-internal`
+/// fn make_my_layer() -> SomeType
+///
+/// // in `tensorzero-gateway`
+/// router.layer(tensorzero_internal::make_my_layer())
+/// ```
+///
+/// However, writing the return type for `make_my_layer` can be very complicated
+/// due to all of the generic bounds used by `axum` and `tower`.
+///
+/// To make things simpler, we define a helper trait, which allows us to call
+/// functions on our `router`. Inside the helper method, we can call
+/// `router.layer(some_layer)` as if we were writing everything inline
+/// in `tensorzero-gateway`, without every needing to name a return type.
+pub trait RouterExt<S> {
+    fn apply_otel_http_trace_layer(self) -> Self;
+}
+
+impl<S: Clone + Send + Sync + 'static> RouterExt<S> for Router<S> {
+    /// Makes a `TraceLayer` specialized for OpenTelemetry traces.
+    /// This is only applied to certain routes (e.g. `/inference`), and
+    /// is *not* used to log requests to the console.
+    fn apply_otel_http_trace_layer(self) -> Self {
+        pub fn make_span<B>(req: &http::Request<B>) -> Span {
+            // Based on `OtelAxumLayer`. We use `TraceLayer` from `tower-http` instead, as it extends
+            // the span to cover the entire response (including sending the full SSE stream).
+            let span =
+                tracing_opentelemetry_instrumentation_sdk::http::http_server::make_span_from_request(
+                    req,
+                );
+            let route = req.extensions().get::<MatchedPath>().map(|mp| mp.as_str());
+            if let Some(route) = route {
+                span.record("http.route", route);
+            }
+            let method = tracing_opentelemetry_instrumentation_sdk::http::http_method(req.method());
+            span.record(
+                "otel.name",
+                format!("{method} {}", route.unwrap_or_default()).trim(),
+            );
+            span.set_parent(
+                tracing_opentelemetry_instrumentation_sdk::http::extract_context(req.headers()),
+            );
+            span
+        }
+        self.layer(TraceLayer::new_for_http().make_span_with(make_span))
+    }
 }
 
 /// A handle produced by `build_opentelemetry_layer` to allow enabling the OTEL layer
