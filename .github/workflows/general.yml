@@ -341,7 +341,7 @@ jobs:
         run: pnpm run typecheck
 
       - name: Compile / validate notebooks
-        run: ci/compile-check-notebooks.sh all
+        run: ci/compile-check-notebooks.sh
 
   clickhouse-tests:
     # We don't run many tests here, so use a normal runner with Github Actions caching
