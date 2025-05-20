@@ -4,12 +4,14 @@
 # ]
 # ///
 
-
 import hashlib
 import os
 from pathlib import Path
 
 import requests
+
+# cd to directory of this file
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 # Constants
 PART_SIZE = 8388608
