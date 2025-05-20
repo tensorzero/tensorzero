@@ -164,7 +164,7 @@ FORMAT JSONEachRow;"#
 
 async fn insert_from_existing(
     clickhouse: &ClickHouseConnectionInfo,
-    path_params: CreatePathParams,
+    path_params: InsertPathParams,
     existing: &ExistingInferenceInfo,
 ) -> Result<Uuid, Error> {
     let inference_data = query_inference_for_datapoint(clickhouse, existing.inference_id).await?;
@@ -263,7 +263,7 @@ struct WithFunctionName {
 #[instrument(name = "insert_datapoint", skip(app_state))]
 pub async fn insert_from_existing_datapoint_handler(
     State(app_state): AppState,
-    Path(path_params): Path<CreatePathParams>,
+    Path(path_params): Path<InsertPathParams>,
     StructuredJson(existing_inference_info): StructuredJson<ExistingInferenceInfo>,
 ) -> Result<Json<InsertDatapointResponse>, Error> {
     validate_dataset_name(&path_params.dataset_name)?;
@@ -982,7 +982,7 @@ pub async fn get_datapoint(
 }
 
 #[derive(Debug, Deserialize)]
-pub struct CreatePathParams {
+pub struct InsertPathParams {
     pub dataset_name: String,
 }
 
