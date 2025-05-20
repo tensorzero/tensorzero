@@ -1,5 +1,5 @@
+# %%
 # type: ignore
-
 
 # %% [markdown]
 # # OpenAI Supervised Fine-Tuning using Direct Preference Optimization (DPO)
@@ -189,34 +189,96 @@ df.head()
 
 
 # %%
-def render_message(content: List[Dict[str, Any]], role: str) -> str:
+def render_message(message: Dict[str, Any]) -> List[Dict[str, Any]]:
+    role = message["role"]
     assert role in ["user", "assistant"], f"Invalid role: {role}"
+    content: List[str] = []
+    tool_calls: List[Dict[str, Any]] = []
+    rendered_messages: List[Dict[str, Any]] = []
 
-    if len(content) != 1:
-        raise ValueError(f"Message must have exactly one content block: {content}")
+    for content_block in message["content"]:
+        if content_block["type"] == "text":
+            parsed_content = content_block["value"]
+            if not isinstance(parsed_content, str):
+                parsed_content = env.render_template(role, **parsed_content)
+            content.append({"type": "text", "text": parsed_content})
+        elif content_block["type"] == "raw_text":
+            content.append({"type": "text", "text": content_block["value"]})
+        elif content_block["type"] == "tool_call":
+            assert role == "assistant", (
+                "Tool calls are only allowed in assistant messages"
+            )
+            tool_calls.append(
+                {
+                    "function": {
+                        "arguments": json.dumps(content_block["arguments"]),
+                        "name": content_block["name"],
+                    },
+                    "id": content_block["id"],
+                    "type": "function",
+                }
+            )
+        elif content_block["type"] == "tool_result":
+            assert role == "user", "Tool results are only allowed in user messages"
+            # Tool results get priority so that they follow the tool call in the conversation
+            rendered_messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": content_block["id"],
+                    "content": content_block["result"],
+                }
+            )
+        else:
+            raise ValueError(f"Unsupported content block type: {content_block['type']}")
 
-    if content[0]["type"] != "text":
-        raise ValueError(f"Content block must be of the type text: {content}")
+    if content or tool_calls:
+        role_message: Dict[str, Any] = {"role": role}
+        if content:
+            role_message["content"] = content
+        if tool_calls:
+            role_message["tool_calls"] = tool_calls
+        rendered_messages.append(role_message)
 
-    content = content[0]["value"]
-
-    if isinstance(content, str):
-        return content
-    else:
-        return env.render_template(role, **content)
+    return rendered_messages
 
 
-def render_output_message(output):
-    if function_type == "chat":
-        if len(output) != 1:
-            raise ValueError(f"Output {output} must have exactly one content block")
-        if output[0]["type"] != "text":
-            raise ValueError(f"Output {output} must be a text block")
-        return {"role": "assistant", "content": output[0]["text"]}
-    elif function_type == "json":
+def render_output(
+    output: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """
+    Parses the assistant message from an observation using the provided function configuration.
+    """
+    content: List[str] = []
+    tool_calls: List[Dict[str, Any]] = []
+
+    if function_type == "json":
         return {"role": "assistant", "content": output["raw"]}
+    elif function_type == "chat":
+        for content_block in output:
+            if content_block["type"] == "text":
+                content.append({"type": "text", "text": content_block["text"]})
+            elif content_block["type"] == "tool_call":
+                tool_calls.append(
+                    {
+                        "function": {
+                            "arguments": json.dumps(content_block["arguments"]),
+                            "name": content_block["name"],
+                        },
+                        "id": content_block["id"],
+                        "type": "function",
+                    }
+                )
     else:
         raise ValueError(f"Unsupported function type: {function_type}")
+
+    # Once we finish collecting all blocks, create one user message if there's any user content
+    output_message: Dict[str, Any] = {"role": "assistant"}
+    if content:
+        output_message["content"] = content
+    if tool_calls:
+        output_message["tool_calls"] = tool_calls
+
+    return output_message
 
 
 def sample_to_openai_messages(sample) -> List[Dict[str, str]]:
@@ -244,18 +306,17 @@ def sample_to_openai_messages(sample) -> List[Dict[str, str]]:
 
     # Add the input messages to the rendered messages
     for message in function_input["messages"]:
-        rendered_message = render_message(message["content"], message["role"])
-        result["input"]["messages"].append(
-            {"role": message["role"], "content": rendered_message}
-        )
+        result["input"]["messages"].extend(render_message(message))
 
     # Add the demonstration (preferred output)
     preferred_output = json.loads(sample["preferred_output"])
-    result["preferred_output"].append(render_output_message(preferred_output))
+    rendered_preferred_output = render_output(preferred_output)
+    result["preferred_output"].append(rendered_preferred_output)
 
     # Add the inference output (non-preferred output)
     non_preferred_output = json.loads(sample["non_preferred_output"])
-    result["non_preferred_output"].append(render_output_message(non_preferred_output))
+    rendered_non_preferred_output = render_output(non_preferred_output)
+    result["non_preferred_output"].append(rendered_non_preferred_output)
 
     return result
 
