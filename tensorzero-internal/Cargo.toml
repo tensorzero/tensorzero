@@ -98,6 +98,7 @@ tracing-opentelemetry = "0.30.0"
 opentelemetry-otlp = { version = "0.29.0", features = ["grpc-tonic"] }
 opentelemetry-semantic-conventions = "0.29.0"
 init-tracing-opentelemetry = "0.28.0"
+tracing-futures = { version = "0.2.5", features = ["futures-03"] }
 
 
 [dev-dependencies]

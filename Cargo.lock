@@ -4195,6 +4195,7 @@ dependencies = [
  "tokio-stream",
  "toml",
  "tracing",
+ "tracing-futures",
  "tracing-opentelemetry",
  "tracing-subscriber",
  "tracing-test",
@@ -4561,6 +4562,18 @@ checksum = "e672c95779cf947c5311f83787af4fa8fffd12fb27e4993211a84bdfd9610f9c"
 dependencies = [
  "once_cell",
  "valuable",
+]
+
+[[package]]
+name = "tracing-futures"
+version = "0.2.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "97d095ae15e245a057c8e8451bab9b3ee1e1f68e9ba2b4fbc18d0ac5237835f2"
+dependencies = [
+ "futures",
+ "futures-task",
+ "pin-project",
+ "tracing",
 ]
 
 [[package]]
