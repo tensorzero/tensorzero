@@ -99,11 +99,19 @@ impl ObjectStoreInfo {
         let object_store: Option<Arc<dyn ObjectStore>> = match &config {
             StorageKind::Filesystem { path } => Some(Arc::new(
                 LocalFileSystem::new_with_prefix(path).map_err(|e| {
-                    Error::new(ErrorDetails::Config {
-                        message: format!(
-                            "Failed to create filesystem object store for path: {path}: {e}"
-                        ),
-                    })
+                    if !std::fs::exists(path).unwrap_or(false) {
+                        return Error::new(ErrorDetails::Config {
+                            message: format!(
+                                "Failed to create filesystem object store: path does not exist: {path}"
+                            ),
+                        });
+                    } else {
+                        Error::new(ErrorDetails::Config {
+                            message: format!(
+                                "Failed to create filesystem object store for path: {path}: {e}"
+                            ),
+                        })
+                    }
                 })?,
             )),
             StorageKind::S3Compatible {
@@ -2502,6 +2510,29 @@ thinking = { type = "enabled", budget_tokens = 1024 }
             .to_string();
         assert!(
             err.contains("Config file not found"),
+            "Unexpected error message: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_config_missing_filesystem_object_store() {
+        let tempfile = NamedTempFile::new().unwrap();
+        write!(
+            &tempfile,
+            r#"
+            [object_storage]
+            type = "filesystem"
+            path = "/fake-tensorzero-path/other-path"
+
+            [functions]"#
+        )
+        .unwrap();
+        let err = Config::load_and_verify_from_path(tempfile.path())
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("Failed to create filesystem object store: path does not exist: /fake-tensorzero-path/other-path"),
             "Unexpected error message: {err}"
         );
     }
