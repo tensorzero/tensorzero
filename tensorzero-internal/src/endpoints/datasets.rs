@@ -260,7 +260,7 @@ struct WithFunctionName {
 ///
 /// The inference is mostly copied as-is, except for the 'output' field.
 /// Based on the 'output' parameter, the output is copied, ignored, or fetched from a demonstration.
-#[instrument(name = "create_datapoint", skip(app_state))]
+#[instrument(name = "insert_datapoint", skip(app_state))]
 pub async fn create_from_existing_datapoint_handler(
     State(app_state): AppState,
     Path(path_params): Path<CreatePathParams>,
@@ -457,7 +457,7 @@ pub async fn bulk_insert_datapoints_handler(
     Path(path_params): Path<CreateDatapointPathParams>,
     StructuredJson(params): StructuredJson<CreateDatapointParams>,
 ) -> Result<Json<Vec<Uuid>>, Error> {
-    let datapoint_ids = create_datapoint(
+    let datapoint_ids = insert_datapoint(
         path_params.dataset_name,
         params,
         &app_state.config,
@@ -468,7 +468,7 @@ pub async fn bulk_insert_datapoints_handler(
     Ok(Json(datapoint_ids))
 }
 
-pub async fn create_datapoint(
+pub async fn insert_datapoint(
     dataset_name: String,
     params: CreateDatapointParams,
     config: &Config<'_>,
@@ -1071,7 +1071,7 @@ impl Datapoint {
     }
 }
 
-/// These input datapoints are used as input typesby the `create_datapoint` endpoint
+/// These input datapoints are used as input typesby the `insert_datapoint` endpoint
 /// The distinction here is that they do not include the `dataset_name` field,
 /// which is instead specified as a path parameter.
 /// We also use Input rather than ResolvedInput because the input is not resolved

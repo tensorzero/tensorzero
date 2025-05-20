@@ -605,7 +605,7 @@ impl Client {
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
-                    tensorzero_internal::endpoints::datasets::create_datapoint(
+                    tensorzero_internal::endpoints::datasets::insert_datapoint(
                         dataset_name,
                         params,
                         &gateway.state.config,
