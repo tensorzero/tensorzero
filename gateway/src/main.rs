@@ -228,7 +228,7 @@ async fn main() {
         )
         .route(
             "/internal/datasets/{dataset_name}/datapoints",
-            post(endpoints::datasets::create_from_existing_datapoint_handler),
+            post(endpoints::datasets::insert_from_existing_datapoint_handler),
         )
         .route(
             "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
