@@ -1,20 +1,6 @@
 # %%
 # type: ignore
 
-# %% [markdown]
-# # OpenAI Supervised Fine-Tuning
-#
-# This recipe allows TensorZero users to fine-tune OpenAI models using their own data.
-# Since TensorZero automatically logs all inferences and feedback, it is straightforward to fine-tune a model using your own data and any prompt you want.
-#
-
-# %% [markdown]
-# To get started:
-#
-# - Set the `TENSORZERO_CLICKHOUSE_URL` environment variable. For example: `TENSORZERO_CLICKHOUSE_URL="http://chuser:chpassword@localhost:8123/tensorzero"`
-# - Set the `OPENAI_API_KEY` environment variable.
-# - Update the following parameters:
-#
 
 # %%
 CONFIG_PATH = "../../../../examples/data-extraction-ner/config/tensorzero.toml"
