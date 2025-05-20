@@ -1,5 +1,6 @@
 # %%
 # type: ignore
+
 # %% [markdown]
 # # Fireworks Supervised Fine-Tuning
 #
@@ -45,6 +46,7 @@ import json
 import os
 import subprocess
 import tempfile
+import warnings
 from pathlib import Path
 from time import sleep
 from typing import Any, Dict, List
@@ -175,24 +177,111 @@ df.sample(5)[["output", "value"]]
 
 
 # %%
-def render_message(content: List[Dict[str, Any]], role: str) -> str:
+def warning_message(role: str) -> str:
+    return (
+        f"Fireworks does not support multiple content blocks per message. "
+        f"We have chosen to concatenate the text across all content blocks for the message with role '{role}'. "
+        f"You may want to manually review this behavior."
+    )
+
+
+def render_message(message: Dict[str, Any]) -> List[Dict[str, Any]]:
+    role = message["role"]
     assert role in ["user", "assistant"], f"Invalid role: {role}"
+    content: List[str] = []
+    tool_calls: List[Dict[str, Any]] = []
+    rendered_messages: List[Dict[str, Any]] = []
 
-    if len(content) != 1:
-        raise ValueError(f"Message must have exactly one content block: {content}")
+    for content_block in message["content"]:
+        if content_block["type"] == "text":
+            parsed_content = content_block["value"]
+            if not isinstance(parsed_content, str):
+                parsed_content = env.render_template(role, **parsed_content)
+            content.append({"type": "text", "text": parsed_content})
+        elif content_block["type"] == "raw_text":
+            content.append({"type": "text", "text": content_block["value"]})
+        elif content_block["type"] == "tool_call":
+            assert role == "assistant", (
+                "Tool calls are only allowed in assistant messages"
+            )
+            tool_calls.append(
+                {
+                    "function": {
+                        "arguments": json.dumps(content_block["arguments"]),
+                        "name": content_block["name"],
+                    },
+                    "id": content_block["id"],
+                    "type": "function",
+                }
+            )
+        elif content_block["type"] == "tool_result":
+            assert role == "user", "Tool results are only allowed in user messages"
+            # Tool results get priority so that they follow the tool call in the conversation
+            rendered_messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": content_block["id"],
+                    "content": content_block["result"],
+                }
+            )
+        else:
+            raise ValueError(f"Unsupported content block type: {content_block['type']}")
 
-    if content[0]["type"] != "text":
-        raise ValueError(f"Content block must be of type text: {content}")
+    if content or tool_calls:
+        role_message: Dict[str, Any] = {"role": role}
+        if content:
+            if len(content) > 1:
+                warnings.warn(warning_message(role), UserWarning)
+            role_message["content"] = "\n".join([c["text"] for c in content])
+        if tool_calls:
+            role_message["tool_calls"] = tool_calls
+        rendered_messages.append(role_message)
 
-    content = content[0]["value"]
+    return rendered_messages
 
-    if isinstance(content, str):
-        return content
+
+def render_output(
+    output: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """
+    Parses the assistant message from an observation using the provided function configuration.
+    """
+    content: List[str] = []
+    tool_calls: List[Dict[str, Any]] = []
+
+    if function_type == "json":
+        return {"role": "assistant", "content": output["raw"]}
+    elif function_type == "chat":
+        for content_block in output:
+            if content_block["type"] == "text":
+                content.append({"type": "text", "text": content_block["text"]})
+            elif content_block["type"] == "tool_call":
+                tool_calls.append(
+                    {
+                        "function": {
+                            "arguments": json.dumps(content_block["arguments"]),
+                            "name": content_block["name"],
+                        },
+                        "id": content_block["id"],
+                        "type": "function",
+                    }
+                )
     else:
-        return env.render_template(role, **content)
+        raise ValueError(f"Unsupported function type: {function_type}")
+
+    # Once we finish collecting all blocks, create one user message if there's any user content
+    output_message: Dict[str, Any] = {"role": "assistant"}
+    if content:
+        if len(content) > 1:
+            warnings.warn(warning_message("assistant"), UserWarning)
+        output_message["content"] = "\n".join([c["text"] for c in content])
+    if tool_calls:
+        output_message["tool_calls"] = tool_calls
+
+    return output_message
 
 
-def sample_to_conversational_messages(sample) -> List[Dict[str, str]]:
+def sample_to_conversational_messages(sample) -> List[Dict[str, Any]]:
     function_input = json.loads(sample["input"])
 
     rendered_messages = []
@@ -209,28 +298,19 @@ def sample_to_conversational_messages(sample) -> List[Dict[str, str]]:
 
     # Add the input messages to the rendered messages
     for message in function_input["messages"]:
-        rendered_message = render_message(message["content"], message["role"])
-        rendered_messages.append({"role": message["role"], "content": rendered_message})
+        rendered_messages.extend(render_message(message))
 
-    # Add the demonstration to the messages NOT the output here
-    output = json.loads(sample["value"])
+    # Add the output to the messages
+    output = json.loads(sample["output"])
+    rendered_output = render_output(output)
+    rendered_messages.append(rendered_output)
 
-    if function_type == "chat":
-        if len(output) != 1:
-            raise ValueError(f"Output {output} must have exactly one content block.")
-
-        if output[0]["type"] != "text":
-            raise ValueError(f"Output {output} must be a text block.")
-
-        rendered_messages.append({"role": "assistant", "content": output[0]["text"]})
-    elif function_type == "json":
-        rendered_messages.append({"role": "assistant", "content": output["raw"]})
-    else:
-        raise ValueError(f"Unsupported function type: {function_type}")
     return {"messages": rendered_messages}
 
 
 df["conversational_messages"] = df.apply(sample_to_conversational_messages, axis=1)
+
+df.head()
 
 # %%
 for _, row in df.iterrows():
