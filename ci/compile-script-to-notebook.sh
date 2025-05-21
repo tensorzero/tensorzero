@@ -2,7 +2,6 @@
 
 set -euo pipefail
 
-RECIPES_DIR="recipes"
 JUPYTEXT="uvx jupytext@1.17.1"      # single authoritative version
 
 ###############################################################################
