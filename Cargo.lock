@@ -4194,9 +4194,12 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "toml",
+ "tower-http",
+ "tower-layer",
  "tracing",
  "tracing-futures",
  "tracing-opentelemetry",
+ "tracing-opentelemetry-instrumentation-sdk",
  "tracing-subscriber",
  "tracing-test",
  "url",
@@ -4607,9 +4610,9 @@ dependencies = [
 
 [[package]]
 name = "tracing-opentelemetry-instrumentation-sdk"
-version = "0.28.0"
+version = "0.28.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ab7fa87728e33031354b2764cc8ed37265f2dc8f92543759dab216c15f04a076"
+checksum = "d68fa8bb457e8327ee32715a0a9425ebeab621d919a9677332dd1e58852a40aa"
 dependencies = [
  "http 1.3.1",
  "opentelemetry",

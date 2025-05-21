@@ -135,6 +135,13 @@ repos:
           - typescript
         pass_filenames: false
 
+      - id: notebooks-compile-validate
+        name: Compile & validate notebooks
+        entry: ci/compile-check-notebooks.sh all
+        language: system # run in the host environment (needs uvx)
+        # Restrict to files that matter so other commits don't pay the cost
+        files: ^recipes/.*(\.ipynb|_nb\.py)$
+
   - repo: https://github.com/srstevenson/nb-clean
     rev: 3.2.0
     hooks:
@@ -147,6 +154,7 @@ repos:
     hooks:
       - id: ruff
         args: ["--extend-select", "I", "--fix"]
+        exclude: ^recipes/.*/_nb\.py$|^recipes/.*_nb\.py$
       - id: ruff-format
 
   - repo: https://github.com/RobertCraigie/pyright-python

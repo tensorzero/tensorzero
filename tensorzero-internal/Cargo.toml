@@ -99,6 +99,9 @@ opentelemetry-otlp = { version = "0.29.0", features = ["grpc-tonic"] }
 opentelemetry-semantic-conventions = "0.29.0"
 init-tracing-opentelemetry = "0.28.0"
 tracing-futures = { version = "0.2.5", features = ["futures-03"] }
+tracing-opentelemetry-instrumentation-sdk = { workspace = true, features = ["http"] }
+tower-http = { workspace = true }
+tower-layer = "0.3.3"
 
 
 [dev-dependencies]
