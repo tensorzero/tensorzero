@@ -71,7 +71,7 @@ impl Migration for Migration0026<'_> {
             || !dynamic_evaluation_run_by_project_name_view_exists)
     }
 
-    async fn apply(&self) -> Result<(), Error> {
+    async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         let query = r#"
             CREATE TABLE IF NOT EXISTS DynamicEvaluationRunEpisodeByRunId
                 (
@@ -138,8 +138,8 @@ impl Migration for Migration0026<'_> {
     fn rollback_instructions(&self) -> String {
         "\
         -- Drop the materialized views\n\
-        DROP MATERIALIZED VIEW IF EXISTS DynamicEvaluationRunEpisodeByRunIdView;\n\
-        DROP MATERIALIZED VIEW IF EXISTS DynamicEvaluationRunByProjectNameView;\n\
+        DROP VIEW IF EXISTS DynamicEvaluationRunEpisodeByRunIdView;\n\
+        DROP VIEW IF EXISTS DynamicEvaluationRunByProjectNameView;\n\
         -- Drop the tables\n\
         DROP TABLE IF EXISTS DynamicEvaluationRunEpisodeByRunId;\n\
         DROP TABLE IF EXISTS DynamicEvaluationRunByProjectName;

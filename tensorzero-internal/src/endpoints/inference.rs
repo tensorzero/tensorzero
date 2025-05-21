@@ -269,6 +269,10 @@ pub async fn inference(
             }
             .into());
         }
+        params.tags.insert(
+            "tensorzero::variant_pinned".to_string(),
+            variant_name.to_string(),
+        );
     } else {
         // Remove all zero-weight variants - these can only be used if explicitly pinned above
         candidate_variant_names.retain(|name| {
@@ -505,7 +509,7 @@ fn find_function(params: &Params, config: &Config) -> Result<(Arc<FunctionConfig
     match (&params.function_name, &params.model_name) {
         // Get the function config or return an error if it doesn't exist
         (Some(function_name), None) => Ok((
-            config.get_function(function_name)?.clone(),
+            config.get_function(function_name)?.into_owned(),
             function_name.to_string(),
         )),
         (None, Some(model_name)) => {
@@ -1184,10 +1188,6 @@ mod tests {
                 panic!("Expected ChatInferenceResponseChunk, got JsonInferenceResponseChunk");
             }
         }
-
-        // TODO (#86): You could get the values of the private members using unsafe Rust.
-        // For now, we won't and will rely on E2E testing here.
-        // This test doesn't do much so consider deleting or doing more.
 
         // Test case 2: Valid JSON ProviderInferenceResponseChunk
         let chunk = InferenceResultChunk::Json(JsonInferenceResultChunk {

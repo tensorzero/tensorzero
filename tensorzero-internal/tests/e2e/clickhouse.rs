@@ -1,9 +1,12 @@
+#![allow(clippy::print_stdout)]
+
+use std::cell::Cell;
 use std::future::Future;
 use std::sync::Arc;
 
 use paste::paste;
 use reqwest::Client;
-use secrecy::SecretString;
+use secrecy::{ExposeSecret, SecretString};
 use serde_json::json;
 use tensorzero_internal::clickhouse::migration_manager::migration_trait::Migration;
 use tracing_test::traced_test;
@@ -19,19 +22,8 @@ use tensorzero_internal::clickhouse::migration_manager::migrations::migration_00
 use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0009::Migration0009;
 use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0011::Migration0011;
 use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0013::Migration0013;
-use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0015::Migration0015;
-use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0016::Migration0016;
-use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0017::Migration0017;
-use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0018::Migration0018;
-use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0019::Migration0019;
-use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0020::Migration0020;
-use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0021::Migration0021;
-use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0022::Migration0022;
-use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0023::Migration0023;
-use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0024::Migration0024;
-use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0025::Migration0025;
-use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0026::Migration0026;
-use tensorzero_internal::clickhouse::migration_manager::{self};
+
+use tensorzero_internal::clickhouse::migration_manager::{self, make_all_migrations};
 use tensorzero_internal::clickhouse::test_helpers::{get_clickhouse, CLICKHOUSE_URL};
 use tensorzero_internal::clickhouse::ClickHouseConnectionInfo;
 
@@ -80,92 +72,258 @@ macro_rules! invoke_all {
     }
 }
 
+const MANIFEST_PATH: &str = env!("CARGO_MANIFEST_DIR");
+
+async fn run_migration_0020_with_data<R: Future<Output = bool>, F: FnOnce() -> R>(
+    clickhouse: &ClickHouseConnectionInfo,
+    run_migration: F,
+) -> bool {
+    // Insert data so that we test the migration re-creates the tables properly.
+    let s3_fixtures_path: String = format!("{MANIFEST_PATH}/../ui/fixtures/s3-fixtures");
+
+    let ClickHouseConnectionInfo::Production {
+        database_url,
+        database,
+        client: _,
+    } = clickhouse
+    else {
+        panic!("ClickHouseConnectionInfo is not a Production connection");
+    };
+
+    let url = url::Url::parse(database_url.expose_secret()).unwrap();
+    let mut host = url.host_str().unwrap();
+    if host == "localhost" || host == "127.0.0.1" {
+        host = "host.docker.internal";
+    }
+    let username = url.username();
+    let password = url.password().unwrap_or("");
+
+    // We use our latest fixtures - new columns will get ignored when inserting.
+    for (file, table) in [
+        ("large_chat_inference.parquet", "ChatInference"),
+        ("large_json_inference.parquet", "JsonInference"),
+    ] {
+        let mut command = tokio::process::Command::new("docker");
+        command.args([
+            "run",
+            "--add-host=host.docker.internal:host-gateway",
+            "-v",
+            &format!("{s3_fixtures_path}:/s3-fixtures"),
+            "clickhouse/clickhouse-server:25.4-alpine",
+            "clickhouse-client",
+            "--host",
+            host,
+            "--user",
+            username,
+            "--password",
+            password,
+            "--database",
+            database,
+            "--query",
+            &format!(
+                r#"
+        INSERT INTO {table} FROM INFILE '/s3-fixtures/{file}' FORMAT Parquet
+    "#
+            ),
+        ]);
+        assert!(
+            command.spawn().unwrap().wait().await.unwrap().success(),
+            "Failed to insert {table}"
+        );
+    }
+
+    // Check that the same number of rows are in the tables before and after the migration
+
+    let initial_chat_count: u64 = clickhouse
+        .run_query_synchronous("SELECT count() FROM ChatInference".to_string(), None)
+        .await
+        .unwrap()
+        .trim()
+        .parse()
+        .unwrap();
+    let initial_json_count: u64 = clickhouse
+        .run_query_synchronous("SELECT count() FROM JsonInference".to_string(), None)
+        .await
+        .unwrap()
+        .trim()
+        .parse()
+        .unwrap();
+
+    let clean_start = run_migration().await;
+
+    let final_chat_count: u64 = clickhouse
+        .run_query_synchronous("SELECT count() FROM ChatInference".to_string(), None)
+        .await
+        .unwrap()
+        .trim()
+        .parse()
+        .unwrap();
+    let final_json_count: u64 = clickhouse
+        .run_query_synchronous("SELECT count() FROM JsonInference".to_string(), None)
+        .await
+        .unwrap()
+        .trim()
+        .parse()
+        .unwrap();
+
+    assert_eq!(
+        initial_chat_count, final_chat_count,
+        "Lost data from ChatInference"
+    );
+    assert_eq!(
+        initial_json_count, final_json_count,
+        "Lost data from JsonInference"
+    );
+
+    // Check that existing rows are inserted into InferenceById and InferenceByEpisodeId,
+    // and check an individual row from ChatInference and JsonInference.
+
+    let final_inference_by_id_count: u64 = clickhouse
+        .run_query_synchronous("SELECT count() FROM InferenceById FINAL".to_string(), None)
+        .await
+        .unwrap()
+        .trim()
+        .parse()
+        .unwrap();
+
+    let final_inference_by_episode_id_count: u64 = clickhouse
+        .run_query_synchronous(
+            "SELECT count() FROM InferenceByEpisodeId FINAL".to_string(),
+            None,
+        )
+        .await
+        .unwrap()
+        .trim()
+        .parse()
+        .unwrap();
+
+    assert_eq!(
+        final_inference_by_id_count,
+        final_chat_count + final_json_count,
+        "Didn't insert all data into InferenceById"
+    );
+    assert_eq!(
+        final_inference_by_episode_id_count,
+        final_chat_count + final_json_count,
+        "Didn't insert all data into InferenceByEpisodeId"
+    );
+
+    let sample_chat_row = clickhouse
+        .run_query_synchronous(
+            "SELECT toUInt128(id) as id_uint, toUInt128(episode_id) as episode_id_uint FROM ChatInference LIMIT 1 FORMAT JSONEachRow".to_string(),
+            None,
+        )
+        .await
+        .unwrap();
+
+    let sample_chat_row_json = serde_json::from_str::<serde_json::Value>(&sample_chat_row).unwrap();
+    let sample_chat_id = sample_chat_row_json["id_uint"].as_str().unwrap();
+    let sample_chat_episode_id = sample_chat_row_json["episode_id_uint"].as_str().unwrap();
+
+    println!("Querying for sample chat by id: {sample_chat_id}");
+
+    let matching_chat_by_id = clickhouse
+        .run_query_synchronous(
+            format!("SELECT id_uint, toUInt128(episode_id) as episode_id_uint FROM InferenceById FINAL WHERE function_type = 'chat' AND id_uint = '{sample_chat_id}' LIMIT 1 FORMAT JSONEachRow"),
+            None,
+        )
+        .await
+        .unwrap();
+
+    println!("Matching chat by id: `{matching_chat_by_id}`");
+
+    let matching_chat_by_id_json =
+        serde_json::from_str::<serde_json::Value>(&matching_chat_by_id).unwrap();
+    assert_eq!(
+        matching_chat_by_id_json["episode_id_uint"]
+            .as_str()
+            .unwrap(),
+        sample_chat_episode_id
+    );
+
+    let matching_chat_by_episode_id = clickhouse
+        .run_query_synchronous(
+            format!("SELECT * FROM InferenceByEpisodeId FINAL WHERE function_type = 'chat' AND episode_id_uint = '{sample_chat_episode_id}' LIMIT 1 FORMAT JSONEachRow"),
+            None,
+        )
+        .await
+        .unwrap();
+
+    let matching_chat_by_episode_id_json =
+        serde_json::from_str::<serde_json::Value>(&matching_chat_by_episode_id).unwrap();
+    assert_eq!(
+        matching_chat_by_episode_id_json["id_uint"]
+            .as_str()
+            .unwrap(),
+        sample_chat_id
+    );
+
+    let sample_json_row = clickhouse
+        .run_query_synchronous(
+            "SELECT toUInt128(id) as id_uint, toUInt128(episode_id) as episode_id_uint FROM JsonInference LIMIT 1 FORMAT JSONEachRow".to_string(),
+            None,
+        )
+        .await
+        .unwrap();
+
+    let sample_json_row_json = serde_json::from_str::<serde_json::Value>(&sample_json_row).unwrap();
+    let sample_json_id = sample_json_row_json["id_uint"].as_str().unwrap();
+    let sample_json_episode_id = sample_json_row_json["episode_id_uint"].as_str().unwrap();
+
+    let matching_json_by_id = clickhouse
+        .run_query_synchronous(
+            format!("SELECT id_uint, toUInt128(episode_id) as episode_id_uint FROM InferenceById FINAL WHERE function_type = 'json' AND id_uint = '{sample_json_id}' LIMIT 1 FORMAT JSONEachRow"),
+            None,
+        )
+        .await
+        .unwrap();
+
+    let matching_json_by_id_json =
+        serde_json::from_str::<serde_json::Value>(&matching_json_by_id).unwrap();
+    assert_eq!(
+        matching_json_by_id_json["episode_id_uint"]
+            .as_str()
+            .unwrap(),
+        sample_json_episode_id
+    );
+
+    let matching_json_by_episode_id = clickhouse
+        .run_query_synchronous(
+            format!("SELECT * FROM InferenceByEpisodeId FINAL WHERE function_type = 'json' AND episode_id_uint = '{sample_json_episode_id}' LIMIT 1 FORMAT JSONEachRow"),
+            None,
+        )
+        .await
+        .unwrap();
+
+    let matching_json_by_episode_id_json =
+        serde_json::from_str::<serde_json::Value>(&matching_json_by_episode_id).unwrap();
+    assert_eq!(
+        matching_json_by_episode_id_json["id_uint"]
+            .as_str()
+            .unwrap(),
+        sample_json_id
+    );
+    clean_start
+}
+
 #[tokio::test]
 async fn test_clickhouse_migration_manager() {
     let clickhouse = get_clean_clickhouse();
     clickhouse.create_database().await.unwrap();
     // Run it twice to test that it is a no-op the second time
     clickhouse.create_database().await.unwrap();
-
-    // When creating a new migration, add it to the end of this array,
-    // and adjust the call to `invoke_all!` to include the new array index.
-    let migrations: &[Box<dyn Migration + '_>] = &[
-        Box::new(Migration0000 {
-            clickhouse: &clickhouse,
-        }),
-        Box::new(Migration0002 {
-            clickhouse: &clickhouse,
-        }),
-        Box::new(Migration0003 {
-            clickhouse: &clickhouse,
-        }),
-        Box::new(Migration0004 {
-            clickhouse: &clickhouse,
-        }),
-        Box::new(Migration0005 {
-            clickhouse: &clickhouse,
-        }),
-        Box::new(Migration0006 {
-            clickhouse: &clickhouse,
-        }),
-        Box::new(Migration0008 {
-            clickhouse: &clickhouse,
-        }),
-        Box::new(Migration0009 {
-            clickhouse: &clickhouse,
-            clean_start: true,
-        }),
-        Box::new(Migration0011 {
-            clickhouse: &clickhouse,
-        }),
-        Box::new(Migration0015 {
-            clickhouse: &clickhouse,
-        }),
-        Box::new(Migration0016 {
-            clickhouse: &clickhouse,
-        }),
-        Box::new(Migration0017 {
-            clickhouse: &clickhouse,
-        }),
-        Box::new(Migration0018 {
-            clickhouse: &clickhouse,
-        }),
-        Box::new(Migration0019 {
-            clickhouse: &clickhouse,
-        }),
-        Box::new(Migration0020 {
-            clickhouse: &clickhouse,
-            clean_start: true,
-        }),
-        Box::new(Migration0021 {
-            clickhouse: &clickhouse,
-            clean_start: true,
-        }),
-        Box::new(Migration0022 {
-            clickhouse: &clickhouse,
-        }),
-        Box::new(Migration0023 {
-            clickhouse: &clickhouse,
-        }),
-        Box::new(Migration0024 {
-            clickhouse: &clickhouse,
-        }),
-        Box::new(Migration0025 {
-            clickhouse: &clickhouse,
-        }),
-        Box::new(Migration0026 {
-            clickhouse: &clickhouse,
-        }),
-    ];
+    let migrations = make_all_migrations(&clickhouse);
 
     // This runs all migrations up to and including the given migration number,
     // verifying that only the most recent migration is actually applied.
     let run_migrations_up_to = |migration_num: usize, logs_contain: fn(&str) -> bool| {
         let migrations = &migrations;
+        let clickhouse = &clickhouse;
         async move {
+            let initial_clean_start = Cell::new(true);
             // All of the previous migrations should have already been run
             for (i, migration) in migrations.iter().enumerate().take(migration_num) {
-                let clean_start = migration_manager::run_migration(migration.as_ref())
+                let clean_start = migration_manager::run_migration(migration.as_ref(), false)
                     .await
                     .unwrap();
                 if i == 0 {
@@ -183,18 +341,36 @@ async fn test_clickhouse_migration_manager() {
                 );
             }
 
-            let clean_start = migration_manager::run_migration(migrations[migration_num].as_ref())
+            let run_migration = || async {
+                migration_manager::run_migration(
+                    migrations[migration_num].as_ref(),
+                    initial_clean_start.get(),
+                )
                 .await
-                .unwrap();
+                .unwrap()
+            };
+
+            // The latest migration should get applied, since we haven't run it before
+            let name = migrations[migration_num].name();
+
+            let clean_start = if name == "Migration0020" {
+                // We're going to be inserting data into the tables, so run all subsequent
+                // migrations in non-clean-start mode.
+                initial_clean_start.set(false);
+                run_migration_0020_with_data(clickhouse, run_migration).await
+            } else {
+                run_migration().await
+            };
+
             if migration_num == 0 {
                 // When running for the first time, we should have a clean start.
                 assert!(clean_start);
             }
-
-            // The latest migration should get applied, since we haven't run it before
-            let name = migrations[migration_num].name();
-            assert!(logs_contain(&format!("Applying migration: {name}")));
-            assert!(logs_contain(&format!("Migration succeeded: {name}")));
+            // Migration 0029 will not be applied since 0023 is turned off.
+            if name != "Migration0029" {
+                assert!(logs_contain(&format!("Applying migration: {name}")));
+                assert!(logs_contain(&format!("Migration succeeded: {name}")));
+            }
             assert!(!logs_contain("Failed to apply migration"));
             assert!(!logs_contain("Failed migration success check"));
             assert!(!logs_contain("Failed to verify migration"));
@@ -203,10 +379,10 @@ async fn test_clickhouse_migration_manager() {
     };
 
     #[traced_test]
-    async fn run_all(migrations: &[Box<dyn Migration + '_>]) {
+    async fn run_all(migrations: &[Box<dyn Migration + Send + Sync + '_>]) {
         // Now, run all of the migrations, and verify that none of them apply
         for (i, migration) in migrations.iter().enumerate() {
-            let clean_start = migration_manager::run_migration(migration.as_ref())
+            let clean_start = migration_manager::run_migration(migration.as_ref(), true)
                 .await
                 .unwrap();
             if i == 0 {
@@ -231,9 +407,9 @@ async fn test_clickhouse_migration_manager() {
         // will throw an error if it doesn't.
         // This must be an array literal, so that the macro can generate a function
         // for each element in the array.
-        [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+        [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]
     );
-    run_all(migrations).await;
+    run_all(&migrations).await;
 
     let database = clickhouse.database();
     tracing::info!("Attempting to drop test database: {database}");
@@ -318,7 +494,6 @@ async fn test_migration_0013_old_table() {
         }),
         Box::new(Migration0009 {
             clickhouse: &clickhouse,
-            clean_start: true,
         }),
         Box::new(Migration0011 {
             clickhouse: &clickhouse,
@@ -327,7 +502,7 @@ async fn test_migration_0013_old_table() {
 
     // Run migrations up to right before 0013
     for migration in migrations.iter() {
-        migration_manager::run_migration(migration.as_ref())
+        migration_manager::run_migration(migration.as_ref(), true)
             .await
             .unwrap();
     }
@@ -347,10 +522,12 @@ async fn test_migration_0013_old_table() {
         .run_query_synchronous(query.to_string(), None)
         .await
         .unwrap();
-    let err = migration_manager::run_migration(&Migration0013 {
-        clean_start: false,
-        clickhouse: &clickhouse,
-    })
+    let err = migration_manager::run_migration(
+        &Migration0013 {
+            clickhouse: &clickhouse,
+        },
+        false,
+    )
     .await
     .unwrap_err();
     assert!(
@@ -394,7 +571,6 @@ async fn test_migration_0013_data_no_table() {
         }),
         Box::new(Migration0009 {
             clickhouse: &clickhouse,
-            clean_start: true,
         }),
         Box::new(Migration0011 {
             clickhouse: &clickhouse,
@@ -403,7 +579,7 @@ async fn test_migration_0013_data_no_table() {
 
     // Run migrations up to right before 0013
     for migration in migrations.iter() {
-        migration_manager::run_migration(migration.as_ref())
+        migration_manager::run_migration(migration.as_ref(), true)
             .await
             .unwrap();
     }
@@ -418,10 +594,12 @@ async fn test_migration_0013_data_no_table() {
         .run_query_synchronous(query.to_string(), None)
         .await
         .unwrap();
-    let err = migration_manager::run_migration(&Migration0013 {
-        clean_start: false,
-        clickhouse: &clickhouse,
-    })
+    let err = migration_manager::run_migration(
+        &Migration0013 {
+            clickhouse: &clickhouse,
+        },
+        false,
+    )
     .await
     .unwrap_err();
     assert!(err.to_string()

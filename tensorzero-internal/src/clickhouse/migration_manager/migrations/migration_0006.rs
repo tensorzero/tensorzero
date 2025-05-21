@@ -44,7 +44,7 @@ impl Migration for Migration0006<'_> {
         Ok(false)
     }
 
-    async fn apply(&self) -> Result<(), Error> {
+    async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         // Create the `BatchModelInference` table
         let query = r#"
             CREATE TABLE IF NOT EXISTS BatchModelInference
@@ -133,7 +133,7 @@ impl Migration for Migration0006<'_> {
     fn rollback_instructions(&self) -> String {
         "\
             -- Drop the materialized views\n\
-            DROP MATERIALIZED VIEW IF EXISTS BatchIdByInferenceIdView;\n\
+            DROP VIEW IF EXISTS BatchIdByInferenceIdView;\n\
             \n\
             -- Drop the tables\n\
             DROP TABLE IF EXISTS BatchIdByInferenceId;\n\

@@ -202,7 +202,7 @@ macro_rules! generate_provider_tests {
         use $crate::providers::common::test_multi_turn_parallel_tool_use_streaming_inference_request_with_provider;
         use $crate::providers::common::test_streaming_invalid_request_with_provider;
         use $crate::providers::common::test_json_mode_off_inference_request_with_provider;
-
+        use $crate::providers::common::test_multiple_text_blocks_in_message_with_provider;
 
         #[tokio::test]
         async fn test_simple_inference_request() {
@@ -211,6 +211,7 @@ macro_rules! generate_provider_tests {
                 test_simple_inference_request_with_provider(provider).await;
             }
         }
+
 
 
         #[tokio::test]
@@ -564,6 +565,15 @@ macro_rules! generate_provider_tests {
                 test_json_mode_off_inference_request_with_provider(provider).await;
             }
         }
+
+        #[tokio::test]
+        async fn test_multiple_text_blocks_in_message() {
+            let providers = $func().await.simple_inference;
+            for provider in providers {
+                test_multiple_text_blocks_in_message_with_provider(provider).await;
+            }
+        }
+
     };
 }
 
@@ -587,14 +597,14 @@ model = "google_ai_studio_gemini::gemini-2.0-flash-lite"
 
 [functions.image_test.variants.gcp_vertex]
 type = "chat_completion"
-model = "gemini-1.5-pro-001"
+model = "gemini-2.5-pro-preview-05-06"
 
-[models."gemini-1.5-pro-001"]
+[models."gemini-2.5-pro-preview-05-06"]
 routing = ["gcp_vertex_gemini"]
 
-[models."gemini-1.5-pro-001".providers.gcp_vertex_gemini]
+[models."gemini-2.5-pro-preview-05-06".providers.gcp_vertex_gemini]
 type = "gcp_vertex_gemini"
-model_id = "gemini-1.5-pro-001"
+model_id = "gemini-2.5-pro-preview-05-06"
 location = "us-central1"
 project_id = "tensorzero-public"
 
@@ -1960,10 +1970,18 @@ pub async fn check_simple_inference_response(
     let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
     assert_eq!(clickhouse_content, content);
 
+    let tags = result.get("tags").unwrap().as_object().unwrap();
     if !is_batch {
-        let tags = result.get("tags").unwrap().as_object().unwrap();
         assert_eq!(tags.get("foo").unwrap().as_str().unwrap(), "bar");
     }
+    // Since the variant was pinned, the variant_pinned tag should be present
+    assert_eq!(
+        tags.get("tensorzero::variant_pinned")
+            .unwrap()
+            .as_str()
+            .unwrap(),
+        provider.variant_name
+    );
 
     let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
     assert!(tool_params.is_empty());
@@ -1975,6 +1993,8 @@ pub async fn check_simple_inference_response(
     assert!(inference_params.get("seed").is_none());
     let max_tokens = if provider.model_name.starts_with("o1") {
         1000
+    } else if provider.model_name.starts_with("gemini-2.5-pro") {
+        500
     } else {
         100
     };
@@ -2188,6 +2208,8 @@ pub async fn check_simple_image_inference_response(
     assert!(inference_params.get("seed").is_none());
     let max_tokens = if provider.model_name.starts_with("o1") {
         1000
+    } else if provider.model_name.starts_with("gemini-2.5-pro") {
+        500
     } else {
         100
     };
@@ -2525,6 +2547,8 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     assert!(inference_params.get("seed").is_none());
     let expected_max_tokens = if provider.model_name.starts_with("o1") {
         1000
+    } else if provider.model_name.starts_with("gemini-2.5-pro") {
+        500
     } else {
         100
     };
@@ -2541,7 +2565,6 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     assert!(processing_time_ms > 0);
 
     let tags = result.get("tags").unwrap().as_object().unwrap();
-    assert_eq!(tags.len(), 1);
     assert_eq!(tags.get("key").unwrap().as_str().unwrap(), tag_value);
 
     // Check ClickHouse - ModelInference Table
@@ -2635,6 +2658,10 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
 }
 
 pub async fn test_inference_params_inference_request_with_provider(provider: E2ETestProvider) {
+    // Gemini 2.5 Pro gives us 'Penalty is not enabled for models/gemini-2.5-pro-preview-05-06'
+    if provider.model_name.starts_with("gemini-2.5-pro") {
+        return;
+    }
     let episode_id = Uuid::now_v7();
     let extra_headers = get_extra_headers();
     let payload = json!({
@@ -2873,6 +2900,10 @@ pub async fn check_inference_params_response(
 pub async fn test_inference_params_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    // Gemini 2.5 Pro gives us 'Penalty is not enabled for models/gemini-2.5-pro-preview-05-06'
+    if provider.model_name.starts_with("gemini-2.5-pro") {
+        return;
+    }
     let episode_id = Uuid::now_v7();
     let extra_headers = get_extra_headers();
     let payload = json!({
@@ -4968,6 +4999,7 @@ pub async fn test_tool_use_tool_choice_none_inference_request_with_provider(
     .await;
 }
 
+// Test that the model doesn't emit a tool call when tool_choice is none
 pub async fn check_tool_use_tool_choice_none_inference_response(
     response_json: Value,
     provider: &E2ETestProvider,
@@ -4990,9 +5022,14 @@ pub async fn check_tool_use_tool_choice_none_inference_response(
     assert!(!content.iter().any(|block| block["type"] == "tool_call"));
     let content_block = content
         .iter()
-        .find(|block| block["type"] == "text")
+        // Gemini 2.5 Pro will sometimes emit 'executableCode' blocks, which we turn into 'unknown' blocks
+        .find(|block| block["type"] == "text" || block["type"] == "unknown")
         .unwrap();
-    assert!(content_block.get("text").unwrap().as_str().is_some());
+    if content_block["type"] == "unknown" {
+        assert!(content_block.get("data").is_some());
+    } else {
+        assert!(content_block.get("text").unwrap().as_str().is_some());
+    }
 
     let usage = response_json.get("usage").unwrap();
     let usage = usage.as_object().unwrap();
@@ -5154,9 +5191,9 @@ pub async fn check_tool_use_tool_choice_none_inference_response(
     let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
     let first = output.first().unwrap();
     match first {
-        ContentBlock::Text(_text) => {}
+        ContentBlock::Text(_) | ContentBlock::Unknown { .. } => {}
         _ => {
-            panic!("Expected a text block, got {first:?}");
+            panic!("Expected a text or unknown block, got {first:?}");
         }
     }
 }
@@ -5164,6 +5201,11 @@ pub async fn check_tool_use_tool_choice_none_inference_response(
 pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    // Gemini 2.5 Pro will produce 'executableCode' blocks for this test, which we don't support
+    // in streaming mode (since we don't have "unknown" streaming chunks)
+    if provider.model_name.starts_with("gemini-2.5-pro") {
+        return;
+    }
     // OpenAI O1 doesn't support streaming responses
     if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
         return;
@@ -6959,6 +7001,8 @@ pub async fn check_tool_use_multi_turn_inference_response(
     assert!(inference_params.get("seed").is_none());
     let max_tokens = if provider.model_name.starts_with("o1") {
         1000
+    } else if provider.model_name.starts_with("gemini-2.5-pro") {
+        500
     } else {
         100
     };
@@ -7103,7 +7147,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
                             "type": "tool_call",
                             "id": "123456789",
                             "name": "get_temperature",
-                            "arguments": "{\"location\": \"Tokyo\"}"
+                            "arguments": "{\"location\": \"Tokyo\", \"units\": \"celsius\"}"
                         }
                     ]
                 },
@@ -7236,7 +7280,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
                         "type": "tool_call",
                         "id": "123456789",
                         "name": "get_temperature",
-                        "arguments": "{\"location\": \"Tokyo\"}"
+                        "arguments": "{\"location\": \"Tokyo\", \"units\": \"celsius\"}"
                     }
                 ]
             },
@@ -7274,13 +7318,18 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
+    let max_tokens = if provider.model_name.starts_with("gemini-2.5-pro") {
+        500
+    } else {
+        100
+    };
     assert_eq!(
         inference_params
             .get("max_tokens")
             .unwrap()
             .as_u64()
             .unwrap(),
-        100
+        max_tokens
     );
 
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
@@ -7360,7 +7409,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
             content: vec![ContentBlock::ToolCall(ToolCall {
                 id: "123456789".to_string(),
                 name: "get_temperature".to_string(),
-                arguments: "{\"location\": \"Tokyo\"}".to_string(),
+                arguments: "{\"location\": \"Tokyo\", \"units\": \"celsius\"}".to_string(),
             })],
         },
         RequestMessage {
@@ -8905,6 +8954,8 @@ pub async fn check_json_mode_inference_response(
     assert!(inference_params.get("seed").is_none());
     let max_tokens = if provider.model_name.starts_with("o1") {
         1000
+    } else if provider.model_name.starts_with("gemini-2.5-pro") {
+        500
     } else {
         100
     };
@@ -9160,6 +9211,8 @@ pub async fn check_dynamic_json_mode_inference_response(
     assert!(inference_params.get("seed").is_none());
     let max_tokens = if provider.model_name.starts_with("o1") {
         1000
+    } else if provider.model_name.starts_with("gemini-2.5-pro") {
+        500
     } else {
         100
     };
@@ -9408,13 +9461,18 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
+    let max_tokens = if provider.model_name.starts_with("gemini-2.5-pro") {
+        500
+    } else {
+        100
+    };
     assert_eq!(
         inference_params
             .get("max_tokens")
             .unwrap()
             .as_u64()
             .unwrap(),
-        100
+        max_tokens
     );
 
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
@@ -9529,6 +9587,14 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
     // currently fails. It's fine to skip it, since we really care about testing the sagemaker
     // wrapper code, not whatever container we happen to be wrapping.
     if provider.model_provider_name == "aws_sagemaker" {
+        return;
+    }
+
+    // The 2.5 Pro model always seems to think before responding, even with
+    // {"generationConfig": {"thinkingConfig": {"thinkingBudget": 0 }}
+    // This prevents us from setting a low max_tokens, since the thinking tokens will
+    // use up all of the output tokens before an actual response is generated.
+    if provider.model_name.starts_with("gemini-2.5-pro") {
         return;
     }
 
@@ -10577,4 +10643,63 @@ pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETes
     assert!(response_time_ms > 0);
 
     assert!(result.get("ttft_ms").unwrap().is_null());
+}
+
+pub async fn test_multiple_text_blocks_in_message_with_provider(provider: E2ETestProvider) {
+    let episode_id = Uuid::now_v7();
+    let extra_headers = get_extra_headers();
+    let payload = json!({
+        "function_name": "basic_test",
+        "variant_name": provider.variant_name,
+        "episode_id": episode_id,
+        "input":
+            {
+               "system": {"assistant_name": "Dr. Mehta"},
+               "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "What is the name of the capital city"
+                        },
+                        {
+                            "type": "text",
+                            "text": "of Japan?"
+                        }
+                    ]
+                }
+            ]},
+        "stream": false,
+        "tags": {"foo": "bar"},
+        "extra_headers": extra_headers.headers,
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    // Check that the API response is ok
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+
+    println!("API response: {response_json:#?}");
+
+    let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
+    let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
+    assert_eq!(episode_id_response, episode_id);
+
+    let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
+    assert_eq!(variant_name, provider.variant_name);
+
+    let content = response_json.get("content").unwrap().as_array().unwrap();
+    assert_eq!(content.len(), 1);
+    let content_block = content.first().unwrap();
+    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
+    assert_eq!(content_block_type, "text");
+    let content = content_block.get("text").unwrap().as_str().unwrap();
+    assert!(content.to_lowercase().contains("tokyo"));
 }

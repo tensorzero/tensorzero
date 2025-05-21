@@ -12,12 +12,12 @@ import {
   Globe,
   Documentation,
   Dataset,
-  Evaluation,
+  GridCheck,
 } from "~/components/icons/Icons";
 import {
   countInferencesByFunction,
   countEpisodes,
-} from "~/utils/clickhouse/inference";
+} from "~/utils/clickhouse/inference.server";
 import { getConfig } from "~/utils/config/index.server";
 import { getDatasetCounts } from "~/utils/clickhouse/datasets.server";
 import { countTotalEvaluationRuns } from "~/utils/clickhouse/evaluations.server";
@@ -162,7 +162,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             />
             <FeatureCard
               source="/evaluations"
-              icon={Evaluation}
+              icon={GridCheck}
               title="Evaluations"
               description={`${numEvaluations} evaluations, ${numEvaluationRuns} runs`}
             />

@@ -91,7 +91,7 @@ impl Migration for Migration0005<'_> {
         Ok(false)
     }
 
-    async fn apply(&self) -> Result<(), Error> {
+    async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         // Create the `InferenceTag` table
         let query = r#"
             CREATE TABLE IF NOT EXISTS InferenceTag
@@ -170,8 +170,8 @@ impl Migration for Migration0005<'_> {
     fn rollback_instructions(&self) -> String {
         "\
             -- Drop the materialized views\n\
-            DROP MATERIALIZED VIEW IF EXISTS ChatInferenceTagView;\n\
-            DROP MATERIALIZED VIEW IF EXISTS JsonInferenceTagView;\n\
+            DROP VIEW IF EXISTS ChatInferenceTagView;\n\
+            DROP VIEW IF EXISTS JsonInferenceTagView;\n\
             \n
             -- Drop the `InferenceTag` table\n\
             DROP TABLE IF EXISTS InferenceTag;\n\
