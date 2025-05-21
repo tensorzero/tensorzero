@@ -32,8 +32,9 @@ export default defineConfig(({ mode }) => ({
       // https://github.com/remix-run/react-router/issues/12786#issuecomment-2634033513
       { warmup: { clientFiles: ["./app/root.tsx"] } }
     : undefined,
-
   test: {
+    // Load env variables from .env if it exists
+    // https://vite.dev/config/
     env: loadEnv(mode, process.cwd(), ""),
     environment: "node",
     include: ["**/*.test.ts", "**/*.test.tsx"],
