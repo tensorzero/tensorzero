@@ -13,15 +13,13 @@ crate::generate_batch_inference_tests!(get_providers);
 //
 // As a result, we leave most of the fields in `E2ETestProviders` empty.
 async fn get_providers() -> E2ETestProviders {
-    let standard_providers = vec![
-        E2ETestProvider {
-            supports_batch_inference: false,
-            variant_name: "aws-sagemaker-openai".to_string(),
-            model_name: "gemma-3-1b-aws-sagemaker-openai".into(),
-            model_provider_name: "aws_sagemaker".into(),
-            credentials: HashMap::new(),
-        },
-    ];
+    let standard_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "aws-sagemaker-openai".to_string(),
+        model_name: "gemma-3-1b-aws-sagemaker-openai".into(),
+        model_provider_name: "aws_sagemaker".into(),
+        credentials: HashMap::new(),
+    }];
 
     let extra_body_providers = vec![E2ETestProvider {
         supports_batch_inference: false,

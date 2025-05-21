@@ -760,7 +760,9 @@ impl UninitializedProviderConfig {
                             Some(CredentialLocation::None),
                         )?),
                         HostedProviderKind::TGI => Box::new(TGIProvider::new(
-                            Url::parse("http://tensorzero-unreachable-domain-please-file-a-bug-report.invalid").unwrap(),
+                            Url::parse("http://tensorzero-unreachable-domain-please-file-a-bug-report.invalid").map_err(|e| {
+                                Error::new(ErrorDetails::InternalError { message: format!("Failed to parse fake TGI endpoint: `{e}`. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new") })
+                            })?,
                             Some(CredentialLocation::None),
                         )?),
                     };

@@ -164,14 +164,14 @@ impl WrappedProvider for TGIProvider {
             })
         })?;
 
-        Ok(TGIResponseWithMetadata {
+        TGIResponseWithMetadata {
             response,
             latency,
             raw_response,
             raw_request,
             generic_request: request,
         }
-        .try_into()?)
+        .try_into()
     }
 
     fn stream_events(
