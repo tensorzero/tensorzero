@@ -1,4 +1,6 @@
+# %%
 # type: ignore
+
 # %% [markdown]
 # # OpenAI Supervised Fine-Tuning
 #
@@ -15,6 +17,7 @@
 #
 
 # %%
+X = 1
 CONFIG_PATH = "../../../../examples/data-extraction-ner/config/tensorzero.toml"
 
 FUNCTION_NAME = "extract_entities"
