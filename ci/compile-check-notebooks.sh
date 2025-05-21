@@ -54,8 +54,8 @@ compile_notebooks () {
     done
     echo ""
     echo "Please use one of the following options to fix the issue:"
-    echo " • Convert the notebook to a script: ci/compile-notebook-to-script.sh path/to/notebook.ipynb"
-    echo " • Convert the script to a notebook: ci/compile-script-to-notebook.sh path/to/script_nb.py"
+    echo " • Compile the notebook to a script: ci/compile-notebook-to-script.sh path/to/notebook.ipynb"
+    echo " • Compile the script to a notebook: ci/compile-script-to-notebook.sh path/to/script_nb.py"
     exit 1
   fi
 }
