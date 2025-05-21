@@ -43,7 +43,7 @@ jobs:
 
       - name: Install uv
         run: curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
-  
+
       - name: Download ClickHouse fixtures
         run: uv run ./ui/fixtures/download-fixtures.py
 
@@ -246,8 +246,8 @@ jobs:
 
       - name: Lint (Python:ruff)
         run: |
-          uvx ruff@0.9.0 check --output-format=github --extend-select I .
-          uvx ruff@0.9.0 format --check .
+          uvx ruff@0.9.0 check --output-format=github --extend-select I --exclude "recipes/**/*_nb.py" .
+          uvx ruff@0.9.0 format --check --exclude "recipes/**/*_nb.py" .
 
       - name: "Python: Pyo3 Client: Build and install dependencies"
         working-directory: clients/python
@@ -340,6 +340,9 @@ jobs:
         working-directory: ui
         run: pnpm run typecheck
 
+      - name: Compile / validate notebooks
+        run: ci/compile-check-notebooks.sh
+
   clickhouse-tests:
     # We don't run many tests here, so use a normal runner with Github Actions caching
     # to avoid unnecessarily using Namespace credits (it should still always finish before
@@ -373,7 +376,7 @@ jobs:
         uses: taiki-e/install-action@37bdc826eaedac215f638a96472df572feab0f9b
         with:
           tool: cargo-nextest
-      
+
       - name: Install uv
         run: curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
 
