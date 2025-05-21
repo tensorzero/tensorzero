@@ -2359,7 +2359,7 @@ pub async fn test_streaming_invalid_request_with_provider(provider: E2ETestProvi
 }
 
 pub async fn test_simple_streaming_inference_request_with_provider(provider: E2ETestProvider) {
-    // We use a serverlesss Sagemaker endpoint, which doesn't support streaming
+    // We use a serverless Sagemaker endpoint, which doesn't support streaming
     if provider.variant_name == "aws-sagemaker-tgi" {
         return;
     }
