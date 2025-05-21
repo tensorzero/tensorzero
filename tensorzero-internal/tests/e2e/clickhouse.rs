@@ -186,6 +186,24 @@ async fn run_migration_0009_with_data<R: Future<Output = bool>, F: FnOnce() -> R
     clean_start
 }
 
+async fn run_migration_0021_with_data<R: Future<Output = bool>, F: FnOnce() -> R>(
+    clickhouse: &ClickHouseConnectionInfo,
+    run_migration: F,
+) -> bool {
+    let initial_chat_inference_count: u64 = count_table_rows(clickhouse, "ChatInference").await;
+    let initial_json_inference_count: u64 = count_table_rows(clickhouse, "JsonInference").await;
+
+    let clean_start = run_migration().await;
+
+    let final_tag_inference_count: u64 = count_table_rows(clickhouse, "TagInference").await;
+    assert_eq!(
+        initial_chat_inference_count + initial_json_inference_count,
+        final_tag_inference_count,
+    );
+
+    clean_start
+}
+
 async fn run_migration_0020_with_data<R: Future<Output = bool>, F: FnOnce() -> R>(
     clickhouse: &ClickHouseConnectionInfo,
     run_migration: F,
@@ -380,7 +398,20 @@ async fn test_clickhouse_migration_manager() {
                     initial_clean_start.set(false);
                     run_migration_0009_with_data(clickhouse, run_migration).await
                 }
-                "Migration0020" => run_migration_0020_with_data(clickhouse, run_migration).await,
+                "Migration0020" => {
+                    assert!(
+                        !initial_clean_start.get(),
+                        "Migration0020 should not be run on a clean start"
+                    );
+                    run_migration_0020_with_data(clickhouse, run_migration).await
+                }
+                "Migration0021" => {
+                    assert!(
+                        !initial_clean_start.get(),
+                        "Migration0021 should not be run on a clean start"
+                    );
+                    run_migration_0021_with_data(clickhouse, run_migration).await
+                }
                 _ => run_migration().await,
             };
 
