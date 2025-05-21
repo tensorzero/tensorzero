@@ -223,8 +223,7 @@ if (
     query = f"""
     SELECT
         i.input,
-        i.output,
-        f.value,
+        f.value as output,
         i.episode_id
     FROM
         {inference_table_name} i
@@ -260,7 +259,7 @@ else:
         raise ValueError(f"Unsupported metric level: {filter_metric.level}")
 
     threshold = FILTER_METRIC_THRESHOLD if filter_metric.type == "float" else 0.5
-    comparison_operator = ">=" if filter_metric.optimize == "maximize" else "<="
+    comparison_operator = ">=" if filter_metric.optimize == "max" else "<="
 
     query = f"""
     SELECT
@@ -296,9 +295,6 @@ else:
 
 df = clickhouse_client.query_df(query, params)
 
-if FILTER_METRIC_NAME != "demonstration":
-    df.value = df.output
-
 df.head()
 
 # %% [markdown]
@@ -317,6 +313,24 @@ if base_variant.system_template is not None:
 if base_variant.user_template is not None:
     templates["user"] = base_variant.user_template
 
+candidate_template = """
+{{ instructions }}
+{% for demo in demonstrations %}
+=== Demonstration {{ loop.index }} ===
+{% for msg in demo.messages %}{% if msg.role != 'system' %}
+**{{ msg.role | capitalize }}**
+{% if msg.content is defined %}{% if msg.content is string %}
+{{ msg.content }}
+{% else %}{% for block in msg.content %}
+{{ block.text }}
+{% endfor %}{% endif %}{% endif %}
+{% if msg.tool_calls is defined %}{% for call in msg.tool_calls %}
+> Tool Call: `{{ call.function.name }}` ({{ call.function.arguments }})
+{% endfor %}{% endif %}{% endif %}{% endfor %}{% endfor %}
+"""
+
+templates["candidate"] = candidate_template
+
 env = Environment(templates=templates)
 
 
@@ -325,88 +339,125 @@ env = Environment(templates=templates)
 
 
 # %%
-def render_message(
-    content: List[Dict[str, Any]], role: str, content_key: str = "value"
-) -> str:
+def render_message(message: Dict[str, Any]) -> List[Dict[str, Any]]:
+    role = message["role"]
     assert role in ["user", "assistant"], f"Invalid role: {role}"
+    content: List[str] = []
+    tool_calls: List[Dict[str, Any]] = []
+    rendered_messages: List[Dict[str, Any]] = []
 
-    rendered_content = []
-    if role == "user":
-        rendered_content.append("ENVIRONMENT:")
-    else:
-        rendered_content.append("AGENT:")
-
-    for block in content:
-        if block["type"] == "text":
-            value = block[content_key]
-            if isinstance(value, str):
-                rendered_content.append(value)
-            else:
-                value = env.render_template(role, **value)  # type: ignore
-                assert isinstance(value, str)
-                rendered_content.append(value)
-        elif block["type"] == "raw_text":
-            rendered_content.append(block["value"])
-        elif block["type"] == "tool_call":
-            del block["id"]
-            del block["type"]
-            rendered_content.append(f"Tool call: {json.dumps(block)}")
-        elif block["type"] == "tool_result":
-            rendered_content.append(f"Tool result: {block['result']}")
+    for content_block in message["content"]:
+        if content_block["type"] == "text":
+            parsed_content = content_block["value"]
+            if not isinstance(parsed_content, str):
+                parsed_content = env.render_template(role, **parsed_content)
+            content.append({"type": "text", "text": parsed_content})
+        elif content_block["type"] == "raw_text":
+            content.append({"type": "text", "text": content_block["value"]})
+        elif content_block["type"] == "tool_call" and role == "assistant":
+            tool_calls.append(
+                {
+                    "function": {
+                        "arguments": json.dumps(content_block["arguments"]),
+                        "name": content_block["name"],
+                    },
+                    "id": content_block["id"],
+                    "type": "function",
+                }
+            )
+        elif content_block["type"] == "tool_result" and role == "user":
+            # Tool results get priority so that they follow the tool call in the conversation
+            rendered_messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": content_block["id"],
+                    "content": content_block["result"],
+                }
+            )
         else:
             raise ValueError(
-                f"Content block must be of type text, tool_call, or tool_result: {content}"
+                f"Unsupported content block type: {content_block['type']} for role: {role}"
             )
 
-    return "\n".join(rendered_content)
+    if content or tool_calls:
+        role_message: Dict[str, Any] = {"role": role}
+        if content:
+            role_message["content"] = content
+        if tool_calls:
+            role_message["tool_calls"] = tool_calls
+        rendered_messages.append(role_message)
+
+    return rendered_messages
 
 
-def format_input(sample):
-    function_input = json.loads(sample["input"])
-    rendered_message = ""
-    for message in function_input["messages"]:
-        rendered_message += render_message(message["content"], message["role"])
-        rendered_message += "\n"
-    return rendered_message
+def render_output(
+    output: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """
+    Parses the assistant message from an observation using the provided function configuration.
+    """
+    content: List[str] = []
+    tool_calls: List[Dict[str, Any]] = []
 
-
-def format_output(sample):
-    output = json.loads(sample["value"])
-
-    rendered_output = []
-    if base_function.type == "chat":
-        for block in output:
-            if block["type"] == "text":
-                rendered_output.append(block["text"])
-            elif block["type"] == "tool_call":
-                del block["raw_arguments"]
-                del block["raw_name"]
-                del block["type"]
-                rendered_output.append(f"Tool call: {json.dumps(block)}")
-            elif block["type"] == "tool_result":
-                rendered_output.append(json.dumps(block))
-            else:
-                raise ValueError(
-                    f"Output {block} must be a text, tool_call, or tool_result block."
+    if base_function.type == "json":
+        return {"role": "assistant", "content": output["raw"]}
+    elif base_function.type == "chat":
+        for content_block in output:
+            if content_block["type"] == "text":
+                content.append({"type": "text", "text": content_block["text"]})
+            elif content_block["type"] == "tool_call":
+                tool_calls.append(
+                    {
+                        "function": {
+                            "arguments": json.dumps(content_block["arguments"]),
+                            "name": content_block["name"],
+                        },
+                        "id": content_block["id"],
+                        "type": "function",
+                    }
                 )
-            return "\n".join(rendered_output)
-    elif base_function.type == "json":
-        return output["raw"]
     else:
         raise ValueError(f"Unsupported function type: {base_function.type}")
 
+    # Once we finish collecting all blocks, create one user message if there's any user content
+    output_message: Dict[str, Any] = {"role": "assistant"}
+    if content:
+        output_message["content"] = content
+    if tool_calls:
+        output_message["tool_calls"] = tool_calls
 
-def format_system_args(sample):
+    return output_message
+
+
+def sample_to_openai_messages(sample) -> List[Dict[str, Any]]:
     function_input = json.loads(sample["input"])
-    if "system" in function_input:
-        return function_input["system"]
-    else:
-        return ""
+
+    rendered_messages = []
+
+    # Add the system message to the rendered messages
+    # If there is data passed in or a system template there must be a system message
+    system = function_input.get("system", {})
+    if len(system) > 0 or base_variant.system_template:
+        if base_variant.system_template:
+            system_message = env.render_template("system", **system)
+            rendered_messages.append({"role": "system", "content": system_message})
+        else:
+            rendered_messages.append({"role": "system", "content": system})
+
+    # Add the input messages to the rendered messages
+    for message in function_input["messages"]:
+        rendered_messages.extend(render_message(message))
+
+    # Add the output to the messages
+    output = json.loads(sample["output"])
+    rendered_output = render_output(output)
+    rendered_messages.append(rendered_output)
+
+    return {"messages": rendered_messages}
 
 
-df["input_str"] = df.apply(format_input, axis=1)
-df["value_str"] = df.apply(format_output, axis=1)
-df["system_args"] = df.apply(format_system_args, axis=1)
+df["conversational_messages"] = df.apply(sample_to_openai_messages, axis=1)
+
 df.head()
 
 # %% [markdown]
@@ -479,22 +530,14 @@ for response in responses:
 def generate_demonstrations(
     df: pd.DataFrame,
     max_examples_per_demonstration: int,
-    input_col: str,
-    output_col: str,
-    system_col: str,
     seed: int = 42,
 ) -> str:
     sample = df.sample(
         n=max_examples_per_demonstration, replace=False, random_state=seed
     )
-    demonstrations = ""
-    demonstration_number = 1
+    demonstrations = []
     for _, row in sample.iterrows():  # type: ignore
-        demonstrations += f"DEMONSTRATION {demonstration_number}:\n"
-        demonstration_number += 1
-        if row[system_col] is not None and row[system_col] != "":
-            demonstrations += f"SYSTEM:\n{row[system_col]}\n"
-        demonstrations += f"{row[input_col]}AGENT:\n{row[output_col]}\n\n"
+        demonstrations.append(row["conversational_messages"])
     return demonstrations
 
 
@@ -503,13 +546,19 @@ candidate_demonstrations = [
     generate_demonstrations(
         df=train_df,
         max_examples_per_demonstration=MAX_EXAMPLES_PER_DEMONSTRATION,
-        input_col="input_str",
-        output_col="value_str",
-        system_col="system_args",
         seed=seed,
     )
     for seed in range(NUM_CANDIDATE_DEMONSTRATIONS)
 ]
+
+# %%
+print(
+    env.render_template(
+        "candidate",
+        demonstrations=candidate_demonstrations[0],
+        instructions=candidate_instructions[1],
+    )
+)
 
 # %% [markdown]
 # ## Optimize the Prompt
@@ -523,10 +572,6 @@ num_demonstrations = len(candidate_demonstrations)
 
 
 # %%
-def format_system_template(instructions: str, demonstrations: str) -> str:
-    return f"# Instructions:\n\n{instructions}\n\n# Demonstrations:\n\n{demonstrations}"
-
-
 def format_response(response: Optional[InferenceResponse]) -> str:
     if response is None:
         return ""
@@ -552,9 +597,10 @@ async def objective(trial: optuna.Trial):
         "demonstration_index", range(num_demonstrations)
     )
     # Format the candidate prompt
-    candidate_prompt = format_system_template(
-        candidate_instructions[instruction_index],
-        candidate_demonstrations[demonstration_index],
+    candidate_prompt = env.render_template(
+        "candidate",
+        instructions=candidate_instructions[instruction_index],
+        demonstrations=candidate_demonstrations[demonstration_index],
     )
     # Create a new variant with the candidate prompt
     candidate_variant_name = f"{instruction_index}_{demonstration_index}"
@@ -600,7 +646,7 @@ async def objective(trial: optuna.Trial):
                 ground_truth=str(ground_truth),
                 semaphore=semaphore,
             )
-            for response, ground_truth in zip(responses, eval_df["value_str"])
+            for response, ground_truth in zip(responses, eval_df["output"])
         ]
     )
 
@@ -659,7 +705,8 @@ for iteration in range(MAX_ITERATIONS):
 # We can now generate an optimized system template.
 
 # %%
-optimized_system_template = format_system_template(
+optimized_system_template = env.render_template(
+    "candidate",
     instructions=candidate_instructions[study_tpe.best_params["instruction_index"]],
     demonstrations=candidate_demonstrations[
         study_tpe.best_params["demonstration_index"]
@@ -671,7 +718,7 @@ print(optimized_system_template)
 # You can save the optimized configuration file tree.
 
 # %%
-OUTPUT_DIR = None  # Set to a local path to save the optimized config
+OUTPUT_DIR = "tmp"  # Set to a local path to save the optimized config
 
 optimized_variant_name = "mipro_optimized"
 optimized_config = deepcopy(base_config)
