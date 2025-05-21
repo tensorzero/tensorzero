@@ -28,9 +28,8 @@ compile_notebooks () {
   local failed=()
   for nb in "${targets[@]}"; do
     [[ $nb != *_nb.py ]] && continue
-    # Copy the notebook to a temporary file
     local target="${nb%_nb.py}.ipynb"
-    local tmp_out="/tmp/compiled_notebook.ipynb"
+    local tmp_out="$(mktemp).ipynb"
     cp "$target" "$tmp_out"
 
     # Compile the Python script to a temporary notebook file and clean it with nb-clean
