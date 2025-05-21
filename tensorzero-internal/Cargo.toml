@@ -93,7 +93,6 @@ eventsource-stream = "0.2.3"
 scoped-tls = "1.0.1"
 opentelemetry_sdk = "0.29.0"
 opentelemetry = "0.29.1"
-opentelemetry-stdout = "0.29.0"
 tracing-opentelemetry = "0.30.0"
 opentelemetry-otlp = { version = "0.29.0", features = ["grpc-tonic"] }
 opentelemetry-semantic-conventions = "0.29.0"
