@@ -2,7 +2,8 @@
 
 set -euo pipefail
 
-JUPYTEXT="uvx jupytext@1.17.1"      # single authoritative version
+JUPYTEXT="uvx jupytext@1.17.1"
+NB_CLEAN="uvx nb-clean@4.0.1"
 
 ###############################################################################
 
@@ -17,7 +18,9 @@ compile_script_to_notebook () {
   $JUPYTEXT --to ipynb --update --set-formats "ipynb,py:percent" \
             --opt notebook_metadata_filter=-all --opt cell_metadata_filter=-all \
             --output "$target" "$nb"
-  uvx nb-clean clean "$target"
+
+  # Clean the notebook
+  $NB_CLEAN clean "$target"
 }
 
 ###############################################################################
