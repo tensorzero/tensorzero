@@ -16,10 +16,14 @@ HF_TOKEN = os.environ["HF_TOKEN"]
 # Hub Model configuration. https://huggingface.co/models
 hub = {
     #'SM_NUM_GPUS': json.dumps(1),
-    "HF_TOKEN": HF_TOKEN,
     # "LOG_LEVEL": "trace",
     # "QUANTIZE": "awq",
-    "VLLM_SKIP_WARMUP": "true",
+    "HF_TOKEN": HF_TOKEN,
+    # TGI has a 'Warming up model' step, which cannot be disabled.
+    # It creates a maximum-size request to test memory usage, which can easily exceed
+    # the 180 second startup timeout for Sagemaker serverless.
+    # By lowering the maximum token limits, we can speed up the startup time.
+    # All of our e2e tests use relatively small requests, so this is fine.
     "MAX_CLIENT_BATCH_SIZE": "1",
     "MAX_BATCH_PREFILL_TOKENS": "100",
     "MAX_BATCH_TOTAL_TOKENS": "1000",
