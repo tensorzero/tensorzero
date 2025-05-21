@@ -194,10 +194,7 @@ def render_message(message: Dict[str, Any]) -> List[Dict[str, Any]]:
             content.append({"type": "text", "text": parsed_content})
         elif content_block["type"] == "raw_text":
             content.append({"type": "text", "text": content_block["value"]})
-        elif content_block["type"] == "tool_call":
-            assert role == "assistant", (
-                "Tool calls are only allowed in assistant messages"
-            )
+        elif content_block["type"] == "tool_call" and role == "assistant":
             tool_calls.append(
                 {
                     "function": {
@@ -208,8 +205,7 @@ def render_message(message: Dict[str, Any]) -> List[Dict[str, Any]]:
                     "type": "function",
                 }
             )
-        elif content_block["type"] == "tool_result":
-            assert role == "user", "Tool results are only allowed in user messages"
+        elif content_block["type"] == "tool_result" and role == "user":
             # Tool results get priority so that they follow the tool call in the conversation
             rendered_messages.append(
                 {
@@ -219,7 +215,9 @@ def render_message(message: Dict[str, Any]) -> List[Dict[str, Any]]:
                 }
             )
         else:
-            raise ValueError(f"Unsupported content block type: {content_block['type']}")
+            raise ValueError(
+                f"Unsupported content block type: {content_block['type']} for role: {role}"
+            )
 
     if content or tool_calls:
         role_message: Dict[str, Any] = {"role": role}
