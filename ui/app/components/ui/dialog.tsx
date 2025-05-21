@@ -73,6 +73,11 @@ const DialogHeader = ({
 );
 DialogHeader.displayName = "DialogHeader";
 
+/**
+ * DialogBody is a component that handles the scrollable content of a dialog.
+ * It ensures that the dialog's header and footer remain visible while allowing
+ * the body content to scroll if it overflows the available space.
+ */
 const DialogBody = ({
   className,
   ...props
