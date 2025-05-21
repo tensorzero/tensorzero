@@ -250,7 +250,7 @@ def warning_message(role: str) -> str:
 def render_message(message: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
     role = message["role"]
     assert role in ["user", "assistant"], f"Invalid role: {role}"
-    content: List[str] = []
+    content: List[Dict[str, Any]] = []
     tool_calls: List[Dict[str, Any]] = []
     rendered_messages: List[Dict[str, Any]] = []
 
@@ -268,6 +268,10 @@ def render_message(message: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
             content.append({"type": "text", "text": parsed_content})
         elif content_block["type"] == "raw_text":
             content.append({"type": "text", "text": content_block["value"]})
+        elif content_block["type"] == "thought":
+            content.append(
+                {"type": "text", "text": f"<think>{content_block['value']}</think>"}
+            )
         elif (
             content_block["type"] == "tool_call"
             and role == "assistant"
@@ -305,9 +309,11 @@ def render_message(message: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
                 }
             )
         else:
-            raise ValueError(
-                f"Unsupported content block type: {content_block['type']} for role: {role}"
+            warnings.warn(
+                f"We do not support content block type: {content_block['type']}, dropping example.",
+                UserWarning,
             )
+            return None
 
     if content or tool_calls:
         role_message: Dict[str, Any] = {"role": role}
@@ -328,7 +334,7 @@ def render_output(
     """
     Parses the assistant message from an observation using the provided function configuration.
     """
-    content: List[str] = []
+    content: List[Dict[str, Any]] = []
     tool_calls: List[Dict[str, Any]] = []
 
     if function_type == "json":
@@ -343,6 +349,10 @@ def render_output(
                 return None
             if content_block["type"] == "text":
                 content.append({"type": "text", "text": content_block["text"]})
+            elif content_block["type"] == "thought":
+                content.append(
+                    {"type": "text", "text": f"<think>{content_block['value']}</think>"}
+                )
             elif content_block["type"] == "tool_call" and not DROP_INVALID_MESSAGES:
                 warnings.warn(
                     "Together.ai may not support tool calls in assistant messages.",
@@ -359,9 +369,11 @@ def render_output(
                     }
                 )
             else:
-                raise ValueError(
-                    f"Unsupported content block type: {content_block['type']}"
+                warnings.warn(
+                    f"We do not support content block type: {content_block['type']}, dropping example.",
+                    UserWarning,
                 )
+                return None
     else:
         raise ValueError(f"Unsupported function type: {function_type}")
 
