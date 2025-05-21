@@ -372,6 +372,15 @@ jobs:
         with:
           cache-provider: "buildjet"
           save-if: ${{ github.event_name == 'merge_group' }}
+      - run: df -h
+      # ClickHouse intermittently runs out of disk space on the `ubuntu-latest` runner
+      # I'm using the commands from https://carlosbecker.com/posts/github-actions-disk-space/ to try to get more disk space
+      - name: "Free up disk space"
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force
+          sudo docker builder prune -a
+      - run: df -h
       - name: Install cargo-nextest
         uses: taiki-e/install-action@37bdc826eaedac215f638a96472df572feab0f9b
         with:
