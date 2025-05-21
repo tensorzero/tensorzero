@@ -12,7 +12,7 @@
 # %% [markdown]
 # To get started:
 #
-# - Set the `CLICKHOUSE_URL` environment variable. For example: `CLICKHOUSE_URL="http://chuser:chpassword@localhost:8123/tensorzero"`
+# - Set the `TENSORZERO_CLICKHOUSE_URL` environment variable. For example: `TENSORZERO_CLICKHOUSE_URL="http://chuser:chpassword@localhost:8123/tensorzero"`
 # - You'll also need to [install](https://docs.fireworks.ai/tools-sdks/firectl/firectl) the CLI tool `firectl` on your machine and sign in with `firectl signin`. You can test that this all worked with `firectl whoami`.
 # - Update the following parameters:
 #
@@ -20,9 +20,9 @@
 # %%
 import os
 
-CLICKHOUSE_URL = os.getenv("CLICKHOUSE_URL")
+CLICKHOUSE_URL = os.getenv("TENSORZERO_CLICKHOUSE_URL")
 
-assert CLICKHOUSE_URL is not None, "CLICKHOUSE_URL is not set"
+assert CLICKHOUSE_URL is not None, "TENSORZERO_CLICKHOUSE_URL is not set"
 
 # %%
 CONFIG_PATH = "../../../../examples/data-extraction-ner/config/tensorzero.toml"
@@ -46,6 +46,11 @@ MAX_SAMPLES = 100_000
 # The name of the model to fine-tune (supported models: https://docs.fireworks.ai/fine-tuning/fine-tuning-models#supported-base-models)
 MODEL_NAME = "accounts/fireworks/models/llama-v3p1-8b-instruct"
 
+# At the time of writing, Fireworks does not support tool call content blocks in assistant messages. Or the tool role.
+# We will drop these invalid messages from the dataset by default.
+# You can set this to False to keep the invalid messages in the dataset.
+DROP_INVALID_MESSAGES = True
+
 # %%
 import json
 import os
@@ -54,7 +59,7 @@ import tempfile
 import warnings
 from pathlib import Path
 from time import sleep
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import toml
 from clickhouse_connect import get_client
@@ -243,7 +248,7 @@ def warning_message(role: str) -> str:
     )
 
 
-def render_message(message: Dict[str, Any]) -> List[Dict[str, Any]]:
+def render_message(message: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
     role = message["role"]
     assert role in ["user", "assistant"], f"Invalid role: {role}"
     content: List[str] = []
@@ -251,6 +256,12 @@ def render_message(message: Dict[str, Any]) -> List[Dict[str, Any]]:
     rendered_messages: List[Dict[str, Any]] = []
 
     for content_block in message["content"]:
+        if content_block["type"] not in ["text", "raw_text"] and DROP_INVALID_MESSAGES:
+            warnings.warn(
+                f"Fireworks may not support content block type: {content_block['type']}, dropping example.",
+                UserWarning,
+            )
+            return None
         if content_block["type"] == "text":
             parsed_content = content_block["value"]
             if not isinstance(parsed_content, str):
@@ -258,7 +269,15 @@ def render_message(message: Dict[str, Any]) -> List[Dict[str, Any]]:
             content.append({"type": "text", "text": parsed_content})
         elif content_block["type"] == "raw_text":
             content.append({"type": "text", "text": content_block["value"]})
-        elif content_block["type"] == "tool_call" and role == "assistant":
+        elif (
+            content_block["type"] == "tool_call"
+            and role == "assistant"
+            and not DROP_INVALID_MESSAGES
+        ):
+            warnings.warn(
+                "Fireworks may not support tool calls in assistant messages. Including it may cause the fine-tuning job to fail.",
+                UserWarning,
+            )
             tool_calls.append(
                 {
                     "function": {
@@ -269,7 +288,15 @@ def render_message(message: Dict[str, Any]) -> List[Dict[str, Any]]:
                     "type": "function",
                 }
             )
-        elif content_block["type"] == "tool_result" and role == "user":
+        elif (
+            content_block["type"] == "tool_result"
+            and role == "user"
+            and not DROP_INVALID_MESSAGES
+        ):
+            warnings.warn(
+                "Fireworks may not support tool results in user messages. Including it may cause the fine-tuning job to fail.",
+                UserWarning,
+            )
             # Tool results get priority so that they follow the tool call in the conversation
             rendered_messages.append(
                 {
@@ -298,7 +325,7 @@ def render_message(message: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 def render_output(
     output: List[Dict[str, Any]],
-) -> Dict[str, Any]:
+) -> Optional[Dict[str, Any]]:
     """
     Parses the assistant message from an observation using the provided function configuration.
     """
@@ -309,9 +336,19 @@ def render_output(
         return {"role": "assistant", "content": output["raw"]}
     elif function_type == "chat":
         for content_block in output:
+            if content_block["type"] != "text" and DROP_INVALID_MESSAGES:
+                warnings.warn(
+                    f"Fireworks may not support content block type: {content_block['type']}, dropping example.",
+                    UserWarning,
+                )
+                return None
             if content_block["type"] == "text":
                 content.append({"type": "text", "text": content_block["text"]})
-            elif content_block["type"] == "tool_call":
+            elif content_block["type"] == "tool_call" and not DROP_INVALID_MESSAGES:
+                warnings.warn(
+                    "Fireworks may not support tool calls in assistant messages. Including it may cause the fine-tuning job to fail.",
+                    UserWarning,
+                )
                 tool_calls.append(
                     {
                         "function": {
@@ -321,6 +358,10 @@ def render_output(
                         "id": content_block["id"],
                         "type": "function",
                     }
+                )
+            else:
+                raise ValueError(
+                    f"Unsupported content block type: {content_block['type']}"
                 )
     else:
         raise ValueError(f"Unsupported function type: {function_type}")
@@ -354,17 +395,23 @@ def sample_to_conversational_messages(sample) -> List[Dict[str, Any]]:
 
     # Add the input messages to the rendered messages
     for message in function_input["messages"]:
-        rendered_messages.extend(render_message(message))
+        rendered_message = render_message(message)
+        if rendered_message is None:
+            return None
+        rendered_messages.extend(rendered_message)
 
     # Add the output to the messages
     output = json.loads(sample["output"])
     rendered_output = render_output(output)
+    if rendered_output is None:
+        return None
     rendered_messages.append(rendered_output)
 
     return {"messages": rendered_messages}
 
 
 df["conversational_messages"] = df.apply(sample_to_conversational_messages, axis=1)
+df = df[df["conversational_messages"].notna()]
 
 df.head()
 
@@ -406,13 +453,11 @@ def get_job_id(stdout: str) -> str:
 command = [
     "firectl",
     "create",
-    "fine-tuning-job",
+    "sftj",
     "--display-name",
     f"tensorzero-ft-job-{dataset_id}",
     "--dataset",
     dataset_id,
-    "--kind",
-    "conversation",
     "--base-model",
     MODEL_NAME,
 ]
@@ -438,17 +483,17 @@ while True:
     clear_output(wait=True)
 
     try:
-        command = ["firectl", "get", "fine-tuning-job", job_id]
+        command = ["firectl", "get", "sftj", job_id]
         result = subprocess.run(command, capture_output=True)
         stdout = result.stdout.decode("utf-8")
         print(stdout)
     except Exception as e:
         print(f"Error: {e}")
 
-    if "State: FAILED" in stdout:
+    if "State: JOB_STATE_FAILED" in stdout:
         raise ValueError("Fine-tuning job failed")
 
-    if "State: COMPLETED" in stdout:
+    if "State: JOB_STATE_COMPLETED" in stdout:
         break
 
     sleep(5)
@@ -457,7 +502,7 @@ while True:
 # %%
 def get_model_id(stdout: str) -> str:
     for line in stdout.splitlines():
-        if line.strip().startswith("Model Id:"):
+        if line.strip().startswith("Output Model:"):
             return line.split(":")[1].strip()
     raise ValueError("Model ID not found in output")
 
