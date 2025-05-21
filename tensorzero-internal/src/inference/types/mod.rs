@@ -390,6 +390,13 @@ pub struct ModelInferenceRequest<'a> {
     pub extra_cache_key: Option<String>,
 }
 
+/// For use in rendering for optimization purposes
+#[derive(Debug)]
+pub struct ModelInput {
+    pub system: Option<String>,
+    pub messages: Vec<RequestMessage>,
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum FinishReason {
