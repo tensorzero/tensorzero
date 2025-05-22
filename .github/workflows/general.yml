@@ -75,7 +75,14 @@ jobs:
         # This test causes a huge slowdown on ClickHouse cloud, even though it uses a fresh database
         # For now, let's skip it (we still run it in the local docker ClickHouse tests)
         # See https://github.com/tensorzero/tensorzero/issues/2216
-        run: cargo test-e2e-no-creds -- --skip test_concurrent_clickhouse_migrations
+        # Also, `test_clickhouse_migration_manager` is consistently taking a very long time (and timing out)
+        # on the fast release channel, so we temporarily skip it
+        run: |
+          if [ "${{ matrix.cloud_instance.release_channel }}" = "fast" ]; then
+            cargo test-e2e-no-creds -- --skip test_concurrent_clickhouse_migrations --skip test_clickhouse_migration_manager
+          else
+            cargo test-e2e-no-creds -- --skip test_concurrent_clickhouse_migrations
+          fi
 
       - name: Print e2e logs
         if: always()
