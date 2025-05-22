@@ -1,0 +1,101 @@
+name: UI Tests
+
+on:
+  workflow_call:
+
+jobs:
+  ui-tests:
+    runs-on: namespace-profile-tensorzero-4x16
+
+    permissions:
+      contents: read # permission to read the repository
+      id-token: write # permission to fetch the GitHub OIDC token
+
+    continue-on-error: ${{ matrix.clickhouse_version.allow_failure }}
+
+    strategy:
+      matrix:
+        clickhouse_version:
+          - tag: "24.12-alpine"
+            allow_failure: false
+          - tag: "25.2-alpine"
+            allow_failure: false
+          - tag: "latest-alpine"
+            # ClickHouse can make new releases at any time, which might break our tests.
+            # We allow this job to fail to avoid blocking CI whenever this happens.
+            # However, we'll still want to fix the failing tests soon after we notice the failure
+            allow_failure: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # NOTE: We allow the builder setup to fail on Dependabot PRs and PRs from forks (OIDC token not available)
+
+      - name: Setup the Namespace CLI
+        uses: namespacelabs/nscloud-setup@v0
+        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
+
+      # - name: Setup Namespace-powered Buildx
+      #   uses: namespacelabs/nscloud-setup-buildx-action@v0
+      #   continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
+
+      - name: Setup the Namespace cache for `s3-fixtures`
+        uses: namespacelabs/nscloud-cache-action@v1
+        with:
+          path: |
+            ./ui/fixtures/s3-fixtures
+
+      - name: Setup `uv`
+        run: curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
+
+      - name: Setup `pnpm`
+        uses: pnpm/action-setup@v4
+        with:
+          version: "10"
+
+      - name: Setup `node`
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.9.0"
+
+      - name: Setup `wasm-pack`
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Build minijinja WASM bindings
+        working-directory: ui/app/utils/minijinja
+        run: wasm-pack build --features console_error_panic_hook
+
+      - name: Install dependencies
+        working-directory: ui
+        run: pnpm install --frozen-lockfile
+
+      - name: Start services for `ui` tests
+        working-directory: ui
+        run: |
+          echo "OPENAI_API_KEY=not_used" >> fixtures/.env
+          echo "FIREWORKS_API_KEY=not_used" >> fixtures/.env
+          echo "FIREWORKS_ACCOUNT_ID=not_used" >> fixtures/.env
+          echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures" >> fixtures/.env
+          TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f fixtures/docker-compose.yml up -d --build --force-recreate --wait
+
+      - name: Run `ui` tests
+        working-directory: ui
+        env:
+          OPENAI_API_KEY: not_used
+          TENSORZERO_UI_CONFIG_PATH: fixtures/config/tensorzero.toml
+          TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures
+          TENSORZERO_GATEWAY_URL: http://localhost:3000
+        run: pnpm test
+
+      - name: Print `ui` tests logs
+        if: always()
+        working-directory: ui
+        run: docker compose -f fixtures/docker-compose.yml logs -t
+
+      - name: Print ClickHouse error logs
+        if: always()
+        run: docker exec fixtures-clickhouse-1 cat /var/log/clickhouse-server/clickhouse-server.err.log
+
+      - name: Print ClickHouse trace logs
+        if: always()
+        run: docker exec fixtures-clickhouse-1 cat /var/log/clickhouse-server/clickhouse-server.log
