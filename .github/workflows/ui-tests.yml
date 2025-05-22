@@ -108,6 +108,8 @@ jobs:
         run: docker exec fixtures-clickhouse-1 cat /var/log/clickhouse-server/clickhouse-server.log
 
   test-e2e:
+    needs: build-gateway
+
     runs-on: namespace-profile-tensorzero-8x16
 
     # We currently only run this job when we have secrets available, since we need to use an S3 object_store
