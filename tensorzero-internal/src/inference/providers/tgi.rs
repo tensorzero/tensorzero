@@ -217,7 +217,6 @@ impl InferenceProvider for TGIProvider {
 
         let res = request_builder
             .body(raw_request.clone())
-            .header(reqwest::header::CONTENT_TYPE, "application/json")
             .headers(headers)
             .send()
             .await
@@ -319,9 +318,7 @@ impl InferenceProvider for TGIProvider {
         let request_url = get_chat_url(&self.api_base)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
-        let mut request_builder = http_client
-            .post(request_url)
-            .header("Content-Type", "application/json");
+        let mut request_builder = http_client.post(request_url);
         if let Some(api_key) = api_key {
             request_builder = request_builder.bearer_auth(api_key.expose_secret());
         }
