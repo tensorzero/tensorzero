@@ -57,20 +57,15 @@ jobs:
         working-directory: ui
         run: pnpm install --frozen-lockfile
 
-      - name: Load `gateway` container from cache
-        uses: namespacelabs/nscloud-cache-action@v1
-        with:
-          path: ui-tests-gateway-container-${{ github.run_id }}.tar
-          key: ui-tests-gateway-container-${{ github.run_id }}
-
-      - name: Load `gateway` container into Docker
-        run: docker load < ui-tests-gateway-container-${{ github.run_id }}.tar
-
-      - name: Setup the Namespace cache for `s3-fixtures`
+      - name: Load `gateway` and `s3-fixtures` from cache
         uses: namespacelabs/nscloud-cache-action@v1
         with:
           path: |
+            ui-tests-gateway-container-${{ github.run_id }}.tar
             ./ui/fixtures/s3-fixtures
+
+      - name: Load `gateway` container into Docker
+        run: docker load < ui-tests-gateway-container-${{ github.run_id }}.tar
 
       - name: Setup `wasm-pack`
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
