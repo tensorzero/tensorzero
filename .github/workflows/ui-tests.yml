@@ -76,7 +76,7 @@ jobs:
       - name: Load `gateway` container
         run: docker load < ui-tests-gateway-container-${{ github.run_id }}.tar
 
-      - name: Start services for UI tests
+      - name: Start Docker containers and apply fixtures
         working-directory: ui
         run: |
           echo "OPENAI_API_KEY=not_used" >> fixtures/.env
