@@ -7,10 +7,6 @@ jobs:
   ui-tests:
     runs-on: namespace-profile-tensorzero-4x16
 
-    permissions:
-      contents: read # permission to read the repository
-      id-token: write # permission to fetch the GitHub OIDC token
-
     continue-on-error: ${{ matrix.clickhouse_version.allow_failure }}
 
     strategy:
@@ -21,10 +17,7 @@ jobs:
           - tag: "25.2-alpine"
             allow_failure: false
           - tag: "latest-alpine"
-            # ClickHouse can make new releases at any time, which might break our tests.
-            # We allow this job to fail to avoid blocking CI whenever this happens.
-            # However, we'll still want to fix the failing tests soon after we notice the failure
-            allow_failure: true
+            allow_failure: false
 
     steps:
       - uses: actions/checkout@v4
