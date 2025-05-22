@@ -1,6 +1,7 @@
 mod anthropic;
 mod aws_bedrock;
-mod aws_sagemaker;
+mod aws_sagemaker_openai;
+mod aws_sagemaker_tgi;
 mod azure;
 mod batch;
 pub mod common;
