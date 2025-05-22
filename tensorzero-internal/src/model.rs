@@ -794,6 +794,7 @@ impl UninitializedProviderConfig {
                 location,
                 project_id,
                 api_key_location,
+                provider_types,
             )?),
             UninitializedProviderConfig::GCPVertexGemini {
                 model_id,
