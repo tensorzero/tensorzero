@@ -5,7 +5,7 @@ on:
 
 jobs:
   build-gateway:
-    runs-on: namespace-profile-tensorzero-16x16
+    runs-on: namespace-profile-tensorzero-8x16
 
     steps:
       - uses: namespacelabs/nscloud-checkout-action@v6
@@ -26,7 +26,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ui-tests-gateway-container-${{ github.run_id }}.tar
-          key: gateway-container-${{ github.run_id }}
+          key: ui-tests-gateway-container-${{ github.run_id }}
 
   test:
     needs: build-gateway
@@ -61,7 +61,7 @@ jobs:
         uses: namespacelabs/nscloud-cache-action@v1
         with:
           path: ui-tests-gateway-container-${{ github.run_id }}.tar
-          key: gateway-container-${{ github.run_id }}
+          key: ui-tests-gateway-container-${{ github.run_id }}
 
       - name: Load `gateway` container into Docker
         run: docker load < ui-tests-gateway-container-${{ github.run_id }}.tar
