@@ -4,7 +4,7 @@ on:
   workflow_call:
 
 jobs:
-  build:
+  ui-tests-build:
     runs-on: namespace-profile-tensorzero-4x16
     steps:
       - uses: namespacelabs/nscloud-checkout-action@v6
@@ -58,8 +58,8 @@ jobs:
           name: ui-tests-ui-container
           path: ui-tests-ui-container.tar
 
-  test:
-    needs: build
+  ui-tests:
+    needs: ui-tests-build
     runs-on: namespace-profile-tensorzero-4x16
     strategy:
       matrix:
