@@ -1,4 +1,4 @@
-#![allow(clippy::print_stdout)]
+#![allow(clippy::print_stdout, clippy::print_stderr)]
 
 use std::cell::Cell;
 use std::future::Future;
@@ -41,10 +41,10 @@ impl Drop for DeleteDbOnDrop {
         tokio::task::block_in_place(|| {
             Handle::current().block_on(async move {
                 client
-                    .run_query_synchronous(format!("DROP DATABASE IF EXISTS {}", database), None)
+                    .run_query_synchronous(format!("DROP DATABASE IF EXISTS {database}"), None)
                     .await
                     .unwrap();
-                eprintln!("Database dropped: {}", database);
+                eprintln!("Database dropped: {database}");
             })
         });
     }
@@ -72,7 +72,7 @@ fn get_clean_clickhouse() -> (ClickHouseConnectionInfo, DeleteDbOnDrop) {
     (
         clickhouse.clone(),
         DeleteDbOnDrop {
-            database: database,
+            database,
             client: clickhouse,
         },
     )
@@ -361,7 +361,7 @@ async fn run_migration_0020_with_data<R: Future<Output = bool>, F: FnOnce() -> R
 
 #[tokio::test]
 async fn test_clickhouse_migration_manager() {
-    let (clickhouse, _cleaup_db) = get_clean_clickhouse();
+    let (clickhouse, _cleanup_db) = get_clean_clickhouse();
     clickhouse.create_database().await.unwrap();
     // Run it twice to test that it is a no-op the second time
     clickhouse.create_database().await.unwrap();
