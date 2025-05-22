@@ -312,7 +312,7 @@ def sample_to_openai_messages(sample) -> List[Dict[str, Any]]:
         rendered_messages.extend(render_message(message))
 
     # Add the output to the messages
-    output = json.loads(sample["output"])
+    output = json.loads(sample["value"])
     rendered_output = render_output(output)
     if rendered_output is None:
         # `render_output` will return None if the output contains an unknown or unsupported content block.
