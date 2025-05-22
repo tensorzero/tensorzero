@@ -15,8 +15,8 @@ crate::generate_batch_inference_tests!(get_providers);
 async fn get_providers() -> E2ETestProviders {
     let standard_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
-        variant_name: "aws-sagemaker".to_string(),
-        model_name: "gemma-3-1b-aws-sagemaker".into(),
+        variant_name: "aws-sagemaker-openai".to_string(),
+        model_name: "gemma-3-1b-aws-sagemaker-openai".into(),
         model_provider_name: "aws_sagemaker".into(),
         credentials: HashMap::new(),
     }];
@@ -24,7 +24,7 @@ async fn get_providers() -> E2ETestProviders {
     let extra_body_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "aws-sagemaker-extra-body".to_string(),
-        model_name: "gemma-3-1b-aws-sagemaker".into(),
+        model_name: "gemma-3-1b-aws-sagemaker-openai".into(),
         model_provider_name: "aws_sagemaker".into(),
         credentials: HashMap::new(),
     }];
@@ -32,7 +32,7 @@ async fn get_providers() -> E2ETestProviders {
     let bad_auth_extra_headers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "aws-sagemaker-extra-headers".to_string(),
-        model_name: "gemma-3-1b-aws-sagemaker".into(),
+        model_name: "gemma-3-1b-aws-sagemaker-openai".into(),
         model_provider_name: "aws_sagemaker".into(),
         credentials: HashMap::new(),
     }];
