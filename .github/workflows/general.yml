@@ -14,6 +14,9 @@ jobs:
   clickhouse-tests-cloud:
     if: github.event_name == 'merge_group'
     runs-on: ubuntu-latest
+    concurrency:
+      group: clickhouse-cloud-tests
+      cancel-in-progress: false
     strategy:
       matrix:
         cloud_instance:
