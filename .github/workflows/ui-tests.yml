@@ -13,7 +13,7 @@ jobs:
       - name: Build `gateway` container
         working-directory: ui
         run: |
-          touch fixtures/.env # file must exist but not used for building the container
+          touch fixtures/.env # file must exist but not used while building the container
           docker compose -f fixtures/docker-compose.yml build gateway
 
       - name: Save `gateway` container
@@ -31,7 +31,7 @@ jobs:
   test:
     needs: build-gateway
 
-    runs-on: namespace-profile-tensorzero-2x8
+    runs-on: namespace-profile-tensorzero-8x16
 
     strategy:
       matrix:
@@ -82,9 +82,6 @@ jobs:
       - name: Start services for UI tests
         working-directory: ui
         run: |
-          echo "OPENAI_API_KEY=not_used" >> fixtures/.env
-          echo "FIREWORKS_API_KEY=not_used" >> fixtures/.env
-          echo "FIREWORKS_ACCOUNT_ID=not_used" >> fixtures/.env
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures" >> fixtures/.env
           TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version }} docker compose -f fixtures/docker-compose.yml up -d --wait
 
