@@ -29,7 +29,9 @@ mod client_inference_params;
 mod client_input;
 mod git;
 mod inference_example;
-pub use inference_example::{ChatInferenceExample, InferenceExample, JsonInferenceExample};
+pub use inference_example::{
+    ChatInferenceExample, InferenceExample, JsonInferenceExample, RenderedStoredInference,
+};
 pub mod input_handling;
 pub use client_inference_params::{ClientInferenceParams, ClientSecretString};
 pub use client_input::{ClientInput, ClientInputMessage, ClientInputMessageContent};
@@ -737,10 +739,11 @@ impl Client {
         }
     }
 
+    /// TODO(Viraj): document this from the notion page
     pub async fn experimental_render_inferences(
         &self,
         inference_examples: Vec<InferenceExample>,
-    ) -> Result<String, TensorZeroError> {
+    ) -> Result<Vec<RenderedStoredInference>, TensorZeroError> {
         todo!()
     }
 
