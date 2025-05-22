@@ -745,7 +745,12 @@ impl Client {
 
     /// There are two things that need to happen in this function:
     /// 1. We need to resolve all network resources (e.g. images) in the inference examples.
-    /// 2. We need to prepare all messages into "simple" messages that
+    /// 2. We need to prepare all messages into "simple" messages that have been templated for a particular variant.
+    ///    To do this, we need to know what variant to use for each function that might appear in the data.
+    ///
+    /// IMPORTANT: For now, this function drops datapoints which are bad, e.g. ones where templating fails, the function
+    ///            has no variant specified, or where the process of downloading resources fails.
+    ///            In future we will make this behavior configurable by the caller.
     pub async fn experimental_render_inferences(
         &self,
         mut inference_examples: Vec<InferenceExample>,
