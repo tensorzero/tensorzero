@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+#[cfg(feature = "pyo3")]
+use pyo3::prelude::*;
 use serde_json::Value;
 use tensorzero_internal::{
     config_parser::Config,
@@ -65,6 +67,7 @@ impl InferenceExample {
 /// This is constructed by rendering an InferenceExample with a variant for messages
 /// and by resolving all network resources (e.g. images).
 #[expect(dead_code)]
+#[cfg_attr(feature = "pyo3", pyclass)]
 pub struct RenderedStoredInference {
     function_name: String,
     variant_name: String,
