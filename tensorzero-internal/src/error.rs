@@ -19,7 +19,7 @@ use crate::inference::types::storage::StoragePath;
 ///
 /// WARNING: Setting this to true will expose potentially sensitive request/response
 /// data in logs and error responses. Use with caution.
-static DEBUG: OnceCell<bool> = OnceCell::const_new();
+static DEBUG: OnceCell<bool> = OnceCell::const_new_with(cfg!(feature = "e2e_tests"));
 
 pub fn set_debug(debug: bool) -> Result<(), Error> {
     DEBUG.set(debug).map_err(|_| {
