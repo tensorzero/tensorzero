@@ -1,9 +1,11 @@
 use serde_json::Value;
 use tensorzero_internal::{
+    config_parser::Config,
     inference::types::{
         ContentBlockChatOutput, ContentBlockOutput, JsonInferenceOutput, ModelInput, ResolvedInput,
     },
     tool::ToolCallConfigDatabaseInsert,
+    variant::chat_completion::prepare_model_input,
 };
 use uuid::Uuid;
 
@@ -39,6 +41,12 @@ impl InferenceExample {
             InferenceExample::Json(example) => &mut example.input,
         }
     }
+    pub fn input(&self) -> &ResolvedInput {
+        match self {
+            InferenceExample::Chat(example) => &example.input,
+            InferenceExample::Json(example) => &example.input,
+        }
+    }
 }
 
 pub struct RenderedStoredInference {
@@ -50,4 +58,26 @@ pub struct RenderedStoredInference {
     inference_id: Uuid,
     tool_params: Option<ToolCallConfigDatabaseInsert>,
     output_schema: Option<Value>,
+}
+
+pub fn render_model_input(
+    inference_example: &InferenceExample,
+    config: &Config,
+    variants: &HashMap<String, String>,
+) -> Result<ModelInput, Error> {
+    // TODO
+    let variant_name = variants.get(&inference_example.function_name).ok_or_else(|| Error::new(ErrorDetails::InvalidVariant {
+    let variant_config = config
+        .get_function(&inference_example.function_name)?
+        .variants()
+        .get(variants)
+        
+        
+        .unwrap();
+    prepare_model_input(
+        inference_example.input().system.as_ref(),
+        &inference_example.input().messages,
+        &config.templates,
+        variants,
+    );
 }

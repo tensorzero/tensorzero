@@ -745,7 +745,16 @@ impl Client {
     pub async fn experimental_render_inferences(
         &self,
         mut inference_examples: Vec<InferenceExample>,
+        variants: HashMap<String, String>, // Map from function name to variant name
     ) -> Result<Vec<RenderedStoredInference>, TensorZeroError> {
+        let ClientMode::EmbeddedGateway { gateway, ..} = &self.mode else {
+            return Err(TensorZeroError::Other {
+                source: tensorzero_internal::error::Error::new(ErrorDetails::InvalidClientMode {
+                    message: "This function is only available in EmbeddedGateway mode".to_string(),
+                })
+                .into(),
+            });
+        };
         let resolution_futures = inference_examples.iter_mut().map(|inference_example| {
             // Create a future for each call to reresolve_input_for_fine_tuning.
             // This function modifies inference_example.input_mut() in place.
@@ -765,6 +774,10 @@ impl Client {
                 inference_examples.remove(i);
             }
         }
+
+        let model_inputs = inference_examples.iter().map(|inference_example| {
+            let model_input = 
+        
 
         todo!()
     }
