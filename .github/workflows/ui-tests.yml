@@ -106,3 +106,92 @@ jobs:
       - name: Print ClickHouse trace logs
         if: always()
         run: docker exec fixtures-clickhouse-1 cat /var/log/clickhouse-server/clickhouse-server.log
+
+  test-e2e:
+    runs-on: namespace-profile-tensorzero-8x16
+
+    # We currently only run this job when we have secrets available, since we need to use an S3 object_store
+    # In the future, we might want to fix this so that it can run in PR CI for external (forked) PRs
+    # For now, it just runs in the merge queue and on prs from the main repo
+    if: ${{ (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') || github.event_name == 'merge_group' }}
+
+    steps:
+      - uses: namespacelabs/nscloud-checkout-action@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.9.0"
+
+      - name: Setup `pnpm`
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install `pnpm` dependencies
+        working-directory: ui
+        run: pnpm install --frozen-lockfile
+
+      - name: Setup Playwright
+        working-directory: ui
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Cache `s3-fixtures`
+        uses: namespacelabs/nscloud-cache-action@v1
+        with:
+          path: |
+            ./ui/fixtures/s3-fixtures
+
+      - name: Download `gateway` container
+        uses: namespace-actions/download-artifact@v1
+        with:
+          name: ui-tests-gateway-container-${{ github.run_id }}
+          path: .
+
+      - name: Load `gateway` container
+        run: docker load < ui-tests-gateway-container-${{ github.run_id }}.tar
+
+      - name: Build `ui` container
+        run: docker buildx build -f ui/Dockerfile . -t tensorzero/ui
+
+      - name: Start Docker containers and apply fixtures
+        working-directory: ui
+        run: |
+          echo "AWS_REGION=us-east-1" >> fixtures/.env
+          echo "FIREWORKS_ACCOUNT_ID=fake_fireworks_account" >> fixtures/.env
+          echo "FIREWORKS_API_KEY=not_used" >> fixtures/.env
+          echo "FIREWORKS_BASE_URL=http://mock-inference-provider:3030/fireworks/" >> fixtures/.env
+          echo "OPENAI_API_KEY=not_used" >> fixtures/.env
+          echo "OPENAI_BASE_URL=http://mock-inference-provider:3030/openai/" >> fixtures/.env
+          echo "S3_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" >> fixtures/.env
+          echo "S3_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> fixtures/.env
+          echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures" >> fixtures/.env
+          echo "TENSORZERO_GATEWAY_URL=http://gateway:3000" >> fixtures/.env
+          docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml up --wait
+
+      - name: Run UI E2E tests
+        id: e2e_tests
+        working-directory: ui
+        env:
+          TENSORZERO_CI: 1
+        continue-on-error: true
+        run: pnpm test-e2e
+
+      - name: Print Docker Compose logs
+        if: always()
+        working-directory: ui
+        run: docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml logs -t
+
+      - name: Upload Playwright artifacts
+        if: steps.e2e_tests.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            ui/playwright-report/
+            ui/test-results/
+          retention-days: 7
+
+      - name: Exit if tests failed
+        if: steps.e2e_tests.outcome == 'failure'
+        run: exit 1
