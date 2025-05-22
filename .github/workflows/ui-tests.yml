@@ -4,33 +4,16 @@ on:
   workflow_call:
 
 jobs:
-  ui-tests:
+  build:
     runs-on: namespace-profile-tensorzero-4x16
-
-    continue-on-error: ${{ matrix.clickhouse_version.allow_failure }}
-
-    strategy:
-      matrix:
-        clickhouse_version:
-          - tag: "24.12-alpine"
-            allow_failure: false
-          - tag: "25.2-alpine"
-            allow_failure: false
-          - tag: "latest-alpine"
-            allow_failure: false
-
     steps:
-      - uses: actions/checkout@v4
+      - uses: namespacelabs/nscloud-checkout-action@v6
 
       # NOTE: We allow the builder setup to fail on Dependabot PRs and PRs from forks (OIDC token not available)
 
       - name: Setup the Namespace CLI
         uses: namespacelabs/nscloud-setup@v0
         continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
-
-      # - name: Setup Namespace-powered Buildx
-      #   uses: namespacelabs/nscloud-setup-buildx-action@v0
-      #   continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
       - name: Setup the Namespace cache for `s3-fixtures`
         uses: namespacelabs/nscloud-cache-action@v1
@@ -62,6 +45,38 @@ jobs:
         working-directory: ui
         run: pnpm install --frozen-lockfile
 
+      - name: Build UI container
+        working-directory: ui
+        run: docker compose -f fixtures/docker-compose.yml build ui
+
+      - name: Save UI container
+        run: docker save fixtures-ui > ui-container-${{ github.run_id }}.tar
+
+      - name: Upload UI container
+        uses: namespace-actions/upload-artifact@v1
+        with:
+          name: ui-tests-ui-container
+          path: ui-tests-ui-container.tar
+
+  test:
+    needs: build
+    runs-on: namespace-profile-tensorzero-4x16
+    strategy:
+      matrix:
+        clickhouse_version: ["24.12-alpine", "25.2-alpine", "latest-alpine"]
+
+    steps:
+      - uses: namespacelabs/nscloud-checkout-action@v6
+
+      - name: Download UI container
+        uses: namespace-actions/download-artifact@v1
+        with:
+          name: ui-tests-ui-container
+          path: .
+
+      - name: Load UI container
+        run: docker load < ui-container.tar
+
       - name: Start services for `ui` tests
         working-directory: ui
         run: |
@@ -69,7 +84,7 @@ jobs:
           echo "FIREWORKS_API_KEY=not_used" >> fixtures/.env
           echo "FIREWORKS_ACCOUNT_ID=not_used" >> fixtures/.env
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures" >> fixtures/.env
-          TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f fixtures/docker-compose.yml up -d --build --force-recreate --wait
+          TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version }} docker compose -f fixtures/docker-compose.yml up -d --build --force-recreate --wait
 
       - name: Run `ui` tests
         working-directory: ui
@@ -87,8 +102,8 @@ jobs:
 
       - name: Print ClickHouse error logs
         if: always()
-        run: docker exec fixtures-clickhouse-1 cat /var/log/clickhouse-server/clickhouse-server.err.log
+        run: docker exec fixtures-${{ github.run_id }}-${{ matrix.clickhouse_version }}-clickhouse-1 cat /var/log/clickhouse-server/clickhouse-server.err.log
 
       - name: Print ClickHouse trace logs
         if: always()
-        run: docker exec fixtures-clickhouse-1 cat /var/log/clickhouse-server/clickhouse-server.log
+        run: docker exec fixtures-${{ github.run_id }}-${{ matrix.clickhouse_version }}-clickhouse-1 cat /var/log/clickhouse-server/clickhouse-server.log
