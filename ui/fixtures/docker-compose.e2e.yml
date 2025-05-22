@@ -5,9 +5,6 @@ services:
       CLICKHOUSE_USER: chuser
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
       CLICKHOUSE_PASSWORD: chpassword
-    tmpfs:
-      # So the fixtures aren't persisted between restarts of the containers and double-added
-      - /var/lib/clickhouse
     volumes:
       - ./config.xml:/etc/clickhouse-server/config.xml:ro
     ports:

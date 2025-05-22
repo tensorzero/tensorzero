@@ -1632,7 +1632,7 @@ mod tests {
         assert_eq!(full_response, expected_response);
 
         assert!(logs_contain(
-            r#"ERROR test_infer_model_request_errors_stream:infer_model_request_stream{model_name=dummy_chat_model}:infer_stream{model_name="dummy_chat_model" otel.name="model_inference" stream=true}:infer_stream{provider_name="error"}:infer_stream{provider_name="error" otel.name="model_provider_inference" gen_ai.operation.name="chat" gen_ai.system="dummy" gen_ai.request.model="error" stream=true}: tensorzero_internal::error: Error from dummy client: Error sending request to Dummy provider for model 'error'."#
+            r#"ERROR test_infer_model_request_errors_stream:infer_model_request_stream{model_name=dummy_chat_model}:infer_stream{model_name="dummy_chat_model" otel.name="model_inference" stream=true}:infer_stream{provider_name="error" otel.name="model_provider_inference" gen_ai.operation.name="chat" gen_ai.system="dummy" gen_ai.request.model="error" stream=true}: tensorzero_internal::error: Error from dummy client: Error sending request to Dummy provider for model 'error'."#
         ));
     }
 }

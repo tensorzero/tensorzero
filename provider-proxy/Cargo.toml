@@ -16,7 +16,7 @@ http = "1.2.0"
 http-body-util = "0.1.2"
 http-serde-ext = "1.0.2"
 hyper = { version = "1.6.0", features = ["client", "server", "http1", "http2"] }
-hyper-util = "0.1.11"
+hyper-util = "0.1.12"
 moka = { version = "0.12.10", features = ["sync"] }
 pin-project = "1.1.10"
 rcgen = "0.13.2"

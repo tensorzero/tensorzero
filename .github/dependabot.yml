@@ -7,13 +7,6 @@ updates:
     labels: []
     open-pull-requests-limit: 0 # only send security updates
 
-  # - package-ecosystem: "pnpm"
-  #   directory: "/"
-  #   schedule:
-  #     interval: "weekly"
-  #   labels: []
-  #   open-pull-requests-limit: 0 # only send security updates
-
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
