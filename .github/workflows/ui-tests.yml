@@ -121,17 +121,16 @@ jobs:
           path: |
             ./ui/fixtures/s3-fixtures
 
-      - name: Download `gateway` container
+      - name: Download `gateway` and `ui` containers
         uses: namespace-actions/download-artifact@5c070f7d7ebdc47682b04aa736c76e46ff5f6e1e
         with:
           name: build
           path: .
 
-      - name: Load `gateway` container
-        run: docker load < gateway-container.tar
-
-      - name: Build `ui` container
-        run: docker build -f ui/Dockerfile . -t tensorzero/ui
+      - name: Load `gateway` and `ui` containers
+        run: |
+          docker load < gateway-container.tar
+          docker load < ui-container.tar
 
       - name: Start Docker containers and apply fixtures
         working-directory: ui
