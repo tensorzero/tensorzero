@@ -104,7 +104,7 @@ pub async fn run_migration(
         // Get the migration name (e.g. `Migration0000`)
         let migration_name = migration.name();
 
-        tracing::info!("Applying migration: {migration_name}");
+        tracing::info!("Applying migration: {migration_name} with clean_start: {clean_start}");
 
         if let Err(e) = migration.apply(clean_start).await {
             tracing::error!(
