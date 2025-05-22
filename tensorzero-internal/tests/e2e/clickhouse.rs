@@ -41,7 +41,7 @@ impl Drop for DeleteDbOnDrop {
         tokio::task::block_in_place(|| {
             Handle::current().block_on(async move {
                 client
-                    .run_query_synchronous(format!("DROP DATABASE IF EXISTS {database}"), None)
+                    .run_query_synchronous(format!("DROP DATABASE {database}"), None)
                     .await
                     .unwrap();
                 eprintln!("Database dropped: {database}");
@@ -467,14 +467,6 @@ async fn test_clickhouse_migration_manager() {
         [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]
     );
     run_all(&migrations).await;
-
-    let database = clickhouse.database();
-    tracing::info!("Attempting to drop test database: {database}");
-
-    clickhouse
-        .run_query_synchronous(format!("DROP DATABASE {database}"), None)
-        .await
-        .unwrap();
 }
 
 #[tokio::test]
