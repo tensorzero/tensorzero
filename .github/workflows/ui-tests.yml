@@ -18,11 +18,10 @@ jobs:
       - name: Build `gateway` container
         working-directory: ui
         run: |
-          touch fixtures/.env
-          docker compose -f fixtures/docker-compose.yml build gateway
+          docker build -f gateway/Dockerfile . -t tensorzero/gateway
 
       - name: Save `gateway` container
-        run: docker save fixtures-gateway > ui-tests-gateway-container-${{ github.run_id }}.tar
+        run: docker save tensorzero/gateway > ui-tests-gateway-container-${{ github.run_id }}.tar
 
       - name: Upload `gateway` container as an artifact
         uses: namespace-actions/upload-artifact@v1
