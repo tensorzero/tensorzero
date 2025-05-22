@@ -654,6 +654,8 @@ pub(super) enum UninitializedProviderConfig {
         model_name: String,
         api_key_location: Option<CredentialLocation>,
     },
+    #[strum(serialize = "groq")]
+    #[serde(rename = "groq")]
     Groq {
         model_name: String,
         api_key_location: Option<CredentialLocation>,
