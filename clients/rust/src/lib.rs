@@ -1,9 +1,11 @@
 use std::{
-    cmp::Ordering, env, fmt::Display, future::Future, path::PathBuf, sync::Arc, time::Duration,
+    cmp::Ordering, collections::HashMap, env, fmt::Display, future::Future, path::PathBuf,
+    sync::Arc, time::Duration,
 };
 
 use futures::future::join_all;
 use git::GitInfo;
+use inference_example::render_stored_inference;
 use input_handling::reresolve_input_for_fine_tuning;
 use reqwest::header::HeaderMap;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
@@ -747,9 +749,10 @@ impl Client {
         mut inference_examples: Vec<InferenceExample>,
         variants: HashMap<String, String>, // Map from function name to variant name
     ) -> Result<Vec<RenderedStoredInference>, TensorZeroError> {
-        let ClientMode::EmbeddedGateway { gateway, ..} = &self.mode else {
+        let ClientMode::EmbeddedGateway { gateway, .. } = &self.mode else {
             return Err(TensorZeroError::Other {
                 source: tensorzero_internal::error::Error::new(ErrorDetails::InvalidClientMode {
+                    mode: "Http".to_string(),
                     message: "This function is only available in EmbeddedGateway mode".to_string(),
                 })
                 .into(),
@@ -775,11 +778,14 @@ impl Client {
             }
         }
 
-        let model_inputs = inference_examples.iter().map(|inference_example| {
-            let model_input = 
-        
+        let rendered_inference_examples = inference_examples.into_iter().map(|inference_example| {
+            render_stored_inference(inference_example, &gateway.state.config, &variants)
+        });
 
-        todo!()
+        // Drop all Err results and return the Ok results
+        Ok(rendered_inference_examples
+            .filter_map(|result| result.ok())
+            .collect())
     }
 
     async fn parse_http_response<T: serde::de::DeserializeOwned>(

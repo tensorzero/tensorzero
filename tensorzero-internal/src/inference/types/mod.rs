@@ -1267,6 +1267,25 @@ impl From<ContentBlockChatOutput> for ContentBlock {
     }
 }
 
+impl From<ContentBlockChatOutput> for ContentBlockOutput {
+    fn from(output: ContentBlockChatOutput) -> Self {
+        match output {
+            ContentBlockChatOutput::Text(text) => ContentBlockOutput::Text(text),
+            ContentBlockChatOutput::ToolCall(tool_call) => {
+                ContentBlockOutput::ToolCall(tool_call.into())
+            }
+            ContentBlockChatOutput::Thought(thought) => ContentBlockOutput::Thought(thought),
+            ContentBlockChatOutput::Unknown {
+                data,
+                model_provider_name,
+            } => ContentBlockOutput::Unknown {
+                data,
+                model_provider_name,
+            },
+        }
+    }
+}
+
 /// We use best-effort to reconstruct the raw response for JSON functions
 /// They might either return a ToolCallChunk or a TextChunk
 /// We take the string from either of these (from the last block if there are multiple)
