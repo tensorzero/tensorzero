@@ -12,39 +12,9 @@ jobs:
 
       # NOTE: We allow the builder setup to fail on Dependabot PRs and PRs from forks (OIDC token not available)
 
-      - name: Setup the Namespace CLI
-        uses: namespacelabs/nscloud-setup@v0
-        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
-
-      - name: Setup the Namespace cache for `s3-fixtures`
-        uses: namespacelabs/nscloud-cache-action@v1
-        with:
-          path: |
-            ./ui/fixtures/s3-fixtures
-
-      - name: Setup `uv`
-        run: curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
-
-      - name: Setup `pnpm`
-        uses: pnpm/action-setup@v4
-        with:
-          version: "10"
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22.9.0"
-
-      - name: Setup `wasm-pack`
-        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
-
-      - name: Build minijinja WASM bindings
-        working-directory: ui/app/utils/minijinja
-        run: wasm-pack build --features console_error_panic_hook
-
-      - name: Install dependencies
-        working-directory: ui
-        run: pnpm install --frozen-lockfile
+      # - name: Setup the Namespace CLI
+      #   uses: namespacelabs/nscloud-setup@v0
+      #   continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
       - name: Build `gateway` container
         working-directory: ui
@@ -79,6 +49,36 @@ jobs:
     steps:
       - uses: namespacelabs/nscloud-checkout-action@v6
 
+      - name: Setup `uv`
+        run: curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.9.0"
+
+      - name: Setup `pnpm`
+        uses: pnpm/action-setup@v4
+        with:
+          version: "10"
+
+      - name: Install `pnpm` dependencies
+        working-directory: ui
+        run: pnpm install --frozen-lockfile
+
+      - name: Setup the Namespace cache for `s3-fixtures`
+        uses: namespacelabs/nscloud-cache-action@v1
+        with:
+          path: |
+            ./ui/fixtures/s3-fixtures
+
+      - name: Setup `wasm-pack`
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Build minijinja WASM bindings
+        working-directory: ui/app/utils/minijinja
+        run: wasm-pack build --features console_error_panic_hook
+
       - name: Download `gateway` container
         uses: namespace-actions/download-artifact@v1
         with:
@@ -88,7 +88,7 @@ jobs:
       - name: Load `gateway` container
         run: docker load < ui-tests-gateway-container-${{ github.run_id }}.tar
 
-      - name: Start services for `ui` tests
+      - name: Start services for UI tests
         working-directory: ui
         run: |
           echo "OPENAI_API_KEY=not_used" >> fixtures/.env
@@ -97,7 +97,7 @@ jobs:
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures" >> fixtures/.env
           TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version }} docker compose -f fixtures/docker-compose.yml up -d --wait
 
-      - name: Run `ui` tests
+      - name: Run `pnpm test`
         working-directory: ui
         env:
           OPENAI_API_KEY: not_used
@@ -106,7 +106,7 @@ jobs:
           TENSORZERO_GATEWAY_URL: http://localhost:3000
         run: pnpm test
 
-      - name: Print `ui` tests logs
+      - name: Print test logs
         if: always()
         working-directory: ui
         run: docker compose -f fixtures/docker-compose.yml logs -t
