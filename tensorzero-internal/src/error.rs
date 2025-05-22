@@ -19,9 +19,17 @@ use crate::inference::types::storage::StoragePath;
 ///
 /// WARNING: Setting this to true will expose potentially sensitive request/response
 /// data in logs and error responses. Use with caution.
-static DEBUG: OnceCell<bool> = OnceCell::const_new_with(cfg!(feature = "e2e_tests"));
+static DEBUG: OnceCell<bool> = if cfg!(feature = "e2e_tests") {
+    OnceCell::const_new_with(true)
+} else {
+    OnceCell::const_new()
+};
 
 pub fn set_debug(debug: bool) -> Result<(), Error> {
+    // We already initialized `DEBUG`, so do nothing
+    if cfg!(feature = "e2e_tests") {
+        return Ok(());
+    }
     DEBUG.set(debug).map_err(|_| {
         Error::new(ErrorDetails::Config {
             message: "Failed to set debug mode".to_string(),
