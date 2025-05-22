@@ -9,31 +9,7 @@ on:
         required: true
 
 jobs:
-  build-gateway:
-    runs-on: namespace-profile-tensorzero-8x16
-
-    steps:
-      - uses: namespacelabs/nscloud-checkout-action@953fed31a6113cc2347ca69c9d823743c65bc84b
-
-      - name: Build `gateway` container
-        run: |
-          docker build -f gateway/Dockerfile . -t tensorzero/gateway
-
-      - name: Save `gateway` container
-        run: docker save tensorzero/gateway > ui-tests-gateway-container.tar
-
-      - name: Upload `gateway` container as an artifact
-        uses: namespace-actions/upload-artifact@9a78c62e083914789d908952f9773e42744b9f68
-        with:
-          name: ui-tests-gateway-container
-          path: ui-tests-gateway-container.tar
-          retention-days: 1
-          if-no-files-found: error
-          overwrite: false
-
   test:
-    needs: build-gateway
-
     runs-on: namespace-profile-tensorzero-8x16
 
     strategy:
@@ -73,11 +49,11 @@ jobs:
       - name: Download `gateway` container
         uses: namespace-actions/download-artifact@5c070f7d7ebdc47682b04aa736c76e46ff5f6e1e
         with:
-          name: ui-tests-gateway-container
+          name: build
           path: .
 
       - name: Load `gateway` container
-        run: docker load < ui-tests-gateway-container.tar
+        run: docker load < gateway-container.tar
 
       - name: Start Docker containers and apply fixtures
         working-directory: ui
@@ -111,8 +87,6 @@ jobs:
         run: docker exec fixtures-clickhouse-1 cat /var/log/clickhouse-server/clickhouse-server.log
 
   test-e2e:
-    needs: build-gateway
-
     runs-on: namespace-profile-tensorzero-8x16
 
     # We currently only run this job when we have secrets available, since we need to use an S3 object_store
@@ -150,11 +124,11 @@ jobs:
       - name: Download `gateway` container
         uses: namespace-actions/download-artifact@5c070f7d7ebdc47682b04aa736c76e46ff5f6e1e
         with:
-          name: ui-tests-gateway-container
+          name: build
           path: .
 
       - name: Load `gateway` container
-        run: docker load < ui-tests-gateway-container.tar
+        run: docker load < gateway-container.tar
 
       - name: Build `ui` container
         run: docker build -f ui/Dockerfile . -t tensorzero/ui
