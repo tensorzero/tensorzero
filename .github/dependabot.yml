@@ -4,35 +4,28 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
-    labels: [ ]
-    open-pull-requests-limit: 0 # only send security updates
-
-  - package-ecosystem: "pnpm"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-    labels: [ ]
+    labels: []
     open-pull-requests-limit: 0 # only send security updates
 
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
       interval: "weekly"
-    labels: [ ]
+    labels: []
     open-pull-requests-limit: 0 # only send security updates
 
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
       interval: "weekly"
-    labels: [ ]
+    labels: []
     open-pull-requests-limit: 0 # only send security updates
 
   - package-ecosystem: "uv"
     directory: "/"
     schedule:
       interval: "weekly"
-    labels: [ ]
+    labels: []
     open-pull-requests-limit: 0 # only send security updates
 
   - package-ecosystem: "cargo"
@@ -40,7 +33,7 @@ updates:
     schedule:
       # This schedule does not affect security updates: https://docs.github.com/en/code-security/dependabot/dependabot-security-updates/customizing-dependabot-security-prs#about-customizing-pull-requests-for-security-updates
       interval: "weekly"
-    labels: [ ]
+    labels: []
     groups:
       rust-dependencies:
         patterns:

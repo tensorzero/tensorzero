@@ -111,53 +111,14 @@ impl ChatCompletionConfig {
         let template_path = match message.role {
             Role::User => self.user_template.as_ref(),
             Role::Assistant => self.assistant_template.as_ref(),
-        };
-        let mut content = Vec::new();
-        for block in message.content.iter() {
-            match block {
-                ResolvedInputMessageContent::Text { value: text } => {
-                    let text_content= match template_path {
-                        Some(template_path) => templates.template_message(
-                            template_path.path.to_str().ok_or_else(|| Error::new(ErrorDetails::InvalidTemplatePath))?,
-                            text,
-                        )?,
-                        None => text.as_str().ok_or_else(|| Error::new(ErrorDetails::InvalidMessage { message: format!("Request message content {} is not a string but there is no variant template for Role {}", text, message.role) }))?.to_string(),
-                    };
-                    content.push(text_content.into());
-                }
-                ResolvedInputMessageContent::RawText { value: text } => {
-                    content.push(text.clone().into());
-                }
-                // The following two clones are probably removable.
-                // We will need to implement a ToolCallRef type or something so that we can avoid cloning the ToolCall and ToolResult.
-                ResolvedInputMessageContent::ToolCall(tool_call) => {
-                    content.push(ContentBlock::ToolCall(tool_call.clone()));
-                }
-                ResolvedInputMessageContent::ToolResult(tool_result) => {
-                    content.push(ContentBlock::ToolResult(tool_result.clone()));
-                }
-                ResolvedInputMessageContent::Image(image) => {
-                    content.push(ContentBlock::Image(image.clone()));
-                }
-                ResolvedInputMessageContent::Thought(thought) => {
-                    content.push(ContentBlock::Thought(thought.clone()));
-                }
-                ResolvedInputMessageContent::Unknown {
-                    data,
-                    model_provider_name,
-                } => {
-                    content.push(ContentBlock::Unknown {
-                        data: data.clone(),
-                        model_provider_name: model_provider_name.clone(),
-                    });
-                }
-            }
         }
-
-        Ok(RequestMessage {
-            role: message.role,
-            content,
+        .map(|x| {
+            x.path
+                .to_str()
+                .ok_or_else(|| Error::new(ErrorDetails::InvalidTemplatePath))
         })
+        .transpose()?;
+        prepare_request_message(message, templates, template_path)
     }
 
     pub fn prepare_system_message(
@@ -165,25 +126,16 @@ impl ChatCompletionConfig {
         templates: &TemplateConfig,
         system: Option<&Value>,
     ) -> Result<Option<String>, Error> {
-        Ok(match &self.system_template {
-            Some(template_path) => Some(templates.template_message(
-                template_path.path.to_str().ok_or_else(|| Error::new(ErrorDetails::InvalidTemplatePath))?,
-                system.unwrap_or(&Value::Null),
-            )?),
-            None => {
-                match system {
-                    None => None,
-                    Some(system) =>
-                Some(system
-                .as_str()
-                .ok_or_else(|| Error::new(ErrorDetails::InvalidMessage {
-                    message:
-                        format!("System message content {system} is not a string but there is no variant template")
-                            .to_string(),
-                }))?
-                .to_string()),
-            }
-        }})
+        let template_path = self
+            .system_template
+            .as_ref()
+            .map(|x| {
+                x.path
+                    .to_str()
+                    .ok_or_else(|| Error::new(ErrorDetails::InvalidTemplatePath))
+            })
+            .transpose()?;
+        prepare_system_message(system, templates, template_path)
     }
 
     fn prepare_request<'a, 'request>(
@@ -241,6 +193,85 @@ impl ChatCompletionConfig {
             extra_headers,
         )
     }
+}
+
+fn prepare_system_message(
+    system: Option<&Value>,
+    templates: &TemplateConfig,
+    template_name: Option<&str>,
+) -> Result<Option<String>, Error> {
+    Ok(match template_name {
+        Some(template_path) => Some(templates.template_message(
+            template_path,
+            system.unwrap_or(&Value::Null),
+        )?),
+        None => {
+            match system {
+                None => None,
+                Some(system) =>
+            Some(system
+            .as_str()
+            .ok_or_else(|| Error::new(ErrorDetails::InvalidMessage {
+                message:
+                    format!("System message content {system} is not a string but there is no variant template")
+                        .to_string(),
+            }))?
+            .to_string()),
+        }
+    }})
+}
+
+fn prepare_request_message(
+    message: &ResolvedInputMessage,
+    templates: &TemplateConfig,
+    template_name: Option<&str>,
+) -> Result<RequestMessage, Error> {
+    let mut content = Vec::new();
+    for block in message.content.iter() {
+        match block {
+            ResolvedInputMessageContent::Text { value: text } => {
+                let text_content= match template_name {
+                        Some(template_path) => templates.template_message(
+                            template_path,
+                            text,
+                        )?,
+                        None => text.as_str().ok_or_else(|| Error::new(ErrorDetails::InvalidMessage { message: format!("Request message content {} is not a string but there is no variant template for Role {}", text, message.role) }))?.to_string(),
+                    };
+                content.push(text_content.into());
+            }
+            ResolvedInputMessageContent::RawText { value: text } => {
+                content.push(text.clone().into());
+            }
+            // The following two clones are probably removable.
+            // We will need to implement a ToolCallRef type or something so that we can avoid cloning the ToolCall and ToolResult.
+            ResolvedInputMessageContent::ToolCall(tool_call) => {
+                content.push(ContentBlock::ToolCall(tool_call.clone()));
+            }
+            ResolvedInputMessageContent::ToolResult(tool_result) => {
+                content.push(ContentBlock::ToolResult(tool_result.clone()));
+            }
+            ResolvedInputMessageContent::Image(image) => {
+                content.push(ContentBlock::Image(image.clone()));
+            }
+            ResolvedInputMessageContent::Thought(thought) => {
+                content.push(ContentBlock::Thought(thought.clone()));
+            }
+            ResolvedInputMessageContent::Unknown {
+                data,
+                model_provider_name,
+            } => {
+                content.push(ContentBlock::Unknown {
+                    data: data.clone(),
+                    model_provider_name: model_provider_name.clone(),
+                });
+            }
+        }
+    }
+
+    Ok(RequestMessage {
+        role: message.role,
+        content,
+    })
 }
 
 impl Variant for ChatCompletionConfig {
