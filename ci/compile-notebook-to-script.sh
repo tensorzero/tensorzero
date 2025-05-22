@@ -4,6 +4,7 @@ set -euo pipefail
 
 JUPYTEXT="uvx jupytext@1.17.1"
 NB_CLEAN="uvx nb-clean@4.0.1"
+RUFF="uvx ruff@0.11.10"
 
 ###############################################################################
 
@@ -20,6 +21,9 @@ compile_notebook_to_script () {
   # Compile the notebook to Python script
   $JUPYTEXT --to py:percent --opt notebook_metadata_filter=-all --opt cell_metadata_filter=-all \
             --output "$target" "$nb"
+
+  # Run ruff on the generated script
+  $RUFF format "$target"
 }
 
 ###############################################################################

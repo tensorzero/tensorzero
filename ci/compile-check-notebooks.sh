@@ -17,6 +17,7 @@ RECIPES_DIR="recipes"
 
 JUPYTEXT="uvx jupytext@1.17.1"
 NB_CLEAN="uvx nb-clean@4.0.1"
+RUFF="uvx ruff@0.11.10"
 
 ###############################################################################
 
@@ -85,6 +86,9 @@ compile_notebooks () {
     # Compile the notebook to Python script
     $JUPYTEXT --to py:percent --opt notebook_metadata_filter=-all --opt cell_metadata_filter=-all \
               --output "$tmp_script" "$source_nb"
+
+    # Run ruff on the generated script
+    $RUFF format "$tmp_script"
 
     # Fail if the generated notebook doesn't match the current version of the notebook
     if ! diff -q "$target_script" "$tmp_script" >/dev/null; then
