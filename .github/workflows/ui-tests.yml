@@ -25,8 +25,8 @@ jobs:
       - name: Cache `gateway` container
         uses: namespacelabs/nscloud-cache-action@v1
         with:
-          path: ui-tests-gateway-container-${{ github.run_id }}.tar
-          key: ui-tests-gateway-container-${{ github.run_id }}
+          path: |
+            ui-tests-gateway-container-${{ github.run_id }}.tar
 
   test:
     needs: build-gateway
