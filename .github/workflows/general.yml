@@ -439,56 +439,43 @@ jobs:
 
   ui-tests-e2e:
     runs-on: namespace-profile-tensorzero-8x16
+
     # We currently only run this job when we have secrets available, since we need to use an S3 object_store
     # In the future, we might want to fix this so that it can run in PR CI for external (forked) PRs
     # For now, it just runs in the merge queue and on prs from the main repo
     if: ${{ (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') || github.event_name == 'merge_group' }}
-    permissions:
-      # Permission to checkout the repository
-      contents: read
-      # Permission to fetch GitHub OIDC token authentication
-      id-token: write
-    strategy:
-      matrix:
-        feature_flag:
-          - behavior: node-optimization-server
-            enable_python: 0
-          - behavior: python-optimization-server
-            enable_python: 1
+
     steps:
       - uses: actions/checkout@v4
 
-      # We allow the namespace builder setup to fail on Dependabot PRs and PRs from forks
-      # (where the oidc token is not available)
-
-      - name: Install uv
-        run: curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10
-
-      - name: Setup Node.js
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: "22.9.0"
 
-      - name: Install dependencies
+      - name: Setup `pnpm`
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install `pnpm` dependencies
         working-directory: ui
         run: pnpm install --frozen-lockfile
 
-      - name: Cache s3-fixtures
+      - name: Setup Playwright
+        working-directory: ui
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Cache `s3-fixtures`
         uses: namespacelabs/nscloud-cache-action@v1
         with:
           path: |
             ./ui/fixtures/s3-fixtures
 
-      - name: Build ui container
-        # Enable feedback in the UI for this job so the playwright tests can use it
+      - name: Build `ui` container
         run: docker buildx build -f ui/Dockerfile . -t tensorzero/ui
 
-      - name: Start services for ui e2e tests
+      - name: Start Docker containers and apply fixtures
         working-directory: ui
         run: |
           echo "OPENAI_BASE_URL=http://mock-inference-provider:3030/openai/" >> fixtures/.env
@@ -501,23 +488,18 @@ jobs:
           echo "AWS_REGION=us-east-1" >> fixtures/.env
           echo "S3_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" >> fixtures/.env
           echo "S3_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> fixtures/.env
-          echo "TENSORZERO_UI_FF_ENABLE_PYTHON=${{ matrix.feature_flag.enable_python }}" >> fixtures/.env
           docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml rm
           docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml up --wait --build --force-recreate
 
-      - name: Install playwright dependencies
-        working-directory: ui
-        run: pnpm exec playwright install --with-deps chromium
-
-      - name: Run ui e2e tests
+      - name: Run UI E2E tests
         working-directory: ui
         env:
           TENSORZERO_CI: 1
-        run: TENSORZERO_UI_FF_ENABLE_PYTHON=${{ matrix.feature_flag.enable_python }} pnpm test-e2e
+        run: pnpm test-e2e
         continue-on-error: true
         id: e2e_tests
 
-      - name: Print ui tests logs
+      - name: Print Docker Compose logs
         if: always()
         working-directory: ui
         run: docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml logs -t
@@ -536,7 +518,7 @@ jobs:
         if: steps.e2e_tests.outcome == 'failure'
         run: exit 1
 
-      - name: Take down ui tests
+      - name: Take down Docker containers
         working-directory: ui
         run: docker compose -f fixtures/docker-compose.yml down
 
