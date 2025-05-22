@@ -4,17 +4,11 @@ on:
   workflow_call:
 
 jobs:
-  build:
-    runs-on: namespace-profile-tensorzero-4x16
+  build-gateway:
+    runs-on: namespace-profile-tensorzero-16x16
 
     steps:
       - uses: namespacelabs/nscloud-checkout-action@v6
-
-      # NOTE: We allow the builder setup to fail on Dependabot PRs and PRs from forks (OIDC token not available)
-
-      # - name: Setup the Namespace CLI
-      #   uses: namespacelabs/nscloud-setup@v0
-      #   continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
       - name: Build `gateway` container
         working-directory: ui
@@ -28,17 +22,14 @@ jobs:
       - name: Save `gateway` container
         run: docker save fixtures-gateway > ui-tests-gateway-container-${{ github.run_id }}.tar
 
-      - name: Upload `gateway` container as an artifact
-        uses: namespace-actions/upload-artifact@v1
+      - name: Cache `gateway` container
+        uses: actions/cache@v4
         with:
-          name: ui-tests-gateway-container-${{ github.run_id }}
           path: ui-tests-gateway-container-${{ github.run_id }}.tar
-          retention-days: 1
-          if-no-files-found: error
-          overwrite: false
+          key: gateway-container-${{ github.run_id }}
 
   test:
-    needs: build
+    needs: build-gateway
 
     runs-on: namespace-profile-tensorzero-2x8
 
@@ -66,6 +57,15 @@ jobs:
         working-directory: ui
         run: pnpm install --frozen-lockfile
 
+      - name: Load `gateway` container from cache
+        uses: namespacelabs/nscloud-cache-action@v1
+        with:
+          path: ui-tests-gateway-container-${{ github.run_id }}.tar
+          key: gateway-container-${{ github.run_id }}
+
+      - name: Load `gateway` container into Docker
+        run: docker load < ui-tests-gateway-container-${{ github.run_id }}.tar
+
       - name: Setup the Namespace cache for `s3-fixtures`
         uses: namespacelabs/nscloud-cache-action@v1
         with:
@@ -78,15 +78,6 @@ jobs:
       - name: Build minijinja WASM bindings
         working-directory: ui/app/utils/minijinja
         run: wasm-pack build --features console_error_panic_hook
-
-      - name: Download `gateway` container
-        uses: namespace-actions/download-artifact@v1
-        with:
-          name: ui-tests-gateway-container-${{ github.run_id }}
-          path: .
-
-      - name: Load `gateway` container
-        run: docker load < ui-tests-gateway-container-${{ github.run_id }}.tar
 
       - name: Start services for UI tests
         working-directory: ui
