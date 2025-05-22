@@ -16,7 +16,6 @@ jobs:
       - uses: namespacelabs/nscloud-checkout-action@v6
 
       - name: Build `gateway` container
-        working-directory: ui
         run: |
           docker build -f gateway/Dockerfile . -t tensorzero/gateway
 
