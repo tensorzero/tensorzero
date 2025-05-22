@@ -2324,7 +2324,7 @@ pub async fn test_streaming_invalid_request_with_provider(provider: E2ETestProvi
         "stream": true,
         "extra_body": [
             {
-                "variant_name": "aws-sagemaker",
+                "variant_name": "aws-sagemaker-openai",
                 "pointer": "/messages/0/content",
                 "value": 123,
             },
