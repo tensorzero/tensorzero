@@ -83,7 +83,7 @@ jobs:
         uses: namespace-actions/download-artifact@v1
         with:
           name: ui-tests-gateway-container-${{ github.run_id }}
-          path: ui-tests-gateway-container-${{ github.run_id }}.tar
+          path: .
 
       - name: Load `gateway` container
         run: docker load < ui-tests-gateway-container-${{ github.run_id }}.tar
