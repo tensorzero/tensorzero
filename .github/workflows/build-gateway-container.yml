@@ -1,4 +1,4 @@
-name: Build
+name: Build Gateway Container
 
 on:
   workflow_call:
