@@ -256,8 +256,8 @@ jobs:
 
       - name: Lint (Python:ruff)
         run: |
-          uvx ruff@0.9.0 check --output-format=github --extend-select I --exclude "recipes/**/*_nb.py" .
-          uvx ruff@0.9.0 format --check --exclude "recipes/**/*_nb.py" .
+          uvx ruff@0.9.0 check --output-format=github --extend-select I .
+          uvx ruff@0.9.0 format --check .
 
       - name: "Python: Pyo3 Client: Build and install dependencies"
         working-directory: clients/python
