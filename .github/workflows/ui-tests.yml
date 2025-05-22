@@ -186,6 +186,14 @@ jobs:
         working-directory: ui
         run: docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml logs -t
 
+      - name: Print ClickHouse error logs
+        if: always()
+        run: docker exec fixtures-clickhouse-1 cat /var/log/clickhouse-server/clickhouse-server.err.log
+
+      - name: Print ClickHouse trace logs
+        if: always()
+        run: docker exec fixtures-clickhouse-1 cat /var/log/clickhouse-server/clickhouse-server.log
+
       - name: Upload Playwright artifacts
         if: steps.e2e_tests.outcome == 'failure'
         uses: namespace-actions/upload-artifact@9a78c62e083914789d908952f9773e42744b9f68
