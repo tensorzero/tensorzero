@@ -157,7 +157,7 @@ jobs:
         run: docker load < ui-tests-gateway-container-${{ github.run_id }}.tar
 
       - name: Build `ui` container
-        run: docker buildx build -f ui/Dockerfile . -t tensorzero/ui
+        run: docker build -f ui/Dockerfile . -t tensorzero/ui
 
       - name: Start Docker containers and apply fixtures
         working-directory: ui
