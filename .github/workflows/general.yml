@@ -72,7 +72,10 @@ jobs:
           echo "GATEWAY_PID=$!" >> $GITHUB_ENV
 
       - name: Test (Rust)
-        run: cargo test-e2e-no-creds
+        # This test causes a huge slowdown on ClickHouse cloud, even though it uses a fresh database
+        # For now, let's skip it (we still run it in the local docker ClickHouse tests)
+        # See https://github.com/tensorzero/tensorzero/issues/2216
+        run: cargo test-e2e-no-creds -- --skip test_concurrent_clickhouse_migrations
 
       - name: Print e2e logs
         if: always()
