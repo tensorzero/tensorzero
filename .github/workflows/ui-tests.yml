@@ -13,7 +13,7 @@ jobs:
       - name: Build `gateway` container
         working-directory: ui
         run: |
-          touch fixtures/.env # file must exist but not used while building the container
+          touch fixtures/.env
           docker compose -f fixtures/docker-compose.yml build gateway
 
       - name: Save `gateway` container
@@ -39,9 +39,6 @@ jobs:
 
     steps:
       - uses: namespacelabs/nscloud-checkout-action@v6
-
-      - name: Setup `uv`
-        run: curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -82,6 +79,9 @@ jobs:
       - name: Start services for UI tests
         working-directory: ui
         run: |
+          echo "OPENAI_API_KEY=not_used" >> fixtures/.env
+          echo "FIREWORKS_API_KEY=not_used" >> fixtures/.env
+          echo "FIREWORKS_ACCOUNT_ID=not_used" >> fixtures/.env
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures" >> fixtures/.env
           TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version }} docker compose -f fixtures/docker-compose.yml up -d --wait
 
