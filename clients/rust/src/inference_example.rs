@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+#[cfg(feature = "pyo3")]
+use pyo3::prelude::*;
 use serde_json::Value;
 use tensorzero_internal::{
     config_parser::Config,
@@ -12,7 +14,7 @@ use tensorzero_internal::{
 };
 use uuid::Uuid;
 
-/// A struct that represents an inference example to be used for optimization.
+/// Represents an inference example to be used for optimization.
 /// These are retrieved from the database in this format.
 pub enum InferenceExample {
     Chat(ChatInferenceExample),
@@ -61,10 +63,11 @@ impl InferenceExample {
     }
 }
 
-/// A struct that represents an inference that has been prepared for fine-tuning.
+/// Represents an inference that has been prepared for fine-tuning.
 /// This is constructed by rendering an InferenceExample with a variant for messages
 /// and by resolving all network resources (e.g. images).
 #[expect(dead_code)]
+#[cfg_attr(feature = "pyo3", pyclass)]
 pub struct RenderedStoredInference {
     function_name: String,
     variant_name: String,
