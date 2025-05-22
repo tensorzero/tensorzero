@@ -17,8 +17,8 @@ mimalloc = "0.1.45"
 clap = { workspace = true }
 serde = { workspace = true }
 axum-tracing-opentelemetry = "0.28.0"
-tracing-opentelemetry-instrumentation-sdk = { version = "0.28.0", features = ["tracing_level_info"] }
-tower-http = { version = "0.6.4", features = ["trace"] }
+tracing-opentelemetry-instrumentation-sdk = { workspace = true }
+tower-http = { workspace = true }
 
 [lints]
 workspace = true

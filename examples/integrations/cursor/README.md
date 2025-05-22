@@ -17,6 +17,8 @@ This will send all traffic through your local TensorZero gateway.
 Take a look at the server running on `http://localhost:6901` to see what your requests look like!
 
 ## Intercepting requests for cursor tab:
+> [!NOTE]
+> This section is mostly for reference. You do not need to do this to run the Cursor integration today.
 
 - Install mitmproxy, and install the root cert system-wide
 - Turn off HTTP2 in vscode settings (https://forum.cursor.com/t/add-authorized-certificates-to-cursor/21765)

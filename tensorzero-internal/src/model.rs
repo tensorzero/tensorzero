@@ -8,7 +8,8 @@ use std::time::Duration;
 use std::{env, fs};
 use strum::VariantNames;
 use tensorzero_derive::TensorZeroDeserialize;
-use tracing::{span, Instrument, Level};
+use tracing::{span, Level, Span};
+use tracing_futures::{Instrument, Instrumented};
 use url::Url;
 
 use crate::cache::{
@@ -103,7 +104,7 @@ impl UninitializedModelConfig {
 }
 
 pub struct StreamResponse {
-    pub stream: PeekableProviderInferenceResponseStream,
+    pub stream: Instrumented<PeekableProviderInferenceResponseStream>,
     pub raw_request: String,
     pub model_provider_name: Arc<str>,
     pub cached: bool,
@@ -148,7 +149,11 @@ impl StreamResponse {
                     })
                 },
             ))) as ProviderInferenceResponseStreamInner)
-                .peekable(),
+                .peekable()
+                .instrument(tracing::info_span!(
+                    "stream_from_cache",
+                    otel.name = "stream_from_cache"
+                )),
             raw_request: cache_lookup.raw_request,
             model_provider_name,
             cached: true,
@@ -339,11 +344,6 @@ impl ModelConfig {
                     clients.http_client,
                     clients.credentials,
                 )
-                .instrument(span!(
-                    Level::INFO,
-                    "infer_stream",
-                    provider_name = &**provider_name
-                ))
                 .await;
             match response {
                 Ok(response) => {
@@ -352,19 +352,21 @@ impl ModelConfig {
                     // in the cache. We don't want this logic in `collect_chunks`, which would cause us to cache the result
                     // of higher-level transformations (e.g. dicl)
                     let mut stream = if clients.cache_options.enabled.write() {
+                        let span = stream.span().clone();
                         stream_with_cache_write(
                             raw_request.clone(),
                             model_provider_request,
                             clients,
-                            stream,
+                            stream.into_inner(),
                         )
                         .await?
+                        .instrument(span)
                     } else {
                         stream
                     };
                     // Get a single chunk from the stream and make sure it is OK then send to client.
                     // We want to do this here so that we can tell that the request is working.
-                    peek_first_chunk(&mut stream, &raw_request, provider_name).await?;
+                    peek_first_chunk(stream.inner_mut(), &raw_request, provider_name).await?;
                     return Ok((
                         StreamResponse {
                             stream,
@@ -944,8 +946,14 @@ impl ModelProvider {
         request: ModelProviderRequest<'_>,
         client: &Client,
         api_keys: &InferenceCredentials,
-    ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        match &self.config {
+    ) -> Result<
+        (
+            tracing_futures::Instrumented<PeekableProviderInferenceResponseStream>,
+            String,
+        ),
+        Error,
+    > {
+        let (stream, raw_request) = match &self.config {
             ProviderConfig::Anthropic(provider) => {
                 provider.infer_stream(request, client, api_keys, self).await
             }
@@ -1001,7 +1009,13 @@ impl ModelProvider {
             ProviderConfig::Dummy(provider) => {
                 provider.infer_stream(request, client, api_keys, self).await
             }
-        }
+        }?;
+
+        // Attach the current `model_provider_inference` span to the stream.
+        // This will cause the span to be entered every time the stream is polled,
+        // extending the lifetime of the span in OpenTelemetry to include the entire
+        // duration of the response stream.
+        Ok((stream.instrument(Span::current()), raw_request))
     }
 
     async fn start_batch_inference<'a>(
