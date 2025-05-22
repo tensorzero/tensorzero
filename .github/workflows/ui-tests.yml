@@ -70,7 +70,7 @@ jobs:
   test:
     needs: build
 
-    runs-on: namespace-profile-tensorzero-4x16
+    runs-on: namespace-profile-tensorzero-2x8
 
     strategy:
       matrix:
@@ -95,7 +95,7 @@ jobs:
           echo "FIREWORKS_API_KEY=not_used" >> fixtures/.env
           echo "FIREWORKS_ACCOUNT_ID=not_used" >> fixtures/.env
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures" >> fixtures/.env
-          TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version }} docker compose -f fixtures/docker-compose.yml up -d --build --force-recreate --wait
+          TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version }} docker compose -f fixtures/docker-compose.yml up -d --wait
 
       - name: Run `ui` tests
         working-directory: ui
