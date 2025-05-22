@@ -12,6 +12,13 @@ use tensorzero_internal::{
 };
 use uuid::Uuid;
 
+/// A struct that represents an inference example to be used for optimization.
+/// These are retrieved from the database in this format.
+pub enum InferenceExample {
+    Chat(ChatInferenceExample),
+    Json(JsonInferenceExample),
+}
+
 pub struct ChatInferenceExample {
     pub function_name: String,
     pub variant_name: String,
@@ -30,11 +37,6 @@ pub struct JsonInferenceExample {
     pub episode_id: Uuid,
     pub inference_id: Uuid,
     pub output_schema: Value,
-}
-
-pub enum InferenceExample {
-    Chat(ChatInferenceExample),
-    Json(JsonInferenceExample),
 }
 
 impl InferenceExample {
@@ -59,6 +61,10 @@ impl InferenceExample {
     }
 }
 
+/// A struct that represents an inference that has been prepared for fine-tuning.
+/// This is constructed by rendering an InferenceExample with a variant for messages
+/// and by resolving all network resources (e.g. images).
+#[expect(dead_code)]
 pub struct RenderedStoredInference {
     function_name: String,
     variant_name: String,
@@ -70,12 +76,15 @@ pub struct RenderedStoredInference {
     output_schema: Option<Value>,
 }
 
+/// Convert an InferenceExample's input to a ModelInput.
+/// `variants` should be a map from function name to variant name, i.e. what variant to use for a particular function
+/// as the inference example is being rendered.
+/// This does not handle resolving network resources (e.g. images).
 fn render_model_input(
     inference_example: &InferenceExample,
     config: &Config,
     variants: &HashMap<String, String>,
 ) -> Result<ModelInput, Error> {
-    // TODO
     let variant_name = variants
         .get(inference_example.function_name())
         .ok_or_else(|| {
@@ -135,6 +144,11 @@ fn render_model_input(
     )
 }
 
+/// Render an InferenceExample to a RenderedStoredInference.
+/// `variants` should be a map from function name to variant name, i.e. what variant to use for a particular function
+/// as the inference example is being rendered.
+///
+/// This does not handle resolving network resources (e.g. images).
 pub fn render_stored_inference(
     inference_example: InferenceExample,
     config: &Config,

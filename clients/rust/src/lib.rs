@@ -743,7 +743,9 @@ impl Client {
         }
     }
 
-    /// TODO(Viraj): document this from the notion page
+    /// There are two things that need to happen in this function:
+    /// 1. We need to resolve all network resources (e.g. images) in the inference examples.
+    /// 2. We need to prepare all messages into "simple" messages that
     pub async fn experimental_render_inferences(
         &self,
         mut inference_examples: Vec<InferenceExample>,
