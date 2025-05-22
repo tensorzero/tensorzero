@@ -8,6 +8,7 @@ use crate::cache::{
 };
 use crate::config_parser::ProviderTypesConfig;
 use crate::endpoints::inference::InferenceClients;
+use crate::inference::providers::ollama::OllamaProvider;
 use crate::model::UninitializedProviderConfig;
 use crate::model_table::BaseModelTable;
 use crate::model_table::ShorthandModelConfig;
@@ -41,6 +42,9 @@ impl ShorthandModelConfig for EmbeddingModelConfig {
         let provider_config = match provider_type {
             "openai" => {
                 EmbeddingProviderConfig::OpenAI(OpenAIProvider::new(model_name, None, None)?)
+            }
+            "ollama"=>{
+                EmbeddingProviderConfig::Ollama(OllamaProvider::new(model_name, None, None)?)
             }
             #[cfg(any(test, feature = "e2e_tests"))]
             "dummy" => EmbeddingProviderConfig::Dummy(DummyProvider::new(model_name, None)?),
@@ -306,6 +310,7 @@ pub trait EmbeddingProvider {
 #[derive(Debug)]
 pub enum EmbeddingProviderConfig {
     OpenAI(OpenAIProvider),
+    Ollama(OllamaProvider),
     #[cfg(any(test, feature = "e2e_tests"))]
     Dummy(DummyProvider),
 }
@@ -324,6 +329,7 @@ impl UninitializedEmbeddingProviderConfig {
         let provider_config = self.config.load(provider_types)?;
         Ok(match provider_config {
             ProviderConfig::OpenAI(provider) => EmbeddingProviderConfig::OpenAI(provider),
+            ProviderConfig::Ollama(provider) => EmbeddingProviderConfig::Ollama(provider),
             _ => {
                 return Err(Error::new(ErrorDetails::Config {
                     message: format!(
@@ -344,6 +350,9 @@ impl EmbeddingProvider for EmbeddingProviderConfig {
     ) -> Result<EmbeddingProviderResponse, Error> {
         match self {
             EmbeddingProviderConfig::OpenAI(provider) => {
+                provider.embed(request, client, dynamic_api_keys).await
+            }
+            EmbeddingProviderConfig::Ollama(provider)=>{
                 provider.embed(request, client, dynamic_api_keys).await
             }
             #[cfg(any(test, feature = "e2e_tests"))]
