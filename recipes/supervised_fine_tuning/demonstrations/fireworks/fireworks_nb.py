@@ -358,7 +358,7 @@ def sample_to_conversational_messages(sample) -> List[Dict[str, Any]]:
         rendered_messages.extend(rendered_message)
 
     # Add the output to the messages
-    output = json.loads(sample["output"])
+    output = json.loads(sample["value"])
     rendered_output = render_output(output)
     if rendered_output is None:
         # `render_output` will return None if the output contains an unknown or unsupported content block.
