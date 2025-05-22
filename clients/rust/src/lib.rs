@@ -16,7 +16,8 @@ use tensorzero_internal::{
     endpoints::{
         datasets::CreateDatapointParams,
         dynamic_evaluation_run::{
-            DynamicEvaluationRunEpisodeParams, DynamicEvaluationRunEpisodeResponse,
+            validate_variant_pins, DynamicEvaluationRunEpisodeParams,
+            DynamicEvaluationRunEpisodeResponse,
         },
         validate_tags,
     },
@@ -765,6 +766,8 @@ impl Client {
                 .into(),
             });
         };
+        validate_variant_pins(&variants, &gateway.state.config)
+            .map_err(|e| TensorZeroError::Other { source: e.into() })?;
         let resolution_futures = inference_examples.iter_mut().map(|inference_example| {
             // Create a future for each call to reresolve_input_for_fine_tuning.
             // This function modifies inference_example.input_mut() in place.

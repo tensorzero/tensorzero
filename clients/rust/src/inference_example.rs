@@ -66,17 +66,17 @@ impl InferenceExample {
 /// Represents an inference that has been prepared for fine-tuning.
 /// This is constructed by rendering an InferenceExample with a variant for messages
 /// and by resolving all network resources (e.g. images).
-#[expect(dead_code)]
 #[cfg_attr(feature = "pyo3", pyclass)]
+#[derive(Debug, PartialEq)]
 pub struct RenderedStoredInference {
-    function_name: String,
-    variant_name: String,
-    input: ModelInput,
-    output: Vec<ContentBlockOutput>,
-    episode_id: Uuid,
-    inference_id: Uuid,
-    tool_params: Option<ToolCallConfigDatabaseInsert>,
-    output_schema: Option<Value>,
+    pub function_name: String,
+    pub variant_name: String,
+    pub input: ModelInput,
+    pub output: Vec<ContentBlockOutput>,
+    pub episode_id: Uuid,
+    pub inference_id: Uuid,
+    pub tool_params: Option<ToolCallConfigDatabaseInsert>,
+    pub output_schema: Option<Value>,
 }
 
 /// Convert an InferenceExample's input to a ModelInput.

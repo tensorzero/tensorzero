@@ -391,7 +391,7 @@ pub struct ModelInferenceRequest<'a> {
 }
 
 /// For use in rendering for optimization purposes
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct ModelInput {
     pub system: Option<String>,
     pub messages: Vec<RequestMessage>,
