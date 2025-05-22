@@ -94,7 +94,7 @@ jobs:
           TENSORZERO_GATEWAY_URL: http://localhost:3000
         run: pnpm test
 
-      - name: Print test logs
+      - name: Print Docker Compose logs
         if: always()
         working-directory: ui
         run: docker compose -f fixtures/docker-compose.yml logs -t
