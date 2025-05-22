@@ -9,6 +9,7 @@ use reqwest::Client;
 use secrecy::{ExposeSecret, SecretString};
 use serde_json::json;
 use tensorzero_internal::clickhouse::migration_manager::migration_trait::Migration;
+use tokio::runtime::Handle;
 use tracing_test::traced_test;
 use uuid::Uuid;
 
@@ -27,7 +28,34 @@ use tensorzero_internal::clickhouse::migration_manager::{self, make_all_migratio
 use tensorzero_internal::clickhouse::test_helpers::{get_clickhouse, CLICKHOUSE_URL};
 use tensorzero_internal::clickhouse::ClickHouseConnectionInfo;
 
-fn get_clean_clickhouse() -> ClickHouseConnectionInfo {
+struct DeleteDbOnDrop {
+    database: String,
+    client: ClickHouseConnectionInfo,
+}
+
+impl Drop for DeleteDbOnDrop {
+    fn drop(&mut self) {
+        eprintln!("Dropping database: {}", self.database);
+        let client = self.client.clone();
+        let database = self.database.clone();
+        tokio::task::block_in_place(|| {
+            Handle::current().block_on(async move {
+                client
+                    .run_query_synchronous(format!("DROP DATABASE IF EXISTS {}", database), None)
+                    .await
+                    .unwrap();
+                eprintln!("Database dropped: {}", database);
+            })
+        });
+    }
+}
+
+/// Creates a fresh ClickHouse database.
+/// Returns a `ClickHouseConnectionInfo` for the db, along with a `DeleteDbOnDrop`
+/// that deletes the database when the `DeleteDbOnDrop` is dropped (which will
+/// happen even if the test panics).
+/// This helps to reduce peak disk usage on CI.
+fn get_clean_clickhouse() -> (ClickHouseConnectionInfo, DeleteDbOnDrop) {
     let database = format!(
         "tensorzero_e2e_tests_migration_manager_{}",
         Uuid::now_v7().simple()
@@ -36,11 +64,18 @@ fn get_clean_clickhouse() -> ClickHouseConnectionInfo {
     clickhouse_url.set_path("");
     clickhouse_url.set_query(Some(format!("database={database}").as_str()));
 
-    ClickHouseConnectionInfo::Production {
+    let clickhouse = ClickHouseConnectionInfo::Production {
         database_url: SecretString::from(clickhouse_url.to_string()),
         database: database.clone(),
         client: Client::new(),
-    }
+    };
+    (
+        clickhouse.clone(),
+        DeleteDbOnDrop {
+            database: database,
+            client: clickhouse,
+        },
+    )
 }
 
 /// A helper macro to work with `#[traced_test]`. We need to generate a new `#[traced_test]`
@@ -326,7 +361,7 @@ async fn run_migration_0020_with_data<R: Future<Output = bool>, F: FnOnce() -> R
 
 #[tokio::test]
 async fn test_clickhouse_migration_manager() {
-    let clickhouse = get_clean_clickhouse();
+    let (clickhouse, _cleaup_db) = get_clean_clickhouse();
     clickhouse.create_database().await.unwrap();
     // Run it twice to test that it is a no-op the second time
     clickhouse.create_database().await.unwrap();
@@ -461,13 +496,14 @@ async fn test_bad_clickhouse_write() {
 
 #[tokio::test]
 async fn test_clean_clickhouse_start() {
-    let clickhouse = get_clean_clickhouse();
+    let (clickhouse, _cleanup_db) = get_clean_clickhouse();
     migration_manager::run(&clickhouse).await.unwrap();
 }
 
 #[tokio::test]
 async fn test_concurrent_clickhouse_migrations() {
-    let clickhouse = Arc::new(get_clean_clickhouse());
+    let (clickhouse, _cleanup_db) = get_clean_clickhouse();
+    let clickhouse = Arc::new(clickhouse);
     let num_concurrent_starts = 50;
     let mut handles = Vec::with_capacity(num_concurrent_starts);
     for _ in 0..num_concurrent_starts {
@@ -487,7 +523,7 @@ async fn test_concurrent_clickhouse_migrations() {
 /// rather than brick the database.
 #[tokio::test]
 async fn test_migration_0013_old_table() {
-    let clickhouse = get_clean_clickhouse();
+    let (clickhouse, _cleanup_db) = get_clean_clickhouse();
     clickhouse.create_database().await.unwrap();
 
     // When creating a new migration, add it to the end of this array,
@@ -564,7 +600,7 @@ async fn test_migration_0013_old_table() {
 /// This should fail.
 #[tokio::test]
 async fn test_migration_0013_data_no_table() {
-    let clickhouse = get_clean_clickhouse();
+    let (clickhouse, _cleanup_db) = get_clean_clickhouse();
     clickhouse.create_database().await.unwrap();
 
     // When creating a new migration, add it to the end of this array,
