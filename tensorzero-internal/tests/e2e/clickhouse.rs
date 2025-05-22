@@ -359,7 +359,7 @@ async fn run_migration_0020_with_data<R: Future<Output = bool>, F: FnOnce() -> R
     clean_start
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_clickhouse_migration_manager() {
     let (clickhouse, _cleanup_db) = get_clean_clickhouse();
     clickhouse.create_database().await.unwrap();
@@ -494,13 +494,13 @@ async fn test_bad_clickhouse_write() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_clean_clickhouse_start() {
     let (clickhouse, _cleanup_db) = get_clean_clickhouse();
     migration_manager::run(&clickhouse).await.unwrap();
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_concurrent_clickhouse_migrations() {
     let (clickhouse, _cleanup_db) = get_clean_clickhouse();
     let clickhouse = Arc::new(clickhouse);
@@ -521,7 +521,7 @@ async fn test_concurrent_clickhouse_migrations() {
 /// the database.
 /// This test enforces that the migration will error if there would be an invalid database state
 /// rather than brick the database.
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_migration_0013_old_table() {
     let (clickhouse, _cleanup_db) = get_clean_clickhouse();
     clickhouse.create_database().await.unwrap();
@@ -598,7 +598,7 @@ async fn test_migration_0013_old_table() {
 /// For this test, we will run all the migrations up to 0011, add some data to
 /// the JSONInference table, then run migration 0013.
 /// This should fail.
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_migration_0013_data_no_table() {
     let (clickhouse, _cleanup_db) = get_clean_clickhouse();
     clickhouse.create_database().await.unwrap();
