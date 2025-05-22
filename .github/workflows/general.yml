@@ -436,6 +436,9 @@ jobs:
 
   ui-tests:
     uses: ./.github/workflows/ui-tests.yml
+    secrets:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
   # See 'ci/README.md' at the repository root for more details.
   check-all-general-jobs-passed:
