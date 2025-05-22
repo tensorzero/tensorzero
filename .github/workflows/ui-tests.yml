@@ -13,10 +13,6 @@ jobs:
       - name: Build `gateway` container
         working-directory: ui
         run: |
-          echo "OPENAI_API_KEY=not_used" >> fixtures/.env
-          echo "FIREWORKS_API_KEY=not_used" >> fixtures/.env
-          echo "FIREWORKS_ACCOUNT_ID=not_used" >> fixtures/.env
-          echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures" >> fixtures/.env
           docker compose -f fixtures/docker-compose.yml build gateway
 
       - name: Save `gateway` container
