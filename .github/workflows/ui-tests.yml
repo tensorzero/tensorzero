@@ -56,14 +56,16 @@ jobs:
           docker compose -f fixtures/docker-compose.yml build gateway
 
       - name: Save `gateway` container
-        working-directory: ui
         run: docker save fixtures-gateway > ui-tests-gateway-container-${{ github.run_id }}.tar
 
-      - name: Upload `gateway` container
+      - name: Upload `gateway` container as an artifact
         uses: namespace-actions/upload-artifact@v1
         with:
           name: ui-tests-gateway-container-${{ github.run_id }}
           path: ui-tests-gateway-container-${{ github.run_id }}.tar
+          retention-days: 1
+          if-no-files-found: error
+          overwrite: false
 
   test:
     needs: build
