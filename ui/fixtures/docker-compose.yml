@@ -2,12 +2,9 @@ services:
   clickhouse:
     image: clickhouse/clickhouse-server:${TENSORZERO_CLICKHOUSE_VERSION:-24.12-alpine}
     environment:
-      - CLICKHOUSE_USER=chuser
-      - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
-      - CLICKHOUSE_PASSWORD=chpassword
-    tmpfs:
-      # So the fixtures aren't persisted between restarts of the containers and double-added
-      - /var/lib/clickhouse
+      CLICKHOUSE_USER: chuser
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+      CLICKHOUSE_PASSWORD: chpassword
     ports:
       - "8123:8123" # HTTP port
       - "9000:9000" # Native port
@@ -29,7 +26,7 @@ services:
     volumes:
       - ./config:/app/config:ro
     environment:
-      - TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures
+      TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures
     env_file:
       - .env
     ports:
@@ -54,17 +51,25 @@ services:
       timeout: 1s
 
   fixtures:
-    image: clickhouse/clickhouse-server:24.12-alpine
+    build:
+      dockerfile: Dockerfile
     volumes:
-      - .:/fixtures:ro
+      - .:/fixtures
+      - ~/.aws:/root/.aws
     environment:
-      - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
-      - CLICKHOUSE_HOST=clickhouse
-      - CLICKHOUSE_PASSWORD=chpassword
-      - CLICKHOUSE_USER=chuser
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PASSWORD: chpassword
+      CLICKHOUSE_USER: chuser
     depends_on:
       gateway:
         condition: service_healthy
     # Keep this running to make 'check-docker-compose.sh' detect that all containers are healthy
     command:
       ["bash", "-c", "cd /fixtures && ./load_fixtures.sh && sleep infinity"]
+    healthcheck:
+      test: ["CMD", "test", "-f", "/tmp/load_complete.marker"]
+      interval: 5s
+      timeout: 1s
+      retries: 48 # Retry for up to 4 minutes
+      start_period: 5s # Give the script time to start

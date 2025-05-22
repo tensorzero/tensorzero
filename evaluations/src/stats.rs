@@ -21,7 +21,7 @@ impl EvaluationStats {
     pub(crate) fn new(output_format: OutputFormat, dataset_len: usize) -> Self {
         let progress_bar = match output_format {
             OutputFormat::Jsonl => None,
-            OutputFormat::HumanReadable => Some(ProgressBar::new(dataset_len as u64)),
+            OutputFormat::Pretty => Some(ProgressBar::new(dataset_len as u64)),
         };
         Self {
             output_format,
@@ -40,7 +40,7 @@ impl EvaluationStats {
             OutputFormat::Jsonl => {
                 writeln!(writer, "{}", serde_json::to_string(&evaluation_update)?)?;
             }
-            OutputFormat::HumanReadable => {
+            OutputFormat::Pretty => {
                 if let Some(progress_bar) = &mut self.progress_bar {
                     progress_bar.inc(1);
                 }
@@ -104,7 +104,7 @@ impl EvaluationStats {
 // We allow large enum variants because
 // we expect the Success case way more often so it's ok to pay the cost
 // of a large enum here.
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum EvaluationUpdate {

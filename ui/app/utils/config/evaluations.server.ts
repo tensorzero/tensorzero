@@ -3,7 +3,15 @@ import path from "path";
 import fs from "fs";
 import { jsonModeSchema, RetryConfigSchema } from "./types";
 import { type FunctionConfig } from "./function";
-import { type VariantConfig } from "./variant";
+import {
+  type VariantConfig,
+  type TemplateWithContent,
+  ChatCompletionConfigSchema,
+  BestOfNSamplingConfigSchema,
+  MixtureOfNConfigSchema,
+  DiclConfigSchema,
+  ChainOfThoughtConfigSchema,
+} from "./variant";
 import {
   LLMJudgeIncludeConfigSchema,
   ExactMatchConfigSchema,
@@ -36,13 +44,9 @@ const llm_judge_user_template = `# Input
 const llm_judge_float_output_schema = {
   $schema: "http://json-schema.org/draft-07/schema#",
   type: "object",
-  required: ["thinking", "score"],
+  required: ["score"],
   additionalProperties: false,
   properties: {
-    thinking: {
-      type: "string",
-      description: "The reasoning or thought process behind the judgment",
-    },
     score: {
       type: "number",
       description: "The score assigned as a number",
@@ -56,13 +60,9 @@ const llm_judge_float_output_schema = {
 const llm_judge_boolean_output_schema = {
   $schema: "http://json-schema.org/draft-07/schema#",
   type: "object",
-  required: ["thinking", "score"],
+  required: ["score"],
   additionalProperties: false,
   properties: {
-    thinking: {
-      type: "string",
-      description: "The reasoning or thought process behind the judgment",
-    },
     score: {
       type: "boolean",
       description: "The LLM judge's score as a boolean",
@@ -94,8 +94,14 @@ const llm_judge_user_schema = {
   },
 };
 
+export enum LLMJudgeInputFormat {
+  Serialized = "serialized",
+  Messages = "messages",
+}
+const LLMJudgeInputFormatSchema = z.nativeEnum(LLMJudgeInputFormat);
+
 export const UninitializedLLMJudgeChatCompletionVariantConfigSchema = z.object({
-  active: z.boolean().default(false),
+  active: z.boolean().optional(), // Make optional to match Rust's get_weight logic
   model: z.string(),
   system_instructions: z.string(), // Path to system instructions
   temperature: z.number().optional(),
@@ -106,6 +112,46 @@ export const UninitializedLLMJudgeChatCompletionVariantConfigSchema = z.object({
   seed: z.number().int().optional(),
   json_mode: jsonModeSchema,
   retries: RetryConfigSchema.default({ num_retries: 0, max_delay_s: 10 }),
+  extra_body: z.record(z.string(), z.any()).optional(),
+  extra_headers: z.record(z.string(), z.string()).optional(),
+});
+
+// Default timeout value for BestOfN and MixtureOfN variants
+const defaultTimeout = () => 300.0;
+
+// Schema for BestOfN variant
+export const UninitializedLLMJudgeBestOfNVariantConfigSchema = z.object({
+  active: z.boolean().optional(),
+  timeout_s: z.number().default(defaultTimeout()),
+  candidates: z.array(z.string()).default([]),
+  evaluator: UninitializedLLMJudgeChatCompletionVariantConfigSchema,
+});
+
+// Schema for MixtureOfN variant
+export const UninitializedLLMJudgeMixtureOfNVariantConfigSchema = z.object({
+  active: z.boolean().optional(),
+  timeout_s: z.number().default(defaultTimeout()),
+  candidates: z.array(z.string()).default([]),
+  fuser: UninitializedLLMJudgeChatCompletionVariantConfigSchema,
+});
+
+// Schema for DICL variant
+export const UninitializedLLMJudgeDiclVariantConfigSchema = z.object({
+  active: z.boolean().optional(),
+  embedding_model: z.string(),
+  k: z.number().int(),
+  model: z.string(),
+  system_instructions: z.string().optional(),
+  temperature: z.number().optional(),
+  top_p: z.number().optional(),
+  presence_penalty: z.number().optional(),
+  frequency_penalty: z.number().optional(),
+  max_tokens: z.number().int().optional(),
+  seed: z.number().int().optional(),
+  json_mode: jsonModeSchema.optional(),
+  retries: RetryConfigSchema.optional(),
+  extra_body: z.record(z.string(), z.any()).optional(),
+  extra_headers: z.record(z.string(), z.string()).optional(),
 });
 
 export const UnintializedLLMJudgeVariantConfigSchema = z.discriminatedUnion(
@@ -115,10 +161,30 @@ export const UnintializedLLMJudgeVariantConfigSchema = z.discriminatedUnion(
       type: z.literal("chat_completion"),
       ...UninitializedLLMJudgeChatCompletionVariantConfigSchema.shape,
     }),
+    z.object({
+      type: z.literal("experimental_best_of_n_sampling"),
+      ...UninitializedLLMJudgeBestOfNVariantConfigSchema.shape,
+    }),
+    z.object({
+      type: z.literal("experimental_mixture_of_n"),
+      ...UninitializedLLMJudgeMixtureOfNVariantConfigSchema.shape,
+    }),
+    z.object({
+      type: z.literal("experimental_dynamic_in_context_learning"),
+      ...UninitializedLLMJudgeDiclVariantConfigSchema.shape,
+    }),
+    z.object({
+      type: z.literal("experimental_chain_of_thought"),
+      ...UninitializedLLMJudgeChatCompletionVariantConfigSchema.shape,
+      // This is the same as ChatCompletionVariantConfigSchema because they have the same config options
+    }),
   ],
 );
 
 export const UninitializedLLMJudgeConfigSchema = z.object({
+  input_format: LLMJudgeInputFormatSchema.default(
+    LLMJudgeInputFormat.Serialized,
+  ),
   variants: z.record(z.string(), UnintializedLLMJudgeVariantConfigSchema),
   output_type: z.enum(["float", "boolean"]),
   optimize: z.enum(["min", "max"]),
@@ -167,6 +233,24 @@ async function readSystemInstructions(
   }
 }
 
+// Helper function to get template path
+function getTemplatePath(
+  evaluationName: string,
+  evaluatorName: string,
+  variantName: string,
+  templateName: "system" | "user",
+): string {
+  return `tensorzero::llm_judge::${evaluationName}::${evaluatorName}::${variantName}::${templateName}`;
+}
+
+// Helper function to get weight
+function getWeight(active?: boolean): number | undefined {
+  if (active === undefined) {
+    return undefined; // Explicitly return undefined if not specified
+  }
+  return active ? 1.0 : 0.0;
+}
+
 // Get LLM judge function name
 function getLLMJudgeFunctionName(
   evaluationName: string,
@@ -189,39 +273,180 @@ async function loadLLMJudgeVariant(
   basePath: string,
   evaluationName: string,
   evaluatorName: string,
+  inputFormat: LLMJudgeInputFormat, // Added parameter
+  variantName: string, // Added parameter
 ): Promise<VariantConfig> {
-  if (variantConfig.type !== "chat_completion") {
-    throw new Error(
-      `Unsupported LLM judge variant type: ${variantConfig.type}`,
-    );
-  }
+  const weight = getWeight(variantConfig.active);
 
-  const systemInstructions = await readSystemInstructions(
-    variantConfig.system_instructions,
-    basePath,
+  // Common user template logic
+  const userTemplatePath = getTemplatePath(
+    evaluationName,
+    evaluatorName,
+    variantName,
+    "user",
+  );
+  const user_template: TemplateWithContent | undefined =
+    inputFormat === LLMJudgeInputFormat.Serialized
+      ? {
+          path: userTemplatePath,
+          content: llm_judge_user_template,
+        }
+      : undefined;
+
+  const systemTemplatePath = getTemplatePath(
+    evaluationName,
+    evaluatorName,
+    variantName,
+    "system",
   );
 
-  return {
-    type: "chat_completion" as const,
-    weight: variantConfig.active ? 1.0 : 0.0,
-    model: variantConfig.model,
-    system_template: {
-      path: `tensorzero::llm_judge::${evaluationName}::${evaluatorName}::system`,
-      content: systemInstructions,
-    },
-    user_template: {
-      path: `tensorzero::llm_judge::${evaluationName}::${evaluatorName}::user`,
-      content: llm_judge_user_template,
-    },
-    temperature: variantConfig.temperature,
-    top_p: variantConfig.top_p,
-    max_tokens: variantConfig.max_tokens,
-    presence_penalty: variantConfig.presence_penalty,
-    frequency_penalty: variantConfig.frequency_penalty,
-    seed: variantConfig.seed,
-    json_mode: variantConfig.json_mode,
-    retries: variantConfig.retries,
-  };
+  switch (variantConfig.type) {
+    case "chat_completion": {
+      const systemInstructions = await readSystemInstructions(
+        variantConfig.system_instructions,
+        basePath,
+      );
+
+      const system_template: TemplateWithContent = {
+        path: systemTemplatePath,
+        content: systemInstructions,
+      };
+
+      // Validate and return ChatCompletionConfig
+      return ChatCompletionConfigSchema.parse({
+        type: "chat_completion" as const,
+        weight: weight, // Use calculated weight
+        model: variantConfig.model,
+        system_template: system_template, // Use formatted content
+        user_template: user_template, // Use conditional template
+        temperature: variantConfig.temperature,
+        top_p: variantConfig.top_p,
+        max_tokens: variantConfig.max_tokens,
+        presence_penalty: variantConfig.presence_penalty,
+        frequency_penalty: variantConfig.frequency_penalty,
+        seed: variantConfig.seed,
+        json_mode: variantConfig.json_mode,
+        retries: variantConfig.retries,
+        extra_body: variantConfig.extra_body,
+        extra_headers: variantConfig.extra_headers,
+      });
+    }
+
+    case "experimental_best_of_n_sampling": {
+      // Construct the inner evaluator config (without weight)
+      const evaluator = ChatCompletionConfigSchema.parse({
+        type: "chat_completion" as const,
+        model: variantConfig.evaluator.model,
+        system_template: variantConfig.evaluator.system_instructions,
+        user_template: llm_judge_user_template,
+        temperature: variantConfig.evaluator.temperature,
+        top_p: variantConfig.evaluator.top_p,
+        max_tokens: variantConfig.evaluator.max_tokens,
+        presence_penalty: variantConfig.evaluator.presence_penalty,
+        frequency_penalty: variantConfig.evaluator.frequency_penalty,
+        seed: variantConfig.evaluator.seed,
+        json_mode: variantConfig.evaluator.json_mode,
+        retries: variantConfig.evaluator.retries,
+        extra_body: variantConfig.evaluator.extra_body,
+        extra_headers: variantConfig.evaluator.extra_headers,
+      });
+
+      // Validate and return BestOfNSamplingConfig
+      return BestOfNSamplingConfigSchema.parse({
+        type: "experimental_best_of_n_sampling" as const,
+        weight: weight,
+        timeout_s: variantConfig.timeout_s,
+        candidates: variantConfig.candidates,
+        evaluator: evaluator,
+      });
+    }
+
+    case "experimental_mixture_of_n": {
+      const fuserSystemInstructions = await readSystemInstructions(
+        variantConfig.fuser.system_instructions,
+        basePath,
+      );
+
+      // Construct the inner fuser config (without weight)
+      const fuser = ChatCompletionConfigSchema.parse({
+        type: "chat_completion" as const,
+        model: variantConfig.fuser.model,
+        system_template: fuserSystemInstructions,
+        user_template: llm_judge_user_template,
+        temperature: variantConfig.fuser.temperature,
+        top_p: variantConfig.fuser.top_p,
+        max_tokens: variantConfig.fuser.max_tokens,
+        presence_penalty: variantConfig.fuser.presence_penalty,
+        frequency_penalty: variantConfig.fuser.frequency_penalty,
+        seed: variantConfig.fuser.seed,
+        json_mode: variantConfig.fuser.json_mode,
+        retries: variantConfig.fuser.retries,
+        extra_body: variantConfig.fuser.extra_body,
+        extra_headers: variantConfig.fuser.extra_headers,
+      });
+
+      // Validate and return MixtureOfNConfig
+      return MixtureOfNConfigSchema.parse({
+        type: "experimental_mixture_of_n" as const,
+        weight: weight,
+        timeout_s: variantConfig.timeout_s,
+        candidates: variantConfig.candidates,
+        fuser: fuser,
+      });
+    }
+
+    case "experimental_dynamic_in_context_learning": {
+      return DiclConfigSchema.parse({
+        type: "experimental_dynamic_in_context_learning" as const,
+        weight: weight,
+        embedding_model: variantConfig.embedding_model,
+        k: variantConfig.k,
+        model: variantConfig.model,
+        system_instructions: variantConfig.system_instructions,
+        temperature: variantConfig.temperature,
+        top_p: variantConfig.top_p,
+        presence_penalty: variantConfig.presence_penalty,
+        frequency_penalty: variantConfig.frequency_penalty,
+        max_tokens: variantConfig.max_tokens,
+        seed: variantConfig.seed,
+        json_mode: variantConfig.json_mode,
+        retries: variantConfig.retries,
+        extra_body: variantConfig.extra_body,
+        extra_headers: variantConfig.extra_headers,
+      });
+    }
+
+    case "experimental_chain_of_thought": {
+      const systemInstructions = await readSystemInstructions(
+        variantConfig.system_instructions,
+        basePath,
+      );
+
+      const system_template: TemplateWithContent = {
+        path: systemTemplatePath,
+        content: systemInstructions,
+      };
+
+      // Validate and return ChainOfThoughtConfig
+      return ChainOfThoughtConfigSchema.parse({
+        type: "experimental_chain_of_thought" as const,
+        weight: weight, // Use calculated weight
+        model: variantConfig.model,
+        system_template: system_template, // Use formatted content
+        user_template: user_template, // Use conditional template
+        temperature: variantConfig.temperature,
+        top_p: variantConfig.top_p,
+        max_tokens: variantConfig.max_tokens,
+        presence_penalty: variantConfig.presence_penalty,
+        frequency_penalty: variantConfig.frequency_penalty,
+        seed: variantConfig.seed,
+        json_mode: variantConfig.json_mode,
+        retries: variantConfig.retries,
+        extra_body: variantConfig.extra_body,
+        extra_headers: variantConfig.extra_headers,
+      });
+    }
+  }
 }
 
 // Transform uninitialized LLM judge config into LLM judge config and function config
@@ -233,6 +458,7 @@ async function loadLLMJudgeEvaluator(
 ): Promise<{
   evaluatorConfig: {
     type: "llm_judge";
+    input_format: LLMJudgeInputFormat; // Add input_format to return type
     output_type: "float" | "boolean";
     include: z.infer<typeof LLMJudgeIncludeConfigSchema>;
     optimize: "min" | "max";
@@ -249,6 +475,7 @@ async function loadLLMJudgeEvaluator(
 
   // Load all variants
   const loadedVariants: Record<string, VariantConfig> = {};
+  let activeVariantCount = 0;
 
   for (const [name, variant] of Object.entries(config.variants)) {
     const loadedVariant = await loadLLMJudgeVariant(
@@ -256,10 +483,46 @@ async function loadLLMJudgeEvaluator(
       basePath,
       evaluationName,
       evaluatorName,
+      config.input_format, // Pass input_format
+      name, // Pass variantName
     );
+    // Handle undefined weight (meaning active was not specified)
+    // In Rust, if only one variant exists and weight is None, it defaults to 1.0
+    // If multiple variants exist and weight is None, it's treated as 0.0 for the active check
+    let effectiveWeight = loadedVariant.weight;
+    if (Object.keys(config.variants).length === 1) {
+      effectiveWeight = 1.0;
+      // Mutate the loaded variant to set the default weight
+      if (loadedVariant.type === "chat_completion") {
+        loadedVariant.weight = 1.0;
+      } else if (loadedVariant.type === "experimental_best_of_n_sampling") {
+        loadedVariant.weight = 1.0;
+      } else if (loadedVariant.type === "experimental_mixture_of_n") {
+        loadedVariant.weight = 1.0;
+      }
+    } else if (effectiveWeight === undefined) {
+      effectiveWeight = 0.0; // Treat as inactive for counting if multiple variants
+    }
+
+    if (effectiveWeight > 0) {
+      activeVariantCount++;
+    }
     loadedVariants[name] = loadedVariant;
   }
-  // We don't validate that exactly one variant is active here since Rust does
+
+  // Validate active variant count
+  if (Object.keys(loadedVariants).length > 1 && activeVariantCount !== 1) {
+    throw new Error(
+      `Evaluator \`${evaluatorName}\` in \`[evaluations.${evaluationName}]\` must have exactly 1 variant that is active. Found ${activeVariantCount} variants with nonzero weights.`,
+    );
+  } else if (
+    Object.keys(loadedVariants).length === 1 &&
+    activeVariantCount === 0
+  ) {
+    throw new Error(
+      `Evaluator \`${evaluatorName}\` in \`[evaluations.${evaluationName}]\` must have exactly 1 variant that is active. You have specified a single inactive variant.`,
+    );
+  }
 
   // Create output schema based on output type
   const outputSchema =
@@ -272,20 +535,35 @@ async function loadLLMJudgeEvaluator(
     type: "json",
     variants: loadedVariants,
     output_schema: {
-      path: `tensorzero::llm_judge::${evaluationName}::${evaluatorName}::output_schema`,
+      path: getTemplatePath(
+        evaluationName,
+        evaluatorName,
+        "output_schema", // Use a generic name for schema paths? Or derive from variant? Let's stick to this for now.
+        "system", // This part of getTemplatePath isn't really used here, just need the base
+      ).replace(/::system$/, "::output_schema"), // Adjust path generation slightly
       content: outputSchema,
     },
     system_schema: undefined,
-    user_schema: {
-      path: `tensorzero::llm_judge::${evaluationName}::${evaluatorName}::user_schema`,
-      content: llm_judge_user_schema,
-    },
+    // Add user_schema only if input_format is Serialized
+    user_schema:
+      config.input_format === LLMJudgeInputFormat.Serialized
+        ? {
+            path: getTemplatePath(
+              evaluationName,
+              evaluatorName,
+              "user_schema", // Generic name
+              "system",
+            ).replace(/::system$/, "::user_schema"), // Adjust path
+            content: llm_judge_user_schema,
+          }
+        : undefined,
     assistant_schema: undefined,
   };
 
   return {
     evaluatorConfig: {
       type: "llm_judge" as const,
+      input_format: config.input_format, // Include input_format
       output_type: config.output_type,
       include: config.include,
       optimize: config.optimize,
@@ -338,7 +616,7 @@ async function loadEvaluator(
       );
 
       return {
-        evaluatorConfig,
+        evaluatorConfig, // This now includes input_format
         functionConfig,
         metricConfig: {
           type: config.output_type === "float" ? "float" : "boolean",
@@ -420,8 +698,6 @@ export const RawEvaluationConfigSchema =
               metricConfigs,
             };
           }
-          default:
-            throw new Error(`Unsupported evaluation type: ${raw.type}`);
         }
       },
     };

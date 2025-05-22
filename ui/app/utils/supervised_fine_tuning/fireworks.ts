@@ -36,7 +36,8 @@ import type {
 import type { ParsedInferenceExample } from "../clickhouse/curation";
 
 // Base URL for the Fireworks API
-export const FIREWORKS_API_URL = "https://api.fireworks.ai";
+export const FIREWORKS_API_URL =
+  process.env.FIREWORKS_BASE_URL || "https://api.fireworks.ai";
 
 // Retrieves the API key for the Fireworks API from environment variables
 // Logs a warning if the key is not set
@@ -533,9 +534,8 @@ export function tensorzero_inference_to_fireworks_messages(
 // Creates a dataset record in Fireworks.
 // This is a placeholder for the dataset that gets uploaded in a subsequent call.
 // Essentially all this does is make an ID in Fireworks that we reuse.
-// We'll use a UUIDv7
 async function create_dataset_record(accountId: string, exampleCount: number) {
-  const datasetId = v7();
+  const datasetId = `t0-${v7()}`;
   const url = new URL(
     `v1/accounts/${accountId}/datasets`,
     FIREWORKS_API_URL,

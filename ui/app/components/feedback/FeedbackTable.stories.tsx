@@ -6,7 +6,19 @@ import type { Config } from "~/utils/config";
 
 const config: Config = {
   gateway: {
-    disable_observability: false,
+    observability: {
+      enabled: true,
+      async_writes: false,
+    },
+    export: {
+      otlp: {
+        traces: {
+          enabled: false,
+        },
+      },
+    },
+    debug: false,
+    enable_template_filesystem_access: false,
   },
   models: {},
   embedding_models: {},
@@ -26,6 +38,13 @@ const config: Config = {
       type: "boolean" as const,
       optimize: "min" as const,
       level: "inference" as const,
+    },
+    demonstration: {
+      type: "demonstration" as const,
+      level: "inference" as const,
+    },
+    comment: {
+      type: "comment" as const,
     },
   },
   tools: {},
@@ -121,7 +140,12 @@ const mockFeedback: FeedbackRow[] = [
     type: "demonstration",
     id: "00000010-0000-0000-0000-000000000000",
     inference_id: "00000011-0000-0000-0000-000000000000",
-    value: "This is a demonstration.",
+    value: JSON.stringify([
+      {
+        type: "text",
+        text: "This is a demonstration.",
+      },
+    ]),
     timestamp: "2024-03-20T10:06:00Z",
   },
 ];
@@ -176,12 +200,12 @@ export const WithLongDemonstration: Story = {
         type: "demonstration",
         id: "00000000-0000-0000-0000-000000000000",
         inference_id: "00000000-0000-0000-0000-000000000000",
-        value:
-          "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Cras dolor ex, posuere at libero sit amet, mollis varius neque. Aliquam et purus eu erat imperdiet faucibus a non sapien. Proin arcu sapien, auctor a malesuada vel, condimentum vitae mauris. Nam nec pellentesque eros, nec accumsan metus. Proin quis augue sagittis, aliquet dolor gravida, pulvinar ligula. Proin et interdum lorem. Etiam at enim sodales ligula molestie viverra. Quisque tincidunt eget dolor id tempus.\n\n" +
-          "Vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia curae; Sed vitae lorem vel nisl vehicula tincidunt. Mauris vehicula massa in dolor tincidunt eleifend. Pellentesque habitant morbi tristique senectus et netus et malesuada fames ac turpis egestas. Donec ultrices tellus vitae diam sagittis venenatis. Nulla facilisi. Nullam lacinia tellus nec dui tempor, non tempus eros facilisis.\n\n" +
-          "Fusce vehicula, tortor et congue tincidunt, dolor magna tempor nisl, et ultricies massa diam sit amet libero. Integer consectetur urna non ex sollicitudin, in tincidunt nisi hendrerit. Praesent in vehicula nisi. Suspendisse potenti. Sed fermentum magna vitae lectus venenatis, vel sagittis dolor dictum. Donec sed odio dui. Cras mattis consectetur purus sit amet fermentum.\n\n" +
-          "Maecenas volutpat, quam id porttitor tincidunt, velit turpis vulputate justo, sed laoreet nulla risus nec velit. Suspendisse potenti. Nullam auctor pulvinar nisi, at tempor nisi hendrerit vitae. Sed consequat magna at velit fermentum, quis aliquam enim tempus. Morbi malesuada ligula a mauris tempor dignissim. Vivamus dictum purus sed purus fermentum pharetra. Duis ut libero nec ligula facilisis mattis.\n\n" +
-          "Phasellus ullamcorper ipsum rutrum nunc. Nunc nonummy metus. Vestibulum volutpat pretium libero. Cras id dui. Aenean ut eros et nisl sagittis vestibulum. Nullam nulla eros, ultricies sit amet, nonummy id, imperdiet feugiat, pede. Sed lectus. Donec mollis hendrerit risus. Phasellus nec sem in justo pellentesque facilisis. Etiam imperdiet imperdiet orci.",
+        value: JSON.stringify([
+          {
+            type: "text",
+            text: "Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book. It has survived not only five centuries, but also the leap into electronic typesetting, remaining essentially unchanged. It was popularised in the 1960s with the release of Letraset sheets containing Lorem Ipsum passages, and more recently with desktop publishing software like Aldus PageMaker including versions of Lorem Ipsum.\n\nLorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book. It has survived not only five centuries, but also the leap into electronic typesetting, remaining essentially unchanged. It was popularised in the 1960s with the release of Letraset sheets containing Lorem Ipsum passages, and more recently with desktop publishing software like Aldus PageMaker including versions of Lorem Ipsum.\n\nLorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book. It has survived not only five centuries, but also the leap into electronic typesetting, remaining essentially unchanged. It was popularised in the 1960s with the release of Letraset sheets containing Lorem Ipsum passages, and more recently with desktop publishing software like Aldus PageMaker including versions of Lorem Ipsum.\n\nLorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book. It has survived not only five centuries, but also the leap into electronic typesetting, remaining essentially unchanged. It was popularised in the 1960s with the release of Letraset sheets containing Lorem Ipsum passages, and more recently with desktop publishing software like Aldus PageMaker including versions of Lorem Ipsum.\n\nLorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book. It has survived not only five centuries, but also the leap into electronic typesetting, remaining essentially unchanged. It was popularised in the 1960s with the release of Letraset sheets containing Lorem Ipsum passages, and more recently with desktop publishing software like Aldus PageMaker including versions of Lorem Ipsum.\n\n",
+          },
+        ]),
         timestamp: "2024-03-20T10:00:00Z",
       },
     ],

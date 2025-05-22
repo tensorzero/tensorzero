@@ -1,0 +1,47 @@
+gateway.debug = true
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                 FUNCTIONS                                  │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[functions.cursorzero]
+type = "chat"
+
+[functions.cursorzero.variants."gpt-4.1"]
+weight = 1
+type = "chat_completion"
+model = "openai::gpt-4.1"
+
+[functions.cursorzero.variants."claude-3.7"]
+weight = 1
+type = "chat_completion"
+model = "anthropic::claude-3-7-sonnet-20250219"
+
+[functions.cursorzero.variants."gemini-2.5-pro"]
+weight = 1
+type = "chat_completion"
+model = "google_ai_studio_gemini::gemini-2.5-pro-preview-05-06"
+
+[functions.cursorzero.variants."o4-mini"]
+weight = 1
+type = "chat_completion"
+model = "openai::o4-mini-2025-04-16"
+extra_body = [{ pointer = "/temperature", value = 1.0 }]
+
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                  METRICS                                   │
+# └────────────────────────────────────────────────────────────────────────────┘
+[metrics.min_ted]
+type = "float"
+level = "inference"
+optimize = "min"
+
+[metrics.ted_ratio]
+type = "float"
+level = "inference"
+optimize = "max"
+
+# [metrics.valid_output]
+# type = "boolean"
+# level = "inference"
+# optimize = "max"

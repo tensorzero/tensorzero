@@ -28,7 +28,9 @@ use super::openai::{
 };
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
+use crate::error::DisplayOrDebugGateway;
 use crate::error::{Error, ErrorDetails};
+use crate::inference::providers::openai::check_api_base_suffix;
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::{
     BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse,
@@ -65,6 +67,10 @@ impl TGIProvider {
             PROVIDER_TYPE,
             &DEFAULT_CREDENTIALS,
         )?;
+
+        // Check if the api_base has the `/chat/completions` suffix and warn if it does
+        check_api_base_suffix(&api_base);
+
         Ok(TGIProvider {
             api_base,
             credentials,
@@ -132,11 +138,15 @@ impl InferenceProvider for TGIProvider {
         let mut request_body = serde_json::to_value(TGIRequest::new(PROVIDER_TYPE, request)?)
             .map_err(|e| {
                 Error::new(ErrorDetails::Serialization {
-                    message: format!("Error serializing TGI request: {e}"),
+                    message: format!(
+                        "Error serializing TGI request: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                 })
             })?;
         let headers = inject_extra_request_data(
             &request.extra_body,
+            &request.extra_headers,
             model_provider,
             model_name,
             &mut request_body,
@@ -160,8 +170,11 @@ impl InferenceProvider for TGIProvider {
             .await
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
-                    message: format!("Error sending request to TGI: {e}"),
                     status_code: e.status(),
+                    message: format!(
+                        "Error sending request to TGI: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: serde_json::to_string(&request_body).ok(),
                     raw_response: None,
@@ -171,7 +184,10 @@ impl InferenceProvider for TGIProvider {
         if res.status().is_success() {
             let raw_response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing text response: {e}"),
+                    message: format!(
+                        "Error parsing text response: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: serde_json::to_string(&request_body).ok(),
                     raw_response: None,
@@ -180,7 +196,10 @@ impl InferenceProvider for TGIProvider {
 
             let response = serde_json::from_str(&raw_response).map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing JSON response: {e}"),
+                    message: format!(
+                        "Error parsing JSON response: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: serde_json::to_string(&request_body).ok(),
                     raw_response: Some(raw_response.clone()),
@@ -203,7 +222,10 @@ impl InferenceProvider for TGIProvider {
                 res.status(),
                 &res.text().await.map_err(|e| {
                     Error::new(ErrorDetails::InferenceServer {
-                        message: format!("Error parsing error response: {e}"),
+                        message: format!(
+                            "Error parsing error response: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
                         provider_type: PROVIDER_TYPE.to_string(),
                         raw_request: serde_json::to_string(&request_body).ok(),
                         raw_response: None,
@@ -227,11 +249,15 @@ impl InferenceProvider for TGIProvider {
         let mut request_body = serde_json::to_value(TGIRequest::new(PROVIDER_NAME, request)?)
             .map_err(|e| {
                 Error::new(ErrorDetails::Serialization {
-                    message: format!("Error serializing TGI request: {e}"),
+                    message: format!(
+                        "Error serializing TGI request: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                 })
             })?;
         let headers = inject_extra_request_data(
             &request.extra_body,
+            &request.extra_headers,
             model_provider,
             model_name,
             &mut request_body,
@@ -245,7 +271,10 @@ impl InferenceProvider for TGIProvider {
         }
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
-                message: format!("Error serializing request: {e}"),
+                message: format!(
+                    "Error serializing request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
             })
         })?;
         let request_url = get_chat_url(&self.api_base)?;
@@ -263,7 +292,10 @@ impl InferenceProvider for TGIProvider {
             .eventsource()
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
-                    message: format!("Error sending request to OpenAI: {e}"),
+                    message: format!(
+                        "Error sending request to OpenAI: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     status_code: None,
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(raw_request.clone()),
@@ -319,8 +351,7 @@ fn stream_tgi(
                         let data: Result<TGIChatChunk, Error> =
                             serde_json::from_str(&message.data).map_err(|e| Error::new(ErrorDetails::InferenceServer {
                                 message: format!(
-                                    "Error parsing chunk. Error: {}",
-                                    e,
+                                    "Error parsing chunk. Error: {e}",
                                 ),
                                 raw_request: None,
                                 raw_response: Some(message.data.clone()),
@@ -483,7 +514,10 @@ impl<'a> TryFrom<TGIResponseWithMetadata<'a>> for ProviderInferenceResponse {
         }
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
-                message: format!("Error serializing request body as JSON: {e}"),
+                message: format!(
+                    "Error serializing request body as JSON: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
             })
         })?;
         let system = generic_request.system.clone();
@@ -663,7 +697,10 @@ fn tgi_to_tensorzero_chunk(
 ) -> Result<ProviderInferenceResponseChunk, Error> {
     let raw_message = serde_json::to_string(&chunk).map_err(|e| {
         Error::new(ErrorDetails::InferenceServer {
-            message: format!("Error parsing response from OpenAI: {e}"),
+            message: format!(
+                "Error parsing response from OpenAI: {}",
+                DisplayOrDebugGateway::new(e)
+            ),
             raw_request: None,
             raw_response: Some(serde_json::to_string(&chunk).unwrap_or_default()),
             provider_type: PROVIDER_TYPE.to_string(),
@@ -717,6 +754,7 @@ mod tests {
     use std::borrow::Cow;
 
     use serde_json::json;
+    use tracing_test::traced_test;
     use uuid::Uuid;
 
     use crate::inference::{
@@ -982,5 +1020,35 @@ mod tests {
                 response_time: Duration::from_secs(0)
             }
         );
+    }
+
+    #[test]
+    #[traced_test]
+    fn test_tgi_provider_new_api_base_check() {
+        let api_key_location = Some(CredentialLocation::None);
+
+        // Valid cases (should not warn)
+        let _ = TGIProvider::new(
+            Url::parse("http://localhost:1234/v1/").unwrap(),
+            api_key_location.clone(),
+        )
+        .unwrap();
+
+        let _ = TGIProvider::new(
+            Url::parse("http://localhost:1234/v1").unwrap(),
+            api_key_location.clone(),
+        )
+        .unwrap();
+
+        // Invalid cases (should warn)
+        let invalid_url_1 = Url::parse("http://localhost:1234/chat/completions").unwrap();
+        let _ = TGIProvider::new(invalid_url_1.clone(), api_key_location.clone()).unwrap();
+        assert!(logs_contain("automatically appends `/chat/completions`"));
+        assert!(logs_contain(invalid_url_1.as_ref()));
+
+        let invalid_url_2 = Url::parse("http://localhost:1234/v1/chat/completions/").unwrap();
+        let _ = TGIProvider::new(invalid_url_2.clone(), api_key_location.clone()).unwrap();
+        assert!(logs_contain("automatically appends `/chat/completions`"));
+        assert!(logs_contain(invalid_url_2.as_ref()));
     }
 }

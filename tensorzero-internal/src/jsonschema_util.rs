@@ -11,7 +11,7 @@ use crate::error::{Error, ErrorDetails};
 
 #[derive(Debug, Serialize)]
 pub enum JsonSchemaRef<'a> {
-    Static(&'a JSONSchemaFromPath),
+    Static(&'a StaticJSONSchema),
     Dynamic(&'a DynamicJSONSchema),
 }
 
@@ -32,19 +32,19 @@ impl<'a> JsonSchemaRef<'a> {
 }
 
 #[derive(Clone, Debug, Serialize)]
-pub struct JSONSchemaFromPath {
+pub struct StaticJSONSchema {
     #[serde(skip)]
     pub compiled: Arc<Validator>,
     pub value: &'static serde_json::Value,
 }
 
-impl PartialEq for JSONSchemaFromPath {
+impl PartialEq for StaticJSONSchema {
     fn eq(&self, other: &Self) -> bool {
         self.value == other.value
     }
 }
 
-impl Default for JSONSchemaFromPath {
+impl Default for StaticJSONSchema {
     fn default() -> Self {
         // Create an empty JSON object
         let empty_schema: serde_json::Value = serde_json::json!({});
@@ -53,7 +53,7 @@ impl Default for JSONSchemaFromPath {
         let static_schema: &'static serde_json::Value = Box::leak(Box::new(empty_schema));
 
         // Compile the schema
-        #[allow(clippy::expect_used)]
+        #[expect(clippy::expect_used)]
         let compiled_schema =
             jsonschema::validator_for(static_schema).expect("Failed to compile empty schema");
 
@@ -64,10 +64,10 @@ impl Default for JSONSchemaFromPath {
     }
 }
 
-impl JSONSchemaFromPath {
+impl StaticJSONSchema {
     /// Just instantiates the struct, does not load the schema
     /// You should call `load` to load the schema
-    pub fn new<P: AsRef<Path>>(path: PathBuf, base_path: P) -> Result<Self, Error> {
+    pub fn from_path<P: AsRef<Path>>(path: PathBuf, base_path: P) -> Result<Self, Error> {
         let path = base_path.as_ref().join(path);
         let content = fs::read_to_string(&path).map_err(|e| {
             Error::new(ErrorDetails::JsonSchema {
@@ -92,12 +92,11 @@ impl JSONSchemaFromPath {
         Ok(Self { compiled, value })
     }
 
-    // NOTE: This function is to be used only for tests and constants
     pub fn from_value(value: &serde_json::Value) -> Result<Self, Error> {
         let schema_boxed: &'static serde_json::Value = Box::leak(Box::new(value.clone()));
         let compiled_schema = jsonschema::validator_for(schema_boxed).map_err(|e| {
             Error::new(ErrorDetails::JsonSchema {
-                message: format!("Failed to compile JSON Schema: {}", e),
+                message: format!("Failed to compile JSON Schema: {e}"),
             })
         })?;
         Ok(Self {
@@ -185,7 +184,7 @@ impl DynamicJSONSchema {
                     .await
                     .map_err(|e| {
                         Error::new(ErrorDetails::JsonSchema {
-                            message: format!("Task join error in DynamicJSONSchema: {}", e),
+                            message: format!("Task join error in DynamicJSONSchema: {e}"),
                         })
                     })?
                 }
@@ -225,9 +224,9 @@ mod tests {
         "#;
 
         let mut temp_file = NamedTempFile::new().expect("Failed to create temporary file");
-        write!(temp_file, "{}", schema).expect("Failed to write schema to temporary file");
+        write!(temp_file, "{schema}").expect("Failed to write schema to temporary file");
 
-        let schema = JSONSchemaFromPath::new(temp_file.path().to_owned(), PathBuf::from(""))
+        let schema = StaticJSONSchema::from_path(temp_file.path().to_owned(), PathBuf::from(""))
             .expect("Failed to load schema");
 
         let instance = serde_json::json!({
@@ -269,10 +268,10 @@ mod tests {
         "#;
 
         let mut temp_file = NamedTempFile::new().expect("Failed to create temporary file");
-        write!(temp_file, "{}", invalid_schema)
+        write!(temp_file, "{invalid_schema}")
             .expect("Failed to write invalid schema to temporary file");
 
-        let result = JSONSchemaFromPath::new(temp_file.path().to_owned(), PathBuf::from(""));
+        let result = StaticJSONSchema::from_path(temp_file.path().to_owned(), PathBuf::from(""));
         assert_eq!(
             result.unwrap_err().to_string(),
             format!(
@@ -285,7 +284,7 @@ mod tests {
     #[test]
     fn test_nonexistent_file() {
         let result =
-            JSONSchemaFromPath::new(PathBuf::from("nonexistent_file.json"), PathBuf::from(""));
+            StaticJSONSchema::from_path(PathBuf::from("nonexistent_file.json"), PathBuf::from(""));
         assert_eq!(
             result.unwrap_err().to_string(),
             "Failed to read JSON Schema `nonexistent_file.json`: No such file or directory (os error 2)".to_string()

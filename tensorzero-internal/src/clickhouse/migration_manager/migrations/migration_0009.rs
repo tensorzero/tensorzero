@@ -10,7 +10,6 @@ use async_trait::async_trait;
 /// This migration allows us to efficiently query feedback tables by their target IDs.
 pub struct Migration0009<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
-    pub clean_start: bool,
 }
 
 #[async_trait]
@@ -29,7 +28,7 @@ impl Migration for Migration0009<'_> {
             if !check_table_exists(self.clickhouse, table, "0009").await? {
                 return Err(ErrorDetails::ClickHouseMigration {
                     id: "0009".to_string(),
-                    message: format!("Table {} does not exist", table),
+                    message: format!("Table {table} does not exist"),
                 }
                 .into());
             }
@@ -57,7 +56,7 @@ impl Migration for Migration0009<'_> {
         Ok(false)
     }
 
-    async fn apply(&self) -> Result<(), Error> {
+    async fn apply(&self, clean_start: bool) -> Result<(), Error> {
         // Only gets used when we are not doing a clean start
         let view_offset = Duration::from_secs(15);
         let view_timestamp = (std::time::SystemTime::now()
@@ -83,10 +82,13 @@ impl Migration for Migration0009<'_> {
             ) ENGINE = MergeTree()
             ORDER BY target_id;
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous(query.to_string(), None)
+            .await?;
         // Create the materialized view for the `BooleanMetricFeedbackByTargetId` table from BooleanMetricFeedback
         // If we are not doing a clean start, we need to add a where clause to the view to only include rows that have been created after the view_timestamp
-        let view_where_clause = if !self.clean_start {
+        let view_where_clause = if !clean_start {
             format!("WHERE UUIDv7ToDateTime(id) >= toDateTime(toUnixTimestamp({view_timestamp}))")
         } else {
             String::new()
@@ -104,10 +106,9 @@ impl Migration for Migration0009<'_> {
                     tags
                 FROM BooleanMetricFeedback
                 {view_where_clause};
-            "#,
-            view_where_clause = view_where_clause
+            "#
         );
-        let _ = self.clickhouse.run_query(query, None).await?;
+        let _ = self.clickhouse.run_query_synchronous(query, None).await?;
 
         // Create the `CommentFeedbackByTargetId` table
         let query = r#"
@@ -121,7 +122,10 @@ impl Migration for Migration0009<'_> {
             ) ENGINE = MergeTree()
             ORDER BY target_id;
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous(query.to_string(), None)
+            .await?;
 
         // Create the materialized view for the `CommentFeedbackByTargetId` table from CommentFeedback
         // If we are not doing a clean start, we need to add a where clause to the view to only include rows that have been created after the view_timestamp
@@ -138,10 +142,9 @@ impl Migration for Migration0009<'_> {
                     tags
                 FROM CommentFeedback
                 {view_where_clause};
-            "#,
-            view_where_clause = view_where_clause
+            "#
         );
-        let _ = self.clickhouse.run_query(query, None).await?;
+        let _ = self.clickhouse.run_query_synchronous(query, None).await?;
 
         // Create the `DemonstrationFeedbackByInferenceId` table
         let query = r#"
@@ -154,7 +157,10 @@ impl Migration for Migration0009<'_> {
             ) ENGINE = MergeTree()
             ORDER BY inference_id;
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous(query.to_string(), None)
+            .await?;
 
         // Create the materialized view for the `DemonstrationFeedbackByInferenceId` table from DemonstrationFeedback
         // If we are not doing a clean start, we need to add a where clause to the view to only include rows that have been created after the view_timestamp
@@ -170,10 +176,9 @@ impl Migration for Migration0009<'_> {
                     tags
                 FROM DemonstrationFeedback
                 {view_where_clause};
-            "#,
-            view_where_clause = view_where_clause
+            "#
         );
-        let _ = self.clickhouse.run_query(query, None).await?;
+        let _ = self.clickhouse.run_query_synchronous(query, None).await?;
 
         // Create the `FloatMetricFeedbackByTargetId` table
         let query = r#"
@@ -187,11 +192,14 @@ impl Migration for Migration0009<'_> {
            ) ENGINE = MergeTree()
            ORDER BY target_id;
        "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous(query.to_string(), None)
+            .await?;
 
         // Create the materialized view for the `FloatMetricFeedbackByTargetId` table from FloatMetricFeedback
         // If we are not doing a clean start, we need to add a where clause to the view to only include rows that have been created after the view_timestamp
-        let view_where_clause = if !self.clean_start {
+        let view_where_clause = if !clean_start {
             format!("WHERE UUIDv7ToDateTime(id) >= toDateTime(toUnixTimestamp({view_timestamp}))")
         } else {
             String::new()
@@ -209,13 +217,12 @@ impl Migration for Migration0009<'_> {
                    tags
                FROM FloatMetricFeedback
                {view_where_clause};
-           "#,
-            view_where_clause = view_where_clause
+           "#
         );
-        let _ = self.clickhouse.run_query(query, None).await?;
+        let _ = self.clickhouse.run_query_synchronous(query, None).await?;
 
         // Insert the data from the original tables into the new table (we do this concurrently since it could theoretically take a long time)
-        if !self.clean_start {
+        if !clean_start {
             // Sleep for the duration specified by view_offset to allow the materialized views to catch up
             tokio::time::sleep(view_offset).await;
             let insert_boolean_metric_feedback = async {
@@ -230,10 +237,9 @@ impl Migration for Migration0009<'_> {
                         tags
                     FROM BooleanMetricFeedback
                     WHERE UUIDv7ToDateTime(id) < toDateTime(toUnixTimestamp({view_timestamp}));
-                "#,
-                    view_timestamp = view_timestamp
+                "#
                 );
-                self.clickhouse.run_query(query, None).await
+                self.clickhouse.run_query_synchronous(query, None).await
             };
 
             let insert_comment_feedback = async {
@@ -248,10 +254,9 @@ impl Migration for Migration0009<'_> {
                         tags
                     FROM CommentFeedback
                     WHERE UUIDv7ToDateTime(id) < toDateTime(toUnixTimestamp({view_timestamp}));
-                "#,
-                    view_timestamp = view_timestamp
+                "#
                 );
-                self.clickhouse.run_query(query, None).await
+                self.clickhouse.run_query_synchronous(query, None).await
             };
 
             let insert_demonstration_feedback = async {
@@ -265,10 +270,9 @@ impl Migration for Migration0009<'_> {
                         tags
                     FROM DemonstrationFeedback
                     WHERE UUIDv7ToDateTime(id) < toDateTime(toUnixTimestamp({view_timestamp}));
-                "#,
-                    view_timestamp = view_timestamp
+                "#
                 );
-                self.clickhouse.run_query(query, None).await
+                self.clickhouse.run_query_synchronous(query, None).await
             };
 
             let insert_float_metric_feedback = async {
@@ -283,10 +287,9 @@ impl Migration for Migration0009<'_> {
                         tags
                     FROM FloatMetricFeedback
                     WHERE UUIDv7ToDateTime(id) < toDateTime(toUnixTimestamp({view_timestamp}));
-                "#,
-                    view_timestamp = view_timestamp
+                "#
                 );
-                self.clickhouse.run_query(query, None).await
+                self.clickhouse.run_query_synchronous(query, None).await
             };
 
             tokio::try_join!(

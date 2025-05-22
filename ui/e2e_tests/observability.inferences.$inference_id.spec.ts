@@ -1,12 +1,11 @@
 import { test, expect } from "@playwright/test";
 
 test("should show the inference detail page", async ({ page }) => {
-  await page.goto(
-    "/observability/inferences/0195aef8-3eaa-7dc2-9376-8dde217649e8",
-  );
+  const inference_id = "0196367a-842d-74c2-9e62-67e058632503";
+  await page.goto(`/observability/inferences/${inference_id}`);
   // The episode ID should be visible
   await expect(
-    page.getByText("0195aef8-3eaa-7dc2-9376-8de1d8c6536b"),
+    page.getByText("0196367a-842d-74c2-9e62-67f07369b6ad"),
   ).toBeVisible();
 
   // Assert that "error" is not in the page
@@ -15,7 +14,7 @@ test("should show the inference detail page", async ({ page }) => {
 
 test("should display inferences with image content", async ({ page }) => {
   await page.goto(
-    "/observability/inferences/0195e31b-68d6-7001-b7b7-fde770175c65",
+    "/observability/inferences/0196372f-1b4b-7013-a446-511e312a3c30",
   );
   // Assert that there are 2 images displayed and they render
   const images = page.locator("img");
@@ -31,9 +30,14 @@ test("should display inferences with image content", async ({ page }) => {
   await expect(firstImage).toHaveJSProperty("complete", true);
   await expect(secondImage).toHaveJSProperty("complete", true);
 
+  // Wait for the page to load
+  await page.waitForTimeout(500);
+
   // Verify that images display in the modelInference section too
   // Click on the modelInference section
-  await page.getByText("0195e31b-703c-74a3-bbdd-e252ca10a86d").click();
+  await page.getByText("0196372f-2b63-7ed1-9a5a-9d0fa69c43e9").click();
+  // Wait for 500ms
+  await page.waitForTimeout(500);
   // Assert that the images are visible
   const newImages = page.locator("img");
   await expect(newImages).toHaveCount(4);
@@ -49,7 +53,7 @@ test("should display inferences with image content", async ({ page }) => {
 
 test("tag navigation works by evaluation_name", async ({ page }) => {
   await page.goto(
-    "/observability/inferences/0195f845-949b-76c0-b9d4-68b3fd799b50",
+    "/observability/inferences/0196368f-1b05-7181-b50c-e2ea0acea312",
   );
 
   // Wait for page to load
@@ -74,7 +78,7 @@ test("tag navigation works by evaluation_name", async ({ page }) => {
 
 test("tag navigation works by datapoint_id", async ({ page }) => {
   await page.goto(
-    "/observability/inferences/0195f845-949b-76c0-b9d4-68b3fd799b50",
+    "/observability/inferences/0196368f-1ae7-7e21-9027-f120f73d8ce0",
   );
 
   // Wait for page to load completely
@@ -92,6 +96,211 @@ test("tag navigation works by datapoint_id", async ({ page }) => {
 
   // Assert the URL
   await expect(page).toHaveURL(
-    "/datasets/foo/datapoint/019368c7-d150-7ba0-819a-88a2cec33663",
+    "/datasets/foo/datapoint/01936b20-e838-7322-956f-cd5a5d56f5fa",
   );
+});
+
+test("should be able to add float feedback via the inference page", async ({
+  page,
+}) => {
+  await page.goto(
+    "/observability/inferences/0196368f-1aeb-7f92-a62b-bdc595d0a626",
+  );
+  // Wait for the page to load
+  await page.waitForLoadState("networkidle");
+  // Click on the Add feedback button
+  await page.getByText("Add feedback").click();
+
+  // Click "Select a metric"
+  await page.getByText("Select a metric").click();
+
+  // Explicitly wait for the item to be visible before clicking
+  const metricItemLocator = page
+    .locator('div[role="dialog"]')
+    .locator('div[cmdk-item=""]')
+    .filter({
+      hasText: "jaccard_similarity",
+    });
+  await metricItemLocator.waitFor({ state: "visible" });
+  // Click on the metric in the command list
+  await metricItemLocator.click();
+
+  await page.locator("body").click();
+
+  // Fill in the value using the correct role and label
+  // Generate a random float between 0 and 1, avoiding .225 which seems to occur frequently
+  // Use a different approach to generate the random number
+  const randomValue = (0.1 + Math.random() * 0.8).toFixed(3);
+  const randomFloat = parseFloat(randomValue);
+
+  await page
+    .getByRole("spinbutton", { name: "Value" })
+    .fill(randomFloat.toString());
+
+  // Click the submit button
+  await page.getByText("Submit Feedback").click();
+
+  // Wait for the page to load
+  await page.waitForLoadState("networkidle");
+
+  // sleep for 500ms
+  await page.waitForTimeout(500);
+
+  // Verify the feedback value is visible in the table cell
+  await expect(
+    page.getByRole("cell", { name: randomFloat.toString() }),
+  ).toBeVisible();
+});
+
+test("should be able to add boolean feedback via the inference page", async ({
+  page,
+}) => {
+  await page.goto(
+    "/observability/inferences/0196368f-1ae7-7e21-9027-f120f73d8ce0",
+  );
+  // Wait for the page to load
+  await page.waitForLoadState("networkidle");
+  // Click on the Add feedback button
+  await page.getByText("Add feedback").click();
+
+  // Click "Select a metric"
+  await page.getByText("Select a metric").click();
+
+  // Explicitly wait for the item to be visible before clicking
+  const metricItemLocator = page
+    .locator('div[role="dialog"]')
+    .locator('div[cmdk-item=""]')
+    .filter({
+      hasText: "exact_match",
+    });
+  await metricItemLocator.waitFor({ state: "visible" });
+  // Click on the metric in the command list
+  await metricItemLocator.click();
+
+  // Wait for the radio button to be visible
+  await page.getByRole("radio", { name: "true" }).waitFor({ state: "visible" });
+
+  // Click the radio button for "true"
+  await page.getByRole("radio", { name: "true" }).click();
+
+  // Click the submit button
+  await page.getByText("Submit Feedback").click();
+
+  // Wait for the page to load
+  await page.waitForLoadState("networkidle");
+
+  // sleep for 1000ms
+  await page.waitForTimeout(1000);
+
+  // Get the search param `newFeedbackId` from the url
+  const newFeedbackId = new URL(page.url()).searchParams.get("newFeedbackId");
+  if (!newFeedbackId) {
+    throw new Error("newFeedbackId is not present in the url");
+  }
+  // Assert that the feedback value is visible in its table cell
+  await expect(page.getByRole("cell", { name: newFeedbackId })).toBeVisible();
+});
+
+test("should be able to add json demonstration feedback via the inference page", async ({
+  page,
+}) => {
+  await page.goto(
+    "/observability/inferences/0196368e-5933-7632-814c-2cd498b961de",
+  );
+  // Wait for the page to load
+  await page.waitForLoadState("networkidle");
+  // Click on the Add feedback button
+  await page.getByText("Add feedback").click();
+
+  // Click "Select a metric"
+  await page.getByText("Select a metric").click();
+
+  // Explicitly wait for the item to be visible before clicking
+  const metricItemLocator = page
+    .locator('div[role="dialog"]')
+    .locator('div[cmdk-item=""]')
+    .filter({
+      hasText: "demonstration",
+    });
+  await metricItemLocator.waitFor({ state: "visible" });
+  // Click on the metric in the command list
+  await metricItemLocator.click();
+
+  // Generate a random float between 0 and 1 with 3 decimal places
+  const randomFloat = Math.floor(Math.random() * 1000) / 1000;
+  // fill in
+  // Locate the dialog first
+  const dialog = page.locator('div[role="dialog"]');
+  // Locate the textbox within the dialog and fill it
+  await dialog.getByRole("textbox").waitFor({ state: "visible" });
+  const json = `{"score": ${randomFloat}}`;
+  await dialog.getByRole("textbox").fill(json);
+
+  // Click the submit button
+  await page.getByText("Submit Feedback").click();
+
+  // Wait for the page to load
+  await page.waitForLoadState("networkidle");
+
+  // sleep for 1 second
+  await page.waitForTimeout(1000);
+
+  // Get the search param `newFeedbackId` from the url
+  const newFeedbackId = new URL(page.url()).searchParams.get("newFeedbackId");
+  if (!newFeedbackId) {
+    throw new Error("newFeedbackId is not present in the url");
+  }
+  // Assert that the feedback value is visible in its table cell
+  await expect(page.getByRole("cell", { name: newFeedbackId })).toBeVisible();
+});
+
+test("should be able to add chat demonstration feedback via the inference page", async ({
+  page,
+}) => {
+  await page.goto(
+    "/observability/inferences/0196374b-0d7d-7422-b6dc-e94c572cc79b",
+  );
+  // Click on the Add feedback button
+  await page.getByText("Add feedback").click();
+  // Sleep for a little bit to ensure the dialog is open
+  await page.waitForTimeout(500);
+
+  // Click "Select a metric"
+  await page.getByText("Select a metric").click();
+
+  // Explicitly wait for the item to be visible before clicking
+  const metricItemLocator = page
+    .locator('div[role="dialog"]')
+    .locator('div[cmdk-item=""]')
+    .filter({
+      hasText: "demonstration",
+    });
+  await metricItemLocator.waitFor({ state: "visible" });
+  // Click on the metric in the command list
+  await metricItemLocator.click();
+
+  // Locate the dialog first
+  const dialog = page.locator('div[role="dialog"]');
+  // Locate the textbox within the dialog and fill it
+  await dialog.getByRole("textbox").waitFor({ state: "visible" });
+  // This doesn't have to be a JSON, it can be any string
+  const demonstration = "hop on pop";
+  await dialog.getByRole("textbox").fill(demonstration);
+
+  // Click the submit button
+  await page.getByText("Submit Feedback").click();
+
+  // Wait for the page to load
+  await page.waitForLoadState("networkidle");
+
+  // sleep for 1 second
+  await page.waitForTimeout(1000);
+
+  // Get the search param `newFeedbackId` from the url
+  const newFeedbackId = new URL(page.url()).searchParams.get("newFeedbackId");
+  if (!newFeedbackId) {
+    throw new Error("newFeedbackId is not present in the url");
+  }
+  // Assert that the feedback value is visible in its table cell
+  await expect(page.getByRole("cell", { name: newFeedbackId })).toBeVisible();
 });

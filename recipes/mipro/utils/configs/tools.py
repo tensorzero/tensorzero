@@ -1,7 +1,7 @@
 import json
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union, cast
 
 from pydantic import (
     BaseModel,
@@ -72,7 +72,7 @@ class ToolCallConfig(BaseModel):
     tool choice strategy, and whether tool calls can be parallel.
     """
 
-    tools_available: Optional[List[ToolConfig]] = Field(default_factory=list)
+    tools_available = cast(Optional[List[ToolConfig]], Field(default_factory=list))
     tool_choice: Optional[ToolChoice] = None
     parallel_tool_calls: Optional[bool] = False
 

@@ -39,7 +39,7 @@ impl Migration for Migration0012<'_> {
         Ok(!chat_inference_dataset_table_exists || !json_inference_dataset_table_exists)
     }
 
-    async fn apply(&self) -> Result<(), Error> {
+    async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         // Create the `ChatInferenceDataset` table
         let query = r#"
             CREATE TABLE IF NOT EXISTS ChatInferenceDataset
@@ -63,7 +63,7 @@ impl Migration for Migration0012<'_> {
             ) ENGINE = ReplacingMergeTree(created_at, is_deleted)
             ORDER BY (dataset_name, function_name, id)
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self.clickhouse.run_query_synchronous(query.to_string(), None).await?;
 
         // Create the `JsonInferenceDataset` table
         let query = r#"
@@ -83,7 +83,7 @@ impl Migration for Migration0012<'_> {
             ) ENGINE = ReplacingMergeTree(created_at, is_deleted)
             ORDER BY (dataset_name, function_name, id)
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self.clickhouse.run_query_synchronous(query.to_string(), None).await?;
 
         Ok(())
     }

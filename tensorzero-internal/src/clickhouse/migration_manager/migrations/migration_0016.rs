@@ -43,7 +43,7 @@ impl Migration for Migration0016<'_> {
         Ok(false)
     }
 
-    async fn apply(&self) -> Result<(), Error> {
+    async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         if check_table_exists(self.clickhouse, "ChatInferenceDataset", "0016").await? {
             let chat_inference_dataset_has_data =
                 table_is_nonempty(self.clickhouse, "ChatInferenceDataset", "0016").await?;
@@ -70,10 +70,16 @@ impl Migration for Migration0016<'_> {
 
         // First, drop the ChatInferenceDataset and JsonInferenceDataset tables if they were created in 0014
         let query = "DROP TABLE IF EXISTS ChatInferenceDataset";
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous(query.to_string(), None)
+            .await?;
 
         let query = "DROP TABLE IF EXISTS JsonInferenceDataset";
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous(query.to_string(), None)
+            .await?;
 
         // Create the `ChatInferenceDatapoint` table
         let query = r#"
@@ -100,7 +106,10 @@ impl Migration for Migration0016<'_> {
             ) ENGINE = ReplacingMergeTree(updated_at, is_deleted)
             ORDER BY (dataset_name, function_name, id)
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous(query.to_string(), None)
+            .await?;
 
         // Create the `JsonInferenceDatapoint` table
         let query = r#"
@@ -120,7 +129,10 @@ impl Migration for Migration0016<'_> {
             ) ENGINE = ReplacingMergeTree(updated_at, is_deleted)
             ORDER BY (dataset_name, function_name, id)
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous(query.to_string(), None)
+            .await?;
 
         Ok(())
     }

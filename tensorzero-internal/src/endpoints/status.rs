@@ -6,7 +6,7 @@ use axum::response::Json;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-pub const TENSORZERO_VERSION: &str = "2025.04.1";
+pub const TENSORZERO_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// A handler for a simple liveness check
 #[debug_handler]

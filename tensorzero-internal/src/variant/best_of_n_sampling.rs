@@ -14,12 +14,13 @@ use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels};
 use crate::error::ErrorDetails;
 use crate::inference::types::extra_body::FullExtraBodyConfig;
+use crate::inference::types::extra_headers::FullExtraHeadersConfig;
 use crate::inference::types::{
     batch::StartBatchModelInferenceWithMetadata, FunctionType, ModelInferenceRequest,
     ModelInferenceResponseWithMetadata, RequestMessage, Role, Usage,
 };
 use crate::inference::types::{ContentBlockOutput, ResolvedInput};
-use crate::jsonschema_util::JSONSchemaFromPath;
+use crate::jsonschema_util::StaticJSONSchema;
 use crate::model::ModelTable;
 use crate::tool::{ImplicitToolConfig, ToolCallConfig, ToolChoice, ToolConfig};
 use crate::{
@@ -83,9 +84,9 @@ impl LoadableConfig<BestOfNSamplingConfig> for UninitializedBestOfNSamplingConfi
 }
 
 lazy_static! {
-    static ref EVALUATOR_OUTPUT_SCHEMA: JSONSchemaFromPath = {
-        #[allow(clippy::expect_used)]
-        JSONSchemaFromPath::from_value(&json!({
+    static ref EVALUATOR_OUTPUT_SCHEMA: StaticJSONSchema = {
+        #[expect(clippy::expect_used)]
+        StaticJSONSchema::from_value(&json!({
             "type": "object",
             "properties": {
                 "thinking": { "type": "string" },
@@ -243,6 +244,7 @@ impl BestOfNSamplingConfig {
                 // However, the 'A, C' and 'C, D' evaluations will all have distinct cache keys:
                 // (A, 2), (C, 3), (C, 2), (D, 4)
                 let mut config = inference_config.clone();
+                config.variant_name = Some(candidate);
                 config.extra_cache_key = Some(format!("candidate_{i}"));
                 Ok((candidate.to_string(), variant, config))
             })
@@ -569,11 +571,11 @@ impl EvaluatorConfig {
                     candidate_outputs.push(serialized_content);
                 }
                 InferenceResult::Json(json_result) => {
-                    if json_result.output.parsed.is_some() {
-                        candidate_outputs.push(json_result.output.raw.clone());
-                    } else {
-                        // Skip if the JSON output is not correctly parsed
-                        skipped_indices.push(i);
+                    match (&json_result.output.raw, &json_result.output.parsed) {
+                        (Some(raw), Some(_)) => {
+                            candidate_outputs.push(raw.clone());
+                        }
+                        _ => skipped_indices.push(i),
                     }
                 }
             }
@@ -669,9 +671,12 @@ impl EvaluatorConfig {
             .into());
         }
         let extra_body = FullExtraBodyConfig {
-            variant_extra_headers: self.inner.extra_headers.clone(),
             extra_body: self.inner.extra_body.clone(),
             inference_extra_body: Default::default(),
+        };
+        let extra_headers = FullExtraHeadersConfig {
+            variant_extra_headers: self.inner.extra_headers.clone(),
+            inference_extra_headers: Default::default(),
         };
         Ok((
             ModelInferenceRequest {
@@ -690,6 +695,7 @@ impl EvaluatorConfig {
                 function_type: FunctionType::Json,
                 output_schema: Some(EVALUATOR_OUTPUT_SCHEMA.value),
                 extra_body,
+                extra_headers,
                 extra_cache_key: inference_config.extra_cache_key.clone(),
             },
             skipped_indices,
@@ -1025,8 +1031,10 @@ mod tests {
 
         let candidate1 = InferenceResult::Json(JsonInferenceResult::new(
             Uuid::now_v7(),
-            "{\"response\": \"Valid JSON response\"}".to_string(),
+            Some("{\"response\": \"Valid JSON response\"}".to_string()),
             Some(json!({"response": "Valid JSON response"})),
+            Some(0),
+            vec![],
             Usage {
                 input_tokens: 10,
                 output_tokens: 20,
@@ -1065,8 +1073,10 @@ mod tests {
 
         let candidate2 = InferenceResult::Json(JsonInferenceResult::new(
             Uuid::now_v7(),
-            "{\"oops: \"Malformed JSON response\"".to_string(),
+            Some("{\"oops: \"Malformed JSON response\"".to_string()),
             None, // malformed
+            Some(0),
+            vec![],
             Usage {
                 input_tokens: 15,
                 output_tokens: 25,
@@ -1238,6 +1248,7 @@ mod tests {
             function_name: "",
             variant_name: Some(""),
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
 

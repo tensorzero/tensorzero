@@ -18,8 +18,10 @@ use crate::error::Error;
 use crate::error::ErrorDetails;
 use crate::function::FunctionConfig;
 use crate::inference::types::batch::StartBatchModelInferenceWithMetadata;
-use crate::inference::types::extra_body::FullExtraBodyConfig;
-use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
+use crate::inference::types::extra_body::{FullExtraBodyConfig, UnfilteredInferenceExtraBody};
+use crate::inference::types::extra_headers::{
+    FullExtraHeadersConfig, UnfilteredInferenceExtraHeaders,
+};
 use crate::inference::types::ResolvedInput;
 use crate::inference::types::{
     FunctionType, InferenceResultChunk, InferenceResultStream, ModelInferenceRequest,
@@ -33,6 +35,7 @@ use crate::tool::{create_dynamic_implicit_tool_config, ToolCallConfig};
 use crate::{inference::types::InferenceResult, model::ModelConfig};
 
 pub mod best_of_n_sampling;
+pub mod chain_of_thought;
 pub mod chat_completion;
 pub mod dicl;
 pub mod mixture_of_n;
@@ -43,6 +46,7 @@ pub enum VariantConfig {
     BestOfNSampling(best_of_n_sampling::BestOfNSamplingConfig),
     Dicl(dicl::DiclConfig),
     MixtureOfN(mixture_of_n::MixtureOfNConfig),
+    ChainOfThought(chain_of_thought::ChainOfThoughtConfig),
 }
 
 /// This type is used to determine how to enforce JSON mode for a given variant.
@@ -68,6 +72,7 @@ pub struct InferenceConfig<'a, 'request> {
     pub variant_name: Option<&'request str>,
     pub ids: InferenceIds,
     pub extra_body: UnfilteredInferenceExtraBody,
+    pub extra_headers: UnfilteredInferenceExtraHeaders,
     /// Optional arbitrary data, only used when constructing the cache key.
     /// This is used by best_of_n/mixture_of_n to force different sub-variants
     /// to have different cache keys.
@@ -109,6 +114,7 @@ impl<'a> BatchInferenceConfig<'a> {
                 },
                 // Not yet supported for batch inference requests
                 extra_body: Default::default(),
+                extra_headers: Default::default(),
                 extra_cache_key: None,
             },
         )
@@ -179,13 +185,14 @@ impl VariantConfig {
             VariantConfig::BestOfNSampling(params) => params.weight,
             VariantConfig::Dicl(params) => params.weight,
             VariantConfig::MixtureOfN(params) => params.weight,
+            VariantConfig::ChainOfThought(params) => params.inner.weight,
         }
     }
 }
 
 impl Variant for VariantConfig {
     #[instrument(
-        fields(function_name = %inference_config.function_name, variant_name = %inference_config.variant_name.unwrap_or("")),
+        fields(function_name = %inference_config.function_name, variant_name = %inference_config.variant_name.unwrap_or(""), otel.name="variant_inference", stream=false),
         skip_all
     )]
     async fn infer<'a: 'request, 'request>(
@@ -247,11 +254,23 @@ impl Variant for VariantConfig {
                     )
                     .await
             }
+            VariantConfig::ChainOfThought(params) => {
+                params
+                    .infer(
+                        input,
+                        models,
+                        function,
+                        inference_config,
+                        clients,
+                        inference_params,
+                    )
+                    .await
+            }
         }
     }
 
     #[instrument(
-        fields(function_name = %inference_config.function_name, variant_name = %inference_config.variant_name.unwrap_or("")),
+        fields(function_name = %inference_config.function_name, variant_name = %inference_config.variant_name.unwrap_or(""), otel.name="variant_inference", stream=true),
         skip_all
     )]
     async fn infer_stream<'a, 'request>(
@@ -301,6 +320,18 @@ impl Variant for VariantConfig {
                     .await
             }
             VariantConfig::MixtureOfN(params) => {
+                params
+                    .infer_stream(
+                        input,
+                        models,
+                        function,
+                        inference_config,
+                        clients,
+                        inference_params,
+                    )
+                    .await
+            }
+            VariantConfig::ChainOfThought(params) => {
                 params
                     .infer_stream(
                         input,
@@ -387,6 +418,14 @@ impl Variant for VariantConfig {
                 function_name,
                 variant_name,
             ),
+            VariantConfig::ChainOfThought(params) => params.validate(
+                function,
+                models,
+                embedding_models,
+                templates,
+                function_name,
+                variant_name,
+            ),
         }
     }
 
@@ -396,11 +435,12 @@ impl Variant for VariantConfig {
             VariantConfig::BestOfNSampling(params) => params.get_all_template_paths(),
             VariantConfig::Dicl(params) => params.get_all_template_paths(),
             VariantConfig::MixtureOfN(params) => params.get_all_template_paths(),
+            VariantConfig::ChainOfThought(params) => params.get_all_template_paths(),
         }
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments)]
 fn prepare_model_inference_request<'a, 'request>(
     messages: Vec<RequestMessage>,
     system: Option<String>,
@@ -410,6 +450,7 @@ fn prepare_model_inference_request<'a, 'request>(
     inference_params: &InferenceParams,
     base_json_mode: Option<JsonMode>,
     extra_body: FullExtraBodyConfig,
+    extra_headers: FullExtraHeadersConfig,
 ) -> Result<ModelInferenceRequest<'request>, Error>
 where
     'a: 'request,
@@ -439,6 +480,7 @@ where
                 function_type: FunctionType::Chat,
                 output_schema: inference_config.dynamic_output_schema.map(|v| &v.value),
                 extra_body,
+                extra_headers,
                 extra_cache_key: inference_config.extra_cache_key.clone(),
             }
         }
@@ -474,6 +516,7 @@ where
                 function_type: FunctionType::Json,
                 output_schema,
                 extra_body,
+                extra_headers,
                 extra_cache_key: inference_config.extra_cache_key.clone(),
             }
         }
@@ -624,7 +667,7 @@ mod tests {
     use crate::inference::types::{
         ContentBlockChunk, ModelInferenceRequestJsonMode, RequestMessage, Role,
     };
-    use crate::jsonschema_util::JSONSchemaFromPath;
+    use crate::jsonschema_util::StaticJSONSchema;
     use crate::minijinja_util::tests::get_test_template_config;
     use crate::model::{ModelProvider, ProviderConfig};
     use crate::tool::{ToolCallConfig, ToolChoice};
@@ -658,6 +701,7 @@ mod tests {
                 episode_id: Uuid::now_v7(),
             },
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
 
@@ -696,6 +740,7 @@ mod tests {
             tools: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
+            description: None,
         });
         let json_mode = JsonMode::Off;
 
@@ -707,6 +752,7 @@ mod tests {
             stream,
             &inference_params,
             Some(json_mode),
+            Default::default(),
             Default::default(),
         )
         .unwrap();
@@ -733,7 +779,7 @@ mod tests {
             },
             "required": ["answer"],
         });
-        let output_schema = JSONSchemaFromPath::from_value(&output_schema_value).unwrap();
+        let output_schema = StaticJSONSchema::from_value(&output_schema_value).unwrap();
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema_value);
 
         let function_config_json = FunctionConfig::Json(FunctionConfigJson {
@@ -743,6 +789,7 @@ mod tests {
             user_schema: None,
             output_schema: output_schema.clone(),
             implicit_tool_call_config: implicit_tool_call_config.clone(),
+            description: None,
         });
 
         let json_mode = JsonMode::On;
@@ -755,6 +802,7 @@ mod tests {
             stream,
             &inference_params,
             Some(json_mode),
+            Default::default(),
             Default::default(),
         )
         .unwrap();
@@ -790,6 +838,7 @@ mod tests {
             variant_name: Some("test_variant"),
             dynamic_output_schema: Some(&dynamic_output_schema),
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
         let json_mode = JsonMode::ImplicitTool;
@@ -802,6 +851,7 @@ mod tests {
             stream,
             &inference_params,
             Some(json_mode),
+            Default::default(),
             Default::default(),
         )
         .unwrap();
@@ -826,6 +876,7 @@ mod tests {
             &inference_params,
             Some(json_mode),
             Default::default(),
+            Default::default(),
         )
         .unwrap();
 
@@ -844,6 +895,7 @@ mod tests {
             stream,
             &inference_params,
             Some(json_mode),
+            Default::default(),
             Default::default(),
         )
         .unwrap();
@@ -881,6 +933,7 @@ mod tests {
                 episode_id: Uuid::now_v7(),
             },
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
 
@@ -894,6 +947,7 @@ mod tests {
             tools: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
+            description: None,
         });
 
         let request_messages = vec![RequestMessage {
@@ -917,6 +971,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             ..Default::default()
         };
 
@@ -985,7 +1040,7 @@ mod tests {
             system_schema: None,
             user_schema: None,
             assistant_schema: None,
-            output_schema: JSONSchemaFromPath::from_value(&json!({
+            output_schema: StaticJSONSchema::from_value(&json!({
                 "type": "object",
                 "properties": {
                     "answer": { "type": "string" }
@@ -998,6 +1053,7 @@ mod tests {
                 tool_choice: ToolChoice::Auto,
                 parallel_tool_calls: None,
             },
+            description: None,
         });
         let output_schema = json!({
             "type": "object",
@@ -1023,6 +1079,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Json,
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             ..Default::default()
         };
 
@@ -1063,8 +1120,10 @@ mod tests {
         let inference_result = result.unwrap();
         match inference_result {
             InferenceResult::Json(json_result) => {
-                let expected_raw_output = DUMMY_JSON_RESPONSE_RAW.to_string();
-                assert_eq!(json_result.output.raw, expected_raw_output);
+                assert_eq!(
+                    json_result.output.raw,
+                    Some(DUMMY_JSON_RESPONSE_RAW.to_string())
+                );
                 assert_eq!(json_result.output.parsed, Some(json!({"answer": "Hello"})));
                 assert_eq!(json_result.usage, DUMMY_INFER_USAGE.clone());
                 assert_eq!(json_result.model_inference_results.len(), 1);
@@ -1074,7 +1133,7 @@ mod tests {
                 );
                 assert_eq!(
                     json_result.model_inference_results[0].output,
-                    vec![expected_raw_output.into()]
+                    vec![DUMMY_JSON_RESPONSE_RAW.to_string().into()]
                 );
             }
             _ => panic!("Expected Json inference result"),
@@ -1152,6 +1211,7 @@ mod tests {
                 episode_id: Uuid::now_v7(),
             },
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
 
@@ -1165,6 +1225,7 @@ mod tests {
             tools: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
+            description: None,
         });
 
         let request_messages = vec![RequestMessage {
@@ -1188,6 +1249,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             ..Default::default()
         };
 
@@ -1266,7 +1328,7 @@ mod tests {
             _ => panic!("Expected Chat inference result"),
         }
         assert!(logs_contain(
-            r#"ERROR test_infer_model_request_errors:infer_model_request{model_name=dummy_chat_model}:infer{provider_name="error"}: tensorzero_internal::error: Error from dummy client: Error sending request to Dummy provider for model 'error'."#
+            r#"ERROR test_infer_model_request_errors:infer_model_request{model_name=dummy_chat_model}:infer{model_name="dummy_chat_model" otel.name="model_inference" stream=false}:infer{provider_name="error"}:infer{provider_name="error" otel.name="model_provider_inference" gen_ai.operation.name="chat" gen_ai.system="dummy" gen_ai.request.model="error" stream=false}: tensorzero_internal::error: Error from dummy client: Error sending request to Dummy provider for model 'error'."#
         ));
     }
 
@@ -1295,6 +1357,7 @@ mod tests {
             tools: vec![],
             tool_choice: crate::tool::ToolChoice::Auto,
             parallel_tool_calls: None,
+            description: None,
         });
 
         // Create an input message
@@ -1340,6 +1403,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             ..Default::default()
         };
 
@@ -1438,6 +1502,7 @@ mod tests {
             tools: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
+            description: None,
         })));
 
         let request_messages = vec![RequestMessage {
@@ -1461,6 +1526,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             ..Default::default()
         };
 
@@ -1566,7 +1632,7 @@ mod tests {
         assert_eq!(full_response, expected_response);
 
         assert!(logs_contain(
-            r#"ERROR test_infer_model_request_errors_stream:infer_model_request_stream{model_name=dummy_chat_model}:infer_stream{provider_name="error"}: tensorzero_internal::error: Error from dummy client: Error sending request to Dummy provider for model 'error'."#
+            r#"ERROR test_infer_model_request_errors_stream:infer_model_request_stream{model_name=dummy_chat_model}:infer_stream{model_name="dummy_chat_model" otel.name="model_inference" stream=true}:infer_stream{provider_name="error" otel.name="model_provider_inference" gen_ai.operation.name="chat" gen_ai.system="dummy" gen_ai.request.model="error" stream=true}: tensorzero_internal::error: Error from dummy client: Error sending request to Dummy provider for model 'error'."#
         ));
     }
 }

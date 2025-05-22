@@ -11,7 +11,7 @@ use url::Url;
 
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
-use crate::error::{Error, ErrorDetails};
+use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::{
@@ -31,7 +31,7 @@ use super::provider_trait::TensorZeroEventError;
 
 lazy_static! {
     static ref XAI_DEFAULT_BASE_URL: Url = {
-        #[allow(clippy::expect_used)]
+        #[expect(clippy::expect_used)]
         Url::parse("https://api.x.ai/v1").expect("Failed to parse XAI_DEFAULT_BASE_URL")
     };
 }
@@ -67,6 +67,10 @@ impl XAIProvider {
             model_name,
             credentials,
         })
+    }
+
+    pub fn model_name(&self) -> &str {
+        &self.model_name
     }
 }
 
@@ -129,11 +133,15 @@ impl InferenceProvider for XAIProvider {
         let mut request_body = serde_json::to_value(XAIRequest::new(&self.model_name, request)?)
             .map_err(|e| {
                 Error::new(ErrorDetails::Serialization {
-                    message: format!("Error serializing xAI request: {e}"),
+                    message: format!(
+                        "Error serializing xAI request: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                 })
             })?;
         let headers = inject_extra_request_data(
             &request.extra_body,
+            &request.extra_headers,
             model_provider,
             model_name,
             &mut request_body,
@@ -153,8 +161,11 @@ impl InferenceProvider for XAIProvider {
             .await
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
-                    message: format!("Error sending request to xAI: {e}"),
                     status_code: e.status(),
+                    message: format!(
+                        "Error sending request to xAI: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
@@ -164,7 +175,10 @@ impl InferenceProvider for XAIProvider {
         if res.status().is_success() {
             let raw_response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing text response: {e}"),
+                    message: format!(
+                        "Error parsing text response: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
@@ -173,7 +187,10 @@ impl InferenceProvider for XAIProvider {
 
             let response = serde_json::from_str(&raw_response).map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing JSON response: {e}"),
+                    message: format!(
+                        "Error parsing JSON response: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                     raw_response: Some(raw_response.clone()),
                     provider_type: PROVIDER_TYPE.to_string(),
@@ -196,13 +213,21 @@ impl InferenceProvider for XAIProvider {
 
             let response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing error response: {e}"),
+                    message: format!(
+                        "Error parsing error response: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
-            Err(handle_openai_error(status, &response, PROVIDER_TYPE))
+            Err(handle_openai_error(
+                &serde_json::to_string(&request_body).unwrap_or_default(),
+                status,
+                &response,
+                PROVIDER_TYPE,
+            ))
         }
     }
 
@@ -220,18 +245,25 @@ impl InferenceProvider for XAIProvider {
         let mut request_body = serde_json::to_value(XAIRequest::new(&self.model_name, request)?)
             .map_err(|e| {
                 Error::new(ErrorDetails::Serialization {
-                    message: format!("Error serializing xAI request: {e}"),
+                    message: format!(
+                        "Error serializing xAI request: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                 })
             })?;
         let headers = inject_extra_request_data(
             &request.extra_body,
+            &request.extra_headers,
             model_provider,
             model_name,
             &mut request_body,
         )?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
-                message: format!("Error serializing request: {e}"),
+                message: format!(
+                    "Error serializing request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
                 raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                 raw_response: None,
                 provider_type: PROVIDER_TYPE.to_string(),
@@ -244,12 +276,15 @@ impl InferenceProvider for XAIProvider {
             .post(request_url)
             .header("Content-Type", "application/json")
             .bearer_auth(api_key.expose_secret())
-            .headers(headers)
             .json(&request_body)
+            .headers(headers)
             .eventsource()
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
-                    message: format!("Error sending request to xAI: {e}"),
+                    message: format!(
+                        "Error sending request to xAI: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     status_code: None,
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                     raw_response: None,
@@ -258,6 +293,7 @@ impl InferenceProvider for XAIProvider {
             })?;
 
         let stream = stream_openai(
+            PROVIDER_TYPE.to_string(),
             event_source.map_err(TensorZeroEventError::EventSource),
             start_time,
         )
@@ -347,10 +383,7 @@ impl<'a> XAIRequest<'a> {
             false => None,
         };
 
-        let response_format = Some(XAIResponseFormat::new(
-            &request.json_mode,
-            request.output_schema,
-        ));
+        let response_format = XAIResponseFormat::new(&request.json_mode, request.output_schema);
 
         let messages = prepare_openai_messages(request)?;
 
@@ -386,16 +419,20 @@ enum XAIResponseFormat {
 }
 
 impl XAIResponseFormat {
-    fn new(json_mode: &ModelInferenceRequestJsonMode, output_schema: Option<&Value>) -> Self {
+    fn new(
+        json_mode: &ModelInferenceRequestJsonMode,
+        output_schema: Option<&Value>,
+    ) -> Option<Self> {
         match json_mode {
-            ModelInferenceRequestJsonMode::On => XAIResponseFormat::JsonObject,
-            ModelInferenceRequestJsonMode::Off => XAIResponseFormat::Text,
+            ModelInferenceRequestJsonMode::On => Some(XAIResponseFormat::JsonObject),
+            // For now, we never explicitly send `XAIResponseFormat::Text`
+            ModelInferenceRequestJsonMode::Off => None,
             ModelInferenceRequestJsonMode::Strict => match output_schema {
                 Some(schema) => {
                     let json_schema = json!({"name": "response", "strict": true, "schema": schema});
-                    XAIResponseFormat::JsonSchema { json_schema }
+                    Some(XAIResponseFormat::JsonSchema { json_schema })
                 }
-                None => XAIResponseFormat::JsonObject,
+                None => Some(XAIResponseFormat::JsonObject),
             },
         }
     }
@@ -458,7 +495,10 @@ impl<'a> TryFrom<XAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
         }
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
-                message: format!("Error serializing request body as JSON: {e}"),
+                message: format!(
+                    "Error serializing request body as JSON: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
             })
         })?;
         let system = generic_request.system.clone();

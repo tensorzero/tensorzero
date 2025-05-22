@@ -75,7 +75,7 @@ export const storageKindSchema = z.discriminatedUnion("type", [
     .object({
       type: z.literal("s3_compatible"),
       bucket_name: z.string(),
-      region: z.string(),
+      region: z.string().nullable(),
       endpoint: z.string().nullable(),
       allow_http: z.boolean().nullable(),
     })
@@ -232,8 +232,8 @@ export const requestMessageSchema = z.object({
 export type RequestMessage = z.infer<typeof requestMessageSchema>;
 
 export const jsonInferenceOutputSchema = z.object({
-  raw: z.string(),
-  parsed: z.any().optional(),
+  raw: z.string().default(""),
+  parsed: z.any().nullable(),
 });
 
 export type JsonInferenceOutput = z.infer<typeof jsonInferenceOutputSchema>;
@@ -241,9 +241,9 @@ export type JsonInferenceOutput = z.infer<typeof jsonInferenceOutputSchema>;
 export const toolCallOutputSchema = z
   .object({
     type: z.literal("tool_call"),
-    arguments: z.any().optional(), // Value type from Rust maps to any in TS
+    arguments: z.any().nullable().default(null),
     id: z.string(),
-    name: z.string().optional(),
+    name: z.string().nullable().default(null),
     raw_arguments: z.string(),
     raw_name: z.string(),
   })
@@ -287,3 +287,8 @@ export const TableBoundsSchema = z.object({
   last_id: z.string().uuid().nullable(), // UUIDv7 string
 });
 export type TableBounds = z.infer<typeof TableBoundsSchema>;
+
+export const CountSchema = z.object({
+  count: z.number(),
+});
+export type Count = z.infer<typeof CountSchema>;

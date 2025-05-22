@@ -5,10 +5,10 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  TableEmptyState,
 } from "~/components/ui/table";
 import type { InferenceByIdRow } from "~/utils/clickhouse/inference";
-import { formatDate } from "~/utils/date";
-import { Link } from "react-router";
+import { TableItemShortUuid, TableItemTime } from "~/components/ui/TableItems";
 
 export default function VariantInferenceTable({
   inferences,
@@ -26,38 +26,25 @@ export default function VariantInferenceTable({
       </TableHeader>
       <TableBody>
         {inferences.length === 0 ? (
-          <TableRow className="hover:bg-bg-primary">
-            <TableCell
-              colSpan={3}
-              className="text-fg-muted px-3 py-8 text-center"
-            >
-              No inferences found.
-            </TableCell>
-          </TableRow>
+          <TableEmptyState message="No inferences found" />
         ) : (
           inferences.map((inference) => (
             <TableRow key={inference.id} id={inference.id}>
               <TableCell className="max-w-[200px]">
-                <Link
-                  to={`/observability/inferences/${inference.id}`}
-                  className="block no-underline"
-                >
-                  <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
-                    {inference.id}
-                  </code>
-                </Link>
+                <TableItemShortUuid
+                  id={inference.id}
+                  link={`/observability/inferences/${inference.id}`}
+                />
               </TableCell>
               <TableCell>
-                <Link
-                  to={`/observability/episodes/${inference.episode_id}`}
-                  className="block no-underline"
-                >
-                  <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
-                    {inference.episode_id}
-                  </code>
-                </Link>
+                <TableItemShortUuid
+                  id={inference.episode_id}
+                  link={`/observability/episodes/${inference.episode_id}`}
+                />
               </TableCell>
-              <TableCell>{formatDate(new Date(inference.timestamp))}</TableCell>
+              <TableCell>
+                <TableItemTime timestamp={inference.timestamp} />
+              </TableCell>
             </TableRow>
           ))
         )}

@@ -10,11 +10,13 @@ output_schema = "functions/extract_entities/output_schema.json"
 type = "chat_completion"
 model = "openai::gpt-4o-2024-08-06"
 system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
+json_mode = "strict"
 
 [functions.extract_entities.variants.gpt_4o_mini]
 type = "chat_completion"
 model = "openai::gpt-4o-mini-2024-07-18"
 system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
+json_mode = "strict"
 
 # TODO: Once you've fine-tuned your model, add it here like the commented example below
 
@@ -22,6 +24,7 @@ system_template = "functions/extract_entities/initial_prompt/system_template.min
 # type = "chat_completion"
 # model = "openai::ft:gpt-4o-mini-2024-07-18:xxxxxxxx::xxxxxxxx"
 # system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
+# json_mode = "strict"
 
 # [functions.extract_entities.variants.gpt_4o_mini_dicl]
 # type = "experimental_dynamic_in_context_learning"
@@ -29,6 +32,7 @@ system_template = "functions/extract_entities/initial_prompt/system_template.min
 # model = "openai::gpt-4o-mini-2024-07-18"
 # k = 10
 # system_instructions = "functions/extract_entities/initial_prompt/system_template.minijinja"
+# json_mode = "strict"
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                  METRICS                                   │

@@ -28,6 +28,10 @@ The judge is configurable to fit your problem by describing the task and metric 
 
 Though &mdash; unsurprisingly &mdash; it doesn't outperform DICL (see `recipes/dicl`) and supervised fine-tuning (see `recipes/supervised_fine_tuning`), it materially outperforms a naive initial prompt.
 
+> [!TIP]
+>
+> See our article [From NER to Agents: Does Automated Prompt Engineering Scale to Complex Tasks?](https://tensorzero.com/blog/from-ner-to-agents-does-automated-prompt-engineering-scale-to-complex-tasks) for more insights on automated prompt engineering with MIPRO.
+
 ## Getting Started
 
 ### Prerequisites

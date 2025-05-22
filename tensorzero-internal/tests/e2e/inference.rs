@@ -1,7 +1,14 @@
-use crate::providers::common::{make_embedded_gateway_with_config, FERRIS_PNG};
+use crate::{
+    otel::{
+        attrs_to_map, build_span_map, install_capturing_otel_exporter, CapturingOtelExporter,
+        SpanMap,
+    },
+    providers::common::{make_embedded_gateway_with_config, FERRIS_PNG},
+};
 use axum::http::HeaderValue;
 use base64::prelude::*;
 use futures::StreamExt;
+use opentelemetry_sdk::trace::SpanData;
 use reqwest::{Client, StatusCode};
 use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{json, Value};
@@ -10,13 +17,17 @@ use tensorzero::{
     ClientInputMessageContent, InferenceOutput, InferenceResponse,
 };
 use tensorzero_internal::{
+    endpoints::inference::ChatInferenceResponse,
     inference::{
         providers::dummy::{
             DUMMY_BAD_TOOL_RESPONSE, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW,
             DUMMY_JSON_RESPONSE_RAW, DUMMY_RAW_REQUEST, DUMMY_STREAMING_RESPONSE,
             DUMMY_STREAMING_TOOL_RESPONSE, DUMMY_TOOL_RESPONSE,
         },
-        types::{ContentBlock, Image, ImageKind, RequestMessage, Role, Text, TextKind},
+        types::{
+            ContentBlock, ContentBlockOutput, Image, ImageKind, RequestMessage, ResolvedInput,
+            ResolvedInputMessageContent, Role, Text, TextKind,
+        },
     },
     tool::{ToolCall, ToolCallInput},
 };
@@ -328,6 +339,9 @@ async fn test_dummy_only_inference_chat_strip_unknown_block_stream() {
     // Check the variant name
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, "test");
+    let tags = result.get("tags").unwrap().as_object().unwrap();
+    // Since the variant was not pinned, the variant_pinned tag should not be present
+    assert!(tags.get("tensorzero::variant_pinned").is_none());
 
     // Check the ModelInference Table
     let result = select_model_inference_clickhouse(&clickhouse, inference_id)
@@ -1185,7 +1199,7 @@ async fn e2e_test_variant_failover() {
                     "messages": [
                     {
                         "role": "user",
-                        "content": [{"type": "text", "value": {"type": "tacos", "quantity": 13}}],
+                        "content": [{"type": "text", "arguments": {"type": "tacos", "quantity": 13}}],
                     }
                 ]},
             "stream": false,
@@ -1845,7 +1859,7 @@ model_name = "json"
     let good_response = gateway.inference(params.clone()).await.unwrap();
     let InferenceOutput::NonStreaming(InferenceResponse::Chat(good_response)) = good_response
     else {
-        panic!("Expected non-streaming response, got {:?}", good_response);
+        panic!("Expected non-streaming response, got {good_response:?}");
     };
 
     assert_eq!(
@@ -1856,7 +1870,7 @@ model_name = "json"
     // Second request to the flaky judge should fail
     let bad_response = gateway.inference(params).await.unwrap();
     let InferenceOutput::NonStreaming(InferenceResponse::Chat(bad_response)) = bad_response else {
-        panic!("Expected non-streaming response, got {:?}", bad_response);
+        panic!("Expected non-streaming response, got {bad_response:?}");
     };
 
     assert!(
@@ -1867,6 +1881,7 @@ model_name = "json"
 
 #[tokio::test]
 async fn test_original_response_mixture_of_n_flaky_fuser() {
+    let exporter = install_capturing_otel_exporter();
     // We use an embedded client so that we can control the number of
     // requests to the flaky judge.
     let gateway = make_embedded_gateway_with_config(
@@ -1911,18 +1926,20 @@ model = "dummy::flaky_model"
     let good_response = gateway.inference(params.clone()).await.unwrap();
     let InferenceOutput::NonStreaming(InferenceResponse::Chat(good_response)) = good_response
     else {
-        panic!("Expected non-streaming response, got {:?}", good_response);
+        panic!("Expected non-streaming response, got {good_response:?}");
     };
 
     assert_eq!(
-        good_response.original_response.unwrap(),
+        good_response.original_response.as_ref().unwrap(),
         DUMMY_INFER_RESPONSE_RAW,
     );
+
+    check_good_mixture_response(exporter, good_response).await;
 
     // Second request to the flaky judge should fail
     let bad_response = gateway.inference(params).await.unwrap();
     let InferenceOutput::NonStreaming(InferenceResponse::Chat(bad_response)) = bad_response else {
-        panic!("Expected non-streaming response, got {:?}", bad_response);
+        panic!("Expected non-streaming response, got {bad_response:?}");
     };
 
     assert!(
@@ -1931,6 +1948,129 @@ model = "dummy::flaky_model"
     );
 
     // Don't check ClickHouse, as we do that in lots of other tests.
+}
+
+async fn check_good_mixture_response(
+    exporter: CapturingOtelExporter,
+    output: ChatInferenceResponse,
+) {
+    let all_spans = exporter.take_spans();
+    let num_spans = all_spans.len();
+    let spans = build_span_map(all_spans);
+    let [root_span] = spans.root_spans.as_slice() else {
+        panic!("Expected one root span: {:#?}", spans.root_spans);
+    };
+    // Since we're using the embedded gateway, the root span will be `function_call`
+    // (we won't have a top-level HTTP span)
+    assert_eq!(root_span.name, "function_inference");
+    let root_attr_map = attrs_to_map(&root_span.attributes);
+    assert_eq!(root_attr_map["function_name"], "mixture_of_n".into());
+    assert_eq!(root_attr_map.get("model_name"), None);
+    assert_eq!(
+        root_attr_map["inference_id"],
+        output.inference_id.to_string().into()
+    );
+    assert_eq!(
+        root_attr_map["episode_id"],
+        output.episode_id.to_string().into()
+    );
+    assert_eq!(root_attr_map["function_name"], "mixture_of_n".into());
+    // We didn't explicitly pin a variant in the inference request, so this is `None` in the top-level function_call span
+    assert_eq!(root_attr_map.get("variant_name"), None);
+
+    let root_children = &spans.span_children[&root_span.span_context.span_id()];
+    let [variant_span] = root_children.as_slice() else {
+        panic!("Expected one child span: {root_children:#?}");
+    };
+
+    assert_eq!(variant_span.name, "variant_inference");
+    let variant_attr_map = attrs_to_map(&variant_span.attributes);
+    assert_eq!(variant_attr_map["function_name"], "mixture_of_n".into());
+    assert_eq!(
+        variant_attr_map["variant_name"],
+        "mixture_of_n_variant".into()
+    );
+    assert_eq!(variant_attr_map["stream"], false.into());
+
+    let mut variant_children = spans.span_children[&variant_span.span_context.span_id()].clone();
+    variant_children.sort_by_key(|s| {
+        s.attributes.iter().find_map(|k| {
+            if k.key.as_str() == "variant_name" {
+                Some(k.value.as_str().to_string())
+            } else {
+                None
+            }
+        })
+    });
+
+    let [model_span, variant0_span, variant1_span] = variant_children.as_slice() else {
+        panic!("Expected three child spans: {variant_children:#?}");
+    };
+
+    check_dummy_model_span(model_span, &spans, "dummy::flaky_model", "flaky_model");
+
+    assert_eq!(variant0_span.name, "variant_inference");
+    let variant0_attr_map = attrs_to_map(&variant0_span.attributes);
+    assert_eq!(variant0_attr_map["function_name"], "mixture_of_n".into());
+    assert_eq!(variant0_attr_map["variant_name"], "variant0".into());
+    assert_eq!(variant0_attr_map["stream"], false.into());
+
+    let variant0_children = &spans.span_children[&variant0_span.span_context.span_id()];
+    let [variant0_model_span] = variant0_children.as_slice() else {
+        panic!("Expected one child span: {variant0_children:#?}");
+    };
+    check_dummy_model_span(variant0_model_span, &spans, "dummy::test", "test");
+
+    assert_eq!(variant1_span.name, "variant_inference");
+    let variant1_attr_map = attrs_to_map(&variant1_span.attributes);
+    assert_eq!(variant1_attr_map["function_name"], "mixture_of_n".into());
+    assert_eq!(variant1_attr_map["variant_name"], "variant1".into());
+    assert_eq!(variant1_attr_map["stream"], false.into());
+
+    let variant1_children = &spans.span_children[&variant1_span.span_context.span_id()];
+    let [variant1_model_span] = variant1_children.as_slice() else {
+        panic!("Expected one child span: {variant1_children:#?}");
+    };
+    check_dummy_model_span(variant1_model_span, &spans, "dummy::alternate", "alternate");
+
+    assert_eq!(num_spans, 10);
+}
+
+fn check_dummy_model_span(
+    model_span: &SpanData,
+    spans: &SpanMap,
+    model_name: &str,
+    genai_model_name: &str,
+) {
+    assert_eq!(model_span.name, "model_inference");
+    let model_attr_map = attrs_to_map(&model_span.attributes);
+    assert_eq!(model_attr_map["model_name"].as_str(), model_name);
+    assert_eq!(model_attr_map["stream"], false.into());
+
+    let model_children = &spans.span_children[&model_span.span_context.span_id()];
+    let [model_provider_span] = model_children.as_slice() else {
+        panic!("Expected one child span: {model_children:#?}");
+    };
+    assert_eq!(model_provider_span.name, "model_provider_inference");
+    let model_provider_attr_map = attrs_to_map(&model_provider_span.attributes);
+    assert_eq!(model_provider_attr_map["provider_name"], "dummy".into());
+    assert_eq!(
+        model_provider_attr_map["gen_ai.operation.name"],
+        "chat".into()
+    );
+    assert_eq!(model_provider_attr_map["gen_ai.system"], "dummy".into());
+    assert_eq!(
+        model_provider_attr_map["gen_ai.request.model"].as_str(),
+        genai_model_name
+    );
+    assert_eq!(model_attr_map["stream"], false.into());
+
+    assert_eq!(
+        spans
+            .span_children
+            .get(&model_provider_span.span_context.span_id()),
+        None
+    );
 }
 
 #[tokio::test]
@@ -2987,8 +3127,8 @@ async fn test_client_adjust_tool_call() {
     };
 
     bad_gateway.inference(params.clone()).await.unwrap_err();
-    let stringified_tool_call_args = r#"{"function_name":"basic_test","model_name":null,"episode_id":null,"input":{"messages":[{"role":"user","content":[{"type":"tool_call","name":"my_tool_call","arguments":"{\"location\":\"Brooklyn\",\"units\":\"celsius\"}","id":"my_id"}]}]},"stream":null,"params":{"chat_completion":{}},"variant_name":null,"dryrun":null,"internal":false,"tags":{},"allowed_tools":null,"additional_tools":null,"tool_choice":null,"parallel_tool_calls":null,"output_schema":null,"credentials":{},"cache_options":{"max_age_s":null,"enabled":"write_only"},"include_original_response":false,"extra_body":[]}"#;
-    let non_stringified_tool_call_args = r#"{"function_name":"basic_test","model_name":null,"episode_id":null,"input":{"messages":[{"role":"user","content":[{"type":"tool_call","name":"my_tool_call","arguments":{"location":"Brooklyn","units":"celsius"},"id":"my_id"}]}]},"stream":null,"params":{"chat_completion":{}},"variant_name":null,"dryrun":null,"internal":false,"tags":{},"allowed_tools":null,"additional_tools":null,"tool_choice":null,"parallel_tool_calls":null,"output_schema":null,"credentials":{},"cache_options":{"max_age_s":null,"enabled":"write_only"},"include_original_response":false,"extra_body":[]}"#;
+    let stringified_tool_call_args = r#"{"function_name":"basic_test","model_name":null,"episode_id":null,"input":{"messages":[{"role":"user","content":[{"type":"tool_call","name":"my_tool_call","arguments":"{\"location\":\"Brooklyn\",\"units\":\"celsius\"}","id":"my_id"}]}]},"stream":null,"params":{"chat_completion":{}},"variant_name":null,"dryrun":null,"internal":false,"tags":{},"allowed_tools":null,"additional_tools":null,"tool_choice":null,"parallel_tool_calls":null,"output_schema":null,"credentials":{},"cache_options":{"max_age_s":null,"enabled":"write_only"},"include_original_response":false,"extra_body":[],"extra_headers":[]}"#;
+    let non_stringified_tool_call_args = r#"{"function_name":"basic_test","model_name":null,"episode_id":null,"input":{"messages":[{"role":"user","content":[{"type":"tool_call","name":"my_tool_call","arguments":{"location":"Brooklyn","units":"celsius"},"id":"my_id"}]}]},"stream":null,"params":{"chat_completion":{}},"variant_name":null,"dryrun":null,"internal":false,"tags":{},"allowed_tools":null,"additional_tools":null,"tool_choice":null,"parallel_tool_calls":null,"output_schema":null,"credentials":{},"cache_options":{"max_age_s":null,"enabled":"write_only"},"include_original_response":false,"extra_body":[],"extra_headers":[]}"#;
 
     // With an invalid gateway url, we shouldn't get a version
     assert_eq!(bad_gateway.get_gateway_version().await, None);
@@ -3014,4 +3154,411 @@ async fn test_client_adjust_tool_call() {
 
     let last_body = { bad_gateway.last_body.lock().await.take().unwrap() };
     assert_eq!(last_body, non_stringified_tool_call_args);
+}
+
+/// Test that a json inference with null response (i.e. no generated content blocks) works as expected.
+#[tokio::test]
+async fn test_chat_function_null_response() {
+    let payload = json!({
+        "function_name": "null_chat",
+        "input": {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "No yapping!"
+                }
+            ]
+        },
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    // Check Response is OK, then fields in order
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+
+    // Check that the response content is an empty array (no content blocks)
+    assert!(response_json["content"].as_array().unwrap().is_empty());
+}
+
+/// Test that a json inference with null response (i.e. no generated content blocks) works as expected.
+#[tokio::test]
+async fn test_json_function_null_response() {
+    let payload = json!({
+        "function_name": "null_json",
+        "input": {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Extract no data!"
+                }
+            ]
+        },
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    // Check Response is OK, then fields in order
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+    // Check that raw and parsed keys exist with null values
+    assert!(response_json
+        .get("output")
+        .unwrap()
+        .as_object()
+        .unwrap()
+        .contains_key("raw"));
+    assert!(response_json
+        .get("output")
+        .unwrap()
+        .as_object()
+        .unwrap()
+        .contains_key("parsed"));
+    assert!(response_json["output"]["raw"].is_null());
+    assert!(response_json["output"]["parsed"].is_null());
+}
+
+/// Test that a json inference with chain of thought variant works as expected.
+#[tokio::test]
+async fn test_json_cot_inference_request() {
+    let episode_id = Uuid::now_v7();
+
+    let payload = json!({
+        "function_name": "json_success",
+        "variant_name": "chain_of_thought",
+        "episode_id": episode_id,
+        "input":
+            {
+               "system": {"assistant_name": "Dr. Mehta"},
+               "messages": [
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "arguments": {"country": "Japan"}}]
+                }
+            ]},
+        "stream": false,
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    // Check that the API response is ok
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+
+    check_json_cot_inference_response(
+        response_json,
+        episode_id,
+        "chain_of_thought",
+        "dummy::json_cot",
+        "dummy",
+    )
+    .await;
+}
+
+/// Test that a json inference with chain of thought variant and implicit tool call works as expected.
+#[tokio::test]
+async fn test_json_cot_inference_request_implicit_tool() {
+    let episode_id = Uuid::now_v7();
+
+    let payload = json!({
+        "function_name": "json_success",
+        "variant_name": "chain_of_thought_implicit_tool",
+        "episode_id": episode_id,
+        "input":
+            {
+               "system": {"assistant_name": "Dr. Mehta"},
+               "messages": [
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "arguments": {"country": "Japan"}}]
+                }
+            ]},
+        "stream": false,
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    // Check that the API response is ok
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+
+    check_json_cot_inference_response(
+        response_json,
+        episode_id,
+        "chain_of_thought_implicit_tool",
+        "openai::gpt-4.1-nano-2025-04-14",
+        "openai",
+    )
+    .await;
+}
+
+async fn check_json_cot_inference_response(
+    response_json: Value,
+    episode_id: Uuid,
+    expected_variant_name: &str,
+    expected_model_name: &str,
+    expected_model_provider_name: &str,
+) {
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+
+    let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
+    let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
+    assert_eq!(episode_id_response, episode_id);
+
+    let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
+    assert_eq!(variant_name, expected_variant_name);
+
+    let output = response_json.get("output").unwrap().as_object().unwrap();
+    let parsed_output = output.get("parsed").unwrap().as_object().unwrap();
+    assert!(parsed_output
+        .get("answer")
+        .unwrap()
+        .as_str()
+        .unwrap()
+        .to_lowercase()
+        .contains("tokyo"));
+    let raw_output = output.get("raw").unwrap().as_str().unwrap();
+    let raw_output: Value = serde_json::from_str(raw_output).unwrap();
+    assert_eq!(&raw_output, output.get("parsed").unwrap());
+
+    let usage = response_json.get("usage").unwrap();
+    let input_tokens = usage.get("input_tokens").unwrap().as_u64().unwrap();
+    assert!(input_tokens > 0);
+    let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
+    assert!(output_tokens > 0);
+
+    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    // Check if ClickHouse is ok - JsonInference Table
+    let clickhouse = get_clickhouse().await;
+    let result = select_json_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    let id = result.get("id").unwrap().as_str().unwrap();
+    let id = Uuid::parse_str(id).unwrap();
+    assert_eq!(id, inference_id);
+
+    let function_name = result.get("function_name").unwrap().as_str().unwrap();
+    assert_eq!(function_name, "json_success");
+
+    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
+    assert_eq!(variant_name, expected_variant_name);
+
+    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
+    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
+    assert_eq!(retrieved_episode_id, episode_id);
+
+    let input: Value =
+        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+    let correct_input = json!({
+        "system": {"assistant_name": "Dr. Mehta"},
+        "messages": [
+            {
+                "role": "user",
+                "content": [{"type": "text", "value": {"country": "Japan"}}]
+            }
+        ]
+    });
+    assert_eq!(input, correct_input);
+
+    let output_clickhouse = result.get("output").unwrap().as_str().unwrap();
+    let output_clickhouse: Value = serde_json::from_str(output_clickhouse).unwrap();
+    let output_clickhouse = output_clickhouse.as_object().unwrap();
+    assert_eq!(output_clickhouse, output);
+
+    let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
+    let inference_params: Value = serde_json::from_str(inference_params).unwrap();
+    let inference_params = inference_params.get("chat_completion").unwrap();
+    assert!(inference_params.get("temperature").is_none());
+    assert!(inference_params.get("seed").is_none());
+    let max_tokens = 100;
+    assert_eq!(
+        inference_params
+            .get("max_tokens")
+            .unwrap()
+            .as_u64()
+            .unwrap(),
+        max_tokens
+    );
+
+    let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
+    assert!(processing_time_ms > 0);
+
+    let retrieved_output_schema = result.get("output_schema").unwrap().as_str().unwrap();
+    let retrieved_output_schema: Value = serde_json::from_str(retrieved_output_schema).unwrap();
+    let expected_output_schema = json!({
+        "type": "object",
+        "properties": {
+          "answer": {
+            "type": "string"
+          }
+        },
+        "required": ["answer"],
+        "additionalProperties": false
+      }
+    );
+    assert_eq!(retrieved_output_schema, expected_output_schema);
+
+    // Check that the auxiliary content is correct
+    let auxiliary_content: Vec<ContentBlockOutput> =
+        serde_json::from_str(result.get("auxiliary_content").unwrap().as_str().unwrap()).unwrap();
+    assert_eq!(auxiliary_content.len(), 1);
+    assert!(matches!(
+        auxiliary_content[0],
+        ContentBlockOutput::Thought(_)
+    ));
+
+    // Check the ModelInference Table
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    let model_inference_id = result.get("id").unwrap().as_str().unwrap();
+    assert!(Uuid::parse_str(model_inference_id).is_ok());
+
+    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
+    assert_eq!(inference_id_result, inference_id);
+
+    let model_name = result.get("model_name").unwrap().as_str().unwrap();
+    assert_eq!(model_name, expected_model_name);
+    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
+    assert_eq!(model_provider_name, expected_model_provider_name);
+
+    result.get("raw_request").unwrap().as_str().unwrap();
+
+    let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
+    assert!(raw_response.to_lowercase().contains("tokyo"));
+    assert!(raw_response.to_lowercase().contains("thinking"));
+    assert!(serde_json::from_str::<Value>(raw_response).is_ok());
+
+    let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
+    assert!(input_tokens > 0);
+    let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
+    assert!(output_tokens > 0);
+    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+    assert!(response_time_ms > 0);
+    assert!(result.get("ttft_ms").unwrap().is_null());
+
+    let system = result.get("system").unwrap().as_str().unwrap();
+    assert_eq!(
+        system,
+        "You are a helpful and friendly assistant named Dr. Mehta.\n\nPlease answer the questions in a JSON with key \"answer\".\n\nDo not include any other text than the JSON object. Do not include \"```json\" or \"```\" or anything else.\n\nExample Response:\n\n{\n    \"answer\": \"42\"\n}"
+    );
+    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
+    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![RequestMessage {
+        role: Role::User,
+        content: vec!["What is the name of the capital city of Japan?"
+            .to_string()
+            .into()],
+    }];
+    assert_eq!(input_messages, expected_input_messages);
+    let output = result.get("output").unwrap().as_str().unwrap();
+    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(output.len(), 1);
+    match &output[0] {
+        ContentBlock::Text(text) => {
+            let parsed: Value = serde_json::from_str(&text.text).unwrap();
+            let response = parsed.get("response").unwrap().as_object().unwrap();
+            let answer = response.get("answer").unwrap().as_str().unwrap();
+            assert!(answer.to_lowercase().contains("tokyo"));
+            assert!(parsed
+                .get("thinking")
+                .unwrap()
+                .as_str()
+                .unwrap()
+                .to_lowercase()
+                .contains("hmm"));
+        }
+        ContentBlock::ToolCall(tool_call) => {
+            // Handles implicit tool calls
+            assert_eq!(tool_call.name, "respond");
+            let arguments: Value = serde_json::from_str(&tool_call.arguments).unwrap();
+            let response = arguments.get("response").unwrap().as_object().unwrap();
+            let answer = response.get("answer").unwrap().as_str().unwrap();
+            assert!(answer.to_lowercase().contains("tokyo"));
+        }
+        _ => {
+            panic!("Expected a text block, got {:?}", output[0]);
+        }
+    }
+}
+
+/// Test that a json inference with 2 text blocks in the message works as expected.
+#[tokio::test]
+async fn test_multiple_text_blocks_in_message() {
+    let payload = json!({
+        "model_name": "dummy::multiple-text-blocks",
+        "input": {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "content"
+                        },
+                        {
+                            "type": "text",
+                            "text": "extra content"
+                        }
+                    ]
+                },
+            ]
+        },
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    // Check Response is OK, then fields in order
+    assert_eq!(response.status(), StatusCode::OK);
+    let response = response.json::<Value>().await.unwrap();
+    let inference_id = response.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+    // Get the ClickHouse inference
+    let clickhouse = get_clickhouse().await;
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    // Check that the inference has multiple content blocks
+    let input = result.get("input").unwrap().as_str().unwrap();
+    let input: ResolvedInput = serde_json::from_str(input).unwrap();
+    assert_eq!(input.messages.len(), 1);
+    assert_eq!(input.messages[0].content.len(), 2);
+    assert!(matches!(
+        input.messages[0].content[0],
+        ResolvedInputMessageContent::Text { .. }
+    ));
+    assert!(matches!(
+        input.messages[0].content[1],
+        ResolvedInputMessageContent::Text { .. }
+    ));
 }

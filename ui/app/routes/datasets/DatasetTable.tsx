@@ -5,10 +5,11 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  TableEmptyState,
 } from "~/components/ui/table";
-import { formatDate } from "~/utils/date";
 import type { DatasetCountInfo } from "~/utils/clickhouse/datasets";
 import { Link } from "react-router";
+import { TableItemTime } from "~/components/ui/TableItems";
 
 export default function DatasetTable({
   counts,
@@ -27,14 +28,7 @@ export default function DatasetTable({
         </TableHeader>
         <TableBody>
           {counts.length === 0 ? (
-            <TableRow className="hover:bg-bg-primary">
-              <TableCell
-                colSpan={3}
-                className="text-fg-muted px-3 py-8 text-center"
-              >
-                No datasets found.
-              </TableCell>
-            </TableRow>
+            <TableEmptyState message="No datasets found" />
           ) : (
             counts.map((count) => (
               <TableRow key={count.dataset_name} id={count.dataset_name}>
@@ -50,7 +44,7 @@ export default function DatasetTable({
                 </TableCell>
                 <TableCell className="max-w-[200px]">{count.count}</TableCell>
                 <TableCell>
-                  {formatDate(new Date(count.last_updated))}
+                  <TableItemTime timestamp={count.last_updated} />
                 </TableCell>
               </TableRow>
             ))

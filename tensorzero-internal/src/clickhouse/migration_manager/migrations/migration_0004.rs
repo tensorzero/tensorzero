@@ -38,15 +38,18 @@ impl Migration for Migration0004<'_> {
     async fn should_apply(&self) -> Result<bool, Error> {
         let database = self.clickhouse.database();
         let query = format!(
-            "SELECT name FROM system.columns WHERE database = '{}' AND table = 'ModelInference'",
-            database
+            "SELECT name FROM system.columns WHERE database = '{database}' AND table = 'ModelInference'"
         );
-        let response = self.clickhouse.run_query(query, None).await.map_err(|e| {
-            Error::new(ErrorDetails::ClickHouseMigration {
-                id: "0004".to_string(),
-                message: format!("Failed to fetch columns for ModelInference: {}", e),
-            })
-        })?;
+        let response = self
+            .clickhouse
+            .run_query_synchronous(query, None)
+            .await
+            .map_err(|e| {
+                Error::new(ErrorDetails::ClickHouseMigration {
+                    id: "0004".to_string(),
+                    message: format!("Failed to fetch columns for ModelInference: {e}"),
+                })
+            })?;
         let present_columns: Vec<&str> = response.lines().map(|line| line.trim()).collect();
         if present_columns.contains(&"system")
             && present_columns.contains(&"input_messages")
@@ -58,7 +61,7 @@ impl Migration for Migration0004<'_> {
         }
     }
 
-    async fn apply(&self) -> Result<(), Error> {
+    async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         // Add a column `system` to the `ModelInference` table
         let query = r#"
             ALTER TABLE ModelInference
@@ -66,7 +69,10 @@ impl Migration for Migration0004<'_> {
             ADD COLUMN IF NOT EXISTS input_messages String,
             ADD COLUMN IF NOT EXISTS output String
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous(query.to_string(), None)
+            .await?;
 
         Ok(())
     }

@@ -19,18 +19,31 @@ const baseConfigSchema = z.object({
   assistant_schema: z.custom<SchemaWithContent>().optional(),
 });
 
+export const specificToolChoiceSchema = z.object({
+  specific: z.string(),
+});
+
 // Schema for FunctionConfigChat
 export const FunctionConfigChatSchema = baseConfigSchema.extend({
   type: z.literal("chat"),
   tools: z.array(z.string()).default([]),
-  tool_choice: z.enum(["none", "auto", "any"]).default("none"),
+  tool_choice: z
+    .union([
+      z.literal("none"),
+      z.literal("auto"),
+      z.literal("required"),
+      specificToolChoiceSchema,
+    ])
+    .default("none"),
   parallel_tool_calls: z.boolean().default(false),
+  description: z.string().optional(),
 });
 
 // Schema for FunctionConfigJson
 export const FunctionConfigJsonSchema = baseConfigSchema.extend({
   type: z.literal("json"),
   output_schema: z.custom<SchemaWithContent>().optional(),
+  description: z.string().optional(),
 });
 
 // Combined FunctionConfig schema

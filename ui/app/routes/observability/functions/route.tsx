@@ -2,7 +2,7 @@ import type { Route } from "./+types/route";
 import { isRouteErrorResponse } from "react-router";
 import FunctionsTable from "./FunctionsTable";
 import { useConfig } from "~/context/config";
-import { countInferencesByFunction } from "~/utils/clickhouse/inference";
+import { countInferencesByFunction } from "~/utils/clickhouse/inference.server";
 import {
   PageHeader,
   PageLayout,

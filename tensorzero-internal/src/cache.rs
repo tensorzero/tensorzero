@@ -10,12 +10,15 @@ use crate::inference::types::{
     ModelInferenceResponse, ProviderInferenceResponseChunk, Usage,
 };
 use crate::model::StreamResponse;
+use blake3::Hash;
+use clap::ValueEnum;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
-#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize, ValueEnum)]
 #[serde(rename_all = "snake_case")]
+#[clap(rename_all = "snake_case")]
 pub enum CacheEnabledMode {
     On,
     Off,
@@ -34,7 +37,7 @@ impl CacheEnabledMode {
     }
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct CacheParamsOptions {
     #[serde(default)]
     pub max_age_s: Option<u32>,
@@ -101,6 +104,12 @@ impl CacheKey {
     }
 }
 
+impl From<Hash> for CacheKey {
+    fn from(hash: Hash) -> Self {
+        Self(hash.into())
+    }
+}
+
 impl EmbeddingModelProviderRequest<'_> {
     // Destructure EmbeddingModelProviderRequest so that we get a compiler error
     // if we add any new fields
@@ -123,7 +132,7 @@ impl EmbeddingModelProviderRequest<'_> {
             })
         })?;
         hasher.update(request_json.as_bytes());
-        Ok(CacheKey(hasher.finalize().into()))
+        Ok(hasher.finalize().into())
     }
 }
 
@@ -168,7 +177,7 @@ impl ModelProviderRequest<'_> {
         // Get the bytes of the serialized request to use in the hash
         let request_bytes = serialized_request.as_bytes();
         hasher.update(request_bytes);
-        Ok(CacheKey(hasher.finalize().into()))
+        Ok(hasher.finalize().into())
     }
 }
 
@@ -384,8 +393,6 @@ pub async fn cache_lookup_inner<T: CacheOutput + DeserializeOwned>(
     let short_cache_key = cache_key.get_short_key()?.to_string();
     let long_cache_key = cache_key.get_long_key();
     // The clickhouse query args look like rust format string args, but they're not.
-    #[allow(unknown_lints)]
-    #[allow(clippy::literal_string_with_formatting_args)]
     let query = if max_age_s.is_some() {
         r#"
             SELECT
@@ -430,7 +437,7 @@ pub async fn cache_lookup_inner<T: CacheOutput + DeserializeOwned>(
         query_params.insert("lookback_s", lookback_str.as_str());
     }
     let result = clickhouse_connection_info
-        .run_query(query.to_string(), Some(&query_params))
+        .run_query_synchronous(query.to_string(), Some(&query_params))
         .await?;
     if result.is_empty() {
         return Ok(None);
@@ -472,6 +479,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
         let model_provider_request = ModelProviderRequest {
@@ -496,6 +504,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
         let model_provider_request = ModelProviderRequest {
@@ -522,6 +531,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
         let model_provider_request = ModelProviderRequest {

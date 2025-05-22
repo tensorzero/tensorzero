@@ -33,7 +33,7 @@ impl Migration for Migration0011<'_> {
         Ok(!table_exists || !cached_column_exists)
     }
 
-    async fn apply(&self) -> Result<(), Error> {
+    async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         // Create the `ModelInferenceCache` table
         let query = r#"
             CREATE TABLE IF NOT EXISTS ModelInferenceCache
@@ -52,13 +52,19 @@ impl Migration for Migration0011<'_> {
             PRIMARY KEY (short_cache_key)
             SETTINGS index_granularity = 256
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous(query.to_string(), None)
+            .await?;
 
         // Add the `cached` column to ModelInference
         let query = r#"
             ALTER TABLE ModelInference ADD COLUMN IF NOT EXISTS cached Bool DEFAULT false;
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous(query.to_string(), None)
+            .await?;
 
         Ok(())
     }

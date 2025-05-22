@@ -2,7 +2,6 @@ import {
   data,
   isRouteErrorResponse,
   redirect,
-  useLoaderData,
   useNavigate,
   useSearchParams,
 } from "react-router";
@@ -17,7 +16,7 @@ import {
   countInferencesForVariant,
   queryInferenceTableBoundsByVariantName,
   queryInferenceTableByVariantName,
-} from "~/utils/clickhouse/inference";
+} from "~/utils/clickhouse/inference.server";
 import {
   getVariantPerformances,
   type TimeWindowUnit,
@@ -118,7 +117,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   };
 }
 
-export default function VariantDetails() {
+export default function VariantDetails({ loaderData }: Route.ComponentProps) {
   const {
     function_name,
     variant_name,
@@ -127,7 +126,7 @@ export default function VariantDetails() {
     inference_bounds,
     variant_performances,
     metricsWithFeedback,
-  } = useLoaderData<typeof loader>();
+  } = loaderData;
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const config = useConfig();

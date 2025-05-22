@@ -43,7 +43,7 @@ pub async fn get_object_handler(
     // Use the existing object store if it matches the requested kind, so
     let storage_path: StoragePath = serde_json::from_str(&params.storage_path).map_err(|e| {
         Error::new(ErrorDetails::InvalidRequest {
-            message: format!("Error parsing storage path: {}", e),
+            message: format!("Error parsing storage path: {e}"),
         })
     })?;
     Ok(Json(get_object(&config, storage_path).await?))
@@ -82,12 +82,12 @@ pub async fn get_object(
         .await
         .map_err(|e| {
             Error::new(ErrorDetails::InternalError {
-                message: format!("Error getting object: {}", e),
+                message: format!("Error getting object: {e}"),
             })
         })?;
     let bytes = object.bytes().await.map_err(|e| {
         Error::new(ErrorDetails::InternalError {
-            message: format!("Error getting object bytes: {}", e),
+            message: format!("Error getting object bytes: {e}"),
         })
     })?;
     Ok(ObjectResponse {

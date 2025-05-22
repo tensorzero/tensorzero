@@ -1,6 +1,6 @@
 [package]
 name = "evaluations"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 
 [[test]]
@@ -26,18 +26,8 @@ indicatif = "0.17.11"
 [dev-dependencies]
 tensorzero = { path = "../clients/rust" }
 
-[lints.rust]
-unsafe_code = "forbid"
-[lints.clippy]
-panic = "deny"
-print_stderr = "deny"
-print_stdout = "deny"
-todo = "deny"
-unimplemented = "deny"
-unreachable = "deny"
-unwrap_used = "deny"
-dbg_macro = "deny"
-
+[lints]
+workspace = true
 
 [features]
 default = []

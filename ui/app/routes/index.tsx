@@ -12,20 +12,17 @@ import {
   Globe,
   Documentation,
   Dataset,
-  Evaluation,
+  GridCheck,
 } from "~/components/icons/Icons";
 import {
   countInferencesByFunction,
   countEpisodes,
-} from "~/utils/clickhouse/inference";
+} from "~/utils/clickhouse/inference.server";
 import { getConfig } from "~/utils/config/index.server";
-import { useLoaderData } from "react-router";
 import { getDatasetCounts } from "~/utils/clickhouse/datasets.server";
 import { countTotalEvaluationRuns } from "~/utils/clickhouse/evaluations.server";
 import { useConfig } from "~/context/config";
-
-const FF_ENABLE_DATASETS =
-  import.meta.env.VITE_TENSORZERO_UI_FF_ENABLE_DATASETS === "1";
+import type { Route } from "./+types/index";
 
 interface FeatureCardProps {
   source: string;
@@ -94,14 +91,14 @@ export async function loader() {
   };
 }
 
-export default function Home() {
+export default function Home({ loaderData }: Route.ComponentProps) {
   const {
     totalInferences,
     numFunctions,
     numEpisodes,
     numDatasets,
     numEvaluationRuns,
-  } = useLoaderData<typeof loader>();
+  } = loaderData;
   const config = useConfig();
   const numEvaluations = Object.keys(config.evaluations).length;
 
@@ -151,28 +148,26 @@ export default function Home() {
           </div>
         </div>
 
-        {FF_ENABLE_DATASETS && (
-          <div id="workflows" className="mb-12">
-            <h2 className="mb-1 text-2xl font-medium">Workflows</h2>
-            <p className="text-fg-tertiary mb-6 max-w-[640px] text-sm">
-              Manage your LLM engineering workflows.
-            </p>
-            <div className="grid gap-6 md:grid-cols-3">
-              <FeatureCard
-                source="/datasets"
-                icon={Dataset}
-                title="Datasets"
-                description={`${numDatasets} datasets`}
-              />
-              <FeatureCard
-                source="/evaluations"
-                icon={Evaluation}
-                title="Evaluations"
-                description={`${numEvaluations} evaluations, ${numEvaluationRuns} runs`}
-              />
-            </div>
+        <div id="workflows" className="mb-12">
+          <h2 className="mb-1 text-2xl font-medium">Workflows</h2>
+          <p className="text-fg-tertiary mb-6 max-w-[640px] text-sm">
+            Manage your LLM engineering workflows.
+          </p>
+          <div className="grid gap-6 md:grid-cols-3">
+            <FeatureCard
+              source="/datasets"
+              icon={Dataset}
+              title="Datasets"
+              description={`${numDatasets} datasets`}
+            />
+            <FeatureCard
+              source="/evaluations"
+              icon={GridCheck}
+              title="Evaluations"
+              description={`${numEvaluations} evaluations, ${numEvaluationRuns} runs`}
+            />
           </div>
-        )}
+        </div>
 
         <div className="mt-16 border-t border-gray-200 pt-16">
           <div className="grid gap-8 md:grid-cols-3">

@@ -20,7 +20,7 @@ use super::aws_common::{self, build_interceptor, InterceptorAndRawBody};
 use super::helpers::peek_first_chunk;
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
-use crate::error::{Error, ErrorDetails};
+use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
@@ -35,7 +35,7 @@ use crate::inference::types::{FinishReason, ProviderInferenceResponseArgs};
 use crate::model::ModelProvider;
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
-#[allow(unused)]
+#[expect(unused)]
 const PROVIDER_NAME: &str = "AWS Bedrock";
 const PROVIDER_TYPE: &str = "aws_bedrock";
 
@@ -44,6 +44,7 @@ const PROVIDER_TYPE: &str = "aws_bedrock";
 pub struct AWSBedrockProvider {
     model_id: String,
     client: aws_sdk_bedrockruntime::Client,
+    base_config: aws_sdk_bedrockruntime::config::Builder,
 }
 
 impl AWSBedrockProvider {
@@ -51,7 +52,15 @@ impl AWSBedrockProvider {
         let config = aws_common::config_with_region(PROVIDER_TYPE, region).await?;
         let client = aws_sdk_bedrockruntime::Client::new(&config);
 
-        Ok(Self { model_id, client })
+        Ok(Self {
+            model_id,
+            client,
+            base_config: aws_sdk_bedrockruntime::config::Builder::from(&config),
+        })
+    }
+
+    pub fn model_id(&self) -> &str {
+        &self.model_id
     }
 }
 
@@ -63,7 +72,7 @@ impl InferenceProvider for AWSBedrockProvider {
             provider_name: _,
             model_name,
         }: ModelProviderRequest<'a>,
-        _http_client: &'a reqwest::Client,
+        http_client: &'a reqwest::Client,
         _dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
@@ -128,7 +137,10 @@ impl InferenceProvider for AWSBedrockProvider {
                             raw_request: None,
                             raw_response: None,
                             status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
-                            message: format!("Error configuring AWS Bedrock tool config: {e}"),
+                            message: format!(
+                                "Error configuring AWS Bedrock tool config: {}",
+                                DisplayOrDebugGateway::new(e)
+                            ),
                             provider_type: PROVIDER_TYPE.to_string(),
                         })
                     })?;
@@ -142,9 +154,14 @@ impl InferenceProvider for AWSBedrockProvider {
             get_raw_request,
         } = build_interceptor(request, model_provider, model_name.to_string());
 
+        let new_config = self
+            .base_config
+            .clone()
+            .http_client(super::aws_http_client::Client::new(http_client.clone()));
         let start_time = Instant::now();
         let output = bedrock_request
             .customize()
+            .config_override(new_config)
             .interceptor(interceptor)
             .send()
             .await
@@ -186,7 +203,7 @@ impl InferenceProvider for AWSBedrockProvider {
             provider_name: _,
             model_name,
         }: ModelProviderRequest<'a>,
-        _http_client: &'a reqwest::Client,
+        http_client: &'a reqwest::Client,
         _dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
@@ -249,7 +266,10 @@ impl InferenceProvider for AWSBedrockProvider {
                             raw_request: None,
                             raw_response: None,
                             status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
-                            message: format!("Error configuring AWS Bedrock tool config: {e}"),
+                            message: format!(
+                                "Error configuring AWS Bedrock tool config: {}",
+                                DisplayOrDebugGateway::new(e)
+                            ),
                             provider_type: PROVIDER_TYPE.to_string(),
                         })
                     })?;
@@ -261,10 +281,15 @@ impl InferenceProvider for AWSBedrockProvider {
             interceptor,
             get_raw_request,
         } = build_interceptor(request, model_provider, model_name.to_string());
+        let new_config = self
+            .base_config
+            .clone()
+            .http_client(super::aws_http_client::Client::new(http_client.clone()));
 
         let start_time = Instant::now();
         let stream = bedrock_request
             .customize()
+            .config_override(new_config)
             .interceptor(interceptor)
             .send()
             .await
@@ -531,7 +556,10 @@ impl TryFrom<&ContentBlock> for Option<BedrockContentBlock> {
                         raw_request: None,
                         raw_response: Some(tool_call.arguments.clone()),
                         status_code: Some(StatusCode::BAD_REQUEST),
-                        message: format!("Error parsing tool call arguments as JSON Value: {e}"),
+                        message: format!(
+                            "Error parsing tool call arguments as JSON Value: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
                         provider_type: PROVIDER_TYPE.to_string(),
                     })
                 })?;
@@ -615,7 +643,10 @@ impl TryFrom<BedrockContentBlock> for ContentBlockOutput {
                     Error::new(ErrorDetails::InferenceServer {
                         raw_request: None,
                         raw_response: None,
-                        message: format!("Error parsing tool call arguments from AWS Bedrock: {e}"),
+                        message: format!(
+                            "Error parsing tool call arguments from AWS Bedrock: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
                         provider_type: PROVIDER_TYPE.to_string(),
                     })
                 })?;
@@ -781,8 +812,11 @@ fn serialize_aws_bedrock_struct<T: std::fmt::Debug>(output: &T) -> Result<String
     serde_json::to_string(&serde_json::json!({"debug": format!("{:?}", output)})).map_err(|e| {
         Error::new(ErrorDetails::InferenceServer {
             raw_request: None,
-            raw_response: Some(format!("{:?}", output)),
-            message: format!("Error parsing response from AWS Bedrock: {e}"),
+            raw_response: Some(format!("{output:?}")),
+            message: format!(
+                "Error parsing response from AWS Bedrock: {}",
+                DisplayOrDebugGateway::new(e)
+            ),
             provider_type: PROVIDER_TYPE.to_string(),
         })
     })
@@ -798,7 +832,10 @@ impl TryFrom<&ToolConfig> for Tool {
                     raw_request: None,
                     raw_response: Some(format!("{:?}", tool_config.parameters())),
                     status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
-                    message: format!("Error parsing tool input schema: {e}"),
+                    message: format!(
+                        "Error parsing tool input schema: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?,

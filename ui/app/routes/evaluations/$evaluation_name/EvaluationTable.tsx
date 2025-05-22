@@ -17,7 +17,7 @@ import {
   TooltipTrigger,
 } from "~/components/ui/tooltip";
 
-import { VariantSelector } from "./VariantSelector";
+import { EvalRunSelector } from "~/components/evaluations/EvalRunSelector";
 import type {
   EvaluationRunInfo,
   EvaluationStatistics,
@@ -35,13 +35,17 @@ import OutputComponent from "~/components/inference/Output";
 import "./tooltip-styles.css";
 import { useConfig } from "~/context/config";
 import { getEvaluatorMetricName } from "~/utils/clickhouse/evaluations";
-import type { MetricConfig } from "~/utils/config/metric";
+import {
+  formatMetricSummaryValue,
+  type MetricConfig,
+} from "~/utils/config/metric";
 import { type EvaluatorConfig } from "~/utils/config/evaluations";
-import { useColorAssigner } from "./ColorAssigner";
-import { ColorAssignerProvider } from "./ColorAssigner";
-import MetricValue, {
-  isCutoffFailed,
-} from "~/components/evaluations/MetricValue";
+import {
+  useColorAssigner,
+  ColorAssignerProvider,
+} from "~/hooks/evaluations/ColorAssigner";
+import MetricValue, { isCutoffFailed } from "~/components/metric/MetricValue";
+import EvaluationFeedbackEditor from "~/components/evaluations/EvaluationFeedbackEditor";
 
 // Enhanced TruncatedText component that can handle complex structures
 const TruncatedContent = ({
@@ -237,7 +241,12 @@ interface EvaluationTableProps {
   evaluation_statistics: EvaluationStatistics[];
   evaluator_names: string[];
   evaluation_name: string;
-  mostRecentEvaluationInferenceDates: Map<string, Date>;
+}
+
+interface MetricValueInfo {
+  value: string;
+  evaluator_inference_id: string | null;
+  inference_id: string;
 }
 
 export function EvaluationTable({
@@ -246,7 +255,6 @@ export function EvaluationTable({
   evaluation_statistics,
   evaluator_names,
   evaluation_name,
-  mostRecentEvaluationInferenceDates,
 }: EvaluationTableProps) {
   const selectedRunIds = selected_evaluation_run_infos.map(
     (info) => info.evaluation_run_id,
@@ -282,12 +290,12 @@ export function EvaluationTable({
   // Organize results by datapoint and run ID
   const organizedResults = useMemo(() => {
     const organized = new Map<
-      string,
+      string, // datapoint id
       Map<
-        string,
+        string, // evaluation run id
         {
           generated_output: JsonInferenceOutput | ContentBlockOutput[];
-          metrics: Map<string, string>;
+          metrics: Map<string, MetricValueInfo>;
         }
       >
     >();
@@ -313,7 +321,11 @@ export function EvaluationTable({
 
       const runData = datapointMap.get(result.evaluation_run_id);
       if (runData && result.metric_name) {
-        runData.metrics.set(result.metric_name, result.metric_value);
+        runData.metrics.set(result.metric_name, {
+          value: result.metric_value,
+          evaluator_inference_id: result.evaluator_inference_id,
+          inference_id: result.inference_id,
+        });
       }
     });
 
@@ -334,13 +346,10 @@ export function EvaluationTable({
   return (
     <ColorAssignerProvider selectedRunIds={selectedRunIds}>
       <div>
-        {/* Variant selector */}
-        <VariantSelector
+        {/* Eval run selector */}
+        <EvalRunSelector
           evaluationName={evaluation_name}
           selectedRunIdInfos={selected_evaluation_run_infos}
-          mostRecentEvaluationInferenceDates={
-            mostRecentEvaluationInferenceDates
-          }
         />
 
         {selectedRunIds.length > 0 && (
@@ -406,7 +415,7 @@ export function EvaluationTable({
                         generated_output:
                           | JsonInferenceOutput
                           | ContentBlockOutput[];
-                        metrics: Map<string, string>;
+                        metrics: Map<string, MetricValueInfo>;
                       },
                     ][];
 
@@ -493,19 +502,55 @@ export function EvaluationTable({
                                 config.evaluations[evaluation_name].evaluators[
                                   evaluator_name
                                 ];
+                              const evaluationType = evaluatorConfig.type;
 
                               return (
                                 <TableCell
                                   key={metric_name}
                                   className="h-[52px] text-center align-middle"
                                 >
-                                  <div className="flex h-full items-center justify-center">
+                                  {/* Add group and relative positioning to the container */}
+                                  <div
+                                    className={`group relative flex h-full items-center justify-center ${metricValue && evaluationType === "llm_judge" ? "pl-10" : ""}`}
+                                  >
                                     {metricValue ? (
-                                      <MetricValue
-                                        value={metricValue}
-                                        metricType={metricType}
-                                        evaluatorConfig={evaluatorConfig}
-                                      />
+                                      <>
+                                        <MetricValue
+                                          value={metricValue.value}
+                                          metricType={metricType}
+                                          optimize={
+                                            evaluatorConfig.type === "llm_judge"
+                                              ? evaluatorConfig.optimize
+                                              : "max"
+                                          }
+                                          cutoff={evaluatorConfig.cutoff}
+                                        />
+                                        {/* Make feedback editor appear on hover */}
+                                        {evaluationType === "llm_judge" && (
+                                          <div
+                                            className="ml-2 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+                                            // Stop click event propagation so the row navigation is not triggered
+                                            onClick={(e) => e.stopPropagation()}
+                                          >
+                                            <EvaluationFeedbackEditor
+                                              inferenceId={
+                                                metricValue.inference_id
+                                              }
+                                              datapointId={datapoint.id}
+                                              metricName={metric_name}
+                                              originalValue={metricValue.value}
+                                              evalRunId={runId}
+                                              evaluatorInferenceId={
+                                                metricValue.evaluator_inference_id
+                                              }
+                                              variantName={
+                                                runIdToVariant.get(runId) ||
+                                                "Unknown"
+                                              }
+                                            />
+                                          </div>
+                                        )}
+                                      </>
                                     ) : (
                                       "-"
                                     )}
@@ -613,35 +658,46 @@ const EvaluatorProperties = ({
     .filter((runId) => statsByRunId.has(runId))
     .map((runId) => statsByRunId.get(runId)!);
 
+  const assigner = useColorAssigner();
+
   return (
     <div className="mt-2 flex flex-col items-center gap-1">
       {orderedStats.length > 0 && (
         <div className="text-muted-foreground mt-2 text-center text-xs">
           {orderedStats.map((stat) => {
             // Get the variant color for the circle using the run ID from the stat
-            const variantColorClass = useColorAssigner().getColor(
+            const variantColorClass = assigner.getColor(
               stat.evaluation_run_id,
               false,
             ); // Pass 'false' to get non-hover version
-
+            const failed =
+              evaluatorConfig.type === "llm_judge" && evaluatorConfig.cutoff
+                ? isCutoffFailed(
+                    stat.mean_metric,
+                    evaluatorConfig.optimize,
+                    evaluatorConfig.cutoff,
+                  )
+                : false;
             return (
               <div
                 key={stat.evaluation_run_id}
                 className={`mt-1 flex items-center justify-center gap-1.5 ${
-                  isCutoffFailed(stat.mean_metric, evaluatorConfig)
-                    ? "text-red-700"
-                    : ""
+                  failed ? "text-red-700" : ""
                 }`}
               >
                 <div
                   className={`h-2 w-2 rounded-full ${variantColorClass} shrink-0`}
                 ></div>
                 <span>
-                  {formatSummaryValue(stat.mean_metric, metricConfig)}
+                  {formatMetricSummaryValue(stat.mean_metric, metricConfig)}
                   {stat.stderr_metric ? (
                     <>
                       {" "}
-                      ± {formatSummaryValue(stat.stderr_metric, metricConfig)}
+                      ±{" "}
+                      {formatMetricSummaryValue(
+                        stat.stderr_metric,
+                        metricConfig,
+                      )}
                     </>
                   ) : null}{" "}
                   (n={stat.datapoint_count})
@@ -653,13 +709,4 @@ const EvaluatorProperties = ({
       )}
     </div>
   );
-};
-
-const formatSummaryValue = (value: number, metricConfig: MetricConfig) => {
-  if (metricConfig.type === "boolean") {
-    return `${Math.round(value * 100)}%`;
-  } else if (metricConfig.type === "float") {
-    return value.toFixed(2);
-  }
-  return value;
 };

@@ -7,6 +7,7 @@ import {
 import {
   countDatapointsForDatasetFunction,
   countRowsForDataset,
+  getAdjacentDatapointIds,
   getDatapoint,
   getDatasetCounts,
   getDatasetRows,
@@ -17,6 +18,7 @@ import {
 } from "./datasets.server";
 import { expect, test, describe } from "vitest";
 import { v7 as uuid } from "uuid";
+import { clickhouseClient } from "./client.server";
 
 describe("countRowsForDataset", () => {
   test("returns the correct number of rows for a specific function", async () => {
@@ -26,7 +28,7 @@ describe("countRowsForDataset", () => {
       output_source: "none",
     });
     const rows = await countRowsForDataset(dataset_params);
-    expect(rows).toBe(720);
+    expect(rows).toBe(804);
   });
 
   test("returns the correct number of rows for a specific variant", async () => {
@@ -37,7 +39,7 @@ describe("countRowsForDataset", () => {
       output_source: "none",
     });
     const rows = await countRowsForDataset(dataset_params);
-    expect(rows).toBe(152);
+    expect(rows).toBe(148);
   });
 
   test("throws an error if function_name is not provided but variant_name is", async () => {
@@ -263,9 +265,9 @@ describe("getDatasetCounts", () => {
       // Because other tests insert into the table, there could be additional datasets
       expect.arrayContaining([
         {
-          count: 118,
+          count: 119,
           dataset_name: "foo",
-          last_updated: "2025-03-23T20:03:59Z",
+          last_updated: "2025-04-15T02:33:58Z",
         },
         {
           count: 6,
@@ -280,7 +282,10 @@ describe("getDatasetCounts", () => {
 describe("getNumberOfDatasets", () => {
   test("returns the correct number of datasets", async () => {
     const count = await getNumberOfDatasets();
-    expect(count).toBe(3);
+    // This should be equal to 3 in the fixtures but since we want to be able to re-run this test
+    // and run it in parallel to the other tests which add datasets to the DB,
+    // we use a greater than or equal check.
+    expect(count).toBeGreaterThanOrEqual(3);
   });
 });
 
@@ -301,7 +306,7 @@ describe("getDatasetRows", () => {
       if (rows.length !== pageSize) break;
     }
 
-    expect(allRows.length).toBe(118);
+    expect(allRows.length).toBe(119);
     expect(allRows).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -738,14 +743,14 @@ describe("datapoint operations", () => {
 describe("countDatapointsForDatasetFunction", () => {
   test("returns the correct count for a dataset and chat function", async () => {
     const count = await countDatapointsForDatasetFunction("foo", "write_haiku");
-    expect(count).toBe(77);
+    expect(count).toBe(78);
   });
   test("returns the correct count for a dataset and json function", async () => {
     const count = await countDatapointsForDatasetFunction(
       "foo",
       "extract_entities",
     );
-    expect(count).toBe(42);
+    expect(count).toBe(43);
   });
   test("returns 0 for a non-existent dataset and real function", async () => {
     const count = await countDatapointsForDatasetFunction(
@@ -886,5 +891,60 @@ describe("insertDatapoint", () => {
         source_inference_id: null,
       }),
     ).rejects.toThrow();
+  });
+});
+
+describe("getAdjacentDatapointIds", () => {
+  test("returns the correct adjacent datapoint ids", async () => {
+    const adjacentIds = await getAdjacentDatapointIds(
+      "foo",
+      "01934fc5-ea98-71f0-8191-9fd88f34c28b",
+    );
+    expect(adjacentIds).toEqual({
+      next_id: "0193514c-ec40-7911-ad63-460bb9c861e1",
+      previous_id: "01934fbc-3250-7571-ad38-041f27ffa3f9",
+    });
+  });
+
+  test("returns null for next_id if there is no next datapoint", async () => {
+    const resultSet = await clickhouseClient.query({
+      query: `SELECT uint_to_uuid(max(id_uint)) as id FROM
+      ( SELECT toUInt128(id) as id_uint FROM ChatInferenceDatapoint WHERE dataset_name={dataset_name:String} AND staled_at IS NULL
+       UNION ALL
+       SELECT toUInt128(id) as id_uint FROM JsonInferenceDatapoint WHERE dataset_name={dataset_name:String} AND staled_at IS NULL
+      ) LIMIT 1`,
+      format: "JSON",
+      query_params: { dataset_name: "foo" },
+    });
+    const lastFooDatapointId = await resultSet.json<{ id: string }>();
+    const adjacentIds = await getAdjacentDatapointIds(
+      "foo",
+      lastFooDatapointId.data[0].id,
+    );
+    expect(adjacentIds).toEqual({
+      previous_id: "0196374a-d03f-7420-9da5-1561cba71ddb",
+      next_id: null,
+    });
+  });
+
+  test("returns null for previous_id if there is no previous datapoint", async () => {
+    const resultSet = await clickhouseClient.query({
+      query: `SELECT uint_to_uuid(min(id_uint)) as id FROM
+      ( SELECT toUInt128(id) as id_uint FROM ChatInferenceDatapoint WHERE dataset_name={dataset_name:String} AND staled_at IS NULL
+       UNION ALL
+       SELECT toUInt128(id) as id_uint FROM JsonInferenceDatapoint WHERE dataset_name={dataset_name:String} AND staled_at IS NULL
+      ) LIMIT 1`,
+      format: "JSON",
+      query_params: { dataset_name: "foo" },
+    });
+    const firstFooDatapointId = await resultSet.json<{ id: string }>();
+    const adjacentIds = await getAdjacentDatapointIds(
+      "foo",
+      firstFooDatapointId.data[0].id,
+    );
+    expect(adjacentIds).toEqual({
+      previous_id: null,
+      next_id: "01934ef3-d558-79d3-896e-c5d9fb89103d",
+    });
   });
 });

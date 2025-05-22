@@ -7,10 +7,9 @@ import {
   SupervisedFineTuning,
   Documentation,
   Dataset,
-  Evaluation,
+  GridCheck,
 } from "~/components/icons/Icons";
 import { useSidebar } from "~/components/ui/sidebar";
-import { cn } from "~/utils/common";
 import { useActivePath } from "~/hooks/use-active-path";
 import { TensorZeroLogo } from "~/components/icons/Icons";
 import { Link } from "react-router";
@@ -31,9 +30,6 @@ import {
   SidebarGroupContent,
 } from "~/components/ui/sidebar";
 import TensorZeroStatusIndicator from "./TensorZeroStatusIndicator";
-
-const FF_ENABLE_DATASETS =
-  import.meta.env.VITE_TENSORZERO_UI_FF_ENABLE_DATASETS === "1";
 
 interface NavigationItem {
   title: string;
@@ -77,25 +73,21 @@ const navigation: NavigationSection[] = [
       },
     ],
   },
-  ...(FF_ENABLE_DATASETS
-    ? [
-        {
-          title: "Workflows",
-          items: [
-            {
-              title: "Datasets",
-              url: "/datasets",
-              icon: Dataset,
-            },
-            {
-              title: "Evaluations",
-              url: "/evaluations",
-              icon: Evaluation,
-            },
-          ],
-        },
-      ]
-    : []),
+  {
+    title: "Workflows",
+    items: [
+      {
+        title: "Datasets",
+        url: "/datasets",
+        icon: Dataset,
+      },
+      {
+        title: "Evaluations",
+        url: "/evaluations",
+        icon: GridCheck,
+      },
+    ],
+  },
 ];
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
@@ -121,11 +113,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
-      <SidebarContent
-        className={cn(
-          "overflow-x-hidden! overflow-y-auto! transition-[width] duration-200",
-        )}
-      >
+      <SidebarContent className="overflow-x-hidden! overflow-y-auto! transition-[width] duration-200">
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenuItem className="list-none">

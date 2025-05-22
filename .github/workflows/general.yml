@@ -1,4 +1,5 @@
 name: General Checks
+run-name: "General Checks for: ${{ github.event.pull_request.title || github.ref }}"
 
 on:
   merge_group:
@@ -10,7 +11,6 @@ env:
   TENSORZERO_CLICKHOUSE_URL: "http://chuser:chpassword@localhost:8123/tensorzero"
 
 jobs:
-
   clickhouse-tests-cloud:
     if: github.event_name == 'merge_group'
     runs-on: ubuntu-latest
@@ -25,6 +25,9 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
+        with:
+          cache-provider: "buildjet"
+          save-if: ${{ github.event_name == 'merge_group' }}
       - name: Install cargo-nextest
         uses: taiki-e/install-action@37bdc826eaedac215f638a96472df572feab0f9b
         with:
@@ -37,6 +40,12 @@ jobs:
       - name: Wake up ClickHouse cloud
         run: |
           curl $TENSORZERO_CLICKHOUSE_URL --data-binary 'SHOW DATABASES'
+
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
+
+      - name: Download ClickHouse fixtures
+        run: uv run ./ui/fixtures/download-fixtures.py
 
       - name: Delete old ClickHouse cloud dbs
         run: ./ci/delete-clickhouse-dbs.sh
@@ -69,56 +78,46 @@ jobs:
         if: always()
         run: cat e2e_logs.txt
 
-  # This is the job that we actually mark as required in the branch protection rules
-  #
-  # For PR ci, the 'clickhouse-tests-cloud' job will be skipped, and this job will exit successfully
-  # (since the 'needs' status will be 'skipped')
-  #
-  # For merge_group ci, we'll create a matrix of tests for 'clickhouse-tests-cloud', and this job
-  # will check all of their statuses when they finish.
-  #
-  # See https://github.com/orgs/community/discussions/103114#discussioncomment-8359045
-  clickhouse-tests-cloud-status-check:
-    if: always()
-    needs: [clickhouse-tests-cloud]
-    runs-on: ubuntu-latest
-    steps:
-      - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
-        run: exit 1
-
   check-docker-compose:
+    permissions:
+      # Permission to checkout the repository
+      contents: read
+      # Permission to fetch GitHub OIDC token authentication
+      id-token: write
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
+      # We allow the namespace builder setup to fail on Dependabot PRs and PRs from forks
+      # (where the oidc token is not available)
+
+      - name: Install Namespace CLI
+        uses: namespacelabs/nscloud-setup@d1c625762f7c926a54bd39252efff0705fd11c64
+        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
+
+      - name: Configure Namespace-powered Buildx
+        uses: namespacelabs/nscloud-setup-buildx-action@84ca8c58fdf372d6a4750476cd09b7b96ee778ca
+        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
+
       - name: Check all docker-compose.yml files
         run: ./ci/check-all-docker-compose.sh
 
-  check-pyo3-build:
-    runs-on: ${{ matrix.platform.runner }}
-    strategy:
-      matrix:
-        # We don't test on linux x86_64, because our main 'validate' step already does that
-        # For now, we just check that the build works on our other supported platforms -
-        # we don't run any tests.
-        platform:
-          - runner: ubuntu-22.04-arm
-            target: aarch64
-          - runner: windows-latest
-            target: x64
-          - runner: macos-13
-            target: x86_64
-          - runner: macos-14
-            target: aarch64
+  check-python-client-build:
+    uses: ./.github/workflows/python-client-build.yml
+
+  build-windows:
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      - name: "TensorZero PyO3 Client: Build"
-        uses: PyO3/maturin-action@b3709a81b3e175ce3ede866725776fee42465311
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
         with:
-          working-directory: clients/python-pyo3
-          args: --find-interpreter
+          cache-provider: "buildjet"
+          save-if: ${{ github.event_name == 'merge_group' }}
+      - name: Build Rust
+        run: cargo build --workspace
 
   validate:
     runs-on: namespace-profile-tensorzero-8x16
@@ -128,11 +127,16 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
+      # We allow the namespace builder setup to fail on Dependabot PRs and PRs from forks
+      # (where the oidc token is not available)
+
       - name: Install Namespace CLI
         uses: namespacelabs/nscloud-setup@d1c625762f7c926a54bd39252efff0705fd11c64
+        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
       - name: Configure Namespace-powered Buildx
         uses: namespacelabs/nscloud-setup-buildx-action@84ca8c58fdf372d6a4750476cd09b7b96ee778ca
+        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
       - name: Print Rust version
         run: rustc --version
@@ -143,7 +147,7 @@ jobs:
           version: 10
 
       - name: Install uv
-        run: curl -LsSf https://astral.sh/uv/0.6.4/install.sh | sh
+        run: curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
 
       - name: Configure Namespace cache for Rust, Python (pip), and pnpm
         uses: namespacelabs/nscloud-cache-action@2f50e7d0f70475e6f59a55ba0f05eec9108e77cc
@@ -152,6 +156,70 @@ jobs:
             pnpm
             rust
             uv
+
+      - name: check‑case‑conflict
+        run: uv run --with pre-commit pre-commit run check-case-conflict --all-files
+
+      - name: check‑executables‑have‑shebangs
+        run: uv run --with pre-commit pre-commit run check-executables-have-shebangs --all-files
+
+      - name: check‑json
+        run: uv run --with pre-commit pre-commit run check-json --all-files
+
+      - name: check‑yaml
+        run: uv run --with pre-commit pre-commit run check-yaml --all-files
+
+      - name: check‑toml
+        run: uv run --with pre-commit pre-commit run check-toml --all-files
+
+      - name: check‑xml
+        run: uv run --with pre-commit pre-commit run check-xml --all-files
+
+      - name: check‑merge‑conflict
+        run: uv run --with pre-commit pre-commit run check-merge-conflict --all-files
+
+      - name: check‑symlinks
+        run: uv run --with pre-commit pre-commit run check-symlinks --all-files
+
+      - name: check‑vcs‑permalinks
+        run: uv run --with pre-commit pre-commit run check-vcs-permalinks --all-files
+
+      - name: detect‑private‑key
+        run: uv run --with pre-commit pre-commit run detect-private-key --all-files
+
+      # We don't run these two because we want to allow template files to have trailing whitespace
+      # TODO: how do we exclude minijinja files using pre-commit in GHA?
+      # - name: end‑of‑file‑fixer
+      #   run: uv run --with pre-commit pre-commit run end-of-file-fixer
+
+      # - name: trailing‑whitespace
+      #   run: uv run --with pre-commit pre-commit run trailing-whitespace
+
+      - name: uv-lock
+        run: |
+          bash -c '
+          git ls-files "**/pyproject.toml" \
+            | while read f; do
+                dir=$(dirname "$f")
+                (cd "$dir" && uv lock --project="pyproject.toml")
+              done
+          '
+
+      - name: uv-export
+        run: |
+          bash -c '
+          git ls-files "**/pyproject.toml" \
+            | while read f; do
+                dir=$(dirname "$f")
+                (cd "$dir" && uv export --project="pyproject.toml" --output-file=requirements.txt --quiet)
+              done
+          '
+      - name: verify uv generated files
+        run: git diff --exit-code
+
+      # TODO: Enable this if we can figure out the invocation
+      # - name: Run nb-clean
+      #   run: uv run --with nb-clean nb-clean check --remove-empty-cells
 
       - name: Install cargo-nextest, cargo-deny, and cargo-hack
         uses: taiki-e/install-action@37bdc826eaedac215f638a96472df572feab0f9b
@@ -171,37 +239,30 @@ jobs:
 
       - name: Test (Rust)
         run: |
-          cargo test-unit ${{vars.CARGO_NEXTEST_ARGS}}
+          cargo test-unit ${{ vars.CARGO_NEXTEST_EXTRA_ARGS }}
 
       - name: Install Python for python async client tests
         run: uv python install 3.9
 
       - name: Lint (Python:ruff)
         run: |
-          uvx ruff@0.9.0 check --output-format=github --extend-select I .
-          uvx ruff@0.9.0 format --check .
+          uvx ruff@0.9.0 check --output-format=github --extend-select I --exclude "recipes/**/*_nb.py" .
+          uvx ruff@0.9.0 format --check --exclude "recipes/**/*_nb.py" .
 
-      - name: "TensorZero PyO3 Client: Build"
-        uses: PyO3/maturin-action@b3709a81b3e175ce3ede866725776fee42465311
-        with:
-          working-directory: clients/python-pyo3
-          args: --find-interpreter
-          container: off
-
-      - name: "Python: Pyo3 Client: Install dependencies"
-        working-directory: clients/python-pyo3
+      - name: "Python: Pyo3 Client: Build and install dependencies"
+        working-directory: clients/python
         run: |
           uv venv
           uv pip sync requirements.txt
 
       - name: "Python: PyO3 Client: pyright"
-        working-directory: clients/python-pyo3
+        working-directory: clients/python
         run: |
           uv pip install pyright==1.1.394
           uv run pyright
 
       - name: "Python: PyO3 Client: stubtest"
-        working-directory: clients/python-pyo3
+        working-directory: clients/python
         run: |
           uv run stubtest tensorzero.tensorzero
 
@@ -222,10 +283,19 @@ jobs:
         run: |
           pnpm install
 
+      - name: "Node.js: Run prettier"
+        working-directory: clients/openai-node
+        run: pnpm run format
+
       - name: "Node.js: OpenAI Client: typecheck"
         working-directory: clients/openai-node
         run: |
           pnpm run typecheck
+
+      - name: "Node.js: OpenAI Client: lint"
+        working-directory: clients/openai-node
+        run: |
+          pnpm run lint
 
       - name: "Python: Recipes: Install dependencies"
         working-directory: recipes
@@ -238,11 +308,6 @@ jobs:
         run: |
           uv run pyright
 
-      - name: "Node.js: OpenAI Client: lint"
-        working-directory: clients/openai-node
-        run: |
-          pnpm run lint
-
       - name: Setup Node.js
         uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
         with:
@@ -253,7 +318,7 @@ jobs:
 
       - name: Build minijinja WASM bindings
         working-directory: ui/app/utils/minijinja
-        run: wasm-pack build --features console_error_panic_hook
+        run: wasm-pack build --dev --features console_error_panic_hook
 
       - name: Run minijinja WASM tests
         working-directory: ui/app/utils/minijinja
@@ -275,29 +340,57 @@ jobs:
         working-directory: ui
         run: pnpm run typecheck
 
+      - name: Compile / validate notebooks
+        run: ci/compile-check-notebooks.sh
+
   clickhouse-tests:
     # We don't run many tests here, so use a normal runner with Github Actions caching
     # to avoid unnecessarily using Namespace credits (it should still always finish before
     # the main 'validate' job)
     runs-on: ubuntu-latest
+    continue-on-error: ${{ matrix.clickhouse_version.allow_failure }}
     strategy:
       matrix:
         clickhouse_version:
           - tag: "24.12-alpine"
             prefix: "24.12"
+            allow_failure: false
           - tag: "25.2-alpine"
             prefix: "25.2"
+            allow_failure: false
           - tag: "latest-alpine"
             prefix: ""
+            # ClickHouse can make new releases at any time, which might break our tests.
+            # We allow this job to fail to avoid blocking CI whenever this happens.
+            # However, we'll still want to fix the failing tests soon after we notice the failure
+            allow_failure: true
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
+        with:
+          cache-provider: "buildjet"
+          save-if: ${{ github.event_name == 'merge_group' }}
+      - run: df -h
+      # ClickHouse intermittently runs out of disk space on the `ubuntu-latest` runner
+      # I'm using the commands from https://carlosbecker.com/posts/github-actions-disk-space/ to try to get more disk space
+      - name: "Free up disk space"
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force
+          sudo docker builder prune -a
+      - run: df -h
       - name: Install cargo-nextest
         uses: taiki-e/install-action@37bdc826eaedac215f638a96472df572feab0f9b
         with:
           tool: cargo-nextest
+
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
+
+      - name: Download ClickHouse fixtures
+        run: uv run ./ui/fixtures/download-fixtures.py
 
       - name: Set up TENSORZERO_CLICKHOUSE_URL for E2E tests
         run: |
@@ -342,12 +435,42 @@ jobs:
         run: cat e2e_logs.txt
 
   ui-tests:
-    runs-on: ubuntu-latest
+    # We run on Namespace so that we have cache volumes for our s3-fixtures directory
+    runs-on: namespace-profile-tensorzero-4x16
+    permissions:
+      # Permission to checkout the repository
+      contents: read
+      # Permission to fetch GitHub OIDC token authentication
+      id-token: write
+    continue-on-error: ${{ matrix.clickhouse_version.allow_failure }}
     strategy:
       matrix:
-        clickhouse_version: ["24.12-alpine", "25.2-alpine", "latest-alpine"]
+        clickhouse_version:
+          - tag: "24.12-alpine"
+            allow_failure: false
+          - tag: "25.2-alpine"
+            allow_failure: false
+          - tag: "latest-alpine"
+            # ClickHouse can make new releases at any time, which might break our tests.
+            # We allow this job to fail to avoid blocking CI whenever this happens.
+            # However, we'll still want to fix the failing tests soon after we notice the failure
+            allow_failure: true
     steps:
       - uses: actions/checkout@v4
+
+      # We allow the namespace builder setup to fail on Dependabot PRs and PRs from forks
+      # (where the oidc token is not available)
+
+      - name: Install and configure Namespace CLI
+        uses: namespacelabs/nscloud-setup@v0
+        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
+
+      - name: Configure Namespace powered Buildx
+        uses: namespacelabs/nscloud-setup-buildx-action@v0
+        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
+
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -358,6 +481,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22.9.0"
+
+      - name: Cache s3-fixtures
+        uses: namespacelabs/nscloud-cache-action@v1
+        with:
+          path: |
+            ./ui/fixtures/s3-fixtures
 
       - name: Install wasm-pack
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
@@ -377,7 +506,7 @@ jobs:
           echo "FIREWORKS_API_KEY=not_used" >> fixtures/.env
           echo "FIREWORKS_ACCOUNT_ID=not_used" >> fixtures/.env
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures" >> fixtures/.env
-          TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version }} docker compose -f fixtures/docker-compose.yml up -d --build --force-recreate --wait
+          TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f fixtures/docker-compose.yml up -d --build --force-recreate --wait
 
       - name: Run ui tests
         working-directory: ui
@@ -387,3 +516,138 @@ jobs:
           TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures
           TENSORZERO_GATEWAY_URL: http://localhost:3000
         run: pnpm test
+
+      - name: Print ui tests logs
+        if: always()
+        working-directory: ui
+        run: docker compose -f fixtures/docker-compose.yml logs -t
+
+      - name: Print ClickHouse error logs
+        if: always()
+        run: docker exec fixtures-clickhouse-1 cat /var/log/clickhouse-server/clickhouse-server.err.log
+
+      - name: Print ClickHouse trace logs
+        if: always()
+        run: docker exec fixtures-clickhouse-1 cat /var/log/clickhouse-server/clickhouse-server.log
+
+  ui-tests-e2e:
+    runs-on: namespace-profile-tensorzero-8x16
+    # We currently only run this job when we have secrets available, since we need to use an S3 object_store
+    # In the future, we might want to fix this so that it can run in PR CI for external (forked) PRs
+    # For now, it just runs in the merge queue and on prs from the main repo
+    if: ${{ (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') || github.event_name == 'merge_group' }}
+    permissions:
+      # Permission to checkout the repository
+      contents: read
+      # Permission to fetch GitHub OIDC token authentication
+      id-token: write
+    strategy:
+      matrix:
+        feature_flag:
+          - behavior: node-optimization-server
+            enable_python: 0
+          - behavior: python-optimization-server
+            enable_python: 1
+    steps:
+      - uses: actions/checkout@v4
+
+      # We allow the namespace builder setup to fail on Dependabot PRs and PRs from forks
+      # (where the oidc token is not available)
+
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.9.0"
+
+      - name: Install dependencies
+        working-directory: ui
+        run: pnpm install --frozen-lockfile
+
+      - name: Cache s3-fixtures
+        uses: namespacelabs/nscloud-cache-action@v1
+        with:
+          path: |
+            ./ui/fixtures/s3-fixtures
+
+      - name: Build ui container
+        # Enable feedback in the UI for this job so the playwright tests can use it
+        run: docker buildx build -f ui/Dockerfile . -t tensorzero/ui
+
+      - name: Start services for ui e2e tests
+        working-directory: ui
+        run: |
+          echo "OPENAI_BASE_URL=http://mock-inference-provider:3030/openai/" >> fixtures/.env
+          echo "FIREWORKS_BASE_URL=http://mock-inference-provider:3030/fireworks/" >> fixtures/.env
+          echo "OPENAI_API_KEY=not_used" >> fixtures/.env
+          echo "FIREWORKS_API_KEY=not_used" >> fixtures/.env
+          echo "FIREWORKS_ACCOUNT_ID=fake_fireworks_account" >> fixtures/.env
+          echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures" >> fixtures/.env
+          echo "TENSORZERO_GATEWAY_URL=http://gateway:3000" >> fixtures/.env
+          echo "AWS_REGION=us-east-1" >> fixtures/.env
+          echo "S3_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" >> fixtures/.env
+          echo "S3_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> fixtures/.env
+          echo "TENSORZERO_UI_FF_ENABLE_PYTHON=${{ matrix.feature_flag.enable_python }}" >> fixtures/.env
+          docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml rm
+          docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml up --wait --build --force-recreate
+
+      - name: Install playwright dependencies
+        working-directory: ui
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run ui e2e tests
+        working-directory: ui
+        env:
+          TENSORZERO_CI: 1
+        run: TENSORZERO_UI_FF_ENABLE_PYTHON=${{ matrix.feature_flag.enable_python }} pnpm test-e2e
+        continue-on-error: true
+        id: e2e_tests
+
+      - name: Print ui tests logs
+        if: always()
+        working-directory: ui
+        run: docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml logs -t
+
+      - name: Upload Playwright artifacts
+        if: steps.e2e_tests.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            ui/playwright-report/
+            ui/test-results/
+          retention-days: 7
+
+      - name: Exit if tests failed
+        if: steps.e2e_tests.outcome == 'failure'
+        run: exit 1
+
+      - name: Take down ui tests
+        working-directory: ui
+        run: docker compose -f fixtures/docker-compose.yml down
+
+  # See 'ci/README.md' at the repository root for more details.
+  check-all-general-jobs-passed:
+    if: always()
+    needs:
+      [
+        clickhouse-tests-cloud,
+        check-docker-compose,
+        check-python-client-build,
+        build-windows,
+        validate,
+        clickhouse-tests,
+        ui-tests,
+        ui-tests-e2e,
+      ]
+    runs-on: ubuntu-latest
+    steps:
+      - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
+        run: exit 1

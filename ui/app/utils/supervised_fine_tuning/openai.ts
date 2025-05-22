@@ -27,6 +27,7 @@ import type { Tiktoken } from "tiktoken";
 export const client = process.env.OPENAI_API_KEY
   ? new OpenAI({
       apiKey: process.env.OPENAI_API_KEY,
+      baseURL: process.env.OPENAI_BASE_URL || undefined,
     })
   : (() => {
       console.warn("OPENAI_API_KEY environment variable is not set");
@@ -152,9 +153,7 @@ export class OpenAISFTJob extends SFTJob {
       formData: this.formData,
       rawData: this.job,
       jobUrl: this.jobUrl,
-      estimatedCompletionTime: estimatedCompletionTime
-        ? new Date(estimatedCompletionTime * 1000)
-        : undefined,
+      estimatedCompletionTime: estimatedCompletionTime || undefined,
       analysisData: this.analysisData,
     };
   }

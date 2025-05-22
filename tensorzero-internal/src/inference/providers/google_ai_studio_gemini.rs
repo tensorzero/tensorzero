@@ -14,7 +14,7 @@ use uuid::Uuid;
 
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
-use crate::error::{Error, ErrorDetails};
+use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::resolved_input::ImageWithPath;
@@ -41,6 +41,7 @@ const PROVIDER_TYPE: &str = "google_ai_studio_gemini";
 /// Implements a subset of the Google AI Studio Gemini API as documented [here](https://ai.google.dev/gemini-api/docs/text-generation?lang=rest)
 #[derive(Debug)]
 pub struct GoogleAIStudioGeminiProvider {
+    model_name: String,
     request_url: Url,
     streaming_request_url: Url,
     credentials: GoogleAIStudioCredentials,
@@ -65,7 +66,7 @@ impl GoogleAIStudioGeminiProvider {
         ))
         .map_err(|e| {
             Error::new(ErrorDetails::Config {
-                message: format!("Failed to parse request URL: {}", e),
+                message: format!("Failed to parse request URL: {e}"),
             })
         })?;
         let streaming_request_url = Url::parse(&format!(
@@ -73,14 +74,19 @@ impl GoogleAIStudioGeminiProvider {
         ))
         .map_err(|e| {
             Error::new(ErrorDetails::Config {
-                message: format!("Failed to parse streaming request URL: {}", e),
+                message: format!("Failed to parse streaming request URL: {e}"),
             })
         })?;
         Ok(GoogleAIStudioGeminiProvider {
+            model_name,
             request_url,
             streaming_request_url,
             credentials,
         })
+    }
+
+    pub fn model_name(&self) -> &str {
+        &self.model_name
     }
 }
 
@@ -148,11 +154,15 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
     ) -> Result<ProviderInferenceResponse, Error> {
         let mut request_body = serde_json::to_value(GeminiRequest::new(request)?).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
-                message: format!("Error serializing Gemini request: {e}"),
+                message: format!(
+                    "Error serializing Gemini request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
             })
         })?;
         let headers = inject_extra_request_data(
             &request.extra_body,
+            &request.extra_headers,
             model_provider,
             model_name,
             &mut request_body,
@@ -170,8 +180,8 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
             .await
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
-                    message: format!("Error sending request: {e}"),
                     status_code: e.status(),
+                    message: format!("Error sending request: {}", DisplayOrDebugGateway::new(e)),
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                     raw_response: None,
@@ -183,7 +193,10 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
         if res.status().is_success() {
             let raw_response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing text response: {e}"),
+                    message: format!(
+                        "Error parsing text response: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                     raw_response: None,
@@ -192,7 +205,10 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
 
             let response = serde_json::from_str(&raw_response).map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing JSON response: {e}"),
+                    message: format!(
+                        "Error parsing JSON response: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                     raw_response: Some(raw_response.clone()),
@@ -210,7 +226,10 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
             let response_code = res.status();
             let error_body = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing text response: {e}"),
+                    message: format!(
+                        "Error parsing text response: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                     raw_response: None,
@@ -234,18 +253,25 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let mut request_body = serde_json::to_value(GeminiRequest::new(request)?).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
-                message: format!("Error serializing Gemini request: {e}"),
+                message: format!(
+                    "Error serializing Gemini request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
             })
         })?;
         let headers = inject_extra_request_data(
             &request.extra_body,
+            &request.extra_headers,
             model_provider,
             model_name,
             &mut request_body,
         )?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
-                message: format!("Error serializing request: {e}"),
+                message: format!(
+                    "Error serializing request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
             })
         })?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
@@ -260,7 +286,10 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
             .eventsource()
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
-                    message: format!("Error sending request to Google AI Studio Gemini: {e}"),
+                    message: format!(
+                        "Error sending request to Google AI Studio Gemini: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     status_code: None,
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
@@ -314,7 +343,7 @@ fn stream_google_ai_studio_gemini(
                     Event::Message(message) => {
                         let data: Result<GeminiResponse, Error> = serde_json::from_str(&message.data).map_err(|e| {
                             Error::new(ErrorDetails::InferenceServer {
-                                message: format!("Error parsing streaming JSON response: {e}"),
+                                message: format!("Error parsing streaming JSON response: {}", DisplayOrDebugGateway::new(e)),
                                 provider_type: PROVIDER_TYPE.to_string(),
                                 raw_request: None,
                                 raw_response: Some(message.data.clone()),
@@ -327,11 +356,10 @@ fn stream_google_ai_studio_gemini(
                                 continue;
                             }
                         };
-                        let response = GoogleAIStudioGeminiResponseWithMetadata {
+                        yield GoogleAIStudioGeminiResponseWithMetadata {
                             response: data,
                             latency: start_time.elapsed(),
                         }.try_into();
-                        yield response
                     }
                 }
             }
@@ -403,21 +431,10 @@ impl<'a> TryFrom<&'a ContentBlock> for Option<FlattenUnknown<'a, GeminiPart<'a>>
                 Ok(Some(FlattenUnknown::Normal(GeminiPart::Text { text })))
             }
             ContentBlock::ToolResult(tool_result) => {
-                // Convert the tool result from String to JSON Value (Gemini expects an object)
-                let response: Value = serde_json::from_str(&tool_result.result).map_err(|e| {
-                    Error::new(ErrorDetails::InferenceClient {
-                        status_code: Some(StatusCode::BAD_REQUEST),
-                        message: format!("Error parsing tool result as JSON Value: {e}"),
-                        provider_type: PROVIDER_TYPE.to_string(),
-                        raw_request: None,
-                        raw_response: Some(tool_result.result.clone()),
-                    })
-                })?;
-
                 // Gemini expects the format below according to [the documentation](https://ai.google.dev/gemini-api/docs/function-calling#multi-turn-example-1)
                 let response = serde_json::json!({
                     "name": tool_result.name,
-                    "content": response,
+                    "content": tool_result.result,
                 });
 
                 Ok(Some(FlattenUnknown::Normal(GeminiPart::FunctionResponse {
@@ -432,7 +449,10 @@ impl<'a> TryFrom<&'a ContentBlock> for Option<FlattenUnknown<'a, GeminiPart<'a>>
                 let args: Value = serde_json::from_str(&tool_call.arguments).map_err(|e| {
                     Error::new(ErrorDetails::InferenceClient {
                         status_code: Some(StatusCode::BAD_REQUEST),
-                        message: format!("Error parsing tool call arguments as JSON Value: {e}"),
+                        message: format!(
+                            "Error parsing tool call arguments as JSON Value: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
                         provider_type: PROVIDER_TYPE.to_string(),
                         raw_request: None,
                         raw_response: Some(tool_call.arguments.clone()),
@@ -601,7 +621,7 @@ impl<'a> From<&'a ToolChoice> for GoogleAIStudioGeminiToolConfig<'a> {
 #[derive(Debug, PartialEq, Serialize)]
 enum GeminiResponseMimeType {
     #[serde(rename = "text/plain")]
-    #[allow(dead_code)]
+    #[expect(dead_code)]
     TextPlain,
     #[serde(rename = "application/json")]
     ApplicationJson,
@@ -772,6 +792,7 @@ impl TryFrom<GeminiResponseContentPart> for ContentBlockOutput {
 
 #[derive(Debug, Deserialize, Serialize)]
 struct GeminiResponseContent {
+    #[serde(default)]
     parts: Vec<GeminiResponseContentPart>,
 }
 
@@ -900,7 +921,10 @@ impl<'a> TryFrom<GeminiResponseWithMetadata<'a>> for ProviderInferenceResponse {
             .into();
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
-                message: format!("Error serializing request: {e}"),
+                message: format!(
+                    "Error serializing request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
             })
         })?;
         let system = generic_request.system.clone();
@@ -960,11 +984,19 @@ impl TryFrom<GoogleAIStudioGeminiResponseWithMetadata> for ProviderInferenceResp
             ContentBlockChunk::Text(text) => !text.text.is_empty(),
             _ => true,
         });
-        Ok(ProviderInferenceResponseChunk::new(
-            content,
+        // Google AI Studio returns the running usage metadata in each chunk.
+        // We only want to return the final usage metadata once the stream has ended.
+        // So, we clear the usage metadata if the finish reason is not set.
+        let usage = if first_candidate.finish_reason.as_ref().is_none() {
+            None
+        } else {
             response
                 .usage_metadata
-                .map(|usage_metadata| usage_metadata.into()),
+                .map(|usage_metadata| usage_metadata.into())
+        };
+        Ok(ProviderInferenceResponseChunk::new(
+            content,
+            usage,
             raw,
             latency,
             first_candidate
@@ -1090,7 +1122,7 @@ mod tests {
                     name: "get_temperature",
                     response: json!({
                         "name": "get_temperature",
-                        "content": json!({"temperature": 25, "conditions": "sunny"})
+                        "content": r#"{"temperature": 25, "conditions": "sunny"}"#
                     }),
                 }
             })
@@ -1843,5 +1875,296 @@ mod tests {
             result.unwrap_err().get_owned_details(),
             ErrorDetails::Config { message } if message.contains("Invalid api_key_location")
         ));
+    }
+
+    #[test]
+    fn test_try_from_with_content_and_finish_reason() {
+        // Setup a response with content and finish reason
+        let text_part = GeminiResponseContentPart::Text("Hello, world!".to_string());
+        let content = GeminiResponseContent {
+            parts: vec![text_part],
+        };
+        let candidate = GeminiResponseCandidate {
+            content: Some(content),
+            finish_reason: Some(GeminiFinishReason::Stop),
+        };
+        let response = GeminiResponse {
+            candidates: vec![candidate],
+            usage_metadata: Some(GeminiUsageMetadata {
+                prompt_token_count: 10,
+                candidates_token_count: Some(20),
+            }),
+        };
+
+        let response_with_metadata = GoogleAIStudioGeminiResponseWithMetadata {
+            response,
+            latency: Duration::from_millis(100),
+        };
+
+        // Convert to ProviderInferenceResponseChunk
+        let chunk: ProviderInferenceResponseChunk = response_with_metadata.try_into().unwrap();
+
+        // Verify content
+        assert_eq!(chunk.content.len(), 1);
+        if let ContentBlockChunk::Text(text) = &chunk.content[0] {
+            assert_eq!(text.text, "Hello, world!");
+            assert_eq!(text.id, "0");
+        } else {
+            panic!("Expected text content");
+        }
+
+        // Verify usage is included when finish_reason is set
+        assert!(chunk.usage.is_some());
+        let usage = chunk.usage.unwrap();
+        assert_eq!(usage.input_tokens, 10);
+        assert_eq!(usage.output_tokens, 20);
+
+        // Verify finish reason
+        assert_eq!(chunk.finish_reason, Some(FinishReason::Stop));
+    }
+
+    #[test]
+    fn test_try_from_without_finish_reason() {
+        // Setup a response without finish reason (streaming chunk)
+        let text_part = GeminiResponseContentPart::Text("Partial response".to_string());
+        let content = GeminiResponseContent {
+            parts: vec![text_part],
+        };
+        let candidate = GeminiResponseCandidate {
+            content: Some(content),
+            finish_reason: None, // No finish reason for streaming chunks
+        };
+        let response = GeminiResponse {
+            candidates: vec![candidate],
+            usage_metadata: Some(GeminiUsageMetadata {
+                prompt_token_count: 10,
+                candidates_token_count: Some(15),
+            }),
+        };
+
+        let response_with_metadata = GoogleAIStudioGeminiResponseWithMetadata {
+            response,
+            latency: Duration::from_millis(50),
+        };
+
+        // Convert to ProviderInferenceResponseChunk
+        let chunk: ProviderInferenceResponseChunk = response_with_metadata.try_into().unwrap();
+
+        // Verify content
+        assert_eq!(chunk.content.len(), 1);
+        if let ContentBlockChunk::Text(text) = &chunk.content[0] {
+            assert_eq!(text.text, "Partial response");
+        } else {
+            panic!("Expected text content");
+        }
+
+        // Verify usage is None when finish_reason is not set
+        assert!(chunk.usage.is_none());
+
+        // Verify finish reason is None
+        assert_eq!(chunk.finish_reason, None);
+    }
+
+    #[test]
+    fn test_try_from_with_empty_text_chunks() {
+        // Setup a response with empty text chunks that should be filtered out
+        let empty_text = GeminiResponseContentPart::Text("".to_string());
+        let non_empty_text = GeminiResponseContentPart::Text("Non-empty text".to_string());
+        let content = GeminiResponseContent {
+            parts: vec![empty_text, non_empty_text],
+        };
+        let candidate = GeminiResponseCandidate {
+            content: Some(content),
+            finish_reason: Some(GeminiFinishReason::Stop),
+        };
+        let response = GeminiResponse {
+            candidates: vec![candidate],
+            usage_metadata: Some(GeminiUsageMetadata {
+                prompt_token_count: 5,
+                candidates_token_count: Some(3),
+            }),
+        };
+
+        let response_with_metadata = GoogleAIStudioGeminiResponseWithMetadata {
+            response,
+            latency: Duration::from_millis(75),
+        };
+
+        // Convert to ProviderInferenceResponseChunk
+        let chunk: ProviderInferenceResponseChunk = response_with_metadata.try_into().unwrap();
+
+        // Verify empty text chunks are filtered out
+        assert_eq!(chunk.content.len(), 1);
+        if let ContentBlockChunk::Text(text) = &chunk.content[0] {
+            assert_eq!(text.text, "Non-empty text");
+        } else {
+            panic!("Expected text content");
+        }
+    }
+
+    #[test]
+    fn test_try_from_with_function_call() {
+        // Setup a response with a function call
+        let function_call = GeminiResponseContentPart::FunctionCall(GeminiResponseFunctionCall {
+            name: "get_weather".to_string(),
+            args: json!({"location": "New York", "unit": "celsius"}),
+        });
+        let content = GeminiResponseContent {
+            parts: vec![function_call],
+        };
+        let candidate = GeminiResponseCandidate {
+            content: Some(content),
+            finish_reason: Some(GeminiFinishReason::Recitation),
+        };
+        let response = GeminiResponse {
+            candidates: vec![candidate],
+            usage_metadata: Some(GeminiUsageMetadata {
+                prompt_token_count: 15,
+                candidates_token_count: Some(10),
+            }),
+        };
+
+        let response_with_metadata = GoogleAIStudioGeminiResponseWithMetadata {
+            response,
+            latency: Duration::from_millis(120),
+        };
+
+        // Convert to ProviderInferenceResponseChunk
+        let chunk: ProviderInferenceResponseChunk = response_with_metadata.try_into().unwrap();
+
+        // Verify function call content
+        assert_eq!(chunk.content.len(), 1);
+        if let ContentBlockChunk::ToolCall(tool_call) = &chunk.content[0] {
+            assert_eq!(tool_call.raw_name, "get_weather");
+            assert_eq!(tool_call.id, "0");
+            // Check that arguments were serialized correctly
+            let args: serde_json::Value = serde_json::from_str(&tool_call.raw_arguments).unwrap();
+            assert_eq!(args["location"], "New York");
+            assert_eq!(args["unit"], "celsius");
+        } else {
+            panic!("Expected tool call content");
+        }
+
+        // Verify finish reason for tool calls
+        assert_eq!(chunk.finish_reason, Some(FinishReason::ToolCall));
+    }
+
+    #[test]
+    fn test_try_from_without_content() {
+        // Setup a response without content (e.g., blocked by safety settings)
+        let candidate = GeminiResponseCandidate {
+            content: None,
+            finish_reason: Some(GeminiFinishReason::Safety),
+        };
+        let response = GeminiResponse {
+            candidates: vec![candidate],
+            usage_metadata: Some(GeminiUsageMetadata {
+                prompt_token_count: 8,
+                candidates_token_count: None, // No output tokens when blocked
+            }),
+        };
+
+        let response_with_metadata = GoogleAIStudioGeminiResponseWithMetadata {
+            response,
+            latency: Duration::from_millis(60),
+        };
+
+        // Convert to ProviderInferenceResponseChunk
+        let chunk: ProviderInferenceResponseChunk = response_with_metadata.try_into().unwrap();
+
+        // Verify empty content
+        assert_eq!(chunk.content.len(), 0);
+
+        // Verify usage is included (with zero output tokens)
+        assert!(chunk.usage.is_some());
+        let usage = chunk.usage.unwrap();
+        assert_eq!(usage.input_tokens, 8);
+        assert_eq!(usage.output_tokens, 0);
+
+        // Verify finish reason for safety blocks
+        assert_eq!(chunk.finish_reason, Some(FinishReason::ContentFilter));
+    }
+
+    #[test]
+    fn test_try_from_with_no_candidates() {
+        // Setup a response with no candidates
+        let response = GeminiResponse {
+            candidates: vec![],
+            usage_metadata: Some(GeminiUsageMetadata {
+                prompt_token_count: 5,
+                candidates_token_count: Some(0),
+            }),
+        };
+
+        let response_with_metadata = GoogleAIStudioGeminiResponseWithMetadata {
+            response,
+            latency: Duration::from_millis(30),
+        };
+
+        // Attempt to convert to ProviderInferenceResponseChunk
+        let result = ProviderInferenceResponseChunk::try_from(response_with_metadata);
+
+        // Verify error is returned
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        let details = error.get_owned_details();
+        if let ErrorDetails::InferenceServer { message, .. } = details {
+            assert!(message.contains("no candidates"));
+        } else {
+            panic!("Expected InferenceServer error");
+        }
+    }
+
+    #[test]
+    fn test_try_from_with_various_finish_reasons() {
+        // Test different finish reasons and their mappings
+        let finish_reasons = vec![
+            (GeminiFinishReason::Stop, FinishReason::Stop),
+            (GeminiFinishReason::MaxTokens, FinishReason::Length),
+            (GeminiFinishReason::Safety, FinishReason::ContentFilter),
+            (GeminiFinishReason::Recitation, FinishReason::ToolCall),
+            (GeminiFinishReason::Other, FinishReason::Unknown),
+            (GeminiFinishReason::Blocklist, FinishReason::ContentFilter),
+            (
+                GeminiFinishReason::ProhibitedContent,
+                FinishReason::ContentFilter,
+            ),
+            (GeminiFinishReason::Spii, FinishReason::ContentFilter),
+            (
+                GeminiFinishReason::MalformedFunctionCall,
+                FinishReason::ToolCall,
+            ),
+            (
+                GeminiFinishReason::FinishReasonUnspecified,
+                FinishReason::Unknown,
+            ),
+            (GeminiFinishReason::Unknown, FinishReason::Unknown),
+        ];
+
+        for (gemini_reason, expected_reason) in finish_reasons {
+            let text_part = GeminiResponseContentPart::Text("Test".to_string());
+            let content = GeminiResponseContent {
+                parts: vec![text_part],
+            };
+            let candidate = GeminiResponseCandidate {
+                content: Some(content),
+                finish_reason: Some(gemini_reason),
+            };
+            let response = GeminiResponse {
+                candidates: vec![candidate],
+                usage_metadata: Some(GeminiUsageMetadata {
+                    prompt_token_count: 1,
+                    candidates_token_count: Some(1),
+                }),
+            };
+
+            let response_with_metadata = GoogleAIStudioGeminiResponseWithMetadata {
+                response,
+                latency: Duration::from_millis(10),
+            };
+
+            let chunk: ProviderInferenceResponseChunk = response_with_metadata.try_into().unwrap();
+            assert_eq!(chunk.finish_reason, Some(expected_reason));
+        }
     }
 }

@@ -23,7 +23,6 @@ use crate::error::{Error, ErrorDetails};
 /// and JsonInferenceDatapoint to now64() from now() since now() is only second resolution.
 pub struct Migration0021<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
-    pub clean_start: bool,
 }
 
 const MIGRATION_ID: &str = "0021";
@@ -102,7 +101,7 @@ impl Migration for Migration0021<'_> {
             || !json_default_updated_at_correct)
     }
 
-    async fn apply(&self) -> Result<(), Error> {
+    async fn apply(&self, clean_start: bool) -> Result<(), Error> {
         // Only gets used when we are not doing a clean start
         let view_offset = Duration::from_secs(15);
         let view_timestamp = (std::time::SystemTime::now()
@@ -130,32 +129,47 @@ impl Migration for Migration0021<'_> {
                     updated_at DateTime64(6, 'UTC') DEFAULT now64()
                 ) ENGINE = ReplacingMergeTree(updated_at, is_deleted)
                 ORDER BY (key, value, inference_id)"#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous(query.to_string(), None)
+            .await?;
 
         // Add the staled_at column to both datapoint tables
         let query = r#"
             ALTER TABLE ChatInferenceDatapoint ADD COLUMN IF NOT EXISTS staled_at Nullable(DateTime64(6, 'UTC'));
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous(query.to_string(), None)
+            .await?;
 
         let query = r#"
             ALTER TABLE JsonInferenceDatapoint ADD COLUMN IF NOT EXISTS staled_at Nullable(DateTime64(6, 'UTC'));
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous(query.to_string(), None)
+            .await?;
 
         // Update the defaults of updated_at for the Datapoint tables to be now64
         let query = r#"
             ALTER TABLE ChatInferenceDatapoint MODIFY COLUMN updated_at DateTime64(6, 'UTC') default now64();
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous(query.to_string(), None)
+            .await?;
 
         let query = r#"
             ALTER TABLE JsonInferenceDatapoint MODIFY COLUMN updated_at DateTime64(6, 'UTC') default now64();
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous(query.to_string(), None)
+            .await?;
 
         // If we are not doing a clean start, we need to add a where clause to the view to only include rows that have been created after the view_timestamp
-        let view_where_clause = if !self.clean_start {
+        let view_where_clause = if !clean_start {
             format!("WHERE UUIDv7ToDateTime(id) >= toDateTime(toUnixTimestamp({view_timestamp}))")
         } else {
             String::new()
@@ -177,10 +191,12 @@ impl Migration for Migration0021<'_> {
                 FROM ChatInference
                 ARRAY JOIN mapKeys(tags) as key
                 {view_where_clause};
-        "#,
-            view_where_clause = view_where_clause
+        "#
         );
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous(query.to_string(), None)
+            .await?;
 
         let query = format!(
             r#"
@@ -198,12 +214,14 @@ impl Migration for Migration0021<'_> {
                 FROM JsonInference
                 ARRAY JOIN mapKeys(tags) as key
                 {view_where_clause};
-        "#,
-            view_where_clause = view_where_clause
+        "#
         );
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous(query.to_string(), None)
+            .await?;
 
-        if !self.clean_start {
+        if !clean_start {
             // Sleep for the duration specified by view_offset to allow the materialized views to catch up
             tokio::time::sleep(view_offset).await;
 
@@ -222,10 +240,9 @@ impl Migration for Migration0021<'_> {
                     FROM ChatInference
                     ARRAY JOIN mapKeys(tags) as key
                     WHERE UUIDv7ToDateTime(id) < toDateTime(toUnixTimestamp({view_timestamp}));
-                "#,
-                    view_timestamp = view_timestamp
+                "#
                 );
-                self.clickhouse.run_query(query, None).await
+                self.clickhouse.run_query_synchronous(query, None).await
             };
 
             let insert_json_inference = async {
@@ -243,10 +260,9 @@ impl Migration for Migration0021<'_> {
                     FROM JsonInference
                     ARRAY JOIN mapKeys(tags) as key
                     WHERE UUIDv7ToDateTime(id) < toDateTime(toUnixTimestamp({view_timestamp}));
-                "#,
-                    view_timestamp = view_timestamp
+                "#
                 );
-                self.clickhouse.run_query(query, None).await
+                self.clickhouse.run_query_synchronous(query, None).await
             };
 
             tokio::try_join!(insert_chat_inference, insert_json_inference)?;
@@ -258,8 +274,8 @@ impl Migration for Migration0021<'_> {
     fn rollback_instructions(&self) -> String {
         "\
         -- Drop the materialized views\n\
-        DROP MATERIALIZED VIEW IF EXISTS TagChatInferenceView;\n\
-        DROP MATERIALIZED VIEW IF EXISTS TagJsonInferenceView;\n\
+        DROP VIEW IF EXISTS TagChatInferenceView;\n\
+        DROP VIEW IF EXISTS TagJsonInferenceView;\n\
         \n
         -- Drop the `TagInference` table\n\
         DROP TABLE IF EXISTS TagInference;

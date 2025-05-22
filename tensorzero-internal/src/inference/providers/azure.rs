@@ -11,7 +11,7 @@ use url::Url;
 
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
-use crate::error::{Error, ErrorDetails};
+use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::{
@@ -59,6 +59,10 @@ impl AzureProvider {
             endpoint,
             credentials,
         })
+    }
+
+    pub fn deployment_id(&self) -> &str {
+        &self.deployment_id
     }
 }
 
@@ -125,11 +129,15 @@ impl InferenceProvider for AzureProvider {
     ) -> Result<ProviderInferenceResponse, Error> {
         let mut request_body = serde_json::to_value(AzureRequest::new(request)?).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
-                message: format!("Error serializing Azure request: {e}"),
+                message: format!(
+                    "Error serializing Azure request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
             })
         })?;
         let headers = inject_extra_request_data(
             &request.extra_body,
+            &request.extra_headers,
             model_provider,
             model_name,
             &mut request_body,
@@ -161,7 +169,10 @@ impl InferenceProvider for AzureProvider {
 
             let raw_response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing text response: {e}"),
+                    message: format!(
+                        "Error parsing text response: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                     raw_response: None,
@@ -189,13 +200,21 @@ impl InferenceProvider for AzureProvider {
             let status = res.status();
             let response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing error response: {e}"),
+                    message: format!(
+                        "Error parsing error response: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                     raw_response: None,
                 })
             })?;
-            Err(handle_openai_error(status, &response, PROVIDER_TYPE))
+            Err(handle_openai_error(
+                &serde_json::to_string(&request_body).unwrap_or_default(),
+                status,
+                &response,
+                PROVIDER_TYPE,
+            ))
         }
     }
 
@@ -212,18 +231,25 @@ impl InferenceProvider for AzureProvider {
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let mut request_body = serde_json::to_value(AzureRequest::new(request)?).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
-                message: format!("Error serializing Azure request: {e}"),
+                message: format!(
+                    "Error serializing Azure request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
             })
         })?;
         let headers = inject_extra_request_data(
             &request.extra_body,
+            &request.extra_headers,
             model_provider,
             model_name,
             &mut request_body,
         )?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
-                message: format!("Error serializing request body as JSON: {e}"),
+                message: format!(
+                    "Error serializing request body as JSON: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
             })
         })?;
         let request_url = get_azure_chat_url(&self.endpoint, &self.deployment_id)?;
@@ -238,7 +264,10 @@ impl InferenceProvider for AzureProvider {
             .eventsource()
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
-                    message: format!("Error sending request to Azure: {e}"),
+                    message: format!(
+                        "Error sending request to Azure: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     status_code: None,
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(raw_request.clone()),
@@ -246,6 +275,7 @@ impl InferenceProvider for AzureProvider {
                 })
             })?;
         let stream = stream_openai(
+            PROVIDER_TYPE.to_string(),
             event_source.map_err(TensorZeroEventError::EventSource),
             start_time,
         )
@@ -357,7 +387,8 @@ struct AzureRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     seed: Option<u32>,
     stream: bool,
-    response_format: AzureResponseFormat,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    response_format: Option<AzureResponseFormat>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<Vec<OpenAITool<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -398,19 +429,23 @@ pub enum AzureResponseFormat {
 }
 
 impl AzureResponseFormat {
-    fn new(json_mode: &ModelInferenceRequestJsonMode, output_schema: Option<&Value>) -> Self {
+    fn new(
+        json_mode: &ModelInferenceRequestJsonMode,
+        output_schema: Option<&Value>,
+    ) -> Option<Self> {
         // Note: Some models on Azure won't support strict JSON mode.
         // Azure will 400 if you try to use it for those.
         // See these docs: https://learn.microsoft.com/en-us/azure/ai-services/openai/how-to/structured-outputs
         match json_mode {
-            ModelInferenceRequestJsonMode::On => AzureResponseFormat::JsonObject,
-            ModelInferenceRequestJsonMode::Off => AzureResponseFormat::Text,
+            ModelInferenceRequestJsonMode::On => Some(AzureResponseFormat::JsonObject),
+            // For now, we never explicitly send `AzureResponseFormat::Text`
+            ModelInferenceRequestJsonMode::Off => None,
             ModelInferenceRequestJsonMode::Strict => match output_schema {
                 Some(schema) => {
                     let json_schema = json!({"name": "response", "strict": true, "schema": schema});
-                    AzureResponseFormat::JsonSchema { json_schema }
+                    Some(AzureResponseFormat::JsonSchema { json_schema })
                 }
-                None => AzureResponseFormat::JsonObject,
+                None => Some(AzureResponseFormat::JsonObject),
             },
         }
     }
@@ -474,7 +509,10 @@ impl<'a> TryFrom<AzureResponseWithMetadata<'a>> for ProviderInferenceResponse {
         }
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
-                message: format!("Error serializing request body as JSON: {e}"),
+                message: format!(
+                    "Error serializing request body as JSON: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
             })
         })?;
 
@@ -542,7 +580,7 @@ mod tests {
         assert_eq!(azure_request.max_tokens, Some(100));
         assert!(!azure_request.stream);
         assert_eq!(azure_request.seed, Some(69));
-        assert_eq!(azure_request.response_format, AzureResponseFormat::Text);
+        assert_eq!(azure_request.response_format, None);
         assert!(azure_request.tools.is_some());
         let tools = azure_request.tools.as_ref().unwrap();
         assert_eq!(tools.len(), 1);
@@ -593,7 +631,7 @@ mod tests {
         assert_eq!(azure_request.seed, Some(69));
         assert_eq!(
             azure_request.response_format,
-            AzureResponseFormat::JsonObject
+            Some(AzureResponseFormat::JsonObject)
         );
         assert!(azure_request.tools.is_some());
         let tools = azure_request.tools.as_ref().unwrap();

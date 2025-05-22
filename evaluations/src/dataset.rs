@@ -17,14 +17,23 @@ pub async fn query_dataset(
         FunctionConfig::Chat(_) => "ChatInferenceDatapoint",
         FunctionConfig::Json(_) => "JsonInferenceDatapoint",
     };
-    let query = "SELECT * FROM {table_name: Identifier} FINAL WHERE dataset_name = {dataset_name: String} AND function_name = {function_name: String} FORMAT JSON".to_string();
+
+    // Construct the query to fetch datapoints from the appropriate table
+    let query = r#"SELECT * FROM {table_name: Identifier} FINAL
+         WHERE dataset_name = {dataset_name: String}
+         AND function_name = {function_name: String}
+         AND staled_at IS NULL
+         FORMAT JSON"#;
+
     let params = HashMap::from([
         ("table_name", table_name),
         ("dataset_name", dataset_name),
         ("function_name", function_name),
     ]);
 
-    let result = clickhouse_client.run_query(query, Some(&params)).await?;
+    let result = clickhouse_client
+        .run_query_synchronous(query.to_string(), Some(&params))
+        .await?;
     let datapoints: Vec<Datapoint> = match function_config {
         FunctionConfig::Chat(_) => {
             let chat_datapoints: serde_json::Value = serde_json::from_str(&result)?;

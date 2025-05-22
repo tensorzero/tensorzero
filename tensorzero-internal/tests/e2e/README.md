@@ -5,7 +5,7 @@
 - Spin up the ClickHouse container using Docker Compose:
 
   ```sh
-  docker compose -f gateway/tests/e2e/docker-compose.yml up -d --build --force-recreate --remove-orphans  --wait
+  docker compose -f tensorzero-internal/tests/e2e/docker-compose.yml up -d --build --force-recreate --remove-orphans  --wait
   ```
 
 - Set the `TENSORZERO_CLICKHOUSE_URL` environment variable to the URL of the ClickHouse container (e.g. `TENSORZERO_CLICKHOUSE_URL=http://localhost:8123`).

@@ -14,6 +14,7 @@ pub mod migration_manager;
 #[cfg(any(test, feature = "e2e_tests"))]
 pub mod test_helpers;
 
+use crate::error::DisplayOrDebugGateway;
 use crate::error::{Error, ErrorDetails};
 
 #[derive(Debug, Clone)]
@@ -48,7 +49,7 @@ impl ClickHouseConnectionInfo {
             })
         })?;
 
-        #[allow(unused_variables)]
+        #[cfg(not(feature = "e2e_tests"))]
         let database = validate_clickhouse_url_get_db_name(&database_url)?
             .unwrap_or_else(|| "default".to_string());
 
@@ -193,7 +194,11 @@ impl ClickHouseConnectionInfo {
         }
     }
 
-    pub async fn run_query(
+    /// Runs a query with the given parameters, waiting for mutations to complete
+    /// using `mutations_sync=2` and `alter_sync=2`.
+    /// This ensures that we can run `ALTER TABLE ADD COLUMN` in a migration
+    /// and have the column available once the query completes.
+    pub async fn run_query_synchronous(
         &self,
         query: String,
         parameters: Option<&HashMap<&str, &str>>,
@@ -210,12 +215,18 @@ impl ClickHouseConnectionInfo {
                 // Add query parameters if provided
                 if let Some(params) = parameters {
                     for (key, value) in params {
-                        let param_key = format!("param_{}", key);
+                        let param_key = format!("param_{key}");
                         database_url
                             .query_pairs_mut()
                             .append_pair(&param_key, value);
                     }
                 }
+                database_url
+                    .query_pairs_mut()
+                    .append_pair("mutations_sync", "2");
+                database_url
+                    .query_pairs_mut()
+                    .append_pair("alter_sync", "2");
                 let response = client
                     .post(database_url)
                     .body(query)
@@ -223,14 +234,14 @@ impl ClickHouseConnectionInfo {
                     .await
                     .map_err(|e| {
                         Error::new(ErrorDetails::ClickHouseQuery {
-                            message: e.to_string(),
+                            message: DisplayOrDebugGateway::new(e).to_string(),
                         })
                     })?;
                 let status = response.status();
 
                 let response_body = response.text().await.map_err(|e| {
                     Error::new(ErrorDetails::ClickHouseQuery {
-                        message: e.to_string(),
+                        message: DisplayOrDebugGateway::new(e).to_string(),
                     })
                 })?;
 
@@ -297,17 +308,14 @@ impl ClickHouseConnectionInfo {
                 let metadata = if let Some(summary) = res.headers().get("x-clickhouse-summary") {
                     let summary_str = summary.to_str().map_err(|e| {
                         Error::new(ErrorDetails::ClickHouseQuery {
-                            message: format!("Failed to parse x-clickhouse-summary header: {}", e),
+                            message: format!("Failed to parse x-clickhouse-summary header: {e}"),
                         })
                     })?;
 
                     serde_json::from_str::<ClickHouseResponseMetadata>(summary_str).map_err(
                         |e| {
                             Error::new(ErrorDetails::ClickHouseQuery {
-                                message: format!(
-                                    "Failed to deserialize x-clickhouse-summary: {}",
-                                    e
-                                ),
+                                message: format!("Failed to deserialize x-clickhouse-summary: {e}"),
                             })
                         },
                     )?
@@ -353,7 +361,7 @@ impl ClickHouseConnectionInfo {
                         message: "Invalid ClickHouse database URL".to_string(),
                     })
                 })?;
-                let query = format!("CREATE DATABASE IF NOT EXISTS {}", database);
+                let query = format!("CREATE DATABASE IF NOT EXISTS {database}");
                 // In order to create the database, we need to remove the database query parameter from the URL
                 // Otherwise, ClickHouse will throw an error
                 let mut base_url = database_url.clone();
@@ -394,6 +402,15 @@ impl ClickHouseConnectionInfo {
             }
         }
     }
+}
+
+/// ClickHouse uses backslashes to escape quotes and all other special sequences in strings.
+/// In certain cases, we'll need to use a string as a literal in a ClickHouse query.
+/// e.g. to compare a raw string containing user input to strings in the database.
+/// These may contain single quotes and backslashes, for example, if the user input contains doubly-serialized JSON.
+/// This function will escape single quotes and backslashes in the input string so that the comparison will be accurate.
+pub fn escape_string_for_clickhouse_literal(s: &str) -> String {
+    s.replace(r#"\"#, r#"\\"#).replace(r#"'"#, r#"\'"#)
 }
 
 async fn write_mock(
@@ -496,6 +513,7 @@ fn set_clickhouse_format_settings(database_url: &mut Url) {
     database_url.query_pairs_mut().finish();
 }
 
+#[cfg(any(not(feature = "e2e_tests"), test))]
 fn validate_clickhouse_url_get_db_name(url: &Url) -> Result<Option<String>, Error> {
     // Check the scheme
     match url.scheme() {
@@ -688,5 +706,47 @@ mod tests {
         let database_url = Url::parse("http://chuser:chpassword@localhost:8123/database/").unwrap();
         let database = validate_clickhouse_url_get_db_name(&database_url).unwrap();
         assert_eq!(database, Some("database".to_string()));
+    }
+
+    #[test]
+    fn test_escape_string_for_clickhouse_comparison() {
+        // Test basic escaping of single quotes
+        assert_eq!(
+            escape_string_for_clickhouse_literal("test's string"),
+            r#"test\'s string"#
+        );
+
+        // Test basic escaping of backslashes
+        assert_eq!(
+            escape_string_for_clickhouse_literal(r#"test\string"#),
+            r#"test\\string"#
+        );
+
+        // Test escaping of both single quotes and backslashes
+        assert_eq!(
+            escape_string_for_clickhouse_literal(r#"test\'s string"#),
+            r#"test\\\'s string"#
+        );
+
+        // Test with JSON-like content that has escaped quotes
+        assert_eq!(
+            escape_string_for_clickhouse_literal(r#"{"key":"value with a \", and a '"}"#),
+            r#"{"key":"value with a \\", and a \'"}"#
+        );
+
+        // Test with empty string
+        assert_eq!(escape_string_for_clickhouse_literal(""), "");
+
+        // Test with multiple backslashes and quotes
+        assert_eq!(
+            escape_string_for_clickhouse_literal(r#"\\\'test\'\\"#),
+            r#"\\\\\\\'test\\\'\\\\"#
+        );
+
+        // Test with alternating backslashes and quotes
+        assert_eq!(
+            escape_string_for_clickhouse_literal(r#"\'\'\'"#),
+            r#"\\\'\\\'\\\'"#
+        );
     }
 }

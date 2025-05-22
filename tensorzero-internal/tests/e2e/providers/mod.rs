@@ -10,6 +10,7 @@ mod fireworks;
 mod gcp_vertex_anthropic;
 mod gcp_vertex_gemini;
 mod google_ai_studio_gemini;
+mod helpers;
 mod hyperbolic;
 mod mistral;
 mod openai;

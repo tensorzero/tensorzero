@@ -5,7 +5,7 @@ use serde_json::Value;
 
 use crate::{
     error::{Error, ErrorDetails},
-    jsonschema_util::{DynamicJSONSchema, JSONSchemaFromPath},
+    jsonschema_util::{DynamicJSONSchema, StaticJSONSchema},
 };
 
 /* A Tool is a function that can be called by an LLM
@@ -41,7 +41,7 @@ pub enum ToolConfig {
 #[derive(Debug, PartialEq, Serialize)]
 pub struct StaticToolConfig {
     pub description: String,
-    pub parameters: JSONSchemaFromPath,
+    pub parameters: StaticJSONSchema,
     pub name: String,
     pub strict: bool,
 }
@@ -59,7 +59,7 @@ pub struct DynamicToolConfig {
 /// JSON schema enforcement
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ImplicitToolConfig {
-    pub parameters: JSONSchemaFromPath,
+    pub parameters: StaticJSONSchema,
 }
 
 /// Contains the configuration information for a tool used in implicit tool calling for
@@ -330,7 +330,7 @@ impl ToolCallOutput {
 impl ToolCallConfig {
     #[cfg(test)]
     pub fn implicit_from_value(value: &Value) -> Self {
-        let parameters = JSONSchemaFromPath::from_value(value).unwrap();
+        let parameters = StaticJSONSchema::from_value(value).unwrap();
         let implicit_tool_config = ToolConfig::Implicit(ImplicitToolConfig { parameters });
         Self {
             tools_available: vec![implicit_tool_config],
@@ -585,7 +585,7 @@ impl From<ToolCallConfigDatabaseInsert> for ToolCallConfig {
 
 /// For use in initializing JSON functions
 /// Creates a ToolCallConfig with a single implicit tool that takes the schema as arguments
-pub fn create_implicit_tool_call_config(schema: JSONSchemaFromPath) -> ToolCallConfig {
+pub fn create_implicit_tool_call_config(schema: StaticJSONSchema) -> ToolCallConfig {
     let implicit_tool = ToolConfig::Implicit(ImplicitToolConfig { parameters: schema });
     ToolCallConfig {
         tools_available: vec![implicit_tool],
@@ -609,8 +609,7 @@ mod tests {
                 Arc::new(StaticToolConfig {
                     name: "get_temperature".to_string(),
                     description: "Get the current temperature in a given location".to_string(),
-                    #[allow(clippy::expect_used)]
-                    parameters: JSONSchemaFromPath::from_value(&json!({
+                    parameters: StaticJSONSchema::from_value(&json!({
                     "type": "object",
                     "properties": {
                         "location": {"type": "string"},
@@ -628,8 +627,7 @@ mod tests {
                     name: "query_articles".to_string(),
                     description: "Query articles from a database based on given criteria"
                         .to_string(),
-                    #[allow(clippy::expect_used)]
-                    parameters: JSONSchemaFromPath::from_value(&json!({
+                    parameters: StaticJSONSchema::from_value(&json!({
                         "type": "object",
                         "properties": {
                             "keyword": {"type": "string"},

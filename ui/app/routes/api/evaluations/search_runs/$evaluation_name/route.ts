@@ -2,7 +2,7 @@ import type { LoaderFunctionArgs } from "react-router";
 import { useEffect } from "react";
 import { useFetcher } from "react-router";
 import { searchEvaluationRuns } from "~/utils/clickhouse/evaluations.server";
-import type { EvaluationRunInfo } from "~/utils/clickhouse/evaluations";
+import type { EvaluationRunSearchResult } from "~/utils/clickhouse/evaluations";
 import { getConfig } from "~/utils/config/index.server";
 
 export async function loader({
@@ -22,7 +22,13 @@ export async function loader({
     return new Response("Missing evaluation_name parameter", { status: 400 });
   }
 
-  const runs = await searchEvaluationRuns(evaluationName, function_name, query);
+  const runs = await searchEvaluationRuns(
+    evaluationName,
+    function_name,
+    query,
+    100,
+    0,
+  );
   return new Response(JSON.stringify(runs), {
     headers: {
       "Content-Type": "application/json",
@@ -43,7 +49,7 @@ export async function loader({
 export function useSearchEvaluationRunsFetcher(params: {
   evaluationName?: string;
   query?: string;
-}): { data?: EvaluationRunInfo[]; isLoading: boolean } {
+}): { data?: EvaluationRunSearchResult[]; isLoading: boolean } {
   const runsFetcher = useFetcher();
 
   useEffect(() => {
@@ -56,6 +62,8 @@ export function useSearchEvaluationRunsFetcher(params: {
         `/api/evaluations/search_runs/${params.evaluationName}?${searchParams}`,
       );
     }
+    // TODO: Fix and stop ignoring lint rule
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.evaluationName, params.query]);
 
   return {

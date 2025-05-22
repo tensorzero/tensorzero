@@ -8,14 +8,14 @@ pub(super) fn run_exact_match_evaluator(
     datapoint: &Datapoint,
 ) -> Result<Option<Value>> {
     match (inference_response, datapoint) {
-        (InferenceResponse::Chat(response), Datapoint::ChatInference(datapoint)) => {
+        (InferenceResponse::Chat(response), Datapoint::Chat(datapoint)) => {
             match &datapoint.output {
                 // Right now this is order-sensitive, but we may consider relaxing this in the future
                 Some(output) => Ok(Some(Value::Bool(output == &response.content))),
                 None => Ok(None),
             }
         }
-        (InferenceResponse::Json(json_completion), Datapoint::JsonInference(json_inference)) => {
+        (InferenceResponse::Json(json_completion), Datapoint::Json(json_inference)) => {
             match &json_inference.output {
                 Some(output) => {
                     // `output.parsed` is an Option<Value> but it should always be Some here
@@ -55,7 +55,7 @@ mod tests {
     #[test]
     fn test_exact_match_evaluator_chat() {
         // Test a match
-        let datapoint = Datapoint::ChatInference(ChatInferenceDatapoint {
+        let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
             id: Uuid::now_v7(),
             input: ResolvedInput {
                 system: None,
@@ -77,6 +77,7 @@ mod tests {
             auxiliary: "".to_string(),
             is_deleted: false,
             source_inference_id: None,
+            staled_at: None,
         });
         let inference_response = InferenceResponse::Chat(ChatInferenceResponse {
             inference_id: Uuid::now_v7(),
@@ -114,7 +115,7 @@ mod tests {
         assert_eq!(result, Some(Value::Bool(false)));
 
         // Test with missing output (should be None)
-        let datapoint = Datapoint::ChatInference(ChatInferenceDatapoint {
+        let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
             id: Uuid::now_v7(),
             input: ResolvedInput {
                 system: None,
@@ -134,6 +135,7 @@ mod tests {
             auxiliary: "".to_string(),
             is_deleted: false,
             source_inference_id: None,
+            staled_at: None,
         });
         let result = run_exact_match_evaluator(&inference_response, &datapoint).unwrap();
         assert_eq!(result, None);
@@ -142,7 +144,7 @@ mod tests {
     #[test]
     fn test_exact_match_evaluator_json() {
         // Test a match
-        let datapoint = Datapoint::JsonInference(JsonInferenceDatapoint {
+        let datapoint = Datapoint::Json(JsonInferenceDatapoint {
             id: Uuid::now_v7(),
             input: ResolvedInput {
                 system: None,
@@ -166,12 +168,13 @@ mod tests {
             episode_id: Some(Uuid::now_v7()),
             output: Some(JsonInferenceOutput {
                 parsed: Some(json!({"foo": "bar"})),
-                raw: r#"{"foo": "bar"}"#.to_string(),
+                raw: Some(r#"{"foo": "bar"}"#.to_string()),
             }),
             tags: None,
             auxiliary: "".to_string(),
             is_deleted: false,
             source_inference_id: None,
+            staled_at: None,
         });
         let inference_response = InferenceResponse::Json(JsonInferenceResponse {
             inference_id: Uuid::now_v7(),
@@ -179,7 +182,7 @@ mod tests {
             variant_name: "test".to_string(),
             output: JsonInferenceOutput {
                 parsed: Some(json!({"foo": "bar"})),
-                raw: r#"{"foo": "bar"}"#.to_string(),
+                raw: Some(r#"{"foo": "bar"}"#.to_string()),
             },
             usage: Usage {
                 input_tokens: 10,
@@ -198,7 +201,7 @@ mod tests {
             variant_name: "test".to_string(),
             output: JsonInferenceOutput {
                 parsed: Some(json!({"foo": "baz"})),
-                raw: r#"{"foo": "baz"}"#.to_string(),
+                raw: Some(r#"{"foo": "baz"}"#.to_string()),
             },
             usage: Usage {
                 input_tokens: 10,
@@ -211,7 +214,7 @@ mod tests {
         assert_eq!(result, Some(Value::Bool(false)));
 
         // Test with missing output (should be None)
-        let datapoint = Datapoint::JsonInference(JsonInferenceDatapoint {
+        let datapoint = Datapoint::Json(JsonInferenceDatapoint {
             id: Uuid::now_v7(),
             input: ResolvedInput {
                 system: None,
@@ -238,12 +241,13 @@ mod tests {
             auxiliary: "".to_string(),
             is_deleted: false,
             source_inference_id: None,
+            staled_at: None,
         });
         let result = run_exact_match_evaluator(&inference_response, &datapoint).unwrap();
         assert_eq!(result, None);
 
         // Test with datapoint with malformed output schema (should be None)
-        let datapoint = Datapoint::JsonInference(JsonInferenceDatapoint {
+        let datapoint = Datapoint::Json(JsonInferenceDatapoint {
             id: Uuid::now_v7(),
             input: ResolvedInput {
                 system: None,
@@ -259,7 +263,7 @@ mod tests {
             episode_id: Some(Uuid::now_v7()),
             output: Some(JsonInferenceOutput {
                 parsed: None,
-                raw: r#"{"foo": "bar"}"#.to_string(),
+                raw: Some(r#"{"foo": "bar"}"#.to_string()),
             }),
             output_schema: json!({
                 "type": "object",
@@ -273,6 +277,7 @@ mod tests {
             auxiliary: "".to_string(),
             is_deleted: false,
             source_inference_id: None,
+            staled_at: None,
         });
         let result = run_exact_match_evaluator(&inference_response, &datapoint).unwrap();
         assert_eq!(result, None);

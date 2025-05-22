@@ -9,31 +9,77 @@ use tensorzero::{
 use tensorzero_internal::cache::CacheEnabledMode;
 use tensorzero_internal::endpoints::datasets::Datapoint;
 use tensorzero_internal::evaluations::{
-    get_llm_judge_function_name, LLMJudgeConfig, LLMJudgeInputFormat, LLMJudgeOutputType,
+    get_evaluator_metric_name, get_llm_judge_function_name, LLMJudgeConfig, LLMJudgeInputFormat,
+    LLMJudgeOutputType,
 };
 use tensorzero_internal::inference::types::{
     ContentBlockChatOutput, JsonInferenceOutput, TextKind,
 };
 use uuid::Uuid;
 
-use crate::ThrottledTensorZeroClient;
+use crate::helpers::{check_static_eval_human_feedback, get_cache_options};
+use crate::Clients;
 
+#[derive(Debug)]
 pub struct LLMJudgeEvaluationResult {
-    pub inference_id: Uuid,
+    pub evaluator_inference_id: Uuid,
     pub value: Value,
+    pub human_feedback: bool,
 }
 
-#[allow(clippy::too_many_arguments)]
+impl LLMJudgeEvaluationResult {
+    pub fn tags(&self) -> HashMap<String, String> {
+        if self.human_feedback {
+            HashMap::from([(
+                "tensorzero::derived_from_human_feedback".to_string(),
+                "true".to_string(),
+            )])
+        } else {
+            HashMap::new()
+        }
+    }
+}
+
+pub struct RunLLMJudgeEvaluatorParams<'a> {
+    pub inference_response: &'a InferenceResponse,
+    pub datapoint: &'a Datapoint,
+    pub clients: &'a Clients,
+    pub llm_judge_config: &'a LLMJudgeConfig,
+    pub evaluation_name: &'a str,
+    pub evaluator_name: &'a str,
+    pub evaluation_run_id: Uuid,
+    pub input: &'a ClientInput,
+    pub inference_cache: CacheEnabledMode,
+}
+
 pub async fn run_llm_judge_evaluator(
-    inference_response: &InferenceResponse,
-    datapoint: &Datapoint,
-    tensorzero_client: &ThrottledTensorZeroClient,
-    llm_judge_config: &LLMJudgeConfig,
-    evaluation_name: &str,
-    evaluator_name: &str,
-    evaluation_run_id: Uuid,
-    input: &ClientInput,
+    params: RunLLMJudgeEvaluatorParams<'_>,
 ) -> Result<Option<LLMJudgeEvaluationResult>> {
+    let RunLLMJudgeEvaluatorParams {
+        inference_response,
+        datapoint,
+        clients,
+        llm_judge_config,
+        evaluation_name,
+        evaluator_name,
+        evaluation_run_id,
+        input,
+        inference_cache,
+    } = params;
+    if let Some(human_feedback) = check_static_eval_human_feedback(
+        &clients.clickhouse_client,
+        &get_evaluator_metric_name(evaluation_name, evaluator_name),
+        datapoint.id(),
+        inference_response,
+    )
+    .await?
+    {
+        return Ok(Some(LLMJudgeEvaluationResult {
+            evaluator_inference_id: human_feedback.evaluator_inference_id,
+            value: human_feedback.value,
+            human_feedback: true,
+        }));
+    }
     let judge_input =
         match prepare_llm_judge_input(llm_judge_config, input, inference_response, datapoint)? {
             Some(input) => input,
@@ -64,20 +110,18 @@ pub async fn run_llm_judge_evaluator(
         dynamic_tool_params: DynamicToolParams::default(),
         output_schema: None,
         credentials: HashMap::new(),
-        cache_options: tensorzero::CacheParamsOptions {
-            max_age_s: None,
-            enabled: CacheEnabledMode::On,
-        },
+        cache_options: get_cache_options(inference_cache),
         extra_body: Default::default(),
+        extra_headers: Default::default(),
     };
-    let result = tensorzero_client.inference(params).await?;
+    let result = clients.tensorzero_client.inference(params).await?;
     let response = match result {
         InferenceOutput::NonStreaming(response) => response,
         InferenceOutput::Streaming(..) => {
             bail!("Streaming not supported for LLM judge evaluations. This is a bug, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.")
         }
     };
-    let inference_id = response.inference_id();
+    let evaluator_inference_id = response.inference_id();
     let output = match response {
         InferenceResponse::Chat(..) => {
             bail!("Chat output not supported for LLM judge evaluations. This is a bug, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.")
@@ -97,8 +141,9 @@ pub async fn run_llm_judge_evaluator(
     };
     match value {
         Some(value) => Ok(Some(LLMJudgeEvaluationResult {
-            inference_id,
+            evaluator_inference_id,
             value,
+            human_feedback: false,
         })),
         None => Ok(None),
     }
@@ -145,6 +190,7 @@ fn prepare_llm_judge_input(
                 messages: vec![ClientInputMessage {
                     role: Role::User,
                     content: vec![ClientInputMessageContent::Text(TextKind::Arguments{
+                        #[expect(clippy::expect_used)]
                         arguments: json!({"input": serialized_input, "generated_output": generated_output, "reference_output": reference_output})
                             .as_object()
                             .expect("Arguments should be an object")
@@ -333,10 +379,11 @@ fn prepare_serialized_chat_output(content: &Vec<ContentBlockChatOutput>) -> Resu
 }
 
 fn prepare_serialized_json_output(output: &JsonInferenceOutput) -> Result<String> {
-    if output.parsed.is_none() {
-        bail!("JSON output does not contain a `parsed` field");
+    match (&output.raw, &output.parsed) {
+        (_, None) => bail!("JSON output does not contain a `parsed` field"),
+        (None, _) => bail!("JSON output does not contain a `raw` field"),
+        (Some(raw), Some(_parsed)) => Ok(raw.clone()),
     }
-    Ok(output.raw.clone())
 }
 
 /// Handles the reference output for the LLM judge evaluator.
@@ -351,11 +398,11 @@ fn handle_reference_output(
         return Ok(None);
     }
     match datapoint {
-        Datapoint::ChatInference(chat_datapoint) => match &chat_datapoint.output {
+        Datapoint::Chat(chat_datapoint) => match &chat_datapoint.output {
             Some(output) => prepare_serialized_chat_output(output).map(Some),
             None => bail!("Datapoint does not contain an output when this is expected"),
         },
-        Datapoint::JsonInference(json_datapoint) => match &json_datapoint.output {
+        Datapoint::Json(json_datapoint) => match &json_datapoint.output {
             Some(output) => prepare_serialized_json_output(output).map(Some),
             None => bail!("Datapoint does not contain an output when this is expected"),
         },
@@ -521,7 +568,7 @@ mod tests {
                 finish_reason: None,
                 episode_id: Uuid::now_v7(),
             }),
-            &Datapoint::ChatInference(ChatInferenceDatapoint {
+            &Datapoint::Chat(ChatInferenceDatapoint {
                 dataset_name: "foo".to_string(),
                 function_name: "foo".to_string(),
                 id: Uuid::now_v7(),
@@ -539,6 +586,7 @@ mod tests {
                 auxiliary: String::new(),
                 is_deleted: false,
                 source_inference_id: None,
+                staled_at: None,
             }),
         )
         .unwrap()
@@ -587,7 +635,7 @@ mod tests {
                 finish_reason: None,
                 episode_id: Uuid::now_v7(),
             }),
-            &Datapoint::ChatInference(ChatInferenceDatapoint {
+            &Datapoint::Chat(ChatInferenceDatapoint {
                 dataset_name: "foo".to_string(),
                 function_name: "foo".to_string(),
                 id: Uuid::now_v7(),
@@ -605,6 +653,7 @@ mod tests {
                 auxiliary: String::new(),
                 is_deleted: false,
                 source_inference_id: None,
+                staled_at: None,
             }),
         )
         .unwrap()
@@ -785,7 +834,7 @@ mod tests {
     fn test_prepare_serialized_json_output() {
         // Test with parsed field
         let output = JsonInferenceOutput {
-            raw: r#"{"key":"value"}"#.to_string(),
+            raw: Some(r#"{"key":"value"}"#.to_string()),
             parsed: Some(json!({"key":"value"})),
         };
         let serialized = prepare_serialized_json_output(&output).unwrap();
@@ -793,7 +842,7 @@ mod tests {
 
         // Test without parsed field
         let output = JsonInferenceOutput {
-            raw: r#"{"key":"value"}"#.to_string(),
+            raw: Some(r#"{"key":"value"}"#.to_string()),
             parsed: None,
         };
         let err = prepare_serialized_json_output(&output).unwrap_err();
@@ -815,7 +864,7 @@ mod tests {
                 reference_output: false,
             },
         };
-        let datapoint = Datapoint::ChatInference(ChatInferenceDatapoint {
+        let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
             dataset_name: "dataset".to_string(),
             function_name: "function".to_string(),
             id: Uuid::now_v7(),
@@ -830,6 +879,7 @@ mod tests {
             auxiliary: String::new(),
             is_deleted: false,
             source_inference_id: None,
+            staled_at: None,
         });
         let result = handle_reference_output(&config, &datapoint).unwrap();
         assert_eq!(result, None);
@@ -844,7 +894,7 @@ mod tests {
                 reference_output: true,
             },
         };
-        let datapoint = Datapoint::ChatInference(ChatInferenceDatapoint {
+        let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
             dataset_name: "dataset".to_string(),
             function_name: "function".to_string(),
             id: Uuid::now_v7(),
@@ -859,6 +909,7 @@ mod tests {
             auxiliary: String::new(),
             is_deleted: false,
             source_inference_id: None,
+            staled_at: None,
         });
         let err = handle_reference_output(&config, &datapoint).unwrap_err();
         assert_eq!(
@@ -867,7 +918,7 @@ mod tests {
         );
 
         // Test with reference output enabled and present (chat)
-        let datapoint = Datapoint::ChatInference(ChatInferenceDatapoint {
+        let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
             dataset_name: "dataset".to_string(),
             function_name: "function".to_string(),
             id: Uuid::now_v7(),
@@ -884,6 +935,7 @@ mod tests {
             auxiliary: String::new(),
             is_deleted: false,
             source_inference_id: None,
+            staled_at: None,
         });
         let result = handle_reference_output(&config, &datapoint)
             .unwrap()
@@ -891,7 +943,7 @@ mod tests {
         assert_eq!(result, r#"[{"type":"text","text":"Reference text"}]"#);
 
         // Test with reference output enabled and present (json)
-        let datapoint = Datapoint::JsonInference(JsonInferenceDatapoint {
+        let datapoint = Datapoint::Json(JsonInferenceDatapoint {
             dataset_name: "dataset".to_string(),
             function_name: "function".to_string(),
             id: Uuid::now_v7(),
@@ -901,7 +953,7 @@ mod tests {
                 messages: Vec::new(),
             },
             output: Some(JsonInferenceOutput {
-                raw: r#"{"result":"json reference"}"#.to_string(),
+                raw: Some(r#"{"result":"json reference"}"#.to_string()),
                 parsed: Some(json!({"result":"json reference"})),
             }),
             output_schema: json!({}),
@@ -909,6 +961,7 @@ mod tests {
             auxiliary: String::new(),
             is_deleted: false,
             source_inference_id: None,
+            staled_at: None,
         });
         let result = handle_reference_output(&config, &datapoint)
             .unwrap()
@@ -993,7 +1046,7 @@ mod tests {
                 finish_reason: None,
                 episode_id: Uuid::now_v7(),
             }),
-            &Datapoint::ChatInference(ChatInferenceDatapoint {
+            &Datapoint::Chat(ChatInferenceDatapoint {
                 dataset_name: "dataset".to_string(),
                 function_name: "function".to_string(),
                 id: Uuid::now_v7(),
@@ -1010,6 +1063,7 @@ mod tests {
                 auxiliary: String::new(),
                 is_deleted: false,
                 source_inference_id: None,
+                staled_at: None,
             }),
         )
         .unwrap()
@@ -1094,7 +1148,7 @@ mod tests {
             &input,
             &InferenceResponse::Json(JsonInferenceResponse {
                 output: JsonInferenceOutput {
-                    raw: r#"{"result":"json output"}"#.to_string(),
+                    raw: Some(r#"{"result":"json output"}"#.to_string()),
                     parsed: Some(json!({"result":"json output"})),
                 },
                 inference_id: Uuid::now_v7(),
@@ -1104,7 +1158,7 @@ mod tests {
                 finish_reason: None,
                 episode_id: Uuid::now_v7(),
             }),
-            &Datapoint::JsonInference(JsonInferenceDatapoint {
+            &Datapoint::Json(JsonInferenceDatapoint {
                 dataset_name: "dataset".to_string(),
                 function_name: "function".to_string(),
                 id: Uuid::now_v7(),
@@ -1114,7 +1168,7 @@ mod tests {
                     messages: Vec::new(),
                 },
                 output: Some(JsonInferenceOutput {
-                    raw: r#"{"result":"reference output"}"#.to_string(),
+                    raw: Some(r#"{"result":"reference output"}"#.to_string()),
                     parsed: Some(json!({"result":"reference output"})),
                 }),
                 output_schema: json!({}),
@@ -1122,6 +1176,7 @@ mod tests {
                 auxiliary: String::new(),
                 is_deleted: false,
                 source_inference_id: None,
+                staled_at: None,
             }),
         )
         .unwrap()

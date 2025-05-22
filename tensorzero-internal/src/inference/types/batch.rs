@@ -531,6 +531,30 @@ impl TryFrom<BatchOutputSchemasWithSize> for Vec<Option<DynamicJSONSchema>> {
     }
 }
 
+impl TryFrom<BatchOutputSchemasWithSize> for Vec<Option<Value>> {
+    type Error = Error;
+
+    fn try_from(schemas: BatchOutputSchemasWithSize) -> Result<Self, Self::Error> {
+        let BatchOutputSchemasWithSize(schemas, num_inferences) = schemas;
+        if let Some(schemas) = schemas {
+            if schemas.len() != num_inferences {
+                Err(ErrorDetails::InvalidRequest {
+                    message: format!(
+                    "output_schemas vector length ({}) does not match number of inferences ({})",
+                    schemas.len(),
+                    num_inferences
+                ),
+                }
+                .into())
+            } else {
+                Ok(schemas.into_iter().collect())
+            }
+        } else {
+            Ok(vec![None; num_inferences])
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use uuid::Timestamp;

@@ -3,23 +3,26 @@ use object_store::local::LocalFileSystem;
 use object_store::{ObjectStore, PutPayload};
 use scoped_tls::scoped_thread_local;
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tensorzero_derive::TensorZeroDeserialize;
 use tracing::instrument;
 
-use crate::embeddings::EmbeddingModelTable;
+use crate::embeddings::{EmbeddingModelTable, UninitializedEmbeddingModelConfig};
+use crate::endpoints::inference::DEFAULT_FUNCTION_NAME;
 use crate::error::{Error, ErrorDetails};
 use crate::evaluations::{EvaluationConfig, UninitializedEvaluationConfig};
 use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
 use crate::inference::types::storage::StorageKind;
-use crate::jsonschema_util::JSONSchemaFromPath;
+use crate::jsonschema_util::StaticJSONSchema;
 use crate::minijinja_util::TemplateConfig;
-use crate::model::{ModelConfig, ModelTable};
+use crate::model::{ModelConfig, ModelTable, UninitializedModelConfig};
 use crate::model_table::{CowNoClone, ShorthandModelConfig};
 use crate::tool::{create_implicit_tool_call_config, StaticToolConfig, ToolChoice};
 use crate::variant::best_of_n_sampling::UninitializedBestOfNSamplingConfig;
+use crate::variant::chain_of_thought::UninitializedChainOfThoughtConfig;
 use crate::variant::chat_completion::UninitializedChatCompletionConfig;
 use crate::variant::dicl::UninitializedDiclConfig;
 use crate::variant::mixture_of_n::UninitializedMixtureOfNConfig;
@@ -39,16 +42,45 @@ pub struct Config<'c> {
     pub evaluations: HashMap<String, Arc<EvaluationConfig>>, // evaluation name => evaluation config
     pub templates: TemplateConfig<'c>,
     pub object_store_info: Option<ObjectStoreInfo>,
+    pub provider_types: ProviderTypesConfig,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Deserialize)]
 pub struct GatewayConfig {
     pub bind_address: Option<std::net::SocketAddr>,
+    #[serde(default)]
     pub observability: ObservabilityConfig,
+    #[serde(default)]
     pub debug: bool,
     /// If `true`, allow minijinja to read from the filesystem (within the tree of the config file) for '{% include %}'
     /// Defaults to `false`
+    #[serde(default)]
     pub enable_template_filesystem_access: bool,
+    #[serde(default)]
+    pub export: ExportConfig,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct GCPProviderTypeConfig {
+    #[serde(default)]
+    pub batch: Option<GCPBatchConfigType>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(tag = "storage_type", rename_all = "snake_case")]
+pub enum GCPBatchConfigType {
+    // In the future, we'll want to allow explicitly setting 'none' at the model provider level,
+    // to override the global provider-types batch config.
+    None,
+    CloudStorage(GCPBatchConfigCloudStorage),
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct GCPBatchConfigCloudStorage {
+    pub input_uri_prefix: String,
+    pub output_uri_prefix: String,
 }
 
 #[derive(Clone, Debug)]
@@ -67,11 +99,19 @@ impl ObjectStoreInfo {
         let object_store: Option<Arc<dyn ObjectStore>> = match &config {
             StorageKind::Filesystem { path } => Some(Arc::new(
                 LocalFileSystem::new_with_prefix(path).map_err(|e| {
-                    Error::new(ErrorDetails::Config {
-                        message: format!(
-                            "Failed to create filesystem object store for path: {path}: {e}"
-                        ),
-                    })
+                    if !std::fs::exists(path).unwrap_or(false) {
+                        Error::new(ErrorDetails::Config {
+                            message: format!(
+                                "Failed to create filesystem object store: path does not exist: {path}"
+                            ),
+                        })
+                    } else {
+                        Error::new(ErrorDetails::Config {
+                            message: format!(
+                                "Failed to create filesystem object store for path: {path}: {e}"
+                            ),
+                        })
+                    }
                 })?,
             )),
             StorageKind::S3Compatible {
@@ -178,58 +218,31 @@ fn contains_bad_scheme_err(e: &impl StdError) -> bool {
     format!("{e:?}").contains("BadScheme")
 }
 
-/// Note: This struct and the impl below can be removed in favor of a derived impl for Deserialize once we have removed the `disable_observability` flag
-/// TODO (#797): Remove this once we have removed the `disable_observability` flag
-#[derive(Debug, Default, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct UninitializedGatewayConfig {
-    pub bind_address: Option<std::net::SocketAddr>,
-    #[serde(default)]
-    pub disable_observability: bool,
-    #[serde(default)]
-    pub observability: ObservabilityConfig,
-    #[serde(default)]
-    pub debug: bool,
-    #[serde(default)]
-    pub enable_template_filesystem_access: bool,
-}
-
-impl TryFrom<UninitializedGatewayConfig> for GatewayConfig {
-    type Error = Error;
-    fn try_from(config: UninitializedGatewayConfig) -> Result<Self, Self::Error> {
-        let enabled = match (config.disable_observability, config.observability.enabled) {
-            (true, Some(_)) => {
-                return Err(Error::new(ErrorDetails::Config {
-                    message: "Configuration flag `gateway.disable_observability` and `gateway.observability.enabled` are mutually exclusive. We are deprecating `gateway.disable_observability` in favor of `gateway.observability.enabled`. See https://github.com/tensorzero/tensorzero/issues/797 on GitHub for details.".to_string(),
-                }));
-            }
-            (true, None) => {
-                tracing::warn!("Deprecation Warning: The configuration flag `gateway.disable_observability` is deprecated in favor of `gateway.observability.enabled`. See https://github.com/tensorzero/tensorzero/issues/797 on GitHub for details.");
-                Some(false)
-            }
-            (false, Some(enabled)) => Some(enabled),
-            (false, None) => None,
-        };
-
-        Ok(Self {
-            bind_address: config.bind_address,
-            observability: ObservabilityConfig {
-                enabled,
-                async_writes: config.observability.async_writes,
-            },
-            debug: config.debug,
-            enable_template_filesystem_access: config.enable_template_filesystem_access,
-        })
-    }
-}
-
 #[derive(Debug, Default, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct ObservabilityConfig {
-    #[serde(default)]
     pub enabled: Option<bool>,
     #[serde(default)]
     pub async_writes: bool,
+}
+
+#[derive(Debug, Default, Deserialize, PartialEq)]
+pub struct ExportConfig {
+    #[serde(default)]
+    pub otlp: OtlpConfig,
+}
+
+#[derive(Debug, Default, Deserialize, PartialEq)]
+pub struct OtlpConfig {
+    #[serde(default)]
+    pub traces: OtlpTracesConfig,
+}
+
+#[derive(Debug, Default, Deserialize, PartialEq)]
+pub struct OtlpTracesConfig {
+    /// Enable OpenTelemetry traces export to the configured OTLP endpoint (configured via OTLP environment variables)
+    #[serde(default)]
+    pub enabled: bool,
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
@@ -247,7 +260,7 @@ pub enum MetricConfigType {
     Float,
 }
 
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Copy, Clone, Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum MetricConfigOptimize {
     Min,
@@ -319,11 +332,6 @@ impl<'c> Config<'c> {
         }
         let uninitialized_config = UninitializedConfig::try_from(table)?;
 
-        let gateway = uninitialized_config
-            .gateway
-            .unwrap_or_default()
-            .try_into()?;
-
         let templates = TemplateConfig::new();
 
         let functions = uninitialized_config
@@ -342,18 +350,47 @@ impl<'c> Config<'c> {
             })
             .collect::<Result<HashMap<String, Arc<StaticToolConfig>>, Error>>()?;
 
+        let models = uninitialized_config
+            .models
+            .into_iter()
+            .map(|(name, config)| {
+                config
+                    .load(&name, &uninitialized_config.provider_types)
+                    .map(|c| (name, c))
+            })
+            .collect::<Result<HashMap<_, _>, _>>()?;
+
+        let embedding_models = uninitialized_config
+            .embedding_models
+            .into_iter()
+            .map(|(name, config)| {
+                config
+                    .load(&uninitialized_config.provider_types)
+                    .map(|c| (name, c))
+            })
+            .collect::<Result<HashMap<_, _>, _>>()?;
+
         let object_store_info = ObjectStoreInfo::new(uninitialized_config.object_storage)?;
 
         let mut config = Config {
-            gateway,
-            models: uninitialized_config.models,
-            embedding_models: uninitialized_config.embedding_models,
+            gateway: uninitialized_config.gateway,
+            models: models.try_into().map_err(|e| {
+                Error::new(ErrorDetails::Config {
+                    message: format!("Failed to load models: {e}"),
+                })
+            })?,
+            embedding_models: embedding_models.try_into().map_err(|e| {
+                Error::new(ErrorDetails::Config {
+                    message: format!("Failed to load embedding models: {e}"),
+                })
+            })?,
             functions,
             metrics: uninitialized_config.metrics,
             tools,
             evaluations: HashMap::new(),
             templates,
             object_store_info,
+            provider_types: uninitialized_config.provider_types,
         };
 
         // Initialize the templates
@@ -382,8 +419,7 @@ impl<'c> Config<'c> {
                 if config.functions.contains_key(&evaluation_function_name) {
                     return Err(ErrorDetails::Config {
                         message: format!(
-                            "Duplicate evaluator function name: `{}` already exists. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.",
-                            evaluation_function_name
+                            "Duplicate evaluator function name: `{evaluation_function_name}` already exists. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports."
                         ),
                     }
                     .into());
@@ -410,7 +446,7 @@ impl<'c> Config<'c> {
             for (evaluation_metric_name, evaluation_metric_config) in evaluation_metric_configs {
                 if config.metrics.contains_key(&evaluation_metric_name) {
                     return Err(ErrorDetails::Config {
-                        message: format!("Duplicate evaluator metric name: `{}` already exists. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.", evaluation_metric_name),
+                        message: format!("Duplicate evaluator metric name: `{evaluation_metric_name}` already exists. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports."),
                     }
                     .into());
                 }
@@ -450,10 +486,7 @@ impl<'c> Config<'c> {
         for metric_name in self.metrics.keys() {
             if metric_name == "comment" || metric_name == "demonstration" {
                 return Err(ErrorDetails::Config {
-                    message: format!(
-                        "Metric name '{}' is reserved and cannot be used",
-                        metric_name
-                    ),
+                    message: format!("Metric name '{metric_name}' is reserved and cannot be used"),
                 }
                 .into());
             }
@@ -503,12 +536,29 @@ impl<'c> Config<'c> {
     pub fn get_function<'a>(
         &'a self,
         function_name: &str,
-    ) -> Result<&'a Arc<FunctionConfig>, Error> {
-        self.functions.get(function_name).ok_or_else(|| {
-            Error::new(ErrorDetails::UnknownFunction {
-                name: function_name.to_string(),
-            })
-        })
+    ) -> Result<Cow<'a, Arc<FunctionConfig>>, Error> {
+        if function_name == DEFAULT_FUNCTION_NAME {
+            Ok(Cow::Owned(Arc::new(FunctionConfig::Chat(
+                FunctionConfigChat {
+                    variants: HashMap::new(),
+                    system_schema: None,
+                    user_schema: None,
+                    assistant_schema: None,
+                    tools: vec![],
+                    tool_choice: ToolChoice::None,
+                    parallel_tool_calls: None,
+                    description: None,
+                },
+            ))))
+        } else {
+            Ok(Cow::Borrowed(
+                self.functions.get(function_name).ok_or_else(|| {
+                    Error::new(ErrorDetails::UnknownFunction {
+                        name: function_name.to_string(),
+                    })
+                })?,
+            ))
+        }
     }
 
     /// Get a metric by name, producing an error if it's not found
@@ -583,11 +633,12 @@ pub trait LoadableConfig<T> {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct UninitializedConfig {
-    pub gateway: Option<UninitializedGatewayConfig>,
     #[serde(default)]
-    pub models: ModelTable, // model name => model config
+    pub gateway: GatewayConfig,
     #[serde(default)]
-    pub embedding_models: EmbeddingModelTable, // embedding model name => embedding model config
+    pub models: HashMap<Arc<str>, UninitializedModelConfig>, // model name => model config
+    #[serde(default)]
+    pub embedding_models: HashMap<Arc<str>, UninitializedEmbeddingModelConfig>, // embedding model name => embedding model config
     #[serde(default)]
     pub functions: HashMap<String, UninitializedFunctionConfig>, // function name => function config
     #[serde(default)]
@@ -595,8 +646,17 @@ struct UninitializedConfig {
     #[serde(default)]
     pub tools: HashMap<String, UninitializedToolConfig>, // tool name => tool config
     #[serde(default)]
-    pub evaluations: HashMap<String, UninitializedEvaluationConfig>, // evaluation name => evaluation config
+    pub evaluations: HashMap<String, UninitializedEvaluationConfig>, // evaluation name => evaluation
+    #[serde(default)]
+    pub provider_types: ProviderTypesConfig, // global configuration for all model providers of a particular type
     pub object_storage: Option<StorageKind>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProviderTypesConfig {
+    #[serde(default)]
+    pub gcp_vertex_gemini: Option<GCPProviderTypeConfig>,
 }
 
 impl UninitializedConfig {
@@ -667,6 +727,8 @@ struct UninitializedFunctionConfigChat {
     tool_choice: ToolChoice,
     #[serde(default)]
     parallel_tool_calls: Option<bool>,
+    #[serde(default)]
+    description: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -689,15 +751,15 @@ impl UninitializedFunctionConfig {
             UninitializedFunctionConfig::Chat(params) => {
                 let system_schema = params
                     .system_schema
-                    .map(|path| JSONSchemaFromPath::new(path, base_path.as_ref()))
+                    .map(|path| StaticJSONSchema::from_path(path, base_path.as_ref()))
                     .transpose()?;
                 let user_schema = params
                     .user_schema
-                    .map(|path| JSONSchemaFromPath::new(path, base_path.as_ref()))
+                    .map(|path| StaticJSONSchema::from_path(path, base_path.as_ref()))
                     .transpose()?;
                 let assistant_schema = params
                     .assistant_schema
-                    .map(|path| JSONSchemaFromPath::new(path, base_path.as_ref()))
+                    .map(|path| StaticJSONSchema::from_path(path, base_path.as_ref()))
                     .transpose()?;
                 let variants = params
                     .variants
@@ -724,24 +786,25 @@ impl UninitializedFunctionConfig {
                     tools: params.tools,
                     tool_choice: params.tool_choice,
                     parallel_tool_calls: params.parallel_tool_calls,
+                    description: params.description,
                 }))
             }
             UninitializedFunctionConfig::Json(params) => {
                 let system_schema = params
                     .system_schema
-                    .map(|path| JSONSchemaFromPath::new(path, base_path.as_ref()))
+                    .map(|path| StaticJSONSchema::from_path(path, base_path.as_ref()))
                     .transpose()?;
                 let user_schema = params
                     .user_schema
-                    .map(|path| JSONSchemaFromPath::new(path, base_path.as_ref()))
+                    .map(|path| StaticJSONSchema::from_path(path, base_path.as_ref()))
                     .transpose()?;
                 let assistant_schema = params
                     .assistant_schema
-                    .map(|path| JSONSchemaFromPath::new(path, base_path.as_ref()))
+                    .map(|path| StaticJSONSchema::from_path(path, base_path.as_ref()))
                     .transpose()?;
                 let output_schema = match params.output_schema {
-                    Some(path) => JSONSchemaFromPath::new(path, base_path.as_ref())?,
-                    None => JSONSchemaFromPath::default(),
+                    Some(path) => StaticJSONSchema::from_path(path, base_path.as_ref())?,
+                    None => StaticJSONSchema::default(),
                 };
                 let implicit_tool_call_config =
                     create_implicit_tool_call_config(output_schema.clone());
@@ -774,6 +837,11 @@ impl UninitializedFunctionConfig {
                                 warn_variant = Some(name.clone());
                             }
                         }
+                        VariantConfig::ChainOfThought(chain_of_thought_config) => {
+                            if chain_of_thought_config.inner.json_mode.is_none() {
+                                warn_variant = Some(name.clone());
+                            }
+                        }
                     }
                     if let Some(warn_variant) = warn_variant {
                         tracing::warn!("Deprecation Warning: `json_mode` is not specified for `[functions.{function_name}.variants.{warn_variant}]` (parent function `{function_name}` is a JSON function), defaulting to `strict`. This field will become required in a future release - see https://github.com/tensorzero/tensorzero/issues/1043 on GitHub for details.");
@@ -786,6 +854,7 @@ impl UninitializedFunctionConfig {
                     assistant_schema,
                     output_schema,
                     implicit_tool_call_config,
+                    description: None,
                 }))
             }
         }
@@ -804,6 +873,8 @@ pub enum UninitializedVariantConfig {
     Dicl(UninitializedDiclConfig),
     #[serde(rename = "experimental_mixture_of_n")]
     MixtureOfN(UninitializedMixtureOfNConfig),
+    #[serde(rename = "experimental_chain_of_thought")]
+    ChainOfThought(UninitializedChainOfThoughtConfig),
 }
 
 impl UninitializedVariantConfig {
@@ -820,6 +891,9 @@ impl UninitializedVariantConfig {
             }
             UninitializedVariantConfig::MixtureOfN(params) => {
                 Ok(VariantConfig::MixtureOfN(params.load(base_path)?))
+            }
+            UninitializedVariantConfig::ChainOfThought(params) => {
+                Ok(VariantConfig::ChainOfThought(params.load(base_path)?))
             }
         }
     }
@@ -839,7 +913,7 @@ impl UninitializedToolConfig {
         base_path: P,
         name: String,
     ) -> Result<StaticToolConfig, Error> {
-        let parameters = JSONSchemaFromPath::new(self.parameters, base_path.as_ref())?;
+        let parameters = StaticJSONSchema::from_path(self.parameters, base_path.as_ref())?;
         Ok(StaticToolConfig {
             name,
             description: self.description,
@@ -1006,7 +1080,7 @@ mod tests {
             .unwrap();
         match &**function {
             FunctionConfig::Json(json_config) => {
-                assert_eq!(json_config.variants.len(), 1);
+                assert_eq!(json_config.variants.len(), 7);
                 match &json_config.variants["anthropic_promptA"] {
                     VariantConfig::ChatCompletion(chat_config) => {
                         assert_eq!(chat_config.model, "anthropic::claude-3.5-sonnet".into());
@@ -1017,7 +1091,7 @@ mod tests {
                                 // We don't use a real path for programmatically generated templates
                                 // Instead we use this handle and then the same in minijinja
                                 path: PathBuf::from(
-                                    "tensorzero::llm_judge::evaluation1::llm_judge_bool::system"
+                                    "tensorzero::llm_judge::evaluation1::llm_judge_bool::anthropic_promptA::system"
                                 ),
                                 contents:
                                     "Return True if there is NSFW content in this generation.\n\n"
@@ -1027,6 +1101,60 @@ mod tests {
                         assert_eq!(chat_config.json_mode, Some(JsonMode::ImplicitTool));
                     }
                     _ => panic!("Expected a chat completion variant"),
+                }
+                match &json_config.variants["best_of_3"] {
+                    VariantConfig::BestOfNSampling(best_of_n_config) => {
+                        assert_eq!(best_of_n_config.candidates.len(), 3);
+                        assert_eq!(
+                            best_of_n_config.evaluator.inner.model,
+                            "openai::gpt-4o-mini".into()
+                        );
+                        assert_eq!(
+                            best_of_n_config.evaluator.inner.json_mode,
+                            Some(JsonMode::Strict)
+                        );
+                        assert_eq!(best_of_n_config.evaluator.inner.temperature, Some(0.3));
+                    }
+                    _ => panic!("Expected a best of n sampling variant"),
+                }
+                match &json_config.variants["mixture_of_3"] {
+                    VariantConfig::MixtureOfN(mixture_of_n_config) => {
+                        assert_eq!(mixture_of_n_config.candidates.len(), 3);
+                        assert_eq!(
+                            mixture_of_n_config.fuser.inner.model,
+                            "openai::gpt-4o-mini".into()
+                        );
+                        assert_eq!(
+                            mixture_of_n_config.fuser.inner.json_mode,
+                            Some(JsonMode::Strict)
+                        );
+                        assert_eq!(mixture_of_n_config.fuser.inner.temperature, Some(0.3));
+                    }
+                    _ => panic!("Expected a mixture of n sampling variant"),
+                }
+                match &json_config.variants["dicl"] {
+                    VariantConfig::Dicl(dicl_config) => {
+                        assert_eq!(
+                            dicl_config.system_instructions,
+                            crate::variant::dicl::default_system_instructions()
+                        );
+                        assert_eq!(dicl_config.embedding_model, "text-embedding-3-small".into());
+                        assert_eq!(dicl_config.k, 3);
+                        assert_eq!(dicl_config.model, "openai::gpt-4o-mini".into());
+                    }
+                    _ => panic!("Expected a Dicl variant"),
+                }
+                match &json_config.variants["dicl_custom_system"] {
+                    VariantConfig::Dicl(dicl_config) => {
+                        assert_eq!(
+                            dicl_config.system_instructions,
+                            "Return True if there is NSFW content in this generation.\n\n"
+                        );
+                        assert_eq!(dicl_config.embedding_model, "text-embedding-3-small".into());
+                        assert_eq!(dicl_config.k, 3);
+                        assert_eq!(dicl_config.model, "openai::gpt-4o-mini".into());
+                    }
+                    _ => panic!("Expected a Dicl variant"),
                 }
             }
             _ => panic!("Expected a JSON function"),
@@ -1354,7 +1482,7 @@ mod tests {
             FunctionConfig::Json(json_config) => &json_config.output_schema,
             _ => panic!("Expected a JSON function"),
         };
-        assert_eq!(output_schema, &JSONSchemaFromPath::default());
+        assert_eq!(output_schema, &StaticJSONSchema::default());
         assert_eq!(output_schema.value, &serde_json::json!({}));
     }
 
@@ -1830,7 +1958,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             Error::new(ErrorDetails::Config {
-                message: "models: Model name 'tensorzero::bad_model' contains a reserved prefix"
+                message: "Failed to load models: Model name 'tensorzero::bad_model' contains a reserved prefix"
                     .to_string()
             })
         );
@@ -1858,7 +1986,7 @@ mod tests {
                 result.unwrap_err(),
                 Error::new(ErrorDetails::Config {
                     message:
-                        "embedding_models: Embedding model name 'tensorzero::bad_embedding_model' contains a reserved prefix"
+                        "Failed to load embedding models: Embedding model name 'tensorzero::bad_embedding_model' contains a reserved prefix"
                             .to_string()
                 })
             );
@@ -2070,33 +2198,85 @@ mod tests {
 
         assert_eq!(
             *templates
-                .get("tensorzero::llm_judge::evaluation1::llm_judge_bool::system")
+                .get(
+                    "tensorzero::llm_judge::evaluation1::llm_judge_bool::anthropic_promptA::system"
+                )
                 .unwrap(),
             "Return True if there is NSFW content in this generation.\n\n".to_string(),
         );
 
         assert_eq!(
             *templates
-                .get("tensorzero::llm_judge::evaluation1::llm_judge_float::system")
+                .get(
+                    "tensorzero::llm_judge::evaluation1::llm_judge_float::anthropic_promptA::system"
+                )
                 .unwrap(),
             "Return a number between 0 and 1 where 1 is very NSFW and 0 is the least NSFW content.\n\n"
                 .to_string(),
         );
         assert_eq!(
             *templates
-                .get("tensorzero::llm_judge::evaluation1::llm_judge_bool::user")
+                .get("tensorzero::llm_judge::evaluation1::llm_judge_bool::anthropic_promptA::user")
                 .unwrap(),
             include_str!("evaluations/llm_judge_user_template.minijinja").to_string()
         );
         assert_eq!(
             *templates
-                .get("tensorzero::llm_judge::evaluation1::llm_judge_float::user")
+                .get("tensorzero::llm_judge::evaluation1::llm_judge_float::anthropic_promptA::user")
+                .unwrap(),
+            include_str!("evaluations/llm_judge_user_template.minijinja").to_string()
+        );
+        assert_eq!(
+            *templates
+                .get("tensorzero::llm_judge::evaluation1::llm_judge_bool::llama_promptA::system")
+                .unwrap(),
+            "Return True if there is NSFW content in this generation.\n\n".to_string(),
+        );
+        assert_eq!(
+            *templates
+                .get("tensorzero::llm_judge::evaluation1::llm_judge_bool::llama_promptA::user")
+                .unwrap(),
+            include_str!("evaluations/llm_judge_user_template.minijinja").to_string()
+        );
+        assert_eq!(
+            *templates
+                .get("tensorzero::llm_judge::evaluation1::llm_judge_bool::openai_promptA::system")
+                .unwrap(),
+            "Return True if there is NSFW content in this generation.\n\n".to_string()
+        );
+        assert_eq!(
+            *templates
+                .get("tensorzero::llm_judge::evaluation1::llm_judge_bool::openai_promptA::user")
+                .unwrap(),
+            include_str!("evaluations/llm_judge_user_template.minijinja").to_string()
+        );
+        assert_eq!(
+            *templates
+                .get("tensorzero::llm_judge::evaluation1::llm_judge_bool::best_of_3::system")
+                .unwrap(),
+            "Return True if there is NSFW content in this generation.\n\n".to_string()
+        );
+        assert_eq!(
+            *templates
+                .get("tensorzero::llm_judge::evaluation1::llm_judge_bool::best_of_3::user")
+                .unwrap(),
+            include_str!("evaluations/llm_judge_user_template.minijinja").to_string()
+        );
+        assert_eq!(
+            *templates
+                .get("tensorzero::llm_judge::evaluation1::llm_judge_bool::mixture_of_3::system")
+                .unwrap(),
+            "Return True if there is NSFW content in this generation.\n\n".to_string()
+        );
+        assert_eq!(
+            *templates
+                .get("tensorzero::llm_judge::evaluation1::llm_judge_bool::mixture_of_3::user")
                 .unwrap(),
             include_str!("evaluations/llm_judge_user_template.minijinja").to_string()
         );
 
         // Check the total number of templates
-        assert_eq!(templates.len(), 14);
+        assert_eq!(templates.len(), 22);
     }
 
     #[test]
@@ -2330,6 +2510,29 @@ thinking = { type = "enabled", budget_tokens = 1024 }
             .to_string();
         assert!(
             err.contains("Config file not found"),
+            "Unexpected error message: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_config_missing_filesystem_object_store() {
+        let tempfile = NamedTempFile::new().unwrap();
+        write!(
+            &tempfile,
+            r#"
+            [object_storage]
+            type = "filesystem"
+            path = "/fake-tensorzero-path/other-path"
+
+            [functions]"#
+        )
+        .unwrap();
+        let err = Config::load_and_verify_from_path(tempfile.path())
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("Failed to create filesystem object store: path does not exist: /fake-tensorzero-path/other-path"),
             "Unexpected error message: {err}"
         );
     }

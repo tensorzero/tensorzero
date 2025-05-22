@@ -56,7 +56,7 @@ impl Migration for Migration0007<'_> {
         Ok(false)
     }
 
-    async fn apply(&self) -> Result<(), Error> {
+    async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         // Only gets used when we are not doing a clean start
         let view_offset = Duration::from_secs(15);
         let view_timestamp = (std::time::SystemTime::now()
@@ -83,7 +83,7 @@ impl Migration for Migration0007<'_> {
             ENGINE = MergeTree
             ORDER BY (episode_id, id);
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self.clickhouse.run_query_synchronous(query.to_string(), None).await?;
 
         // If we are not doing a clean start, we need to add a where clause to the view to only include rows that have been created after the view_timestamp
         let view_where_clause = if !self.clean_start {
@@ -107,7 +107,7 @@ impl Migration for Migration0007<'_> {
             "#,
             view_where_clause = view_where_clause
         );
-        let _ = self.clickhouse.run_query(query, None).await?;
+        let _ = self.clickhouse.run_query_synchronous(query, None).await?;
 
         // Create the materialized view for the `InferenceByEpisodeId` table from JsonInference
         let query = format!(
@@ -126,7 +126,7 @@ impl Migration for Migration0007<'_> {
             "#,
             view_where_clause = view_where_clause
         );
-        let _ = self.clickhouse.run_query(query, None).await?;
+        let _ = self.clickhouse.run_query_synchronous(query, None).await?;
 
         if !self.clean_start {
             // Sleep for the duration specified by view_offset to allow the materialized views to catch up
@@ -148,7 +148,7 @@ impl Migration for Migration0007<'_> {
                 "#,
                     view_timestamp = view_timestamp
                 );
-                self.clickhouse.run_query(query, None).await
+                self.clickhouse.run_query_synchronous(query, None).await
             };
 
             let insert_json_inference = async {
@@ -166,7 +166,7 @@ impl Migration for Migration0007<'_> {
                 "#,
                     view_timestamp = view_timestamp
                 );
-                self.clickhouse.run_query(query, None).await
+                self.clickhouse.run_query_synchronous(query, None).await
             };
 
             tokio::try_join!(insert_chat_inference, insert_json_inference)?;

@@ -3,15 +3,11 @@ import { NewRunButton } from "./NewRunButton";
 
 interface EvaluationsActionsProps {
   onNewRun: () => void;
-  className?: string;
 }
 
-export function EvaluationsActions({
-  onNewRun,
-  className,
-}: EvaluationsActionsProps) {
+export function EvaluationsActions({ onNewRun }: EvaluationsActionsProps) {
   return (
-    <ActionBar className={className}>
+    <ActionBar>
       <NewRunButton onClick={onNewRun} />
     </ActionBar>
   );

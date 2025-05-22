@@ -1,16 +1,20 @@
-#![allow(clippy::print_stdout)]
+#![expect(clippy::print_stdout)]
 
 use std::time::Duration;
 
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
+use tensorzero::{ChatInferenceDatapoint, JsonInferenceDatapoint, Role};
 use tensorzero_internal::{
-    clickhouse::test_helpers::stale_datapoint_clickhouse,
-    endpoints::datasets::CLICKHOUSE_DATETIME_FORMAT,
+    clickhouse::test_helpers::{
+        select_chat_dataset_clickhouse, select_json_dataset_clickhouse, stale_datapoint_clickhouse,
+    },
+    endpoints::datasets::{DatapointKind, CLICKHOUSE_DATETIME_FORMAT},
+    inference::types::{ContentBlockChatOutput, ResolvedInputMessageContent},
 };
 use uuid::Uuid;
 
-use crate::common::get_gateway_endpoint;
+use crate::common::{delete_datapoint, get_gateway_endpoint};
 use tensorzero_internal::clickhouse::test_helpers::{
     get_clickhouse, select_chat_datapoint_clickhouse, select_json_datapoint_clickhouse,
 };
@@ -26,11 +30,11 @@ async fn test_datapoint_insert_synthetic_chat() {
 
     let resp = client
         .put(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+            "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
         )))
         .json(&json!({
             "function_name": "basic_test",
-            "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "value": "My synthetic input"}]}]},
+            "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "text": "My synthetic input"}]}]},
             "output": [{"type": "text", "text": "My synthetic output"}],
             "source_inference_id": source_inference_id,
         }))
@@ -42,7 +46,7 @@ async fn test_datapoint_insert_synthetic_chat() {
     let resp_json = resp.json::<Value>().await.unwrap();
 
     if !status.is_success() {
-        panic!("Bad request: {:?}", resp_json);
+        panic!("Bad request: {resp_json:?}");
     }
 
     let id: Uuid = resp_json
@@ -98,11 +102,11 @@ async fn test_datapoint_insert_synthetic_chat() {
     let new_datapoint_id = Uuid::now_v7();
     let resp = client
         .put(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints/{new_datapoint_id}",
+            "/internal/datasets/{dataset_name}/datapoints/{new_datapoint_id}",
         )))
         .json(&json!({
             "function_name": "basic_test",
-            "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "value": "My synthetic input"}]}]},
+            "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "text": "My synthetic input"}]}]},
             "output": [{"type": "text", "text": "My synthetic output"}],
             "source_inference_id": source_inference_id,
         }))
@@ -123,11 +127,11 @@ async fn test_datapoint_insert_synthetic_chat() {
     let new_datapoint_id = Uuid::now_v7();
     let resp = client
        .put(get_gateway_endpoint(&format!(
-           "/datasets/{dataset_name}/datapoints/{new_datapoint_id}",
+           "/internal/datasets/{dataset_name}/datapoints/{new_datapoint_id}",
        )))
        .json(&json!({
            "function_name": "basic_test",
-           "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "value": "My synthetic input"}]}]},
+           "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "text": "My synthetic input"}]}]},
            "output": [{"type": "text", "text": "My synthetic output"}],
            "source_inference_id": source_inference_id,
        }))
@@ -178,6 +182,363 @@ async fn test_datapoint_insert_synthetic_chat() {
 }
 
 #[tokio::test]
+async fn test_create_delete_datapoint_chat() {
+    let clickhouse = get_clickhouse().await;
+    let client = Client::new();
+    let dataset_name = format!("test-dataset-{}", Uuid::now_v7());
+    println!("dataset_name: {dataset_name}");
+
+    let additional_tools = json!([{"description": "Get the current temperature in a given location",
+                "parameters": {
+                    "$schema": "http://json-schema.org/draft-07/schema#",
+                    "type": "object",
+                    "properties": {
+                        "location": {
+                            "type": "string",
+                            "description": "The location to get the temperature for (e.g. \"New York\")"
+                        },
+                        "units": {
+                            "type": "string",
+                            "description": "The units to get the temperature in (must be \"fahrenheit\" or \"celsius\")",
+                            "enum": ["fahrenheit", "celsius"]
+                        }
+                    },
+                    "required": ["location"],
+                    "additionalProperties": false
+                },
+                "name": "get_temperature",
+                "strict": false}]);
+
+    let resp = client
+        .post(get_gateway_endpoint(&format!(
+            "/datasets/{dataset_name}/datapoints/bulk",
+        )))
+        .json(&json!({
+            "datapoints": [
+                {
+                    "function_name": "basic_test",
+                    "input": {
+                        "system": { "assistant_name": "foo" },
+                        "messages": [
+                            {
+                                "role": "user",
+                                "content": [ { "type": "text", "text": "bar" } ]
+                            }
+                        ]
+                    },
+                    "output": [ { "type": "text", "text": "foobar" } ],
+                    "additional_tools": null,
+                    "tool_choice":   null,
+                },
+                {
+                    "function_name": "basic_test",
+                    "input": {
+                        "system": { "assistant_name": "Dummy" },
+                        "messages": [
+                            {
+                                "role": "user",
+                                "content": [ { "type": "text", "text": "My synthetic input" } ]
+                            }
+                        ]
+                    },
+                    "output": [
+                        {
+                            "type": "tool_call",
+                            "name": "get_temperature",
+                            "arguments": { "location": "New York", "units": "fahrenheit" }
+                        }
+                    ],
+                    "additional_tools": additional_tools,
+                    "tool_choice":  "auto"
+                },
+                {
+                    "function_name": "basic_test",
+                    "input": {
+                        "system": { "assistant_name": "bar" },
+                        "messages": [
+                            {
+                                "role": "user",
+                                "content": [ { "type": "text", "text": "foo" } ]
+                            }
+                        ]
+                    },
+                    "output": null,
+                    "additional_tools": null,
+                    "tool_choice":  null
+                }
+            ]
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    let status = resp.status();
+
+    assert_eq!(status, StatusCode::OK);
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    let datapoints = select_chat_dataset_clickhouse(&clickhouse, &dataset_name)
+        .await
+        .unwrap();
+    assert_eq!(datapoints.len(), 3);
+
+    // Test the getter
+    let list_datapoints_response = client
+        .get(get_gateway_endpoint(&format!(
+            "/datasets/{dataset_name}/datapoints",
+        )))
+        .send()
+        .await
+        .unwrap();
+    assert!(list_datapoints_response.status().is_success());
+    let list_datapoints_json = list_datapoints_response.json::<Vec<Value>>().await.unwrap();
+    // Test that the auxiliary field is not returned by the list datapoints API
+    for datapoint in list_datapoints_json.iter() {
+        assert!(datapoint.get("auxiliary").is_none());
+    }
+    let list_datapoints = list_datapoints_json
+        .into_iter()
+        .map(|datapoint| serde_json::from_value::<ChatInferenceDatapoint>(datapoint).unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(list_datapoints.len(), 3);
+
+    for (datapoint, list_datapoint) in datapoints.iter().zip(list_datapoints.iter()) {
+        let pretty_datapoint = serde_json::to_string_pretty(&datapoint).unwrap();
+        println!("pretty_datapoint: {pretty_datapoint}");
+        // Verify the datapoint structure and content
+        assert_eq!(datapoint.dataset_name, dataset_name);
+        assert_eq!(datapoint.function_name, "basic_test");
+        assert!(!datapoint.is_deleted);
+        assert!(datapoint.episode_id.is_none());
+        assert!(datapoint.tags.as_ref().unwrap().is_empty());
+        assert_eq!(datapoint.auxiliary, "");
+        assert!(datapoint.staled_at.is_none());
+        let datapoint_id = datapoint.id;
+
+        // Test the getter
+        let get_datapoint_response = client
+            .get(get_gateway_endpoint(&format!(
+                "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+            )))
+            .send()
+            .await
+            .unwrap();
+        assert!(get_datapoint_response.status().is_success());
+        let get_datapoint_json = get_datapoint_response.json::<Value>().await.unwrap();
+        // Assert that the auxiliary field is not returned by the get datapoint API
+        assert!(get_datapoint_json.get("auxiliary").is_none());
+        let get_datapoint =
+            serde_json::from_value::<ChatInferenceDatapoint>(get_datapoint_json).unwrap();
+        assert_eq!(&get_datapoint, datapoint);
+
+        // Verify the list datapoint structure and content
+        assert_eq!(list_datapoint.dataset_name, dataset_name);
+        assert_eq!(list_datapoint.function_name, "basic_test");
+        assert!(!list_datapoint.is_deleted);
+        assert!(list_datapoint.episode_id.is_none());
+        assert!(list_datapoint.tags.as_ref().unwrap().is_empty());
+        assert_eq!(list_datapoint.auxiliary, "");
+
+        let mut is_tool = false;
+        // Verify input structure
+        let input = &datapoint.input;
+        assert!(input
+            .system
+            .as_ref()
+            .unwrap()
+            .get("assistant_name")
+            .is_some());
+        assert!(!input.messages.is_empty());
+        let first_message = input.messages[0].clone();
+        assert_eq!(first_message.role, Role::User);
+        let content = first_message.content;
+        assert!(!content.is_empty());
+        let first_content = content[0].clone();
+        assert!(matches!(
+            first_content,
+            ResolvedInputMessageContent::Text { .. }
+        ));
+        assert!(matches!(
+            first_content,
+            ResolvedInputMessageContent::Text { value: _, .. }
+        ));
+
+        // Verify the list datapoint input structure and content
+        let input = &list_datapoint.input;
+        assert!(input
+            .system
+            .as_ref()
+            .unwrap()
+            .get("assistant_name")
+            .is_some());
+        assert!(!input.messages.is_empty());
+        let first_message = input.messages[0].clone();
+        assert_eq!(first_message.role, Role::User);
+        let content = first_message.content;
+        assert!(!content.is_empty());
+        let first_content = content[0].clone();
+        assert!(matches!(
+            first_content,
+            ResolvedInputMessageContent::Text { .. }
+        ));
+
+        // Verify output if present
+        if let Some(output) = &datapoint.output {
+            assert!(!output.is_empty());
+            let first_output = output[0].clone();
+            if matches!(first_output, ContentBlockChatOutput::Text { .. }) {
+                assert!(matches!(first_output, ContentBlockChatOutput::Text { .. }));
+            } else if matches!(first_output, ContentBlockChatOutput::ToolCall { .. }) {
+                assert!(matches!(
+                    first_output,
+                    ContentBlockChatOutput::ToolCall { .. }
+                ));
+                is_tool = true;
+            }
+        }
+
+        // Verify output if present for the list datapoint
+        if let Some(output) = &list_datapoint.output {
+            assert!(!output.is_empty());
+            let first_output = output[0].clone();
+            if matches!(first_output, ContentBlockChatOutput::Text { .. }) {
+                assert!(matches!(first_output, ContentBlockChatOutput::Text { .. }));
+            } else if matches!(first_output, ContentBlockChatOutput::ToolCall { .. }) {
+                assert!(matches!(
+                    first_output,
+                    ContentBlockChatOutput::ToolCall { .. }
+                ));
+            }
+        }
+
+        // Verify tool_params if present
+        if let Some(tool_params) = &datapoint.tool_params {
+            assert!(is_tool);
+            let tools_available = &tool_params.tools_available;
+            assert!(!tools_available.is_empty());
+            let first_tool = tools_available[0].clone();
+            assert_eq!(first_tool.name, "get_temperature");
+            assert_eq!(
+                first_tool.description,
+                "Get the current temperature in a given location"
+            );
+            assert_eq!(
+                first_tool.parameters,
+                json!({
+                    "$schema": "http://json-schema.org/draft-07/schema#",
+                    "type": "object",
+                    "properties": {
+                        "location": {
+                            "type": "string",
+                            "description": "The location to get the temperature for (e.g. \"New York\")"
+                        },
+                        "units": {
+                            "type": "string",
+                            "description": "The units to get the temperature in (must be \"fahrenheit\" or \"celsius\")",
+                            "enum": ["fahrenheit", "celsius"]
+                        }
+                    },
+                    "required": ["location"],
+                    "additionalProperties": false
+                })
+            );
+        } else {
+            assert!(!is_tool);
+        }
+
+        // Verify tool_params if present for the list datapoint
+        if let Some(tool_params) = &list_datapoint.tool_params {
+            let tools_available = &tool_params.tools_available;
+            assert!(!tools_available.is_empty());
+            let first_tool = tools_available[0].clone();
+            assert_eq!(first_tool.name, "get_temperature");
+            assert_eq!(
+                first_tool.description,
+                "Get the current temperature in a given location"
+            );
+            assert_eq!(
+                first_tool.parameters,
+                json!({
+                    "$schema": "http://json-schema.org/draft-07/schema#",
+                    "type": "object",
+                    "properties": {
+                        "location": {
+                            "type": "string",
+                            "description": "The location to get the temperature for (e.g. \"New York\")"
+                        },
+                        "units": {
+                            "type": "string",
+                            "description": "The units to get the temperature in (must be \"fahrenheit\" or \"celsius\")",
+                            "enum": ["fahrenheit", "celsius"]
+                        }
+                    },
+                    "required": ["location"],
+                    "additionalProperties": false
+                })
+            );
+        }
+
+        let datapoint_id = datapoint.id;
+        let resp = client
+            .delete(get_gateway_endpoint(&format!(
+                "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+            )))
+            .send()
+            .await
+            .unwrap();
+
+        let status = resp.status();
+        resp.text().await.unwrap();
+        assert_eq!(status, StatusCode::OK);
+    }
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    let datapoints = select_chat_dataset_clickhouse(&clickhouse, &dataset_name)
+        .await
+        .unwrap();
+    assert!(datapoints.is_empty());
+}
+
+#[tokio::test]
+async fn test_create_datapoint_chat_bad_request() {
+    let client = Client::new();
+    let dataset_name = format!("test-dataset-{}", Uuid::now_v7());
+    println!("dataset_name: {dataset_name}");
+
+    let resp = client
+        .post(get_gateway_endpoint(&format!(
+            "/datasets/{dataset_name}/datapoints/bulk",
+        )))
+        .json(&json!({
+            "datapoints": [
+                {
+                    "function_name": "basic_test",
+                    "input": {
+                        "system": {"assistant_name": "Dummy"},
+                        "messages": [
+                            {
+                                "role": "user",
+                                "content": [
+                                    {"type": "text", "text": "My synthetic input"}
+                                ]
+                            }
+                        ]
+                    },
+                    "output": [
+                        {"type": "tool_call", "name": "get_temperature", "arguments": {"location": "New York", "units": "fahrenheit"}}
+                    ]
+                }
+            ]
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    let status = resp.status();
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
 async fn test_datapoint_insert_synthetic_chat_with_tools() {
     let clickhouse = get_clickhouse().await;
     let client = Client::new();
@@ -216,7 +577,7 @@ async fn test_datapoint_insert_synthetic_chat_with_tools() {
 
     let resp = client
         .put(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+            "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
         )))
         .json(&json!({
             "function_name": "basic_test",
@@ -226,7 +587,7 @@ async fn test_datapoint_insert_synthetic_chat_with_tools() {
                     {
                         "role": "user",
                         "content": [
-                            {"type": "text", "value": "My synthetic input"}
+                            {"type": "text", "text": "My synthetic input"}
                         ]
                     }
                 ]
@@ -246,7 +607,7 @@ async fn test_datapoint_insert_synthetic_chat_with_tools() {
     // This should fail because the tool call is not in the tool_params
     assert_eq!(status, StatusCode::BAD_REQUEST);
     let err_msg = resp_json.get("error").unwrap().as_str().unwrap();
-    println!("Error: {}", err_msg);
+    println!("Error: {err_msg}");
     assert!(
         err_msg.contains("Demonstration contains invalid tool name"),
         "Unexpected error message: {err_msg}"
@@ -255,7 +616,7 @@ async fn test_datapoint_insert_synthetic_chat_with_tools() {
     // Next we check invalid arguments
     let resp = client
         .put(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+            "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
         )))
         .json(&json!({
             "function_name": "basic_test",
@@ -265,7 +626,7 @@ async fn test_datapoint_insert_synthetic_chat_with_tools() {
                     {
                         "role": "user",
                         "content": [
-                            {"type": "text", "value": "My synthetic input"}
+                            {"type": "text", "text": "My synthetic input"}
                         ]
                     }
                 ]
@@ -285,7 +646,7 @@ async fn test_datapoint_insert_synthetic_chat_with_tools() {
     // This request is correct
     assert_eq!(status, StatusCode::BAD_REQUEST);
     let err_msg = resp_json.get("error").unwrap().as_str().unwrap();
-    println!("Error: {}", err_msg);
+    println!("Error: {err_msg}");
     assert!(
         err_msg.contains("Demonstration contains invalid tool call arguments"),
         "Unexpected error message: {err_msg}"
@@ -293,7 +654,7 @@ async fn test_datapoint_insert_synthetic_chat_with_tools() {
 
     let resp = client
     .put(get_gateway_endpoint(&format!(
-        "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+        "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
     )))
     .json(&json!({
         "function_name": "basic_test",
@@ -303,7 +664,7 @@ async fn test_datapoint_insert_synthetic_chat_with_tools() {
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "value": "My synthetic input"}
+                        {"type": "text", "text": "My synthetic input"}
                     ]
                 }
             ]
@@ -380,7 +741,7 @@ async fn test_datapoint_insert_synthetic_json() {
 
     let resp = client
         .put(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+            "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
         )))
         .json(&json!({
             "function_name": "json_success",
@@ -397,7 +758,7 @@ async fn test_datapoint_insert_synthetic_json() {
     let resp_json = resp.json::<Value>().await.unwrap();
 
     if !status.is_success() {
-        panic!("Bad request: {:?}", resp_json);
+        panic!("Bad request: {resp_json:?}");
     }
 
     let id: Uuid = resp_json
@@ -455,7 +816,7 @@ async fn test_datapoint_insert_synthetic_json() {
     // Test updating with a different output schema (this should fail)
     let new_resp = client
     .put(get_gateway_endpoint(&format!(
-        "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+        "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
     )))
     .json(&json!({
         "function_name": "json_success",
@@ -486,7 +847,7 @@ async fn test_datapoint_insert_synthetic_json() {
     // but we are overwriting the same datapoint with a new one
     let new_resp = client
     .put(get_gateway_endpoint(&format!(
-        "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+        "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
     )))
     .json(&json!({
         "function_name": "json_success",
@@ -514,7 +875,7 @@ async fn test_datapoint_insert_synthetic_json() {
 
     // Force deduplication to run
     clickhouse
-        .run_query("OPTIMIZE TABLE JsonInferenceDatapoint".to_string(), None)
+        .run_query_synchronous("OPTIMIZE TABLE JsonInferenceDatapoint".to_string(), None)
         .await
         .unwrap();
 
@@ -567,7 +928,7 @@ async fn test_datapoint_insert_synthetic_json() {
     let new_datapoint_id = Uuid::now_v7();
     let new_resp = client
     .put(get_gateway_endpoint(&format!(
-        "/datasets/{dataset_name}/datapoints/{new_datapoint_id}",
+        "/internal/datasets/{dataset_name}/datapoints/{new_datapoint_id}",
     )))
     .json(&json!({
         "function_name": "json_success",
@@ -591,7 +952,7 @@ async fn test_datapoint_insert_synthetic_json() {
 
     // Check that the datapoint was not inserted into clickhouse
     let datapoint = select_json_datapoint_clickhouse(&clickhouse, new_datapoint_id).await;
-    println!("datapoint: {:?}", datapoint);
+    println!("datapoint: {datapoint:?}");
     assert!(datapoint.is_none());
     // Let's stale the old datapoint and try again
     stale_datapoint_clickhouse(&clickhouse, datapoint_id).await;
@@ -600,7 +961,7 @@ async fn test_datapoint_insert_synthetic_json() {
     let new_datapoint_id = Uuid::now_v7();
     let resp = client
        .put(get_gateway_endpoint(&format!(
-           "/datasets/{dataset_name}/datapoints/{new_datapoint_id}",
+           "/internal/datasets/{dataset_name}/datapoints/{new_datapoint_id}",
        )))
        .json(&json!({
            "function_name": "json_success",
@@ -663,6 +1024,264 @@ async fn test_datapoint_insert_synthetic_json() {
 }
 
 #[tokio::test]
+async fn test_create_delete_datapoint_json() {
+    let clickhouse = get_clickhouse().await;
+    let client = Client::new();
+    let dataset_name = format!("test-dataset-{}", Uuid::now_v7());
+
+    let alternate_output_schema = json!({
+    "type": "object",
+    "properties": {
+        "response": {
+            "type": "string"
+        }
+    },
+    "required": ["response"],
+    "additionalProperties": false
+    });
+    let resp = client
+        .post(get_gateway_endpoint(&format!(
+            "/datasets/{dataset_name}/datapoints/bulk",
+        )))
+        .json(&json!({
+            "datapoints": [
+                {
+                    "function_name": "json_success",
+                    "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "US"}}]}]},
+                    "output": {"answer": "Hello"},
+                },
+                {
+                    "function_name": "json_success",
+                    "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "US"}}]}]},
+                    "output": {"response": "Hello"},
+                    "output_schema": alternate_output_schema
+                }
+            ]
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    let status = resp.status();
+
+    assert!(status.is_success());
+    // Sleep for a little so the getter can get
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Test the lister
+    let list_datapoints_response = client
+        .get(get_gateway_endpoint(&format!(
+            "/datasets/{dataset_name}/datapoints",
+        )))
+        .send()
+        .await
+        .unwrap();
+    assert!(list_datapoints_response.status().is_success());
+    let list_datapoints = list_datapoints_response.json::<Vec<Value>>().await.unwrap();
+    assert_eq!(list_datapoints.len(), 2);
+    for datapoint in list_datapoints.iter() {
+        // Test that the auxiliary field is not returned by the list datapoints API
+        assert!(datapoint.get("auxiliary").is_none());
+    }
+    let list_datapoints = list_datapoints
+        .into_iter()
+        .map(|datapoint| serde_json::from_value::<JsonInferenceDatapoint>(datapoint).unwrap())
+        .collect::<Vec<_>>();
+    let datapoints = select_json_dataset_clickhouse(&clickhouse, &dataset_name)
+        .await
+        .unwrap();
+    assert_eq!(datapoints.len(), 2);
+
+    for (datapoint, list_datapoint) in datapoints.iter().zip(list_datapoints.iter()) {
+        let pretty_datapoint = serde_json::to_string_pretty(&datapoint).unwrap();
+        println!("pretty_datapoint: {pretty_datapoint}");
+        // Verify the datapoint structure and content
+        assert_eq!(datapoint.dataset_name, dataset_name);
+        assert_eq!(datapoint.function_name, "json_success");
+        assert!(!datapoint.is_deleted);
+        assert!(datapoint.episode_id.is_none());
+        assert!(datapoint.tags.as_ref().unwrap().is_empty());
+        assert_eq!(datapoint.auxiliary, "");
+        assert!(datapoint.staled_at.is_none());
+        let datapoint_id = datapoint.id;
+
+        // Test the getter
+        let get_datapoint_response = client
+            .get(get_gateway_endpoint(&format!(
+                "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+            )))
+            .send()
+            .await
+            .unwrap();
+        assert!(get_datapoint_response.status().is_success());
+        let get_datapoint_json = get_datapoint_response.json::<Value>().await.unwrap();
+        // Assert that the auxiliary field is not returned by the get datapoint API
+        assert!(get_datapoint_json.get("auxiliary").is_none());
+        let get_datapoint =
+            serde_json::from_value::<JsonInferenceDatapoint>(get_datapoint_json).unwrap();
+        assert_eq!(&get_datapoint, datapoint);
+
+        // Verify the list datapoint structure and content
+        assert_eq!(list_datapoint.dataset_name, dataset_name);
+        assert_eq!(list_datapoint.function_name, "json_success");
+        assert!(!list_datapoint.is_deleted);
+        assert!(list_datapoint.episode_id.is_none());
+        assert!(list_datapoint.tags.as_ref().unwrap().is_empty());
+        assert_eq!(list_datapoint.auxiliary, "");
+
+        // Verify input structure
+        let input = &datapoint.input;
+        assert!(input
+            .system
+            .as_ref()
+            .unwrap()
+            .get("assistant_name")
+            .is_some());
+        assert!(!input.messages.is_empty());
+        let first_message = input.messages[0].clone();
+        assert_eq!(first_message.role, Role::User);
+        let content = first_message.content;
+        assert!(!content.is_empty());
+        let first_content = content[0].clone();
+        assert!(matches!(
+            first_content,
+            ResolvedInputMessageContent::Text { .. }
+        ));
+        assert!(matches!(
+            first_content,
+            ResolvedInputMessageContent::Text { value: _, .. }
+        ));
+
+        // Verify the list datapoint input structure and content
+        let input = &list_datapoint.input;
+        assert!(input
+            .system
+            .as_ref()
+            .unwrap()
+            .get("assistant_name")
+            .is_some());
+        assert!(!input.messages.is_empty());
+        let first_message = input.messages[0].clone();
+        assert_eq!(first_message.role, Role::User);
+        let content = first_message.content;
+        assert!(!content.is_empty());
+        let first_content = content[0].clone();
+        assert!(matches!(
+            first_content,
+            ResolvedInputMessageContent::Text { .. }
+        ));
+
+        // Get the output schema
+        let output_schema = &datapoint.output_schema;
+        let output_schema_str = serde_json::to_string(&output_schema).unwrap();
+
+        // Verify output if present
+        if let Some(output) = &datapoint.output {
+            if output_schema_str.contains("response") {
+                assert_eq!(output.raw, Some("{\"response\":\"Hello\"}".to_string()));
+                assert_eq!(output.parsed, Some(json!({"response": "Hello"})));
+            } else {
+                assert_eq!(output.raw, Some("{\"answer\":\"Hello\"}".to_string()));
+                assert_eq!(output.parsed, Some(json!({"answer": "Hello"})));
+            }
+        }
+
+        // Get the output schema from the list datapoint
+        let output_schema = &list_datapoint.output_schema;
+        let output_schema_str = serde_json::to_string(&output_schema).unwrap();
+
+        // Verify output if present for the list datapoint
+        if let Some(output) = &list_datapoint.output {
+            if output_schema_str.contains("response") {
+                assert_eq!(output.raw, Some("{\"response\":\"Hello\"}".to_string()));
+                assert_eq!(output.parsed, Some(json!({"response": "Hello"})));
+            } else {
+                assert_eq!(output.raw, Some("{\"answer\":\"Hello\"}".to_string()));
+                assert_eq!(output.parsed, Some(json!({"answer": "Hello"})));
+            }
+        }
+
+        let datapoint_id = datapoint.id;
+        let resp = client
+            .delete(get_gateway_endpoint(&format!(
+                "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+            )))
+            .send()
+            .await
+            .unwrap();
+
+        let status = resp.status();
+        resp.text().await.unwrap();
+        assert_eq!(status, StatusCode::OK);
+    }
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    let datapoints = select_json_dataset_clickhouse(&clickhouse, &dataset_name)
+        .await
+        .unwrap();
+    assert!(datapoints.is_empty());
+}
+
+#[tokio::test]
+async fn test_create_datapoint_json_bad_output() {
+    let client = Client::new();
+    let dataset_name = format!("test-dataset-{}", Uuid::now_v7());
+
+    let resp = client
+        .post(get_gateway_endpoint(&format!(
+            "/datasets/{dataset_name}/datapoints/bulk",
+        )))
+        .json(&json!({
+            "datapoints": [
+                {
+                    "function_name": "json_success",
+                    "input": {
+                        "system": { "assistant_name": "Dummy" },
+                        "messages": [
+                            {
+                                "role": "user",
+                                "content": [
+                                    {
+                                        "type": "text",
+                                        "arguments": { "country": "US" }
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    "output": [
+                        { "response": "Hello" }
+                    ]
+                }
+            ]
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn test_delete_nonexistent_datapoint() {
+    let client = Client::new();
+    let dataset_name = format!("test-dataset-{}", Uuid::now_v7());
+    let datapoint_id = Uuid::now_v7();
+
+    let resp = client
+        .delete(get_gateway_endpoint(&format!(
+            "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+        )))
+        .send()
+        .await
+        .unwrap();
+
+    let status = resp.status();
+    // For now, we don't care if the datapoint doesn't exist.
+    assert_eq!(status, StatusCode::OK);
+}
+
+#[tokio::test]
 async fn test_datapoint_insert_bad_name() {
     let client = Client::new();
     let dataset_name = "builder";
@@ -670,7 +1289,7 @@ async fn test_datapoint_insert_bad_name() {
 
     let resp = client
         .put(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+            "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
         )))
         .json(&json!({
             "function_name": "json_success",
@@ -701,11 +1320,11 @@ async fn test_datapoint_insert_invalid_input_synthetic_chat() {
 
     let resp = client
         .put(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+            "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
         )))
         .json(&json!({
             "function_name": "variant_failover",
-            "input": {"system": {"assistant_name": "Ferris"}, "messages": [{"role": "user", "content": [{"type": "text", "value": "My synthetic input"}]}]},
+            "input": {"system": {"assistant_name": "Ferris"}, "messages": [{"role": "user", "content": [{"type": "text", "text": "My synthetic input"}]}]},
             "output": "Not a json object",
         }))
         .send()
@@ -735,11 +1354,11 @@ async fn test_datapoint_insert_invalid_input_synthetic_json() {
 
     let resp = client
         .put(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+            "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
         )))
         .json(&json!({
             "function_name": "json_success",
-            "input": {"system": {"assistant_name": "Ferris"}, "messages": [{"role": "user", "content": [{"type": "text", "value": "My synthetic input"}]}]},
+            "input": {"system": {"assistant_name": "Ferris"}, "messages": [{"role": "user", "content": [{"type": "text", "text": "My synthetic input"}]}]},
             "output": "Not a json object",
             "output_schema": {},
         }))
@@ -770,7 +1389,7 @@ async fn test_datapoint_insert_invalid_output_synthetic_json() {
 
     let resp = client
         .put(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+            "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
         )))
         .json(&json!({
             "function_name": "json_success",
@@ -809,7 +1428,7 @@ async fn test_datapoint_insert_synthetic_bad_uuid() {
 
     let resp = client
         .put(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints/{datapoint_uuid_v4}",
+            "/internal/datasets/{dataset_name}/datapoints/{datapoint_uuid_v4}",
         )))
         .json(&json!({
             "function_name": "basic_test",
@@ -837,7 +1456,7 @@ async fn test_datapoint_insert_synthetic_bad_params() {
 
     let resp = client
         .put(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+            "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
         )))
         .json(&json!({
             "function_name": "basic_test",
@@ -888,7 +1507,7 @@ async fn test_datapoint_insert_output_inherit_chat() {
 
     let resp = client
         .post(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints"
+            "/internal/datasets/{dataset_name}/datapoints"
         )))
         .json(&json!({
             "inference_id": inference_id,
@@ -937,28 +1556,25 @@ async fn test_datapoint_insert_output_inherit_chat() {
       "output": "[{\"type\":\"text\",\"text\":\"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\"}]",
       "tool_params": "",
       "tags": {},
-      "auxiliary": "{}",
+      "auxiliary": "",
       "is_deleted": false,
       "staled_at": null,
       "source_inference_id": inference_id.to_string(),
     });
     assert_eq!(datapoint, expected);
 
-    let resp = client
-        .delete(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/function/basic_test/kind/chat/datapoint/{datapoint_id}",
-        )))
-        .send()
-        .await
-        .unwrap();
-
-    let status = resp.status();
-    let resp_text = resp.text().await.unwrap();
-    assert_eq!(status, StatusCode::OK, "Delete failed: {resp_text}");
+    delete_datapoint(
+        &clickhouse,
+        DatapointKind::Chat,
+        "basic_test",
+        &dataset_name,
+        datapoint_id,
+    )
+    .await;
 
     // Force deduplication to run
     clickhouse
-        .run_query("OPTIMIZE TABLE ChatInferenceDatapoint".to_string(), None)
+        .run_query_synchronous("OPTIMIZE TABLE ChatInferenceDatapoint".to_string(), None)
         .await
         .unwrap();
 
@@ -994,7 +1610,7 @@ async fn test_datapoint_insert_output_inherit_chat() {
       "output": "[{\"type\":\"text\",\"text\":\"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\"}]",
       "tool_params": "",
       "tags": {},
-      "auxiliary": "{}",
+      "auxiliary": "",
       "is_deleted": true,
       "staled_at": null,
       "source_inference_id": inference_id.to_string(),
@@ -1003,34 +1619,6 @@ async fn test_datapoint_insert_output_inherit_chat() {
     assert_ne!(
         updated_at, new_updated_at,
         "Deleting datapoint should change updated_at"
-    );
-}
-
-#[tokio::test]
-async fn test_bad_delete_datapoint() {
-    let client = Client::new();
-
-    let id = Uuid::now_v7();
-    let resp = client
-        .delete(get_gateway_endpoint(&format!(
-            "/datasets/missing/function/basic_test/kind/chat/datapoint/{id}",
-        )))
-        .send()
-        .await
-        .unwrap();
-
-    let status = resp.status();
-    let resp: serde_json::Value = resp.json().await.unwrap();
-    assert_eq!(
-        status,
-        StatusCode::BAD_REQUEST,
-        "Delete should have failed: {resp}"
-    );
-    assert_eq!(
-        resp,
-        json!({
-            "error": format!("Datapoint not found with params DeletePathParams {{ dataset: \"missing\", function: \"basic_test\", kind: Chat, id: {id} }}")
-        })
     );
 }
 
@@ -1065,7 +1653,7 @@ async fn test_datapoint_insert_output_none_chat() {
 
     let resp = client
         .post(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints"
+            "/internal/datasets/{dataset_name}/datapoints"
         )))
         .json(&json!({
             "inference_id": inference_id,
@@ -1115,7 +1703,7 @@ async fn test_datapoint_insert_output_none_chat() {
       "output": null,
       "tool_params": "",
       "tags": {},
-      "auxiliary": "{}",
+      "auxiliary": "",
       "is_deleted": false,
       "staled_at": null,
       "source_inference_id": inference_id.to_string(),
@@ -1151,7 +1739,7 @@ async fn test_datapoint_create_bad_name() {
 
     let resp = client
         .post(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints"
+            "/internal/datasets/{dataset_name}/datapoints"
         )))
         .json(&json!({
             "inference_id": inference_id,
@@ -1213,11 +1801,11 @@ async fn test_datapoint_insert_output_demonstration_chat() {
     }
 
     // Sleep to ensure that we wrote to ClickHouse
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
     let resp = client
         .post(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints"
+            "/internal/datasets/{dataset_name}/datapoints"
         )))
         .json(&json!({
             "inference_id": inference_id,
@@ -1271,7 +1859,7 @@ async fn test_datapoint_insert_output_demonstration_chat() {
       "output": "[{\"type\":\"text\",\"text\":\"My demonstration chat answer\"}]",
       "tool_params": "",
       "tags": {},
-      "auxiliary": "{}",
+      "auxiliary": "",
       "is_deleted": false,
       "staled_at": null,
       "source_inference_id": inference_id.to_string(),
@@ -1288,7 +1876,9 @@ async fn test_datapoint_insert_output_inherit_json() {
         "function_name": "json_success",
         "input": {
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": {"country": "Japan"}}]
+            "messages": [{"role": "user", "content": [
+                {"type": "text", "arguments": {"country": "Japan"}}
+            ]}],
         },
         "stream": false,
     });
@@ -1310,7 +1900,7 @@ async fn test_datapoint_insert_output_inherit_json() {
 
     let resp = client
         .post(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints"
+            "/internal/datasets/{dataset_name}/datapoints"
         )))
         .json(&json!({
             "inference_id": inference_id,
@@ -1359,28 +1949,25 @@ async fn test_datapoint_insert_output_inherit_json() {
       "output": "{\"raw\":\"{\\\"answer\\\":\\\"Hello\\\"}\",\"parsed\":{\"answer\":\"Hello\"}}",
       "output_schema": "{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\"}},\"required\":[\"answer\"],\"additionalProperties\":false}",
       "tags": {},
-      "auxiliary": "{}",
+      "auxiliary": "",
       "is_deleted": false,
       "staled_at": null,
       "source_inference_id": inference_id.to_string(),
     });
     assert_eq!(datapoint, expected);
 
-    let resp = client
-        .delete(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/function/json_success/kind/json/datapoint/{datapoint_id}",
-        )))
-        .send()
-        .await
-        .unwrap();
-
-    let status = resp.status();
-    let resp_text = resp.text().await.unwrap();
-    assert_eq!(status, StatusCode::OK, "Delete failed: {resp_text}");
+    delete_datapoint(
+        &clickhouse,
+        DatapointKind::Json,
+        "json_success",
+        &dataset_name,
+        datapoint_id,
+    )
+    .await;
 
     // Force deduplication to run
     clickhouse
-        .run_query("OPTIMIZE TABLE JsonInferenceDatapoint".to_string(), None)
+        .run_query_synchronous("OPTIMIZE TABLE JsonInferenceDatapoint".to_string(), None)
         .await
         .unwrap();
 
@@ -1416,7 +2003,7 @@ async fn test_datapoint_insert_output_inherit_json() {
       "output": "{\"raw\":\"{\\\"answer\\\":\\\"Hello\\\"}\",\"parsed\":{\"answer\":\"Hello\"}}",
       "output_schema": "{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\"}},\"required\":[\"answer\"],\"additionalProperties\":false}",
       "tags": {},
-      "auxiliary": "{}",
+      "auxiliary": "",
       "is_deleted": true,
       "staled_at": null,
       "source_inference_id": inference_id.to_string(),
@@ -1442,7 +2029,7 @@ async fn test_datapoint_insert_output_none_json() {
         "function_name": "json_success",
         "input": {
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": {"country": "Japan"}}]
+            "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "Japan"}}]}]
         },
         "stream": false,
     });
@@ -1464,7 +2051,7 @@ async fn test_datapoint_insert_output_none_json() {
 
     let resp = client
         .post(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints"
+            "/internal/datasets/{dataset_name}/datapoints"
         )))
         .json(&json!({
             "inference_id": inference_id,
@@ -1513,7 +2100,7 @@ async fn test_datapoint_insert_output_none_json() {
       "output":null,
       "output_schema": "{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\"}},\"required\":[\"answer\"],\"additionalProperties\":false}",
       "tags": {},
-      "auxiliary": "{}",
+      "auxiliary": "",
       "is_deleted": false,
       "staled_at": null,
       "source_inference_id": inference_id.to_string(),
@@ -1530,7 +2117,7 @@ async fn test_datapoint_insert_output_demonstration_json() {
         "function_name": "json_success",
         "input": {
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": {"country": "Japan"}}]
+            "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "Japan"}}]}]
         },
         "stream": false,
     });
@@ -1569,7 +2156,7 @@ async fn test_datapoint_insert_output_demonstration_json() {
 
     let resp = client
         .post(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints"
+            "/internal/datasets/{dataset_name}/datapoints"
         )))
         .json(&json!({
             "inference_id": inference_id,
@@ -1623,7 +2210,7 @@ async fn test_datapoint_insert_output_demonstration_json() {
       "output": "{\"raw\":\"{\\\"answer\\\":\\\"My demonstration answer\\\"}\",\"parsed\":{\"answer\":\"My demonstration answer\"}}",
       "output_schema": "{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\"}},\"required\":[\"answer\"],\"additionalProperties\":false}",
       "tags": {},
-      "auxiliary": "{}",
+      "auxiliary": "",
       "is_deleted": false,
       "staled_at": null,
       "source_inference_id": inference_id.to_string(),
@@ -1636,7 +2223,9 @@ async fn test_missing_inference_id() {
     let client = Client::new();
     let fake_inference_id = Uuid::now_v7();
     let resp = client
-        .post(get_gateway_endpoint("/datasets/dummy-dataset/datapoints"))
+        .post(get_gateway_endpoint(
+            "/internal/datasets/dummy-dataset/datapoints",
+        ))
         .json(&json!({
             "inference_id": fake_inference_id,
             "output": "inherit"
@@ -1661,7 +2250,7 @@ async fn test_datapoint_missing_demonstration() {
         "function_name": "json_success",
         "input": {
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": {"country": "Japan"}}]
+            "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "Japan"}}]}]
         },
         "stream": false,
     });
@@ -1681,7 +2270,7 @@ async fn test_datapoint_missing_demonstration() {
 
     let resp = client
         .post(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints"
+            "/internal/datasets/{dataset_name}/datapoints"
         )))
         .json(&json!({
             "inference_id": inference_id,
@@ -1710,11 +2299,11 @@ async fn test_datapoint_insert_missing_output_chat() {
 
     let resp = client
         .put(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+            "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
         )))
         .json(&json!({
             "function_name": "basic_test",
-            "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "value": "My synthetic input"}]}]},
+            "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "text": "My synthetic input"}]}]},
             // output field is deliberately omitted
         }))
         .send()
@@ -1724,8 +2313,7 @@ async fn test_datapoint_insert_missing_output_chat() {
     let status = resp.status();
     assert!(
         status.is_success(),
-        "Expected successful response, got: {}",
-        status
+        "Expected successful response, got: {status}"
     );
 
     let resp_json = resp.json::<Value>().await.unwrap();
@@ -1774,11 +2362,11 @@ async fn test_datapoint_insert_null_output_chat() {
 
     let resp = client
         .put(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+            "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
         )))
         .json(&json!({
             "function_name": "basic_test",
-            "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "value": "My synthetic input"}]}]},
+            "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "text": "My synthetic input"}]}]},
             "output": null, // explicitly null output
         }))
         .send()
@@ -1788,8 +2376,7 @@ async fn test_datapoint_insert_null_output_chat() {
     let status = resp.status();
     assert!(
         status.is_success(),
-        "Expected successful response, got: {}",
-        status
+        "Expected successful response, got: {status}"
     );
 
     let resp_json = resp.json::<Value>().await.unwrap();
@@ -1838,7 +2425,7 @@ async fn test_datapoint_insert_missing_output_json() {
 
     let resp = client
         .put(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+            "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
         )))
         .json(&json!({
             "function_name": "json_success",
@@ -1853,8 +2440,7 @@ async fn test_datapoint_insert_missing_output_json() {
     let status = resp.status();
     assert!(
         status.is_success(),
-        "Expected successful response, got: {}",
-        status
+        "Expected successful response, got: {status}"
     );
 
     let resp_json = resp.json::<Value>().await.unwrap();
@@ -1903,7 +2489,7 @@ async fn test_datapoint_insert_null_output_json() {
 
     let resp = client
         .put(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+            "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
         )))
         .json(&json!({
             "function_name": "json_success",
@@ -1918,8 +2504,7 @@ async fn test_datapoint_insert_null_output_json() {
     let status = resp.status();
     assert!(
         status.is_success(),
-        "Expected successful response, got: {}",
-        status
+        "Expected successful response, got: {status}"
     );
 
     let resp_json = resp.json::<Value>().await.unwrap();
@@ -1957,4 +2542,37 @@ async fn test_datapoint_insert_null_output_json() {
       "source_inference_id": null,
     });
     assert_eq!(datapoint, expected);
+}
+
+#[tokio::test]
+async fn test_list_datapoints_nonexistent_dataset() {
+    let client = Client::new();
+    let dataset_name = format!("nonexistent-dataset-{}", Uuid::now_v7());
+
+    let resp = client
+        .get(get_gateway_endpoint(&format!(
+            "/datasets/{dataset_name}/datapoints",
+        )))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let datapoints: Vec<ChatInferenceDatapoint> = resp.json().await.unwrap();
+    assert!(datapoints.is_empty());
+}
+
+#[tokio::test]
+async fn test_get_nonexistent_datapoint() {
+    let client = Client::new();
+    let dataset_name = format!("test-dataset-{}", Uuid::now_v7());
+    let datapoint_id = Uuid::now_v7();
+
+    let resp = client
+        .get(get_gateway_endpoint(&format!(
+            "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+        )))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
 }

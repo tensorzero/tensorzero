@@ -51,16 +51,16 @@ impl Migration for Migration0018<'_> {
         Ok(!finish_reason_column_exists || !cache_finish_reason_column_exists)
     }
 
-    async fn apply(&self) -> Result<(), Error> {
+    async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         self.clickhouse
-            .run_query(
+            .run_query_synchronous(
                 "ALTER TABLE ModelInference ADD COLUMN IF NOT EXISTS finish_reason Nullable(Enum8('stop', 'length', 'tool_call', 'content_filter', 'unknown'))".to_string(),
                 None,
             )
             .await?;
 
         self.clickhouse
-            .run_query(
+            .run_query_synchronous(
                 "ALTER TABLE ModelInferenceCache ADD COLUMN IF NOT EXISTS finish_reason Nullable(Enum8('stop', 'length', 'tool_call', 'content_filter', 'unknown'))".to_string(),
                 None,
             )

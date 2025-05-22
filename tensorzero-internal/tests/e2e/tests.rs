@@ -1,4 +1,4 @@
-#![allow(clippy::panic, clippy::unwrap_used, clippy::expect_used)]
+#![expect(clippy::panic, clippy::unwrap_used, clippy::expect_used)]
 mod batch;
 mod best_of_n;
 mod cache;
@@ -6,13 +6,17 @@ mod clickhouse;
 mod common;
 mod datasets;
 mod dicl;
+mod dynamic_evaluations;
 mod fallback;
 mod feedback;
 mod health;
+mod human_static_evaluation_feedback;
 mod inference;
 mod mixture_of_n;
 mod object_storage;
 mod openai_compatible;
+mod otel;
+mod otel_jaeger;
 mod prometheus;
 mod providers;
 mod proxy;

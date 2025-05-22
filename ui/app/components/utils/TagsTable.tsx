@@ -5,6 +5,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  TableEmptyState,
 } from "~/components/ui/table";
 import { Code } from "~/components/ui/code";
 import { useNavigate } from "react-router";
@@ -21,6 +22,7 @@ export function TagsTable({ tags }: TagsTableProps) {
     "tensorzero::evaluation_name",
     "tensorzero::dataset_name",
     "tensorzero::evaluator_inference_id",
+    "tensorzero::dynamic_evaluation_run_id",
   ];
   // The following 2 keys only get links if the evaluation or dataset name is present
   // Since that information is not guaranteed to be present,
@@ -65,6 +67,9 @@ export function TagsTable({ tags }: TagsTableProps) {
         case "tensorzero::evaluator_inference_id":
           navigate(`/observability/inferences/${value}`);
           break;
+        case "tensorzero::dynamic_evaluation_run_id":
+          navigate(`/dynamic_evaluations/runs/${value}`);
+          break;
       }
     }
   };
@@ -79,14 +84,7 @@ export function TagsTable({ tags }: TagsTableProps) {
       </TableHeader>
       <TableBody>
         {Object.keys(tags).length === 0 ? (
-          <TableRow className="hover:bg-bg-primary">
-            <TableCell
-              colSpan={2}
-              className="text-fg-muted px-3 py-8 text-center"
-            >
-              No tags found.
-            </TableCell>
-          </TableRow>
+          <TableEmptyState message="No tags found" />
         ) : (
           Object.entries(tags).map(([key, value]) => (
             <TableRow

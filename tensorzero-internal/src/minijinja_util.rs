@@ -32,7 +32,7 @@ impl TemplateConfig<'_> {
                 .map_err(|e| {
                     Error::new(ErrorDetails::MiniJinjaTemplate {
                         template_name,
-                        message: format!("Failed to add template: {}", e),
+                        message: format!("Failed to add template: {e}"),
                     })
                 })?;
         }
@@ -60,7 +60,7 @@ impl TemplateConfig<'_> {
             .map_err(|e| {
                 Error::new(ErrorDetails::MiniJinjaTemplate {
                     template_name: template_name.to_string(),
-                    message: format!("Failed to add template: {}", e),
+                    message: format!("Failed to add template: {e}"),
                 })
             })
     }
@@ -76,10 +76,10 @@ impl TemplateConfig<'_> {
         match maybe_message {
             Ok(message) => Ok(message),
             Err(err) => {
-                let mut message = format!("Could not render template: {:#}", err);
+                let mut message = format!("Could not render template: {err:#}");
                 let mut err = &err as &dyn std::error::Error;
                 while let Some(next_err) = err.source() {
-                    message.push_str(&format!("\nCaused by: {:#}", next_err));
+                    message.push_str(&format!("\nCaused by: {next_err:#}"));
                     err = next_err;
                 }
                 Err(ErrorDetails::MiniJinjaTemplateRender {
@@ -110,7 +110,7 @@ impl TemplateConfig<'_> {
             .map_err(|e| {
                 Error::new(ErrorDetails::MiniJinjaTemplate {
                     template_name: "t0:best_of_n_evaluator_system".to_string(),
-                    message: format!("Failed to add template: {}", e),
+                    message: format!("Failed to add template: {e}"),
                 })
             })?;
         self.env
@@ -121,7 +121,7 @@ impl TemplateConfig<'_> {
             .map_err(|e| {
                 Error::new(ErrorDetails::MiniJinjaTemplate {
                     template_name: "t0:best_of_n_evaluator_candidates".to_string(),
-                    message: format!("Failed to add template: {}", e),
+                    message: format!("Failed to add template: {e}"),
                 })
             })?;
         self.env
@@ -129,7 +129,7 @@ impl TemplateConfig<'_> {
             .map_err(|e| {
                 Error::new(ErrorDetails::MiniJinjaTemplate {
                     template_name: "t0:mixture_of_n_fuser_system".to_string(),
-                    message: format!("Failed to add template: {}", e),
+                    message: format!("Failed to add template: {e}"),
                 })
             })?;
         self.env
@@ -140,7 +140,7 @@ impl TemplateConfig<'_> {
             .map_err(|e| {
                 Error::new(ErrorDetails::MiniJinjaTemplate {
                     template_name: "t0:mixture_of_n_fuser_candidates".to_string(),
-                    message: format!("Failed to add template: {}", e),
+                    message: format!("Failed to add template: {e}"),
                 })
             })?;
         Ok(())

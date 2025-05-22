@@ -5,12 +5,11 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  TableEmptyState,
 } from "~/components/ui/table";
 import type { FunctionConfig } from "~/utils/config/function";
-import type { FunctionCountInfo } from "~/utils/clickhouse/inference";
-import { formatDate } from "~/utils/date";
-import { Code } from "~/components/ui/code";
-import { FunctionLink } from "~/components/function/FunctionLink";
+import type { FunctionCountInfo } from "~/utils/clickhouse/inference.server";
+import { TableItemTime, TableItemFunction } from "~/components/ui/TableItems";
 
 export default function FunctionsTable({
   functions,
@@ -39,11 +38,16 @@ export default function FunctionsTable({
       type = "?";
     }
 
+    const variantsCount = function_config?.variants
+      ? Object.keys(function_config.variants).length
+      : 0;
+
     return {
       function_name,
       count: countInfo ? countInfo.count : 0,
       max_timestamp: countInfo ? countInfo.max_timestamp : "Never",
       type,
+      variantsCount,
     };
   });
 
@@ -53,40 +57,39 @@ export default function FunctionsTable({
         <TableHeader>
           <TableRow>
             <TableHead>Name</TableHead>
-            <TableHead>Type</TableHead>
-            <TableHead>Inference Count</TableHead>
+            <TableHead>Variants</TableHead>
+            <TableHead>Inferences</TableHead>
             <TableHead>Last Used</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {mergedFunctions.length === 0 ? (
-            <TableRow className="hover:bg-bg-primary">
-              <TableCell
-                colSpan={4}
-                className="text-fg-muted px-3 py-8 text-center"
-              >
-                No functions found.
-              </TableCell>
-            </TableRow>
+            <TableEmptyState message="No functions found" />
           ) : (
             mergedFunctions.map(
-              ({ function_name, count, max_timestamp, type }) => (
+              ({
+                function_name,
+                count,
+                max_timestamp,
+                type,
+                variantsCount,
+              }) => (
                 <TableRow key={function_name} id={function_name}>
                   <TableCell className="max-w-[200px] lg:max-w-none">
-                    <FunctionLink functionName={function_name}>
-                      <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
-                        {function_name}
-                      </code>
-                    </FunctionLink>
+                    <TableItemFunction
+                      functionName={function_name}
+                      functionType={type}
+                      link={`/observability/functions/${function_name}`}
+                    />
                   </TableCell>
-                  <TableCell>
-                    <Code>{type}</Code>
-                  </TableCell>
+                  <TableCell>{variantsCount}</TableCell>
                   <TableCell>{count}</TableCell>
                   <TableCell>
-                    {max_timestamp === "Never"
-                      ? "Never"
-                      : formatDate(new Date(max_timestamp))}
+                    {max_timestamp === "Never" ? (
+                      "Never"
+                    ) : (
+                      <TableItemTime timestamp={max_timestamp} />
+                    )}
                   </TableCell>
                 </TableRow>
               ),

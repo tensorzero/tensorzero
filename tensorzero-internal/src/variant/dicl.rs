@@ -9,8 +9,8 @@ use crate::config_parser::LoadableConfig;
 use crate::config_parser::PathWithContents;
 use crate::embeddings::{EmbeddingModelTable, EmbeddingResponseWithMetadata};
 use crate::endpoints::inference::InferenceModels;
-use crate::inference::types::extra_body::ExtraHeadersConfig;
 use crate::inference::types::extra_body::{ExtraBodyConfig, FullExtraBodyConfig};
+use crate::inference::types::extra_headers::{ExtraHeadersConfig, FullExtraHeadersConfig};
 use crate::inference::types::ContentBlock;
 use crate::inference::types::ResolvedInput;
 use crate::inference::types::ResolvedInputMessageContent;
@@ -314,8 +314,7 @@ impl DiclConfig {
         let serialized_input = serde_json::to_string(&input).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!(
-                    "Error in serializing Input in dynamic in-context learning variant: {}",
-                    e
+                    "Error in serializing Input in dynamic in-context learning variant: {e}"
                 ),
             })
         })?;
@@ -364,7 +363,7 @@ impl DiclConfig {
         // Run the query on the ClickHouse database to find nearest neighbors
         let result = clients
             .clickhouse_connection_info
-            .run_query(query, None)
+            .run_query_synchronous(query, None)
             .await?;
 
         // Parse each line into RawExample (since we will have some serialized JSON strings inside it)
@@ -374,7 +373,7 @@ impl DiclConfig {
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| {
                 Error::new(ErrorDetails::Serialization {
-                    message: format!("Failed to parse raw examples: {}", e),
+                    message: format!("Failed to parse raw examples: {e}"),
                 })
             })?;
 
@@ -411,8 +410,7 @@ impl DiclConfig {
                 .map_err(|e| {
                     Error::new(ErrorDetails::Serialization {
                         message: format!(
-                            "Error in serializing Input in dynamic in-context learning variant: {}",
-                            e
+                            "Error in serializing Input in dynamic in-context learning variant: {e}"
                         ),
                     })
                 })?
@@ -427,7 +425,9 @@ impl DiclConfig {
                 .into_iter()
                 .map(|x| x.into())
                 .collect(),
-            Example::Json(json_example) => vec![json_example.output.raw.clone().into()],
+            Example::Json(json_example) => {
+                vec![json_example.output.raw.clone().unwrap_or_default().into()]
+            }
         };
 
         // Push the output as an assistant message
@@ -443,8 +443,7 @@ impl DiclConfig {
             .map_err(|e| {
                 Error::new(ErrorDetails::Serialization {
                     message: format!(
-                        "Error in serializing Input in dynamic in-context learning variant: {}",
-                        e
+                        "Error in serializing Input in dynamic in-context learning variant: {e}"
                     ),
                 })
             })?
@@ -519,8 +518,14 @@ impl DiclConfig {
         }
         let extra_body = FullExtraBodyConfig {
             extra_body: self.extra_body.clone(),
-            variant_extra_headers: self.extra_headers.clone(),
             inference_extra_body: Default::default(),
+        };
+        let extra_headers = FullExtraHeadersConfig {
+            variant_extra_headers: self.extra_headers.clone(),
+            inference_extra_headers: inference_config
+                .extra_headers
+                .clone()
+                .filter(inference_config.variant_name),
         };
         prepare_model_inference_request(
             messages,
@@ -531,6 +536,7 @@ impl DiclConfig {
             inference_params,
             self.json_mode,
             extra_body,
+            extra_headers,
         )
     }
 }
@@ -547,7 +553,7 @@ fn parse_raw_examples(
         // Parse the `input` string into `Input`
         let input: ResolvedInput = serde_json::from_str(&raw_example.input).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
-                message: format!("Failed to parse `input`: {}", e),
+                message: format!("Failed to parse `input`: {e}"),
             })
         })?;
 
@@ -569,8 +575,7 @@ fn parse_raw_examples(
                         .map_err(|e| {
                             Error::new(ErrorDetails::Serialization {
                                 message: format!(
-                                    "Failed to parse `output` in example `{:?}`: {}",
-                                    raw_example, e
+                                    "Failed to parse `output` in example `{raw_example:?}`: {e}"
                                 ),
                             })
                         })?;
@@ -582,8 +587,7 @@ fn parse_raw_examples(
                     .map_err(|e| {
                         Error::new(ErrorDetails::Serialization {
                             message: format!(
-                                "Failed to parse `output` in example `{:?}`: {}",
-                                raw_example, e
+                                "Failed to parse `output` in example `{raw_example:?}`: {e}"
                             ),
                         })
                     })?;
@@ -593,6 +597,10 @@ fn parse_raw_examples(
     }
 
     Ok(examples)
+}
+
+pub fn default_system_instructions() -> String {
+    "You are tasked with learning by induction and then solving a problem below. You will be shown several examples of inputs followed by outputs. Then, in the same format you will be given one last set of inputs. Your job is to use the provided examples to inform your response to the last set of inputs.".to_string()
 }
 
 impl LoadableConfig<DiclConfig> for UninitializedDiclConfig {
@@ -605,11 +613,11 @@ impl LoadableConfig<DiclConfig> for UninitializedDiclConfig {
                 let path = base_path.as_ref().join(path);
                 fs::read_to_string(path).map_err(|e| {
                     Error::new(ErrorDetails::Config {
-                        message: format!("Failed to read system instructions: {}", e),
+                        message: format!("Failed to read system instructions: {e}"),
                     })
                 })?
             }
-            None => "You are tasked with learning by induction and then solving a problem below. You will be shown several examples of inputs followed by outputs. Then, in the same format you will be given one last set of inputs. Your job is to use the provided examples to inform your response to the last set of inputs.".to_string(),
+            None => default_system_instructions(),
         };
 
         Ok(DiclConfig {
@@ -716,7 +724,7 @@ mod tests {
 
         // Mock Output data for JsonExample
         let json_output = JsonInferenceOutput {
-            raw: "{\"result\": \"success\"}".to_string(),
+            raw: Some("{\"result\": \"success\"}".to_string()),
             parsed: Some(json!({"result": "success"})),
         };
 
@@ -741,7 +749,7 @@ mod tests {
 
         // Second message should be from Assistant with raw JSON output as text
         let expected_content = vec![ContentBlock::Text(Text {
-            text: json_output.raw.clone(),
+            text: json_output.raw.unwrap().clone(),
         })];
 
         assert_eq!(json_messages[1].role, Role::Assistant);
@@ -931,7 +939,7 @@ mod tests {
                 })
                 .unwrap(),
                 output: serde_json::to_string(&JsonInferenceOutput {
-                    raw: "{\"status\": \"success\", \"data\": {\"id\": 1}}".to_string(),
+                    raw: Some("{\"status\": \"success\", \"data\": {\"id\": 1}}".to_string()),
                     parsed: Some(json!({
                         "status": "success",
                         "data": {
@@ -953,7 +961,7 @@ mod tests {
                 })
                 .unwrap(),
                 output: serde_json::to_string(&JsonInferenceOutput {
-                    raw: "{\"result\": [1, 2, 3], \"status\": \"ok\"}".to_string(),
+                    raw: Some("{\"result\": [1, 2, 3], \"status\": \"ok\"}".to_string()),
                     parsed: Some(json!({
                         "result": [1, 2, 3],
                         "status": "ok"

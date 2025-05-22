@@ -7,7 +7,4 @@ requires-python = ">=3.10"
 dependencies = ["flask", "requests"]
 
 [dependency-groups]
-dev = [
-    "boto3>=1.37.26",
-    "sagemaker>=2.243.0",
-]
+dev = ["boto3>=1.37.26", "sagemaker>=2.243.0"]

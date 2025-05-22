@@ -30,7 +30,7 @@ impl Migration for Migration0002<'_> {
         Ok(false)
     }
 
-    async fn apply(&self) -> Result<(), Error> {
+    async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         // Create the `DynamicInContextLearningExample` table
         let query = r#"
             CREATE TABLE IF NOT EXISTS DynamicInContextLearningExample
@@ -46,7 +46,10 @@ impl Migration for Migration0002<'_> {
             ) ENGINE = MergeTree()
             ORDER BY (function_name, variant_name, namespace);
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous(query.to_string(), None)
+            .await?;
         Ok(())
     }
 

@@ -33,7 +33,7 @@ async fn e2e_test_mixture_of_n_dummy_candidates_dummy_judge_inner(
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "value": format!("Please write me a sentence about Megumin making an explosion: {random_input}")},
+                        {"type": "text", "text": format!("Please write me a sentence about Megumin making an explosion: {random_input}")},
                     ]
                 }
             ]},
@@ -164,7 +164,7 @@ async fn e2e_test_mixture_of_n_dummy_candidates_real_judge() {
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "value": "Please write me a sentence about the anime character Megumin."},
+                        {"type": "text", "text": "Please write me a sentence about the anime character Megumin."},
                         {"type": "unknown", "model_provider_name": "tensorzero::model_name::test::provider_name::good", "data": {"type": "text", "text": "My extra test-model input"}}
                     ]
                 }
@@ -297,9 +297,6 @@ async fn e2e_test_mixture_of_n_dummy_candidates_real_judge() {
               ],
               "model": "gpt-4o-mini-2024-07-18",
               "stream": false,
-              "response_format": {
-                "type": "text"
-              }
             });
             assert_eq!(raw_request, expected_request);
             let system = result.get("system").unwrap().as_str().unwrap();
@@ -720,9 +717,6 @@ async fn e2e_test_mixture_of_n_extra_body() {
               ],
               "model": "gpt-4o-mini-2024-07-18",
               "stream": false,
-              "response_format": {
-                "type": "text"
-              },
               "temperature": 0.123
             });
             assert_eq!(raw_request, expected_request);
@@ -743,9 +737,6 @@ async fn e2e_test_mixture_of_n_extra_body() {
               ],
               "model": "o1-2024-12-17",
               "stream": false,
-              "response_format": {
-                "type": "text"
-              }
             });
             assert_eq!(raw_request, expected_request);
         }

@@ -10,6 +10,7 @@ use crate::config_parser::PathWithContents;
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels};
 use crate::inference::types::extra_body::FullExtraBodyConfig;
+use crate::inference::types::extra_headers::FullExtraHeadersConfig;
 use crate::inference::types::ResolvedInput;
 use crate::inference::types::{
     batch::StartBatchModelInferenceWithMetadata, ModelInferenceRequest, RequestMessage, Role, Usage,
@@ -219,6 +220,7 @@ impl MixtureOfNConfig {
                 // However, the 'A, C' and 'C, D' evaluations will all have distinct cache keys:
                 // (A, 2), (C, 3), (C, 2), (D, 4)
                 let mut config = inference_config.clone();
+                config.variant_name = Some(candidate);
                 config.extra_cache_key = Some(format!("candidate_{i}"));
                 Ok((candidate.to_string(), variant, config))
             })
@@ -455,8 +457,10 @@ impl FuserConfig {
                     included_indices.push(i);
                 }
                 InferenceResult::Json(json_result) => {
-                    if json_result.output.parsed.is_some() {
-                        candidate_outputs.push(json_result.output.raw.clone());
+                    if let (Some(raw), Some(_)) =
+                        (&json_result.output.raw, &json_result.output.parsed)
+                    {
+                        candidate_outputs.push(raw.clone());
                         included_indices.push(i);
                     }
                 }
@@ -541,8 +545,14 @@ impl FuserConfig {
         }
         let extra_body = FullExtraBodyConfig {
             extra_body: self.inner.extra_body.clone(),
-            variant_extra_headers: self.inner.extra_headers.clone(),
             inference_extra_body: Default::default(),
+        };
+        let extra_headers = FullExtraHeadersConfig {
+            variant_extra_headers: self.inner.extra_headers.clone(),
+            inference_extra_headers: inference_config
+                .extra_headers
+                .clone()
+                .filter(inference_config.variant_name),
         };
         let model_inference_request = prepare_model_inference_request(
             messages,
@@ -553,6 +563,7 @@ impl FuserConfig {
             inference_params,
             self.inner.json_mode,
             extra_body,
+            extra_headers,
         )?;
         Ok((model_inference_request, included_indices))
     }
@@ -573,11 +584,11 @@ mod tests {
         inference::{
             providers::dummy::DummyProvider,
             types::{
-                ChatInferenceResult, FinishReason, JsonInferenceOutput, JsonInferenceResult,
-                Latency, ModelInferenceResponseWithMetadata,
+                ChatInferenceResult, FinishReason, InternalJsonInferenceOutput,
+                JsonInferenceResult, Latency, ModelInferenceResponseWithMetadata,
             },
         },
-        jsonschema_util::JSONSchemaFromPath,
+        jsonschema_util::StaticJSONSchema,
         minijinja_util::tests::get_test_template_config,
         model::{ModelConfig, ModelProvider, ProviderConfig},
         tool::{ToolCallConfig, ToolChoice},
@@ -854,8 +865,10 @@ mod tests {
 
         let candidate1 = InferenceResult::Json(JsonInferenceResult::new(
             Uuid::now_v7(),
-            "{\"response\": \"Valid JSON response\"}".to_string(),
+            Some("{\"response\": \"Valid JSON response\"}".to_string()),
             Some(json!({"response": "Valid JSON response"})),
+            Some(0),
+            vec![],
             Usage {
                 input_tokens: 10,
                 output_tokens: 20,
@@ -891,8 +904,10 @@ mod tests {
 
         let candidate2 = InferenceResult::Json(JsonInferenceResult::new(
             Uuid::now_v7(),
-            "{\"oops: \"Malformed JSON response\"".to_string(),
+            Some("{\"oops: \"Malformed JSON response\"".to_string()),
             None, // malformed
+            Some(0),
+            vec![],
             Usage {
                 input_tokens: 15,
                 output_tokens: 25,
@@ -942,8 +957,9 @@ mod tests {
             system_schema: None,
             user_schema: None,
             assistant_schema: None,
-            output_schema: JSONSchemaFromPath::from_value(&json!({})).unwrap(),
+            output_schema: StaticJSONSchema::from_value(&json!({})).unwrap(),
             implicit_tool_call_config: ToolCallConfig::default(),
+            description: None,
         });
         // Prepare some candidate InferenceResults
         let model_inference_response0 = ModelInferenceResponseWithMetadata {
@@ -1066,6 +1082,7 @@ mod tests {
             function_name: "",
             variant_name: Some(""),
             extra_body: Default::default(),
+            extra_headers: Default::default(),
             extra_cache_key: None,
         };
 
@@ -1085,9 +1102,11 @@ mod tests {
             input_tokens: 35,
             output_tokens: 55,
         };
-        let expected_content = JsonInferenceOutput {
-            raw: "{\"answer\":\"Hello\"}".to_string(),
+        let expected_content = InternalJsonInferenceOutput {
+            raw: Some("{\"answer\":\"Hello\"}".to_string()),
             parsed: Some(json!({"answer": "Hello"})),
+            auxiliary_content: vec![],
+            json_block_index: Some(0),
         };
         match fused {
             InferenceResult::Json(fused) => {
@@ -1212,6 +1231,7 @@ mod tests {
             tools: vec![],
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
+            description: None,
         });
 
         let result = mixture_of_n_variant

@@ -104,7 +104,9 @@ export default function LLMFineTuningStatus({
             <div className="max-w-lg space-y-2">
               <ProgressIndicator
                 createdAt={createdAt}
-                estimatedCompletion={status.estimatedCompletionTime}
+                estimatedCompletion={
+                  new Date(status.estimatedCompletionTime * 1000)
+                }
               />
             </div>
           )}

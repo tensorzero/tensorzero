@@ -18,7 +18,8 @@ use super::openai::{
 use super::provider_trait::{InferenceProvider, TensorZeroEventError};
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
-use crate::error::{Error, ErrorDetails};
+use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
+use crate::inference::providers::openai::check_api_base_suffix;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlockOutput, Latency, ModelInferenceRequest,
@@ -51,11 +52,19 @@ impl VLLMProvider {
             PROVIDER_TYPE,
             &DEFAULT_CREDENTIALS,
         )?;
+
+        // Check if the api_base has the `/chat/completions` suffix and warn if it does
+        check_api_base_suffix(&api_base);
+
         Ok(VLLMProvider {
             model_name,
             api_base,
             credentials,
         })
+    }
+
+    pub fn model_name(&self) -> &str {
+        &self.model_name
     }
 }
 
@@ -125,11 +134,15 @@ impl InferenceProvider for VLLMProvider {
         let mut request_body = serde_json::to_value(VLLMRequest::new(&self.model_name, request)?)
             .map_err(|e| {
             Error::new(ErrorDetails::Serialization {
-                message: format!("Error serializing VLLM request: {e}"),
+                message: format!(
+                    "Error serializing VLLM request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
             })
         })?;
         let headers = inject_extra_request_data(
             &request.extra_body,
+            &request.extra_headers,
             model_provider,
             model_name,
             &mut request_body,
@@ -150,8 +163,11 @@ impl InferenceProvider for VLLMProvider {
             .await
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
-                    message: format!("Error sending request to vLLM: {e}"),
                     status_code: e.status(),
+                    message: format!(
+                        "Error sending request to vLLM: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
@@ -163,7 +179,7 @@ impl InferenceProvider for VLLMProvider {
         if res.status().is_success() {
             let raw_response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing response: {e}"),
+                    message: format!("Error parsing response: {}", DisplayOrDebugGateway::new(e)),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
@@ -171,7 +187,7 @@ impl InferenceProvider for VLLMProvider {
             })?;
             let response_body = serde_json::from_str(&raw_response).map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing response: {e}"),
+                    message: format!("Error parsing response: {}", DisplayOrDebugGateway::new(e)),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                     raw_response: Some(raw_response.clone()),
                     provider_type: PROVIDER_TYPE.to_string(),
@@ -189,13 +205,21 @@ impl InferenceProvider for VLLMProvider {
             let status = res.status();
             let raw_response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing error response: {e}"),
+                    message: format!(
+                        "Error parsing error response: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
-            Err(handle_openai_error(status, &raw_response, PROVIDER_TYPE))
+            Err(handle_openai_error(
+                &serde_json::to_string(&request_body).unwrap_or_default(),
+                status,
+                &raw_response,
+                PROVIDER_TYPE,
+            ))
         }
     }
 
@@ -213,18 +237,25 @@ impl InferenceProvider for VLLMProvider {
         let mut request_body = serde_json::to_value(VLLMRequest::new(&self.model_name, request)?)
             .map_err(|e| {
             Error::new(ErrorDetails::Serialization {
-                message: format!("Error serializing VLLM request: {e}"),
+                message: format!(
+                    "Error serializing VLLM request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
             })
         })?;
         let headers = inject_extra_request_data(
             &request.extra_body,
+            &request.extra_headers,
             model_provider,
             model_name,
             &mut request_body,
         )?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
-                message: format!("Error serializing request: {e}"),
+                message: format!(
+                    "Error serializing request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
             })
         })?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
@@ -242,7 +273,10 @@ impl InferenceProvider for VLLMProvider {
             .eventsource()
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
-                    message: format!("Error sending request to vLLM: {e}"),
+                    message: format!(
+                        "Error sending request to vLLM: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     status_code: None,
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
@@ -250,6 +284,7 @@ impl InferenceProvider for VLLMProvider {
                 })
             })?;
         let stream = stream_openai(
+            PROVIDER_TYPE.to_string(),
             event_source.map_err(TensorZeroEventError::EventSource),
             start_time,
         )
@@ -411,7 +446,10 @@ impl<'a> TryFrom<VLLMResponseWithMetadata<'a>> for ProviderInferenceResponse {
         }
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
-                message: format!("Error serializing request body as JSON: {e}"),
+                message: format!(
+                    "Error serializing request body as JSON: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
             })
         })?;
         let system = generic_request.system.clone();
@@ -457,6 +495,7 @@ mod tests {
     use std::{borrow::Cow, time::Duration};
 
     use serde_json::json;
+    use tracing_test::traced_test;
     use uuid::Uuid;
 
     use super::*;
@@ -640,5 +679,48 @@ mod tests {
                 response_time: Duration::from_secs(0)
             }
         );
+    }
+
+    #[test]
+    #[traced_test]
+    fn test_vllm_provider_new_api_base_check() {
+        let model_name = "test-model".to_string();
+        let api_key_location = Some(CredentialLocation::None);
+
+        // Valid cases (should not warn)
+        let _ = VLLMProvider::new(
+            model_name.clone(),
+            Url::parse("http://localhost:1234/v1/").unwrap(),
+            api_key_location.clone(),
+        )
+        .unwrap();
+
+        let _ = VLLMProvider::new(
+            model_name.clone(),
+            Url::parse("http://localhost:1234/v1").unwrap(),
+            api_key_location.clone(),
+        )
+        .unwrap();
+
+        // Invalid cases (should warn)
+        let invalid_url_1 = Url::parse("http://localhost:1234/chat/completions").unwrap();
+        let _ = VLLMProvider::new(
+            model_name.clone(),
+            invalid_url_1.clone(),
+            api_key_location.clone(),
+        )
+        .unwrap();
+        assert!(logs_contain("automatically appends `/chat/completions`"));
+        assert!(logs_contain(invalid_url_1.as_ref()));
+
+        let invalid_url_2 = Url::parse("http://localhost:1234/v1/chat/completions/").unwrap();
+        let _ = VLLMProvider::new(
+            model_name.clone(),
+            invalid_url_2.clone(),
+            api_key_location.clone(),
+        )
+        .unwrap();
+        assert!(logs_contain("automatically appends `/chat/completions`"));
+        assert!(logs_contain(invalid_url_2.as_ref()));
     }
 }

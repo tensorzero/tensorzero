@@ -12,44 +12,50 @@ async fn get_providers() -> E2ETestProviders {
     };
 
     let providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "vllm".to_string(),
-        model_name: "microsoft/Phi-3.5-mini-instruct".into(),
+        model_name: "smol-lm-instruct-vllm".into(),
         model_provider_name: "vllm".into(),
         credentials: HashMap::new(),
     }];
 
     let extra_body_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "vllm-extra-body".to_string(),
-        model_name: "microsoft/Phi-3.5-mini-instruct".into(),
+        model_name: "smol-lm-instruct-vllm".into(),
         model_provider_name: "vllm".into(),
         credentials: HashMap::new(),
     }];
 
     let bad_auth_extra_headers = vec![E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "vllm-extra-headers".to_string(),
-        model_name: "microsoft/Phi-3.5-mini-instruct".into(),
+        model_name: "smol-lm-instruct-vllm".into(),
         model_provider_name: "vllm".into(),
         credentials: HashMap::new(),
     }];
 
     let json_providers = vec![
         E2ETestProvider {
-            variant_name: "vllm-default".to_string(),
-            model_name: "microsoft/Phi-3.5-mini-instruct".into(),
+            supports_batch_inference: false,
+            variant_name: "vllm".to_string(),
+            model_name: "smol-lm-instruct-vllm".into(),
             model_provider_name: "vllm".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
-            variant_name: "vllm-default".to_string(),
-            model_name: "microsoft/Phi-3.5-mini-instruct".into(),
+            supports_batch_inference: false,
+            variant_name: "vllm-strict".to_string(),
+            model_name: "smol-lm-instruct-vllm".into(),
             model_provider_name: "vllm".into(),
             credentials: HashMap::new(),
         },
     ];
 
     let inference_params_dynamic_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
         variant_name: "vllm-dynamic".to_string(),
-        model_name: "microsoft/Phi-3.5-mini-instruct-dynamic".into(),
+        model_name: "smol-lm-instruct-vllm-dynamic".into(),
         model_provider_name: "vllm".into(),
         credentials,
     }];
@@ -67,9 +73,9 @@ async fn get_providers() -> E2ETestProviders {
         dynamic_tool_use_inference: vec![],
         parallel_tool_use_inference: vec![],
         json_mode_inference: json_providers.clone(),
+        json_mode_off_inference: vec![],
         image_inference: vec![],
 
         shorthand_inference: vec![],
-        supports_batch_inference: false,
     }
 }

@@ -1,6 +1,7 @@
 pub mod anthropic;
 pub mod aws_bedrock;
 pub mod aws_common;
+mod aws_http_client;
 pub mod aws_sagemaker;
 pub mod azure;
 pub mod deepseek;
@@ -11,6 +12,7 @@ pub mod gcp_vertex_anthropic;
 pub mod gcp_vertex_gemini;
 pub mod google_ai_studio_gemini;
 pub mod helpers;
+pub mod helpers_thinking_block;
 pub mod hyperbolic;
 pub mod mistral;
 pub mod openai;
