@@ -342,7 +342,7 @@ async def test_async_reasoning_inference(async_client: AsyncTensorZeroGateway):
     )
     assert isinstance(result, ChatInferenceResponse)
     assert result.variant_name == "reasoner"
-    assert isinstance(result, ChatInferenceResponse)
+    assert result.original_response is None
     content = result.content
     assert len(content) == 2
     assert isinstance(content[0], Thought)
@@ -3192,4 +3192,29 @@ def test_sync_multiple_text_blocks(sync_client: TensorZeroGateway):
                 }
             ]
         },
+    )
+
+
+def test_sync_include_original_response_chat(sync_client: TensorZeroGateway):
+    response = sync_client.inference(
+        model_name="dummy::good",
+        input={"messages": [{"role": "user", "content": "Hello, world!"}]},
+        include_original_response=True,
+    )
+
+    assert (
+        response.original_response
+        == '{\n  "id": "id",\n  "object": "text.completion",\n  "created": 1618870400,\n  "model": "text-davinci-002",\n  "choices": [\n    {\n      "text": "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.",\n      "index": 0,\n      "logprobs": null,\n      "finish_reason": null\n    }\n  ]\n}'
+    )
+
+
+def test_sync_include_original_response_json(sync_client: TensorZeroGateway):
+    response = sync_client.inference(
+        model_name="dummy::good",
+        input={"messages": [{"role": "user", "content": "Hello, world!"}]},
+        include_original_response=True,
+    )
+    assert (
+        response.original_response
+        == '{\n  "id": "id",\n  "object": "text.completion",\n  "created": 1618870400,\n  "model": "text-davinci-002",\n  "choices": [\n    {\n      "text": "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.",\n      "index": 0,\n      "logprobs": null,\n      "finish_reason": null\n    }\n  ]\n}'
     )
