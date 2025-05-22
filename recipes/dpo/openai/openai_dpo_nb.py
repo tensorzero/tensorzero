@@ -207,7 +207,7 @@ def render_message(message: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
             content.append({"type": "text", "text": content_block["value"]})
         elif content_block["type"] == "thought":
             content.append(
-                {"type": "text", "text": f"<think>{content_block['value']}</think>"}
+                {"type": "text", "text": f"<think>{content_block['text']}</think>"}
             )
         elif content_block["type"] == "tool_call" and role == "assistant":
             tool_calls.append(
@@ -221,7 +221,8 @@ def render_message(message: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
                 }
             )
         elif content_block["type"] == "tool_result" and role == "user":
-            # Tool results get priority so that they follow the tool call in the conversation
+            # Tool results get priority so that they follow the tool call in the conversation.
+            # Any other "user" content will be appended in another message below.
             rendered_messages.append(
                 {
                     "role": "tool",
@@ -264,7 +265,7 @@ def render_output(
                 content.append({"type": "text", "text": content_block["text"]})
             elif content_block["type"] == "thought":
                 content.append(
-                    {"type": "text", "text": f"<think>{content_block['value']}</think>"}
+                    {"type": "text", "text": f"<think>{content_block['text']}</think>"}
                 )
             elif content_block["type"] == "tool_call":
                 tool_calls.append(
@@ -286,7 +287,7 @@ def render_output(
     else:
         raise ValueError(f"Unsupported function type: {function_type}")
 
-    # Once we finish collecting all blocks, create one user message if there's any user content
+    # Once we finish collecting all blocks, create one assistant message.
     output_message: Dict[str, Any] = {"role": "assistant"}
     if content:
         output_message["content"] = content
@@ -323,6 +324,8 @@ def sample_to_openai_messages(sample) -> List[Dict[str, str]]:
     for message in function_input["messages"]:
         rendered_message = render_message(message)
         if rendered_message is None:
+            # `render_message` will return None if the message contains an unknown or unsupported content block.
+            # The entire example is dropped if this is the case.
             return None
         result["input"]["messages"].extend(render_message(message))
 
@@ -330,6 +333,8 @@ def sample_to_openai_messages(sample) -> List[Dict[str, str]]:
     preferred_output = json.loads(sample["preferred_output"])
     rendered_preferred_output = render_output(preferred_output)
     if rendered_preferred_output is None:
+        # `render_output` will return None if the output contains an unknown or unsupported content block.
+        # The entire example is dropped if this is the case.
         return None
     result["preferred_output"].append(rendered_preferred_output)
 
@@ -337,6 +342,8 @@ def sample_to_openai_messages(sample) -> List[Dict[str, str]]:
     non_preferred_output = json.loads(sample["non_preferred_output"])
     rendered_non_preferred_output = render_output(non_preferred_output)
     if rendered_non_preferred_output is None:
+        # `render_output` will return None if the output contains an unknown or unsupported content block.
+        # The entire example is dropped if this is the case.
         return None
     result["non_preferred_output"].append(rendered_non_preferred_output)
 
@@ -344,6 +351,8 @@ def sample_to_openai_messages(sample) -> List[Dict[str, str]]:
 
 
 df["openai_messages"] = df.apply(sample_to_openai_messages, axis=1)
+
+# Drop null rows
 df = df[df["openai_messages"].notna()]
 
 df.head()
