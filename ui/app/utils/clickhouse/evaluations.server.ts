@@ -212,6 +212,7 @@ export async function getEvaluationResults(
              argMax(toString(value), timestamp) as value,
              argMax(tags['tensorzero::evaluator_inference_id'], timestamp) as evaluator_inference_id,
              argMax(id, timestamp) as feedback_id,
+             argMax(tags['tensorzero::human_feedback'], timestamp) == 'true' as is_human_feedback,
              target_id
       FROM BooleanMetricFeedback
       WHERE metric_name IN ({metric_names:Array(String)})
@@ -222,6 +223,7 @@ export async function getEvaluationResults(
              argMax(toString(value), timestamp) as value,
              argMax(tags['tensorzero::evaluator_inference_id'], timestamp) as evaluator_inference_id,
              argMax(id, timestamp) as feedback_id,
+             argMax(tags['tensorzero::human_feedback'], timestamp) == 'true' as is_human_feedback,
              target_id
       FROM FloatMetricFeedback
       WHERE metric_name IN ({metric_names:Array(String)})
@@ -240,7 +242,8 @@ export async function getEvaluationResults(
     ci.id as inference_id,
     feedback.metric_name as metric_name,
     feedback.value as metric_value,
-    feedback.feedback_id as feedback_id
+    feedback.feedback_id as feedback_id,
+    toBool(feedback.is_human_feedback) as is_human_feedback
   FROM filtered_dp dp
   INNER JOIN filtered_inference ci
     ON toUUIDOrNull(ci.tags['tensorzero::datapoint_id']) = dp.id
@@ -514,7 +517,8 @@ export async function getEvaluationsForDatapoint(
             metric_name,
             argMax(toString(value), timestamp) as value,
             argMax(tags['tensorzero::evaluator_inference_id'], timestamp) as evaluator_inference_id,
-            argMax(id, timestamp) as feedback_id
+            argMax(id, timestamp) as feedback_id,
+            argMax(tags['tensorzero::human_feedback'], timestamp) == 'true' as is_human_feedback
       FROM BooleanMetricFeedback
       WHERE metric_name IN ({metric_names:Array(String)})
       AND target_id IN (SELECT inference_id FROM all_inference_ids)
@@ -524,7 +528,8 @@ export async function getEvaluationsForDatapoint(
             metric_name,
             argMax(toString(value), timestamp) as value,
             argMax(tags['tensorzero::evaluator_inference_id'], timestamp) as evaluator_inference_id,
-            argMax(id, timestamp) as feedback_id
+            argMax(id, timestamp) as feedback_id,
+            argMax(tags['tensorzero::human_feedback'], timestamp) == 'true' as is_human_feedback
       FROM FloatMetricFeedback
       WHERE metric_name IN ({metric_names:Array(String)})
       AND target_id IN (SELECT inference_id FROM all_inference_ids)
@@ -547,7 +552,8 @@ export async function getEvaluationsForDatapoint(
       if(length(filtered_feedback.evaluator_inference_id) > 0, filtered_feedback.evaluator_inference_id, null) as evaluator_inference_id,
       filtered_feedback.metric_name as metric_name,
       filtered_feedback.value as metric_value,
-      filtered_feedback.feedback_id as feedback_id
+      filtered_feedback.feedback_id as feedback_id,
+      toBool(filtered_feedback.is_human_feedback) as is_human_feedback
     FROM filtered_inference
     INNER JOIN filtered_datapoint
       ON filtered_datapoint.id = toUUIDOrNull(filtered_inference.tags['tensorzero::datapoint_id'])
