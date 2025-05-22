@@ -4,8 +4,9 @@ on:
   workflow_call:
 
 jobs:
-  ui-tests-build:
+  build:
     runs-on: namespace-profile-tensorzero-4x16
+
     steps:
       - uses: namespacelabs/nscloud-checkout-action@v6
 
@@ -45,22 +46,24 @@ jobs:
         working-directory: ui
         run: pnpm install --frozen-lockfile
 
-      - name: Build UI container
+      - name: Build `gateway` container
         working-directory: ui
-        run: docker compose -f fixtures/docker-compose.yml build ui
+        run: docker compose -f fixtures/docker-compose.yml build gateway
 
-      - name: Save UI container
-        run: docker save fixtures-ui > ui-container-${{ github.run_id }}.tar
+      - name: Save `gateway` container
+        run: docker save fixtures-gateway > ui-tests-gateway-container-${{ github.run_id }}.tar
 
-      - name: Upload UI container
+      - name: Upload `gateway` container
         uses: namespace-actions/upload-artifact@v1
         with:
-          name: ui-tests-ui-container
-          path: ui-tests-ui-container.tar
+          name: ui-tests-gateway-container-${{ github.run_id }}
+          path: ui-tests-gateway-container-${{ github.run_id }}.tar
 
-  ui-tests:
-    needs: ui-tests-build
+  test:
+    needs: build
+
     runs-on: namespace-profile-tensorzero-4x16
+
     strategy:
       matrix:
         clickhouse_version: ["24.12-alpine", "25.2-alpine", "latest-alpine"]
@@ -68,14 +71,14 @@ jobs:
     steps:
       - uses: namespacelabs/nscloud-checkout-action@v6
 
-      - name: Download UI container
+      - name: Download `gateway` container
         uses: namespace-actions/download-artifact@v1
         with:
-          name: ui-tests-ui-container
-          path: .
+          name: ui-tests-gateway-container-${{ github.run_id }}
+          path: ui-tests-gateway-container-${{ github.run_id }}.tar
 
-      - name: Load UI container
-        run: docker load < ui-container.tar
+      - name: Load `gateway` container
+        run: docker load < ui-tests-gateway-container-${{ github.run_id }}.tar
 
       - name: Start services for `ui` tests
         working-directory: ui
