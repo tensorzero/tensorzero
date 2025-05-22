@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "tensorzero.fullname" . }}
+  name: {{ include "tensorzero.fullname" . }}-gateway
   labels:
     {{- include "tensorzero.labels" . | nindent 4 }}
     app.kubernetes.io/component: gateway
@@ -65,4 +65,4 @@ spec:
       {{- with .Values.gateway.tolerations }}
       tolerations:
         {{- toYaml . | nindent 8 }}
-      {{- end }} 
+      {{- end }}

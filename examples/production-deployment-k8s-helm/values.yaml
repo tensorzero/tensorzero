@@ -4,10 +4,10 @@ fullnameOverride: ""
 
 # Gateway Configuration
 gateway:
-  replicaCount: 3
-  # command: ["gateway"]
-  # args:
-  #   - --config-file=/app/config/tensorzero.toml
+  replicaCount: 1
+  command: ["gateway"]
+  args:
+    - --config-file=/app/config/tensorzero.toml
 
   image:
     repository: tensorzero/gateway
@@ -16,17 +16,18 @@ gateway:
 
   service:
     type: ClusterIP
-    port: 80
+    port: 3000
 
   additionalEnv:
     secretName: "tensorzero-secret"
     keys:
       - name: TENSORZERO_CLICKHOUSE_URL
         key: TENSORZERO_CLICKHOUSE_URL
-      - name: ANTHROPIC_API_KEY
-        key: ANTHROPIC_API_KEY
       - name: TENSORZERO_GATEWAY_URL
         key: TENSORZERO_GATEWAY_URL
+      - name: OPENAI_API_KEY
+        key: OPENAI_API_KEY
+      # TODO: include other model provider credentials as needed
 
   resources:
     limits:
@@ -44,7 +45,7 @@ gateway:
   ingress:
     enabled: true
     hosts:
-      - host: tz-gateway.example.io # TODO: change this to the correct host
+      - host: tensorzero-gateway.local # TODO: change this to the correct host
         paths:
           - path: /
             pathType: Prefix
@@ -85,9 +86,9 @@ ui:
   affinity: {}
 
   ingress:
-    enabled: false
+    enabled: true
     hosts:
-      - host: tz-ui.example.io # TODO: change this to the correct host
+      - host: tensorzero-ui.local # TODO: change this to the correct host
         paths:
           - path: /
             pathType: Prefix
@@ -96,86 +97,9 @@ ui:
 configMap:
   data:
     tensorzero.toml: |
-      [models.claude_3_5_haiku_20241022]
-      routing = ["anthropic"]
-
-      [models.claude_3_5_haiku_20241022.providers.anthropic]
-      type = "anthropic"
-      model_name = "claude-3-5-haiku-20241022"
-
       [functions.my_function_name]
       type = "chat"
 
       [functions.my_function_name.variants.my_variant_name]
       type = "chat_completion"
-      model = "claude_3_5_haiku_20241022"
-
-# ClickHouse Subchart Configuration for observability
-clickhouse:
-  deploy: true # TODO: change this to false if you don't want to deploy the ClickHouse cluster for observability
-
-  zookeeper:
-    enabled: false
-    image:
-      registry: public.ecr.aws
-      repository: bitnami/zookeeper
-      tag: 3.9.3-debian-12-r10
-      digest: ""
-    persistence:
-      enabled: true
-      storageClass: ""
-      accessModes:
-        - ReadWriteOnce
-      size: 50Gi
-  keeper:
-    enabled: true
-
-  global:
-    security:
-      allowInsecureImages: true
-
-  image:
-    registry: public.ecr.aws
-    repository: bitnami/clickhouse
-    tag: 25.3.2-debian-12-r0
-    digest: ""
-    pullPolicy: IfNotPresent
-
-  # -- ClickHouse host to connect to. If clickhouse.deploy is true, this will be set automatically based on the release name.
-  host: ""
-  # -- ClickHouse HTTP port to connect to.
-  httpPort: 8123
-  # -- ClickHouse native port to connect to.
-  nativePort: 9000
-
-  # Authentication configuration
-  auth:
-    # -- Username for the ClickHouse user.
-    username: default
-    # -- Password for the ClickHouse user.
-    password: tensorzero
-    # -- If you want to use an existing secret for the ClickHouse password, set the name of the secret here. (`clickhouse.auth.username` and `clickhouse.auth.password` will be ignored and picked up from this secret).
-    existingSecret: ""
-    # -- The key in the existing secret that contains the password.
-    existingSecretKey: ""
-
-  # -- Subchart specific settings
-  shards: 1
-  # -- Number of replicas to use for the ClickHouse cluster. 1 corresponds to a single, non-HA deployment.
-  replicaCount: 1
-  # -- The resources preset to use for the ClickHouse cluster.
-  resourcesPreset: 2xlarge
-
-  persistence:
-    enabled: true
-    storageClass: ""
-    accessModes:
-      - ReadWriteOnce
-    size: 200Gi
-
-  metrics:
-    enabled: true
-    serviceMonitor:
-      enabled: true
-      additionalLabels:
-        release: prometheus-operator # TODO: change this to the correct release name
+      model = "openai::gpt-4o-mini"

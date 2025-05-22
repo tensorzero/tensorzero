@@ -25,9 +25,9 @@ spec:
             pathType: {{ .pathType }}
             backend:
               service:
-                name: {{ $fullName }}
+                name: {{ $fullName }}-gateway
                 port:
                   number: {{ $svcPort }}
           {{- end }}
     {{- end }}
-{{- end }} 
+{{- end }}

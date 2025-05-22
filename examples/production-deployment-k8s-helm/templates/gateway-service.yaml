@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "tensorzero.fullname" . }}
+  name: {{ include "tensorzero.fullname" . }}-gateway
   labels:
     {{- include "tensorzero.labels" . | nindent 4 }}
     app.kubernetes.io/component: gateway
