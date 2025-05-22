@@ -104,8 +104,8 @@ jobs:
 
       - name: Print ClickHouse error logs
         if: always()
-        run: docker exec fixtures-${{ github.run_id }}-${{ matrix.clickhouse_version }}-clickhouse-1 cat /var/log/clickhouse-server/clickhouse-server.err.log
+        run: docker exec fixtures-clickhouse-1 cat /var/log/clickhouse-server/clickhouse-server.err.log
 
       - name: Print ClickHouse trace logs
         if: always()
-        run: docker exec fixtures-${{ github.run_id }}-${{ matrix.clickhouse_version }}-clickhouse-1 cat /var/log/clickhouse-server/clickhouse-server.log
+        run: docker exec fixtures-clickhouse-1 cat /var/log/clickhouse-server/clickhouse-server.log
