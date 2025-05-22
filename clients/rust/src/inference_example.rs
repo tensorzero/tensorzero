@@ -63,7 +63,7 @@ pub struct RenderedStoredInference {
     function_name: String,
     variant_name: String,
     input: ModelInput,
-    output: Vec<ContentBlockOutput>, // TODO(Viraj): check that this is the correct type
+    output: Vec<ContentBlockOutput>,
     episode_id: Uuid,
     inference_id: Uuid,
     tool_params: Option<ToolCallConfigDatabaseInsert>,
