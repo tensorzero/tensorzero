@@ -2,7 +2,9 @@ use std::{
     cmp::Ordering, env, fmt::Display, future::Future, path::PathBuf, sync::Arc, time::Duration,
 };
 
+use futures::future::join_all;
 use git::GitInfo;
+use input_handling::reresolve_input_for_fine_tuning;
 use reqwest::header::HeaderMap;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use serde_json::Value;
@@ -742,8 +744,28 @@ impl Client {
     /// TODO(Viraj): document this from the notion page
     pub async fn experimental_render_inferences(
         &self,
-        inference_examples: Vec<InferenceExample>,
+        mut inference_examples: Vec<InferenceExample>,
     ) -> Result<Vec<RenderedStoredInference>, TensorZeroError> {
+        let resolution_futures = inference_examples.iter_mut().map(|inference_example| {
+            // Create a future for each call to reresolve_input_for_fine_tuning.
+            // This function modifies inference_example.input_mut() in place.
+            // `self` (the client) is passed by immutable reference.
+            reresolve_input_for_fine_tuning(inference_example.input_mut(), self)
+        });
+
+        // Await all futures concurrently.
+        // For now, we drop the errors here.
+        // They will log on construction in the future.
+        // TODO: make it configurable whether to drop or error on failures.
+        let results = join_all(resolution_futures).await;
+        // For each result that is an Err, delete the matching inference_example from inference_examples.
+        // Iterate in reverse to avoid issues with shifting indices when removing elements.
+        for i in (0..results.len()).rev() {
+            if results[i].is_err() {
+                inference_examples.remove(i);
+            }
+        }
+
         todo!()
     }
 

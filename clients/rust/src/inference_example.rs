@@ -32,6 +32,15 @@ pub enum InferenceExample {
     Json(JsonInferenceExample),
 }
 
+impl InferenceExample {
+    pub fn input_mut(&mut self) -> &mut ResolvedInput {
+        match self {
+            InferenceExample::Chat(example) => &mut example.input,
+            InferenceExample::Json(example) => &mut example.input,
+        }
+    }
+}
+
 pub struct RenderedStoredInference {
     function_name: String,
     variant_name: String,
