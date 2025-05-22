@@ -20,13 +20,15 @@ jobs:
           docker compose -f fixtures/docker-compose.yml build gateway
 
       - name: Save `gateway` container
-        run: docker save fixtures-gateway > ui-tests-gateway-container-${{ github.run_id }}.tar
+        run: |
+          mkdir -p ~/.t0-cache
+          docker save fixtures-gateway > ~/.t0-cache/ui-tests-gateway-container-${{ github.run_id }}.tar
 
       - name: Cache `gateway` container
         uses: namespacelabs/nscloud-cache-action@v1
         with:
           path: |
-            ui-tests-gateway-container-${{ github.run_id }}.tar
+            ~/.t0-cache
 
   test:
     needs: build-gateway
@@ -57,15 +59,18 @@ jobs:
         working-directory: ui
         run: pnpm install --frozen-lockfile
 
+      - name: Create the TensorZero cache directory
+        run: mkdir -p ~/.t0-cache
+
       - name: Load `gateway` and `s3-fixtures` from cache
         uses: namespacelabs/nscloud-cache-action@v1
         with:
           path: |
-            ui-tests-gateway-container-${{ github.run_id }}.tar
+            ~/.t0-cache/ui-tests-gateway-container-${{ github.run_id }}.tar
             ./ui/fixtures/s3-fixtures
 
       - name: Load `gateway` container into Docker
-        run: docker load < ui-tests-gateway-container-${{ github.run_id }}.tar
+        run: docker load < /t0-cache/ui-tests-gateway-container-${{ github.run_id }}.tar
 
       - name: Setup `wasm-pack`
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
