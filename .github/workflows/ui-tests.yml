@@ -44,7 +44,7 @@ jobs:
       - name: Download `gateway` container
         uses: namespace-actions/download-artifact@5c070f7d7ebdc47682b04aa736c76e46ff5f6e1e
         with:
-          name: build
+          name: build-gateway-container
           path: .
 
       - name: Load `gateway` container

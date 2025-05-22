@@ -20,7 +20,7 @@ jobs:
       - name: Upload `gateway` container as an artifact
         uses: namespace-actions/upload-artifact@9a78c62e083914789d908952f9773e42744b9f68
         with:
-          name: build
+          name: build-gateway-container
           path: gateway-container.tar
           retention-days: 1
           if-no-files-found: error
@@ -42,7 +42,7 @@ jobs:
       - name: Upload `ui` container as an artifact
         uses: namespace-actions/upload-artifact@9a78c62e083914789d908952f9773e42744b9f68
         with:
-          name: build
+          name: build-ui-container
           path: ui-container.tar
           retention-days: 1
           if-no-files-found: error
