@@ -436,6 +436,7 @@ jobs:
 
   ui-tests:
     uses: ./.github/workflows/ui-tests.yml
+
   # See 'ci/README.md' at the repository root for more details.
   check-all-general-jobs-passed:
     if: always()

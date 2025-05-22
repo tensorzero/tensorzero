@@ -159,7 +159,7 @@ jobs:
       - name: Start Docker containers and apply fixtures
         working-directory: ui
         run: |
-          echo "AWS_REGION=us-east-1" >> fixtures/.env
+          echo "Length of AWS_ACCESS_KEY_ID: ${#AWS_ACCESS_KEY_ID}"
           echo "FIREWORKS_ACCOUNT_ID=fake_fireworks_account" >> fixtures/.env
           echo "FIREWORKS_API_KEY=not_used" >> fixtures/.env
           echo "FIREWORKS_BASE_URL=http://mock-inference-provider:3030/fireworks/" >> fixtures/.env
