@@ -21,7 +21,7 @@ COPY . .
 
 # Archive only package.json and pnpm-lock.yaml recursively
 RUN find . -type f \( -name package.json -o -name pnpm-lock.yaml \) \
-	-exec tar --transform='s|^\./||' --no-recursion -rf /tmp/packages.tar {} \;
+    -exec tar --transform='s|^\./||' --no-recursion -rf /tmp/packages.tar {} \;
 
 # ========== development-dependencies-env ==========
 
@@ -69,7 +69,6 @@ ARG CARGO_BUILD_FLAGS=""
 
 RUN cargo build --release -p evaluations $CARGO_BUILD_FLAGS && \
     cp -r /tensorzero/target/release /release
-
 
 # ========== build-env ==========
 
