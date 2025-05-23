@@ -2,6 +2,8 @@ use std::collections::HashMap;
 
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
+#[cfg(feature = "pyo3")]
+use pyo3::types::{PyAny, PyList};
 use serde::Deserialize;
 use serde_json::Value;
 use tensorzero_internal::{
@@ -74,11 +76,16 @@ impl InferenceExample {
 /// Represents an inference that has been prepared for fine-tuning.
 /// This is constructed by rendering an InferenceExample with a variant for messages
 /// and by resolving all network resources (e.g. images).
-#[derive(Debug, PartialEq)]
-#[cfg_attr(feature = "pyo3", pyclass(get_all))]
+#[cfg_attr(feature = "pyo3", pyclass)]
 pub struct RenderedStoredInference {
+    #[cfg(feature = "pyo3")]
+    #[pyo3(get, set)]
     pub function_name: String,
+    #[cfg(feature = "pyo3")]
+    #[pyo3(get, set)]
     pub variant_name: String,
+    #[cfg(feature = "pyo3")]
+    #[pyo3(get, set)]
     pub input: ModelInput,
     pub output: Vec<ContentBlockOutput>,
     pub episode_id: Uuid,
@@ -86,6 +93,15 @@ pub struct RenderedStoredInference {
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
     pub output_schema: Option<Value>,
 }
+
+// #[cfg(feature = "pyo3")]
+// #[pymethods]
+// impl RenderedStoredInference {
+//     #[getter]
+//     pub fn get_output(&self) -> PyResult<PyList> {
+//         todo!()
+//     }
+// }
 
 /// Convert an InferenceExample's input to a ModelInput.
 /// `variants` should be a map from function name to variant name, i.e. what variant to use for a particular function

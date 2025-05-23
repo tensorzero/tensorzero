@@ -274,7 +274,6 @@ pub struct Thought {
 /// Core representation of the types of content that could go into a model provider
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-#[cfg_attr(feature = "pyo3", pyclass)]
 pub enum ContentBlock {
     Text(Text),
     ToolCall(ToolCall),
@@ -319,7 +318,6 @@ pub enum FlattenUnknown<'a, T> {
 /// Defines the types of content block that can come out of a model provider
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-#[cfg_attr(feature = "pyo3", pyclass)]
 pub enum ContentBlockOutput {
     Text(Text),
     ToolCall(ToolCall),
@@ -345,7 +343,7 @@ pub enum ContentBlockChatOutput {
 
 /// A RequestMessage is a message sent to a model
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[cfg_attr(feature = "pyo3", pyclass(get_all))]
+#[cfg_attr(feature = "pyo3", pyclass)]
 pub struct RequestMessage {
     pub role: Role,
     pub content: Vec<ContentBlock>,
@@ -399,7 +397,7 @@ pub struct ModelInferenceRequest<'a> {
 }
 
 /// For use in rendering for optimization purposes
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all))]
 pub struct ModelInput {
     pub system: Option<String>,

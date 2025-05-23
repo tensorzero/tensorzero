@@ -85,7 +85,7 @@ pub struct ToolCallConfig {
 /// ToolCallConfigDatabaseInsert is a lightweight version of ToolCallConfig that can be serialized and cloned.
 /// It is used to insert the ToolCallConfig into the database.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
-#[cfg_attr(feature = "pyo3", pyclass(get_all))]
+#[cfg_attr(feature = "pyo3", pyclass)]
 pub struct ToolCallConfigDatabaseInsert {
     pub tools_available: Vec<Tool>,
     pub tool_choice: ToolChoice,
@@ -363,7 +363,6 @@ pub struct ToolResult {
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(feature = "pyo3", pyclass)]
 pub enum ToolChoice {
     None,
     #[default]

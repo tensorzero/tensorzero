@@ -3220,7 +3220,7 @@ def test_sync_render_inferences(sync_client: TensorZeroGateway):
     assert len(rendered_inferences) == 1
     print(rendered_inferences[0])
     assert rendered_inferences[0].function_name == "basic_test"
-    assert rendered_inferences[0].variant_name == "test"
+    assert rendered_inferences[0].variant_name == "default"
     assert rendered_inferences[0].input == {
         "system": {"assistant_name": "foo"},
         "messages": [{"role": "user", "content": [{"type": "text", "text": "bar"}]}],
