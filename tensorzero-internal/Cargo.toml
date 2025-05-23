@@ -102,7 +102,7 @@ tracing-futures = { version = "0.2.5", features = ["futures-03"] }
 tracing-opentelemetry-instrumentation-sdk = { workspace = true, features = ["http"] }
 tower-http = { workspace = true }
 tower-layer = "0.3.3"
-google-cloud-auth = { git = "https://github.com/googleapis/google-cloud-rust.git" }
+google-cloud-auth = { git = "https://github.com/googleapis/google-cloud-rust.git", rev = "dee6b3f4" }
 
 
 [dev-dependencies]
