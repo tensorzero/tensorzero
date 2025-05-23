@@ -68,7 +68,7 @@ function MessageContent({
 function Message({ message }: { message: ResolvedInputMessage }) {
   return (
     <div className="space-y-1">
-      <div className="font-medium text-slate-600 capitalize dark:text-slate-400">
+      <div className="font-medium capitalize text-slate-600 dark:text-slate-400">
         {message.role}
       </div>
       <MessageContent content={message.content} />

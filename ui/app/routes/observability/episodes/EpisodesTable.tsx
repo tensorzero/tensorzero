@@ -49,6 +49,14 @@ export default function EpisodesTable({
             episodes.map((episode) => (
               <TableRow key={episode.episode_id} id={episode.episode_id}>
                 <TableCell className="max-w-[200px] lg:max-w-none">
+                  <Link
+                    to={`/observability/episodes/${episode.episode_id}`}
+                    className="block no-underline"
+                  >
+                    <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
+                      {episode.episode_id}
+                    </code>
+                  </Link>
                   <TableItemShortUuid
                     id={episode.episode_id}
                     link={`/observability/episodes/${episode.episode_id}`}

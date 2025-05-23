@@ -39,6 +39,34 @@ export default function DatasetRowTable({
             rows.map((row) => (
               <TableRow key={row.id} id={row.id}>
                 <TableCell className="max-w-[200px]">
+                  <Link
+                    to={`/datasets/${dataset_name}/datapoint/${row.id}`}
+                    className="block no-underline"
+                  >
+                    <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
+                      {row.id}
+                    </code>
+                  </Link>
+                </TableCell>
+                <TableCell className="max-w-[200px]">
+                  <Badge variant="outline">{row.type}</Badge>
+                </TableCell>
+                <TableCell>
+                  <Link
+                    to={`/observability/episodes/${row.episode_id}`}
+                    className="block no-underline"
+                  >
+                    <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
+                      {row.episode_id}
+                    </code>
+                  </Link>
+                </TableCell>
+                <TableCell>
+                  <FunctionLink functionName={row.function_name}>
+                    <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
+                      {row.function_name}
+                    </code>
+                  </FunctionLink>
                   <TableItemShortUuid
                     id={row.id}
                     link={`/datasets/${dataset_name}/datapoint/${row.id}`}

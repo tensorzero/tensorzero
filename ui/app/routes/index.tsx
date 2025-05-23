@@ -39,7 +39,7 @@ function FeatureCard({
 }: FeatureCardProps) {
   return (
     <Link to={source} className="block">
-      <Card className="hover:border-border-hover group border-border h-full rounded-xl border-[1px] hover:shadow-[0_0_0_4px_rgba(0,0,0,0.05)]">
+      <Card className="hover:border-border-hover border-border group h-full rounded-xl border-[1px] hover:shadow-[0_0_0_4px_rgba(0,0,0,0.05)]">
         <div className="p-6">
           <Icon className="text-fg-secondary group-hover:text-foreground mb-8 h-4 w-4 transition-colors" />
           <h3 className="text-lg font-medium">{title}</h3>

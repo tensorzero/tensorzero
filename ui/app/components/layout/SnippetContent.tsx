@@ -32,6 +32,7 @@ function Label({ text, icon }: LabelProps) {
   if (!text) return null;
 
   return (
+    <Badge className="bg-bg-muted text-fg-primary mx-4 mb-0 mt-4">{text}</Badge>
     <div className="flex flex-row items-center gap-1">
       {icon && icon}
       <span className="text-fg-tertiary text-xs font-medium">{text}</span>
@@ -68,6 +69,7 @@ export function CodeMessage({
         <div className="w-full">
           <div className="flex w-full">
             {showLineNumbers && (
+              <div className="bg-bg-primary text-fg-muted pointer-events-none sticky left-0 min-w-[3rem] shrink-0 select-none py-5 pl-4 pr-3 text-right font-mono">
               <div className="bg-bg-primary text-fg-muted pointer-events-none sticky left-0 min-w-[2rem] shrink-0 pr-3 text-right font-mono select-none">
                 {Array.from({ length: lineCount }, (_, i) => (
                   <div key={i} className="text-sm leading-6">
@@ -77,6 +79,8 @@ export function CodeMessage({
               </div>
             )}
             <div className="w-0 grow overflow-auto">
+              <pre className="w-full px-4 py-5">
+                <code className="text-fg-primary block whitespace-pre font-mono text-sm leading-6">
               <pre className="w-full">
                 <code className="text-fg-primary block font-mono text-sm leading-6 whitespace-pre">
                   {content || ""}
@@ -114,6 +118,10 @@ export function TextMessage({
       />
 
       <div className="bg-bg-primary w-full overflow-hidden rounded-lg">
+        <div className="p-5">
+          <div className="text-fg-primary whitespace-pre-wrap break-words text-sm">
+            {content || ""}
+          </div>
         <div className="text-fg-primary text-sm break-words whitespace-pre-wrap">
           {content || ""}
         </div>

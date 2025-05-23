@@ -38,7 +38,7 @@ export function TemplateDetailsDialog({
                 {variant && (
                   <>
                     <div className="space-y-2">
-                      <h4 className="leading-none font-medium">
+                      <h4 className="font-medium leading-none">
                         System Template
                       </h4>
                       {chatCompletionVariants[variant]?.system_template ? (
@@ -58,7 +58,7 @@ export function TemplateDetailsDialog({
                     </div>
 
                     <div className="space-y-2">
-                      <h4 className="leading-none font-medium">
+                      <h4 className="font-medium leading-none">
                         User Template
                       </h4>
                       {chatCompletionVariants[variant]?.user_template ? (
@@ -80,7 +80,7 @@ export function TemplateDetailsDialog({
                 )}
 
                 <div className="space-y-2">
-                  <h4 className="leading-none font-medium">
+                  <h4 className="font-medium leading-none">
                     Assistant Template
                   </h4>
                   {chatCompletionVariants[variant]?.assistant_template ? (

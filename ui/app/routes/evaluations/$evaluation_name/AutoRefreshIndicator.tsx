@@ -11,7 +11,7 @@ export default function AutoRefreshIndicator({
   return (
     <div className="flex items-center text-sm text-blue-600">
       <svg
-        className="mr-2 -ml-1 h-4 w-4 animate-spin text-blue-600"
+        className="-ml-1 mr-2 h-4 w-4 animate-spin text-blue-600"
         xmlns="http://www.w3.org/2000/svg"
         fill="none"
         viewBox="0 0 24 24"
