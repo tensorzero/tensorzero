@@ -88,6 +88,17 @@ Did you have something else in mind? Reach out on Slack or Discord and let us kn
 - Install Node.js (we use v22) and `npm` [→](https://nodejs.org/en)
 - Install pnpm `npm install -g pnpm` [→](https://pnpm.io/installation)
 
+### Recipes
+
+We maintain a number of optimization recipes as Jupyter notebooks in `recipes/` which serve as manual workflows for optimizing TensorZero functions.
+They are useful as starting points for custom optimization scripts, educational material, and a lightweight way for us to add new techniques prior to building them into the UI.
+Since notebooks are hard to maintain and review, we compile them using [Jupytext](https://jupytext.readthedocs.io/en/latest/) from Python source ending in `_nb.py`.
+The command to generate the python script in this format from such a notebook (the reverse direction) is `uvx jupytext@1.17.1 --to py:percent --opt notebook_metadata_filter=-all --opt cell_metadata_filter=-all openai.ipynb`.
+This will generate a Python script called `openai.py` that must be renamed to `openai_nb.py` prior to committing.
+In pre-commit and CI we test that the notebooks match their source python files using a script `ci/compile-check-notebooks.sh`.
+This way we can be certain that the notebooks match their source files.
+You should be aware of this process if you edit or contribute recipes.
+
 ### Tests
 
 #### Rust
@@ -129,7 +140,7 @@ cargo test-unit
 
 1. Launch ClickHouse and the gateway in E2E testing mode (see above).
 
-2. Go to the relevant directory (e.g. `cd clients/python-pyo3`)
+2. Go to the relevant directory (e.g. `cd clients/python`)
 
 3. Create a virtual environment and install the dependencies
 
@@ -189,7 +200,6 @@ TENSORZERO_UI_CONFIG_PATH=<path-to-config-file> # For testing, set to ./fixtures
 With the dependencies running, you can run the tests with `pnpm run test` and the Playwright tests with `pnpm run test-e2e`.
 Similarly, you can start a development server with `pnpm run dev`.
 There may be some Playwright tests in `main` that require feature flags to be on, so be aware of that if they fail for nonobvious reasons.
-
 
 ---
 

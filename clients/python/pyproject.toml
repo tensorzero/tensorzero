@@ -1,0 +1,65 @@
+[project]
+name = "tensorzero"
+description = "The Python client for TensorZero"
+license = "Apache-2.0"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "httpx>=0.27.0",
+    "typing-extensions>=4.12.2",
+    "uuid-utils>=0.9.0",
+]
+authors = [
+    { name = "Viraj Mehta", email = "viraj@tensorzero.com" },
+    { name = "Gabriel Bianconi", email = "gabriel@tensorzero.com" },
+    { name = "Aaron Hill", email = "aaron@tensorzero.com" },
+]
+dynamic = ["version"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
+]
+keywords = [
+    "artificial intelligence",
+    "ai",
+    "machine learning",
+    "ml",
+    "large language model",
+    "large language models",
+    "llm",
+    "llms",
+    "natural language processing",
+    "NLP",
+    "generative ai",
+    "genai",
+]
+
+[project.urls]
+Homepage = "https://tensorzero.com/"
+Documentation = "https://tensorzero.com/docs/"
+Repository = "https://github.com/tensorzero/tensorzero"
+Issues = "https://github.com/tensorzero/tensorzero/issues"
+ReleaseNotes = "https://github.com/tensorzero/tensorzero/releases"
+
+[build-system]
+requires = ["maturin>=1.8,<2.0"]
+build-backend = "maturin"
+
+[dependency-groups]
+dev = [
+    "maturin",
+    "mypy",
+    "pyright",
+    "pytest-asyncio",
+    "pytest-xdist",
+    "pytest",
+    "openai",
+]
+
+[tool.maturin]
+features = ["pyo3/extension-module"]
+include = [".cargo/*"]
+strip = true

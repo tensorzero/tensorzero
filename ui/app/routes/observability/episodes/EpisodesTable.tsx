@@ -1,4 +1,3 @@
-import { Link } from "react-router";
 import {
   Table,
   TableBody,
@@ -9,6 +8,7 @@ import {
   TableEmptyState,
 } from "~/components/ui/table";
 import type { EpisodeByIdRow } from "~/utils/clickhouse/inference";
+import { TableItemShortUuid } from "~/components/ui/TableItems";
 
 export default function EpisodesTable({
   episodes,
@@ -57,6 +57,10 @@ export default function EpisodesTable({
                       {episode.episode_id}
                     </code>
                   </Link>
+                  <TableItemShortUuid
+                    id={episode.episode_id}
+                    link={`/observability/episodes/${episode.episode_id}`}
+                  />
                 </TableCell>
                 <TableCell>{episode.count}</TableCell>
                 <TableCell className="max-w-[200px] lg:max-w-none">

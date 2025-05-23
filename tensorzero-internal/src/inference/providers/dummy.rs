@@ -120,6 +120,7 @@ lazy_static! {
 }
 pub static DUMMY_JSON_RESPONSE_RAW: &str = r#"{"answer":"Hello"}"#;
 pub static DUMMY_JSON_GOODBYE_RESPONSE_RAW: &str = r#"{"answer":"Goodbye"}"#;
+pub static DUMMY_JSON_RESPONSE_RAW_DIFF_SCHEMA: &str = r#"{"response":"Hello"}"#;
 pub static DUMMY_JSON_COT_RESPONSE_RAW: &str =
     r#"{"thinking":"hmmm", "response": {"answer":"tokyo!"}}"#;
 pub static DUMMY_INFER_USAGE: Usage = Usage {
@@ -212,6 +213,25 @@ impl InferenceProvider for DummyProvider {
             }
             .into());
         }
+        if self.model_name == "multiple-text-blocks" {
+            // The first message must have 2 text blocks or we error
+            let first_message = &request.messages[0];
+            let first_message_text_content = first_message
+                .content
+                .iter()
+                .filter(|block| matches!(block, ContentBlock::Text(_)))
+                .collect::<Vec<_>>();
+            if first_message_text_content.len() != 2 {
+                return Err(ErrorDetails::InferenceClient {
+                    message: "First message must have exactly two text blocks".to_string(),
+                    raw_request: Some("raw request".to_string()),
+                    raw_response: None,
+                    status_code: None,
+                    provider_type: PROVIDER_TYPE.to_string(),
+                }
+                .into());
+            }
+        }
 
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         if self.model_name == "test_key" {
@@ -265,6 +285,7 @@ impl InferenceProvider for DummyProvider {
             "json" => vec![DUMMY_JSON_RESPONSE_RAW.to_string().into()],
             "json_goodbye" => vec![DUMMY_JSON_GOODBYE_RESPONSE_RAW.to_string().into()],
             "json_cot" => vec![DUMMY_JSON_COT_RESPONSE_RAW.to_string().into()],
+            "json_diff_schema" => vec![DUMMY_JSON_RESPONSE_RAW_DIFF_SCHEMA.to_string().into()],
             "json_beatles_1" => vec![r#"{"names":["John", "George"]}"#.to_string().into()],
             "json_beatles_2" => vec![r#"{"names":["Paul", "Ringo"]}"#.to_string().into()],
             "best_of_n_0" => {

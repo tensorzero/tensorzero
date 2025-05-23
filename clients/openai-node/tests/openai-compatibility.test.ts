@@ -1006,6 +1006,15 @@ describe("OpenAI Compatibility", () => {
       required: ["response"],
       additionalProperties: false,
     };
+    const response_format = {
+      type: "json_schema" as const,
+      json_schema: {
+        name: "test",
+        description: "test",
+        schema: outputSchema,
+        strict: true,
+      },
+    };
 
     const serializedOutputSchema = JSON.stringify(outputSchema);
     const messages: ChatCompletionMessageParam[] = [
@@ -1033,10 +1042,7 @@ describe("OpenAI Compatibility", () => {
     const result = await client.chat.completions.create({
       messages,
       model: "tensorzero::function_name::dynamic_json",
-      response_format: {
-        type: "json_schema",
-        json_schema: { name: "json_schema", ...outputSchema }, // the Node client requires a `name` field here...?
-      },
+      response_format,
       // @ts-expect-error - custom TensorZero property
       "tensorzero::episode_id": episodeId,
       "tensorzero::variant_name": "openai",
@@ -1441,4 +1447,24 @@ it("should handle extra body parameter", async () => {
     },
     extra_headers: { variant_extra_headers: null, inference_extra_headers: [] },
   });
+});
+
+it("should handle multiple text blocks in message", async () => {
+  const result = await client.chat.completions.create({
+    model: "tensorzero::model_name::dummy::multiple-text-blocks",
+    messages: [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Hello, world!" },
+          { type: "text", text: "Hello, world!" },
+        ],
+      },
+    ],
+  });
+
+  expect(result.model).toBe(
+    "tensorzero::model_name::dummy::multiple-text-blocks"
+  );
+  expect(result.choices[0].message.content).toContain("Megumin");
 });

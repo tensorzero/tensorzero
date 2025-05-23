@@ -19,9 +19,17 @@ use crate::inference::types::storage::StoragePath;
 ///
 /// WARNING: Setting this to true will expose potentially sensitive request/response
 /// data in logs and error responses. Use with caution.
-static DEBUG: OnceCell<bool> = OnceCell::const_new();
+static DEBUG: OnceCell<bool> = if cfg!(feature = "e2e_tests") {
+    OnceCell::const_new_with(true)
+} else {
+    OnceCell::const_new()
+};
 
 pub fn set_debug(debug: bool) -> Result<(), Error> {
+    // We already initialized `DEBUG`, so do nothing
+    if cfg!(feature = "e2e_tests") {
+        return Ok(());
+    }
     DEBUG.set(debug).map_err(|_| {
         Error::new(ErrorDetails::Config {
             message: "Failed to set debug mode".to_string(),
@@ -148,6 +156,10 @@ pub enum ErrorDetails {
     },
     ObjectStoreUnconfigured {
         block_type: String,
+    },
+    DatapointNotFound {
+        dataset_name: String,
+        datapoint_id: Uuid,
     },
     DynamicJsonSchema {
         message: String,
@@ -379,6 +391,7 @@ impl ErrorDetails {
             ErrorDetails::ClickHouseQuery { .. } => tracing::Level::ERROR,
             ErrorDetails::ObjectStoreWrite { .. } => tracing::Level::ERROR,
             ErrorDetails::Config { .. } => tracing::Level::ERROR,
+            ErrorDetails::DatapointNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::DynamicJsonSchema { .. } => tracing::Level::WARN,
             ErrorDetails::FileRead { .. } => tracing::Level::ERROR,
             ErrorDetails::GCPCredentials { .. } => tracing::Level::ERROR,
@@ -457,6 +470,7 @@ impl ErrorDetails {
             ErrorDetails::ClickHouseMigration { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ClickHouseQuery { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ObjectStoreUnconfigured { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::DatapointNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::Config { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::DynamicJsonSchema { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::FileRead { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -625,6 +639,15 @@ impl std::fmt::Display for ErrorDetails {
             }
             ErrorDetails::Config { message } => {
                 write!(f, "{message}")
+            }
+            ErrorDetails::DatapointNotFound {
+                dataset_name,
+                datapoint_id,
+            } => {
+                write!(
+                    f,
+                    "Datapoint not found for dataset: {dataset_name} and id: {datapoint_id}"
+                )
             }
             ErrorDetails::DynamicJsonSchema { message } => {
                 write!(

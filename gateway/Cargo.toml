@@ -17,6 +17,8 @@ mimalloc = "0.1.45"
 clap = { workspace = true }
 serde = { workspace = true }
 axum-tracing-opentelemetry = "0.28.0"
+tracing-opentelemetry-instrumentation-sdk = { workspace = true }
+tower-http = { workspace = true }
 
 [lints]
 workspace = true
@@ -24,3 +26,7 @@ workspace = true
 [features]
 e2e_tests = ["tensorzero-internal/e2e_tests"]
 default = []
+
+[dev-dependencies]
+reqwest.workspace = true
+tempfile = "3.20.0"

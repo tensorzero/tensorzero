@@ -35,7 +35,7 @@ impl Migration for Migration0015<'_> {
         Ok(false)
     }
 
-    async fn apply(&self) -> Result<(), Error> {
+    async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         // Alter the `input_tokens` column of `ModelInference` to be a nullable column
         let query = r#"
             ALTER TABLE ModelInference

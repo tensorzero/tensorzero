@@ -97,7 +97,9 @@ pub async fn run_evaluation(
         .ok_or(anyhow!("evaluation not found"))?
         .clone();
     let EvaluationConfig::Static(static_evaluation_config) = &*evaluation_config;
-    let function_config = config.get_function(&static_evaluation_config.function_name)?;
+    let function_config = config
+        .get_function(&static_evaluation_config.function_name)?
+        .into_owned();
     let tensorzero_client = match args.gateway_url {
         Some(gateway_url) => {
             ClientBuilder::new(ClientBuilderMode::HTTPGateway { url: gateway_url })
@@ -122,7 +124,7 @@ pub async fn run_evaluation(
         &clients.clickhouse_client,
         &args.dataset_name,
         &static_evaluation_config.function_name,
-        function_config,
+        &function_config,
     )
     .await?;
     let dataset_name = Arc::new(args.dataset_name);

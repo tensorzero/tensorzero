@@ -5,9 +5,6 @@ services:
       CLICKHOUSE_USER: chuser
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
       CLICKHOUSE_PASSWORD: chpassword
-    tmpfs:
-      # So the fixtures aren't persisted between restarts of the containers and double-added
-      - /var/lib/clickhouse
     volumes:
       - ./config.xml:/etc/clickhouse-server/config.xml:ro
     ports:
@@ -73,9 +70,11 @@ services:
       timeout: 1s
 
   fixtures:
-    image: clickhouse/clickhouse-server:24.12-alpine
+    build:
+      dockerfile: Dockerfile
     volumes:
       - .:/fixtures
+      - ~/.aws:/root/.aws
     environment:
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
       CLICKHOUSE_HOST: clickhouse
@@ -91,5 +90,5 @@ services:
       test: ["CMD", "test", "-f", "/tmp/load_complete.marker"]
       interval: 5s
       timeout: 1s
-      retries: 12 # Retry for up to a minute
+      retries: 48 # Retry for up to 4 minutes
       start_period: 5s # Give the script time to start

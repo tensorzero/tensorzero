@@ -2,7 +2,7 @@ import {
   countInferencesForEpisode,
   queryInferenceTableBoundsByEpisodeId,
   queryInferenceTableByEpisodeId,
-} from "~/utils/clickhouse/inference";
+} from "~/utils/clickhouse/inference.server";
 import {
   countFeedbackByTargetId,
   pollForFeedbackItem,
@@ -10,13 +10,7 @@ import {
   queryFeedbackByTargetId,
 } from "~/utils/clickhouse/feedback";
 import type { Route } from "./+types/route";
-import {
-  data,
-  Form,
-  isRouteErrorResponse,
-  redirect,
-  useNavigate,
-} from "react-router";
+import { data, isRouteErrorResponse, useNavigate } from "react-router";
 import EpisodeInferenceTable from "./EpisodeInferenceTable";
 import FeedbackTable from "~/components/feedback/FeedbackTable";
 import PageButtons from "~/components/utils/PageButtons";
@@ -35,9 +29,8 @@ import { ActionBar } from "~/components/layout/ActionBar";
 import { HumanFeedbackButton } from "~/components/feedback/HumanFeedbackButton";
 import { HumanFeedbackModal } from "~/components/feedback/HumanFeedbackModal";
 import { HumanFeedbackForm } from "~/components/feedback/HumanFeedbackForm";
-
-const FF_ENABLE_FEEDBACK =
-  import.meta.env.VITE_TENSORZERO_UI_FF_ENABLE_FEEDBACK === "1";
+import { isServerRequestError } from "~/utils/common";
+import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { episode_id } = params;
@@ -106,18 +99,31 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   };
 }
 
+type ActionData =
+  | { redirectTo: string; error?: never }
+  | { error: string; redirectTo?: never };
+
 export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
-  const _action = formData.get("_action");
-  switch (_action) {
-    case "addFeedback": {
-      const response = await addHumanFeedback(formData);
-      const url = new URL(request.url);
-      url.searchParams.delete("beforeFeedback");
-      url.searchParams.delete("afterFeedback");
-      url.searchParams.set("newFeedbackId", response.feedback_id);
-      return redirect(url.toString());
+
+  try {
+    const response = await addHumanFeedback(formData);
+    const url = new URL(request.url);
+    url.searchParams.delete("beforeFeedback");
+    url.searchParams.delete("afterFeedback");
+    url.searchParams.set("newFeedbackId", response.feedback_id);
+    return data<ActionData>({ redirectTo: url.pathname + url.search });
+  } catch (error) {
+    if (isServerRequestError(error)) {
+      return data<ActionData>(
+        { error: error.message },
+        { status: error.statusCode },
+      );
     }
+    return data<ActionData>(
+      { error: "Unknown server error. Try again." },
+      { status: 500 },
+    );
   }
 }
 
@@ -196,23 +202,50 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     !feedback_bounds.first_id ||
     feedback_bounds.first_id === bottomFeedback.id;
 
+  const humanFeedbackFetcher = useFetcherWithReset<typeof action>();
+  const formError =
+    humanFeedbackFetcher.state === "idle"
+      ? (humanFeedbackFetcher.data?.error ?? null)
+      : null;
+  useEffect(() => {
+    const currentState = humanFeedbackFetcher.state;
+    const data = humanFeedbackFetcher.data;
+    if (currentState === "idle" && data?.redirectTo) {
+      navigate(data.redirectTo);
+      setIsModalOpen(false);
+    }
+  }, [humanFeedbackFetcher.data, humanFeedbackFetcher.state, navigate]);
+
   return (
     <PageLayout>
       <PageHeader label="Episode" name={episode_id}>
-        {FF_ENABLE_FEEDBACK && (
-          <ActionBar>
-            <HumanFeedbackModal
-              isOpen={isModalOpen}
-              onOpenChange={setIsModalOpen}
-              trigger={<HumanFeedbackButton />}
-            >
-              <Form method="post" onSubmit={() => setIsModalOpen(false)}>
-                <input type="hidden" name="_action" value="addFeedback" />
-                <HumanFeedbackForm episodeId={episode_id} />
-              </Form>
-            </HumanFeedbackModal>
-          </ActionBar>
-        )}
+        <ActionBar>
+          <HumanFeedbackModal
+            isOpen={isModalOpen}
+            onOpenChange={(isOpen) => {
+              if (humanFeedbackFetcher.state !== "idle") {
+                return;
+              }
+
+              if (!isOpen) {
+                humanFeedbackFetcher.reset();
+              }
+              setIsModalOpen(isOpen);
+            }}
+            trigger={<HumanFeedbackButton />}
+          >
+            <humanFeedbackFetcher.Form method="post">
+              <HumanFeedbackForm
+                episodeId={episode_id}
+                formError={formError}
+                isSubmitting={
+                  humanFeedbackFetcher.state === "submitting" ||
+                  humanFeedbackFetcher.state === "loading"
+                }
+              />
+            </humanFeedbackFetcher.Form>
+          </HumanFeedbackModal>
+        </ActionBar>
       </PageHeader>
 
       <SectionsGroup>

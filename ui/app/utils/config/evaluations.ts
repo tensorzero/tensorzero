@@ -48,7 +48,10 @@ export const EvaluationConfigSchema = z.discriminatedUnion("type", [
 ]);
 export type EvaluationConfig = z.infer<typeof EvaluationConfigSchema>;
 
-export const getOptimize = (evaluatorConfig: EvaluatorConfig) => {
+export const getOptimize = (evaluatorConfig?: EvaluatorConfig) => {
+  if (!evaluatorConfig) {
+    return "max";
+  }
   switch (evaluatorConfig.type) {
     case "exact_match":
       return "max";

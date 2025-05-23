@@ -71,6 +71,7 @@
     "@storybook/addon-onboarding": "^8.6.12",
     "@storybook/blocks": "^8.6.12",
     "@storybook/experimental-addon-test": "^8.6.12",
+    "@storybook/preview-api": "^8.6.12",
     "@storybook/react": "^8.6.12",
     "@storybook/react-vite": "^8.6.12",
     "@storybook/test": "^8.6.12",
@@ -88,6 +89,7 @@
     "prettier": "^3.5.3",
     "prettier-plugin-tailwindcss": "^0.6.11",
     "storybook": "^8.6.12",
+    "storybook-addon-remix-react-router": "^4.0.1",
     "tailwindcss": "^4.1.2",
     "typescript": "^5.8.2",
     "vite": "^6.2.7",
@@ -105,7 +107,8 @@
   "pnpm": {
     "ignoredBuiltDependencies": [
       "esbuild",
-      "msw"
+      "msw",
+      "storybook-addon-remix-react-router"
     ],
     "onlyBuiltDependencies": [
       "esbuild",

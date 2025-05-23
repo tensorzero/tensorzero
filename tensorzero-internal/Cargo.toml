@@ -22,7 +22,7 @@ workspace = true
 async-stream = { workspace = true }
 async-trait = "0.1.86"
 aws-config = { version = "1.6", features = ["behavior-version-latest"] }
-aws-sdk-bedrockruntime = { version = "1.84.0", default-features = false, features = [
+aws-sdk-bedrockruntime = { version = "1.89.0", default-features = false, features = [
     "behavior-version-latest",
     "rt-tokio",
     "default-https-client",
@@ -50,7 +50,7 @@ metrics = "0.24.2"
 metrics-exporter-prometheus = { version = "0.17.0", features = [
     "http-listener",
 ], default-features = false }
-minijinja = { version = "2.9.0", features = [
+minijinja = { version = "2.10.2", features = [
     "loader",
     "debug",
     "json",
@@ -66,8 +66,8 @@ serde = { workspace = true }
 serde-untagged = { workspace = true }
 serde_json = { workspace = true }
 http = { workspace = true }
-serde_path_to_error = "0.1.17"
-sha2 = "0.10.8"
+serde_path_to_error = { workspace = true }
+sha2 = "0.10.9"
 strum = { version = "0.27.1", features = ["derive"] }
 strum_macros = "0.27.1"
 tokio = { workspace = true }
@@ -83,7 +83,7 @@ url = { workspace = true, features = ["serde"] }
 uuid = { workspace = true }
 tensorzero-derive = { path = "../tensorzero-derive" }
 clap = { workspace = true }
-aws-sdk-sagemakerruntime = { version = "1.67.0", features = [
+aws-sdk-sagemakerruntime = { version = "1.71.0", features = [
     "behavior-version-latest",
     "rt-tokio",
     "default-https-client",
@@ -93,19 +93,23 @@ eventsource-stream = "0.2.3"
 scoped-tls = "1.0.1"
 opentelemetry_sdk = "0.29.0"
 opentelemetry = "0.29.1"
-opentelemetry-stdout = "0.29.0"
 tracing-opentelemetry = "0.30.0"
 opentelemetry-otlp = { version = "0.29.0", features = ["grpc-tonic"] }
 opentelemetry-semantic-conventions = "0.29.0"
+init-tracing-opentelemetry = "0.28.1"
+tracing-futures = { version = "0.2.5", features = ["futures-03"] }
+tracing-opentelemetry-instrumentation-sdk = { workspace = true, features = ["http"] }
+tower-http = { workspace = true }
+tower-layer = "0.3.3"
 
 
 [dev-dependencies]
-tempfile = "3.19.1"
+tempfile = "3.20.0"
 tracing-test = { workspace = true }
 tensorzero = { path = "../clients/rust" }
 paste = "1.0.15"
 base64 = "0.22.1"
-aws-sdk-s3 = { version = "1.83.0", default-features = false, features = [
+aws-sdk-s3 = { version = "1.87.0", default-features = false, features = [
     "behavior-version-latest",
     "sigv4a",
     "rt-tokio",
@@ -116,4 +120,4 @@ aws-credential-types = { version = "1.2.2", features = [
 ] }
 
 [build-dependencies]
-built = { version = "0.7.7", features = ["git2"] }
+built = { version = "0.8.0", features = ["git2"] }

@@ -14,8 +14,9 @@
 
 use std::{collections::HashMap, path::PathBuf};
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use clap::Parser;
+use cursorzero::clickhouse::InferenceInfo;
 use cursorzero::ted::minimum_ted;
 use cursorzero::{
     clickhouse::get_inferences_in_time_range,
@@ -30,6 +31,8 @@ use git2::Repository;
 use serde_json::json;
 use tensorzero::{ClientBuilder, ClientBuilderMode, FeedbackParams};
 use tensorzero_internal::clickhouse::ClickHouseConnectionInfo;
+use tensorzero_internal::inference::types::ContentBlockChatOutput;
+use tracing_subscriber::{EnvFilter, FmtSubscriber};
 use tree_sitter::Tree;
 use url::Url;
 use uuid::Uuid;
@@ -44,6 +47,15 @@ struct Cli {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let subscriber = FmtSubscriber::builder()
+        .with_env_filter(
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
+        )
+        .finish();
+    #[expect(clippy::expect_used)]
+    tracing::subscriber::set_global_default(subscriber)
+        .expect("Failed to set global default subscriber");
+
     let args = Cli::parse();
     let repo = Repository::discover(args.path)?;
     let commit = get_last_commit_from_repo(&repo)?;
@@ -74,12 +86,22 @@ async fn main() -> Result<()> {
     let clickhouse_url = std::env::var("CURSORZERO_CLICKHOUSE_URL")?;
     let clickhouse = ClickHouseConnectionInfo::new(&clickhouse_url).await?;
     let inferences = get_inferences_in_time_range(&clickhouse, commit_interval).await?;
+    let inferences_by_id: HashMap<Uuid, &InferenceInfo> =
+        inferences.iter().map(|i| (i.id, i)).collect();
     let mut inference_trees: HashMap<Uuid, Vec<TreeInfo>> = HashMap::new();
-    for inference in inferences {
-        let code_blocks =
-            parse_cursor_output(&inference.input, &inference.output).with_context(|| {
-                format!("Error parsing cursor output for inference {}", inference.id)
-            })?;
+    for inference in inferences.iter() {
+        // If the parsing fails (meaning the inference doesn't look like something we recognize),
+        // we log a warning and skip the inference.
+        let code_blocks = match parse_cursor_output(&inference.input, &inference.output) {
+            Ok(code_blocks) => code_blocks,
+            Err(e) => {
+                tracing::warn!(
+                    "Skipping inference {} because it doesn't look like a cursor response: {e}",
+                    inference.id
+                );
+                continue;
+            }
+        };
         for code_block in code_blocks {
             let tree = parse_hunk(&code_block.content, &code_block.language_extension).ok();
             if let Some(tree) = tree {
@@ -166,8 +188,54 @@ async fn main() -> Result<()> {
                     dryrun: None,
                 })
                 .await?;
+
+            if let Some(min_ted_source) = &best_ted_info.min_ted_source {
+                client
+                    .feedback(FeedbackParams {
+                        inference_id: Some(inference_id),
+                        metric_name: "demonstration".to_string(),
+                        value: serde_json::Value::String(min_ted_source.clone()),
+                        tags: HashMap::from_iter([(
+                            "cursorzero_demonstration_kind".to_string(),
+                            "raw".to_string(),
+                        )]),
+                        episode_id: None,
+                        internal: false,
+                        dryrun: None,
+                    })
+                    .await?;
+
+                let original_inference = inferences_by_id.get(&inference_id).ok_or_else(|| {
+                    anyhow::anyhow!("Inference not found in inferences_by_id: {inference_id}")
+                })?;
+                let output_text = match original_inference.output.as_slice() {
+                    [ContentBlockChatOutput::Text(t)] => &t.text,
+                    _ => {
+                        return Err(anyhow::anyhow!("Output is not a single text block"));
+                    }
+                };
+
+                // Inside of the original cursor response, replace the old tree with the closest tree we found in the git diff.
+                // This produces a demonstration with the proper context (e.g. the '// Start of Selection' comment).
+                let updated_cursor_output =
+                    output_text.replace(&String::from_utf8(tree_info.src)?, min_ted_source);
+
+                client
+                    .feedback(FeedbackParams {
+                        inference_id: Some(inference_id),
+                        metric_name: "demonstration".to_string(),
+                        value: serde_json::Value::String(updated_cursor_output),
+                        tags: HashMap::from_iter([(
+                            "cursorzero_demonstration_kind".to_string(),
+                            "replaced".to_string(),
+                        )]),
+                        episode_id: None,
+                        internal: false,
+                        dryrun: None,
+                    })
+                    .await?;
+            }
             num_feedbacks_sent += 1;
-            // TODO: Send a demonstration of the matching snippet if it's sufficiently good.
         }
     }
     #[expect(clippy::print_stdout)]

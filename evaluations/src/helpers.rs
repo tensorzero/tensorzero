@@ -54,6 +54,7 @@ pub fn setup_logging(args: &Args) -> Result<()> {
         OutputFormat::Jsonl => {
             let subscriber = tracing_subscriber::FmtSubscriber::builder()
                 .with_writer(std::io::stderr)
+                .json()
                 .finish();
             tracing::subscriber::set_global_default(subscriber)
                 .map_err(|e| anyhow!("Failed to initialize tracing: {}", e))

@@ -19,6 +19,10 @@ export default [
     "routes/api/datasets/count_dataset_function.route.ts",
   ),
   route(
+    "api/dynamic_evaluations/search_runs",
+    "routes/api/dynamic_evaluations/search_runs/route.ts",
+  ),
+  route(
     "api/evaluations/search_runs/:evaluation_name",
     "routes/api/evaluations/search_runs/$evaluation_name/route.ts",
   ),
@@ -43,6 +47,15 @@ export default [
   route(
     "evaluations/:evaluation_name/:datapoint_id",
     "routes/evaluations/$evaluation_name/$datapoint_id/route.tsx",
+  ),
+  route("dynamic_evaluations", "routes/dynamic_evaluations/route.tsx"),
+  route(
+    "dynamic_evaluations/runs/:run_id",
+    "routes/dynamic_evaluations/runs/$run_id/route.tsx",
+  ),
+  route(
+    "dynamic_evaluations/projects/:project_name",
+    "routes/dynamic_evaluations/projects/$project_name/route.tsx",
   ),
   route(
     "observability/inferences",

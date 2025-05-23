@@ -60,7 +60,7 @@ export function ColorAssignerProvider({
   };
 
   // Update color assignments when selected run IDs change
-  const selectedRunIdsRef = useRef<string[]>(selectedRunIds);
+  const selectedRunIdsRef = useRef<string[]>([]);
   useEffect(() => {
     // because selectedRunIds is an array of strings that may not be memoized,
     // do a manual shallow comparison before running the sync effect to prevent

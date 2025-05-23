@@ -8,8 +8,11 @@ import {
   TableRow,
   TableEmptyState,
 } from "~/components/ui/table";
-import { TableItemShortUuid, TableItemTime } from "~/components/ui/TableItems";
-import { FunctionLink } from "~/components/function/FunctionLink";
+import {
+  TableItemShortUuid,
+  TableItemTime,
+  TableItemFunction,
+} from "~/components/ui/TableItems";
 import { VariantLink } from "~/components/function/variant/VariantLink";
 
 export default function InferencesTable({
@@ -53,6 +56,13 @@ export default function InferencesTable({
                       {inference.function_name}
                     </code>
                   </FunctionLink>
+
+                  <TableItemFunction
+                    functionName={inference.function_name}
+                    functionType={inference.function_type}
+                    link={`/observability/functions/${inference.function_name}`}
+                  />
+
                 </TableCell>
                 <TableCell>
                   <VariantLink

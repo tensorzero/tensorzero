@@ -3,6 +3,7 @@ use object_store::local::LocalFileSystem;
 use object_store::{ObjectStore, PutPayload};
 use scoped_tls::scoped_thread_local;
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -10,6 +11,7 @@ use tensorzero_derive::TensorZeroDeserialize;
 use tracing::instrument;
 
 use crate::embeddings::{EmbeddingModelTable, UninitializedEmbeddingModelConfig};
+use crate::endpoints::inference::DEFAULT_FUNCTION_NAME;
 use crate::error::{Error, ErrorDetails};
 use crate::evaluations::{EvaluationConfig, UninitializedEvaluationConfig};
 use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
@@ -43,14 +45,18 @@ pub struct Config<'c> {
     pub provider_types: ProviderTypesConfig,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Deserialize)]
 pub struct GatewayConfig {
     pub bind_address: Option<std::net::SocketAddr>,
+    #[serde(default)]
     pub observability: ObservabilityConfig,
+    #[serde(default)]
     pub debug: bool,
     /// If `true`, allow minijinja to read from the filesystem (within the tree of the config file) for '{% include %}'
     /// Defaults to `false`
+    #[serde(default)]
     pub enable_template_filesystem_access: bool,
+    #[serde(default)]
     pub export: ExportConfig,
 }
 
@@ -93,11 +99,19 @@ impl ObjectStoreInfo {
         let object_store: Option<Arc<dyn ObjectStore>> = match &config {
             StorageKind::Filesystem { path } => Some(Arc::new(
                 LocalFileSystem::new_with_prefix(path).map_err(|e| {
-                    Error::new(ErrorDetails::Config {
-                        message: format!(
-                            "Failed to create filesystem object store for path: {path}: {e}"
-                        ),
-                    })
+                    if !std::fs::exists(path).unwrap_or(false) {
+                        Error::new(ErrorDetails::Config {
+                            message: format!(
+                                "Failed to create filesystem object store: path does not exist: {path}"
+                            ),
+                        })
+                    } else {
+                        Error::new(ErrorDetails::Config {
+                            message: format!(
+                                "Failed to create filesystem object store for path: {path}: {e}"
+                            ),
+                        })
+                    }
                 })?,
             )),
             StorageKind::S3Compatible {
@@ -204,58 +218,9 @@ fn contains_bad_scheme_err(e: &impl StdError) -> bool {
     format!("{e:?}").contains("BadScheme")
 }
 
-/// Note: This struct and the impl below can be removed in favor of a derived impl for Deserialize once we have removed the `disable_observability` flag
-/// TODO (#797): Remove this once we have removed the `disable_observability` flag
-#[derive(Debug, Default, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct UninitializedGatewayConfig {
-    pub bind_address: Option<std::net::SocketAddr>,
-    #[serde(default)]
-    pub disable_observability: bool,
-    #[serde(default)]
-    pub observability: ObservabilityConfig,
-    #[serde(default)]
-    pub debug: bool,
-    #[serde(default)]
-    pub enable_template_filesystem_access: bool,
-    #[serde(default)]
-    pub export: ExportConfig,
-}
-
-impl TryFrom<UninitializedGatewayConfig> for GatewayConfig {
-    type Error = Error;
-    fn try_from(config: UninitializedGatewayConfig) -> Result<Self, Self::Error> {
-        let enabled = match (config.disable_observability, config.observability.enabled) {
-            (true, Some(_)) => {
-                return Err(Error::new(ErrorDetails::Config {
-                    message: "Configuration flag `gateway.disable_observability` and `gateway.observability.enabled` are mutually exclusive. We are deprecating `gateway.disable_observability` in favor of `gateway.observability.enabled`. See https://github.com/tensorzero/tensorzero/issues/797 on GitHub for details.".to_string(),
-                }));
-            }
-            (true, None) => {
-                tracing::warn!("Deprecation Warning: The configuration flag `gateway.disable_observability` is deprecated in favor of `gateway.observability.enabled`. See https://github.com/tensorzero/tensorzero/issues/797 on GitHub for details.");
-                Some(false)
-            }
-            (false, Some(enabled)) => Some(enabled),
-            (false, None) => None,
-        };
-
-        Ok(Self {
-            bind_address: config.bind_address,
-            observability: ObservabilityConfig {
-                enabled,
-                async_writes: config.observability.async_writes,
-            },
-            export: config.export,
-            debug: config.debug,
-            enable_template_filesystem_access: config.enable_template_filesystem_access,
-        })
-    }
-}
-
 #[derive(Debug, Default, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct ObservabilityConfig {
-    #[serde(default)]
     pub enabled: Option<bool>,
     #[serde(default)]
     pub async_writes: bool,
@@ -367,11 +332,6 @@ impl<'c> Config<'c> {
         }
         let uninitialized_config = UninitializedConfig::try_from(table)?;
 
-        let gateway = uninitialized_config
-            .gateway
-            .unwrap_or_default()
-            .try_into()?;
-
         let templates = TemplateConfig::new();
 
         let functions = uninitialized_config
@@ -413,7 +373,7 @@ impl<'c> Config<'c> {
         let object_store_info = ObjectStoreInfo::new(uninitialized_config.object_storage)?;
 
         let mut config = Config {
-            gateway,
+            gateway: uninitialized_config.gateway,
             models: models.try_into().map_err(|e| {
                 Error::new(ErrorDetails::Config {
                     message: format!("Failed to load models: {e}"),
@@ -576,12 +536,29 @@ impl<'c> Config<'c> {
     pub fn get_function<'a>(
         &'a self,
         function_name: &str,
-    ) -> Result<&'a Arc<FunctionConfig>, Error> {
-        self.functions.get(function_name).ok_or_else(|| {
-            Error::new(ErrorDetails::UnknownFunction {
-                name: function_name.to_string(),
-            })
-        })
+    ) -> Result<Cow<'a, Arc<FunctionConfig>>, Error> {
+        if function_name == DEFAULT_FUNCTION_NAME {
+            Ok(Cow::Owned(Arc::new(FunctionConfig::Chat(
+                FunctionConfigChat {
+                    variants: HashMap::new(),
+                    system_schema: None,
+                    user_schema: None,
+                    assistant_schema: None,
+                    tools: vec![],
+                    tool_choice: ToolChoice::None,
+                    parallel_tool_calls: None,
+                    description: None,
+                },
+            ))))
+        } else {
+            Ok(Cow::Borrowed(
+                self.functions.get(function_name).ok_or_else(|| {
+                    Error::new(ErrorDetails::UnknownFunction {
+                        name: function_name.to_string(),
+                    })
+                })?,
+            ))
+        }
     }
 
     /// Get a metric by name, producing an error if it's not found
@@ -656,7 +633,8 @@ pub trait LoadableConfig<T> {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct UninitializedConfig {
-    pub gateway: Option<UninitializedGatewayConfig>,
+    #[serde(default)]
+    pub gateway: GatewayConfig,
     #[serde(default)]
     pub models: HashMap<Arc<str>, UninitializedModelConfig>, // model name => model config
     #[serde(default)]
@@ -2532,6 +2510,29 @@ thinking = { type = "enabled", budget_tokens = 1024 }
             .to_string();
         assert!(
             err.contains("Config file not found"),
+            "Unexpected error message: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_config_missing_filesystem_object_store() {
+        let tempfile = NamedTempFile::new().unwrap();
+        write!(
+            &tempfile,
+            r#"
+            [object_storage]
+            type = "filesystem"
+            path = "/fake-tensorzero-path/other-path"
+
+            [functions]"#
+        )
+        .unwrap();
+        let err = Config::load_and_verify_from_path(tempfile.path())
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("Failed to create filesystem object store: path does not exist: /fake-tensorzero-path/other-path"),
             "Unexpected error message: {err}"
         );
     }

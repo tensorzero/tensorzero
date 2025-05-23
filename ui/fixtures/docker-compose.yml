@@ -5,9 +5,6 @@ services:
       CLICKHOUSE_USER: chuser
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
       CLICKHOUSE_PASSWORD: chpassword
-    tmpfs:
-      # So the fixtures aren't persisted between restarts of the containers and double-added
-      - /var/lib/clickhouse
     ports:
       - "8123:8123" # HTTP port
       - "9000:9000" # Native port
@@ -54,9 +51,11 @@ services:
       timeout: 1s
 
   fixtures:
-    image: clickhouse/clickhouse-server:24.12-alpine
+    build:
+      dockerfile: Dockerfile
     volumes:
-      - .:/fixtures:ro
+      - .:/fixtures
+      - ~/.aws:/root/.aws
     environment:
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
       CLICKHOUSE_HOST: clickhouse
@@ -68,3 +67,9 @@ services:
     # Keep this running to make 'check-docker-compose.sh' detect that all containers are healthy
     command:
       ["bash", "-c", "cd /fixtures && ./load_fixtures.sh && sleep infinity"]
+    healthcheck:
+      test: ["CMD", "test", "-f", "/tmp/load_complete.marker"]
+      interval: 5s
+      timeout: 1s
+      retries: 48 # Retry for up to 4 minutes
+      start_period: 5s # Give the script time to start
