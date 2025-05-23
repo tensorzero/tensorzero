@@ -75,10 +75,10 @@ jobs:
         with:
           cache-provider: "buildjet"
 
-      - uses: 'google-github-actions/auth@v2'
-        with:
-          project_id: 'tensozero-public'
-          workload_identity_provider: 'projects/454541351720/locations/global/workloadIdentityPools/github/providers/tensorzero'
+      # - uses: 'google-github-actions/auth@v2'
+      #   with:
+      #     project_id: 'tensozero-public'
+      #     workload_identity_provider: 'projects/454541351720/locations/global/workloadIdentityPools/github/providers/tensorzero'
 
       - name: Print Rust version
         run: rustc --version
