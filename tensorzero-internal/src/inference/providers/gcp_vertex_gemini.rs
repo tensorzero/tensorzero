@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use axum::http;
 use futures::StreamExt;
-use google_cloud_auth::credentials::{CacheableResource, Credentials};
+use google_cloud_auth::credentials::Credentials;
 use http::{HeaderMap, HeaderValue};
 use itertools::Itertools;
 use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
@@ -495,25 +495,14 @@ impl GCPVertexCredentials {
                     .expose_secret(),
             ),
             GCPVertexCredentials::Sdk(creds) => {
-                let headers = creds
+                return Ok(creds
                     .headers(http::Extensions::default())
                     .await
                     .map_err(|e| {
                         Error::new(ErrorDetails::GCPCredentials {
                             message: format!("Failed to get GCP access token: {}", e),
                         })
-                    })?;
-                match headers {
-                    CacheableResource::New {
-                        entity_tag: _,
-                        data,
-                    } => return Ok(data),
-                    // We always pass in `http::Extensions::default()` when getting the headers, so this should
-                    // never happen.
-                    CacheableResource::NotModified => return Err(Error::new(ErrorDetails::GCPCredentials {
-                        message: "GCP SDK return `CacheableResource::NotModified` when getting access token. This should never happen.".to_string()
-                    })),
-                }
+                    })?)
             }
             GCPVertexCredentials::None => {
                 return Err(Error::new(ErrorDetails::ApiKeyMissing {

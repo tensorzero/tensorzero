@@ -1736,8 +1736,9 @@ dependencies = [
 
 [[package]]
 name = "google-cloud-auth"
-version = "0.21.0"
-source = "git+https://github.com/googleapis/google-cloud-rust.git?rev=dee6b3f4#dee6b3f4fd8cd2373014847885785d40df6348ca"
+version = "0.20.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0bd58406d918ffb345f0482c1e9a9794a5836169581ecc4dcb6c02330fefdc72"
 dependencies = [
  "async-trait",
  "base64",
@@ -1756,8 +1757,9 @@ dependencies = [
 
 [[package]]
 name = "google-cloud-gax"
-version = "0.23.0"
-source = "git+https://github.com/googleapis/google-cloud-rust.git?rev=dee6b3f4#dee6b3f4fd8cd2373014847885785d40df6348ca"
+version = "0.22.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d2dad82102be3d1052c43950c1ded1641edd08d8ec066af306012e4f71826991"
 dependencies = [
  "base64",
  "bytes",
@@ -1774,8 +1776,9 @@ dependencies = [
 
 [[package]]
 name = "google-cloud-rpc"
-version = "0.4.0"
-source = "git+https://github.com/googleapis/google-cloud-rust.git?rev=dee6b3f4#dee6b3f4fd8cd2373014847885785d40df6348ca"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f42736ae792ea662facb2841a573e281f32a3a161a99fc342c6aef9738f2dfb0"
 dependencies = [
  "bytes",
  "google-cloud-wkt",
@@ -1786,8 +1789,9 @@ dependencies = [
 
 [[package]]
 name = "google-cloud-wkt"
-version = "0.5.0"
-source = "git+https://github.com/googleapis/google-cloud-rust.git?rev=dee6b3f4#dee6b3f4fd8cd2373014847885785d40df6348ca"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5dfd0127a9a4b436e7f2f72db309e8199b4eba248bc602dda9a82ae9e339742c"
 dependencies = [
  "base64",
  "bytes",
