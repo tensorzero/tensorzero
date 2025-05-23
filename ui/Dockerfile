@@ -4,9 +4,6 @@ FROM node:23-bookworm-slim AS base
 
 COPY --from=ghcr.io/astral-sh/uv:0.6.6 /uv /uvx /bin/
 
-ENV PNPM_HOME="/pnpm"
-ENV PATH="$PNPM_HOME:$PATH"
-RUN corepack enable
 RUN npm install -g pnpm
 
 # ========== package-jsons-layer ==========
@@ -22,19 +19,24 @@ RUN find . -type f \( -name package.json -o -name pnpm-lock.yaml \) \
 # ========== development-dependencies-env ==========
 
 FROM base AS development-dependencies-env
-WORKDIR /app
-COPY --from=package-jsons-layer /tmp/packages.tar /tmp/packages.tar
 
-RUN tar -xf /tmp/packages.tar -C . && pnpm install --frozen-lockfile
+WORKDIR /app
+
+COPY --from=package-jsons-layer /tmp/packages.tar /tmp/packages.tar
+RUN tar -xf /tmp/packages.tar -C .
+
+RUN pnpm install --frozen-lockfile
 
 # ========== production-dependencies-env ==========
 
 FROM base AS production-dependencies-env
-WORKDIR /app
-COPY --from=package-jsons-layer /tmp/packages.tar /tmp/packages.tar
 
-RUN tar -xf /tmp/packages.tar -C . &&
-	pnpm install --frozen-lockfile --prod
+WORKDIR /app
+
+COPY --from=package-jsons-layer /tmp/packages.tar /tmp/packages.tar
+RUN tar -xf /tmp/packages.tar -C .
+
+RUN pnpm install --frozen-lockfile --prod
 
 # ========== minijinja-build-env ==========
 
