@@ -14,7 +14,7 @@ use std::fmt::Debug;
 use tensorzero_internal::{
     config_parser::Config,
     endpoints::{
-        datasets::CreateDatapointParams,
+        datasets::InsertDatapointParams,
         dynamic_evaluation_run::{
             validate_variant_pins, DynamicEvaluationRunEpisodeParams,
             DynamicEvaluationRunEpisodeResponse,
@@ -598,7 +598,7 @@ impl Client {
     pub async fn bulk_insert_datapoints(
         &self,
         dataset_name: String,
-        params: CreateDatapointParams,
+        params: InsertDatapointParams,
     ) -> Result<Vec<Uuid>, TensorZeroError> {
         match &self.mode {
             ClientMode::HTTPGateway(client) => {
@@ -613,7 +613,7 @@ impl Client {
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
-                    tensorzero_internal::endpoints::datasets::create_datapoint(
+                    tensorzero_internal::endpoints::datasets::insert_datapoint(
                         dataset_name,
                         params,
                         &gateway.state.config,
