@@ -51,12 +51,20 @@ function MessageContent({
                 <pre className="mt-1 text-sm">{block.result}</pre>
               </div>
             );
-          case "image":
-            return <ImageBlock key={blockIndex} image={block} />;
-          case "image_error":
+          case "file":
+            if (block.file.mime_type.startsWith("image/")) {
+              return <ImageBlock key={blockIndex} image={block} />;
+            } else {
+              return (
+                <div key={blockIndex}>
+                  <SkeletonImage error={`Unsupported file type: ${block.file.mime_type}`} />
+                </div>
+              )
+            }
+          case "file_error":
             return (
               <div key={blockIndex}>
-                <SkeletonImage error={true} />
+                <SkeletonImage error="Failed to retrieve image." />
               </div>
             );
         }

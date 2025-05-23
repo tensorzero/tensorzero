@@ -17,7 +17,7 @@ use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
-use crate::inference::types::resolved_input::ImageWithPath;
+use crate::inference::types::resolved_input::FileWithPath;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, serialize_or_log, ModelInferenceRequest,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
@@ -477,7 +477,7 @@ impl<'a> TryFrom<&'a ContentBlock> for Option<FlattenUnknown<'a, GeminiPart<'a>>
                     },
                 })))
             }
-            ContentBlock::Image(ImageWithPath {
+            ContentBlock::File(FileWithPath {
                 image,
                 storage_path: _,
             }) => Ok(Some(FlattenUnknown::Normal(GeminiPart::InlineData {

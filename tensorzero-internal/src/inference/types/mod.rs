@@ -6,9 +6,9 @@ use extra_headers::{FullExtraHeadersConfig, UnfilteredInferenceExtraHeaders};
 use futures::stream::Peekable;
 use futures::Stream;
 use image::sanitize_raw_request;
-pub use image::{Base64Image, Image, ImageKind};
+pub use image::{Base64File, File, FileKind};
 use itertools::Itertools;
-use resolved_input::ImageWithPath;
+use resolved_input::FileWithPath;
 pub use resolved_input::{ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{Map, Value};
@@ -131,7 +131,7 @@ impl InputMessageContent {
                 );
                 ResolvedInputMessageContent::Text { value }
             }
-            InputMessageContent::Image(image) => {
+            InputMessageContent::File(image) => {
                 let storage_kind = context
                     .object_store_info
                     .as_ref()
@@ -144,7 +144,7 @@ impl InputMessageContent {
                     .clone();
                 let image = image.take_or_fetch(context.client).await?;
                 let path = storage_kind.image_path(&image)?;
-                ResolvedInputMessageContent::Image(ImageWithPath {
+                ResolvedInputMessageContent::File(FileWithPath {
                     image,
                     storage_path: path,
                 })
@@ -180,7 +180,8 @@ pub enum InputMessageContent {
         value: String,
     },
     Thought(Thought),
-    Image(Image),
+    #[serde(alias = "image")]
+    File(File),
     /// An unknown content block type, used to allow passing provider-specific
     /// content blocks (e.g. Anthropic's "redacted_thinking") in and out
     /// of TensorZero.
@@ -273,7 +274,8 @@ pub enum ContentBlock {
     Text(Text),
     ToolCall(ToolCall),
     ToolResult(ToolResult),
-    Image(ImageWithPath),
+    #[serde(alias = "image")]
+    File(FileWithPath),
     Thought(Thought),
     /// Represents an unknown provider-specific content block.
     /// We pass this along as-is without any validation or transformation.

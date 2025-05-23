@@ -17,13 +17,13 @@ use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
-use crate::inference::types::resolved_input::ImageWithPath;
+use crate::inference::types::resolved_input::FileWithPath;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk, FinishReason,
     FunctionType, Latency, ModelInferenceRequestJsonMode, Role, Text,
 };
 use crate::inference::types::{
-    ContentBlockOutput, FlattenUnknown, ImageKind, ModelInferenceRequest,
+    ContentBlockOutput, FileKind, FlattenUnknown, ModelInferenceRequest,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
     ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStreamInner, RequestMessage, TextChunk, Thought, ThoughtChunk, Usage,
@@ -505,7 +505,7 @@ enum AnthropicMessageContent<'a> {
 #[serde(rename_all = "snake_case")]
 pub struct AnthropicImageSource {
     pub r#type: AnthropicImageType,
-    pub media_type: ImageKind,
+    pub media_type: FileKind,
     pub data: String,
 }
 
@@ -564,7 +564,7 @@ impl<'a> TryFrom<&'a ContentBlock> for Option<FlattenUnknown<'a, AnthropicMessag
                     }],
                 },
             ))),
-            ContentBlock::Image(ImageWithPath {
+            ContentBlock::File(FileWithPath {
                 image,
                 storage_path: _,
             }) => Ok(Some(FlattenUnknown::Normal(

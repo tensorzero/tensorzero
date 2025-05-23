@@ -3,11 +3,11 @@
 use serde_json::json;
 use tensorzero::{
     input_handling::resolved_input_to_client_input, ClientBuilder, ClientBuilderMode,
-    ClientInferenceParams, ClientInput, ClientInputMessageContent, Image,
+    ClientInferenceParams, ClientInput, ClientInputMessageContent, File,
 };
 
 use reqwest::Url;
-use tensorzero_internal::inference::types::{ImageKind, ResolvedInput};
+use tensorzero_internal::inference::types::{FileKind, ResolvedInput};
 
 lazy_static::lazy_static! {
     static ref GATEWAY_URL: String = std::env::var("GATEWAY_URL").unwrap_or("http://localhost:3000".to_string());

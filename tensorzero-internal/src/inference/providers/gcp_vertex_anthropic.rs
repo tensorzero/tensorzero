@@ -16,7 +16,7 @@ use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
-use crate::inference::types::resolved_input::ImageWithPath;
+use crate::inference::types::resolved_input::FileWithPath;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk, FunctionType,
     Latency, ModelInferenceRequestJsonMode, Role, Text, TextChunk,
@@ -476,7 +476,7 @@ impl<'a> TryFrom<&'a ContentBlock>
                     }],
                 },
             ))),
-            ContentBlock::Image(ImageWithPath {
+            ContentBlock::File(FileWithPath {
                 image,
                 storage_path: _,
             }) => Ok(Some(FlattenUnknown::Normal(

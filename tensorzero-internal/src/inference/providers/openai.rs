@@ -26,7 +26,7 @@ use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse
 use crate::inference::types::batch::{
     ProviderBatchInferenceOutput, ProviderBatchInferenceResponse,
 };
-use crate::inference::types::resolved_input::ImageWithPath;
+use crate::inference::types::resolved_input::FileWithPath;
 use crate::inference::types::{
     batch::{BatchStatus, StartBatchProviderInferenceResponse},
     ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
@@ -1264,7 +1264,7 @@ fn tensorzero_to_openai_user_messages(
                     tool_call_id: &tool_result.id,
                 }));
             }
-            ContentBlock::Image(ImageWithPath {
+            ContentBlock::File(FileWithPath {
                 image,
                 storage_path: _,
             }) => {
@@ -1339,7 +1339,7 @@ fn tensorzero_to_openai_assistant_messages(
                     message: "Tool results are not supported in assistant messages".to_string(),
                 }));
             }
-            ContentBlock::Image(ImageWithPath {
+            ContentBlock::File(FileWithPath {
                 image,
                 storage_path: _,
             }) => {

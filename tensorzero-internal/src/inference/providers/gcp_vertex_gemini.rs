@@ -31,7 +31,7 @@ use crate::inference::types::batch::{
     BatchRequestRow, BatchStatus, PollBatchInferenceResponse, ProviderBatchInferenceOutput,
     ProviderBatchInferenceResponse,
 };
-use crate::inference::types::resolved_input::ImageWithPath;
+use crate::inference::types::resolved_input::FileWithPath;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, serialize_or_log, ModelInferenceRequest,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
@@ -1246,7 +1246,7 @@ impl<'a> TryFrom<&'a ContentBlock> for Option<FlattenUnknown<'a, GCPVertexGemini
                     },
                 )))
             }
-            ContentBlock::Image(ImageWithPath {
+            ContentBlock::File(FileWithPath {
                 image,
                 storage_path: _,
             }) => Ok(Some(FlattenUnknown::Normal(

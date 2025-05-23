@@ -470,7 +470,7 @@ impl DiclConfig {
             for content in &message.content {
                 match content {
                     // We cannot meaningfully embed images into dicl inputs, so reject the request.
-                    ResolvedInputMessageContent::Image(..) => {
+                    ResolvedInputMessageContent::File(..) => {
                         return Err(Error::new(ErrorDetails::UnsupportedContentBlockType {
                             content_block_type: "image".to_string(),
                             provider_type: "dicl".to_string(),
@@ -559,7 +559,7 @@ fn parse_raw_examples(
 
         for messages in &input.messages {
             for content in &messages.content {
-                if let ResolvedInputMessageContent::Image(_) = content {
+                if let ResolvedInputMessageContent::File(_) = content {
                     return Err(Error::new(ErrorDetails::Serialization {
                         message: "Failed to deserialize raw_example - images are not supported in dynamic in-context learning".to_string(),
                     }));
@@ -646,9 +646,9 @@ mod tests {
     use crate::{
         function::{FunctionConfigChat, FunctionConfigJson},
         inference::types::{
-            resolved_input::ImageWithPath,
+            resolved_input::FileWithPath,
             storage::{StorageKind, StoragePath},
-            Base64Image, ImageKind, ResolvedInputMessage, ResolvedInputMessageContent, Role, Text,
+            Base64File, FileKind, ResolvedInputMessage, ResolvedInputMessageContent, Role, Text,
         },
         tool::{ToolCall, ToolCallOutput},
     };
@@ -830,10 +830,10 @@ mod tests {
                             ResolvedInputMessageContent::Text {
                                 value: json!("What is the name of the capital city of Japan?"),
                             },
-                            ResolvedInputMessageContent::Image(ImageWithPath {
-                                image: Base64Image {
+                            ResolvedInputMessageContent::File(FileWithPath {
+                                image: Base64File {
                                     url: None,
-                                    mime_type: ImageKind::Png,
+                                    mime_type: FileKind::Png,
                                     data: Some("ABC".to_string()),
                                 },
                                 storage_path: StoragePath {

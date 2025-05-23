@@ -7,7 +7,7 @@ use tensorzero_internal::tool::{ToolCall, ToolCallInput};
 use tensorzero_internal::{
     error::ErrorDetails,
     inference::types::{
-        storage::StoragePath, Image, ResolvedInput, ResolvedInputMessage,
+        storage::StoragePath, File, ResolvedInput, ResolvedInputMessage,
         ResolvedInputMessageContent, TextKind,
     },
 };
@@ -78,7 +78,7 @@ async fn resolved_input_message_content_to_client_input_message_content(
         ResolvedInputMessageContent::Thought(thought) => {
             Ok(ClientInputMessageContent::Thought(thought))
         }
-        ResolvedInputMessageContent::Image(image) => {
+        ResolvedInputMessageContent::File(image) => {
             let mime_type = image.image.mime_type;
             let data = match image.image.data {
                 Some(data) => data,
@@ -88,7 +88,7 @@ async fn resolved_input_message_content_to_client_input_message_content(
                 }
             };
 
-            Ok(ClientInputMessageContent::Image(Image::Base64 {
+            Ok(ClientInputMessageContent::Image(File::Base64 {
                 mime_type,
                 data,
             }))
@@ -115,7 +115,7 @@ pub async fn reresolve_input_for_fine_tuning(
     for (message_index, message) in input.messages.iter_mut().enumerate() {
         // First pass: identify images to fetch and collect tasks
         for (content_index, content) in message.content.iter_mut().enumerate() {
-            if let ResolvedInputMessageContent::Image(image_with_path) = content {
+            if let ResolvedInputMessageContent::File(image_with_path) = content {
                 if image_with_path.image.data.is_none() {
                     let storage_path = image_with_path.storage_path.clone();
                     let fut = async move {
@@ -135,7 +135,7 @@ pub async fn reresolve_input_for_fine_tuning(
         // Second pass: update the content with fetched data
         for (message_index, content_index, fetched_data) in fetched_data_results {
             if let Some(message) = input.messages.get_mut(message_index) {
-                if let Some(ResolvedInputMessageContent::Image(image_with_path)) =
+                if let Some(ResolvedInputMessageContent::File(image_with_path)) =
                     message.content.get_mut(content_index)
                 {
                     image_with_path.image.data = Some(fetched_data);
@@ -176,7 +176,7 @@ mod tests {
     use object_store::path::Path;
 
     use tensorzero_internal::inference::types::{
-        resolved_input::ImageWithPath, storage::StorageKind, Base64Image, ImageKind,
+        resolved_input::FileWithPath, storage::StorageKind, Base64File, FileKind,
     };
     use url::Url;
 
@@ -234,10 +234,10 @@ mod tests {
         };
 
         // Create the resolved input message content with an image
-        let resolved_content = ResolvedInputMessageContent::Image(ImageWithPath {
-            image: Base64Image {
+        let resolved_content = ResolvedInputMessageContent::File(FileWithPath {
+            image: Base64File {
                 url: Some(Url::parse("http://notaurl.com").unwrap()),
-                mime_type: ImageKind::Jpeg,
+                mime_type: FileKind::Jpeg,
                 data: Some(image_data.to_string()),
             },
             storage_path: storage_path.clone(),
@@ -253,11 +253,11 @@ mod tests {
 
         // Verify the result
         match result {
-            ClientInputMessageContent::Image(Image::Base64 {
+            ClientInputMessageContent::Image(File::Base64 {
                 mime_type: result_mime_type,
                 data: result_data,
             }) => {
-                assert_eq!(result_mime_type, ImageKind::Jpeg);
+                assert_eq!(result_mime_type, FileKind::Jpeg);
                 assert_eq!(result_data, image_data);
             }
             _ => panic!("Expected ClientInputMessageContent::Image, got something else"),
