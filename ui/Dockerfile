@@ -14,7 +14,7 @@ COPY . .
 
 # Archive only package.json and pnpm-lock.yaml recursively
 RUN find . -type f \( -name package.json -o -name pnpm-lock.yaml \) \
-	-exec tar --transform='s|^\./||' --no-recursion -rf /tmp/packages.tar {} \;
+    -exec tar --transform='s|^\./||' --no-recursion -rf /tmp/packages.tar {} \;
 
 # ========== development-dependencies-env ==========
 
@@ -61,10 +61,10 @@ WORKDIR /tensorzero
 ARG CARGO_BUILD_FLAGS=""
 
 RUN --mount=type=cache,id=tensorzero-evaluations-release,sharing=shared,target=/usr/local/cargo/registry \
-	--mount=type=cache,id=tensorzero-evaluations-release,sharing=shared,target=/usr/local/cargo/git \
-	--mount=type=cache,id=tensorzero-evaluations-release,sharing=shared,target=/sccache \
-	cargo build --release -p evaluations $CARGO_BUILD_FLAGS &&
-	cp -r /tensorzero/target/release /release
+    --mount=type=cache,id=tensorzero-evaluations-release,sharing=shared,target=/usr/local/cargo/git \
+    --mount=type=cache,id=tensorzero-evaluations-release,sharing=shared,target=/sccache \
+    cargo build --release -p evaluations $CARGO_BUILD_FLAGS &&
+    cp -r /tensorzero/target/release /release
 
 # ========== build-env ==========
 
