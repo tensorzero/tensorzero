@@ -9,7 +9,7 @@ on:
         required: true
 
 jobs:
-  test-e2e:
+  ui-tests-e2e:
     runs-on: namespace-profile-tensorzero-8x16
 
     # We currently only run this job when we have secrets available, since we need to use an S3 object_store

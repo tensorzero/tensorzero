@@ -4,7 +4,7 @@ on:
   workflow_call:
 
 jobs:
-  test:
+  ui-tests:
     runs-on: namespace-profile-tensorzero-8x16
 
     strategy:

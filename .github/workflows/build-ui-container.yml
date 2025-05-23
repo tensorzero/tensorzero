@@ -4,7 +4,7 @@ on:
   workflow_call:
 
 jobs:
-  ui:
+  build-ui-container:
     runs-on: namespace-profile-tensorzero-8x16
 
     steps:
