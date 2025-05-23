@@ -16,42 +16,32 @@ WORKDIR /app
 FROM chef AS planner
 COPY . .
 RUN cargo chef prepare --recipe-path recipe.json
+# ========== package-jsons-layer ==========
+
+FROM base AS package-jsons-layer
+WORKDIR /src
+COPY . .
+
+# Archive only package.json and pnpm-lock.yaml recursively
+RUN find . -type f \( -name package.json -o -name pnpm-lock.yaml \) \
+	-exec tar --transform='s|^\./||' --no-recursion -rf /tmp/packages.tar {} \;
 
 # ========== development-dependencies-env ==========
 
 FROM base AS development-dependencies-env
 WORKDIR /app
-COPY ./pnpm-lock.yaml /app/pnpm-lock.yaml
-# Copy only package.json files, preserving directory structure to ensure
-# lockfile includes all dependencies from all workspaces. Create a tar archive
-# with just the package.json files, then extract it in the container.
-# This uses a build context trick with a temporary tarball
-COPY . /tmp/context
-RUN mkdir -p /app &&
-	cd /tmp/context &&
-	find . -name package.json -exec tar --transform='s|^\./||' --no-recursion -rf /tmp/packages.tar {} \; &&
-	tar -xf /tmp/packages.tar -C /app &&
-	rm -rf /tmp/context /tmp/packages.tar
+COPY --from=package-jsons-layer /tmp/packages.tar /tmp/packages.tar
 
-RUN pnpm install --frozen-lockfile
+RUN tar -xf /tmp/packages.tar -C . && pnpm install --frozen-lockfile
 
 # ========== production-dependencies-env ==========
 
 FROM base AS production-dependencies-env
 WORKDIR /app
-COPY ./pnpm-lock.yaml /app/pnpm-lock.yaml
-# Copy only package.json files, preserving directory structure to ensure
-# lockfile includes all dependencies from all workspaces. Create a tar archive
-# with just the package.json files, then extract it in the container.
-# This uses a build context trick with a temporary tarball
-COPY . /tmp/context
-RUN mkdir -p /app &&
-	cd /tmp/context &&
-	find . -name package.json -exec tar --transform='s|^\./||' --no-recursion -rf /tmp/packages.tar {} \; &&
-	tar -xf /tmp/packages.tar -C /app &&
-	rm -rf /tmp/context /tmp/packages.tar
+COPY --from=package-jsons-layer /tmp/packages.tar /tmp/packages.tar
 
-RUN pnpm install --frozen-lockfile --prod
+RUN tar -xf /tmp/packages.tar -C . &&
+	pnpm install --frozen-lockfile --prod
 
 # ========== minijinja-build-env ==========
 
@@ -83,13 +73,13 @@ RUN cargo build --release -p evaluations $CARGO_BUILD_FLAGS && \
 
 FROM base AS build-env
 
-COPY ./ui /app/ui/
-
-COPY --from=minijinja-build-env /build/ui/app/utils/minijinja/pkg /app/ui/app/utils/minijinja/pkg
-COPY --from=development-dependencies-env /app/node_modules /app/node_modules
-COPY --from=development-dependencies-env /app/ui/node_modules /app/ui/node_modules
-
 WORKDIR /app
+
+COPY . .
+
+COPY --from=minijinja-build-env /build/ui/app/utils/minijinja/pkg ./ui/app/utils/minijinja/pkg
+COPY --from=development-dependencies-env /app/node_modules ./node_modules
+COPY --from=development-dependencies-env /app/ui/node_modules ./ui/node_modules
 
 RUN pnpm --filter=tensorzero-ui run build
 
@@ -114,13 +104,8 @@ RUN useradd -m -s /bin/sh ui
 
 RUN apt-get update && apt-get install -y curl python3 && rm -rf /var/lib/apt/lists/*
 
-COPY ./pnpm-lock.yaml /app/pnpm-lock.yaml
-COPY ./package.json /app/package.json
-COPY ./ui/package.json /app/ui/package.json
-
-COPY ./ui/entrypoint.sh /app/entrypoint.sh
-
-RUN chmod +x /app/entrypoint.sh
+COPY ./ui/entrypoint.sh ./entrypoint.sh
+RUN chmod +x ./entrypoint.sh
 
 COPY ./optimization-server /build/optimization-server
 COPY --from=python-build-env /build/clients/python /build/clients/python
@@ -131,6 +116,7 @@ COPY --from=python-build-env /build/optimization-server/.venv /build/optimizatio
 USER ui
 
 COPY --from=production-dependencies-env /app/node_modules /app/node_modules
+COPY --from=production-dependencies-env /app/ui/node_modules /app/ui/node_modules
 
 COPY --from=build-env /app/build /app/build
 
