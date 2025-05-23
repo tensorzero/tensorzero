@@ -4,25 +4,44 @@ FROM node:23-bookworm-slim AS base
 
 COPY --from=ghcr.io/astral-sh/uv:0.6.6 /uv /uvx /bin/
 
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+RUN corepack enable
 RUN npm install -g pnpm
 
 # ========== development-dependencies-env ==========
 
 FROM base AS development-dependencies-env
-
-COPY ./ui/package.json ./ui/pnpm-lock.yaml /app/
-
 WORKDIR /app
+COPY ./pnpm-lock.yaml /app/pnpm-lock.yaml
+# Copy only package.json files, preserving directory structure to ensure
+# lockfile includes all dependencies from all workspaces. Create a tar archive
+# with just the package.json files, then extract it in the container.
+# This uses a build context trick with a temporary tarball
+COPY . /tmp/context
+RUN mkdir -p /app &&
+	cd /tmp/context &&
+	find . -name package.json -exec tar --transform='s|^\./||' --no-recursion -rf /tmp/packages.tar {} \; &&
+	tar -xf /tmp/packages.tar -C /app &&
+	rm -rf /tmp/context /tmp/packages.tar
 
 RUN pnpm install --frozen-lockfile
 
 # ========== production-dependencies-env ==========
 
 FROM base AS production-dependencies-env
-
-COPY ./ui/package.json ./ui/pnpm-lock.yaml /app/
-
 WORKDIR /app
+COPY ./pnpm-lock.yaml /app/pnpm-lock.yaml
+# Copy only package.json files, preserving directory structure to ensure
+# lockfile includes all dependencies from all workspaces. Create a tar archive
+# with just the package.json files, then extract it in the container.
+# This uses a build context trick with a temporary tarball
+COPY . /tmp/context
+RUN mkdir -p /app &&
+	cd /tmp/context &&
+	find . -name package.json -exec tar --transform='s|^\./||' --no-recursion -rf /tmp/packages.tar {} \; &&
+	tar -xf /tmp/packages.tar -C /app &&
+	rm -rf /tmp/context /tmp/packages.tar
 
 RUN pnpm install --frozen-lockfile --prod
 
@@ -49,25 +68,24 @@ WORKDIR /tensorzero
 ARG CARGO_BUILD_FLAGS=""
 
 RUN --mount=type=cache,id=tensorzero-evaluations-release,sharing=shared,target=/usr/local/cargo/registry \
-    --mount=type=cache,id=tensorzero-evaluations-release,sharing=shared,target=/usr/local/cargo/git \
-    --mount=type=cache,id=tensorzero-evaluations-release,sharing=shared,target=/sccache \
-    cargo build --release -p evaluations $CARGO_BUILD_FLAGS && \
-    cp -r /tensorzero/target/release /release
-
+	--mount=type=cache,id=tensorzero-evaluations-release,sharing=shared,target=/usr/local/cargo/git \
+	--mount=type=cache,id=tensorzero-evaluations-release,sharing=shared,target=/sccache \
+	cargo build --release -p evaluations $CARGO_BUILD_FLAGS &&
+	cp -r /tensorzero/target/release /release
 
 # ========== build-env ==========
 
 FROM base AS build-env
 
-COPY ./ui /app/
+COPY ./ui /app/ui/
 
-COPY --from=minijinja-build-env /build/ui/app/utils/minijinja/pkg /app/app/utils/minijinja/pkg
-
+COPY --from=minijinja-build-env /build/ui/app/utils/minijinja/pkg /app/ui/app/utils/minijinja/pkg
 COPY --from=development-dependencies-env /app/node_modules /app/node_modules
+COPY --from=development-dependencies-env /app/ui/node_modules /app/ui/node_modules
 
 WORKDIR /app
 
-RUN pnpm run build
+RUN pnpm --filter=tensorzero-ui run build
 
 # ========== python-build-env ==========
 
@@ -80,7 +98,7 @@ WORKDIR /build/optimization-server
 # UV_PYTHON_DOWNLOADS=never
 # https://hynek.me/articles/docker-uv/
 ENV UV_COMPILE_BYTECODE=1
-RUN uv  --verbose sync --locked --no-dev
+RUN uv --verbose sync --locked --no-dev
 
 # ========== ui ==========
 
@@ -90,7 +108,9 @@ RUN useradd -m -s /bin/sh ui
 
 RUN apt-get update && apt-get install -y curl python3 && rm -rf /var/lib/apt/lists/*
 
-COPY ./ui/package.json ./ui/pnpm-lock.yaml /app/
+COPY ./pnpm-lock.yaml /app/pnpm-lock.yaml
+COPY ./package.json /app/package.json
+COPY ./ui/package.json /app/ui/package.json
 
 COPY ./ui/entrypoint.sh /app/entrypoint.sh
 
@@ -98,7 +118,7 @@ RUN chmod +x /app/entrypoint.sh
 
 COPY ./optimization-server /build/optimization-server
 COPY --from=python-build-env /build/clients/python /build/clients/python
-COPY --from=python-build-env /build/optimization-server/.venv  /build/optimization-server/.venv
+COPY --from=python-build-env /build/optimization-server/.venv /build/optimization-server/.venv
 # Workaround for uv issue
 #COPY ./clients/python /clients/python
 
