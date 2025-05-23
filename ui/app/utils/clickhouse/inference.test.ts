@@ -304,13 +304,13 @@ test("queryInferenceTableByEpisodeId pages through a sample of results correctly
 test("queryInferenceTableBounds", async () => {
   const bounds = await queryInferenceTableBounds();
   expect(bounds.first_id).toBe("01934c9a-be70-74e2-8e6d-8eb19531638c");
-  expect(bounds.last_id).toBe("0196eea6-42cb-7bf1-a56a-534459f08dd5");
+  expect(bounds.last_id).toBe("0196fdd6-25f1-72ba-8dc0-be7a0d9df2c5");
 });
 
 test("queryEpisodeTableBounds", async () => {
   const bounds = await queryEpisodeTableBounds();
   expect(bounds.first_id).toBe("01934c9a-be70-74e2-8e6d-8eb19531638c");
-  expect(bounds.last_id).toBe("0196eea6-42cb-7bf1-a56a-534459f08dd5");
+  expect(bounds.last_id).toBe("0196fdd6-25f1-72ba-8dc0-be7a0d9df2c5");
 });
 
 test("queryInferenceTableBounds with episode_id", async () => {
@@ -529,9 +529,9 @@ test("countInferencesByFunction", async () => {
         max_timestamp: "2025-05-12T21:59:20Z",
       },
       {
-        count: 1,
+        count: 2,
         function_name: "tensorzero::default",
-        max_timestamp: "2025-04-15T02:02:36Z",
+        max_timestamp: "2025-05-23T15:49:52Z",
       },
       {
         count: 1,
