@@ -5,6 +5,9 @@ use crate::tool::{ToolCall, ToolResult};
 
 use super::{storage::StoragePath, Base64Image, Role, Thought};
 
+#[cfg(feature = "pyo3")]
+use pyo3::prelude::*;
+
 /// Like `Input`, but with all network resources resolved.
 /// Currently, this is just used to fetch image URLs in the image input,
 /// so that we always pass a base64-encoded image to the model provider.
@@ -46,6 +49,7 @@ pub enum ResolvedInputMessageContent {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[cfg_attr(feature = "pyo3", pyclass(get_all))]
 pub struct ImageWithPath {
     pub image: Base64Image,
     pub storage_path: StoragePath,

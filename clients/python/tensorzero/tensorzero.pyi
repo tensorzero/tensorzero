@@ -14,7 +14,9 @@ from uuid import UUID
 
 import uuid_utils
 
+from clients.python.tensorzero.types import InferenceExample as InferenceExample
 import tensorzero.internal_optimization_server_types as iost
+from .tensorzero import RenderedStoredInference
 from tensorzero import (
     ChatDatapointInsert,
     Datapoint,
@@ -248,6 +250,16 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         :param dataset_name: The name of the dataset to get the datapoint from.
         :param datapoint_id: The ID of the datapoint to get.
         :return: A `Datapoint` instance.
+        """
+
+    def experimental_render_inferences(
+        self,
+        *,
+        inference_examples: List[InferenceExample],
+        variants: Dict[str, str],
+    ) -> List[RenderedStoredInference]:
+        """
+        Render a list of inference examples.
         """
 
     def close(self) -> None:

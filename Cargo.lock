@@ -4163,6 +4163,7 @@ dependencies = [
  "opentelemetry-semantic-conventions",
  "opentelemetry_sdk",
  "paste",
+ "pyo3",
  "rand 0.9.1",
  "reqwest",
  "reqwest-eventsource",

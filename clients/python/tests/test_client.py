@@ -62,6 +62,7 @@ from tensorzero import (
 from tensorzero.types import (
     ChatChunk,
     ChatDatapoint,
+    ChatInferenceExample,
     JsonChunk,
     JsonDatapoint,
     ProviderExtraBody,
@@ -3193,3 +3194,35 @@ def test_sync_multiple_text_blocks(sync_client: TensorZeroGateway):
             ]
         },
     )
+
+def test_sync_render_inferences(sync_client: TensorZeroGateway):
+    rendered_inferences = sync_client.experimental_render_inferences(
+        inference_examples=[
+            ChatInferenceExample(
+                type="chat",
+                function_name="basic_test",
+                variant_name="default",
+                input={
+                    "system": {"assistant_name": "foo"},
+                    "messages": [{"role": "user", "content": [{"type": "text", "value": "bar"}]}],
+                },
+                output=[{"type": "text", "text": "Hello world"}],
+                episode_id=uuid7(),
+                inference_id=uuid7(),
+                tool_params={
+                    "tools_available": [],
+                    "tool_choice": "auto",
+                },
+            )
+        ],
+        variants={"basic_test": "test"},
+    )
+    assert len(rendered_inferences) == 1
+    print(rendered_inferences[0])
+    assert rendered_inferences[0].function_name == "basic_test"
+    assert rendered_inferences[0].variant_name == "test"
+    assert rendered_inferences[0].input == {
+        "system": {"assistant_name": "foo"},
+        "messages": [{"role": "user", "content": [{"type": "text", "text": "bar"}]}],
+    }
+    assert rendered_inferences[0].output == [{"type": "text", "text": "Hello world"}]

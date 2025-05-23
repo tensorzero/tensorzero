@@ -1,5 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
+#[cfg(feature = "pyo3")]
+use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -211,6 +213,7 @@ pub struct BatchDynamicToolParamsWithSize(pub BatchDynamicToolParams, pub usize)
 
 /// A ToolCall is a request by a model to call a Tool
 #[derive(Clone, Debug, PartialEq, Serialize)]
+#[cfg_attr(feature = "pyo3", pyclass(get_all))]
 pub struct ToolCall {
     pub name: String,
     pub arguments: String,
@@ -341,6 +344,7 @@ impl ToolCallConfig {
 }
 
 /// A ToolResult is the outcome of a ToolCall, which we may want to present back to the model
+#[cfg_attr(feature = "pyo3", pyclass(get_all))]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ToolResult {

@@ -1,5 +1,8 @@
 use std::collections::HashMap;
 
+#[cfg(feature = "pyo3")]
+use pyo3::prelude::*;
+use serde::Deserialize;
 use serde_json::Value;
 use tensorzero_internal::{
     config_parser::Config,
@@ -14,11 +17,17 @@ use uuid::Uuid;
 
 /// Represents an inference example to be used for optimization.
 /// These are retrieved from the database in this format.
+/// NOTE / TODO: As an incremental step we are deserializing this enum from Python.
+/// in the final version we should instead make this a native PyO3 class and
+/// avoid deserialization entirely unless given a dict.
+#[derive(Debug, Deserialize, PartialEq)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum InferenceExample {
     Chat(ChatInferenceExample),
     Json(JsonInferenceExample),
 }
 
+#[derive(Debug, Deserialize, PartialEq)]
 pub struct ChatInferenceExample {
     pub function_name: String,
     pub variant_name: String,
@@ -29,6 +38,7 @@ pub struct ChatInferenceExample {
     pub tool_params: ToolCallConfigDatabaseInsert,
 }
 
+#[derive(Debug, Deserialize, PartialEq)]
 pub struct JsonInferenceExample {
     pub function_name: String,
     pub variant_name: String,
@@ -65,6 +75,7 @@ impl InferenceExample {
 /// This is constructed by rendering an InferenceExample with a variant for messages
 /// and by resolving all network resources (e.g. images).
 #[derive(Debug, PartialEq)]
+#[cfg_attr(feature = "pyo3", pyclass(get_all))]
 pub struct RenderedStoredInference {
     pub function_name: String,
     pub variant_name: String,

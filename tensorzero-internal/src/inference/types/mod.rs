@@ -8,6 +8,8 @@ use futures::Stream;
 use image::sanitize_raw_request;
 pub use image::{Base64Image, Image, ImageKind};
 use itertools::Itertools;
+#[cfg(feature = "pyo3")]
+use pyo3::prelude::*;
 use resolved_input::ImageWithPath;
 pub use resolved_input::{ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent};
 use serde::{Deserialize, Deserializer, Serialize};
@@ -237,6 +239,7 @@ impl<'de> Deserialize<'de> for TextKind {
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "pyo3", pyclass(get_all))]
 pub enum Role {
     User,
     Assistant,
@@ -252,12 +255,14 @@ pub enum Role {
 /// inference that is called for.
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(feature = "pyo3", pyclass(get_all))]
 pub struct Text {
     pub text: String,
 }
 
 /// Struct that represents Chain of Thought reasoning
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(feature = "pyo3", pyclass(get_all))]
 pub struct Thought {
     pub text: String,
     /// An optional signature - currently, this is only used with Anthropic,
@@ -269,6 +274,7 @@ pub struct Thought {
 /// Core representation of the types of content that could go into a model provider
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(feature = "pyo3", pyclass)]
 pub enum ContentBlock {
     Text(Text),
     ToolCall(ToolCall),
@@ -338,6 +344,7 @@ pub enum ContentBlockChatOutput {
 
 /// A RequestMessage is a message sent to a model
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(feature = "pyo3", pyclass(get_all))]
 pub struct RequestMessage {
     pub role: Role,
     pub content: Vec<ContentBlock>,
@@ -392,6 +399,7 @@ pub struct ModelInferenceRequest<'a> {
 
 /// For use in rendering for optimization purposes
 #[derive(Debug, PartialEq)]
+#[cfg_attr(feature = "pyo3", pyclass(get_all))]
 pub struct ModelInput {
     pub system: Option<String>,
     pub messages: Vec<RequestMessage>,

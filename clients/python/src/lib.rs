@@ -39,7 +39,7 @@ use tensorzero_rust::{
     err_to_http, observability::LogFormat, CacheParamsOptions, Client, ClientBuilder,
     ClientBuilderMode, ClientInferenceParams, ClientInput, ClientSecretString,
     DynamicEvaluationRunParams, DynamicToolParams, FeedbackParams, InferenceOutput,
-    InferenceParams, InferenceStream, TensorZeroError, Tool,
+    InferenceParams, InferenceStream, RenderedStoredInference, TensorZeroError, Tool,
 };
 use tokio::sync::Mutex;
 use url::Url;
@@ -64,6 +64,7 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<AsyncTensorZeroGateway>()?;
     m.add_class::<TensorZeroGateway>()?;
     m.add_class::<LocalHttpGateway>()?;
+    m.add_class::<RenderedStoredInference>()?;
 
     let py_json = PyModule::import(m.py(), "json")?;
     let json_loads = py_json.getattr("loads")?;
@@ -881,6 +882,21 @@ impl TensorZeroGateway {
             }
             Err(e) => Err(convert_error(this.py(), e)),
         }
+    }
+
+    #[pyo3(signature = (*, inference_examples, variants))]
+    fn experimental_render_inferences(
+        this: PyRef<'_, Self>,
+        inference_examples: Vec<Bound<'_, PyAny>>,
+        variants: HashMap<String, String>,
+    ) -> PyResult<Vec<RenderedStoredInference>> {
+        let client = this.as_super().client.clone();
+        let inference_examples = inference_examples
+            .iter()
+            .map(|x| deserialize_from_pyobj(this.py(), x))
+            .collect::<Result<Vec<_>, _>>()?;
+        let fut = client.experimental_render_inferences(inference_examples, variants);
+        tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))
     }
 }
 

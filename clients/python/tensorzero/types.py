@@ -8,6 +8,7 @@ from uuid import UUID
 
 import httpx
 from typing_extensions import NotRequired, TypedDict
+import uuid_utils
 
 
 @dataclass
@@ -527,4 +528,28 @@ def parse_datapoint(data: Dict[str, Any]) -> Datapoint:
 # Used by the Rust native module
 class ToDictEncoder(JSONEncoder):
     def default(self, o: Any) -> Any:
+        if isinstance(o, UUID) or isinstance(o, uuid_utils.UUID):
+            return str(o)
         return o.to_dict()
+
+class ChatInferenceExample(TypedDict):
+    type: Literal["chat"]
+    function_name: str
+    variant_name: str
+    input: InferenceInput
+    output: List[ContentBlock]
+    episode_id: UUID
+    inference_id: UUID
+    tool_params: ToolParams
+
+class JsonInferenceExample(TypedDict):
+    type: Literal["json"]
+    function_name: str
+    variant_name: str
+    input: InferenceInput
+    output: JsonInferenceOutput
+    episode_id: UUID
+    inference_id: UUID
+    output_schema: Any
+
+InferenceExample = Union[ChatInferenceExample, JsonInferenceExample]
