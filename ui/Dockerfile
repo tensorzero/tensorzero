@@ -101,7 +101,7 @@ RUN useradd -m -s /bin/sh ui
 
 RUN apt-get update && apt-get install -y curl python3 && rm -rf /var/lib/apt/lists/*
 
-COPY ./ui/entrypoint.sh ./entrypoint.sh
+COPY ./ui/entrypoint.sh /app/entrypoint.sh
 RUN chmod +x ./entrypoint.sh
 
 COPY ./optimization-server /build/optimization-server
@@ -120,6 +120,9 @@ COPY --from=build-env /app/build /app/build
 COPY --from=evaluations-build-env /release/evaluations /usr/local/bin/evaluations
 
 WORKDIR /app
+
+COPY --from=package-jsons-layer /tmp/packages.tar /tmp/packages.tar
+RUN tar -xf /tmp/packages.tar -C .
 
 EXPOSE 4000
 
