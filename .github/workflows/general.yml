@@ -157,8 +157,13 @@ jobs:
       - name: Print Rust version
         run: rustc --version
 
+      - name: Setup Node.js
+        uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
+        with:
+          node-version: "22.9.0"
+
       - name: Install pnpm
-        uses: pnpm/action-setup@4
+        uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda
 
       - name: Install JS dependencies
         run: pnpm install --frozen-lockfile
@@ -315,11 +320,6 @@ jobs:
         working-directory: recipes
         run: |
           uv run pyright
-
-      - name: Setup Node.js
-        uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
-        with:
-          node-version: "22.9.0"
 
       - name: Install wasm-pack
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
