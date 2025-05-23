@@ -152,9 +152,10 @@ jobs:
         run: rustc --version
 
       - name: Install pnpm
-        uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda
-        with:
-          version: 10
+        uses: pnpm/action-setup@4
+
+      - name: Install JS dependencies
+        run: pnpm install --frozen-lockfile
 
       - name: Install uv
         run: curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
@@ -288,24 +289,15 @@ jobs:
           uv pip install pyright==1.1.394
           uv run pyright
 
-      - name: "Node.js: OpenAI Client: Install dependencies"
-        working-directory: clients/openai-node
-        run: |
-          pnpm install
-
       - name: "Node.js: Run prettier"
-        working-directory: clients/openai-node
-        run: pnpm run format
+        run: pnpm --filter=openai-node run format
 
       - name: "Node.js: OpenAI Client: typecheck"
-        working-directory: clients/openai-node
-        run: |
-          pnpm run typecheck
+        run: pnpm --filter=openai-node run typecheck
 
       - name: "Node.js: OpenAI Client: lint"
         working-directory: clients/openai-node
-        run: |
-          pnpm run lint
+        run: pnpm --filter=openai-node run lint
 
       - name: "Python: Recipes: Install dependencies"
         working-directory: recipes
@@ -334,21 +326,14 @@ jobs:
         working-directory: ui/app/utils/minijinja
         run: wasm-pack test --node --features console_error_panic_hook
 
-      - name: Install dependencies
-        working-directory: ui
-        run: pnpm install --frozen-lockfile
-
       - name: Run ESLint
-        working-directory: ui
-        run: pnpm run lint
+        run: pnpm --filter=tensorzero-ui run lint
 
       - name: Run Prettier
-        working-directory: ui
-        run: pnpm run format
+        run: pnpm --filter=tensorzero-ui run format
 
       - name: pnpm TypeScript type checking
-        working-directory: ui
-        run: pnpm run typecheck
+        run: pnpm --filter=tensorzero-ui run typecheck
 
       - name: Compile / validate notebooks
         run: ci/compile-check-notebooks.sh
@@ -476,8 +461,6 @@ jobs:
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: 10
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -485,7 +468,6 @@ jobs:
           node-version: "22.9.0"
 
       - name: Install dependencies
-        working-directory: ui
         run: pnpm install --frozen-lockfile
 
       - name: Cache s3-fixtures
@@ -516,14 +498,12 @@ jobs:
           docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml up --wait --build --force-recreate
 
       - name: Install playwright dependencies
-        working-directory: ui
-        run: pnpm exec playwright install --with-deps chromium
+        run: pnpm --filter=tensorzero-ui exec playwright install --with-deps chromium
 
       - name: Run ui e2e tests
-        working-directory: ui
         env:
           TENSORZERO_CI: 1
-        run: TENSORZERO_UI_FF_ENABLE_PYTHON=${{ matrix.feature_flag.enable_python }} pnpm test-e2e
+        run: TENSORZERO_UI_FF_ENABLE_PYTHON=${{ matrix.feature_flag.enable_python }} pnpm ui:test:e2e
         continue-on-error: true
         id: e2e_tests
 
