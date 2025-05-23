@@ -6,13 +6,24 @@ COPY --from=ghcr.io/astral-sh/uv:0.6.6 /uv /uvx /bin/
 
 RUN npm install -g pnpm
 
+# ========== package-jsons-layer ==========
+
+FROM base AS package-jsons-layer
+WORKDIR /src
+COPY . .
+
+# Archive only package.json and pnpm-lock.yaml recursively
+RUN find . -type f \( -name package.json -o -name pnpm-lock.yaml \) \
+    -exec tar --transform='s|^\./||' --no-recursion -rf /tmp/packages.tar {} \;
+
 # ========== development-dependencies-env ==========
 
 FROM base AS development-dependencies-env
 
-COPY ./ui/package.json ./ui/pnpm-lock.yaml /app/
-
 WORKDIR /app
+
+COPY --from=package-jsons-layer /tmp/packages.tar /tmp/packages.tar
+RUN tar -xf /tmp/packages.tar -C .
 
 RUN pnpm install --frozen-lockfile
 
@@ -20,9 +31,10 @@ RUN pnpm install --frozen-lockfile
 
 FROM base AS production-dependencies-env
 
-COPY ./ui/package.json ./ui/pnpm-lock.yaml /app/
-
 WORKDIR /app
+
+COPY --from=package-jsons-layer /tmp/packages.tar /tmp/packages.tar
+RUN tar -xf /tmp/packages.tar -C .
 
 RUN pnpm install --frozen-lockfile --prod
 
@@ -54,20 +66,19 @@ RUN --mount=type=cache,id=tensorzero-evaluations-release,sharing=shared,target=/
     cargo build --release -p evaluations $CARGO_BUILD_FLAGS && \
     cp -r /tensorzero/target/release /release
 
-
 # ========== build-env ==========
 
 FROM base AS build-env
 
-COPY ./ui /app/
-
-COPY --from=minijinja-build-env /build/ui/app/utils/minijinja/pkg /app/app/utils/minijinja/pkg
-
-COPY --from=development-dependencies-env /app/node_modules /app/node_modules
-
 WORKDIR /app
 
-RUN pnpm run build
+COPY . .
+
+COPY --from=minijinja-build-env /build/ui/app/utils/minijinja/pkg ./ui/app/utils/minijinja/pkg
+COPY --from=development-dependencies-env /app/node_modules ./node_modules
+COPY --from=development-dependencies-env /app/ui/node_modules ./ui/node_modules
+
+RUN pnpm --filter=tensorzero-ui run build
 
 # ========== python-build-env ==========
 
@@ -80,7 +91,7 @@ WORKDIR /build/optimization-server
 # UV_PYTHON_DOWNLOADS=never
 # https://hynek.me/articles/docker-uv/
 ENV UV_COMPILE_BYTECODE=1
-RUN uv  --verbose sync --locked --no-dev
+RUN uv --verbose sync --locked --no-dev
 
 # ========== ui ==========
 
@@ -90,27 +101,28 @@ RUN useradd -m -s /bin/sh ui
 
 RUN apt-get update && apt-get install -y curl python3 && rm -rf /var/lib/apt/lists/*
 
-COPY ./ui/package.json ./ui/pnpm-lock.yaml /app/
-
 COPY ./ui/entrypoint.sh /app/entrypoint.sh
-
-RUN chmod +x /app/entrypoint.sh
+RUN chmod +x ./entrypoint.sh
 
 COPY ./optimization-server /build/optimization-server
 COPY --from=python-build-env /build/clients/python /build/clients/python
-COPY --from=python-build-env /build/optimization-server/.venv  /build/optimization-server/.venv
+COPY --from=python-build-env /build/optimization-server/.venv /build/optimization-server/.venv
 # Workaround for uv issue
 #COPY ./clients/python /clients/python
 
 USER ui
 
 COPY --from=production-dependencies-env /app/node_modules /app/node_modules
+COPY --from=production-dependencies-env /app/ui/node_modules /app/ui/node_modules
 
 COPY --from=build-env /app/build /app/build
 
 COPY --from=evaluations-build-env /release/evaluations /usr/local/bin/evaluations
 
 WORKDIR /app
+
+COPY --from=package-jsons-layer /tmp/packages.tar /tmp/packages.tar
+RUN tar -xf /tmp/packages.tar -C .
 
 EXPOSE 4000
 

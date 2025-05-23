@@ -75,7 +75,7 @@ repos:
 
       - id: "prettier: ui"
         name: "prettier: ui"
-        entry: bash -c 'cd ui && pnpm run format'
+        entry: bash -c 'pnpm --filter=tensorzero-ui run format'
         language: node
         types_or:
           [css, html, javascript, json, jsx, markdown, scss, ts, tsx, yaml]
@@ -88,7 +88,7 @@ repos:
 
       - id: "prettier: openai-node"
         name: "prettier: openai-node"
-        entry: bash -c 'cd clients/openai-node && pnpm run format'
+        entry: bash -c 'pnpm --filter=openai-node run format'
         language: node
         types_or:
           [css, html, javascript, json, jsx, markdown, scss, ts, tsx, yaml]
@@ -101,7 +101,7 @@ repos:
 
       - id: "eslint: ui"
         name: "eslint: ui"
-        entry: bash -c 'cd ui && pnpm run lint'
+        entry: bash -c 'pnpm --filter=tensorzero-ui run lint'
         language: node
         types_or: [javascript, jsx, ts, tsx]
         additional_dependencies:
@@ -112,7 +112,7 @@ repos:
 
       - id: "eslint: openai-node"
         name: "eslint: openai-node"
-        entry: bash -c 'cd clients/openai-node && pnpm run lint'
+        entry: bash -c 'pnpm --filter=openai-node run lint'
         language: node
         types_or: [javascript, jsx, ts, tsx]
         additional_dependencies:
@@ -123,7 +123,7 @@ repos:
 
       - id: "tsc: ui"
         name: "tsc: ui"
-        entry: bash -c 'cd ui && pnpm run typecheck'
+        entry: bash -c 'pnpm --filter=tensorzero-ui run typecheck'
         language: node
         types_or: [ts, tsx]
         additional_dependencies:
@@ -132,7 +132,7 @@ repos:
 
       - id: "tsc: openai-node"
         name: "tsc: openai-node"
-        entry: bash -c 'cd clients/openai-node && pnpm run typecheck'
+        entry: bash -c 'pnpm --filter=openai-node run typecheck'
         language: node
         types_or: [ts, tsx]
         additional_dependencies:
