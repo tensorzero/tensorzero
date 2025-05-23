@@ -62,7 +62,9 @@ jobs:
         uses: namespacelabs/nscloud-setup@d1c625762f7c926a54bd39252efff0705fd11c64
 
       - name: Update rust
-        run: rustup update stable
+        run: |
+          rustup update stable
+          rustup default stable
 
       - name: Configure Namespace-powered Buildx
         uses: namespacelabs/nscloud-setup-buildx-action@84ca8c58fdf372d6a4750476cd09b7b96ee778ca
