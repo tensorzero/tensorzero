@@ -94,8 +94,6 @@ jobs:
 
       - name: Install pnpm
         uses: pnpm/action-setup@4
-        with:
-          version: 10
 
       - name: Configure Namespace cache for Rust, Python (uv), and pnpm
         uses: namespacelabs/nscloud-cache-action@2f50e7d0f70475e6f59a55ba0f05eec9108e77cc
