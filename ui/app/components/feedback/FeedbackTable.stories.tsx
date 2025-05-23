@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react";
 import FeedbackTable from "./FeedbackTable";
 import type { FeedbackRow } from "~/utils/clickhouse/feedback";
 import { ConfigProvider } from "~/context/config";
-import type { Config } from "~/utils/config";
+import type { Config, Feedback } from "~/utils/config";
 
 const config: Config = {
   gateway: {
@@ -174,7 +174,7 @@ export const WithLongComment: Story = {
       },
     ],
   },
-  render: (args) => (
+  render: (args: { feedback: Feedback[] }) => (
     <StoryWrapper>
       <FeedbackTable feedback={args.feedback} />
     </StoryWrapper>

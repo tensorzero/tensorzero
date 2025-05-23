@@ -45,7 +45,7 @@ export default function EvaluationRunsTable({
                     to={`/evaluations/${evaluationRun.evaluation_name}?evaluation_run_ids=${evaluationRun.evaluation_run_id}`}
                     className="block no-underline"
                   >
-                    <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
+                    <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
                       {evaluationRun.evaluation_run_id}
                     </code>
                   </Link>
@@ -55,7 +55,7 @@ export default function EvaluationRunsTable({
                     to={`/evaluations/${evaluationRun.evaluation_name}`}
                     className="block no-underline"
                   >
-                    <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
+                    <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
                       {evaluationRun.evaluation_name}
                     </code>
                   </Link>
@@ -65,14 +65,14 @@ export default function EvaluationRunsTable({
                     to={`/datasets/${evaluationRun.dataset_name}`}
                     className="block no-underline"
                   >
-                    <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
+                    <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
                       {evaluationRun.dataset_name}
                     </code>
                   </Link>
                 </TableCell>
                 <TableCell>
                   <FunctionLink functionName={evaluationRun.function_name}>
-                    <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
+                    <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
                       {evaluationRun.function_name}
                     </code>
                   </FunctionLink>
@@ -82,7 +82,7 @@ export default function EvaluationRunsTable({
                     variantName={evaluationRun.variant_name}
                     functionName={evaluationRun.function_name}
                   >
-                    <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
+                    <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
                       {evaluationRun.variant_name}
                     </code>
                   </VariantLink>

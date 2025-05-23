@@ -117,7 +117,7 @@ function TextBlock({ block, isEditing, onBlockChange }: TextBlockProps) {
   return (
     <div className="bg-muted rounded-md p-4">
       <Badge className="mb-2">Text</Badge>
-      <pre className="overflow-x-auto break-words whitespace-pre-wrap">
+      <pre className="overflow-x-auto whitespace-pre-wrap break-words">
         <code className="text-sm">{block.text}</code>
       </pre>
     </div>
@@ -190,7 +190,7 @@ function OutputToolCallBlock({
   return (
     <div className="bg-muted rounded-md p-4">
       <Badge className="mb-2">Tool: {block.name}</Badge>
-      <pre className="overflow-x-auto break-words whitespace-pre-wrap">
+      <pre className="overflow-x-auto whitespace-pre-wrap break-words">
         <code className="text-sm">
           {JSON.stringify(block.arguments, null, 2)}
         </code>
@@ -241,7 +241,7 @@ function JsonOutput({ output, isEditing, onOutputChange }: JsonOutputProps) {
       {output.parsed && (
         <div className="bg-muted rounded-md p-4">
           <Badge className="mb-2">Parsed Output</Badge>
-          <pre className="overflow-x-auto break-words whitespace-pre-wrap">
+          <pre className="overflow-x-auto whitespace-pre-wrap break-words">
             <code className="text-sm">
               {JSON.stringify(output.parsed, null, 2)}
             </code>
@@ -267,7 +267,7 @@ function JsonOutput({ output, isEditing, onOutputChange }: JsonOutputProps) {
             )}
           </div>
         ) : (
-          <pre className="overflow-x-auto break-words whitespace-pre-wrap">
+          <pre className="overflow-x-auto whitespace-pre-wrap break-words">
             <code className="text-sm">{output.raw}</code>
           </pre>
         )}

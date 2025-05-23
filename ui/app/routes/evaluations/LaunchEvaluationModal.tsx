@@ -208,7 +208,7 @@ function EvaluationForm({ dataset_names }: { dataset_names: string[] }) {
         setSelectedDatasetName={setSelectedDatasetName}
       />
 
-      <div className="text-muted-foreground mt-2 mb-1 text-xs">
+      <div className="text-muted-foreground mb-1 mt-2 text-xs">
         Function:{" "}
         {function_name ? (
           <span className="font-medium">

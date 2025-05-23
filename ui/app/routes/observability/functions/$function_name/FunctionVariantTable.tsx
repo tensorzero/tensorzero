@@ -49,7 +49,7 @@ export default function FunctionVariantTable({
                   variantName={variant_count.variant_name}
                   functionName={function_name}
                 >
-                  <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
+                  <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
                     {variant_count.variant_name}
                   </code>
                 </VariantLink>

@@ -15,7 +15,7 @@ interface TableItemShortUuidProps {
 function TableItemShortUuid({ id, link }: TableItemShortUuidProps) {
   const content = (
     <span
-      className="inline-block max-w-[80px] overflow-hidden align-middle font-mono whitespace-nowrap"
+      className="inline-block max-w-[80px] overflow-hidden whitespace-nowrap align-middle font-mono"
       style={{ direction: "rtl", textOverflow: "ellipsis" }}
     >
       {id}

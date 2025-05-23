@@ -11,6 +11,44 @@ export const GatewayConfig = z.object({
 });
 export type GatewayConfig = z.infer<typeof GatewayConfig>;
 
+export const FeedbackConfig = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("float"),
+    id: z.string().uuid(),
+    target_id: z.string().uuid(),
+    metric_name: z.string(),
+    value: z.number(),
+    tags: z.record(z.string(), z.string()),
+    timestamp: z.string().datetime(),
+  }),
+  z.object({
+    type: z.literal("boolean"),
+    id: z.string().uuid(),
+    target_id: z.string().uuid(),
+    metric_name: z.string(),
+    value: z.boolean(),
+    tags: z.record(z.string(), z.string()),
+    timestamp: z.string().datetime(),
+  }),
+  z.object({
+    type: z.literal("comment"),
+    id: z.string().uuid(),
+    target_id: z.string().uuid(),
+    target_type: z.enum(["inference", "episode"]),
+    value: z.string(),
+    timestamp: z.string().datetime(),
+  }),
+  z.object({
+    type: z.literal("demonstration"),
+    id: z.string().uuid(),
+    inference_id: z.string().uuid(),
+    value: z.string(),
+    timestamp: z.string().datetime(),
+  }),
+]);
+
+export type Feedback = z.infer<typeof FeedbackConfig>;
+
 export const Config = z.object({
   gateway: GatewayConfig.optional().default({}),
   models: z.record(z.string(), ModelConfigSchema),

@@ -1,41 +1,37 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "TensorZero Configuration Toml file",
-  "description": "The configuration for a [`tensorzero`](https://www.tensorzero.com) project.",
+  "description": "he LLM or embedding provider type. Refer to the [Configuration Reference](https://www.tensorzero.com/docs/gateway/configuration-reference/) for supported providers.",
   "type": "object",
   "additionalProperties": false,
   "properties": {
-    "object_storage": {
-      "type": "object",
-      "properties": {
-        "type": {
-          "type": "string",
-          "description": "The type of object storage."
-        },
-        "endpoint": {
-          "type": "string",
-          "format": "uri",
-          "description": "The endpoint for the object storage."
-        },
-        "bucket_name": {
-          "type": "string",
-          "description": "The bucket name."
-        },
-        "allow_http": {
-          "type": "boolean",
-          "description": "Allow HTTP."
-        }
-      },
-      "required": [
-        "type",
-        "endpoint",
-        "bucket_name",
-        "allow_http"
-      ]
-    },
     "gateway": {
-      "bind_address": {
-        "type": "string"
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "bind_address": {
+            "type": "string",
+            "default": "http://localhost:3000"
+          },
+          "debug": {
+            "type": "boolean",
+            "default": false
+          },
+          "enable_template_filesystem_access": {
+            "type": "boolean",
+            "default": false
+          },
+          "async_writes": {
+            "type": "boolean",
+            "default": true
+          },
+          "enabled": {
+            "type": "boolean",
+            "default": null
+          }
+        },
+        "required": []
       }
     },
     "models": {
@@ -69,16 +65,508 @@
                 "type"
               ]
             }
+          },
+          "extra_body": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "pointer": {
+                  "type": "string",
+                  "description": "The JSON pointer to the extra body."
+                },
+                "value": {
+                  "type": "string",
+                  "description": "The value of the extra body."
+                }
+              }
+            },
+            "required": [
+              "pointer",
+              "value"
+            ]
+          },
+          "extra_headers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "pointer": {
+                  "type": "string",
+                  "description": "The JSON pointer to the extra header."
+                },
+                "value": {
+                  "type": "string",
+                  "description": "The value of the extra header."
+                }
+              }
+            },
+            "required": [
+              "pointer",
+              "value"
+            ]
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "anthropic",
+              "aws_bedrock",
+              "aws_sagemaker",
+              "azure",
+              "deepseek",
+              "fireworks",
+              "gcp_vertex_anthropic",
+              "gcp_vertex_gemini",
+              "google_ai_studio_gemini",
+              "hyperbolic",
+              "mistral",
+              "openai",
+              "sglang",
+              "tgi",
+              "together",
+              "vllm",
+              "xai"
+            ],
+           "description": "The LLM provider type.",
+            "default": "openai",
+            "required": [
+              "type"
+            ]
+          },
+          "api_key_location": {
+            "type": "string",
+            "pattern": "^(env::[A-Z0-9_]+|dynamic::[a-zA-Z0-9_]+|none)$",
+            "description": "Location of the API key (e.g., env::OPENAI_API_KEY, none)."
           }
         },
+        "oneOf": [
+          {
+            "if": {
+              "properties": { "type": { "const": "anthropic" } }
+            },
+            "then": {
+              "properties": {
+                "model_name": {
+                  "type": "string",
+                  "description": "Defines the model name to use with the Anthropic API. See Anthropic’s documentation for the list of available model names."
+                },
+                "api_key_location": {
+                  "type": "string",
+                  "pattern": "^(env::[A-Z0-9_]+|dynamic::[a-zA-Z0-9_]+|none)$",
+                  "description": "Defines the location of the API key for the Anthropic provider. The supported locations are env::ENVIRONMENT_VARIABLE"
+                }
+              },
+              "required": [
+                "model_name"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": { "type": { "const": "aws_bedrock" } }
+            },
+            "then": {
+              "properties": {
+                "region": {
+                  "type": "string",
+                  "description": "AWS region for Bedrock (e.g., us-east-1)."
+                },
+                "model_id": {
+                  "type": "string",
+                  "description": "Model ID for AWS Bedrock (e.g., anthropic.claude-v2)."
+                },
+                "allow_auto_detect_region": {
+                  "type": "boolean",
+                  "description": "Allow automatic detection of AWS region if not specified.",
+                  "default": false
+                }
+              },
+              "required": [
+                "model_id"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": { "type": { "const": "aws_sagemaker" } }
+            },
+            "then": {
+              "properties": {
+                "allow_auto_detect_region": {
+                  "type": "boolean",
+                  "description": "Defines whether to automatically detect the AWS region to use with the SageMaker API. Under the hood, the gateway will use the AWS SDK to try to detect the region. Alternatively, you can specify the region manually with the region field (recommended)",
+                  "default": false
+                },
+                "endpoint_name": {
+                  "type": "string",
+                  "description": "Defines the endpoint name to use with the AWS SageMaker API."
+                },
+                "hosted_provider": {
+                  "type": "boolean",
+                  "description": "Defines the underlying model provider to use with the SageMaker API. The aws_sagemaker provider is a wrapper on other providers.",
+                  "default": false
+                },
+                "model_name": {
+                  "type": "string",
+                  "description": "Defines the model name to use with the AWS SageMaker API."
+                },
+                "region": {
+                  "type": "string",
+                  "description": "Defines the AWS region to use with the AWS SageMaker API."
+                }
+              },
+              "required": [
+                "model_name",
+                "endpoint_name",
+                "hosted_provider"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": { "type": { "const": "azure" } }
+            },
+            "then": {
+              "properties": {
+                "deployment_id": {
+                  "type": "string",
+                  "description": "Defines the deployment ID of the Azure OpenAI deployment."
+                },
+                "endpoint": {
+                  "type": "string",
+                  "description": "Defines the endpoint of the Azure OpenAI deployment (protocol and hostname)."
+                },
+                "api_key_location": {
+                  "type": "string",
+                  "pattern": "^(env::[A-Z0-9_]+|dynamic::[a-zA-Z0-9_]+|none)$",
+                  "description": "Defines the location of the API key for the Azure OpenAI provider. The supported locations are env::ENVIRONMENT_VARIABLE, dynamic::DYNAMIC_ENVIRONMENT_VARIABLE, none."
+                }
+              },
+              "required": [
+                "deployment_id",
+                "endpoint"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": { "type": { "const": "deepseek" } }
+            },
+            "then": {
+              "properties": {
+                "model_name": {
+                  "type": "string",
+                  "description": "Defines the model name to use with the DeepSeek API. Currently supported models are deepseek-chat (DeepSeek-v3) and deepseek-reasoner"
+                },
+                "api_key_location": {
+                  "type": "string",
+                  "pattern": "^(env::[A-Z0-9_]+|dynamic::[a-zA-Z0-9_]+|none)$",
+                  "description": "Defines the location of the API key for the DeepSeek provider. The supported locations are env::ENVIRONMENT_VARIABLE and dynamic::ARGUMENT_NAME"
+                }
+              },
+              "required": [
+                "model_name"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": { "type": { "const": "fireworks" } }
+            },
+            "then": {
+              "properties": {
+                "model_name": {
+                  "type": "string",
+                  "description": "Defines the model name to use with the Fireworks API"
+                },
+                "api_key_location": {
+                  "type": "string",
+                  "pattern": "^(env::[A-Z0-9_]+|dynamic::[a-zA-Z0-9_]+|none)$",
+                  "description": "Defines the location of the API key for the Fireworks provider. The supported locations are env::ENVIRONMENT_VARIABLE and dynamic::ARGUMENT_NAME"
+                }
+              },
+              "required": [
+                "model_name"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": { "type": { "const": "gcp_vertex_anthropic" } }
+            },
+            "then": {
+              "properties": {
+                "location": {
+                  "type": "string",
+                  "description": "Defines the location (region) of the GCP Vertex AI Anthropic model."
+                },
+                "model_id": {
+                  "type": "string",
+                  "description": "Defines the model ID of the GCP Vertex AI model."
+                },
+                "project_id": {
+                  "type": "string",
+                  "description": "Defines the project ID of the GCP Vertex AI model."
+                },
+                "credential_location": {
+                  "type": "string",
+                  "pattern": "^(env::[A-Z0-9_]+|dynamic::[a-zA-Z0-9_]+|none)$",
+                  "description": "Defines the location of the credentials for the GCP Vertex Anthropic provider. The supported locations are env::PATH_TO_CREDENTIALS_FILE, dynamic::CREDENTIALS_ARGUMENT_NAME"
+                }
+              },
+              "required": [
+                "location",
+                "model_id",
+                "project_id"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": { "type": { "const": "gcp_vertex_gemini" } }
+            },
+            "then": {
+              "properties": {
+                "location": {
+                  "type": "string",
+                  "description": "Defines the location (region) of the GCP Vertex Gemini model."
+                },
+                "model_id": {
+                  "type": "string",
+                  "description": "Defines the model ID of the GCP Vertex AI model."
+                },
+                "project_id": {
+                  "type": "string",
+                  "description": "Defines the project ID of the GCP Vertex AI model."
+                },
+                "credential_location": {
+                  "type": "string",
+                  "pattern": "^(env::[A-Z0-9_]+|dynamic::[a-zA-Z0-9_]+|none)$",
+                  "description": "Defines the location of the credentials for the GCP Vertex Gemini provider. The supported locations are env::PATH_TO_CREDENTIALS_FILE, dynamic::CREDENTIALS_ARGUMENT_NAME and file::PATH_TO_CREDENTIALS_FILE"
+                }
+              },
+              "required": [
+                "location",
+                "model_id",
+                "project_id"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": { "type": { "const": "google_ai_studio_gemini" } }
+            },
+            "then": {
+              "properties": {
+                "model_name": {
+                  "type": "string",
+                  "description": "Defines the model name to use with the Google AI Studio Gemini API."
+                },
+                "api_key_location": {
+                  "type": "string",
+                  "pattern": "^(env::[A-Z0-9_]+|dynamic::[a-zA-Z0-9_]+|none)$",
+                  "description": "Defines the location of the API key for the Google AI Studio Gemini provider. The supported locations are env::ENVIRONMENT_VARIABLE and dynamic::ARGUMENT_NAME"
+                }
+              },
+              "required": [
+                "model_name"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": { "type": { "const": "hyperbolic" } }
+            },
+            "then": {
+              "properties": {
+                "model_name": {
+                  "type": "string",
+                  "description": "Defines the model name to use with the Hyperbolic API."
+                },
+                "api_key_location": {
+                  "type": "string",
+                  "pattern": "^(env::[A-Z0-9_]+|dynamic::[a-zA-Z0-9_]+|none)$",
+                  "description": "Defines the location of the API key for the Hyperbolic provider. The supported locations are env::ENVIRONMENT_VARIABLE and dynamic::ARGUMENT_NAME"
+                }
+              },
+              "required": [
+                "model_name"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": { "type": { "const": "mistral" } }
+            },
+            "then": {
+              "properties": {
+                "model_name": {
+                  "type": "string",
+                  "description": "Defines the model name to use with the Mistral API."
+                },
+                "api_key_location": {
+                  "type": "string",
+                  "pattern": "^(env::[A-Z0-9_]+|dynamic::[a-zA-Z0-9_]+|none)$",
+                  "description": "Defines the location of the API key for the Mistral provider. The supported locations are env::ENVIRONMENT_VARIABLE and dynamic::ARGUMENT_NAME"
+                }
+              },
+              "required": [
+                "model_name"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": { "type": { "const": "openai" } }
+            },
+            "then": {
+              "properties": {
+                "api_base": {
+                  "type": "string",
+                  "description": "Defines the base URL of the OpenAI API.\n\n You can use the api_base field to use an API provider that is compatible with the OpenAI API. However, many providers are only “approximately compatible” with the OpenAI API, so you might need to use a specialized model provider in those cases."
+                },
+                "model_name": {
+                  "type": "string",
+                  "description": "Defines the model name to use with the OpenAI API."
+                },
+                "api_key_location": {
+                  "type": "string",
+                  "pattern": "^(env::[A-Z0-9_]+|dynamic::[a-zA-Z0-9_]+|none)$",
+                  "description": "Defines the location of the API key for the OpenAI provider. The supported locations are env::ENVIRONMENT_VARIABLE, dynamic::ARGUMENT_NAME, and none"
+                }
+              },
+              "required": [
+                "model_name"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": { "type": { "const": "sglang" } }
+            },
+            "then": {
+              "properties": {
+                "api_base": {
+                  "type": "string",
+                  "description": "Defines the base URL of the SGLang API."
+                },
+                "api_key_location": {
+                  "type": "string",
+                  "pattern": "^(env::[A-Z0-9_]+|dynamic::[a-zA-Z0-9_]+|none)$",
+                  "description": "Defines the location of the API key for the SGLang provider. The supported locations are env::ENVIRONMENT_VARIABLE, dynamic::ARGUMENT_NAME, and none"
+                }
+              },
+              "required": [
+                "api_base"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": { "type": { "const": "together" } }
+            },
+            "then": {
+              "properties": {
+                "model_name": {
+                  "type": "string",
+                  "description": "See Together’s documentation for the list of available model names. You can also deploy your own models on Together AI."
+                },
+                "api_key_location": {
+                  "type": "string",
+                  "pattern": "^(env::[A-Z0-9_]+|dynamic::[a-zA-Z0-9_]+|none)$",
+                  "description": "Defines the location of the API key for the Together AI provider. The supported locations are env::ENVIRONMENT_VARIABLE and dynamic::ARGUMENT_NAME (see the API reference) for more details)."
+                }
+              },
+              "required": [
+                "model_name"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": { "type": { "const": "vllm" } }
+            },
+            "then": {
+              "properties": {
+                "api_base": {
+                  "type": "string",
+                  "description": "Defines the base URL of the VLLM API."
+                },
+                "model_name": {
+                  "type": "string",
+                  "description": "Defines the model name to use with the vLLM API."
+                },
+                "api_key_location": {
+                  "type": "string",
+                  "pattern": "^(env::[A-Z0-9_]+|dynamic::[a-zA-Z0-9_]+|none)$",
+                  "description": "Defines the location of the API key for the vLLM provider. The supported locations are env::ENVIRONMENT_VARIABLE, dynamic::ARGUMENT_NAME, and none"
+                }
+              },
+              "required": [
+                "api_base",
+                "model_name"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": { "type": { "const": "xai" } }
+            },
+            "then": {
+              "properties": {
+                "api_base": {
+                  "type": "string",
+                  "description": "Defines the base URL of the OpenAI API."
+                },
+                "model_name": {
+                  "type": "string",
+                  "description": "Defines the model name to use with the xAI API."
+                },
+                "api_key_location": {
+                  "type": "string",
+                  "pattern": "^(env::[A-Z0-9_]+|dynamic::[a-zA-Z0-9_]+|none)$",
+                  "description": "Defines the location of the API key for the xAI provider. The supported locations are env::ENVIRONMENT_VARIABLE and dynamic::ARGUMENT_NAME"
+                }
+              },
+              "required": [
+                "api_base",
+                "model_name"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": { "type": { "const": "tgi" } }
+            },
+            "then": {
+              "properties": {
+                "api_base": {
+                  "type": "string",
+                  "description": "Defines the base URL of the TGI API."
+                },
+                "api_key_location": {
+                  "type": "string",
+                  "pattern": "^(env::[A-Z0-9_]+|dynamic::[a-zA-Z0-9_]+|none)$",
+                  "description": "Defines the location of the API key for the TGI provider. The supported locations are env::ENVIRONMENT_VARIABLE, dynamic::ARGUMENT_NAME, and none"
+                }
+              },
+              "required": [
+                "api_base",
+                "model_name"
+              ]
+            }
+          }
+        ],
         "required": [
           "routing",
-          "providers"
+          "providers",
+          "type"
         ]
       }
     },
     "embedding_models": {
       "type": "object",
+      "description": "The [embedding_models.model_name] section defines the behavior of an embedding model. You can define multiple models by including multiple [embedding_models.model_name] sections.",
       "additionalProperties": {
         "type": "object",
         "properties": {
@@ -96,11 +584,59 @@
               "properties": {
                 "type": {
                   "type": "string",
-                  "description": "The type of provider."
+                  "description": "Defines the types of the provider. See Integrations » Model(https://www.tensorzero.com/docs/gateway/integrations/#model-providers) Providers for details.",
+                  "enum": [
+                    "anthropic",
+                    "aws_bedrock",
+                    "aws_sagemaker",
+                    "azure",
+                    "deepseek",
+                    "fireworks",
+                    "gcp_vertex_anthropic",
+                    "gcp_vertex_gemini",
+                    "google_ai_studio_gemini",
+                    "hyperbolic",
+                    "mistral",
+                    "openai",
+                    "sglang",
+                    "tgi",
+                    "together",
+                    "vllm",
+                    "xai"
+                  ],
+                  "oneOf": [
+                    {
+                      "if": {
+                        "properties": { "type": { "const": "openai" } }
+                      },
+                      "then": {
+                        "description": "The OpenAI provider type(https://platform.openai.com/docs/models/embeddings).",
+                        "properties": {
+                          "api_base": {
+                            "type": "string",
+                            "description": "Defines the base URL of the OpenAI API."
+                          },
+                          "model_name": {
+                            "type": "string",
+                            "description": "Defines the model name to use with the OpenAI API."
+                          },
+                          "api_key_location": {
+                            "type": "string",
+                            "pattern": "^(env::[A-Z0-9_]+|dynamic::[a-zA-Z0-9_]+|none)$",
+                            "description": "Defines the location of the API key for the OpenAI provider. The supported locations are env::ENVIRONMENT_VARIABLE, dynamic::ARGUMENT_NAME, and none"
+                          }
+                        },
+                        "required": [
+                          "model_name"
+                        ]
+                      }
+                    }
+                  ]
                 },
+
                 "model_name": {
                   "type": "string",
-                  "description": "The model name."
+                  "description": "Defines the model name to use with the provider."
                 }
               },
               "required": [
@@ -117,24 +653,140 @@
     },
     "functions": {
       "type": "object",
+      "description": "The [functions.function_name] section defines the behavior of a function. You can define multiple functions by including multiple [functions.function_name] sections.",
       "additionalProperties": {
         "type": "object",
         "properties": {
+          "assistant_schema": {
+            "type": "string",
+            "description": "Defines the path to the assistant schema file. The path is relative to the configuration file."
+          },
+
+          "system_schema": {
+            "type": "string",
+            "description": "Defines the path to the system schema file. The path is relative to the configuration file."
+          },
+
           "type": {
             "type": "string",
-            "description": "The type of function."
+            "enum": ["chat", "json"],
+            "description": "Defines the type of the function. The supported function types are chat and json.",
+            "oneOf": [
+              {
+                "if": {
+                  "properties": { "type": { "const": "chat" } }
+                },
+                "then": {
+                  "properties": {
+                    "parallel_tool_calls": {
+                      "type": "boolean",
+                      "description": "Determines whether the function should be allowed to call multiple tools in a single conversation turn. If not set, TensorZero will default to the model provider’s default behavior.",
+                      "default": false
+                    },
+
+                    "tool_choice": {
+                      "type": "string",
+                      "enum": ["none", "auto", "required", "specific"],
+                      "description": "Determines the tool choice strategy for the function. The supported tool choice strategies are: none, auto, required, and { specific = tool_name }",
+                      "default": "auto",
+                      "oneOf": [
+                        {
+                          "if": {
+                            "properties": { "tool_choice": { "const": "none" } }
+                          },
+                          "then": {
+                            "additionalProperties": false
+                          }
+                        },
+                        {
+                          "if": {
+                            "properties": { "tool_choice": { "const": "auto" } }
+                          },
+                          "then": {
+                            "properties": {
+                              "tools": {
+                                "type": "array",
+                                "description": "Determines the tools that the function can use.",
+                                "items": {
+                                  "type": "string"
+                                },
+                                "default": []
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "if": {
+                            "properties": { "tool_choice": { "const": "required" } }
+                          },
+                          "then": {
+                            "properties": {
+                              "tools": {
+                                "type": "array",
+                                "description": "Determines the tools that the function can use.",
+                                "items": {
+                                  "type": "string"
+                                },
+                                "default": []
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "if": {
+                            "properties": { "tool_choice": { "const": "specific" } }
+                          },
+                          "then": {
+                            "properties": {
+                              "tools": {
+                                "type": "array",
+                                "description": "Determines the tools that the function can use.",
+                                "items": {
+                                  "type": "string"
+                                },
+                                "default": []
+                              }
+                            }
+                          }
+                        }
+                      ]
+                    },
+
+                    "tools": {
+                      "type": "array",
+                      "description": "Determines the tools that the function can use.",
+                      "items": {
+                        "type": "string"
+                      },
+                      "default": []
+                    }
+                  },
+                  "required": [
+                    "tool_choice"
+                  ]
+                }
+              },
+              {
+                "if": {
+                  "properties": { "type": { "const": "json" } }
+                },
+                "then": {
+                  "properties": {
+                    "output_schema": {
+                      "type": "object",
+                      "description": "Defines the path to the output schema file, which should contain a JSON Schema for the output of the function. The path is relative to the configuration file",
+                      "default": {}
+                    }
+                  }
+                }
+              }
+            ]
           },
-          "output_schema": {
+          "user_schema": {
             "type": "string",
-            "pattern": "^[a-zA-Z0-9_/.-]+$",
-            "description": "output schema path"
+            "description": "Defines the path to the user schema file. The path is relative to the configuration file."
           },
-          "tools": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
+
           "variants": {
             "type": "object",
             "additionalProperties": {
@@ -149,16 +801,16 @@
                       "experimental_mixture_of_n",
                       "string"
                   ],
-                  "description": "The type of variant."
+                  "description": "Defines the type of the variant. The supported variant types are: chat_completion, experimental_dynamic_in_context_learning, experimental_best_of_n_sampling, experimental_mixture_of_n, string."
                 },
                 "model": {
                   "type": "string",
-                  "pattern": "^[a-zA-z0-9._:/-]+$",
+                  "pattern": "^[a-zA-z0-9._:/-]+$"
                 },
                 "system_template": {
                   "type": "string",
                   "pattern": "^[a-zA-Z0-9_/.-]+$",
-                  "description": "The system template to use."
+                  "description": "Defines the system template to use."
                 },
                 "embedding_model": {
                   "type": "string",
@@ -180,17 +832,514 @@
               },
               "required": [
                 "type"
-  
               ],
-              "dependencies": {
-                "embedding_model": [
-                  "k",
-                  "system_instructions"
-                ]
-              }
+
+              "oneOf": [
+                {
+                  "if": {
+                    "properties": { "type": { "const": "chat_completion" } }
+                  },
+                  "then": {
+                    "properties": {
+                      "assistant_template": {
+                        "type": "string",
+                        "pattern": "^[a-zA-Z0-9_/.-]+$",
+                        "description": "Defines the path to the assistant template file. The path is relative to the configuration file. This file should contain a MiniJinja template for the assistant messages. If the template uses any variables, the variables should be defined in the function’s assistant_schema field."
+                      },
+                      "extra_body": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "pointer": {
+                              "type": "string",
+                              "description": " A JSON Pointer(https://datatracker.ietf.org/doc/html/rfc6901) string specifying where to modify the request body."
+                            },
+                            "value": {
+                              "type": "string",
+                              "description": "The value to insert at that location; it can be of any type including nested types"
+                            }
+                          },
+                          "required": [
+                            "pointer",
+                            "value"
+                          ]
+                        },
+                        "description": "The extra_body field allows you to modify the request body that TensorZero sends to a variant’s model provider. This advanced feature is an “escape hatch” that lets you use provider-specific functionality that TensorZero hasn’t implemented yet."
+                      },
+                      "extra_headers": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "description": "(string): The name of the header to modify (e.g. anthropic-beta)"
+                            },
+                            "value": {
+                              "type": "string",
+                              "description": "(string): The value of the header (e.g. token-efficient-tools-2025-02-19)"
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "value"
+                          ]
+                        },
+                        "description": "The extra_headers field allows you to modify the request headers that TensorZero sends to a variant’s model provider. This advanced feature is an “escape hatch” that lets you use provider-specific functionality that TensorZero hasn’t implemented yet."
+                      },
+                      "frequency_penalty": {
+                        "type": "integer",
+                        "default": null,
+                        "description": "Penalizes new tokens based on their frequency in the text so far if positive, encourages them if negative."
+                      },
+
+                      "json_mode": {
+                        "type": "string",
+                        "enum": [
+                          "off",
+                          "on",
+                          "strict",
+                          "implicit_tool"
+                        ],
+                        "default": "strict",
+                        "description": "Defines the strategy for generating JSON outputs. This parameter is only supported for variants of functions with type = json."
+                      },
+
+                      "max_tokens": {
+                        "type": "integer",
+                        "default": null,
+                        "description": "The maximum number of tokens to generate. This parameter is only supported for variants of functions with type = json."
+                      },
+
+                      "model": {
+                        "type": "string",
+                        "description": "A model offered by a model provider, without defining it in your tensorzero.toml configuration file (if supported, see below)"
+                      },
+
+                      "presence_penalty": {
+                        "type": ["integer", "number"],
+                        "default": null,
+                        "description": "Penalizes new tokens based on that have already appeared in the text so far if positive, encourages them if negative."
+                      },
+
+                      "retries": {
+                        "type": "object",
+                        "properties": {
+                          "num_retries": {
+                            "type": "number",
+                            "description": "The number of retries to attempt when the variant fails.",
+                            "default": 0
+                          },
+                          "max_delay_s": {
+                            "type": "number",
+                            "description": "The maximum delay between retries in seconds.",
+                            "default": 0
+                          }
+                        },
+                        "required": [
+                          "num_retries",
+                          "max_delay_s"
+                        ]
+                      },
+
+                      "seed": {
+                        "type": "number",
+                        "description": "Defines the seed to use for the variant.",
+                        "default": null
+                      },
+
+                      "system_template": {
+                        "type": "string",
+                        "description": "Defines the path to the system template file. The path is relative to the configuration file.\n\\nThis file should contain a MiniJinja template for the system messages. If the template uses any variables, the variables should be defined in the function’s system_schema field."
+                      },
+
+                      "temperature": {
+                        "type": "number",
+                        "description": "Defines the temperature to use for the variant.",
+                        "default": null
+                      },
+
+                      "top_p": {
+                        "type": "number",
+                        "description": "Defines the top_p to use for the variant.",
+                        "default": null
+                      },
+
+                      "top_k": {
+                        "type": ["integer", "number"],
+                        "description": "Defines the top_k to use for the variant.",
+                        "default": null
+                      },
+
+                      "user_template": {
+                        "type": "string",
+                        "description": "Defines the path to the user template file. The path is relative to the configuration file.\n\\n This file should contain a MiniJinja(https://docs.rs/minijinja/latest/minijinja/syntax/index.html) template for the user messages. If the template uses any variables, the variables should be defined in the function’s user_schema field."
+                      },
+
+                      "weight": {
+                        "type": ["integer", "number"],
+                        "description": "Defines the weight of the variant. When you call a function, the weight determines the relative importance of the variant when sampling.\n\n Variants will be sampled with a probability proportional to their weight. For example, if variant A has a weight of 1.0 and variant B has a weight of 3.0, variant A will be sampled with probability 1.0 / (1.0 + 3.0) = 25% and variant B will be sampled with probability 3.0 / (1.0 + 3.0) = 75%"
+                      }
+                    },
+
+                    "required": [
+                      "model"
+                    ]
+                  }
+                },
+
+                {
+                  "if": {
+                    "properties": { "type": { "const": "experimental_best_of_n" } }
+                  },
+                  "then": {
+                    "properties": {
+                      "candidates": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "description": "This inference strategy generates N candidate responses, and an evaluator model selects the best one. This approach allows you to leverage multiple prompts or variants to increase the likelihood of getting a high-quality response."
+
+                      },
+                      "evaluator": {
+                        "type": "object",
+                        "description": "The evaluator parameter specifies the configuration for the model that will evaluate and select the best response from the generated candidates"
+                      },
+                      "timeout_s": {
+                        "type": ["number", "integer"],
+                        "default": "300s",
+                        "description": "The timeout_s parameter specifies the maximum time in seconds allowed for generating candidate responses. Any candidate that takes longer than this duration to generate a response will be dropped from consideration."
+                      },
+                      "weight": {
+                        "type": ["number", "integer"],
+                        "default": 0,
+                        "description": "Defines the weight of the variant. When you call a function, the weight determines the relative importance of the variant when sampling."
+                      }
+                    },
+                    "required": [
+                      "candidates",
+                      "evaluator"
+                    ]
+                  }
+                },
+
+                {
+                  "if": {
+                    "properties": { "type": { "const": "experimental_chain_of_thought" } }
+                  },
+                  "then": {
+                    "properties": {
+                      "assistant_template": {
+                        "type": "string",
+                        "pattern": "^[a-zA-Z0-9_/.-]+$",
+                        "description": "Defines the path to the assistant template file. The path is relative to the configuration file. This file should contain a MiniJinja template for the assistant messages. If the template uses any variables, the variables should be defined in the function’s assistant_schema field."
+                      },
+                      "extra_body": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "pointer": {
+                              "type": "string",
+                              "description": " A JSON Pointer(https://datatracker.ietf.org/doc/html/rfc6901) string specifying where to modify the request body."
+                            },
+                            "value": {
+                              "type": "string",
+                              "description": "The value to insert at that location; it can be of any type including nested types"
+                            }
+                          },
+                          "required": [
+                            "pointer",
+                            "value"
+                          ]
+                        },
+                        "description": "The extra_body field allows you to modify the request body that TensorZero sends to a variant’s model provider. This advanced feature is an “escape hatch” that lets you use provider-specific functionality that TensorZero hasn’t implemented yet."
+                      },
+                      "extra_headers": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "description": "(string): The name of the header to modify (e.g. anthropic-beta)"
+                            },
+                            "value": {
+                              "type": "string",
+                              "description": "(string): The value of the header (e.g. token-efficient-tools-2025-02-19)"
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "value"
+                          ]
+                        },
+                        "description": "The extra_headers field allows you to modify the request headers that TensorZero sends to a variant’s model provider. This advanced feature is an “escape hatch” that lets you use provider-specific functionality that TensorZero hasn’t implemented yet."
+                      },
+                      "frequency_penalty": {
+                        "type": "integer",
+                        "default": null,
+                        "description": "Penalizes new tokens based on their frequency in the text so far if positive, encourages them if negative."
+                      },
+
+                      "json_mode": {
+                        "type": "string",
+                        "enum": [
+                          "off",
+                          "on",
+                          "strict",
+                          "implicit_tool"
+                        ],
+                        "default": "strict",
+                        "description": "Defines the strategy for generating JSON outputs. This parameter is only supported for variants of functions with type = json."
+                      },
+
+                      "max_tokens": {
+                        "type": "integer",
+                        "default": null,
+                        "description": "The maximum number of tokens to generate. This parameter is only supported for variants of functions with type = json."
+                      },
+
+                      "model": {
+                        "type": "string",
+                        "description": "A model offered by a model provider, without defining it in your tensorzero.toml configuration file (if supported, see below)"
+                      },
+
+                      "presence_penalty": {
+                        "type": ["integer", "number"],
+                        "default": null,
+                        "description": "Penalizes new tokens based on that have already appeared in the text so far if positive, encourages them if negative."
+                      },
+
+                      "retries": {
+                        "type": "object",
+                        "properties": {
+                          "num_retries": {
+                            "type": "number",
+                            "description": "The number of retries to attempt when the variant fails.",
+                            "default": 0
+                          },
+                          "max_delay_s": {
+                            "type": "number",
+                            "description": "The maximum delay between retries in seconds.",
+                            "default": 0
+                          }
+                        },
+                        "required": [
+                          "num_retries",
+                          "max_delay_s"
+                        ]
+                      },
+
+                      "seed": {
+                        "type": "number",
+                        "description": "Defines the seed to use for the variant.",
+                        "default": null
+                      },
+
+                      "system_template": {
+                        "type": "string",
+                        "description": "Defines the path to the system template file. The path is relative to the configuration file.\n\\nThis file should contain a MiniJinja template for the system messages. If the template uses any variables, the variables should be defined in the function’s system_schema field."
+                      },
+
+                      "temperature": {
+                        "type": "number",
+                        "description": "Defines the temperature to use for the variant.",
+                        "default": null
+                      },
+
+                      "top_p": {
+                        "type": "number",
+                        "description": "Defines the top_p to use for the variant.",
+                        "default": null
+                      },
+
+                      "top_k": {
+                        "type": ["integer", "number"],
+                        "description": "Defines the top_k to use for the variant.",
+                        "default": null
+                      },
+
+                      "user_template": {
+                        "type": "string",
+                        "description": "Defines the path to the user template file. The path is relative to the configuration file.\n\\n This file should contain a MiniJinja(https://docs.rs/minijinja/latest/minijinja/syntax/index.html) template for the user messages. If the template uses any variables, the variables should be defined in the function’s user_schema field."
+                      },
+
+                      "weight": {
+                        "type": ["integer", "number"],
+                        "description": "Defines the weight of the variant. When you call a function, the weight determines the relative importance of the variant when sampling.\n\n Variants will be sampled with a probability proportional to their weight. For example, if variant A has a weight of 1.0 and variant B has a weight of 3.0, variant A will be sampled with probability 1.0 / (1.0 + 3.0) = 25% and variant B will be sampled with probability 3.0 / (1.0 + 3.0) = 75%"
+                      }
+                    },
+
+                    "required": [
+                      "model"
+                    ]
+                  }
+                },
+
+                {
+                  "if": {
+                    "properties": { "type": { "const": "experimental_mixture_of_n" } }
+                  },
+                  "then": {
+                    "properties": {
+                      "candidates": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "description": "This inference strategy generates N candidate responses, and an evaluator model selects the best one. This approach allows you to leverage multiple prompts or variants to increase the likelihood of getting a high-quality response."
+                      },
+                      "fuser": {
+                        "type": "object",
+                        "description": "The fuser parameter specifies the configuration for the model that will evaluate and combine the elements.\n\n The evaluator is configured similarly to a chat_completion variant, but without the type field. The prompts here should be prompts that you would use to solve the original problem, as the gateway has special-purpose handling and templates to convert them to a fuser."
+                      },
+                      "timeout_s": {
+                        "type": ["number", "integer"],
+                        "description": "The timeout_s parameter specifies the maximum time in seconds allowed for generating candidate responses. Any candidate that takes longer than this duration to generate a response will be dropped from consideration.",
+                        "default": "300s"
+                      },
+                      "weight": {
+                        "type": ["number", "integer"],
+                        "default": 0,
+                        "description": "Defines the weight of the variant. When you call a function, the weight determines the relative importance of the variant when sampling."
+                      }
+                    },
+                    "required": [
+                      "candidates",
+                      "fuser"
+                    ]
+                  }
+                },
+
+                {
+                  "if": {
+                    "properties": { "type": { "const": "experimental_dynamic_in_context_learning" } }
+                  },
+                  "then": {
+                    "properties": {
+                      "embedding_model": {
+                        "type": "string",
+                        "description": "The embedding model to use."
+                      },
+                      "extra_body": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "pointer": {
+                              "type": "string",
+                              "description": "The JSON pointer to the extra body."
+                            },
+                            "value": {
+                              "type": "string",
+                              "description": "The value of the extra body."
+                            }
+                          }
+                        },
+                        "required": [
+                          "pointer",
+                          "value"
+                        ]
+                      },
+                      "extra_headers": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "pointer": {
+                              "type": "string",
+                              "description": "The JSON pointer to the extra header."
+                            },
+                            "value": {
+                              "type": "string",
+                              "description": "The value of the extra header."
+                            }
+                          }
+                        },
+                        "required": [
+                          "pointer",
+                          "value"
+                        ]
+                      },
+                      "json_mode": {
+                        "type": "string",
+                        "enum": [
+                          "off",
+                          "on",
+                          "strict",
+                          "implicit_tool"
+                        ],
+                        "description": "The JSON mode to use."
+                      },
+                      "k": {
+                        "type": "integer",
+                        "description": "The number of candidates to generate."
+                      },
+                      "max_tokens": {
+                        "type": "integer",
+                        "description": "The maximum number of tokens to generate."
+                      },
+                      "model": {
+                        "type": "string",
+                        "description": "The model to use."
+                      },
+                      "retries": {
+                        "type": "object",
+                        "description": "TensorZero’s retry strategy is truncated exponential backoff with jitter. The num_retries parameter defines the number of retries (not including the initial request). The max_delay_s parameter defines the maximum delay between retries.",
+                        "properties": {
+                          "num_retries": {
+                            "type": "integer",
+                            "description": "The number of retries to attempt when the variant fails.",
+                            "default": 0
+                          },
+                          "max_delay_s": {
+                            "type": "number",
+                            "description": "The maximum delay between retries in seconds.",
+                            "default": 0
+                          }
+                        },
+                        "required": [
+                          "num_retries",
+                          "max_delay_s"
+                        ]
+                      },
+                      "seed": {
+                        "type": ["integer", "null"],
+                        "description": "Defines the seed to use for the variant."
+                      },
+                      "system_instructions": {
+                        "type": "string",
+                        "description": "Defines the path to the system instructions file. The path is relative to the configuration file."
+                      },
+                      "temperature": {
+                        "type": "number",
+                        "description": "Defines the temperature to use for the variant.",
+                        "default": null
+                      },
+
+                      "weight": {
+                        "type": "number",
+                        "description": "Defines the weight of the variant.",
+                        "default": 0
+                      }
+
+                    },
+                    "required": [
+                      "embedding_model",
+                      "model",
+                      "k"
+                    ]
+                  }
+                }
+              ]
             }
           }
         },
+
+
         "required": [
           "type",
           "variants"
@@ -199,6 +1348,7 @@
     },
     "metrics": {
       "type": "object",
+      "description": "The [metrics] section defines the behavior of a metric. You can define multiple metrics by including multiple [metrics.metric_name] sections.",
       "additionalProperties": {
         "type": "object",
         "properties": {
@@ -208,7 +1358,7 @@
               "boolean",
               "float"
             ],
-            "description": "The type of metric."
+            "description": "Defines the type of the metric. The supported metric types are boolean and float."
           },
           "level": {
             "type": "string",
@@ -216,14 +1366,14 @@
               "inference",
               "episode"
             ],
-            "description": "Measurement level."
+            "description": "Defines whether the metric applies to individual inference or across entire episodes. The supported levels are inference and episode."
           },
           "optimize": {
             "type": "string",
             "enum": [
               "max"
             ],
-            "description": "Optimization goal."
+            "description": "Defines whether the metric should be maximized or minimized. The supported values are max and min."
           }
         },
         "required": [
@@ -235,17 +1385,23 @@
     },
     "tools": {
       "type": "object",
+      "description": "The [tools] section defines the behavior of a tool. You can define multiple tools by including multiple [tools.tool_name] sections.",
       "additionalProperties": {
         "type": "object",
         "properties": {
           "description": {
             "type": "string",
-            "description": "The description of the tool."
+            "description": "Defines the description of the tool provided to the model. You can typically materially improve the quality of responses by providing a detailed description of the tool."
           },
           "parameters": {
             "type": "string",
             "pattern": "^[a-zA-Z0-9_/.-]+$",
-            "description": "The parameters for the tool."
+            "description": "Defines the parameters for the tool. The parameters are a JSON schema that defines the parameters for the tool."
+          },
+          "strict": {
+            "type": "boolean",
+            "description": "Defines whether the tool should be strict. If true, the tool will only be called if the parameters are valid.",
+            "default": false
           }
         },
         "required": [
@@ -254,27 +1410,736 @@
         ]
       }
     },
-    "evals": {
+    "object_storage": {
       "type": "object",
+      "description": "The [object_storage] section defines the behavior of object storage, which is used for storing images used during multimodal inference.",
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "Defines the type of object storage to use.",
+          "enum": [
+            "s3_compatible",
+            "filesystem",
+            "disabled"
+          ],
+          "oneOf": [
+            {
+              "if": {
+                "properties": { "type": { "const": "s3_compatible" } },
+                "description": "If you set type = s3_compatible, TensorZero will use an S3-compatible object storage service to store and retrieve images."
+              },
+              "then": {
+                "properties": {
+                  "endpoint": {
+                    "type": "string",
+                    "description": "Defines the endpoint of the S3 compatible object storage. You should provide an endpoint unless it’s specified in the bucket field.",
+                    "default": "https://s3.amazonaws.com"
+                  },
+                  "bucket": {
+                    "type": "string",
+                    "description": "Defines the name of the bucket to use for object storage. You should provide a bucket name unless it’s specified in the endpoint field."
+                  },
+                  "region": {
+                    "type": "string",
+                    "description": "Defines the region of the object storage service (if applicable). This is required for some providers (e.g. AWS S3). If the provider does not require a region, this field can be omitted."
+                  },
+                  "allow_http": {
+                    "type": "boolean",
+                    "description": "Normally, the TensorZero Gateway will require HTTPS to access the object storage service.\n\n If set to true, the TensorZero Gateway will instead use HTTP to access the object storage service. This is useful for local development (e.g. a local MinIO deployment), but not recommended for production environments.",
+                    "default": false
+                  }
+                },
+                "required": [
+                  "endpoint",
+                  "bucket"
+                ]
+              }
+            },
+            {
+              "if": {
+                "properties": { "type": { "const": "filesystem" } },
+                "description": "If you set type = filesystem, TensorZero will use a local filesystem to store and retrieve images."
+              },
+              "then": {
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "Defines the path to the directory where images will be stored."
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              }
+            },
+            {
+              "if": {
+                "properties": { "type": { "const": "disabled" } },
+                "description": "If you set type = disabled, TensorZero will disable object storage."
+              },
+              "then": {
+                "properties": {},
+                "required": []
+              }
+            }
+          ]
+        }
+      },
+      "required": [
+        "type"
+      ]
+    },
+    "evaluations": {
+      "type": "object",
+      "description": "The evaluations sub-section of the config file defines the behavior of an evaluation in TensorZero. You can define multiple evaluations by including multiple [evaluations.evaluation_name] sections.",
       "additionalProperties": {
         "type": "object",
         "properties": {
           "type": {
             "type": "string",
-            "description": "The type of eval."
+            "enum": ["literal"],
+            "description": "Literal evals are used to evaluate the quality of responses."
           },
-          "description": {
+          "function_name": {
             "type": "string",
-            "description": "The description of the eval."
+            "description": "This should be the name of a function defined in the [functions] section of the gateway config. This value sets which function this evaluation should evaluate when run."
           },
-          "parameters": {
-            "type": "string",
-            "pattern": "^[a-zA-Z0-9_/.-]+$",
-            "description": "The parameters for the eval."
+          "evaluators": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": ["exact_match", "llm_judge"],
+                  "description": "The type of evaluator to use."
+                }
+              },
+              "oneOf": [
+                {
+                  "if": {
+                    "properties": { "type": { "const": "exact_match" } },
+                    "description": "If you set type = exact_match, TensorZero will use an exact match evaluator to evaluate the quality of responses."
+                  },
+                  "then": {
+                    "properties": {
+                      "cutoff": {
+                        "type": ["number", "integer"],
+                        "description": "Sets a user defined threshold at which the test is passing. This can be useful for applications where the evaluations are run as an automated test. \n\n If the average value of this evaluator is below the cutoff, the evaluations binary will return a nonzero status code."
+                      }
+                    }
+                  }
+                },
+                {
+                  "if": {
+                    "properties": { "type": { "const": "llm_judge" } },
+                    "description": "If you set type = llm_judge, TensorZero will use an LLM judge evaluator to evaluate the quality of responses."
+                  },
+                  "then": {
+                    "properties": {
+                      "input_format": {
+                        "type": "string",
+                        "description": "The input format for the LLM judge evaluator. The supported input formats are json and text.",
+                        "default": "serialized"
+                      },
+                      "output_format": {
+                        "type": "string",
+                        "description": "Defines the expected data type of the evaluation result from the LLM judge."
+                      },
+                      "include": {
+                        "type": "object",
+                        "properties": {
+                          "reference_output": {
+                            "type": "boolean",
+                            "description": "Defines whether the reference output should be included in the evaluation.",
+                            "default": false
+                          }
+                        }
+                      },
+                      "variants": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                  "chat_completion",
+                                  "experimental_dynamic_in_context_learning",
+                                  "experimental_best_of_n_sampling",
+                                  "experimental_mixture_of_n",
+                                  "string"
+                              ],
+                              "description": "Defines the type of the variant. The supported variant types are: chat_completion, experimental_dynamic_in_context_learning, experimental_best_of_n_sampling, experimental_mixture_of_n, string."
+                            },
+                            "model": {
+                              "type": "string",
+                              "pattern": "^[a-zA-z0-9._:/-]+$"
+                            },
+                            "system_template": {
+                              "type": "string",
+                              "pattern": "^[a-zA-Z0-9_/.-]+$",
+                              "description": "Defines the system template to use."
+                            },
+                            "embedding_model": {
+                              "type": "string",
+                              "enum": [
+                                "openai::text-embedding-3-small"
+                              ],
+                              "description": "The embedding model to use."
+                            },
+                            "k": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "description": "The number of candidates to generate."
+                            },
+                            "system_instructions": {
+                              "type": "string",
+                              "pattern": "^[a-zA-Z0-9_/.-]+$",
+                              "description": "The system instructions to use."
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ],
+
+                          "oneOf": [
+                            {
+                              "if": {
+                                "properties": { "type": { "const": "chat_completion" } }
+                              },
+                              "then": {
+                                "properties": {
+                                  "assistant_template": {
+                                    "type": "string",
+                                    "pattern": "^[a-zA-Z0-9_/.-]+$",
+                                    "description": "Defines the path to the assistant template file. The path is relative to the configuration file. This file should contain a MiniJinja template for the assistant messages. If the template uses any variables, the variables should be defined in the function’s assistant_schema field."
+                                  },
+                                  "extra_body": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "pointer": {
+                                          "type": "string",
+                                          "description": " A JSON Pointer(https://datatracker.ietf.org/doc/html/rfc6901) string specifying where to modify the request body."
+                                        },
+                                        "value": {
+                                          "type": "string",
+                                          "description": "The value to insert at that location; it can be of any type including nested types"
+                                        }
+                                      },
+                                      "required": [
+                                        "pointer",
+                                        "value"
+                                      ]
+                                    },
+                                    "description": "The extra_body field allows you to modify the request body that TensorZero sends to a variant’s model provider. This advanced feature is an “escape hatch” that lets you use provider-specific functionality that TensorZero hasn’t implemented yet."
+                                  },
+                                  "extra_headers": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "name": {
+                                          "type": "string",
+                                          "description": "(string): The name of the header to modify (e.g. anthropic-beta)"
+                                        },
+                                        "value": {
+                                          "type": "string",
+                                          "description": "(string): The value of the header (e.g. token-efficient-tools-2025-02-19)"
+                                        }
+                                      },
+                                      "required": [
+                                        "name",
+                                        "value"
+                                      ]
+                                    },
+                                    "description": "The extra_headers field allows you to modify the request headers that TensorZero sends to a variant’s model provider. This advanced feature is an “escape hatch” that lets you use provider-specific functionality that TensorZero hasn’t implemented yet."
+                                  },
+                                  "frequency_penalty": {
+                                    "type": "integer",
+                                    "default": null,
+                                    "description": "Penalizes new tokens based on their frequency in the text so far if positive, encourages them if negative."
+                                  },
+
+                                  "json_mode": {
+                                    "type": "string",
+                                    "enum": [
+                                      "off",
+                                      "on",
+                                      "strict",
+                                      "implicit_tool"
+                                    ],
+                                    "default": "strict",
+                                    "description": "Defines the strategy for generating JSON outputs. This parameter is only supported for variants of functions with type = json."
+                                  },
+
+                                  "max_tokens": {
+                                    "type": "integer",
+                                    "default": null,
+                                    "description": "The maximum number of tokens to generate. This parameter is only supported for variants of functions with type = json."
+                                  },
+
+                                  "model": {
+                                    "type": "string",
+                                    "description": "A model offered by a model provider, without defining it in your tensorzero.toml configuration file (if supported, see below)"
+                                  },
+
+                                  "presence_penalty": {
+                                    "type": ["integer", "number"],
+                                    "default": null,
+                                    "description": "Penalizes new tokens based on that have already appeared in the text so far if positive, encourages them if negative."
+                                  },
+
+                                  "retries": {
+                                    "type": "object",
+                                    "properties": {
+                                      "num_retries": {
+                                        "type": "number",
+                                        "description": "The number of retries to attempt when the variant fails.",
+                                        "default": 0
+                                      },
+                                      "max_delay_s": {
+                                        "type": "number",
+                                        "description": "The maximum delay between retries in seconds.",
+                                        "default": 0
+                                      }
+                                    },
+                                    "required": [
+                                      "num_retries",
+                                      "max_delay_s"
+                                    ]
+                                  },
+
+                                  "seed": {
+                                    "type": "number",
+                                    "description": "Defines the seed to use for the variant.",
+                                    "default": null
+                                  },
+
+                                  "system_template": {
+                                    "type": "string",
+                                    "description": "Defines the path to the system template file. The path is relative to the configuration file.\n\\nThis file should contain a MiniJinja template for the system messages. If the template uses any variables, the variables should be defined in the function’s system_schema field."
+                                  },
+
+                                  "temperature": {
+                                    "type": "number",
+                                    "description": "Defines the temperature to use for the variant.",
+                                    "default": null
+                                  },
+
+                                  "top_p": {
+                                    "type": "number",
+                                    "description": "Defines the top_p to use for the variant.",
+                                    "default": null
+                                  },
+
+                                  "top_k": {
+                                    "type": ["integer", "number"],
+                                    "description": "Defines the top_k to use for the variant.",
+                                    "default": null
+                                  },
+
+                                  "user_template": {
+                                    "type": "string",
+                                    "description": "Defines the path to the user template file. The path is relative to the configuration file.\n\\n This file should contain a MiniJinja(https://docs.rs/minijinja/latest/minijinja/syntax/index.html) template for the user messages. If the template uses any variables, the variables should be defined in the function’s user_schema field."
+                                  },
+
+                                  "weight": {
+                                    "type": ["integer", "number"],
+                                    "description": "Defines the weight of the variant. When you call a function, the weight determines the relative importance of the variant when sampling.\n\n Variants will be sampled with a probability proportional to their weight. For example, if variant A has a weight of 1.0 and variant B has a weight of 3.0, variant A will be sampled with probability 1.0 / (1.0 + 3.0) = 25% and variant B will be sampled with probability 3.0 / (1.0 + 3.0) = 75%"
+                                  }
+                                },
+
+                                "required": [
+                                  "model"
+                                ]
+                              }
+                            },
+
+                            {
+                              "if": {
+                                "properties": { "type": { "const": "experimental_best_of_n" } }
+                              },
+                              "then": {
+                                "properties": {
+                                  "candidates": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    },
+                                    "description": "This inference strategy generates N candidate responses, and an evaluator model selects the best one. This approach allows you to leverage multiple prompts or variants to increase the likelihood of getting a high-quality response."
+
+                                  },
+                                  "evaluator": {
+                                    "type": "object",
+                                    "description": "The evaluator parameter specifies the configuration for the model that will evaluate and select the best response from the generated candidates"
+                                  },
+                                  "timeout_s": {
+                                    "type": ["number", "integer"],
+                                    "default": "300s",
+                                    "description": "The timeout_s parameter specifies the maximum time in seconds allowed for generating candidate responses. Any candidate that takes longer than this duration to generate a response will be dropped from consideration."
+                                  },
+                                  "weight": {
+                                    "type": ["number", "integer"],
+                                    "default": 0,
+                                    "description": "Defines the weight of the variant. When you call a function, the weight determines the relative importance of the variant when sampling."
+                                  }
+                                },
+                                "required": [
+                                  "candidates",
+                                  "evaluator"
+                                ]
+                              }
+                            },
+
+                            {
+                              "if": {
+                                "properties": { "type": { "const": "experimental_chain_of_thought" } }
+                              },
+                              "then": {
+                                "properties": {
+                                  "assistant_template": {
+                                    "type": "string",
+                                    "pattern": "^[a-zA-Z0-9_/.-]+$",
+                                    "description": "Defines the path to the assistant template file. The path is relative to the configuration file. This file should contain a MiniJinja template for the assistant messages. If the template uses any variables, the variables should be defined in the function’s assistant_schema field."
+                                  },
+                                  "extra_body": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "pointer": {
+                                          "type": "string",
+                                          "description": " A JSON Pointer(https://datatracker.ietf.org/doc/html/rfc6901) string specifying where to modify the request body."
+                                        },
+                                        "value": {
+                                          "type": "string",
+                                          "description": "The value to insert at that location; it can be of any type including nested types"
+                                        }
+                                      },
+                                      "required": [
+                                        "pointer",
+                                        "value"
+                                      ]
+                                    },
+                                    "description": "The extra_body field allows you to modify the request body that TensorZero sends to a variant’s model provider. This advanced feature is an “escape hatch” that lets you use provider-specific functionality that TensorZero hasn’t implemented yet."
+                                  },
+                                  "extra_headers": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "name": {
+                                          "type": "string",
+                                          "description": "(string): The name of the header to modify (e.g. anthropic-beta)"
+                                        },
+                                        "value": {
+                                          "type": "string",
+                                          "description": "(string): The value of the header (e.g. token-efficient-tools-2025-02-19)"
+                                        }
+                                      },
+                                      "required": [
+                                        "name",
+                                        "value"
+                                      ]
+                                    },
+                                    "description": "The extra_headers field allows you to modify the request headers that TensorZero sends to a variant’s model provider. This advanced feature is an “escape hatch” that lets you use provider-specific functionality that TensorZero hasn’t implemented yet."
+                                  },
+                                  "frequency_penalty": {
+                                    "type": "integer",
+                                    "default": null,
+                                    "description": "Penalizes new tokens based on their frequency in the text so far if positive, encourages them if negative."
+                                  },
+
+                                  "json_mode": {
+                                    "type": "string",
+                                    "enum": [
+                                      "off",
+                                      "on",
+                                      "strict",
+                                      "implicit_tool"
+                                    ],
+                                    "default": "strict",
+                                    "description": "Defines the strategy for generating JSON outputs. This parameter is only supported for variants of functions with type = json."
+                                  },
+
+                                  "max_tokens": {
+                                    "type": "integer",
+                                    "default": null,
+                                    "description": "The maximum number of tokens to generate. This parameter is only supported for variants of functions with type = json."
+                                  },
+
+                                  "model": {
+                                    "type": "string",
+                                    "description": "A model offered by a model provider, without defining it in your tensorzero.toml configuration file (if supported, see below)"
+                                  },
+
+                                  "presence_penalty": {
+                                    "type": ["integer", "number"],
+                                    "default": null,
+                                    "description": "Penalizes new tokens based on that have already appeared in the text so far if positive, encourages them if negative."
+                                  },
+
+                                  "retries": {
+                                    "type": "object",
+                                    "properties": {
+                                      "num_retries": {
+                                        "type": "number",
+                                        "description": "The number of retries to attempt when the variant fails.",
+                                        "default": 0
+                                      },
+                                      "max_delay_s": {
+                                        "type": "number",
+                                        "description": "The maximum delay between retries in seconds.",
+                                        "default": 0
+                                      }
+                                    },
+                                    "required": [
+                                      "num_retries",
+                                      "max_delay_s"
+                                    ]
+                                  },
+
+                                  "seed": {
+                                    "type": "number",
+                                    "description": "Defines the seed to use for the variant.",
+                                    "default": null
+                                  },
+
+                                  "system_template": {
+                                    "type": "string",
+                                    "description": "Defines the path to the system template file. The path is relative to the configuration file.\n\\nThis file should contain a MiniJinja template for the system messages. If the template uses any variables, the variables should be defined in the function’s system_schema field."
+                                  },
+
+                                  "temperature": {
+                                    "type": "number",
+                                    "description": "Defines the temperature to use for the variant.",
+                                    "default": null
+                                  },
+
+                                  "top_p": {
+                                    "type": "number",
+                                    "description": "Defines the top_p to use for the variant.",
+                                    "default": null
+                                  },
+
+                                  "top_k": {
+                                    "type": ["integer", "number"],
+                                    "description": "Defines the top_k to use for the variant.",
+                                    "default": null
+                                  },
+
+                                  "user_template": {
+                                    "type": "string",
+                                    "description": "Defines the path to the user template file. The path is relative to the configuration file.\n\\n This file should contain a MiniJinja(https://docs.rs/minijinja/latest/minijinja/syntax/index.html) template for the user messages. If the template uses any variables, the variables should be defined in the function’s user_schema field."
+                                  },
+
+                                  "weight": {
+                                    "type": ["integer", "number"],
+                                    "description": "Defines the weight of the variant. When you call a function, the weight determines the relative importance of the variant when sampling.\n\n Variants will be sampled with a probability proportional to their weight. For example, if variant A has a weight of 1.0 and variant B has a weight of 3.0, variant A will be sampled with probability 1.0 / (1.0 + 3.0) = 25% and variant B will be sampled with probability 3.0 / (1.0 + 3.0) = 75%"
+                                  }
+                                },
+
+                                "required": [
+                                  "model"
+                                ]
+                              }
+                            },
+
+                            {
+                              "if": {
+                                "properties": { "type": { "const": "experimental_mixture_of_n" } }
+                              },
+                              "then": {
+                                "properties": {
+                                  "candidates": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    },
+                                    "description": "This inference strategy generates N candidate responses, and an evaluator model selects the best one. This approach allows you to leverage multiple prompts or variants to increase the likelihood of getting a high-quality response."
+                                  },
+                                  "fuser": {
+                                    "type": "object",
+                                    "description": "The fuser parameter specifies the configuration for the model that will evaluate and combine the elements.\n\n The evaluator is configured similarly to a chat_completion variant, but without the type field. The prompts here should be prompts that you would use to solve the original problem, as the gateway has special-purpose handling and templates to convert them to a fuser."
+                                  },
+                                  "timeout_s": {
+                                    "type": ["number", "integer"],
+                                    "description": "The timeout_s parameter specifies the maximum time in seconds allowed for generating candidate responses. Any candidate that takes longer than this duration to generate a response will be dropped from consideration.",
+                                    "default": "300s"
+                                  },
+                                  "weight": {
+                                    "type": ["number", "integer"],
+                                    "default": 0,
+                                    "description": "Defines the weight of the variant. When you call a function, the weight determines the relative importance of the variant when sampling."
+                                  }
+                                },
+                                "required": [
+                                  "candidates",
+                                  "fuser"
+                                ]
+                              }
+                            },
+
+                            {
+                              "if": {
+                                "properties": { "type": { "const": "experimental_dynamic_in_context_learning" } }
+                              },
+                              "then": {
+                                "properties": {
+                                  "embedding_model": {
+                                    "type": "string",
+                                    "description": "The embedding model to use."
+                                  },
+                                  "extra_body": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "pointer": {
+                                          "type": "string",
+                                          "description": "The JSON pointer to the extra body."
+                                        },
+                                        "value": {
+                                          "type": "string",
+                                          "description": "The value of the extra body."
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "pointer",
+                                      "value"
+                                    ]
+                                  },
+                                  "extra_headers": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "pointer": {
+                                          "type": "string",
+                                          "description": "The JSON pointer to the extra header."
+                                        },
+                                        "value": {
+                                          "type": "string",
+                                          "description": "The value of the extra header."
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "pointer",
+                                      "value"
+                                    ]
+                                  },
+                                  "json_mode": {
+                                    "type": "string",
+                                    "enum": [
+                                      "off",
+                                      "on",
+                                      "strict",
+                                      "implicit_tool"
+                                    ],
+                                    "description": "The JSON mode to use."
+                                  },
+                                  "k": {
+                                    "type": "integer",
+                                    "description": "The number of candidates to generate."
+                                  },
+                                  "max_tokens": {
+                                    "type": "integer",
+                                    "description": "The maximum number of tokens to generate."
+                                  },
+                                  "model": {
+                                    "type": "string",
+                                    "description": "The model to use."
+                                  },
+                                  "retries": {
+                                    "type": "object",
+                                    "description": "TensorZero’s retry strategy is truncated exponential backoff with jitter. The num_retries parameter defines the number of retries (not including the initial request). The max_delay_s parameter defines the maximum delay between retries.",
+                                    "properties": {
+                                      "num_retries": {
+                                        "type": "integer",
+                                        "description": "The number of retries to attempt when the variant fails.",
+                                        "default": 0
+                                      },
+                                      "max_delay_s": {
+                                        "type": "number",
+                                        "description": "The maximum delay between retries in seconds.",
+                                        "default": 0
+                                      }
+                                    },
+                                    "required": [
+                                      "num_retries",
+                                      "max_delay_s"
+                                    ]
+                                  },
+                                  "seed": {
+                                    "type": ["integer", "null"],
+                                    "description": "Defines the seed to use for the variant."
+                                  },
+                                  "system_instructions": {
+                                    "type": "string",
+                                    "description": "Defines the path to the system instructions file. The path is relative to the configuration file."
+                                  },
+                                  "temperature": {
+                                    "type": "number",
+                                    "description": "Defines the temperature to use for the variant.",
+                                    "default": null
+                                  },
+
+                                  "weight": {
+                                    "type": "number",
+                                    "description": "Defines the weight of the variant.",
+                                    "default": 0
+                                  }
+
+                                },
+                                "required": [
+                                  "embedding_model",
+                                  "model",
+                                  "k"
+                                ]
+                              }
+                            }
+                          ]
+                        }
+                      },
+                      "optimize": {
+                        "type": "string",
+                        "enum": ["max", "min"],
+                        "description": "Defines whether the metric should be maximized or minimized. The supported values are max and min.",
+                        "required": ["max", "min"]
+                      },
+                      "cutoff": {
+                        "type": ["number", "integer"],
+                        "description": "Sets a user defined threshold at which the test is passing. This may be useful for applications where the evaluations are run as an automated test.\n\n If the average value of this evaluator is below the cutoff (when optimize is max) or above the cutoff (when optimize is min), the evaluations binary will return a nonzero status code."
+                      },
+                      "active": {
+                        "type": "boolean",
+                        "default": true,
+                        "description": "Sets which of the variants should be used for evaluation runs."
+                      },
+                      "system_instructions": {
+                        "type": "string",
+                        "description": "Defines the path to the system instructions file. This path is relative to the configuration file."
+                      }
+
+                    }
+                  }
+                }
+              ],
+              "required": [
+                "type"
+              ]
+            },
+            "description": "The evaluators sub-section of the config file defines the behavior of an evaluator in TensorZero. You can define multiple evaluators by including multiple [evaluations.evaluation_name] sections."
           }
         },
         "required": [
-         
+         "type",
+         "function_name"
         ]
       }
     }

@@ -28,7 +28,7 @@ export function FirstExample({ messages }: FirstExampleProps) {
                 <div className="text-muted-foreground text-sm">
                   {message.role}:
                 </div>
-                <code className="bg-muted block rounded-lg p-3 text-sm whitespace-pre-wrap">
+                <code className="bg-muted block whitespace-pre-wrap rounded-lg p-3 text-sm">
                   {message.content}
                 </code>
               </div>

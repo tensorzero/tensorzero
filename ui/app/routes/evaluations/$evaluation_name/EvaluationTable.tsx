@@ -75,11 +75,11 @@ const TruncatedContent = ({
             side="right"
             align="start"
             sideOffset={5}
-            className="tooltip-scrollable max-h-[60vh] max-w-md overflow-auto shadow-xs"
+            className="tooltip-scrollable shadow-xs max-h-[60vh] max-w-md overflow-auto"
             avoidCollisions={true}
           >
             <div className="flex h-full w-full items-center justify-center p-4">
-              <pre className="w-full text-xs whitespace-pre-wrap">
+              <pre className="w-full whitespace-pre-wrap text-xs">
                 {content}
               </pre>
             </div>
@@ -106,7 +106,7 @@ const TruncatedContent = ({
             side="right"
             align="start"
             sideOffset={5}
-            className="tooltip-scrollable max-h-[60vh] max-w-[500px] overflow-auto shadow-xs"
+            className="tooltip-scrollable shadow-xs max-h-[60vh] max-w-[500px] overflow-auto"
             avoidCollisions={true}
           >
             <div className="flex h-full w-full items-center justify-center p-4">
@@ -137,7 +137,7 @@ const TruncatedContent = ({
             side="right"
             align="start"
             sideOffset={5}
-            className="tooltip-scrollable max-h-[60vh] max-w-[500px] overflow-auto shadow-xs"
+            className="tooltip-scrollable shadow-xs max-h-[60vh] max-w-[500px] overflow-auto"
             avoidCollisions={true}
           >
             <div className="flex h-full w-full items-center justify-center p-4">

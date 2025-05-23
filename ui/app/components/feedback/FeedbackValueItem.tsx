@@ -83,7 +83,7 @@ function DemonstrationItem({
 }) {
   return (
     <ValueItem iconType="demonstration" onClick={onClick}>
-      <span className="overflow-hidden font-mono text-ellipsis whitespace-nowrap">
+      <span className="overflow-hidden text-ellipsis whitespace-nowrap font-mono">
         {value}
       </span>
     </ValueItem>

@@ -429,7 +429,7 @@ function OutputsSection({
         {outputsToDisplay.map((result) => (
           <div
             key={result.id}
-            className="flex max-w-[450px] min-w-[300px] shrink-0 flex-col justify-between"
+            className="flex min-w-[300px] max-w-[450px] shrink-0 flex-col justify-between"
           >
             <div>
               <div className="mb-2 flex">
