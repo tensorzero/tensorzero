@@ -12,7 +12,7 @@
         "properties": {
           "bind_address": {
             "type": "string",
-            "default": "http://localhost:3000"
+            "default": "http://localhost:3001"
           },
           "debug": {
             "type": "boolean",
