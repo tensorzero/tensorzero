@@ -16,7 +16,8 @@ import CommentFeedbackInput from "./CommentFeedbackInput";
 
 export interface HumanFeedbackFormSharedProps {
   inferenceOutput?: ContentBlockOutput[] | JsonInferenceOutput;
-  formError?: string;
+  formError?: string | null;
+  isSubmitting?: boolean;
 }
 
 type HumanFeedbackFormProps = HumanFeedbackFormSharedProps &
@@ -30,6 +31,7 @@ export function HumanFeedbackForm({
   episodeId,
   inferenceId,
   formError,
+  isSubmitting,
 }: HumanFeedbackFormProps) {
   const config = useConfig();
   // If there is no inference output this is likely an episode-level feedback and
@@ -144,18 +146,22 @@ export function HumanFeedbackForm({
       )}
 
       {selectedMetricName && (
-        <div className="flex items-start justify-between gap-4">
+        <div className="mt-4 flex items-start justify-between gap-4">
           <div aria-live="polite">
-            {!!formError && <p className="text-destructive">{formError}</p>}
+            {!!formError && (
+              <p className="text-destructive text-sm font-bold">{formError}</p>
+            )}
           </div>
           <Button
             type="submit"
             disabled={
-              !selectedMetricName || isInputMissing || !demonstrationIsValid
+              isSubmitting ||
+              !selectedMetricName ||
+              isInputMissing ||
+              !demonstrationIsValid
             }
-            className="mt-2"
           >
-            Submit Feedback
+            {isSubmitting ? "Submitting…" : "Submit Feedback"}
           </Button>
         </div>
       )}

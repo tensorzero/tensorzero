@@ -4,6 +4,7 @@
 # ]
 # ///
 
+import concurrent.futures
 import hashlib
 import os
 from pathlib import Path
@@ -16,10 +17,14 @@ os.chdir(os.path.dirname(os.path.abspath(__file__)))
 # Constants
 PART_SIZE = 8388608
 FIXTURES = [
-    "large_chat_inference.parquet",
-    "large_model_inference.parquet",
+    "large_chat_inference_v2.parquet",
+    "large_chat_model_inference_v2.parquet",
     "large_json_inference.parquet",
     "large_json_model_inference.parquet",
+    "large_chat_boolean_feedback.parquet",
+    "large_chat_float_feedback.parquet",
+    "large_chat_comment_feedback.parquet",
+    "large_chat_demonstration_feedback.parquet",
 ]
 R2_BUCKET = "https://pub-147e9850a60643208c411e70b636e956.r2.dev"
 S3_FIXTURES_DIR = Path("./s3-fixtures")
@@ -55,39 +60,51 @@ def get_remote_etag(filename):
     return response.headers.get("ETag", "").strip('"')
 
 
-def download_file(filename):
+def download_file(filename, remote_etag):
     """Download file from R2 bucket."""
     url = f"{R2_BUCKET}/{filename}"
     response = requests.get(url, stream=True)
     response.raise_for_status()
 
-    with open(S3_FIXTURES_DIR / filename, "wb") as f:
+    local_file = S3_FIXTURES_DIR / filename
+
+    with open(local_file, "wb") as f:
         for chunk in response.iter_content(chunk_size=8192):
             f.write(chunk)
+
+    local_etag = calculate_etag(local_file)
+    if local_etag != remote_etag:
+        raise Exception(
+            f"ETag mismatch after downloading: {local_etag} != {remote_etag}"
+        )
 
 
 def main():
     # Create s3-fixtures directory if it doesn't exist
     S3_FIXTURES_DIR.mkdir(exist_ok=True)
 
-    for fixture in FIXTURES:
+    def process_fixture(fixture):
         local_file = S3_FIXTURES_DIR / fixture
+        remote_etag = get_remote_etag(fixture)
 
         if not local_file.exists():
             print(f"Downloading {fixture} (file doesn't exist locally)")
-            download_file(fixture)
-            continue
+            download_file(fixture, remote_etag)
+            return
 
-        remote_etag = get_remote_etag(fixture)
         local_etag = calculate_etag(local_file)
 
         if local_etag != remote_etag:
             print(f"Downloading {fixture} (ETag mismatch)")
             print(f"Local ETag: {local_etag}")
             print(f"Remote ETag: {remote_etag}")
-            download_file(fixture)
+            download_file(fixture, remote_etag)
         else:
             print(f"Skipping {fixture} (up to date)")
+
+    # Use ThreadPoolExecutor to download files in parallel
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        executor.map(process_fixture, FIXTURES)
 
 
 if __name__ == "__main__":

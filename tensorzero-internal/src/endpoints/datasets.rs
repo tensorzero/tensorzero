@@ -164,7 +164,7 @@ FORMAT JSONEachRow;"#
 
 async fn insert_from_existing(
     clickhouse: &ClickHouseConnectionInfo,
-    path_params: CreatePathParams,
+    path_params: InsertPathParams,
     existing: &ExistingInferenceInfo,
 ) -> Result<Uuid, Error> {
     let inference_data = query_inference_for_datapoint(clickhouse, existing.inference_id).await?;
@@ -260,12 +260,12 @@ struct WithFunctionName {
 ///
 /// The inference is mostly copied as-is, except for the 'output' field.
 /// Based on the 'output' parameter, the output is copied, ignored, or fetched from a demonstration.
-#[instrument(name = "create_datapoint", skip(app_state))]
-pub async fn create_from_existing_datapoint_handler(
+#[instrument(name = "insert_datapoint", skip(app_state))]
+pub async fn insert_from_existing_datapoint_handler(
     State(app_state): AppState,
-    Path(path_params): Path<CreatePathParams>,
+    Path(path_params): Path<InsertPathParams>,
     StructuredJson(existing_inference_info): StructuredJson<ExistingInferenceInfo>,
-) -> Result<Json<CreateDatapointResponse>, Error> {
+) -> Result<Json<InsertDatapointResponse>, Error> {
     validate_dataset_name(&path_params.dataset_name)?;
     let datapoint_id = insert_from_existing(
         &app_state.clickhouse_connection_info,
@@ -273,7 +273,7 @@ pub async fn create_from_existing_datapoint_handler(
         &existing_inference_info,
     )
     .await?;
-    Ok(Json(CreateDatapointResponse { id: datapoint_id }))
+    Ok(Json(InsertDatapointResponse { id: datapoint_id }))
 }
 
 /// The handler for the PUT `/internal/datasets/:dataset/datapoints/:id"` endpoint.
@@ -289,7 +289,7 @@ pub async fn update_datapoint_handler(
     // This is deserialized as either a `SyntheticChatInferenceDatapoint` or `SyntheticJsonInferenceDatapoint`,
     // based on the type of the function looked up from the `function_name` key.
     StructuredJson(params): StructuredJson<serde_json::Value>,
-) -> Result<Json<CreateDatapointResponse>, Error> {
+) -> Result<Json<InsertDatapointResponse>, Error> {
     validate_tensorzero_uuid(path_params.datapoint_id, "Datapoint")?;
     validate_dataset_name(&path_params.dataset_name)?;
     let fetch_context = FetchContext {
@@ -433,31 +433,31 @@ pub async fn update_datapoint_handler(
             }
         }
     }
-    Ok(Json(CreateDatapointResponse {
+    Ok(Json(InsertDatapointResponse {
         id: path_params.datapoint_id,
     }))
 }
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct CreateDatapointParams {
+pub struct InsertDatapointParams {
     pub datapoints: Vec<Value>,
 }
 
 #[derive(Debug, Deserialize)]
-pub struct CreateDatapointPathParams {
+pub struct InsertDatapointPathParams {
     pub dataset_name: String,
 }
 
 // The handler for the POST `/datasets/:dataset_name/datapoints/bulk` endpoint.
 /// This inserts a new datapoint into `ChatInferenceDatapoint`/`JsonInferenceDatapoint`/
-#[tracing::instrument(name = "create_datapoint_handler", skip(app_state, params))]
-pub async fn create_datapoint_handler(
+#[tracing::instrument(name = "bulk_insert_datapoints_handler", skip(app_state, params))]
+pub async fn bulk_insert_datapoints_handler(
     State(app_state): AppState,
-    Path(path_params): Path<CreateDatapointPathParams>,
-    StructuredJson(params): StructuredJson<CreateDatapointParams>,
+    Path(path_params): Path<InsertDatapointPathParams>,
+    StructuredJson(params): StructuredJson<InsertDatapointParams>,
 ) -> Result<Json<Vec<Uuid>>, Error> {
-    let datapoint_ids = create_datapoint(
+    let datapoint_ids = insert_datapoint(
         path_params.dataset_name,
         params,
         &app_state.config,
@@ -468,9 +468,9 @@ pub async fn create_datapoint_handler(
     Ok(Json(datapoint_ids))
 }
 
-pub async fn create_datapoint(
+pub async fn insert_datapoint(
     dataset_name: String,
-    params: CreateDatapointParams,
+    params: InsertDatapointParams,
     config: &Config<'_>,
     http_client: &Client,
     clickhouse: &ClickHouseConnectionInfo,
@@ -982,7 +982,7 @@ pub async fn get_datapoint(
 }
 
 #[derive(Debug, Deserialize)]
-pub struct CreatePathParams {
+pub struct InsertPathParams {
     pub dataset_name: String,
 }
 
@@ -1023,7 +1023,7 @@ impl DatapointKind {
 }
 
 #[derive(Debug, Serialize)]
-pub struct CreateDatapointResponse {
+pub struct InsertDatapointResponse {
     id: Uuid,
 }
 
@@ -1071,7 +1071,7 @@ impl Datapoint {
     }
 }
 
-/// These input datapoints are used as input typesby the `create_datapoint` endpoint
+/// These input datapoints are used as input typesby the `insert_datapoint` endpoint
 /// The distinction here is that they do not include the `dataset_name` field,
 /// which is instead specified as a path parameter.
 /// We also use Input rather than ResolvedInput because the input is not resolved

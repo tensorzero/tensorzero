@@ -37,6 +37,14 @@ model_name = "ft:gpt-4o-mini-2024-07-18:tensorzero::ALHEaw1j"
 # │                                 FUNCTIONS                                  │
 # └────────────────────────────────────────────────────────────────────────────┘
 
+[functions.dummy_function]
+type = "chat"
+
+[functions.dummy_function.variants.dummy]
+type = "chat_completion"
+system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
+model = "dummy::good"
+
 [functions.extract_entities]
 type = "json"
 output_schema = "functions/extract_entities/output_schema.json"

@@ -4,7 +4,6 @@ use axum::middleware::Next;
 use axum::response::Response;
 use axum::routing::{delete, get, post, put};
 use axum::Router;
-use axum_tracing_opentelemetry::middleware::OtelAxumLayer;
 use clap::Parser;
 use mimalloc::MiMalloc;
 use std::fmt::Display;
@@ -21,7 +20,7 @@ use tensorzero_internal::endpoints;
 use tensorzero_internal::endpoints::status::TENSORZERO_VERSION;
 use tensorzero_internal::error;
 use tensorzero_internal::gateway_util;
-use tensorzero_internal::observability::{self, LogFormat};
+use tensorzero_internal::observability::{self, LogFormat, RouterExt};
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
@@ -206,13 +205,13 @@ async fn main() {
         // Everything above this layer has OpenTelemetry tracing enabled
         // Note - we do *not* attach a `OtelInResponseLayer`, as this seems to be incorrect according to the W3C Trace Context spec
         // (the only response header is `traceresponse` for a completed trace)
-        .layer(OtelAxumLayer::default())
+        .apply_otel_http_trace_layer()
         // Everything below the Otel layers does not have OpenTelemetry tracing enabled
         .route("/status", get(endpoints::status::status_handler))
         .route("/health", get(endpoints::status::health_handler))
         .route(
             "/datasets/{dataset_name}/datapoints/bulk",
-            post(endpoints::datasets::create_datapoint_handler),
+            post(endpoints::datasets::bulk_insert_datapoints_handler),
         )
         .route(
             "/datasets/{dataset_name}/datapoints/{datapoint_id}",
@@ -228,7 +227,7 @@ async fn main() {
         )
         .route(
             "/internal/datasets/{dataset_name}/datapoints",
-            post(endpoints::datasets::create_from_existing_datapoint_handler),
+            post(endpoints::datasets::insert_from_existing_datapoint_handler),
         )
         .route(
             "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
