@@ -72,7 +72,7 @@ RUN pnpm run build
 # ========== python-build-env ==========
 
 FROM rust:latest AS python-build-env
-RUN apt-get update && apt-get install -y python3.10
+RUN apt-get update && apt-get install -y python3
 COPY --from=ghcr.io/astral-sh/uv:0.6.6 /uv /uvx /bin/
 COPY . /build
 WORKDIR /build/optimization-server
@@ -88,7 +88,7 @@ FROM base AS ui
 
 RUN useradd -m -s /bin/sh ui
 
-RUN apt-get update && apt-get install -y curl python3.10 && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y curl python3 && rm -rf /var/lib/apt/lists/*
 
 COPY ./ui/package.json ./ui/pnpm-lock.yaml /app/
 
