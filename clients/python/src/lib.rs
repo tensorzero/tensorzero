@@ -27,7 +27,7 @@ use python_helpers::{
 };
 use tensorzero_internal::{
     endpoints::{
-        datasets::CreateDatapointParams, dynamic_evaluation_run::DynamicEvaluationRunEpisodeParams,
+        datasets::InsertDatapointParams, dynamic_evaluation_run::DynamicEvaluationRunEpisodeParams,
     },
     gateway_util::ShutdownHandle,
     inference::types::{
@@ -806,7 +806,7 @@ impl TensorZeroGateway {
             .iter()
             .map(|dp| deserialize_from_pyobj(this.py(), dp))
             .collect::<Result<Vec<_>, _>>()?;
-        let params = CreateDatapointParams { datapoints };
+        let params = InsertDatapointParams { datapoints };
         let fut = client.bulk_insert_datapoints(dataset_name, params);
         let self_module = PyModule::import(this.py(), "uuid")?;
         let uuid = self_module.getattr("UUID")?.unbind();
@@ -1296,7 +1296,7 @@ impl AsyncTensorZeroGateway {
             .iter()
             .map(|dp| deserialize_from_pyobj(this.py(), dp))
             .collect::<Result<Vec<_>, _>>()?;
-        let params = CreateDatapointParams { datapoints };
+        let params = InsertDatapointParams { datapoints };
         let self_module = PyModule::import(this.py(), "uuid")?;
         let uuid = self_module.getattr("UUID")?.unbind();
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
