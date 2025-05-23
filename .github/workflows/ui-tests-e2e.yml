@@ -48,13 +48,11 @@ jobs:
         uses: namespace-actions/download-artifact@5c070f7d7ebdc47682b04aa736c76e46ff5f6e1e
         with:
           name: build-gateway-container
-          path: .
 
       - name: Download `ui` container
         uses: namespace-actions/download-artifact@5c070f7d7ebdc47682b04aa736c76e46ff5f6e1e
         with:
           name: build-ui-container
-          path: .
 
       - name: Load `gateway` and `ui` containers
         run: |
