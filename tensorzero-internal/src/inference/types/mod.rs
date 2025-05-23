@@ -319,6 +319,7 @@ pub enum FlattenUnknown<'a, T> {
 /// Defines the types of content block that can come out of a model provider
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(feature = "pyo3", pyclass)]
 pub enum ContentBlockOutput {
     Text(Text),
     ToolCall(ToolCall),
