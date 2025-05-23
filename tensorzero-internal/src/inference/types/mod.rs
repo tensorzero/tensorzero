@@ -131,21 +131,21 @@ impl InputMessageContent {
                 );
                 ResolvedInputMessageContent::Text { value }
             }
-            InputMessageContent::File(image) => {
+            InputMessageContent::File(file) => {
                 let storage_kind = context
                     .object_store_info
                     .as_ref()
                     .ok_or_else(|| {
                         Error::new(ErrorDetails::ObjectStoreUnconfigured {
-                            block_type: "image".to_string(),
+                            block_type: "file".to_string(),
                         })
                     })?
                     .kind
                     .clone();
-                let image = image.take_or_fetch(context.client).await?;
-                let path = storage_kind.image_path(&image)?;
+                let file = file.take_or_fetch(context.client).await?;
+                let path = storage_kind.file_path(&file)?;
                 ResolvedInputMessageContent::File(FileWithPath {
-                    image,
+                    file,
                     storage_path: path,
                 })
             }

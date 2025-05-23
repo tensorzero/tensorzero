@@ -46,14 +46,14 @@ impl StorageKind {
     fn prefix(&self) -> &str {
         ""
     }
-    pub fn image_path(self, image: &Base64File) -> Result<StoragePath, Error> {
+    pub fn file_path(self, image: &Base64File) -> Result<StoragePath, Error> {
         let hash = blake3::hash(
             image
                 .data
                 .as_ref()
                 .ok_or_else(|| {
                     Error::new(ErrorDetails::InternalError {
-                        message: "Image data should have been present in `StorageKind.image_path`"
+                        message: "Image data should have been present in `StorageKind.file_path`"
                             .to_string(),
                     })
                 })?
@@ -64,6 +64,7 @@ impl StorageKind {
             FileKind::Png => "png",
             FileKind::WebP => "webp",
         };
+        // TODO - change this to 'files' instead of 'images'
         let path = Path::parse(format!(
             "{}observability/images/{hash}.{suffix}",
             self.prefix()

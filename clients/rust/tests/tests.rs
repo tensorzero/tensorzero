@@ -77,11 +77,11 @@ async fn test_conversion() {
         client_input.messages[0].content[0],
         ClientInputMessageContent::Text(_)
     ));
-    let ClientInputMessageContent::Image(Image::Base64 { mime_type, data }) =
+    let ClientInputMessageContent::File(File::Base64 { mime_type, data }) =
         &client_input.messages[0].content[1]
     else {
-        panic!("Expected image");
+        panic!("Expected file");
     };
-    assert_eq!(mime_type, &ImageKind::Png);
+    assert_eq!(mime_type, &FileKind::Png);
     assert!(!data.is_empty());
 }

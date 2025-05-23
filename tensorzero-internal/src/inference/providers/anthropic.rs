@@ -565,17 +565,20 @@ impl<'a> TryFrom<&'a ContentBlock> for Option<FlattenUnknown<'a, AnthropicMessag
                 },
             ))),
             ContentBlock::File(FileWithPath {
-                image,
+                file,
                 storage_path: _,
-            }) => Ok(Some(FlattenUnknown::Normal(
-                AnthropicMessageContent::Image {
-                    source: AnthropicImageSource {
-                        r#type: AnthropicImageType::Base64,
-                        media_type: image.mime_type,
-                        data: image.data()?.clone(),
+            }) => {
+                file.mime_type.require_image(PROVIDER_TYPE)?;
+                Ok(Some(FlattenUnknown::Normal(
+                    AnthropicMessageContent::Image {
+                        source: AnthropicImageSource {
+                            r#type: AnthropicImageType::Base64,
+                            media_type: file.mime_type,
+                            data: file.data()?.clone(),
+                        },
                     },
-                },
-            ))),
+                )))
+            }
             ContentBlock::Thought(thought) => Ok(Some(FlattenUnknown::Normal(
                 AnthropicMessageContent::Thinking {
                     thinking: &thought.text,

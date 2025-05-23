@@ -883,7 +883,7 @@ pub async fn test_url_image_inference_with_provider_and_store(
                             ClientInputMessageContent::Text(TextKind::Text {
                                 text: "Describe the contents of the image".to_string(),
                             }),
-                            ClientInputMessageContent::Image(File::Url {
+                            ClientInputMessageContent::File(File::Url {
                                 url: image_url.clone(),
                             }),
                         ],
@@ -943,7 +943,7 @@ pub async fn test_base64_image_inference_with_provider_and_store(
                             ClientInputMessageContent::Text(TextKind::Text {
                                 text: "Describe the contents of the image".to_string(),
                             }),
-                            ClientInputMessageContent::Image(File::Base64 {
+                            ClientInputMessageContent::File(File::Base64 {
                                 mime_type: FileKind::Png,
                                 data: image_data.clone(),
                             }),
@@ -1687,7 +1687,7 @@ pub async fn check_base64_image_response(
                     text: "Describe the contents of the image".to_string(),
                 }),
                 ContentBlock::File(FileWithPath {
-                    image: Base64File {
+                    file: Base64File {
                         url: None,
                         data: None,
                         mime_type: FileKind::Png,
@@ -1709,7 +1709,7 @@ pub async fn check_base64_image_response(
 
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(
-        raw_request.contains("<TENSORZERO_IMAGE_0>"),
+        raw_request.contains("<TENSORZERO_FILe_0>"),
         "Unexpected raw_request: {raw_request}"
     );
     assert!(
@@ -1837,7 +1837,7 @@ pub async fn check_url_image_response(
                 content: vec![ContentBlock::Text(Text {
                     text: "Describe the contents of the image".to_string(),
                 }), ContentBlock::File(FileWithPath {
-                    image: Base64File {
+                    file: Base64File {
                         url: Some(image_url.clone()),
                         data: None,
                         mime_type: FileKind::Png,
@@ -1862,7 +1862,7 @@ pub async fn check_url_image_response(
 
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(
-        raw_request.contains("<TENSORZERO_IMAGE_0>"),
+        raw_request.contains("<TENSORZERO_FILE_0>"),
         "Unexpected raw_request: {raw_request}"
     );
     assert!(

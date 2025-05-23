@@ -831,7 +831,7 @@ mod tests {
                                 value: json!("What is the name of the capital city of Japan?"),
                             },
                             ResolvedInputMessageContent::File(FileWithPath {
-                                image: Base64File {
+                                file: Base64File {
                                     url: None,
                                     mime_type: FileKind::Png,
                                     data: Some("ABC".to_string()),

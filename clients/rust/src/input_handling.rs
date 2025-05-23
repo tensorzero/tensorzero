@@ -78,17 +78,17 @@ async fn resolved_input_message_content_to_client_input_message_content(
         ResolvedInputMessageContent::Thought(thought) => {
             Ok(ClientInputMessageContent::Thought(thought))
         }
-        ResolvedInputMessageContent::File(image) => {
-            let mime_type = image.image.mime_type;
-            let data = match image.image.data {
+        ResolvedInputMessageContent::File(file) => {
+            let mime_type = file.file.mime_type;
+            let data = match file.file.data {
                 Some(data) => data,
                 None => {
-                    let storage_path = image.storage_path;
-                    fetch_image_data(storage_path, client).await?
+                    let storage_path = file.storage_path;
+                    fetch_file_data(storage_path, client).await?
                 }
             };
 
-            Ok(ClientInputMessageContent::Image(File::Base64 {
+            Ok(ClientInputMessageContent::File(File::Base64 {
                 mime_type,
                 data,
             }))
@@ -110,35 +110,35 @@ pub async fn reresolve_input_for_fine_tuning(
     input: &mut ResolvedInput,
     client: &Client,
 ) -> Result<(), TensorZeroError> {
-    let mut image_fetch_tasks = Vec::new();
+    let mut file_fetch_tasks = Vec::new();
 
     for (message_index, message) in input.messages.iter_mut().enumerate() {
-        // First pass: identify images to fetch and collect tasks
+        // First pass: identify files to fetch and collect tasks
         for (content_index, content) in message.content.iter_mut().enumerate() {
-            if let ResolvedInputMessageContent::File(image_with_path) = content {
-                if image_with_path.image.data.is_none() {
-                    let storage_path = image_with_path.storage_path.clone();
+            if let ResolvedInputMessageContent::File(file_with_path) = content {
+                if file_with_path.file.data.is_none() {
+                    let storage_path = file_with_path.storage_path.clone();
                     let fut = async move {
-                        let result = fetch_image_data(storage_path, client).await?;
+                        let result = fetch_file_data(storage_path, client).await?;
                         Ok((message_index, content_index, result))
                     };
-                    image_fetch_tasks.push(fut);
+                    file_fetch_tasks.push(fut);
                 }
             }
         }
     }
 
     // Execute fetch tasks concurrently for the current message
-    if !image_fetch_tasks.is_empty() {
-        let fetched_data_results = try_join_all(image_fetch_tasks).await?;
+    if !file_fetch_tasks.is_empty() {
+        let fetched_data_results = try_join_all(file_fetch_tasks).await?;
 
         // Second pass: update the content with fetched data
         for (message_index, content_index, fetched_data) in fetched_data_results {
             if let Some(message) = input.messages.get_mut(message_index) {
-                if let Some(ResolvedInputMessageContent::File(image_with_path)) =
+                if let Some(ResolvedInputMessageContent::File(file_with_path)) =
                     message.content.get_mut(content_index)
                 {
-                    image_with_path.image.data = Some(fetched_data);
+                    file_with_path.file.data = Some(fetched_data);
                 } else {
                     return Err(TensorZeroError::Other {
                         source: Error::new(ErrorDetails::Serialization {
@@ -163,7 +163,7 @@ pub async fn reresolve_input_for_fine_tuning(
     Ok(())
 }
 
-async fn fetch_image_data(
+async fn fetch_file_data(
     storage_path: StoragePath,
     client: &Client,
 ) -> Result<String, TensorZeroError> {
@@ -235,7 +235,7 @@ mod tests {
 
         // Create the resolved input message content with an image
         let resolved_content = ResolvedInputMessageContent::File(FileWithPath {
-            image: Base64File {
+            file: Base64File {
                 url: Some(Url::parse("http://notaurl.com").unwrap()),
                 mime_type: FileKind::Jpeg,
                 data: Some(image_data.to_string()),
@@ -253,7 +253,7 @@ mod tests {
 
         // Verify the result
         match result {
-            ClientInputMessageContent::Image(File::Base64 {
+            ClientInputMessageContent::File(File::Base64 {
                 mime_type: result_mime_type,
                 data: result_data,
             }) => {

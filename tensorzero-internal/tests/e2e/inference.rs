@@ -2851,7 +2851,7 @@ async fn test_image_inference_without_object_store() {
                         ClientInputMessageContent::Text(TextKind::Text {
                             text: "Describe the contents of the image".to_string(),
                         }),
-                        ClientInputMessageContent::Image(File::Base64 {
+                        ClientInputMessageContent::File(File::Base64 {
                             mime_type: FileKind::Png,
                             data: BASE64_STANDARD.encode(FERRIS_PNG),
                         }),

@@ -1265,14 +1265,15 @@ fn tensorzero_to_openai_user_messages(
                 }));
             }
             ContentBlock::File(FileWithPath {
-                image,
+                file,
                 storage_path: _,
             }) => {
+                file.mime_type.require_image(PROVIDER_TYPE)?;
                 user_content_blocks.push(OpenAIContentBlock::ImageUrl {
                     image_url: OpenAIImageUrl {
                         // This will only produce an error if we pass in a bad
-                        // `Base64Image` (with missing image data)
-                        url: format!("data:{};base64,{}", image.mime_type, image.data()?),
+                        // `Base64File` (with missing file data)
+                        url: format!("data:{};base64,{}", file.mime_type, file.data()?),
                     },
                 });
             }
@@ -1340,14 +1341,15 @@ fn tensorzero_to_openai_assistant_messages(
                 }));
             }
             ContentBlock::File(FileWithPath {
-                image,
+                file,
                 storage_path: _,
             }) => {
+                file.mime_type.require_image(PROVIDER_TYPE)?;
                 assistant_content_blocks.push(OpenAIContentBlock::ImageUrl {
                     image_url: OpenAIImageUrl {
                         // This will only produce an error if we pass in a bad
-                        // `Base64Image` (with missing image data)
-                        url: format!("data:{};base64,{}", image.mime_type, image.data()?),
+                        // `Base64File` (with missing file data)
+                        url: format!("data:{};base64,{}", file.mime_type, file.data()?),
                     },
                 });
             }

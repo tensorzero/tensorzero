@@ -29,6 +29,25 @@ pub enum FileKind {
     WebP,
 }
 
+impl FileKind {
+    /// Produces an error if this is not an image
+    pub fn require_image(&self, provider_type: &str) -> Result<(), Error> {
+        if !self.is_image() {
+            return Err(Error::new(ErrorDetails::UnsupportedContentBlockType {
+                content_block_type: format!("file: {self}"),
+                provider_type: provider_type.to_string(),
+            }));
+        }
+        Ok(())
+    }
+
+    pub fn is_image(&self) -> bool {
+        match self {
+            FileKind::Jpeg | FileKind::Png | FileKind::WebP => true,
+        }
+    }
+}
+
 impl Display for FileKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -49,7 +68,7 @@ pub struct Base64File {
     pub url: Option<Url>,
     pub mime_type: FileKind,
     // TODO - should we add a wrapper type to enforce base64?
-    #[serde(skip_serializing_if = "skip_serialize_image_data")]
+    #[serde(skip_serializing_if = "skip_serialize_file_data")]
     #[serde(default)]
     // This is normally `Some`, unless it was deserialized from ClickHouse
     // (with the image data stripped out).
@@ -142,12 +161,12 @@ pub fn sanitize_raw_request(input_messages: &[RequestMessage], mut raw_request: 
     for message in input_messages {
         for content in &message.content {
             if let ContentBlock::File(FileWithPath {
-                image,
+                file,
                 storage_path: _,
             }) = content
             {
-                if let Some(data) = &image.data {
-                    raw_request = raw_request.replace(data, &format!("<TENSORZERO_IMAGE_{i}>"));
+                if let Some(data) = &file.data {
+                    raw_request = raw_request.replace(data, &format!("<TENSORZERO_FILE_{i}>"));
                 }
                 i += 1;
             }
@@ -179,7 +198,7 @@ mod tests {
                         role: Role::User,
                         content: vec![
                             ContentBlock::File(FileWithPath {
-                                image: Base64File {
+                                file: Base64File {
                                     url: None,
                                     mime_type: FileKind::Jpeg,
                                     data: Some("my-image-1-data".to_string()),
@@ -191,7 +210,7 @@ mod tests {
                                 },
                             }),
                             ContentBlock::File(FileWithPath {
-                                image: Base64File {
+                                file: Base64File {
                                     url: None,
                                     mime_type: FileKind::Jpeg,
                                     data: Some("my-image-2-data".to_string()),
@@ -203,7 +222,7 @@ mod tests {
                                 },
                             }),
                             ContentBlock::File(FileWithPath {
-                                image: Base64File {
+                                file: Base64File {
                                     url: None,
                                     mime_type: FileKind::Jpeg,
                                     data: Some("my-image-1-data".to_string()),
@@ -220,7 +239,7 @@ mod tests {
                         role: Role::User,
                         content: vec![
                             ContentBlock::File(FileWithPath {
-                                image: Base64File {
+                                file: Base64File {
                                     url: None,
                                     mime_type: FileKind::Jpeg,
                                     data: Some("my-image-3-data".to_string()),
@@ -232,7 +251,7 @@ mod tests {
                                 },
                             }),
                             ContentBlock::File(FileWithPath {
-                                image: Base64File {
+                                file: Base64File {
                                     url: None,
                                     mime_type: FileKind::Jpeg,
                                     data: Some("my-image-1-data".to_string()),
@@ -248,8 +267,8 @@ mod tests {
                 ],
                 "First my-image-1-data then my-image-2-data then my-image-3-data".to_string()
             ),
-            // Each occurrence of the image data should be replaced with the first matching image content block
-            "First <TENSORZERO_IMAGE_0> then <TENSORZERO_IMAGE_1> then <TENSORZERO_IMAGE_3>"
+            // Each occurrence of the file data should be replaced with the first matching file content block
+            "First <TENSORZERO_FILE_0> then <TENSORZERO_FILE_1> then <TENSORZERO_FILE_3>"
                 .to_string()
         );
     }

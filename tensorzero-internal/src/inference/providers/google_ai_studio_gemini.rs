@@ -478,14 +478,17 @@ impl<'a> TryFrom<&'a ContentBlock> for Option<FlattenUnknown<'a, GeminiPart<'a>>
                 })))
             }
             ContentBlock::File(FileWithPath {
-                image,
+                file,
                 storage_path: _,
-            }) => Ok(Some(FlattenUnknown::Normal(GeminiPart::InlineData {
-                inline_data: GeminiInlineData {
-                    mime_type: image.mime_type.to_string(),
-                    data: image.data()?.as_str(),
-                },
-            }))),
+            }) => {
+                file.mime_type.require_image(PROVIDER_TYPE)?;
+                Ok(Some(FlattenUnknown::Normal(GeminiPart::InlineData {
+                    inline_data: GeminiInlineData {
+                        mime_type: file.mime_type.to_string(),
+                        data: file.data()?.as_str(),
+                    },
+                })))
+            }
 
             // We don't support thought blocks being passed in from a request.
             // These are only possible to be passed in in the scenario where the

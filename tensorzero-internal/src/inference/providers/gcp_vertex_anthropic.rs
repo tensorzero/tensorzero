@@ -477,17 +477,20 @@ impl<'a> TryFrom<&'a ContentBlock>
                 },
             ))),
             ContentBlock::File(FileWithPath {
-                image,
+                file,
                 storage_path: _,
-            }) => Ok(Some(FlattenUnknown::Normal(
-                GCPVertexAnthropicMessageContent::Image {
-                    source: AnthropicImageSource {
-                        r#type: AnthropicImageType::Base64,
-                        media_type: image.mime_type,
-                        data: image.data()?.clone(),
+            }) => {
+                file.mime_type.require_image(PROVIDER_TYPE)?;
+                Ok(Some(FlattenUnknown::Normal(
+                    GCPVertexAnthropicMessageContent::Image {
+                        source: AnthropicImageSource {
+                            r#type: AnthropicImageType::Base64,
+                            media_type: file.mime_type,
+                            data: file.data()?.clone(),
+                        },
                     },
-                },
-            ))),
+                )))
+            }
             // We don't support thought blocks being passed in from a request.
             // These are only possible to be passed in in the scenario where the
             // output of a chat completion is used as an input to another model inference,

@@ -38,7 +38,8 @@ pub enum ClientInputMessageContent {
         value: String,
     },
     Thought(Thought),
-    Image(File),
+    #[serde(alias = "image")]
+    File(File),
     /// An unknown content block type, used to allow passing provider-specific
     /// content blocks (e.g. Anthropic's "redacted_thinking") in and out
     /// of TensorZero.
@@ -64,7 +65,7 @@ impl TryFrom<ClientInputMessageContent> for InputMessageContent {
             }
             ClientInputMessageContent::RawText { value } => InputMessageContent::RawText { value },
             ClientInputMessageContent::Thought(thought) => InputMessageContent::Thought(thought),
-            ClientInputMessageContent::Image(image) => InputMessageContent::File(image),
+            ClientInputMessageContent::File(image) => InputMessageContent::File(image),
             ClientInputMessageContent::Unknown {
                 data,
                 model_provider_name,
@@ -140,7 +141,7 @@ pub(super) fn test_client_to_message_content(
         }
         ClientInputMessageContent::RawText { value } => InputMessageContent::RawText { value },
         ClientInputMessageContent::Thought(thought) => InputMessageContent::Thought(thought),
-        ClientInputMessageContent::Image(image) => InputMessageContent::File(image),
+        ClientInputMessageContent::File(image) => InputMessageContent::File(image),
         ClientInputMessageContent::Unknown {
             data,
             model_provider_name,
