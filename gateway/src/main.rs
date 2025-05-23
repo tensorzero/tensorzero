@@ -211,7 +211,7 @@ async fn main() {
         .route("/health", get(endpoints::status::health_handler))
         .route(
             "/datasets/{dataset_name}/datapoints/bulk",
-            post(endpoints::datasets::create_datapoint_handler),
+            post(endpoints::datasets::bulk_insert_datapoints_handler),
         )
         .route(
             "/datasets/{dataset_name}/datapoints/{datapoint_id}",
@@ -227,7 +227,7 @@ async fn main() {
         )
         .route(
             "/internal/datasets/{dataset_name}/datapoints",
-            post(endpoints::datasets::create_from_existing_datapoint_handler),
+            post(endpoints::datasets::insert_from_existing_datapoint_handler),
         )
         .route(
             "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
