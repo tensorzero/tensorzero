@@ -327,13 +327,11 @@ export default function LaunchEvaluationModal({
   useLayoutEffect(() => {
     const storedValues = getFromLocalStorage();
     if (storedValues) {
-      const advancedParamsOpen = storedValues.inference_cache !== "on";
       setInitialFormState({
         ...storedValues,
         // generate a key that we'll use to force re-render the form so that all
         // internal state values are reset when given new data
         renderKey: Date.now().toString(),
-        advancedParamsOpen,
       });
     }
   }, []);
@@ -362,7 +360,6 @@ interface EvaluationsFormValues {
 }
 
 interface EvaluationsFormState extends Partial<EvaluationsFormValues> {
-  advancedParamsOpen: boolean;
   renderKey: string;
 }
 
