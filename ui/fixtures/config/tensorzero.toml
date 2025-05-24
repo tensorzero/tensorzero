@@ -5,6 +5,9 @@ debug = true
 # │                                   MODELS                                   │
 # └────────────────────────────────────────────────────────────────────────────┘
 
+[ui.pdf]
+max_preview_size_mb = 5
+
 [models."gpt-4o-mini-2024-07-18"]
 routing = ["openai"]
 
