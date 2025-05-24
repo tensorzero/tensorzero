@@ -33,7 +33,7 @@ export function FunctionSelector<T extends Record<string, unknown>>({
       render={({ field }) => (
         <FormItem>
           <FormLabel>Function</FormLabel>
-          <div className="grid gap-x-8 gap-y-2 md:grid-cols-2">
+          <div className="w-full max-w-160 space-y-2">
             <Select
               onValueChange={(value: string) => {
                 field.onChange(value);
