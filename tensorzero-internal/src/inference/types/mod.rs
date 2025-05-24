@@ -348,6 +348,8 @@ pub struct RequestMessage {
     pub role: Role,
     pub content: Vec<ContentBlock>,
 }
+// TODO: implement getters for RequestMessage that handle the obnoxious PyO3 limitations
+// around enums like ContentBlock
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub enum FunctionType {

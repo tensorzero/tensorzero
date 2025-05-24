@@ -3221,8 +3221,18 @@ def test_sync_render_inferences(sync_client: TensorZeroGateway):
     print(rendered_inferences[0])
     assert rendered_inferences[0].function_name == "basic_test"
     assert rendered_inferences[0].variant_name == "default"
-    assert rendered_inferences[0].input == {
-        "system": {"assistant_name": "foo"},
-        "messages": [{"role": "user", "content": [{"type": "text", "text": "bar"}]}],
-    }
-    assert rendered_inferences[0].output == [{"type": "text", "text": "Hello world"}]
+    input = rendered_inferences[0].input
+    assert input.system == "You are a helpful and friendly assistant named foo"
+    messages = input.messages
+    assert len(messages) == 1
+    message = messages[0]
+    assert message.role == "user"
+    content = message.content
+    assert len(content) == 1
+    assert content[0].type == "text"
+    assert content[0].text == "bar"
+    output = rendered_inferences[0].output
+    assert isinstance(output, list)
+    assert len(output) == 1
+    assert output[0].type == "text"
+    assert output[0].text == "Hello world"
