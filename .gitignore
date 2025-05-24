@@ -9,7 +9,6 @@ target-rust-analyzer/
 
 *.pdb
 .envrc
-.python-version
 *.env
 
 # VScode settings
