@@ -892,7 +892,7 @@ describe("OpenAI Compatibility", () => {
       },
       seed: 69,
       "tensorzero::cache_options": {
-        max_age_s: 10,
+        max_age_s: 30, // NOTE: This was 10s and we actually occasionally time out on CI.
         enabled: "on",
       },
     });
