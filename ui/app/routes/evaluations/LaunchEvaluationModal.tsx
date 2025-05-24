@@ -319,7 +319,7 @@ function EvaluationForm({
 export default function LaunchEvaluationModal({
   isOpen,
   onClose,
-  datasetNames: dataset_names,
+  datasetNames,
 }: LaunchEvaluationModalProps) {
   const [initialFormState, setInitialFormState] =
     useState<EvaluationsFormState | null>(null);
@@ -345,7 +345,7 @@ export default function LaunchEvaluationModal({
         </DialogHeader>
         <EvaluationForm
           key={initialFormState?.renderKey}
-          datasetNames={dataset_names}
+          datasetNames={datasetNames}
           initialFormState={initialFormState}
         />
       </DialogContent>
