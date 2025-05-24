@@ -374,7 +374,11 @@ function persistToLocalStorage(formData: FormData) {
     if (typeof value !== "string") continue;
     formObject[key] = value;
   }
-  localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(formObject));
+  try {
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(formObject));
+  } catch {
+    // silently ignore errors, e.g. if localStorage is full
+  }
 }
 
 function getFromLocalStorage() {
