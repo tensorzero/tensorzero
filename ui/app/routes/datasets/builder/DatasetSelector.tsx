@@ -5,15 +5,9 @@ import {
   FormItem,
   FormLabel,
 } from "~/components/ui/form";
-import { useState } from "react";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "~/components/ui/popover";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "~/components/ui/button";
-import { Badge } from "~/components/ui/badge";
-import { ChevronsUpDown } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { Dataset, PlusSquare, TableCheck } from "~/components/icons/Icons";
 import {
   Command,
@@ -38,6 +32,7 @@ export function DatasetSelector({
 }) {
   const [open, setOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
+  const commandRef = useRef<HTMLDivElement>(null);
 
   const sortedDatasets = [...dataset_counts].sort(
     (a, b) =>
@@ -52,7 +47,28 @@ export function DatasetSelector({
 
   const handleInputChange = (input: string) => {
     setInputValue(input);
+    if (input.trim() !== "" && !open) {
+      setOpen(true);
+    }
   };
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (commandRef.current && !commandRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+
+    if (open) {
+      document.addEventListener("mousedown", handleClickOutside);
+    } else {
+      document.removeEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [open]);
 
   return (
     <FormField
@@ -60,177 +76,181 @@ export function DatasetSelector({
       name="dataset"
       render={({ field }) => (
         <FormItem className="flex flex-col gap-y-1">
-          <FormLabel>Dataset</FormLabel>
+          <FormLabel className="text-fg-primary font-medium text-sm">Dataset</FormLabel>
           <div className="w-full max-w-160 space-y-2">
-            <Popover open={open} onOpenChange={setOpen}>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  role="combobox"
-                  aria-expanded={open}
-                  className="w-full font-normal"
-                >
-                  <div className="min-w-0 flex-1">
-                    {field.value ? (
-                      (() => {
-                        const existingDataset = dataset_counts.find(
-                          (d) => d.dataset_name === field.value,
+            <div className="relative h-10">
+            <div 
+              ref={commandRef} 
+              className={clsx(
+                "absolute top-0 left-0 right-0 z-50",
+                "rounded-lg border border-border bg-background",
+                "transition-shadow transition-transform ease-out duration-300",
+                open ? "shadow-2xl" : "hover:shadow-xs active:shadow-none active:scale-99 hover:scale-100.5 scale-100 shadow-none"
+              )}
+            >
+              <Button
+                variant="ghost"
+                role="combobox"
+                aria-expanded={open}
+                className="w-full hover:bg-transparent font-normal cursor-pointer group"
+                onClick={() => setOpen(!open)}
+              >
+                <div className="min-w-0 flex-1">
+                  {field.value ? (
+                    (() => {
+                      const existingDataset = dataset_counts.find(
+                        (d) => d.dataset_name === field.value,
+                      );
+                      if (existingDataset) {
+                        return (
+                          <div className="flex w-full min-w-0 flex-1 items-center gap-x-2">
+                            <Dataset
+                              size={16}
+                              className="text-fg-muted shrink-0"
+                            />
+                            <span className="truncate font-mono text-sm">
+                              {existingDataset.dataset_name}
+                            </span>
+                          </div>
                         );
-                        if (existingDataset) {
-                          return (
-                            <div className="flex w-full min-w-0 flex-1 items-center gap-x-2">
-                              <Dataset
-                                size={16}
-                                className="text-fg-muted shrink-0"
-                              />
+                      } else {
+                        return (
+                          <div className="flex w-full items-center gap-x-1">
+                            <div className="flex min-w-0 flex-1 items-center gap-x-1">
+                              <PlusSquare className="h-4 w-4 shrink-0 text-blue-600" />
                               <span className="truncate font-mono text-sm">
-                                {existingDataset.dataset_name}
+                                {field.value}
                               </span>
                             </div>
-                          );
-                        } else {
-                          return (
-                            <div className="flex w-full items-center gap-x-1">
-                              <div className="flex min-w-0 flex-1 items-center gap-x-1">
-                                <PlusSquare className="h-4 w-4 shrink-0 text-blue-600" />
-                                <span className="truncate font-mono text-sm">
-                                  {field.value}
-                                </span>
-                              </div>
-                              <Badge
-                                variant="outline"
-                                className="flex-shrink-0 bg-blue-50 whitespace-nowrap text-blue-600"
-                              >
-                                New Dataset
-                              </Badge>
-                            </div>
-                          );
-                        }
-                      })()
-                    ) : (
-                      <span className="text-fg-muted flex text-sm">
-                        Create or select a dataset...
-                      </span>
-                    )}
-                  </div>
-                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent
-                className="w-[var(--radix-popover-trigger-width)] p-0"
-                align="start"
-              >
-                <Command>
-                  <CommandInput
-                    placeholder="Search or create a dataset..."
-                    value={inputValue}
-                    onValueChange={handleInputChange}
-                  />
-                  <CommandList>
-                    <CommandEmpty className="px-4 py-2 text-sm">
-                      No datasets found.
-                    </CommandEmpty>
-                    {inputValue.trim() && (
-                      <CommandGroup className="border-border border-b">
-                        <CommandItem
-                          onSelect={() => {
-                            field.onChange(inputValue.trim());
-                            setInputValue("");
-                            setOpen(false);
-                            setIsNewDataset(true);
-                          }}
-                          className="flex items-center justify-between"
-                        >
-                          <div className="flex items-center">
-                            <PlusSquare
-                              className={clsx(
-                                "mr-2 h-4 w-4",
-                                inputValue.trim()
-                                  ? "text-blue-600"
-                                  : "text-fg-muted",
-                              )}
-                            />
-                            <span
-                              className={clsx(
-                                "text-sm",
-                                inputValue.trim()
-                                  ? "text-fg-primary font-mono"
-                                  : "text-fg-muted font-normal",
-                              )}
-                            >
-                              {inputValue.trim() ||
-                                "Start typing to create a new dataset..."}
-                            </span>
                           </div>
-                          <span
-                            className={clsx(
-                              "text-bg-primary rounded-md bg-blue-600 px-2 py-1 text-xs",
-                              inputValue.trim() ? "font-medium" : "invisible",
-                            )}
-                          >
-                            Create New Dataset
-                          </span>
-                        </CommandItem>
-                      </CommandGroup>
-                    )}
-
-                    <CommandGroup
-                      heading={
-                        <div className="text-fg-tertiary flex w-full items-center justify-between">
-                          <span>Existing Datasets</span>
-                          <span className="text-right">Rows</span>
-                        </div>
+                        );
                       }
-                    >
-                      {sortedDatasets.map((dataset) => (
-                        <CommandItem
-                          key={dataset.dataset_name}
-                          value={dataset.dataset_name}
-                          onSelect={() => {
-                            field.onChange(dataset.dataset_name);
-                            setInputValue("");
-                            setOpen(false);
-                            setIsNewDataset(false);
-                          }}
-                          className="group flex w-full items-center gap-2"
-                        >
-                          <div className="flex min-w-0 flex-1 items-center gap-2">
-                            {field.value === dataset.dataset_name ? (
-                              <TableCheck
-                                size={16}
-                                className="text-green-700"
-                              />
-                            ) : (
-                              <Dataset size={16} className="text-fg-muted" />
+                    })()
+                  ) : (
+                    <span className="text-fg-secondary flex text-sm">
+                      Create or select a dataset
+                    </span>
+                  )}
+                </div>
+                <ChevronDown className={clsx("ml-2 h-4 w-4 shrink-0 text-fg-muted group-hover:text-fg-tertiary transition-colors transition-transform ease-out duration-300", open ? "-rotate-180" : "rotate-0")} />
+              </Button>
+
+              <Command
+                className={clsx(
+                  "border-t border-border rounded-none bg-transparent overflow-hidden transition-all ease-out duration-300",
+                  open ? "max-h-[500px] opacity-100" : "max-h-0 opacity-0"
+                )}
+              >
+                <CommandInput
+                  placeholder="Dataset name..."
+                  value={inputValue}
+                  onValueChange={handleInputChange}
+                />
+                <CommandList>
+                  <CommandEmpty className="px-4 py-2 text-sm">
+                    No datasets found.
+                  </CommandEmpty>
+                  {inputValue.trim() && (
+                    <CommandGroup>
+                      <CommandItem
+                        onSelect={() => {
+                          field.onChange(inputValue.trim());
+                          setInputValue("");
+                          setOpen(false);
+                          setIsNewDataset(true);
+                        }}
+                        className="flex items-center justify-between"
+                      >
+                        <div className="flex items-center">
+                          <PlusSquare
+                            className={clsx(
+                              "mr-2 h-4 w-4",
+                              inputValue.trim()
+                                ? "text-blue-600"
+                                : "text-fg-muted",
                             )}
-                            <span
-                              className={clsx(
-                                "group-hover:text-fg-primary truncate font-mono",
-                                field.value === dataset.dataset_name
-                                  ? "font-medium"
-                                  : "font-normal",
-                              )}
-                            >
-                              {dataset.dataset_name}
-                            </span>
-                          </div>
+                          />
                           <span
                             className={clsx(
-                              "min-w-8 flex-shrink-0 text-right text-sm whitespace-nowrap",
-                              field.value === dataset.dataset_name
-                                ? "text-fg-secondary font-medium"
-                                : "text-fg-tertiary font-normal",
+                              "text-sm",
+                              inputValue.trim()
+                                ? "text-fg-primary font-mono"
+                                : "text-fg-muted font-normal",
                             )}
                           >
-                            {dataset.count.toLocaleString()}
+                            {inputValue.trim() ||
+                              "Start typing to create a new dataset..."}
                           </span>
-                        </CommandItem>
-                      ))}
+                        </div>
+                        <span
+                          className={clsx(
+                            "text-bg-primary rounded-md bg-blue-600 px-2 py-1 text-xs",
+                            inputValue.trim() ? "font-medium" : "invisible",
+                          )}
+                        >
+                          Create New Dataset
+                        </span>
+                      </CommandItem>
                     </CommandGroup>
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
+                  )}
+
+                  <CommandGroup
+                    heading={
+                      <div className="text-fg-tertiary flex w-full items-center justify-between">
+                        <span>Existing Datasets</span>
+                        <span className="text-right">Rows</span>
+                      </div>
+                    }
+                  >
+                    {sortedDatasets.map((dataset) => (
+                      <CommandItem
+                        key={dataset.dataset_name}
+                        value={dataset.dataset_name}
+                        onSelect={() => {
+                          field.onChange(dataset.dataset_name);
+                          setInputValue("");
+                          setOpen(false);
+                          setIsNewDataset(false);
+                        }}
+                        className="group flex w-full items-center gap-2"
+                      >
+                        <div className="flex min-w-0 flex-1 items-center gap-2">
+                          {field.value === dataset.dataset_name ? (
+                            <TableCheck
+                              size={16}
+                              className="text-green-700"
+                            />
+                          ) : (
+                            <Dataset size={16} className="text-fg-muted" />
+                          )}
+                          <span
+                            className={clsx(
+                              "group-hover:text-fg-primary truncate font-mono",
+                              field.value === dataset.dataset_name
+                                ? "font-medium"
+                                : "font-normal",
+                            )}
+                          >
+                            {dataset.dataset_name}
+                          </span>
+                        </div>
+                        <span
+                          className={clsx(
+                            "min-w-8 flex-shrink-0 text-right text-sm whitespace-nowrap",
+                            field.value === dataset.dataset_name
+                              ? "text-fg-secondary font-medium"
+                              : "text-fg-tertiary font-normal",
+                          )}
+                        >
+                          {dataset.count.toLocaleString()}
+                        </span>
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </div>
+            </div>
           </div>
           {(() => {
             if (field.value) {
