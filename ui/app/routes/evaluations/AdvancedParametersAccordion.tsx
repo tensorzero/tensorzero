@@ -1,4 +1,3 @@
-import { useState } from "react";
 import {
   Accordion,
   AccordionContent,
@@ -12,14 +11,16 @@ import type { InferenceCacheSetting } from "~/utils/evaluations.server";
 export interface AdvancedParametersAccordionProps {
   inference_cache: InferenceCacheSetting;
   setInferenceCache: (inference_cache: InferenceCacheSetting) => void;
+  isOpen: boolean;
+  setIsOpen: (open: boolean) => void;
 }
 
 export function AdvancedParametersAccordion({
   inference_cache,
   setInferenceCache,
+  isOpen,
+  setIsOpen,
 }: AdvancedParametersAccordionProps) {
-  const [isOpen, setIsOpen] = useState(false);
-
   return (
     <Accordion
       type="single"

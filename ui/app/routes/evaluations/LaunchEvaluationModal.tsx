@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useLayoutEffect, useReducer, useState } from "react";
 import { useFetcher, Link } from "react-router";
 import { Button } from "~/components/ui/button";
 import {
@@ -39,17 +39,17 @@ import type { InferenceCacheSetting } from "~/utils/evaluations.server";
 interface LaunchEvaluationModalProps {
   isOpen: boolean;
   onClose: () => void;
-  dataset_names: string[];
+  datasetNames: string[];
 }
 
 interface DatasetSelectorProps {
-  dataset_names: string[];
+  datasetNames: string[];
   selectedDatasetName: string | null;
   setSelectedDatasetName: (value: string | null) => void;
 }
 
 function DatasetSelector({
-  dataset_names,
+  datasetNames,
   selectedDatasetName,
   setSelectedDatasetName,
 }: DatasetSelectorProps) {
@@ -57,10 +57,10 @@ function DatasetSelector({
   const [datasetInputValue, setDatasetInputValue] = useState("");
 
   const filteredDatasets = datasetInputValue
-    ? dataset_names.filter((name) =>
+    ? datasetNames.filter((name) =>
         name.toLowerCase().includes(datasetInputValue.toLowerCase()),
       )
-    : dataset_names;
+    : datasetNames;
 
   return (
     <>
@@ -127,22 +127,121 @@ function DatasetSelector({
   );
 }
 
-function EvaluationForm({ dataset_names }: { dataset_names: string[] }) {
+interface EvaluationsFormValues {
+  dataset_name: string | null;
+  evaluation_name: string | null;
+  variant_name: string | null;
+  concurrency_limit: string;
+  inference_cache: InferenceCacheSetting;
+}
+
+interface EvaluationsFormState extends EvaluationsFormValues {
+  advancedParamsOpen: boolean;
+  _lastAction: "sync" | "user" | null;
+}
+
+type FieldUpdateAction<K extends keyof EvaluationsFormValues> = {
+  type: "UPDATE_FIELD";
+  fieldName: K;
+  value: EvaluationsFormValues[K];
+};
+
+type FormUpdateAction =
+  | {
+      [K in keyof EvaluationsFormValues]: FieldUpdateAction<K>;
+    }[keyof EvaluationsFormValues]
+  | { type: "SYNC_FORM_STATE"; state: Partial<EvaluationsFormState> }
+  | { type: "TOGGLE_ADVANCED_PARAMS"; open?: boolean }
+  | { type: "USER_ACTION" };
+
+function EvaluationForm({ datasetNames }: { datasetNames: string[] }) {
   const fetcher = useFetcher();
   const config = useConfig();
   const evaluation_names = Object.keys(config.evaluations);
-  const [selectedEvaluationName, setSelectedEvaluationName] = useState<
-    string | null
-  >(null);
-  const [selectedDatasetName, setSelectedDatasetName] = useState<string | null>(
-    null,
+
+  const [formState, formUpdate] = useReducer(
+    function evaluationsFormReducer(
+      state: EvaluationsFormState,
+      update: FormUpdateAction,
+    ): EvaluationsFormState {
+      switch (update.type) {
+        case "UPDATE_FIELD":
+          // HACK: There is a bug in Radix Select that appears to call its
+          // onValueChange handler with an old value in some cases when state
+          // updates are batched. As a result, 'UPDATE_FIELD' may be called with
+          // the field's original value after 'SYNC_FORM_STATE' triggers its
+          // update, resulting in the state being immediately reset to its
+          // previous value. Using `_lastAction` to track that we just synced
+          // the state and ignoring the following updates to work around it.
+          if (state._lastAction === "sync") {
+            return { ...state, _lastAction: null };
+          }
+
+          if (state[update.fieldName] === update.value) {
+            return state;
+          }
+
+          return {
+            ...state,
+            _lastAction: null,
+            [update.fieldName]: update.value,
+            // Reset variant selection when evaluation changes only as a result
+            // of the user's action
+            variant_name:
+              update.fieldName === "evaluation_name" &&
+              state._lastAction === "user"
+                ? null
+                : state.variant_name,
+          };
+
+        case "SYNC_FORM_STATE": {
+          const hasAdvancedParams = "inference_cache" in update.state;
+          return {
+            ...state,
+            ...update.state,
+            advancedParamsOpen: hasAdvancedParams
+              ? true
+              : state.advancedParamsOpen,
+            _lastAction: "sync",
+          };
+        }
+        case "TOGGLE_ADVANCED_PARAMS": {
+          const open = update.open ?? !state.advancedParamsOpen;
+          return { ...state, advancedParamsOpen: open };
+        }
+        case "USER_ACTION":
+          return { ...state, _lastAction: "user" };
+        default:
+          return state;
+      }
+    },
+    {
+      dataset_name: null,
+      evaluation_name: null,
+      variant_name: null,
+      concurrency_limit: "",
+      inference_cache: "on",
+      advancedParamsOpen: false,
+      _lastAction: null,
+    } as EvaluationsFormState,
   );
-  const [selectedVariantName, setSelectedVariantName] = useState<string | null>(
-    null,
-  );
-  const [concurrencyLimit, setConcurrencyLimit] = useState<string>("5");
-  const [inferenceCache, setInferenceCache] =
-    useState<InferenceCacheSetting>("on");
+
+  const {
+    dataset_name: selectedDatasetName,
+    evaluation_name: selectedEvaluationName,
+    variant_name: selectedVariantName,
+    concurrency_limit: concurrencyLimit,
+    inference_cache: inferenceCache,
+    advancedParamsOpen,
+  } = formState;
+
+  // useLayoutEffect to update fields before paint to avoid flicker of old state
+  useLayoutEffect(() => {
+    const storedValues = getFromLocalStorage();
+    if (storedValues) {
+      formUpdate({ type: "SYNC_FORM_STATE", state: storedValues });
+    }
+  }, []);
 
   let count = null;
   let isLoading = false;
@@ -166,7 +265,13 @@ function EvaluationForm({ dataset_names }: { dataset_names: string[] }) {
     concurrencyLimit !== "";
 
   return (
-    <fetcher.Form method="post">
+    <fetcher.Form
+      method="post"
+      onSubmit={(event) => {
+        const formData = new FormData(event.currentTarget);
+        persistToLocalStorage(formData);
+      }}
+    >
       <div className="mt-4">
         <label
           htmlFor="evaluation_name"
@@ -177,12 +282,16 @@ function EvaluationForm({ dataset_names }: { dataset_names: string[] }) {
       </div>
       <Select
         name="evaluation_name"
+        value={selectedEvaluationName || ""}
         onValueChange={(value) => {
-          setSelectedEvaluationName(value);
-          setSelectedVariantName(null); // Reset variant selection when evaluation changes
+          formUpdate({
+            type: "UPDATE_FIELD",
+            fieldName: "evaluation_name",
+            value,
+          });
         }}
       >
-        <SelectTrigger>
+        <SelectTrigger onFocus={() => formUpdate({ type: "USER_ACTION" })}>
           <SelectValue placeholder="Select an evaluation" />
         </SelectTrigger>
         <SelectContent>
@@ -203,9 +312,15 @@ function EvaluationForm({ dataset_names }: { dataset_names: string[] }) {
       </div>
 
       <DatasetSelector
-        dataset_names={dataset_names}
+        datasetNames={datasetNames}
         selectedDatasetName={selectedDatasetName}
-        setSelectedDatasetName={setSelectedDatasetName}
+        setSelectedDatasetName={(value) => {
+          formUpdate({
+            type: "UPDATE_FIELD",
+            fieldName: "dataset_name",
+            value,
+          });
+        }}
       />
 
       <div className="text-muted-foreground mt-2 mb-1 text-xs">
@@ -241,7 +356,14 @@ function EvaluationForm({ dataset_names }: { dataset_names: string[] }) {
       <Select
         name="variant_name"
         disabled={!selectedEvaluationName}
-        onValueChange={(value) => setSelectedVariantName(value)}
+        value={selectedVariantName || ""}
+        onValueChange={(value) => {
+          formUpdate({
+            type: "UPDATE_FIELD",
+            fieldName: "variant_name",
+            value,
+          });
+        }}
       >
         <SelectTrigger>
           <SelectValue placeholder="Select a variant" />
@@ -277,7 +399,16 @@ function EvaluationForm({ dataset_names }: { dataset_names: string[] }) {
           name="concurrency_limit"
           min="1"
           value={concurrencyLimit}
-          onChange={(e) => setConcurrencyLimit(e.target.value)}
+          onChange={(event) => {
+            const value = event.target.value;
+            if (value === "" || Number.isInteger(Number(value))) {
+              formUpdate({
+                type: "UPDATE_FIELD",
+                fieldName: "concurrency_limit",
+                value,
+              });
+            }
+          }}
           className="border-input bg-background w-full rounded-md border px-3 py-2 text-sm"
           required
         />
@@ -285,7 +416,20 @@ function EvaluationForm({ dataset_names }: { dataset_names: string[] }) {
       <div className="mt-4">
         <AdvancedParametersAccordion
           inference_cache={inferenceCache}
-          setInferenceCache={setInferenceCache}
+          setInferenceCache={(value) => {
+            formUpdate({
+              type: "UPDATE_FIELD",
+              fieldName: "inference_cache",
+              value,
+            });
+          }}
+          isOpen={advancedParamsOpen}
+          setIsOpen={(open) => {
+            formUpdate({
+              type: "TOGGLE_ADVANCED_PARAMS",
+              open,
+            });
+          }}
         />
         <input type="hidden" name="inference_cache" value={inferenceCache} />
       </div>
@@ -301,7 +445,7 @@ function EvaluationForm({ dataset_names }: { dataset_names: string[] }) {
 export default function LaunchEvaluationModal({
   isOpen,
   onClose,
-  dataset_names,
+  datasetNames,
 }: LaunchEvaluationModalProps) {
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -310,8 +454,39 @@ export default function LaunchEvaluationModal({
           <DialogTitle>Launch Evaluation</DialogTitle>
         </DialogHeader>
 
-        <EvaluationForm dataset_names={dataset_names} />
+        <EvaluationForm datasetNames={datasetNames} />
       </DialogContent>
     </Dialog>
   );
+}
+
+const LOCAL_STORAGE_KEY = "tensorzero:evaluationForm";
+
+function persistToLocalStorage(formData: FormData) {
+  const formObject: Record<string, string> = {};
+  for (const [key, value] of formData.entries()) {
+    if (typeof value !== "string") continue;
+    formObject[key] = value;
+  }
+  localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(formObject));
+}
+
+// TODO: consider using zod to parse and validate data
+function getFromLocalStorage() {
+  const values = localStorage.getItem(LOCAL_STORAGE_KEY);
+  if (!values) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(values);
+    if (parsed == null || typeof parsed !== "object") {
+      localStorage.removeItem(LOCAL_STORAGE_KEY);
+      return null;
+    }
+  } catch {
+    localStorage.removeItem(LOCAL_STORAGE_KEY);
+    return;
+  }
+
+  // TODO: add validation
+  return parsed as Partial<EvaluationsFormState>;
 }
