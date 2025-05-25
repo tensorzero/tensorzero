@@ -759,7 +759,7 @@ pub async fn test_start_simple_image_batch_inference_request_with_provider(
         "What kind of animal is in this image?".to_string().into()
     );
     assert!(
-        matches!(input_messages[0].content[1], ContentBlock::Image(_)),
+        matches!(input_messages[0].content[1], ContentBlock::File(_)),
         "Unexpected input: {input_messages:?}"
     );
     assert_eq!(input_messages[0].content.len(), 2);

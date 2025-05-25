@@ -279,8 +279,9 @@ export function content_block_to_openai_message(
         content: content.result,
       };
     case "image":
+    case "file":
       throw new Error(
-        "Image content is not supported for OpenAI fine-tuning. We have an open issue for this feature at https://github.com/tensorzero/tensorzero/issues/1132.",
+        "File content is not supported for OpenAI fine-tuning. We have an open issue for this feature at https://github.com/tensorzero/tensorzero/issues/1132.",
       );
     case "raw_text":
       return {

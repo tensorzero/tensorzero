@@ -267,8 +267,12 @@ export function ImageMessage({ url, downloadName }: ImageMessageProps) {
   );
 }
 
+interface ImageErrorMessageProps {  
+  error: string;
+}
+
 // Image Error Message component
-export function ImageErrorMessage() {
+export function ImageErrorMessage({ error }: ImageErrorMessageProps) {
   return (
     <div className="flex flex-col gap-1.5">
       <Label
@@ -279,7 +283,7 @@ export function ImageErrorMessage() {
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-2">
           <ImageOff className="text-fg-muted h-4 w-4" />
           <span className="text-fg-tertiary text-center text-xs font-medium">
-            Failed to retrieve image
+            {error}
           </span>
         </div>
       </div>

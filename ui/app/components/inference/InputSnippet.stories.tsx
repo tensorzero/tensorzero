@@ -366,8 +366,8 @@ export const ImageInput: Story = {
               value: "Do the images share any common features?",
             },
             {
-              type: "image",
-              image: {
+              type: "file",
+              file: {
                 url: await getBase64Image(
                   "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
                 ),
@@ -385,8 +385,8 @@ export const ImageInput: Story = {
               },
             },
             {
-              type: "image",
-              image: {
+              type: "file",
+              file: {
                 // This is a one pixel by one pixel orange image
                 url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAAXNSR0IArs4c6QAAAA1JREFUGFdj+O/P8B8ABe0CTsv8mHgAAAAASUVORK5CYII=",
                 mime_type: "image/png",
@@ -418,11 +418,11 @@ export const ImageInputError: Story = {
               value: "Do the images share any common features?",
             },
             {
-              type: "image_error",
+              type: "file_error",
               error: "Failed to get object: Internal Server Error",
             },
             {
-              type: "image_error",
+              type: "file_error",
               error: "Failed to get object: Timeout",
             },
           ],

@@ -331,7 +331,7 @@ impl InferenceProvider for DummyProvider {
                     .iter()
                     .flat_map(|m| {
                         m.content.iter().flat_map(|block| {
-                            if let ContentBlock::Image(image) = block {
+                            if let ContentBlock::File(image) = block {
                                 Some(image.clone())
                             } else {
                                 None

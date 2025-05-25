@@ -12,7 +12,48 @@ test("should show the inference detail page", async ({ page }) => {
   await expect(page.getByText("error", { exact: false })).not.toBeVisible();
 });
 
-test("should display inferences with image content", async ({ page }) => {
+// Tests an inference stored under the 'file' content block in the db
+test("should display inferences with new image content", async ({ page }) => {
+  await page.goto(
+    "/observability/inferences/0196fdd6-25f1-72ba-8dc0-be7a0d9df2c5",
+  );
+  // Assert that there are 2 images displayed and they render
+  const images = page.locator("img");
+  await expect(images).toHaveCount(2);
+
+  // Verify both images are visible in the viewport
+  const firstImage = images.nth(0);
+  const secondImage = images.nth(1);
+  await expect(firstImage).toBeVisible();
+  await expect(secondImage).toBeVisible();
+
+  // Verify images have loaded correctly
+  await expect(firstImage).toHaveJSProperty("complete", true);
+  await expect(secondImage).toHaveJSProperty("complete", true);
+
+  // Wait for the page to load
+  await page.waitForTimeout(500);
+
+  // Verify that images display in the modelInference section too
+  // Click on the modelInference section
+  await page.getByText("0196fdd7-5287-78a4-b36b-dcafd5d541fd").click();
+  // Wait for 500ms
+  await page.waitForTimeout(500);
+  // Assert that the images are visible
+  const newImages = page.locator("img");
+  await expect(newImages).toHaveCount(4);
+  const firstNewImage = newImages.nth(0);
+  const secondNewImage = newImages.nth(1);
+  const thirdNewImage = newImages.nth(2);
+  const fourthNewImage = newImages.nth(3);
+  await expect(firstNewImage).toBeVisible();
+  await expect(secondNewImage).toBeVisible();
+  await expect(thirdNewImage).toBeVisible();
+  await expect(fourthNewImage).toBeVisible();
+});
+
+// Tests an inference stored under the 'image' content block in the db
+test("should display inferences with old image content", async ({ page }) => {
   await page.goto(
     "/observability/inferences/0196372f-1b4b-7013-a446-511e312a3c30",
   );

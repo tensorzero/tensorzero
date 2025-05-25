@@ -26,7 +26,7 @@ use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse
 use crate::inference::types::batch::{
     ProviderBatchInferenceOutput, ProviderBatchInferenceResponse,
 };
-use crate::inference::types::resolved_input::ImageWithPath;
+use crate::inference::types::resolved_input::FileWithPath;
 use crate::inference::types::{
     batch::{BatchStatus, StartBatchProviderInferenceResponse},
     ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
@@ -1264,15 +1264,16 @@ fn tensorzero_to_openai_user_messages(
                     tool_call_id: &tool_result.id,
                 }));
             }
-            ContentBlock::Image(ImageWithPath {
-                image,
+            ContentBlock::File(FileWithPath {
+                file,
                 storage_path: _,
             }) => {
+                file.mime_type.require_image(PROVIDER_TYPE)?;
                 user_content_blocks.push(OpenAIContentBlock::ImageUrl {
                     image_url: OpenAIImageUrl {
                         // This will only produce an error if we pass in a bad
-                        // `Base64Image` (with missing image data)
-                        url: format!("data:{};base64,{}", image.mime_type, image.data()?),
+                        // `Base64File` (with missing file data)
+                        url: format!("data:{};base64,{}", file.mime_type, file.data()?),
                     },
                 });
             }
@@ -1339,15 +1340,16 @@ fn tensorzero_to_openai_assistant_messages(
                     message: "Tool results are not supported in assistant messages".to_string(),
                 }));
             }
-            ContentBlock::Image(ImageWithPath {
-                image,
+            ContentBlock::File(FileWithPath {
+                file,
                 storage_path: _,
             }) => {
+                file.mime_type.require_image(PROVIDER_TYPE)?;
                 assistant_content_blocks.push(OpenAIContentBlock::ImageUrl {
                     image_url: OpenAIImageUrl {
                         // This will only produce an error if we pass in a bad
-                        // `Base64Image` (with missing image data)
-                        url: format!("data:{};base64,{}", image.mime_type, image.data()?),
+                        // `Base64File` (with missing file data)
+                        url: format!("data:{};base64,{}", file.mime_type, file.data()?),
                     },
                 });
             }

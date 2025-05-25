@@ -74,17 +74,24 @@ function renderContentBlock(block: ResolvedInputMessageContent, index: number) {
         />
       );
 
-    case "image":
-      return (
-        <ImageMessage
-          key={index}
-          url={block.image.url}
-          downloadName={`tensorzero_${block.storage_path.path}`}
-        />
-      );
-
-    case "image_error":
-      return <ImageErrorMessage key={index} />;
+    case "file":
+      if (block.file.mime_type.startsWith("image/")) {
+        return (
+          <ImageMessage
+            key={index}
+            url={block.file.url}
+              downloadName={`tensorzero_${block.storage_path.path}`}
+            />
+        );
+      } else {
+        return (
+          <div key={index}>
+            <ImageErrorMessage key={index} error={`Unsupported file type: ${block.file.mime_type}`} />
+          </div>
+        )
+      }
+    case "file_error":
+      return <ImageErrorMessage key={index} error="Failed to retrieve image" />;
 
     default:
       return null;

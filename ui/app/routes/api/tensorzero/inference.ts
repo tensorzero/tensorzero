@@ -2,7 +2,7 @@ import { ZodError } from "zod";
 import { InferenceRequestSchema } from "~/utils/tensorzero";
 import { tensorZeroClient } from "~/utils/tensorzero.server";
 import type {
-  ResolvedImageContent,
+  ResolvedFileContent,
   ResolvedInput,
   ResolvedInputMessageContent,
 } from "~/utils/clickhouse/common";
@@ -99,20 +99,20 @@ function resolvedInputMessageContentToTensorZeroContent(
     case "tool_call":
     case "tool_result":
       return content;
-    case "image":
-      return resolvedImageContentToTensorZeroImage(content);
-    case "image_error":
+    case "file":
+      return resolvedFileContentToTensorZeroFile(content);
+    case "file_error":
       throw new Error("Can't convert image error to tensorzero content");
   }
 }
 
-function resolvedImageContentToTensorZeroImage(
-  content: ResolvedImageContent,
+function resolvedFileContentToTensorZeroFile(
+  content: ResolvedFileContent,
 ): TensorZeroImage {
-  const data = content.image.url.split(",")[1];
+  const data = content.file.url.split(",")[1];
   return {
     type: "image",
-    mime_type: content.image.mime_type,
+    mime_type: content.file.mime_type,
     data,
   };
 }
