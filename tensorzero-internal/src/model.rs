@@ -799,24 +799,34 @@ impl UninitializedProviderConfig {
                 location,
                 project_id,
                 credential_location: api_key_location,
-            } => ProviderConfig::GCPVertexAnthropic(GCPVertexAnthropicProvider::new(
-                model_id,
-                location,
-                project_id,
-                api_key_location,
-            )?),
+            } => ProviderConfig::GCPVertexAnthropic(tokio::task::block_in_place(move || {
+                tokio::runtime::Handle::current().block_on(async {
+                    GCPVertexAnthropicProvider::new(
+                        model_id,
+                        location,
+                        project_id,
+                        api_key_location,
+                    )
+                    .await
+                })
+            })?),
             UninitializedProviderConfig::GCPVertexGemini {
                 model_id,
                 location,
                 project_id,
                 credential_location: api_key_location,
-            } => ProviderConfig::GCPVertexGemini(GCPVertexGeminiProvider::new(
-                model_id,
-                location,
-                project_id,
-                api_key_location,
-                provider_types,
-            )?),
+            } => ProviderConfig::GCPVertexGemini(tokio::task::block_in_place(move || {
+                tokio::runtime::Handle::current().block_on(async {
+                    GCPVertexGeminiProvider::new(
+                        model_id,
+                        location,
+                        project_id,
+                        api_key_location,
+                        provider_types,
+                    )
+                    .await
+                })
+            })?),
             UninitializedProviderConfig::GoogleAIStudioGemini {
                 model_name,
                 api_key_location,
@@ -1241,6 +1251,8 @@ pub enum CredentialLocation {
     Dynamic(String),
     /// Direct path to a credential file
     Path(String),
+    /// Use a provider-specific SDK to determine credentials
+    Sdk,
     None,
 }
 
@@ -1258,6 +1270,8 @@ impl<'de> Deserialize<'de> for CredentialLocation {
             Ok(CredentialLocation::Dynamic(inner.to_string()))
         } else if let Some(inner) = s.strip_prefix("path::") {
             Ok(CredentialLocation::Path(inner.to_string()))
+        } else if s == "sdk" {
+            Ok(CredentialLocation::Sdk)
         } else if s == "none" {
             Ok(CredentialLocation::None)
         } else {
@@ -1273,6 +1287,7 @@ pub enum Credential {
     Static(SecretString),
     FileContents(SecretString),
     Dynamic(String),
+    Sdk,
     None,
     Missing,
 }
@@ -1432,6 +1447,7 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
                 }
             },
             CredentialLocation::Dynamic(key_name) => Ok(Credential::Dynamic(key_name.clone())),
+            CredentialLocation::Sdk => Ok(Credential::Sdk),
             CredentialLocation::None => Ok(Credential::None),
         }
     }
