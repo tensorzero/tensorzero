@@ -1,0 +1,9 @@
+clickhouse-connect
+google-cloud-aiplatform
+ipykernel
+minijinja
+notebook
+numpy
+pandas
+tensorzero
+toml
