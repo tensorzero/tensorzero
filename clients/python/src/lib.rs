@@ -1402,6 +1402,28 @@ impl AsyncTensorZeroGateway {
         })
     }
 
+    #[pyo3(signature = (*, inference_examples, variants))]
+    fn experimental_render_inferences<'a>(
+        this: PyRef<'a, Self>,
+        inference_examples: Vec<Bound<'a, PyAny>>,
+        variants: HashMap<String, String>,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        let client = this.as_super().client.clone();
+        let inference_examples = inference_examples
+            .iter()
+            .map(|x| deserialize_from_pyobj(this.py(), x))
+            .collect::<Result<Vec<_>, _>>()?;
+        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
+            let res = client
+                .experimental_render_inferences(inference_examples, variants)
+                .await;
+            Python::with_gil(|py| match res {
+                Ok(inferences) => Ok(PyList::new(py, inferences)?.unbind()),
+                Err(e) => Err(convert_error(py, e)),
+            })
+        })
+    }
+
     /// For internal use only - do not call.
     // This is a helper function used by `optimization-server` to get the template config
     // when applying a new prompt template during fine-tuning
