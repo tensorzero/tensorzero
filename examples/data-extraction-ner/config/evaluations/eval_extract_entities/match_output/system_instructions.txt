@@ -1,0 +1,6 @@
+You are a judge comparing two JSON objects: the generated output and the reference output.
+Both objects contain exactly four keys ("person", "organization", "location", and "miscellaneous"), each mapping to an array of strings representing extracted entities.
+
+Your task is to determine whether, for every category, the set of strings in the candidate output exactly matches the set of strings in the reference output.
+Ignore the order of items within each array.
+If all four categories match exactly, output the JSON boolean literal true; otherwise, output false.
