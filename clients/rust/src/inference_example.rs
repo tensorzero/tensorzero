@@ -6,6 +6,9 @@ use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyList};
 use serde::Deserialize;
 use serde_json::Value;
+use tensorzero_internal::inference::types::pyo3_helpers::{
+    content_block_output_to_python, serialize_to_dict, uuid_to_python,
+};
 use tensorzero_internal::{
     config_parser::Config,
     error::{Error, ErrorDetails},
@@ -77,6 +80,7 @@ impl InferenceExample {
 /// This is constructed by rendering an InferenceExample with a variant for messages
 /// and by resolving all network resources (e.g. images).
 #[cfg_attr(feature = "pyo3", pyclass)]
+#[derive(Debug, PartialEq)]
 pub struct RenderedStoredInference {
     #[cfg(feature = "pyo3")]
     #[pyo3(get, set)]
@@ -90,18 +94,40 @@ pub struct RenderedStoredInference {
     pub output: Vec<ContentBlockOutput>,
     pub episode_id: Uuid,
     pub inference_id: Uuid,
+    #[cfg(feature = "pyo3")]
+    #[pyo3(get, set)]
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
     pub output_schema: Option<Value>,
 }
 
-// #[cfg(feature = "pyo3")]
-// #[pymethods]
-// impl RenderedStoredInference {
-//     #[getter]
-//     pub fn get_output(&self) -> PyResult<PyList> {
-//         todo!()
-//     }
-// }
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl RenderedStoredInference {
+    #[getter]
+    pub fn get_output<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let output = self
+            .output
+            .iter()
+            .map(|x| content_block_output_to_python(py, x))
+            .collect::<PyResult<Vec<_>>>()?;
+        PyList::new(py, output).map(|list| list.into_any())
+    }
+
+    #[getter]
+    pub fn get_episode_id<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        uuid_to_python(py, self.episode_id)
+    }
+
+    #[getter]
+    pub fn get_inference_id<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        uuid_to_python(py, self.inference_id)
+    }
+
+    #[getter]
+    pub fn get_output_schema<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        serialize_to_dict(py, self.output_schema.clone()).map(|x| x.into_bound(py))
+    }
+}
 
 /// Convert an InferenceExample's input to a ModelInput.
 /// `variants` should be a map from function name to variant name, i.e. what variant to use for a particular function

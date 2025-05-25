@@ -10,7 +10,10 @@ pub use image::{Base64Image, Image, ImageKind};
 use itertools::Itertools;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
+#[cfg(feature = "pyo3")]
+use pyo3::types::PyAny;
 use pyo3::types::PyList;
+use pyo3_helpers::content_block_to_python;
 use resolved_input::ImageWithPath;
 pub use resolved_input::{ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent};
 use serde::{Deserialize, Deserializer, Serialize};
@@ -45,6 +48,8 @@ pub mod batch;
 pub mod extra_body;
 pub mod extra_headers;
 pub mod image;
+#[cfg(feature = "pyo3")]
+pub mod pyo3_helpers;
 pub mod resolved_input;
 pub mod storage;
 
@@ -240,7 +245,7 @@ impl<'de> Deserialize<'de> for TextKind {
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
-#[cfg_attr(feature = "pyo3", pyclass(get_all))]
+#[cfg_attr(feature = "pyo3", pyclass)]
 pub enum Role {
     User,
     Assistant,
@@ -357,8 +362,18 @@ pub struct RequestMessage {
 #[pymethods]
 impl RequestMessage {
     #[getter]
-    fn get_content(&self) -> PyResult<PyList> {
-        Ok(self.content.clone())
+    fn get_content<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let content = self
+            .content
+            .iter()
+            .map(|c| content_block_to_python(py, c))
+            .collect::<PyResult<Vec<_>>>()?;
+        PyList::new(py, content).map(|list| list.into_any())
+    }
+
+    #[getter]
+    fn get_role(&self) -> String {
+        self.role.to_string()
     }
 }
 

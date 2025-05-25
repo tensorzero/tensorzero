@@ -7,8 +7,8 @@ from typing import Any, Dict, List, Literal, Optional, Union, cast
 from uuid import UUID
 
 import httpx
-from typing_extensions import NotRequired, TypedDict
 import uuid_utils
+from typing_extensions import NotRequired, TypedDict
 
 
 @dataclass
@@ -19,8 +19,6 @@ class Usage:
 
 @dataclass
 class ContentBlock(ABC):
-    type: str
-
     @abstractmethod
     def to_dict(self) -> Dict[str, Any]:
         pass
@@ -30,6 +28,7 @@ class ContentBlock(ABC):
 class Text(ContentBlock):
     text: Optional[str] = None
     arguments: Optional[Any] = None
+    type: str = "text"
 
     def __post_init__(self):
         if self.text is None and self.arguments is None:
@@ -61,28 +60,28 @@ class Text(ContentBlock):
 
 
 @dataclass
-class RawText:
-    # This class does not subclass ContentBlock since it cannot be output by the API.
+class RawText(ContentBlock):
     value: str
+    type: str = "raw_text"
 
     def to_dict(self) -> Dict[str, Any]:
         return dict(type="raw_text", value=self.value)
 
 
 @dataclass
-class ImageBase64:
-    # This class does not subclass ContentBlock since it cannot be output by the API.
+class ImageBase64(ContentBlock):
     data: str
     mime_type: str
+    type: str = "image"
 
     def to_dict(self) -> Dict[str, Any]:
         return dict(type="image", data=self.data, mime_type=self.mime_type)
 
 
 @dataclass
-class ImageUrl:
-    # This class does not subclass ContentBlock since it cannot be output by the API.
+class ImageUrl(ContentBlock):
     url: str
+    type: str = "image"
 
     def to_dict(self) -> Dict[str, Any]:
         return dict(type="image", url=self.url)
@@ -95,6 +94,7 @@ class ToolCall(ContentBlock):
     raw_name: str
     arguments: Optional[Dict[str, Any]] = None
     name: Optional[str] = None
+    type: str = "tool_call"
 
     def to_dict(self) -> Dict[str, Any]:
         d: Dict[str, Any] = {
@@ -113,20 +113,33 @@ class ToolCall(ContentBlock):
 @dataclass
 class Thought(ContentBlock):
     text: str
+    type: str = "thought"
 
     def to_dict(self) -> Dict[str, Any]:
         return dict(type="thought", value=self.text)
 
 
 @dataclass
-class ToolResult:
-    # This class does not subclass ContentBlock since it cannot be output by the API.
+class ToolResult(ContentBlock):
     name: str
     result: str
     id: str
+    type: str = "tool_result"
 
     def to_dict(self) -> Dict[str, Any]:
         return dict(type="tool_result", name=self.name, result=self.result, id=self.id)
+
+
+@dataclass
+class UnknownContentBlock(ContentBlock):
+    data: Any
+    model_provider_name: Optional[str] = None
+    type: str = "unknown"
+
+    def to_dict(self) -> Dict[str, Any]:
+        return dict(
+            type="unknown", data=self.data, model_provider_name=self.model_provider_name
+        )
 
 
 class FinishReason(str, Enum):
@@ -224,6 +237,10 @@ def parse_content_block(block: Dict[str, Any]) -> ContentBlock:
         )
     elif block_type == "thought":
         return Thought(text=block["text"], type=block_type)
+    elif block_type == "unknown":
+        return UnknownContentBlock(
+            data=block["data"], model_provider_name=block.get("model_provider_name")
+        )
     else:
         raise ValueError(f"Unknown content block type: {block}")
 
@@ -233,7 +250,7 @@ def parse_content_block(block: Dict[str, Any]) -> ContentBlock:
 
 @dataclass
 class ContentBlockChunk:
-    type: str
+    pass
 
 
 @dataclass
@@ -242,6 +259,7 @@ class TextChunk(ContentBlockChunk):
     # this `id` will be used to disambiguate them
     id: str
     text: str
+    type: str = "text"
 
 
 @dataclass
@@ -251,12 +269,14 @@ class ToolCallChunk(ContentBlockChunk):
     # `raw_arguments` will come as partial JSON
     raw_arguments: str
     raw_name: str
+    type: str = "tool_call"
 
 
 @dataclass
 class ThoughtChunk(ContentBlockChunk):
     text: str
     id: str
+    type: str = "thought"
 
 
 @dataclass
@@ -532,6 +552,7 @@ class ToDictEncoder(JSONEncoder):
             return str(o)
         return o.to_dict()
 
+
 class ChatInferenceExample(TypedDict):
     type: Literal["chat"]
     function_name: str
@@ -542,6 +563,7 @@ class ChatInferenceExample(TypedDict):
     inference_id: UUID
     tool_params: ToolParams
 
+
 class JsonInferenceExample(TypedDict):
     type: Literal["json"]
     function_name: str
@@ -551,5 +573,6 @@ class JsonInferenceExample(TypedDict):
     episode_id: UUID
     inference_id: UUID
     output_schema: Any
+
 
 InferenceExample = Union[ChatInferenceExample, JsonInferenceExample]

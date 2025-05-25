@@ -3195,6 +3195,9 @@ def test_sync_multiple_text_blocks(sync_client: TensorZeroGateway):
         },
     )
 
+
+# TODO: pull these rendering tests into a separate test file that only uses the embedded client
+# TODO: test every python type and field that we need to support.
 def test_sync_render_inferences(sync_client: TensorZeroGateway):
     rendered_inferences = sync_client.experimental_render_inferences(
         inference_examples=[
@@ -3204,7 +3207,9 @@ def test_sync_render_inferences(sync_client: TensorZeroGateway):
                 variant_name="default",
                 input={
                     "system": {"assistant_name": "foo"},
-                    "messages": [{"role": "user", "content": [{"type": "text", "value": "bar"}]}],
+                    "messages": [
+                        {"role": "user", "content": [{"type": "text", "value": "bar"}]}
+                    ],
                 },
                 output=[{"type": "text", "text": "Hello world"}],
                 episode_id=uuid7(),
@@ -3236,3 +3241,8 @@ def test_sync_render_inferences(sync_client: TensorZeroGateway):
     assert len(output) == 1
     assert output[0].type == "text"
     assert output[0].text == "Hello world"
+    assert isinstance(rendered_inferences[0].episode_id, UUID)
+    assert isinstance(rendered_inferences[0].inference_id, UUID)
+    tool_params = rendered_inferences[0].tool_params
+    assert tool_params.tools_available == []
+    assert rendered_inferences[0].output_schema is None

@@ -21,9 +21,12 @@ use pyo3::{
     IntoPyObjectExt,
 };
 use python_helpers::{
-    deserialize_from_pyobj, parse_datapoint, parse_dynamic_evaluation_run_episode_response,
+    parse_datapoint, parse_dynamic_evaluation_run_episode_response,
     parse_dynamic_evaluation_run_response, parse_feedback_response, parse_inference_chunk,
-    parse_inference_response, parse_tool, python_uuid_to_uuid, serialize_to_dict,
+    parse_inference_response, parse_tool, python_uuid_to_uuid,
+};
+use tensorzero_internal::inference::types::pyo3_helpers::{
+    deserialize_from_pyobj, serialize_to_dict, tensorzero_internal_error, JSON_DUMPS, JSON_LOADS,
 };
 use tensorzero_internal::{
     endpoints::{
@@ -47,10 +50,7 @@ use url::Url;
 mod internal;
 mod python_helpers;
 
-pub(crate) static JSON_LOADS: GILOnceCell<Py<PyAny>> = GILOnceCell::new();
-pub(crate) static JSON_DUMPS: GILOnceCell<Py<PyAny>> = GILOnceCell::new();
 pub(crate) static TENSORZERO_HTTP_ERROR: GILOnceCell<Py<PyAny>> = GILOnceCell::new();
-pub(crate) static TENSORZERO_INTERNAL_ERROR: GILOnceCell<Py<PyAny>> = GILOnceCell::new();
 
 #[pymodule]
 fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -1501,15 +1501,6 @@ fn tensorzero_error(py: Python<'_>, status_code: u16, text: Option<String>) -> P
         Ok(err.unbind())
     })?;
     Ok(PyErr::from_value(err.bind(py).call1((status_code, text))?))
-}
-
-fn tensorzero_internal_error(py: Python<'_>, msg: &str) -> PyResult<PyErr> {
-    let err = TENSORZERO_INTERNAL_ERROR.get_or_try_init::<_, PyErr>(py, || {
-        let self_module = PyModule::import(py, "tensorzero")?;
-        let err: Bound<'_, PyAny> = self_module.getattr("TensorZeroInternalError")?;
-        Ok(err.unbind())
-    })?;
-    Ok(PyErr::from_value(err.bind(py).call1((msg,))?))
 }
 
 fn warn_no_config(py: Python<'_>, config: Option<&str>) -> PyResult<()> {

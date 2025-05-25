@@ -5,6 +5,8 @@ use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+#[cfg(feature = "pyo3")]
+use crate::inference::types::pyo3_helpers::serialize_to_dict;
 use crate::{
     error::{Error, ErrorDetails},
     jsonschema_util::{DynamicJSONSchema, StaticJSONSchema},
@@ -25,11 +27,26 @@ use crate::{
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "pyo3", pyclass)]
 pub struct Tool {
+    #[cfg(feature = "pyo3")]
+    #[pyo3(get, set)]
     pub description: String,
     pub parameters: Value,
+    #[cfg(feature = "pyo3")]
+    #[pyo3(get, set)]
     pub name: String,
+    #[cfg(feature = "pyo3")]
+    #[pyo3(get, set)]
     #[serde(default)]
     pub strict: bool,
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl Tool {
+    #[getter]
+    pub fn get_parameters<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        serialize_to_dict(py, self.parameters.clone()).map(|x| x.into_bound(py))
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -78,16 +95,6 @@ pub struct DynamicImplicitToolConfig {
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct ToolCallConfig {
     pub tools_available: Vec<ToolConfig>,
-    pub tool_choice: ToolChoice,
-    pub parallel_tool_calls: Option<bool>,
-}
-
-/// ToolCallConfigDatabaseInsert is a lightweight version of ToolCallConfig that can be serialized and cloned.
-/// It is used to insert the ToolCallConfig into the database.
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
-#[cfg_attr(feature = "pyo3", pyclass)]
-pub struct ToolCallConfigDatabaseInsert {
-    pub tools_available: Vec<Tool>,
     pub tool_choice: ToolChoice,
     pub parallel_tool_calls: Option<bool>,
 }
@@ -184,6 +191,21 @@ impl ToolCallConfig {
             ToolConfig::DynamicImplicit(_config) => false,
         })
     }
+}
+
+/// ToolCallConfigDatabaseInsert is a lightweight version of ToolCallConfig that can be serialized and cloned.
+/// It is used to insert the ToolCallConfig into the database.
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(feature = "pyo3", pyclass)]
+pub struct ToolCallConfigDatabaseInsert {
+    #[cfg(feature = "pyo3")]
+    #[pyo3(get, set)]
+    pub tools_available: Vec<Tool>,
+    pub tool_choice: ToolChoice,
+    // TODO: decide what we want the Python interface to be for ToolChoice
+    // This is complicated because ToolChoice is an enum with some simple arms and some
+    // struct arms. We would likely need to land on one of the serde options for enums (tagged?)
+    pub parallel_tool_calls: Option<bool>,
 }
 
 /// A struct to hold the dynamic tool parameters passed at inference time.
