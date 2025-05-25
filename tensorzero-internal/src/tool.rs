@@ -205,6 +205,8 @@ pub struct ToolCallConfigDatabaseInsert {
     // TODO: decide what we want the Python interface to be for ToolChoice
     // This is complicated because ToolChoice is an enum with some simple arms and some
     // struct arms. We would likely need to land on one of the serde options for enums (tagged?)
+    #[cfg(feature = "pyo3")]
+    #[pyo3(get, set)]
     pub parallel_tool_calls: Option<bool>,
 }
 

@@ -1,6 +1,6 @@
 import warnings
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from enum import Enum
 from json import JSONEncoder
 from typing import Any, Dict, List, Literal, Optional, Union, cast
@@ -550,11 +550,14 @@ class ToDictEncoder(JSONEncoder):
     def default(self, o: Any) -> Any:
         if isinstance(o, UUID) or isinstance(o, uuid_utils.UUID):
             return str(o)
-        return o.to_dict()
+        try:
+            return o.to_dict()
+        except Exception:
+            return asdict(o)
 
 
-class ChatInferenceExample(TypedDict):
-    type: Literal["chat"]
+@dataclass
+class ChatInferenceExample:
     function_name: str
     variant_name: str
     input: InferenceInput
@@ -562,10 +565,11 @@ class ChatInferenceExample(TypedDict):
     episode_id: UUID
     inference_id: UUID
     tool_params: ToolParams
+    type: Literal["chat"] = "chat"
 
 
-class JsonInferenceExample(TypedDict):
-    type: Literal["json"]
+@dataclass
+class JsonInferenceExample:
     function_name: str
     variant_name: str
     input: InferenceInput
@@ -573,6 +577,7 @@ class JsonInferenceExample(TypedDict):
     episode_id: UUID
     inference_id: UUID
     output_schema: Any
+    type: Literal["json"] = "json"
 
 
 InferenceExample = Union[ChatInferenceExample, JsonInferenceExample]

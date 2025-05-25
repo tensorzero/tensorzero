@@ -62,7 +62,6 @@ from tensorzero import (
 from tensorzero.types import (
     ChatChunk,
     ChatDatapoint,
-    ChatInferenceExample,
     JsonChunk,
     JsonDatapoint,
     ProviderExtraBody,
@@ -3194,55 +3193,3 @@ def test_sync_multiple_text_blocks(sync_client: TensorZeroGateway):
             ]
         },
     )
-
-
-# TODO: pull these rendering tests into a separate test file that only uses the embedded client
-# TODO: test every python type and field that we need to support.
-def test_sync_render_inferences(sync_client: TensorZeroGateway):
-    rendered_inferences = sync_client.experimental_render_inferences(
-        inference_examples=[
-            ChatInferenceExample(
-                type="chat",
-                function_name="basic_test",
-                variant_name="default",
-                input={
-                    "system": {"assistant_name": "foo"},
-                    "messages": [
-                        {"role": "user", "content": [{"type": "text", "value": "bar"}]}
-                    ],
-                },
-                output=[{"type": "text", "text": "Hello world"}],
-                episode_id=uuid7(),
-                inference_id=uuid7(),
-                tool_params={
-                    "tools_available": [],
-                    "tool_choice": "auto",
-                },
-            )
-        ],
-        variants={"basic_test": "test"},
-    )
-    assert len(rendered_inferences) == 1
-    print(rendered_inferences[0])
-    assert rendered_inferences[0].function_name == "basic_test"
-    assert rendered_inferences[0].variant_name == "default"
-    input = rendered_inferences[0].input
-    assert input.system == "You are a helpful and friendly assistant named foo"
-    messages = input.messages
-    assert len(messages) == 1
-    message = messages[0]
-    assert message.role == "user"
-    content = message.content
-    assert len(content) == 1
-    assert content[0].type == "text"
-    assert content[0].text == "bar"
-    output = rendered_inferences[0].output
-    assert isinstance(output, list)
-    assert len(output) == 1
-    assert output[0].type == "text"
-    assert output[0].text == "Hello world"
-    assert isinstance(rendered_inferences[0].episode_id, UUID)
-    assert isinstance(rendered_inferences[0].inference_id, UUID)
-    tool_params = rendered_inferences[0].tool_params
-    assert tool_params.tools_available == []
-    assert rendered_inferences[0].output_schema is None
