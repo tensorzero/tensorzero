@@ -390,6 +390,13 @@ pub struct ModelInferenceRequest<'a> {
     pub extra_cache_key: Option<String>,
 }
 
+/// For use in rendering for optimization purposes
+#[derive(Debug, PartialEq)]
+pub struct ModelInput {
+    pub system: Option<String>,
+    pub messages: Vec<RequestMessage>,
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum FinishReason {
@@ -1253,6 +1260,25 @@ impl From<ContentBlockChatOutput> for ContentBlock {
                 data,
                 model_provider_name,
             } => ContentBlock::Unknown {
+                data,
+                model_provider_name,
+            },
+        }
+    }
+}
+
+impl From<ContentBlockChatOutput> for ContentBlockOutput {
+    fn from(output: ContentBlockChatOutput) -> Self {
+        match output {
+            ContentBlockChatOutput::Text(text) => ContentBlockOutput::Text(text),
+            ContentBlockChatOutput::ToolCall(tool_call) => {
+                ContentBlockOutput::ToolCall(tool_call.into())
+            }
+            ContentBlockChatOutput::Thought(thought) => ContentBlockOutput::Thought(thought),
+            ContentBlockChatOutput::Unknown {
+                data,
+                model_provider_name,
+            } => ContentBlockOutput::Unknown {
                 data,
                 model_provider_name,
             },

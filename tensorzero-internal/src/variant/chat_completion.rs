@@ -15,7 +15,7 @@ use crate::inference::types::{
     ModelInferenceRequest, RequestMessage, Role,
 };
 use crate::inference::types::{
-    InferenceResult, ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent,
+    InferenceResult, ModelInput, ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent,
 };
 use crate::jsonschema_util::StaticJSONSchema;
 use crate::minijinja_util::TemplateConfig;
@@ -193,6 +193,31 @@ impl ChatCompletionConfig {
             extra_headers,
         )
     }
+}
+
+/// Prepare a ModelInput using the same machinery as is used by core TensorZero to prepare
+/// chat completions requests.
+pub fn prepare_model_input(
+    system: Option<&Value>,
+    messages: &[ResolvedInputMessage],
+    templates: &TemplateConfig,
+    system_template_name: Option<&str>,
+    user_template_name: Option<&str>,
+    assistant_template_name: Option<&str>,
+) -> Result<ModelInput, Error> {
+    let system = prepare_system_message(system, templates, system_template_name)?;
+    let mut templated_messages = Vec::with_capacity(messages.len());
+    for message in messages.iter() {
+        let template_name = match message.role {
+            Role::Assistant => assistant_template_name,
+            Role::User => user_template_name,
+        };
+        templated_messages.push(prepare_request_message(message, templates, template_name)?);
+    }
+    Ok(ModelInput {
+        system,
+        messages: templated_messages,
+    })
 }
 
 fn prepare_system_message(

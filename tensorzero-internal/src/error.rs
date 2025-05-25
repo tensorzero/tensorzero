@@ -190,6 +190,10 @@ pub enum ErrorDetails {
         raw_request: Option<String>,
         raw_response: Option<String>,
     },
+    InvalidClientMode {
+        mode: String,
+        message: String,
+    },
     ObjectStoreWrite {
         message: String,
         path: StoragePath,
@@ -252,6 +256,10 @@ pub enum ErrorDetails {
     InvalidTool {
         message: String,
     },
+    InvalidVariantForOptimization {
+        function_name: String,
+        variant_name: String,
+    },
     InvalidUuid {
         raw_uuid: String,
     },
@@ -265,6 +273,9 @@ pub enum ErrorDetails {
         messages: Vec<String>,
         data: Box<Value>,
         schema: Box<Value>,
+    },
+    MissingFunctionInVariants {
+        function_name: String,
     },
     MiniJinjaEnvironment {
         message: String,
@@ -405,11 +416,13 @@ impl ErrorDetails {
             ErrorDetails::InvalidBaseUrl { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidBatchParams { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidCandidate { .. } => tracing::Level::ERROR,
+            ErrorDetails::InvalidClientMode { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidDiclConfig { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidDatasetName { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidDynamicEvaluationRun { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidTensorzeroUuid { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidFunctionVariants { .. } => tracing::Level::ERROR,
+            ErrorDetails::InvalidVariantForOptimization { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidMessage { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidModel { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidModelProvider { .. } => tracing::Level::ERROR,
@@ -426,6 +439,7 @@ impl ErrorDetails {
             ErrorDetails::MiniJinjaTemplate { .. } => tracing::Level::ERROR,
             ErrorDetails::MiniJinjaTemplateMissing { .. } => tracing::Level::ERROR,
             ErrorDetails::MiniJinjaTemplateRender { .. } => tracing::Level::ERROR,
+            ErrorDetails::MissingFunctionInVariants { .. } => tracing::Level::ERROR,
             ErrorDetails::MissingBatchInferenceResponse { .. } => tracing::Level::WARN,
             ErrorDetails::ModelProvidersExhausted { .. } => tracing::Level::ERROR,
             ErrorDetails::ModelValidation { .. } => tracing::Level::ERROR,
@@ -485,6 +499,7 @@ impl ErrorDetails {
             ErrorDetails::InferenceNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::InferenceServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InferenceTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
+            ErrorDetails::InvalidClientMode { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidTensorzeroUuid { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidUuid { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InputValidation { .. } => StatusCode::BAD_REQUEST,
@@ -505,6 +520,7 @@ impl ErrorDetails {
             ErrorDetails::InvalidRequest { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidTemplatePath => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidTool { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::InvalidVariantForOptimization { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::JsonRequest { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::JsonSchema { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::JsonSchemaValidation { .. } => StatusCode::BAD_REQUEST,
@@ -512,7 +528,8 @@ impl ErrorDetails {
             ErrorDetails::MiniJinjaTemplate { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::MiniJinjaTemplateMissing { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::MiniJinjaTemplateRender { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::MissingBatchInferenceResponse { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::MissingBatchInferenceResponse { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::MissingFunctionInVariants { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ModelProvidersExhausted { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ModelValidation { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::Observability { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -742,6 +759,9 @@ impl std::fmt::Display for ErrorDetails {
                     "Invalid candidate variant as a component of variant {variant_name}: {message}"
                 )
             }
+            ErrorDetails::InvalidClientMode { mode, message } => {
+                write!(f, "Invalid client mode: {mode}. {message}")
+            }
             ErrorDetails::InvalidDiclConfig { message } => {
                 write!(f, "Invalid dynamic in-context learning config: {message}. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new")
             }
@@ -783,6 +803,12 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::InvalidTool { message } => write!(f, "{message}"),
             ErrorDetails::InvalidUuid { raw_uuid } => {
                 write!(f, "Failed to parse UUID as v7: {raw_uuid}")
+            }
+            ErrorDetails::InvalidVariantForOptimization {
+                function_name,
+                variant_name,
+            } => {
+                write!(f, "Invalid variant for optimization: {variant_name} for function: {function_name}")
             }
             ErrorDetails::JsonRequest { message } => write!(f, "{message}"),
             ErrorDetails::JsonSchema { message } => write!(f, "{message}"),
@@ -831,6 +857,9 @@ impl std::fmt::Display for ErrorDetails {
                 ),
                 None => write!(f, "Missing batch inference response"),
             },
+            ErrorDetails::MissingFunctionInVariants { function_name } => {
+                write!(f, "Missing function in variants: {function_name}")
+            }
             ErrorDetails::ModelProvidersExhausted { provider_errors } => {
                 write!(
                     f,

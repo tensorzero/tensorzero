@@ -1,8 +1,12 @@
 use std::{
-    cmp::Ordering, env, fmt::Display, future::Future, path::PathBuf, sync::Arc, time::Duration,
+    cmp::Ordering, collections::HashMap, env, fmt::Display, future::Future, path::PathBuf,
+    sync::Arc, time::Duration,
 };
 
+use futures::future::join_all;
 use git::GitInfo;
+use inference_example::render_stored_inference;
+use input_handling::reresolve_input_for_fine_tuning;
 use reqwest::header::HeaderMap;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use serde_json::Value;
@@ -12,7 +16,8 @@ use tensorzero_internal::{
     endpoints::{
         datasets::InsertDatapointParams,
         dynamic_evaluation_run::{
-            DynamicEvaluationRunEpisodeParams, DynamicEvaluationRunEpisodeResponse,
+            validate_variant_pins, DynamicEvaluationRunEpisodeParams,
+            DynamicEvaluationRunEpisodeResponse,
         },
         validate_tags,
     },
@@ -28,8 +33,11 @@ use uuid::Uuid;
 mod client_inference_params;
 mod client_input;
 mod git;
+mod inference_example;
+pub use inference_example::{
+    ChatInferenceExample, InferenceExample, JsonInferenceExample, RenderedStoredInference,
+};
 pub mod input_handling;
-
 pub use client_inference_params::{ClientInferenceParams, ClientSecretString};
 pub use client_input::{ClientInput, ClientInputMessage, ClientInputMessageContent};
 
@@ -734,6 +742,60 @@ impl Client {
                 .await?)
             }
         }
+    }
+
+    /// There are two things that need to happen in this function:
+    /// 1. We need to resolve all network resources (e.g. images) in the inference examples.
+    /// 2. We need to prepare all messages into "simple" messages that have been templated for a particular variant.
+    ///    To do this, we need to know what variant to use for each function that might appear in the data.
+    ///
+    /// IMPORTANT: For now, this function drops datapoints which are bad, e.g. ones where templating fails, the function
+    ///            has no variant specified, or where the process of downloading resources fails.
+    ///            In future we will make this behavior configurable by the caller.
+    pub async fn experimental_render_inferences(
+        &self,
+        mut inference_examples: Vec<InferenceExample>,
+        variants: HashMap<String, String>, // Map from function name to variant name
+    ) -> Result<Vec<RenderedStoredInference>, TensorZeroError> {
+        let ClientMode::EmbeddedGateway { gateway, .. } = &self.mode else {
+            return Err(TensorZeroError::Other {
+                source: tensorzero_internal::error::Error::new(ErrorDetails::InvalidClientMode {
+                    mode: "Http".to_string(),
+                    message: "This function is only available in EmbeddedGateway mode".to_string(),
+                })
+                .into(),
+            });
+        };
+        validate_variant_pins(&variants, &gateway.state.config)
+            .map_err(|e| TensorZeroError::Other { source: e.into() })?;
+        let resolution_futures = inference_examples.iter_mut().map(|inference_example| {
+            // Create a future for each call to reresolve_input_for_fine_tuning.
+            // This function modifies inference_example.input_mut() in place.
+            // `self` (the client) is passed by immutable reference.
+            reresolve_input_for_fine_tuning(inference_example.input_mut(), self)
+        });
+
+        // Await all futures concurrently.
+        // For now, we drop the errors here.
+        // They will log on construction in the future.
+        // TODO: make it configurable whether to drop or error on failures.
+        let results = join_all(resolution_futures).await;
+        // For each result that is an Err, delete the matching inference_example from inference_examples.
+        // Iterate in reverse to avoid issues with shifting indices when removing elements.
+        for i in (0..results.len()).rev() {
+            if results[i].is_err() {
+                inference_examples.remove(i);
+            }
+        }
+
+        let rendered_inference_examples = inference_examples.into_iter().map(|inference_example| {
+            render_stored_inference(inference_example, &gateway.state.config, &variants)
+        });
+
+        // Drop all Err results and return the Ok results
+        Ok(rendered_inference_examples
+            .filter_map(|result| result.ok())
+            .collect())
     }
 
     async fn parse_http_response<T: serde::de::DeserializeOwned>(
