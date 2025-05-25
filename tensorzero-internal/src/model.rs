@@ -48,8 +48,9 @@ use crate::{
             deepseek::DeepSeekProvider, fireworks::FireworksProvider,
             gcp_vertex_anthropic::GCPVertexAnthropicProvider,
             gcp_vertex_gemini::GCPVertexGeminiProvider, mistral::MistralProvider,
-            openai::OpenAIProvider, provider_trait::InferenceProvider, together::TogetherProvider,
-            vllm::VLLMProvider, xai::XAIProvider,
+            openai::OpenAIProvider, openrouter::OpenRouterProvider,
+            provider_trait::InferenceProvider, together::TogetherProvider, vllm::VLLMProvider,
+            xai::XAIProvider,
         },
         types::{ModelInferenceRequest, ModelInferenceResponse, ProviderInferenceResponse},
     },
@@ -511,6 +512,7 @@ impl ModelProvider {
             ProviderConfig::Hyperbolic(_) => "hyperbolic",
             ProviderConfig::Mistral(_) => "mistral",
             ProviderConfig::OpenAI(_) => "openai",
+            ProviderConfig::OpenRouter(_) => "openrouter",
             ProviderConfig::Together(_) => "together",
             ProviderConfig::VLLM(_) => "vllm",
             ProviderConfig::XAI(_) => "xai",
@@ -537,6 +539,7 @@ impl ModelProvider {
             ProviderConfig::Hyperbolic(provider) => Some(provider.model_name()),
             ProviderConfig::Mistral(provider) => Some(provider.model_name()),
             ProviderConfig::OpenAI(provider) => Some(provider.model_name()),
+            ProviderConfig::OpenRouter(provider) => Some(provider.model_name()),
             ProviderConfig::Together(provider) => Some(provider.model_name()),
             ProviderConfig::VLLM(provider) => Some(provider.model_name()),
             ProviderConfig::XAI(provider) => Some(provider.model_name()),
@@ -581,6 +584,7 @@ pub enum ProviderConfig {
     Hyperbolic(HyperbolicProvider),
     Mistral(MistralProvider),
     OpenAI(OpenAIProvider),
+    OpenRouter(OpenRouterProvider),
     SGLang(SGLangProvider),
     TGI(TGIProvider),
     Together(TogetherProvider),
@@ -672,6 +676,11 @@ pub(super) enum UninitializedProviderConfig {
         api_key_location: Option<CredentialLocation>,
     },
     OpenAI {
+        model_name: String,
+        api_base: Option<Url>,
+        api_key_location: Option<CredentialLocation>,
+    },
+    OpenRouter {
         model_name: String,
         api_base: Option<Url>,
         api_key_location: Option<CredentialLocation>,
@@ -839,6 +848,15 @@ impl UninitializedProviderConfig {
             } => {
                 ProviderConfig::OpenAI(OpenAIProvider::new(model_name, api_base, api_key_location)?)
             }
+            UninitializedProviderConfig::OpenRouter {
+                model_name,
+                api_base,
+                api_key_location,
+            } => ProviderConfig::OpenRouter(OpenRouterProvider::new(
+                model_name,
+                api_base,
+                api_key_location,
+            )?),
             UninitializedProviderConfig::Together {
                 model_name,
                 api_key_location,
@@ -927,6 +945,9 @@ impl ModelProvider {
             ProviderConfig::OpenAI(provider) => {
                 provider.infer(request, client, api_keys, self).await
             }
+            ProviderConfig::OpenRouter(provider) => {
+                provider.infer(request, client, api_keys, self).await
+            }
             ProviderConfig::Together(provider) => {
                 provider.infer(request, client, api_keys, self).await
             }
@@ -995,6 +1016,9 @@ impl ModelProvider {
                 provider.infer_stream(request, client, api_keys, self).await
             }
             ProviderConfig::OpenAI(provider) => {
+                provider.infer_stream(request, client, api_keys, self).await
+            }
+            ProviderConfig::OpenRouter(provider) => {
                 provider.infer_stream(request, client, api_keys, self).await
             }
             ProviderConfig::Together(provider) => {
@@ -1086,6 +1110,11 @@ impl ModelProvider {
                     .await
             }
             ProviderConfig::OpenAI(provider) => {
+                provider
+                    .start_batch_inference(requests, client, api_keys)
+                    .await
+            }
+            ProviderConfig::OpenRouter(provider) => {
                 provider
                     .start_batch_inference(requests, client, api_keys)
                     .await
@@ -1187,6 +1216,11 @@ impl ModelProvider {
                     .await
             }
             ProviderConfig::OpenAI(provider) => {
+                provider
+                    .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
+                    .await
+            }
+            ProviderConfig::OpenRouter(provider) => {
                 provider
                     .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
                     .await
@@ -1445,6 +1479,7 @@ const SHORTHAND_MODEL_PREFIXES: &[&str] = &[
     "hyperbolic::",
     "mistral::",
     "openai::",
+    "openrouter::",
     "together::",
     "xai::",
     "dummy::",
