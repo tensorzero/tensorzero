@@ -10,6 +10,7 @@ pub use image::{Base64Image, Image, ImageKind};
 use itertools::Itertools;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
+use pyo3::types::PyList;
 use resolved_input::ImageWithPath;
 pub use resolved_input::{ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent};
 use serde::{Deserialize, Deserializer, Serialize};
@@ -345,11 +346,21 @@ pub enum ContentBlockChatOutput {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "pyo3", pyclass)]
 pub struct RequestMessage {
+    #[pyo3(get, set)]
     pub role: Role,
     pub content: Vec<ContentBlock>,
 }
 // TODO: implement getters for RequestMessage that handle the obnoxious PyO3 limitations
 // around enums like ContentBlock
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl RequestMessage {
+    #[getter]
+    fn get_content(&self) -> PyResult<PyList> {
+        Ok(self.content.clone())
+    }
+}
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub enum FunctionType {
