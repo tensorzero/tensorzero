@@ -53,17 +53,24 @@ pub fn uuid_elapsed(uuid: &Uuid) -> Result<Duration, Error> {
         }
         .into());
     }
-    let (seconds, subsec_nanos) = uuid
-        .get_timestamp()
-        .ok_or_else(|| {
-            // Since this can be OK (e.g. for dynamic evaluation runs), we don't log here.
-            Error::new_without_logging(ErrorDetails::InvalidUuid {
-                raw_uuid: uuid.to_string(),
-            })
-        })?
-        .to_unix();
-    let uuid_system_time =
+
+    let uuid_timestamp = uuid.get_timestamp().ok_or_else(|| {
+        // Since this can be OK (e.g. for dynamic evaluation runs), we don't log here.
+        Error::new_without_logging(ErrorDetails::InvalidUuid {
+            raw_uuid: uuid.to_string(),
+        })
+    })?;
+
+    let (seconds, subsec_nanos) = uuid_timestamp.to_unix();
+
+    let mut uuid_system_time =
         UNIX_EPOCH + Duration::from_secs(seconds) + Duration::from_nanos(subsec_nanos as u64);
+
+    // If the UUID crosses the dynamic evaluation threshold, we have to remove that offset
+    if compare_timestamps(DYNAMIC_EVALUATION_THRESHOLD, uuid_timestamp) {
+        uuid_system_time -= DYNAMIC_EVALUATION_OFFSET;
+    }
+
     let elapsed = match SystemTime::now().duration_since(uuid_system_time) {
         Ok(duration) => duration,
         Err(e) => {
@@ -196,6 +203,27 @@ mod tests {
             &ErrorDetails::UuidInFuture {
                 raw_uuid: future_uuid.to_string(),
             }
+        );
+
+        // Test dynamic evaluation threshold
+        let now_for_dynamic = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("Time went backwards");
+        let five_seconds_ago_dynamic_offset = now_for_dynamic
+            .checked_sub(std::time::Duration::from_secs(5))
+            .expect("Timestamp arithmetic overflow");
+
+        let timestamp_with_offset = Timestamp::from_unix_time(
+            five_seconds_ago_dynamic_offset.as_secs() + DYNAMIC_EVALUATION_OFFSET_S,
+            five_seconds_ago_dynamic_offset.subsec_nanos(),
+            0,
+            0,
+        );
+        let dynamic_uuid = Uuid::new_v7(timestamp_with_offset);
+        let elapsed_dynamic = uuid_elapsed(&dynamic_uuid).unwrap();
+        assert!(
+            elapsed_dynamic > Duration::from_secs(0) && elapsed_dynamic < Duration::from_secs(15),
+            "Elapsed time for dynamic UUID should be around 5s, got {elapsed_dynamic:?}"
         );
     }
 
