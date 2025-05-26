@@ -500,7 +500,7 @@ async fn test_create_delete_datapoint_chat() {
 }
 
 #[tokio::test]
-async fn test_create_datapoint_chat_bad_request() {
+async fn test_insert_datapoint_chat_bad_request() {
     let client = Client::new();
     let dataset_name = format!("test-dataset-{}", Uuid::now_v7());
     println!("dataset_name: {dataset_name}");
@@ -1223,7 +1223,7 @@ async fn test_create_delete_datapoint_json() {
 }
 
 #[tokio::test]
-async fn test_create_datapoint_json_bad_output() {
+async fn test_insert_datapoint_json_bad_output() {
     let client = Client::new();
     let dataset_name = format!("test-dataset-{}", Uuid::now_v7());
 

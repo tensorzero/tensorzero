@@ -10,16 +10,17 @@ import { RadioGroup, RadioGroupItem } from "~/components/ui/radio-group";
 import type { InferenceCacheSetting } from "~/utils/evaluations.server";
 
 export interface AdvancedParametersAccordionProps {
-  inference_cache: InferenceCacheSetting;
+  inferenceCache: InferenceCacheSetting;
   setInferenceCache: (inference_cache: InferenceCacheSetting) => void;
+  defaultOpen?: boolean;
 }
 
 export function AdvancedParametersAccordion({
-  inference_cache,
+  inferenceCache,
   setInferenceCache,
+  defaultOpen,
 }: AdvancedParametersAccordionProps) {
-  const [isOpen, setIsOpen] = useState(false);
-
+  const [isOpen, setIsOpen] = useState(defaultOpen ?? false);
   return (
     <Accordion
       type="single"
@@ -38,7 +39,7 @@ export function AdvancedParametersAccordion({
           <div className="space-y-6 px-3 pt-3">
             <Label>Inference Cache</Label>
             <RadioGroup
-              value={inference_cache}
+              value={inferenceCache}
               onValueChange={setInferenceCache}
               className="mt-2 flex gap-4"
             >
