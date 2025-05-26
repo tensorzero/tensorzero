@@ -39,8 +39,8 @@ export function NumberInputWithButtons({
           }
 
           const coercedValue = Number(e.target.value);
-          if (!isValidNumber(numericValue)) {
-            console.warn(`Invalid number input value: ${numericValue}`);
+          if (!isValidNumber(coercedValue)) {
+            console.warn(`Invalid number input value: ${coercedValue}`);
           } else {
             onChange(coercedValue);
           }
