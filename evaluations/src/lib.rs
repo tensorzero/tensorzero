@@ -50,16 +50,16 @@ pub struct Args {
     #[arg(long)]
     pub gateway_url: Option<Url>,
 
-    /// Name of the evaluation to run.
-    #[arg(short, long)]
+    /// Name of the evaluation to run. If not provided, will use value from ~/.tensorzero_eval_defaults.toml if available.
+    #[arg(short, long, default_value = "")]
     pub evaluation_name: String,
 
-    /// Name of the dataset to run on.
-    #[arg(short, long)]
+    /// Name of the dataset to run on. If not provided, will use value from ~/.tensorzero_eval_defaults.toml if available.
+    #[arg(short, long, default_value = "")]
     pub dataset_name: String,
 
-    /// Name of the variant to run.
-    #[arg(short, long)]
+    /// Name of the variant to run. If not provided, will use value from ~/.tensorzero_eval_defaults.toml if available.
+    #[arg(short, long, default_value = "")]
     pub variant_name: String,
 
     /// Number of concurrent requests to make.

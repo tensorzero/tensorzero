@@ -1,0 +1,10 @@
+# TensorZero Evaluation Defaults
+# Place this file at ~/.tensorzero_eval_defaults.toml
+# Example:
+# evaluation_name = "my-eval"
+# dataset_name = "my-dataset"
+# variant_name = "my-variant"
+
+evaluation_name = ""
+dataset_name = ""
+variant_name = ""
