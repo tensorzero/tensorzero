@@ -28,7 +28,7 @@ class ContentBlock(ABC):
 class Text(ContentBlock):
     text: Optional[str] = None
     arguments: Optional[Any] = None
-    type: str = "text"
+    type: Literal["text"] = "text"
 
     def __post_init__(self):
         if self.text is None and self.arguments is None:
@@ -62,7 +62,7 @@ class Text(ContentBlock):
 @dataclass
 class RawText(ContentBlock):
     value: str
-    type: str = "raw_text"
+    type: Literal["raw_text"] = "raw_text"
 
     def to_dict(self) -> Dict[str, Any]:
         return dict(type="raw_text", value=self.value)
@@ -72,7 +72,7 @@ class RawText(ContentBlock):
 class ImageBase64(ContentBlock):
     data: str
     mime_type: str
-    type: str = "image"
+    type: Literal["image"] = "image"
 
     def to_dict(self) -> Dict[str, Any]:
         return dict(type="image", data=self.data, mime_type=self.mime_type)
@@ -81,7 +81,7 @@ class ImageBase64(ContentBlock):
 @dataclass
 class ImageUrl(ContentBlock):
     url: str
-    type: str = "image"
+    type: Literal["image"] = "image"
 
     def to_dict(self) -> Dict[str, Any]:
         return dict(type="image", url=self.url)
@@ -94,7 +94,7 @@ class ToolCall(ContentBlock):
     raw_name: str
     arguments: Optional[Dict[str, Any]] = None
     name: Optional[str] = None
-    type: str = "tool_call"
+    type: Literal["tool_call"] = "tool_call"
 
     def to_dict(self) -> Dict[str, Any]:
         d: Dict[str, Any] = {
@@ -113,7 +113,7 @@ class ToolCall(ContentBlock):
 @dataclass
 class Thought(ContentBlock):
     text: str
-    type: str = "thought"
+    type: Literal["thought"] = "thought"
 
     def to_dict(self) -> Dict[str, Any]:
         return dict(type="thought", value=self.text)
@@ -124,7 +124,7 @@ class ToolResult(ContentBlock):
     name: str
     result: str
     id: str
-    type: str = "tool_result"
+    type: Literal["tool_result"] = "tool_result"
 
     def to_dict(self) -> Dict[str, Any]:
         return dict(type="tool_result", name=self.name, result=self.result, id=self.id)
@@ -134,7 +134,7 @@ class ToolResult(ContentBlock):
 class UnknownContentBlock(ContentBlock):
     data: Any
     model_provider_name: Optional[str] = None
-    type: str = "unknown"
+    type: Literal["unknown"] = "unknown"
 
     def to_dict(self) -> Dict[str, Any]:
         return dict(
@@ -259,7 +259,7 @@ class TextChunk(ContentBlockChunk):
     # this `id` will be used to disambiguate them
     id: str
     text: str
-    type: str = "text"
+    type: Literal["text"] = "text"
 
 
 @dataclass
@@ -269,14 +269,14 @@ class ToolCallChunk(ContentBlockChunk):
     # `raw_arguments` will come as partial JSON
     raw_arguments: str
     raw_name: str
-    type: str = "tool_call"
+    type: Literal["tool_call"] = "tool_call"
 
 
 @dataclass
 class ThoughtChunk(ContentBlockChunk):
     text: str
     id: str
-    type: str = "thought"
+    type: Literal["thought"] = "thought"
 
 
 @dataclass
