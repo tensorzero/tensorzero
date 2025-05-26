@@ -553,6 +553,8 @@ class ToDictEncoder(JSONEncoder):
         try:
             return o.to_dict()
         except Exception:
+            # NOTE for reviewer: we should probably just use this everywhere and deprecate to_dict
+            # This is built into dataclass module.
             return asdict(o)
 
 

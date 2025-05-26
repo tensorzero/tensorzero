@@ -11,8 +11,8 @@ use itertools::Itertools;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
 #[cfg(feature = "pyo3")]
-use pyo3::types::PyAny;
-use pyo3::types::PyList;
+use pyo3::types::{PyAny, PyList};
+#[cfg(feature = "pyo3")]
 use pyo3_helpers::content_block_to_python;
 use resolved_input::ImageWithPath;
 pub use resolved_input::{ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent};
@@ -355,8 +355,6 @@ pub struct RequestMessage {
     pub role: Role,
     pub content: Vec<ContentBlock>,
 }
-// TODO: implement getters for RequestMessage that handle the obnoxious PyO3 limitations
-// around enums like ContentBlock
 
 #[cfg(feature = "pyo3")]
 #[pymethods]
