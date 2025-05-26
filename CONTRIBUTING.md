@@ -88,16 +88,19 @@ Did you have something else in mind? Reach out on Slack or Discord and let us kn
 - Install Node.js (we use v22) and `npm` [→](https://nodejs.org/en)
 - Install pnpm `npm install -g pnpm` [→](https://pnpm.io/installation)
 
-### Recipes
+### Optimization Recipes
 
-We maintain a number of optimization recipes as Jupyter notebooks in `recipes/` which serve as manual workflows for optimizing TensorZero functions.
-They are useful as starting points for custom optimization scripts, educational material, and a lightweight way for us to add new techniques prior to building them into the UI.
-Since notebooks are hard to maintain and review, we compile them using [Jupytext](https://jupytext.readthedocs.io/en/latest/) from Python source ending in `_nb.py`.
-The command to generate the python script in this format from such a notebook (the reverse direction) is `uvx jupytext@1.17.1 --to py:percent --opt notebook_metadata_filter=-all --opt cell_metadata_filter=-all openai.ipynb`.
-This will generate a Python script called `openai.py` that must be renamed to `openai_nb.py` prior to committing.
-In pre-commit and CI we test that the notebooks match their source python files using a script `ci/compile-check-notebooks.sh`.
-This way we can be certain that the notebooks match their source files.
-You should be aware of this process if you edit or contribute recipes.
+We maintain optimization recipes as Jupyter notebooks in `recipes/`.
+These notebooks serve as manual workflows for optimizing (e.g. fine-tuning) TensorZero functions.
+
+Jupyter notebooks are notoriously hard to test, maintain, and review.
+To address these issues, each notebook has an accompanying Python script ending in `_nb.py` that serves the same purpose.
+We automatically keep these two files in sync using [Jupytext](https://jupytext.readthedocs.io/en/latest/).
+
+To convert a notebook to a script, run `ci/compile-notebook-to-script.sh path/to/notebook.ipynb`.
+To convert a script to a notebook, run `ci/compile-script-to-notebook.sh path/to/script_nb.py`.
+
+In `pre-commit` and CI, we check that the notebooks match the relevant scripts using a script `ci/compile-check-notebooks.sh`.
 
 ### Tests
 

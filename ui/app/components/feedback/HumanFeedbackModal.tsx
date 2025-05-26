@@ -1,5 +1,6 @@
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogHeader,
   DialogTitle,
@@ -26,7 +27,7 @@ export function HumanFeedbackModal({
         <DialogHeader>
           <DialogTitle>Add Feedback</DialogTitle>
         </DialogHeader>
-        {children}
+        <DialogBody>{children}</DialogBody>
       </DialogContent>
     </Dialog>
   );

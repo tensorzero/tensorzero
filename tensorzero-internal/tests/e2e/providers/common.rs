@@ -2324,7 +2324,7 @@ pub async fn test_streaming_invalid_request_with_provider(provider: E2ETestProvi
         "stream": true,
         "extra_body": [
             {
-                "variant_name": "aws-sagemaker",
+                "variant_name": "aws-sagemaker-openai",
                 "pointer": "/messages/0/content",
                 "value": 123,
             },
@@ -2359,6 +2359,10 @@ pub async fn test_streaming_invalid_request_with_provider(provider: E2ETestProvi
 }
 
 pub async fn test_simple_streaming_inference_request_with_provider(provider: E2ETestProvider) {
+    // We use a serverless Sagemaker endpoint, which doesn't support streaming
+    if provider.variant_name == "aws-sagemaker-tgi" {
+        return;
+    }
     let episode_id = Uuid::now_v7();
     let tag_value = Uuid::now_v7().to_string();
     // Generate random u32
