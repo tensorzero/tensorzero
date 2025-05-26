@@ -17,6 +17,7 @@ import uuid_utils
 import tensorzero.internal_optimization_server_types as iost
 from tensorzero import (
     ChatDatapointInsert,
+    ContentBlock,
     Datapoint,
     DynamicEvaluationRunEpisodeResponse,
     DynamicEvaluationRunResponse,
@@ -28,7 +29,18 @@ from tensorzero import (
     InferenceResponse,
     JsonDatapointInsert,
 )
-from tensorzero.types import RenderedStoredInference
+from tensorzero.types import ModelInput, ToolCallConfigDatabaseInsert
+
+@final
+class RenderedStoredInference:
+    function_name: str
+    variant_name: str
+    input: ModelInput
+    output: List[ContentBlock]
+    episode_id: UUID
+    inference_id: UUID
+    tool_params: Optional[ToolCallConfigDatabaseInsert]
+    output_schema: Optional[Dict[str, Any]]
 
 class BaseTensorZeroGateway:
     pass

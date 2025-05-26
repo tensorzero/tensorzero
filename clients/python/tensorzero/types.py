@@ -621,15 +621,3 @@ class ToolCallConfigDatabaseInsert:
     # tool_choice: ToolChoice
     # The Rust codebase doesn't expose this yet
     parallel_tool_calls: Optional[bool]
-
-
-@dataclass
-class RenderedStoredInference:
-    function_name: str
-    variant_name: str
-    input: ModelInput
-    output: List[ContentBlock]
-    episode_id: UUID
-    inference_id: UUID
-    tool_params: Optional[ToolCallConfigDatabaseInsert]
-    output_schema: Optional[Dict[str, Any]]
