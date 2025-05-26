@@ -780,22 +780,35 @@ impl Client {
         // They will log on construction in the future.
         // TODO: make it configurable whether to drop or error on failures.
         let results = join_all(resolution_futures).await;
-        // For each result that is an Err, delete the matching inference_example from inference_examples.
-        // Iterate in reverse to avoid issues with shifting indices when removing elements.
-        for i in (0..results.len()).rev() {
-            if results[i].is_err() {
-                inference_examples.remove(i);
-            }
-        }
 
-        let rendered_inference_examples = inference_examples.into_iter().map(|inference_example| {
-            render_stored_inference(inference_example, &gateway.state.config, &variants)
-        });
+        // Ensure that the number of results matches the number of inference examples.
+        // This should be guaranteed to be true based on the code above, but we assert it anyway.
+        assert_eq!(
+            inference_examples.len(),
+            results.len(),
+            "Mismatch between number of inference examples and resolution results. This indicates a bug."
+        );
 
-        // Drop all Err results and return the Ok results
-        Ok(rendered_inference_examples
-            .filter_map(|result| result.ok())
-            .collect())
+        let final_rendered_examples: Vec<RenderedStoredInference> = inference_examples
+            .into_iter() // Consumes Vec<InferenceExample>; elements are already mutated
+            .zip(results.into_iter()) // Creates an iterator of (InferenceExample, Result<(), Error>)
+            .filter_map(|(example, resolution_result)| {
+                // Filter out examples where reresolve_input_for_fine_tuning failed.
+                // If resolution_result is Ok, map Some(()) to Some(example).
+                // If resolution_result is Err, .ok() yields None, so filter_map drops it.
+                resolution_result.ok().map(|_| example)
+            })
+            .filter_map(|resolved_example| {
+                // resolved_example is an InferenceExample that was successfully processed by reresolve.
+                // Now, attempt to render it.
+                // render_stored_inference returns Result<RenderedStoredInference, Error>.
+                // .ok() converts this to Option<RenderedStoredInference>.
+                // filter_map will keep Some(RenderedStoredInference) and discard None (if rendering failed).
+                render_stored_inference(resolved_example, &gateway.state.config, &variants).ok()
+            })
+            .collect();
+
+        Ok(final_rendered_examples)
     }
 
     async fn parse_http_response<T: serde::de::DeserializeOwned>(
