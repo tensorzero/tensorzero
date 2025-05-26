@@ -4,12 +4,20 @@ from uuid import UUID
 
 import pytest
 import pytest_asyncio
-from tensorzero import AsyncTensorZeroGateway, TensorZeroGateway
-from tensorzero.types import (
+from tensorzero import (
+    AsyncTensorZeroGateway,
     ChatInferenceExample,
+    ImageBase64,
     JsonInferenceExample,
+    JsonInferenceOutput,
+    TensorZeroGateway,
+    Text,
+    Thought,
     Tool,
+    ToolCall,
     ToolParams,
+    ToolResult,
+    UnknownContentBlock,
 )
 from tensorzero.util import uuid7
 
@@ -96,11 +104,11 @@ def test_sync_render_inferences_success(sync_client: TensorZeroGateway):
                         },
                     ],
                 },
-                output=[{"type": "text", "text": "Hello world"}],
+                output=[Text(text="Hello world")],
                 episode_id=uuid7(),
                 inference_id=uuid7(),
-                tool_params={
-                    "tools_available": [
+                tool_params=ToolParams(
+                    tools_available=[
                         Tool(
                             name="test",
                             description="test",
@@ -108,9 +116,9 @@ def test_sync_render_inferences_success(sync_client: TensorZeroGateway):
                             strict=False,
                         )
                     ],
-                    "tool_choice": "auto",
-                    "parallel_tool_calls": False,
-                },
+                    tool_choice="auto",
+                    parallel_tool_calls=False,
+                ),
             ),
             JsonInferenceExample(
                 function_name="json_success",
@@ -126,7 +134,9 @@ def test_sync_render_inferences_success(sync_client: TensorZeroGateway):
                         }
                     ],
                 },
-                output={"parsed": {"answer": "Tokyo"}, "raw": '{"answer": "Tokyo"}'},
+                output=JsonInferenceOutput(
+                    parsed={"answer": "Tokyo"}, raw='{"answer": "Tokyo"}'
+                ),
                 episode_id=uuid7(),
                 inference_id=uuid7(),
                 output_schema={
@@ -151,10 +161,13 @@ def test_sync_render_inferences_success(sync_client: TensorZeroGateway):
     assert message.role == "user"
     content = message.content
     assert len(content) == 3
+    assert isinstance(content[0], Thought)
     assert content[0].type == "thought"
     assert content[0].text == "hmmm"
+    assert isinstance(content[1], Text)
     assert content[1].type == "text"
     assert content[1].text == "bar"
+    assert isinstance(content[2], ToolCall)
     assert content[2].type == "tool_call"
     assert content[2].id == "123"
     assert content[2].arguments == '{"foo":"bar"}'
@@ -163,12 +176,15 @@ def test_sync_render_inferences_success(sync_client: TensorZeroGateway):
     assert message.role == "assistant"
     content = message.content
     assert len(content) == 3
+    assert isinstance(content[0], Text)
     assert content[0].type == "text"
     assert content[0].text == "Hello world"
+    assert isinstance(content[1], ToolResult)
     assert content[1].type == "tool_result"
     assert content[1].id == "123"
     assert content[1].name == "test_tool"
     assert content[1].result == "test"
+    assert isinstance(content[2], UnknownContentBlock)
     assert content[2].type == "unknown"
     assert content[2].data == [{"woo": "hoo"}]
     output = rendered_inferences[0].output
@@ -177,6 +193,7 @@ def test_sync_render_inferences_success(sync_client: TensorZeroGateway):
     assert message.role == "user"
     content = message.content
     assert len(content) == 1
+    assert isinstance(content[0], ImageBase64)
     assert content[0].type == "image"
     assert content[0].mime_type == "image/png"
     assert len(content[0].data) > 1000
@@ -185,11 +202,13 @@ def test_sync_render_inferences_success(sync_client: TensorZeroGateway):
 
     assert isinstance(output, list)
     assert len(output) == 1
+    assert isinstance(output[0], Text)
     assert output[0].type == "text"
     assert output[0].text == "Hello world"
     assert isinstance(rendered_inferences[0].episode_id, UUID)
     assert isinstance(rendered_inferences[0].inference_id, UUID)
     tool_params = rendered_inferences[0].tool_params
+    assert tool_params is not None
     tools_available = tool_params.tools_available
     assert len(tools_available) == 1
     tool = tools_available[0]
@@ -228,6 +247,7 @@ Example Response:
     assert message.role == "user"
     content = message.content
     assert len(content) == 1
+    assert isinstance(content[0], Text)
     assert content[0].type == "text"
     # templating happens here
     assert content[0].text == "What is the name of the capital city of Japan?"
@@ -246,7 +266,7 @@ Example Response:
 
 
 def test_sync_render_inferences_nonexistent_function(
-    sync_client: TensorZeroGateway, caplog
+    sync_client: TensorZeroGateway,
 ):
     """Test that render_inferences drops if the function does not exist at all."""
     rendered_inferences = sync_client.experimental_render_inferences(
@@ -263,7 +283,7 @@ def test_sync_render_inferences_nonexistent_function(
                         }
                     ],
                 },
-                output=[{"type": "text", "text": "Hello world"}],
+                output=[Text(text="Hello world")],
                 episode_id=uuid7(),
                 inference_id=uuid7(),
                 tool_params=ToolParams(
@@ -295,7 +315,7 @@ def test_sync_render_inferences_unspecified_function(sync_client: TensorZeroGate
                         }
                     ],
                 },
-                output=[{"type": "text", "text": "Hello world"}],
+                output=[Text(text="Hello world")],
                 episode_id=uuid7(),
                 inference_id=uuid7(),
                 tool_params=ToolParams(
@@ -311,7 +331,7 @@ def test_sync_render_inferences_unspecified_function(sync_client: TensorZeroGate
     # TODO: test that the warning message is logged (we do this in Rust)
 
 
-def test_sync_render_inferences_no_variant(sync_client: TensorZeroGateway, caplog):
+def test_sync_render_inferences_no_variant(sync_client: TensorZeroGateway):
     """Test that render_inferences drops an example if the variant is not found and logs a warning."""
     with pytest.raises(Exception) as excinfo:
         sync_client.experimental_render_inferences(
@@ -328,7 +348,7 @@ def test_sync_render_inferences_no_variant(sync_client: TensorZeroGateway, caplo
                             }
                         ],
                     },
-                    output=[{"type": "text", "text": "Hello world"}],
+                    output=[Text(text="Hello world")],
                     episode_id=uuid7(),
                     inference_id=uuid7(),
                     tool_params=ToolParams(
@@ -346,7 +366,7 @@ def test_sync_render_inferences_no_variant(sync_client: TensorZeroGateway, caplo
 
 
 def test_sync_render_inferences_missing_variable(
-    sync_client: TensorZeroGateway, caplog
+    sync_client: TensorZeroGateway,
 ):
     """Test that render_inferences drops an example if a template variable is missing."""
     rendered_inferences = sync_client.experimental_render_inferences(
@@ -363,7 +383,7 @@ def test_sync_render_inferences_missing_variable(
                         }
                     ],
                 },
-                output=[{"type": "text", "text": "Hello world"}],
+                output=[Text(text="Hello world")],
                 episode_id=uuid7(),
                 inference_id=uuid7(),
                 tool_params=ToolParams(
@@ -437,11 +457,11 @@ async def test_async_render_inferences_success(async_client: AsyncTensorZeroGate
                         },
                     ],
                 },
-                output=[{"type": "text", "text": "Hello world"}],
+                output=[Text(text="Hello world")],
                 episode_id=uuid7(),
                 inference_id=uuid7(),
-                tool_params={
-                    "tools_available": [
+                tool_params=ToolParams(
+                    tools_available=[
                         Tool(
                             name="test",
                             description="test",
@@ -449,9 +469,9 @@ async def test_async_render_inferences_success(async_client: AsyncTensorZeroGate
                             strict=False,
                         )
                     ],
-                    "tool_choice": "auto",
-                    "parallel_tool_calls": False,
-                },
+                    tool_choice="auto",
+                    parallel_tool_calls=False,
+                ),
             ),
             JsonInferenceExample(
                 function_name="json_success",
@@ -467,10 +487,10 @@ async def test_async_render_inferences_success(async_client: AsyncTensorZeroGate
                         }
                     ],
                 },
-                output={
-                    "parsed": {"answer": "Tokyo"},
-                    "raw": """{"answer": "Tokyo"}""",
-                },
+                output=JsonInferenceOutput(
+                    parsed={"answer": "Tokyo"},
+                    raw="""{"answer": "Tokyo"}""",
+                ),
                 episode_id=uuid7(),
                 inference_id=uuid7(),
                 output_schema={
@@ -495,10 +515,13 @@ async def test_async_render_inferences_success(async_client: AsyncTensorZeroGate
     assert message.role == "user"
     content = message.content
     assert len(content) == 3
+    assert isinstance(content[0], Thought)
     assert content[0].type == "thought"
     assert content[0].text == "hmmm"
+    assert isinstance(content[1], Text)
     assert content[1].type == "text"
     assert content[1].text == "bar"
+    assert isinstance(content[2], ToolCall)
     assert content[2].type == "tool_call"
     assert content[2].id == "123"
     assert content[2].arguments == """{"foo":"bar"}"""
@@ -507,12 +530,15 @@ async def test_async_render_inferences_success(async_client: AsyncTensorZeroGate
     assert message.role == "assistant"
     content = message.content
     assert len(content) == 3
+    assert isinstance(content[0], Text)
     assert content[0].type == "text"
     assert content[0].text == "Hello world"
+    assert isinstance(content[1], ToolResult)
     assert content[1].type == "tool_result"
     assert content[1].id == "123"
     assert content[1].name == "test_tool"
     assert content[1].result == "test"
+    assert isinstance(content[2], UnknownContentBlock)
     assert content[2].type == "unknown"
     assert content[2].data == [{"woo": "hoo"}]
     output = rendered_inferences[0].output
@@ -521,19 +547,21 @@ async def test_async_render_inferences_success(async_client: AsyncTensorZeroGate
     assert message.role == "user"
     content = message.content
     assert len(content) == 1
+    assert isinstance(content[0], ImageBase64)
     assert content[0].type == "image"
     assert content[0].mime_type == "image/png"
     assert len(content[0].data) > 1000
-    assert content[0].mime_type == "image/png"
-    assert content[0].type == "image"
 
     assert isinstance(output, list)
     assert len(output) == 1
+    assert isinstance(output[0], Text)
     assert output[0].type == "text"
+    assert isinstance(output[0], Text)
     assert output[0].text == "Hello world"
     assert isinstance(rendered_inferences[0].episode_id, UUID)
     assert isinstance(rendered_inferences[0].inference_id, UUID)
     tool_params = rendered_inferences[0].tool_params
+    assert tool_params is not None
     tools_available = tool_params.tools_available
     assert len(tools_available) == 1
     tool = tools_available[0]
@@ -572,6 +600,7 @@ Example Response:
     assert message.role == "user"
     content = message.content
     assert len(content) == 1
+    assert isinstance(content[0], Text)
     assert content[0].type == "text"
     # templating happens here
     assert content[0].text == "What is the name of the capital city of Japan?"
@@ -591,7 +620,7 @@ Example Response:
 
 @pytest.mark.asyncio
 async def test_async_render_inferences_nonexistent_function(
-    async_client: AsyncTensorZeroGateway, caplog
+    async_client: AsyncTensorZeroGateway,
 ):
     """Test that render_inferences drops if the function does not exist at all."""
     rendered_inferences = await async_client.experimental_render_inferences(
@@ -608,7 +637,7 @@ async def test_async_render_inferences_nonexistent_function(
                         }
                     ],
                 },
-                output=[{"type": "text", "text": "Hello world"}],
+                output=[Text(text="Hello world")],
                 episode_id=uuid7(),
                 inference_id=uuid7(),
                 tool_params=ToolParams(
@@ -643,7 +672,7 @@ async def test_async_render_inferences_unspecified_function(
                         }
                     ],
                 },
-                output=[{"type": "text", "text": "Hello world"}],
+                output=[Text(text="Hello world")],
                 episode_id=uuid7(),
                 inference_id=uuid7(),
                 tool_params=ToolParams(
@@ -661,7 +690,7 @@ async def test_async_render_inferences_unspecified_function(
 
 @pytest.mark.asyncio
 async def test_async_render_inferences_no_variant(
-    async_client: AsyncTensorZeroGateway, caplog
+    async_client: AsyncTensorZeroGateway,
 ):
     """Test that render_inferences drops an example if the variant is not found and logs a warning."""
     with pytest.raises(Exception) as excinfo:
@@ -679,7 +708,7 @@ async def test_async_render_inferences_no_variant(
                             }
                         ],
                     },
-                    output=[{"type": "text", "text": "Hello world"}],
+                    output=[Text(text="Hello world")],
                     episode_id=uuid7(),
                     inference_id=uuid7(),
                     tool_params=ToolParams(
@@ -698,7 +727,7 @@ async def test_async_render_inferences_no_variant(
 
 @pytest.mark.asyncio
 async def test_async_render_inferences_missing_variable(
-    async_client: AsyncTensorZeroGateway, caplog
+    async_client: AsyncTensorZeroGateway,
 ):
     """Test that render_inferences drops an example if a template variable is missing."""
     rendered_inferences = await async_client.experimental_render_inferences(
@@ -715,7 +744,7 @@ async def test_async_render_inferences_missing_variable(
                         }
                     ],
                 },
-                output=[{"type": "text", "text": "Hello world"}],
+                output=[Text(text="Hello world")],
                 episode_id=uuid7(),
                 inference_id=uuid7(),
                 tool_params=ToolParams(

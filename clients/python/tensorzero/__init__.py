@@ -41,10 +41,15 @@ from .types import (
     TensorZeroInternalError,
     Text,
     TextChunk,
+    Thought,
     ThoughtChunk,
+    Tool,
     ToolCall,
     ToolCallChunk,
+    ToolChoice,
+    ToolParams,
     ToolResult,
+    UnknownContentBlock,
     Usage,
 )
 
@@ -84,10 +89,15 @@ __all__ = [
     "TensorZeroInternalError",
     "Text",
     "TextChunk",
+    "Thought",
     "ThoughtChunk",
+    "Tool",
+    "ToolChoice",
+    "ToolParams",
     "ToolCall",
     "ToolCallChunk",
     "ToolResult",
+    "UnknownContentBlock",
     "Usage",
 ]
 

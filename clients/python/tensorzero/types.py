@@ -116,7 +116,7 @@ class Thought(ContentBlock):
     type: Literal["thought"] = "thought"
 
     def to_dict(self) -> Dict[str, Any]:
-        return dict(type="thought", value=self.text)
+        return dict(type="thought", text=self.text)
 
 
 @dataclass
@@ -583,3 +583,7 @@ class JsonInferenceExample:
 
 
 InferenceExample = Union[ChatInferenceExample, JsonInferenceExample]
+
+
+# ToolChoice type definition
+ToolChoice = Union[Literal["auto", "required", "off"], Dict[Literal["specific"], str]]
