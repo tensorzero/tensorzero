@@ -6,6 +6,7 @@ use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyList};
 use serde::Deserialize;
 use serde_json::Value;
+#[cfg(feature = "pyo3")]
 use tensorzero_internal::inference::types::pyo3_helpers::{
     content_block_output_to_python, serialize_to_dict, uuid_to_python,
 };
