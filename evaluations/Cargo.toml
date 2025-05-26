@@ -23,7 +23,6 @@ uuid = { workspace = true }
 futures = { workspace = true }
 indicatif = "0.17.11"
 dirs = "6.0.0"
-dirs-next = "2.0.0"
 
 [dev-dependencies]
 tensorzero = { path = "../clients/rust" }

@@ -51,8 +51,7 @@ async fn main() -> Result<()> {
 
     // If still missing, error out
     if args.evaluation_name.is_empty() || args.dataset_name.is_empty() || args.variant_name.is_empty() {
-        eprintln!("Error: --evaluation-name, --dataset-name, and --variant-name must be provided either as CLI args or in ~/.tensorzero_eval_defaults.toml");
-        std::process::exit(1);
+        anyhow::bail!("Error: --evaluation-name, --dataset-name, and --variant-name must be provided either as CLI args or in ~/.tensorzero_eval_defaults.toml");
     }
 
     let mut writer = std::io::stdout();
