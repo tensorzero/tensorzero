@@ -1,9 +1,9 @@
 import warnings
-from abc import ABC, abstractmethod
+from abc import ABC
 from dataclasses import asdict, dataclass
 from enum import Enum
 from json import JSONEncoder
-from typing import Any, Dict, List, Literal, Optional, Union, cast
+from typing import Any, Dict, List, Literal, Optional, Protocol, Union, cast
 from uuid import UUID
 
 import httpx
@@ -17,18 +17,21 @@ class Usage:
     output_tokens: int
 
 
+# For type checking purposes only
+class HasTypeField(Protocol):
+    type: str
+
+
 @dataclass
-class ContentBlock(ABC):
-    @abstractmethod
-    def to_dict(self) -> Dict[str, Any]:
-        pass
+class ContentBlock(ABC, HasTypeField):
+    pass
 
 
 @dataclass
 class Text(ContentBlock):
     text: Optional[str] = None
     arguments: Optional[Any] = None
-    type: Literal["text"] = "text"
+    type: str = "text"
 
     def __post_init__(self):
         if self.text is None and self.arguments is None:
@@ -62,7 +65,7 @@ class Text(ContentBlock):
 @dataclass
 class RawText(ContentBlock):
     value: str
-    type: Literal["raw_text"] = "raw_text"
+    type: str = "raw_text"
 
     def to_dict(self) -> Dict[str, Any]:
         return dict(type="raw_text", value=self.value)
@@ -72,7 +75,7 @@ class RawText(ContentBlock):
 class ImageBase64(ContentBlock):
     data: str
     mime_type: str
-    type: Literal["image"] = "image"
+    type: str = "image"
 
     def to_dict(self) -> Dict[str, Any]:
         return dict(type="image", data=self.data, mime_type=self.mime_type)
@@ -81,7 +84,7 @@ class ImageBase64(ContentBlock):
 @dataclass
 class ImageUrl(ContentBlock):
     url: str
-    type: Literal["image"] = "image"
+    type: str = "image"
 
     def to_dict(self) -> Dict[str, Any]:
         return dict(type="image", url=self.url)
@@ -94,7 +97,7 @@ class ToolCall(ContentBlock):
     raw_name: str
     arguments: Optional[Dict[str, Any]] = None
     name: Optional[str] = None
-    type: Literal["tool_call"] = "tool_call"
+    type: str = "tool_call"
 
     def to_dict(self) -> Dict[str, Any]:
         d: Dict[str, Any] = {
@@ -113,7 +116,7 @@ class ToolCall(ContentBlock):
 @dataclass
 class Thought(ContentBlock):
     text: str
-    type: Literal["thought"] = "thought"
+    type: str = "thought"
 
     def to_dict(self) -> Dict[str, Any]:
         return dict(type="thought", text=self.text)
@@ -124,7 +127,7 @@ class ToolResult(ContentBlock):
     name: str
     result: str
     id: str
-    type: Literal["tool_result"] = "tool_result"
+    type: str = "tool_result"
 
     def to_dict(self) -> Dict[str, Any]:
         return dict(type="tool_result", name=self.name, result=self.result, id=self.id)
@@ -134,7 +137,7 @@ class ToolResult(ContentBlock):
 class UnknownContentBlock(ContentBlock):
     data: Any
     model_provider_name: Optional[str] = None
-    type: Literal["unknown"] = "unknown"
+    type: str = "unknown"
 
     def to_dict(self) -> Dict[str, Any]:
         return dict(
@@ -249,7 +252,7 @@ def parse_content_block(block: Dict[str, Any]) -> ContentBlock:
 
 
 @dataclass
-class ContentBlockChunk:
+class ContentBlockChunk(ABC, HasTypeField):
     pass
 
 
@@ -259,7 +262,7 @@ class TextChunk(ContentBlockChunk):
     # this `id` will be used to disambiguate them
     id: str
     text: str
-    type: Literal["text"] = "text"
+    type: str = "text"
 
 
 @dataclass
@@ -269,14 +272,14 @@ class ToolCallChunk(ContentBlockChunk):
     # `raw_arguments` will come as partial JSON
     raw_arguments: str
     raw_name: str
-    type: Literal["tool_call"] = "tool_call"
+    type: str = "tool_call"
 
 
 @dataclass
 class ThoughtChunk(ContentBlockChunk):
-    text: str
     id: str
-    type: Literal["thought"] = "thought"
+    text: str
+    type: str = "thought"
 
 
 @dataclass
@@ -346,16 +349,15 @@ def parse_inference_chunk(chunk: Dict[str, Any]) -> InferenceChunk:
 def parse_content_block_chunk(block: Dict[str, Any]) -> ContentBlockChunk:
     block_type = block["type"]
     if block_type == "text":
-        return TextChunk(id=block["id"], text=block["text"], type=block_type)
+        return TextChunk(id=block["id"], text=block["text"])
     elif block_type == "tool_call":
         return ToolCallChunk(
             id=block["id"],
             raw_arguments=block["raw_arguments"],
             raw_name=block["raw_name"],
-            type=block_type,
         )
     elif block_type == "thought":
-        return ThoughtChunk(id=block["id"], text=block["text"], type=block_type)
+        return ThoughtChunk(id=block["id"], text=block["text"])
     else:
         raise ValueError(f"Unknown content block type: {block}")
 
