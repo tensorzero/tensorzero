@@ -1,20 +1,19 @@
 import asyncio
 import itertools
 from asyncio import Semaphore
-from tqdm.asyncio import tqdm_asyncio
 
 from agent import ask_question
 from dataset import load_beerqa
 from judge import judge_answer
 from tensorzero import AsyncTensorZeroGateway
-
+from tqdm.asyncio import tqdm_asyncio
 
 MAX_SAMPLES = 10
 CONCURRENCY = 10
 
 
 async def main():
-    # We initialize a TensorZero client with our configuration file.
+    # Initialize a TensorZero client with our configuration file.
     t0 = await AsyncTensorZeroGateway.build_http(
         gateway_url="http://localhost:3000",
     )
@@ -24,7 +23,7 @@ async def main():
     agent_variants = ["baseline", "gpt-4.1-mini", "gemini-2.5-flash"]
     compact_context_variants = ["baseline", "gemini-2.5-flash"]
 
-    # We want to evaluate all combinations of agent and compact_context variants
+    # Evaluate all combinations of agent and compact_context variants
     for agent_variant, compact_context_variant in itertools.product(
         agent_variants, compact_context_variants
     ):
@@ -51,7 +50,7 @@ async def evaluate_variant_pins(
     )
 
     # Create tasks for each question
-    # `data` is a list of dictionaries. Each dictionary has a `question` (string) and `answers` (list of strings).
+    # `data` is a list of dictionaries; each has a `question` (string) and `answers` (list of strings)
     question_tasks = []
     for question in data[:MAX_SAMPLES]:  # Apply MAX_SAMPLES limit here
         question_tasks.append(
