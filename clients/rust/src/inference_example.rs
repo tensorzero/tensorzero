@@ -83,20 +83,12 @@ impl InferenceExample {
 #[cfg_attr(feature = "pyo3", pyclass)]
 #[derive(Debug, PartialEq)]
 pub struct RenderedStoredInference {
-    #[cfg(feature = "pyo3")]
-    #[pyo3(get, set)]
     pub function_name: String,
-    #[cfg(feature = "pyo3")]
-    #[pyo3(get, set)]
     pub variant_name: String,
-    #[cfg(feature = "pyo3")]
-    #[pyo3(get, set)]
     pub input: ModelInput,
     pub output: Vec<ContentBlockOutput>,
     pub episode_id: Uuid,
     pub inference_id: Uuid,
-    #[cfg(feature = "pyo3")]
-    #[pyo3(get, set)]
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
     pub output_schema: Option<Value>,
 }
@@ -104,6 +96,21 @@ pub struct RenderedStoredInference {
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl RenderedStoredInference {
+    #[getter]
+    pub fn get_function_name(&self) -> &str {
+        &self.function_name
+    }
+
+    #[getter]
+    pub fn get_variant_name(&self) -> &str {
+        &self.variant_name
+    }
+
+    #[getter]
+    pub fn get_input(&self) -> ModelInput {
+        self.input.clone()
+    }
+
     #[getter]
     pub fn get_output<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let output = self
@@ -122,6 +129,11 @@ impl RenderedStoredInference {
     #[getter]
     pub fn get_inference_id<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         uuid_to_python(py, self.inference_id)
+    }
+
+    #[getter]
+    pub fn get_tool_params(&self) -> Option<ToolCallConfigDatabaseInsert> {
+        self.tool_params.clone()
     }
 
     #[getter]

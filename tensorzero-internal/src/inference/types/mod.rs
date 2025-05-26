@@ -351,7 +351,6 @@ pub enum ContentBlockChatOutput {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "pyo3", pyclass)]
 pub struct RequestMessage {
-    #[pyo3(get, set)]
     pub role: Role,
     pub content: Vec<ContentBlock>,
 }

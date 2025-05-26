@@ -27,15 +27,9 @@ use crate::{
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "pyo3", pyclass)]
 pub struct Tool {
-    #[cfg(feature = "pyo3")]
-    #[pyo3(get, set)]
     pub description: String,
     pub parameters: Value,
-    #[cfg(feature = "pyo3")]
-    #[pyo3(get, set)]
     pub name: String,
-    #[cfg(feature = "pyo3")]
-    #[pyo3(get, set)]
     #[serde(default)]
     pub strict: bool,
 }
@@ -46,6 +40,21 @@ impl Tool {
     #[getter]
     pub fn get_parameters<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         serialize_to_dict(py, self.parameters.clone()).map(|x| x.into_bound(py))
+    }
+
+    #[getter]
+    pub fn get_description(&self) -> &str {
+        &self.description
+    }
+
+    #[getter]
+    pub fn get_name(&self) -> &str {
+        &self.name
+    }
+
+    #[getter]
+    pub fn get_strict(&self) -> bool {
+        self.strict
     }
 }
 
@@ -198,16 +207,26 @@ impl ToolCallConfig {
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "pyo3", pyclass)]
 pub struct ToolCallConfigDatabaseInsert {
-    #[cfg(feature = "pyo3")]
-    #[pyo3(get, set)]
     pub tools_available: Vec<Tool>,
     pub tool_choice: ToolChoice,
     // TODO: decide what we want the Python interface to be for ToolChoice
     // This is complicated because ToolChoice is an enum with some simple arms and some
     // struct arms. We would likely need to land on one of the serde options for enums (tagged?)
-    #[cfg(feature = "pyo3")]
-    #[pyo3(get, set)]
     pub parallel_tool_calls: Option<bool>,
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl ToolCallConfigDatabaseInsert {
+    #[getter]
+    pub fn get_tools_available(&self) -> Vec<Tool> {
+        self.tools_available.clone()
+    }
+
+    #[getter]
+    pub fn get_parallel_tool_calls(&self) -> Option<bool> {
+        self.parallel_tool_calls
+    }
 }
 
 /// A struct to hold the dynamic tool parameters passed at inference time.
