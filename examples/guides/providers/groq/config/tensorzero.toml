@@ -1,13 +1,13 @@
-[models.gpt_4o_mini_2024_07_18]
+[models.llama-scout-groq]
 routing = ["groq"]
 
-[models.gpt_4o_mini_2024_07_18.providers.groq]
+[models.llama-scout-groq.providers.groq]
 type = "groq"
-model_name = "gpt-4o-mini-2024-07-18"
+model_name = "meta-llama/llama-4-scout-17b-16e-instruct"
 
 [functions.my_function_name]
 type = "chat"
 
 [functions.my_function_name.variants.my_variant_name]
 type = "chat_completion"
-model = "gpt_4o_mini_2024_07_18"
+model = "llama-scout-groq"
