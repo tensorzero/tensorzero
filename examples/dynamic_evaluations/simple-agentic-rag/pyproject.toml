@@ -8,5 +8,6 @@ dependencies = [
     "jupyter",
     "markdownify",
     "tensorzero",
+    "tqdm>=4.67.1",
     "wikipedia",
 ]
