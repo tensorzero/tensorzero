@@ -142,9 +142,7 @@ impl InferenceProvider for GroqProvider {
             &mut request_body,
         )?;
 
-        let mut request_builder = http_client
-            .post(request_url)
-            .header("Content-Type", "application/json");
+        let mut request_builder = http_client.post(request_url);
         if let Some(api_key) = api_key {
             request_builder = request_builder.bearer_auth(api_key.expose_secret());
         }
