@@ -4,11 +4,17 @@ from importlib.metadata import version
 import httpx
 
 from .client import AsyncTensorZeroGateway, BaseTensorZeroGateway, TensorZeroGateway
-from .tensorzero import _start_http_gateway as _start_http_gateway
+from .tensorzero import (
+    RenderedStoredInference,
+)
+from .tensorzero import (
+    _start_http_gateway as _start_http_gateway,
+)
 from .types import (
     BaseTensorZeroError,
     ChatDatapointInsert,
     ChatInferenceDatapointInput,  # DEPRECATED
+    ChatInferenceExample,
     ChatInferenceResponse,
     ContentBlock,
     Datapoint,
@@ -20,10 +26,12 @@ from .types import (
     ImageBase64,
     ImageUrl,
     InferenceChunk,
+    InferenceExample,
     InferenceInput,
     InferenceResponse,
     JsonDatapointInsert,
     JsonInferenceDatapointInput,  # DEPRECATED
+    JsonInferenceExample,
     JsonInferenceOutput,
     JsonInferenceResponse,
     Message,
@@ -46,6 +54,7 @@ __all__ = [
     "BaseTensorZeroGateway",
     "ChatDatapointInsert",
     "ChatInferenceDatapointInput",  # DEPRECATED
+    "ChatInferenceExample",
     "ChatInferenceResponse",
     "ContentBlock",
     "Datapoint",
@@ -57,15 +66,18 @@ __all__ = [
     "ImageBase64",
     "ImageUrl",
     "InferenceChunk",
+    "InferenceExample",
     "InferenceInput",
     "InferenceResponse",
     "JsonDatapointInsert",
     "JsonInferenceDatapointInput",  # DEPRECATED
     "JsonInferenceOutput",
+    "JsonInferenceExample",
     "JsonInferenceResponse",
     "Message",
     "patch_openai_client",
     "RawText",
+    "RenderedStoredInference",
     "System",
     "TensorZeroError",
     "TensorZeroGateway",
