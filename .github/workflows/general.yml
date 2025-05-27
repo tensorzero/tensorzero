@@ -151,7 +151,7 @@ jobs:
       # We deliberately install our MSRV here (rather than 'stable') to ensure that everything compiles with that version
       - name: Install Rust 1.85.0
         run: |
-          rustup install 1.85.0 --profile complete
+          rustup install 1.85.0 --component clippy,rustfmt
           rustup default 1.85.0
 
       - name: Print Rust version
