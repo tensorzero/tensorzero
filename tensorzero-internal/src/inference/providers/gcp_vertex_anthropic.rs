@@ -56,7 +56,11 @@ pub struct GCPVertexAnthropicProvider {
 
 static DEFAULT_CREDENTIALS: OnceLock<GCPVertexCredentials> = OnceLock::new();
 
-pub async fn make_gcp_sdk_credentials(provider_type: &str) -> Result<GCPVertexCredentials, Error> {
+pub async fn make_gcp_sdk_credentials(
+    // This is only used in test mode
+    #[cfg_attr(not(any(test, feature = "e2e_tests")), expect(unused_variables))]
+    provider_type: &str,
+) -> Result<GCPVertexCredentials, Error> {
     let creds_result = google_cloud_auth::credentials::Builder::default().build();
 
     let handle_err = |e| {
