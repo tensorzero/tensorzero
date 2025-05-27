@@ -114,6 +114,15 @@ export const OpenAIProviderConfigSchema = z.object({
 });
 export type OpenAIProviderConfig = z.infer<typeof OpenAIProviderConfigSchema>;
 
+export const OpenRouterProviderConfigSchema = z.object({
+  type: z.literal("openrouter"),
+  model_name: z.string(),
+  api_base: z.string().url().optional(),
+});
+export type OpenRouterProviderConfig = z.infer<
+  typeof OpenRouterProviderConfigSchema
+>;
+
 export const TGIProviderConfigSchema = z.object({
   type: z.literal("tgi"),
   api_base: z.string().url(),
@@ -164,6 +173,7 @@ export const ProviderConfigSchema = z.discriminatedUnion("type", [
   HyperbolicProviderConfigSchema,
   MistralProviderConfigSchema,
   OpenAIProviderConfigSchema,
+  OpenRouterProviderConfigSchema,
   SGLangProviderConfigSchema,
   TGIProviderConfigSchema,
   TogetherProviderConfigSchema,

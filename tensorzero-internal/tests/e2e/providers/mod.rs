@@ -16,6 +16,7 @@ mod helpers;
 mod hyperbolic;
 mod mistral;
 mod openai;
+mod openrouter;
 mod reasoning;
 mod sglang;
 mod tgi;
