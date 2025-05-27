@@ -3,6 +3,7 @@ name = "minijinja-bindings"
 version.workspace = true
 rust-version.workspace = true
 edition = "2021"
+license.workspace = true
 
 [lib]
 crate-type = ["cdylib", "rlib"]
