@@ -1130,8 +1130,8 @@ mod tests {
     use uuid::Uuid;
 
     use crate::inference::types::{
-        ChatInferenceResultChunk, ContentBlock, ContentBlockChunk, File, FileKind,
-        InputMessageContent, JsonInferenceResultChunk, Role, TextChunk,
+        ChatInferenceResultChunk, ContentBlockChunk, File, FileKind, InputMessageContent,
+        JsonInferenceResultChunk, Role, TextChunk,
     };
 
     #[tokio::test]
