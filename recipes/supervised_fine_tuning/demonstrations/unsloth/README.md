@@ -9,7 +9,9 @@ Set `TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzer
 
 ```bash
 uv venv  # Create a new virtual environment
-uv pip sync requirements.txt  # Install the dependencies
+source .venv/bin/activate # Activate environment
+uv pip install xformers --index-url https://download.pytorch.org/whl/<your-cuda-version> # Install torch
+uv pip install -r requirements.txt # Install the dependencies
 ```
 
 ### Using `pip`
@@ -17,5 +19,6 @@ uv pip sync requirements.txt  # Install the dependencies
 We recommend using Python 3.10+ and a virtual environment.
 
 ```bash
+pip install torch [--index-url https://download.pytorch.org/whl/<your-cuda-version>]
 pip install -r requirements.txt
 ```
