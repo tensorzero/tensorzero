@@ -30,7 +30,7 @@ FROM base AS development-dependencies-env
 WORKDIR /app
 
 COPY --from=package-jsons-layer /tmp/packages.tar /tmp/packages.tar
-RUN tar -xf /tmp/packages.tar -C .
+RUN tar -vxf /tmp/packages.tar -C .
 
 RUN pnpm install --frozen-lockfile
 
@@ -41,7 +41,7 @@ FROM base AS production-dependencies-env
 WORKDIR /app
 
 COPY --from=package-jsons-layer /tmp/packages.tar /tmp/packages.tar
-RUN tar -xf /tmp/packages.tar -C .
+RUN tar -vxf /tmp/packages.tar -C .
 
 RUN pnpm install --frozen-lockfile --prod
 
@@ -116,7 +116,7 @@ COPY --from=python-build-env /build/optimization-server/.venv /build/optimizatio
 #COPY ./clients/python /clients/python
 
 COPY --from=production-dependencies-env /app/node_modules /app/node_modules
-COPY --from=production-dependencies-env /app/ui/node_modules /app/ui/node_modules
+COPY --from=production-dependencies-env /app/ui/node_modules* /app/ui/node_modules
 
 COPY --from=build-env /app/ui/build /app/build
 
@@ -125,7 +125,7 @@ COPY --from=evaluations-build-env /release/evaluations /usr/local/bin/evaluation
 WORKDIR /app
 
 COPY --from=package-jsons-layer /tmp/packages.tar /tmp/packages.tar
-RUN tar -xf /tmp/packages.tar -C .
+RUN tar -vxf /tmp/packages.tar -C .
 
 USER ui
 
