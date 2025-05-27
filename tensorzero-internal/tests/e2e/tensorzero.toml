@@ -207,6 +207,14 @@ routing = ["google_ai_studio_gemini"]
 type = "google_ai_studio_gemini"
 model_name = "gemini-2.0-flash-lite"
 
+[models."gemini-2.0-flash-lite-tuned"]
+routing = ["gcp_vertex_gemini"]
+
+[models."gemini-2.0-flash-lite-tuned".providers.gcp_vertex_gemini]
+type = "gcp_vertex_gemini"
+location = "us-central1"
+project_id = "tensorzero-public"
+endpoint_id = "945488740422254592"
 
 [models."gemini-2.0-flash-lite-dynamic"]
 routing = ["google_ai_studio_gemini"]
@@ -792,6 +800,12 @@ type = "chat_completion"
 model = "gemini-2.5-pro-preview-05-06"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 500
+
+[functions.basic_test.variants.gcp-vertex-gemini-flash-lite-tuned]
+type = "chat_completion"
+model = "gemini-2.0-flash-lite-tuned"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
 
 [functions.basic_test.variants.google-ai-studio-gemini-flash-8b]
 type = "chat_completion"
@@ -1439,6 +1453,14 @@ model = "gemini-2.0-flash-001"
 system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "implicit_tool"
+max_tokens = 100
+
+[functions.json_success.variants.gcp-vertex-gemini-flash-lite-tuned]
+type = "chat_completion"
+model = "gemini-2.0-flash-lite-tuned"
+system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
+json_mode = "on"
 max_tokens = 100
 
 [functions.json_success.variants.gcp-vertex-gemini-pro]

@@ -216,8 +216,8 @@ impl GCPVertexGeminiProvider {
         let (model_or_endpoint_id, request_url, streaming_request_url) = match (&model_id, &endpoint_id) {
             (Some(model_id), None) => (model_id.clone(), format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model_id}:generateContent"),
                                                format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model_id}:streamGenerateContent?alt=sse")),
-            (None, Some(endpoint_id)) => (endpoint_id.clone(), format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/endpoints/{endpoint_id}:generateContent"),
-                                                  format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/endpoints/{endpoint_id}:streamGenerateContent?alt=sse")),
+            (None, Some(endpoint_id)) => (endpoint_id.clone(), format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/endpoints/{endpoint_id}:generateContent"),
+                                                  format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/endpoints/{endpoint_id}:streamGenerateContent?alt=sse")),
             _ => return Err(ErrorDetails::InvalidProviderConfig { message: "Exactly one of model_id or endpoint_id must be provided".to_string() }.into())
         };
 

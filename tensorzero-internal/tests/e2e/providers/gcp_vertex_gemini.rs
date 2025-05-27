@@ -31,6 +31,13 @@ async fn get_providers() -> E2ETestProviders {
             model_provider_name: "gcp_vertex_gemini".into(),
             credentials: HashMap::new(),
         },
+        E2ETestProvider {
+            supports_batch_inference: false,
+            variant_name: "gcp-vertex-gemini-flash-lite-tuned".to_string(),
+            model_name: "gemini-2.0-flash-lite-tuned".into(),
+            model_provider_name: "gcp_vertex_gemini".into(),
+            credentials: HashMap::new(),
+        },
     ];
 
     let image_providers = vec![E2ETestProvider {
@@ -83,6 +90,13 @@ async fn get_providers() -> E2ETestProviders {
             supports_batch_inference: false,
             variant_name: "gcp-vertex-gemini-flash-strict".to_string(),
             model_name: "gemini-2.0-flash-001".into(),
+            model_provider_name: "gcp_vertex_gemini".into(),
+            credentials: HashMap::new(),
+        },
+        E2ETestProvider {
+            supports_batch_inference: false,
+            variant_name: "gcp-vertex-gemini-flash-lite-tuned".to_string(),
+            model_name: "gemini-2.0-flash-lite-tuned".into(),
             model_provider_name: "gcp_vertex_gemini".into(),
             credentials: HashMap::new(),
         },
