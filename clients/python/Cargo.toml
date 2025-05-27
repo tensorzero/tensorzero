@@ -4,6 +4,7 @@
 # (which has a crate name of 'tensorzero')
 name = "tensorzero-python"
 version.workspace = true
+rust-version.workspace = true
 edition = "2021"
 license = "Apache-2.0"
 
