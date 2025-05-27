@@ -177,3 +177,40 @@ async fn test_gcp_pro_tool_choice_none() {
         .get("executableCode")
         .is_some());
 }
+
+/// There are fields for both model_name and endpoint_id and we can't know a priori which one to use.
+/// We test here that the error message is correct and helpful.
+#[tokio::test]
+async fn test_gcp_vertex_gemini_bad_model_id() {
+    let episode_id = Uuid::now_v7();
+    let payload = json!({
+        "function_name": "basic_test",
+        "episode_id": episode_id,
+        "input":
+            {
+               "system": {"assistant_name": "Dr. Mehta"},
+               "messages": [
+                {
+                    "role": "user",
+                    "content": "What is the name of the capital city of Japan?"
+                }
+            ]},
+        "stream": false,
+        "variant_name": "gemini-bad-model-name",
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    let status = response.status();
+
+    let response_json: Value = response.json().await.unwrap();
+    println!("API response: {response_json:#?}");
+
+    assert_eq!(status, StatusCode::BAD_GATEWAY);
+    let error = response_json.get("error").unwrap().as_str().unwrap();
+    assert!(error.contains("Model or endpoint not found. You may be specifying the wrong one of these. Standard GCP models should use a `model_id` and not an `endpoint_id`, while fine-tuned models should use an `endpoint_id`."))
+}

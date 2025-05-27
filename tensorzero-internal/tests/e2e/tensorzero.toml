@@ -216,6 +216,15 @@ location = "us-central1"
 project_id = "tensorzero-public"
 endpoint_id = "945488740422254592"
 
+[models."gemini-wrong-field"]
+routing = ["gcp_vertex_gemini"]
+
+[models."gemini-wrong-field".providers.gcp_vertex_gemini]
+type = "gcp_vertex_gemini"
+location = "us-central1"
+project_id = "tensorzero-public"
+model_id = "945488740422254592"
+
 [models."gemini-2.0-flash-lite-dynamic"]
 routing = ["google_ai_studio_gemini"]
 
@@ -804,6 +813,12 @@ max_tokens = 500
 [functions.basic_test.variants.gcp-vertex-gemini-flash-lite-tuned]
 type = "chat_completion"
 model = "gemini-2.0-flash-lite-tuned"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.gemini-bad-model-name]
+type = "chat_completion"
+model = "gemini-wrong-field"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
