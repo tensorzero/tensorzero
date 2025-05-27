@@ -192,7 +192,7 @@ pub fn deserialize_from_pyobj<'a, T: serde::de::DeserializeOwned>(
     obj: &Bound<'a, PyAny>,
 ) -> PyResult<T> {
     let self_module = PyModule::import(py, "tensorzero.types")?;
-    let to_dict_encoder: Bound<'_, PyAny> = self_module.getattr("ToDictEncoder")?;
+    let to_dict_encoder: Bound<'_, PyAny> = self_module.getattr("TensorZeroTypeEncoder")?;
     let kwargs = PyDict::new(py);
     kwargs.set_item(intern!(py, "cls"), to_dict_encoder)?;
 

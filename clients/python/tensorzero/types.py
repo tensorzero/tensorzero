@@ -1,6 +1,6 @@
 import warnings
 from abc import ABC
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, is_dataclass
 from enum import Enum
 from json import JSONEncoder
 from typing import Any, Dict, List, Literal, Optional, Protocol, Union, cast
@@ -67,9 +67,6 @@ class RawText(ContentBlock):
     value: str
     type: str = "raw_text"
 
-    def to_dict(self) -> Dict[str, Any]:
-        return dict(type="raw_text", value=self.value)
-
 
 @dataclass
 class ImageBase64(ContentBlock):
@@ -77,17 +74,11 @@ class ImageBase64(ContentBlock):
     mime_type: str
     type: str = "image"
 
-    def to_dict(self) -> Dict[str, Any]:
-        return dict(type="image", data=self.data, mime_type=self.mime_type)
-
 
 @dataclass
 class ImageUrl(ContentBlock):
     url: str
     type: str = "image"
-
-    def to_dict(self) -> Dict[str, Any]:
-        return dict(type="image", url=self.url)
 
 
 @dataclass
@@ -118,9 +109,6 @@ class Thought(ContentBlock):
     text: str
     type: str = "thought"
 
-    def to_dict(self) -> Dict[str, Any]:
-        return dict(type="thought", text=self.text)
-
 
 @dataclass
 class ToolResult(ContentBlock):
@@ -129,20 +117,12 @@ class ToolResult(ContentBlock):
     id: str
     type: str = "tool_result"
 
-    def to_dict(self) -> Dict[str, Any]:
-        return dict(type="tool_result", name=self.name, result=self.result, id=self.id)
-
 
 @dataclass
 class UnknownContentBlock(ContentBlock):
     data: Any
     model_provider_name: Optional[str] = None
     type: str = "unknown"
-
-    def to_dict(self) -> Dict[str, Any]:
-        return dict(
-            type="unknown", data=self.data, model_provider_name=self.model_provider_name
-        )
 
 
 class FinishReason(str, Enum):
@@ -433,18 +413,6 @@ class ChatDatapointInsert:
     parallel_tool_calls: Optional[bool] = None
     tags: Optional[Dict[str, str]] = None
 
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "function_name": self.function_name,
-            "input": self.input,
-            "output": self.output,
-            "allowed_tools": self.allowed_tools,
-            "additional_tools": self.additional_tools,
-            "tool_choice": self.tool_choice,
-            "parallel_tool_calls": self.parallel_tool_calls,
-            "tags": self.tags,
-        }
-
 
 # CAREFUL: deprecated
 class ChatInferenceDatapointInput(ChatDatapointInsert):
@@ -464,15 +432,6 @@ class JsonDatapointInsert:
     output: Optional[Any] = None
     output_schema: Optional[Any] = None
     tags: Optional[Dict[str, str]] = None
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "function_name": self.function_name,
-            "input": self.input,
-            "output": self.output,
-            "output_schema": self.output_schema,
-            "tags": self.tags,
-        }
 
 
 # CAREFUL: deprecated
@@ -548,16 +507,16 @@ def parse_datapoint(data: Dict[str, Any]) -> Datapoint:
 
 # Helper used to serialize Python objects to JSON, which may contain dataclasses like `Text`
 # Used by the Rust native module
-class ToDictEncoder(JSONEncoder):
+class TensorZeroTypeEncoder(JSONEncoder):
     def default(self, o: Any) -> Any:
         if isinstance(o, UUID) or isinstance(o, uuid_utils.UUID):
             return str(o)
-        try:
+        elif hasattr(o, "to_dict"):
             return o.to_dict()
-        except Exception:
-            # NOTE for reviewer: we should probably just use this everywhere and deprecate to_dict
-            # This is built into dataclass module.
+        elif is_dataclass(o) and not isinstance(o, type):
             return asdict(o)
+        else:
+            super().default(o)
 
 
 @dataclass
@@ -587,16 +546,13 @@ class JsonInferenceExample:
 InferenceExample = Union[ChatInferenceExample, JsonInferenceExample]
 
 
-# ToolChoice type definition
 ToolChoice = Union[Literal["auto", "required", "off"], Dict[Literal["specific"], str]]
 
-"""
-Note: the auxiliary types below before the clients are never actually constructed by the client and should not be constructed directly.
-They are part of the type checking interface only.
+# Note: the auxiliary types below before the clients are never actually constructed by the client and should not be constructed directly.
+# They are part of the type checking interface only.
 
-In the future, we may convert these to constructible types for optional construction and passing into other TensorZero methods.
-In that case, we should add a constructor in Rust to the types and test against raw Python types as well.
-"""
+# In the future, we may convert these to constructible types for optional construction and passing into other TensorZero methods.
+# In that case, we should add a constructor in Rust to the types and test against raw Python types as well.
 
 
 # NOTE: there are two different message types. This one is to hint that

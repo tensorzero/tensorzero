@@ -777,7 +777,7 @@ impl Client {
 
         // Await all futures concurrently.
         // For now, we drop the errors here.
-        // They will log on construction in the future.
+        // They are logged on construction in the task.
         // TODO: make it configurable whether to drop or error on failures.
         let results = join_all(resolution_futures).await;
 
