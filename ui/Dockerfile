@@ -76,7 +76,9 @@ COPY . .
 
 COPY --from=minijinja-build-env /build/ui/app/utils/minijinja/pkg ./ui/app/utils/minijinja/pkg
 COPY --from=development-dependencies-env /app/node_modules ./node_modules
-COPY --from=development-dependencies-env /app/ui/node_modules ./ui/node_modules
+
+# Ensure pnpm workspace links are set up correctly
+RUN pnpm install --frozen-lockfile
 
 RUN pnpm --filter=tensorzero-ui run build
 
@@ -102,7 +104,7 @@ RUN useradd -m -s /bin/sh ui
 RUN apt-get update && apt-get install -y curl python3 && rm -rf /var/lib/apt/lists/*
 
 COPY ./ui/entrypoint.sh /app/entrypoint.sh
-RUN chmod +x ./entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
 
 COPY ./optimization-server /build/optimization-server
 COPY --from=python-build-env /build/clients/python /build/clients/python
@@ -110,12 +112,9 @@ COPY --from=python-build-env /build/optimization-server/.venv /build/optimizatio
 # Workaround for uv issue
 #COPY ./clients/python /clients/python
 
-USER ui
-
 COPY --from=production-dependencies-env /app/node_modules /app/node_modules
-COPY --from=production-dependencies-env /app/ui/node_modules /app/ui/node_modules
 
-COPY --from=build-env /app/build /app/build
+COPY --from=build-env /app/ui/build /app/build
 
 COPY --from=evaluations-build-env /release/evaluations /usr/local/bin/evaluations
 
@@ -123,6 +122,8 @@ WORKDIR /app
 
 COPY --from=package-jsons-layer /tmp/packages.tar /tmp/packages.tar
 RUN tar -xf /tmp/packages.tar -C .
+
+USER ui
 
 EXPOSE 4000
 
