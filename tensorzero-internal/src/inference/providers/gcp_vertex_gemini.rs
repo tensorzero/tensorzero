@@ -133,7 +133,7 @@ fn join_cloud_paths(dir: &str, file: &str) -> String {
 /// Constructs a new `ObjectStore` instance for the bucket specified by `gs_url`
 /// with the provided credentials.
 /// We call this on each batch start/poll request, as we might be using dynamic credentials.
-fn make_gcp_object_store(
+async fn make_gcp_object_store(
     gs_url: &str,
     credentials: &GCPVertexCredentials,
     dynamic_api_keys: &InferenceCredentials,
@@ -171,10 +171,54 @@ fn make_gcp_object_store(
                     bearer: key.expose_secret().to_string(),
                 })));
         }
-        GCPVertexCredentials::Sdk(_) => {
-            return Err(Error::new(ErrorDetails::GCPCredentials {
-                message: "GCP `credential_location = \"sdk\"` is not yet supported for batch inference storage".to_string(),
-            }))
+        GCPVertexCredentials::Sdk(creds) => {
+            let headers = creds
+                .headers(http::Extensions::default())
+                .await
+                .map_err(|e| {
+                    Error::new(ErrorDetails::GCPCredentials {
+                        message: format!("Failed to get GCP access token: {e}"),
+                    })
+                })?;
+
+            // The 'object_store' crate requires us to use a bearer auth token, so try to extract that from the produced headers
+            // In the future, we may want to use the GCP object store sdk crate directly, so that we can support all of the
+            // auth methods
+            if headers.len() != 1 {
+                return Err(Error::new(ErrorDetails::GCPCredentials {
+                    message: format!(
+                        "Expected GCP SDK to produce exactly one auth headers, found: {:?}",
+                        headers.keys()
+                    ),
+                }));
+            }
+
+            let header_value = headers.get("Authorization").ok_or_else(|| {
+                Error::new(ErrorDetails::GCPCredentials {
+                    message: format!(
+                        "Expected GCP SDK to produce an Authorization header, found: {:?}",
+                        headers.keys()
+                    ),
+                })
+            })?;
+
+            if let Some(bearer_token) = header_value
+                .to_str()
+                .ok()
+                .and_then(|s| s.strip_prefix("Bearer "))
+            {
+                builder = builder.with_credentials(Arc::new(StaticCredentialProvider::new(
+                    GcpCredential {
+                        bearer: bearer_token.to_string(),
+                    },
+                )));
+            } else {
+                return Err(Error::new(ErrorDetails::GCPCredentials {
+                    message:
+                        "Expected GCP SDK to produce a Bearer token in the Authorization header"
+                            .to_string(),
+                }));
+            }
         }
         GCPVertexCredentials::None => {
             return Err(Error::new(ErrorDetails::ApiKeyMissing {
@@ -280,7 +324,8 @@ impl GCPVertexGeminiProvider {
                     &join_cloud_paths(&gcs_output_directory, "predictions.jsonl"),
                     api_key,
                     dynamic_api_keys,
-                )?;
+                )
+                .await?;
                 let data = store_and_path
                     .store
                     .get(&store_and_path.path)
@@ -495,14 +540,14 @@ impl GCPVertexCredentials {
                     .expose_secret(),
             ),
             GCPVertexCredentials::Sdk(creds) => {
-                return Ok(creds
+                return creds
                     .headers(http::Extensions::default())
                     .await
                     .map_err(|e| {
                         Error::new(ErrorDetails::GCPCredentials {
-                            message: format!("Failed to get GCP access token: {}", e),
+                            message: format!("Failed to get GCP access token: {e}"),
                         })
-                    })?)
+                    })
             }
             GCPVertexCredentials::None => {
                 return Err(Error::new(ErrorDetails::ApiKeyMissing {
@@ -516,8 +561,7 @@ impl GCPVertexCredentials {
             HeaderValue::from_str(&format!("Bearer {bearer_token}",)).map_err(|e| {
                 Error::new(ErrorDetails::GCPCredentials {
                     message: format!(
-                        "Failed to create GCP Vertex Gemini credentials from SDK: {}",
-                        e
+                        "Failed to create GCP Vertex Gemini credentials from SDK: {e}",
                     ),
                 })
             })?,
@@ -878,7 +922,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
         // For now, we use the same set of credentials for writing to Google Cloud Storage as we do for invoking
         // the Vertex API. In the future, we may want to allow configuring a separate set of credentials.
         let store_and_path =
-            make_gcp_object_store(&input_source_url, &self.credentials, dynamic_api_keys)?;
+            make_gcp_object_store(&input_source_url, &self.credentials, dynamic_api_keys).await?;
 
         store_and_path
             .store

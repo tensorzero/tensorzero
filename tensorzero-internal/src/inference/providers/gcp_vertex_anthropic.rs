@@ -5,7 +5,6 @@ use std::time::Duration;
 use futures::StreamExt;
 use reqwest::StatusCode;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
-use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::time::Instant;
