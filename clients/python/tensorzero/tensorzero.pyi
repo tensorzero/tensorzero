@@ -29,7 +29,7 @@ from tensorzero import (
     InferenceResponse,
     JsonDatapointInsert,
 )
-from tensorzero.types import ModelInput, ToolCallConfigDatabaseInsert
+from tensorzero.internal import ModelInput, ToolCallConfigDatabaseInsert
 
 @final
 class RenderedStoredInference:
