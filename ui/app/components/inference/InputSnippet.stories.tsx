@@ -381,7 +381,7 @@ export const ImageInput: Story = {
                   endpoint: null,
                   allow_http: null,
                 },
-                path: "observability/images/e46e28c76498f7a7e935a502d3cd6f41052a76a6c6b0d8cda44e03fad8cc70f1.png",
+                path: "observability/files/e46e28c76498f7a7e935a502d3cd6f41052a76a6c6b0d8cda44e03fad8cc70f1.png",
               },
             },
             {
@@ -396,7 +396,7 @@ export const ImageInput: Story = {
                   type: "filesystem",
                   path: "my_object_storage",
                 },
-                path: "observability/images/7f3a9b2e8d4c6f5a1e0b9d8c7a4b2e5f3d1c8b9a6e4f2d5c8b3a7e1f9d4c6b2.png",
+                path: "observability/files/7f3a9b2e8d4c6f5a1e0b9d8c7a4b2e5f3d1c8b9a6e4f2d5c8b3a7e1f9d4c6b2.png",
               },
             },
           ],

@@ -741,7 +741,7 @@ pub async fn test_start_simple_image_batch_inference_request_with_provider(
                         },
                         "storage_path": {
                             "kind": {"type": "disabled"},
-                            "path": "observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"
+                            "path": "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"
                         }
                     }
                 ]

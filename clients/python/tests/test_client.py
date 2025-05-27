@@ -1225,7 +1225,7 @@ def test_image_inference_base64(sync_client: TensorZeroGateway):
             "image": {"url": None, "mime_type": "image/png"},
             "storage_path": {
                 "kind": {"type": "disabled"},
-                "path": "observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png",
+                "path": "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png",
             },
         }
     ]
@@ -1270,7 +1270,7 @@ def test_image_inference_url(sync_client: TensorZeroGateway):
             },
             "storage_path": {
                 "kind": {"type": "disabled"},
-                "path": "observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png",
+                "path": "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png",
             },
         }
     ]

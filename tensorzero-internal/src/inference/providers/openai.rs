@@ -35,7 +35,7 @@ use crate::inference::types::{
     TextChunk, Usage,
 };
 use crate::inference::types::{
-    FinishReason, ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner,
+    FileKind, FinishReason, ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner,
 };
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
@@ -1020,10 +1020,17 @@ where
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct OpenAIFile<'a> {
+    file_data: Cow<'a, str>,
+    filename: Cow<'a, str>,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum OpenAIContentBlock<'a> {
     Text { text: Cow<'a, str> },
     ImageUrl { image_url: OpenAIImageUrl },
+    File { file: OpenAIFile<'a> },
     Unknown { data: Cow<'a, Value> },
 }
 
@@ -1037,12 +1044,14 @@ impl Serialize for OpenAIContentBlock<'_> {
         enum Helper<'a> {
             Text { text: &'a str },
             ImageUrl { image_url: &'a OpenAIImageUrl },
+            File { file: &'a OpenAIFile<'a> },
         }
         match self {
             OpenAIContentBlock::Text { text } => Helper::Text { text }.serialize(serializer),
             OpenAIContentBlock::ImageUrl { image_url } => {
                 Helper::ImageUrl { image_url }.serialize(serializer)
             }
+            OpenAIContentBlock::File { file } => Helper::File { file }.serialize(serializer),
             OpenAIContentBlock::Unknown { data } => data.serialize(serializer),
         }
     }
@@ -1113,7 +1122,7 @@ impl OpenAIRequestMessage<'_> {
             OpenAIRequestMessage::System(msg) => msg.content.to_lowercase().contains(value),
             OpenAIRequestMessage::User(msg) => msg.content.iter().any(|c| match c {
                 OpenAIContentBlock::Text { text } => text.to_lowercase().contains(value),
-                OpenAIContentBlock::ImageUrl { .. } => false,
+                OpenAIContentBlock::ImageUrl { .. } | OpenAIContentBlock::File { .. } => false,
                 // Don't inspect the contents of 'unknown' blocks
                 OpenAIContentBlock::Unknown { data: _ } => false,
             }),
@@ -1121,7 +1130,9 @@ impl OpenAIRequestMessage<'_> {
                 if let Some(content) = &msg.content {
                     content.iter().any(|c| match c {
                         OpenAIContentBlock::Text { text } => text.to_lowercase().contains(value),
-                        OpenAIContentBlock::ImageUrl { .. } => false,
+                        OpenAIContentBlock::ImageUrl { .. } | OpenAIContentBlock::File { .. } => {
+                            false
+                        }
                         // Don't inspect the contents of 'unknown' blocks
                         OpenAIContentBlock::Unknown { data: _ } => false,
                     })
@@ -1268,14 +1279,27 @@ fn tensorzero_to_openai_user_messages(
                 file,
                 storage_path: _,
             }) => {
-                file.mime_type.require_image(PROVIDER_TYPE)?;
-                user_content_blocks.push(OpenAIContentBlock::ImageUrl {
-                    image_url: OpenAIImageUrl {
-                        // This will only produce an error if we pass in a bad
-                        // `Base64File` (with missing file data)
-                        url: format!("data:{};base64,{}", file.mime_type, file.data()?),
-                    },
-                });
+                let data = format!("data:{};base64,{}", file.mime_type, file.data()?);
+                match file.mime_type {
+                    FileKind::Jpeg | FileKind::Png | FileKind::WebP => {
+                        user_content_blocks.push(OpenAIContentBlock::ImageUrl {
+                            image_url: OpenAIImageUrl {
+                                // This will only produce an error if we pass in a bad
+                                // `Base64File` (with missing file data)
+                                url: data,
+                            },
+                        });
+                    }
+                    FileKind::Pdf => {
+                        user_content_blocks.push(OpenAIContentBlock::File {
+                            file: OpenAIFile {
+                                file_data: Cow::Owned(data),
+                                // TODO - should we allow the user to specify the file name?
+                                filename: Cow::Borrowed("input.pdf"),
+                            },
+                        });
+                    }
+                }
             }
             ContentBlock::Thought(_) => {
                 // OpenAI doesn't support thought blocks.
