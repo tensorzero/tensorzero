@@ -3,7 +3,7 @@
     "ui:dev": "pnpm --filter=tensorzero-ui dev",
     "ui:storybook": "pnpm --filter=tensorzero-ui storybook",
     "ui:test": "pnpm --filter=tensorzero-ui test",
-    "ui:test:e2e": "playwright test",
+    "ui:test:e2e": "pnpm --filter=tensorzero-ui test-e2e",
     "clean:node": "find . -name 'node_modules' -type d -prune -exec rm -rf '{}' +"
   },
   "devDependencies": {
