@@ -3527,6 +3527,7 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
             }],
         },
         stream: Some(true),
+        extra_headers: get_extra_headers(),
         ..Default::default()
     }).await.unwrap();
 
@@ -3852,6 +3853,7 @@ pub async fn test_tool_use_tool_choice_auto_unused_inference_request_with_provid
                 }],
             },
             stream: Some(false),
+            extra_headers: get_extra_headers(),
             ..Default::default()
         })
         .await
@@ -8958,6 +8960,7 @@ pub async fn test_json_mode_inference_request_with_provider(
                 }],
             },
             stream: Some(false),
+            extra_headers: get_extra_headers(),
             ..Default::default()
         })
         .await
