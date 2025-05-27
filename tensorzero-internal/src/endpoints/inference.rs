@@ -1125,11 +1125,13 @@ impl ChatCompletionInferenceParams {
 mod tests {
     use super::*;
 
+    use serde_json::json;
     use std::time::Duration;
     use uuid::Uuid;
 
     use crate::inference::types::{
-        ChatInferenceResultChunk, ContentBlockChunk, JsonInferenceResultChunk, TextChunk,
+        ChatInferenceResultChunk, ContentBlock, ContentBlockChunk, File, FileKind,
+        InputMessageContent, JsonInferenceResultChunk, Role, TextChunk,
     };
 
     #[tokio::test]
@@ -1329,6 +1331,61 @@ mod tests {
             err.to_string()
                 .contains("Model name 'fake_provider::gpt-9000' not found in model table"),
             "Unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn test_deserialize_file_content() {
+        let input_with_url = json!({
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "file",
+                            "url": "https://example.com/file.txt",
+                        }
+                    ]
+                }
+            ]
+        });
+
+        let input_with_url: Input = serde_json::from_value(input_with_url).unwrap();
+        assert_eq!(input_with_url.messages.len(), 1);
+        assert_eq!(input_with_url.messages[0].role, Role::User);
+        assert_eq!(input_with_url.messages[0].content.len(), 1);
+        assert_eq!(
+            input_with_url.messages[0].content[0],
+            InputMessageContent::File(File::Url {
+                url: "https://example.com/file.txt".parse().unwrap(),
+            })
+        );
+
+        let input_with_base64 = json!({
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "file",
+                            "data": "fake_base64_data",
+                            "mime_type": "image/png"
+                        }
+                    ]
+                }
+            ]
+        });
+
+        let input_with_base64: Input = serde_json::from_value(input_with_base64).unwrap();
+        assert_eq!(input_with_base64.messages.len(), 1);
+        assert_eq!(input_with_base64.messages[0].role, Role::User);
+        assert_eq!(input_with_base64.messages[0].content.len(), 1);
+        assert_eq!(
+            input_with_base64.messages[0].content[0],
+            InputMessageContent::File(File::Base64 {
+                mime_type: FileKind::Png,
+                data: "fake_base64_data".to_string(),
+            })
         );
     }
 }
