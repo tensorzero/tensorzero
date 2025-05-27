@@ -251,7 +251,7 @@ impl GCPVertexGeminiProvider {
         let cred_location = api_key_location.as_ref().unwrap_or(&default_location);
 
         let credentials = if matches!(cred_location, CredentialLocation::Sdk) {
-            make_gcp_sdk_credentials().await?
+            make_gcp_sdk_credentials(PROVIDER_TYPE).await?
         } else {
             build_creds_caching_default_with_fn(
                 api_key_location,

@@ -10,6 +10,7 @@ use serde_json::Value;
 use tokio::time::Instant;
 
 use crate::cache::ModelProviderRequest;
+use crate::config_parser::SKIP_CREDENTIAL_VALIDATION;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
@@ -55,30 +56,39 @@ pub struct GCPVertexAnthropicProvider {
 
 static DEFAULT_CREDENTIALS: OnceLock<GCPVertexCredentials> = OnceLock::new();
 
-pub async fn make_gcp_sdk_credentials() -> Result<GCPVertexCredentials, Error> {
-    let creds = google_cloud_auth::credentials::Builder::default()
-        .build()
-        .map_err(|e| {
-            Error::new(ErrorDetails::GCPCredentials {
+pub async fn make_gcp_sdk_credentials(provider_type: &str) -> Result<GCPVertexCredentials, Error> {
+    let creds_result = google_cloud_auth::credentials::Builder::default().build();
+
+    let handle_err = |e| {
+        if SKIP_CREDENTIAL_VALIDATION.is_set() {
+            #[cfg(any(test, feature = "e2e_tests"))]
+            {
+                tracing::warn!(
+                    "Failed to get GCP SDK credentials for a model provider of type `{provider_type}`, so the associated tests will likely fail: {e}",
+                );
+            }
+            return Ok(GCPVertexCredentials::None);
+        } else {
+            return Err(Error::new(ErrorDetails::GCPCredentials {
                 message: format!(
-                    "Failed to create GCP Vertex Anthropic credentials from SDK: {}",
+                    "Failed to create GCP Vertex credentials from SDK: {}",
                     DisplayOrDebugGateway::new(e)
                 ),
-            })
-        })?;
+            }));
+        }
+    };
+
+    let creds = match creds_result {
+        Ok(creds) => creds,
+        Err(e) => {
+            return handle_err(e);
+        }
+    };
     // Test that the credentials are valid by getting headers
-    creds
-        .headers(http::Extensions::default())
-        .await
-        .map_err(|e| {
-            Error::new(ErrorDetails::GCPCredentials {
-                message: format!(
-                    "Failed to get GCP Vertex Gemini credential headers from SDK: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-            })
-        })?;
-    Ok(GCPVertexCredentials::Sdk(creds))
+    match creds.headers(http::Extensions::default()).await {
+        Ok(_) => Ok(GCPVertexCredentials::Sdk(creds)),
+        Err(e) => handle_err(e),
+    }
 }
 
 impl GCPVertexAnthropicProvider {
@@ -92,7 +102,7 @@ impl GCPVertexAnthropicProvider {
         let cred_location = api_key_location.as_ref().unwrap_or(&default_location);
 
         let credentials = if matches!(cred_location, CredentialLocation::Sdk) {
-            make_gcp_sdk_credentials().await?
+            make_gcp_sdk_credentials(PROVIDER_TYPE).await?
         } else {
             build_creds_caching_default_with_fn(
                 api_key_location,
