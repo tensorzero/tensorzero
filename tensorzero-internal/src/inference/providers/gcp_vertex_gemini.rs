@@ -711,6 +711,14 @@ impl InferenceProvider for GCPVertexGeminiProvider {
             Ok(response_with_latency.try_into()?)
         } else {
             let response_code = res.status();
+            if response_code == StatusCode::NOT_FOUND {
+                return Err(Error::new(ErrorDetails::InferenceServer {
+                    message: "Model or endpoint not found. You may be specifying the wrong one of these. Standard GCP models should use a `model_id` and not an `endpoint_id`, while fine-tuned models should use an `endpoint_id`.".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: None,
+                }));
+            };
             let error_body = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!(
