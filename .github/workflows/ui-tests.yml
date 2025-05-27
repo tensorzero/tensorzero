@@ -14,6 +14,8 @@ jobs:
     steps:
       - uses: namespacelabs/nscloud-checkout-action@953fed31a6113cc2347ca69c9d823743c65bc84b
 
+      - uses: dtolnay/rust-toolchain@stable
+
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
