@@ -67,14 +67,14 @@ pub async fn make_gcp_sdk_credentials(provider_type: &str) -> Result<GCPVertexCr
                     "Failed to get GCP SDK credentials for a model provider of type `{provider_type}`, so the associated tests will likely fail: {e}",
                 );
             }
-            return Ok(GCPVertexCredentials::None);
+            Ok(GCPVertexCredentials::None)
         } else {
-            return Err(Error::new(ErrorDetails::GCPCredentials {
+            Err(Error::new(ErrorDetails::GCPCredentials {
                 message: format!(
                     "Failed to create GCP Vertex credentials from SDK: {}",
                     DisplayOrDebugGateway::new(e)
                 ),
-            }));
+            }))
         }
     };
 
