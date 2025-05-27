@@ -23,8 +23,6 @@ jobs:
 
       - name: Setup `pnpm`
         uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda
-        with:
-          version: "10"
 
       - name: Install `pnpm` dependencies
         run: pnpm install --frozen-lockfile
