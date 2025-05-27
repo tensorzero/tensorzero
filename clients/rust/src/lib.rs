@@ -10,7 +10,7 @@ use std::fmt::Debug;
 use tensorzero_internal::{
     config_parser::Config,
     endpoints::{
-        datasets::CreateDatapointParams,
+        datasets::InsertDatapointParams,
         dynamic_evaluation_run::{
             DynamicEvaluationRunEpisodeParams, DynamicEvaluationRunEpisodeResponse,
         },
@@ -46,6 +46,12 @@ pub use tensorzero_internal::endpoints::inference::{
     InferenceOutput, InferenceParams, InferenceResponse, InferenceResponseChunk, InferenceStream,
 };
 pub use tensorzero_internal::endpoints::object_storage::ObjectResponse;
+pub use tensorzero_internal::inference::types::extra_body::{
+    InferenceExtraBody, UnfilteredInferenceExtraBody,
+};
+pub use tensorzero_internal::inference::types::extra_headers::{
+    InferenceExtraHeader, UnfilteredInferenceExtraHeaders,
+};
 pub use tensorzero_internal::inference::types::storage::{StorageKind, StoragePath};
 pub use tensorzero_internal::inference::types::Image;
 pub use tensorzero_internal::inference::types::{
@@ -590,7 +596,7 @@ impl Client {
     pub async fn bulk_insert_datapoints(
         &self,
         dataset_name: String,
-        params: CreateDatapointParams,
+        params: InsertDatapointParams,
     ) -> Result<Vec<Uuid>, TensorZeroError> {
         match &self.mode {
             ClientMode::HTTPGateway(client) => {
@@ -605,7 +611,7 @@ impl Client {
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
-                    tensorzero_internal::endpoints::datasets::create_datapoint(
+                    tensorzero_internal::endpoints::datasets::insert_datapoint(
                         dataset_name,
                         params,
                         &gateway.state.config,

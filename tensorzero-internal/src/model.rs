@@ -25,6 +25,7 @@ use crate::inference::providers::google_ai_studio_gemini::GoogleAIStudioGeminiPr
 
 use crate::inference::providers::helpers::peek_first_chunk;
 use crate::inference::providers::hyperbolic::HyperbolicProvider;
+use crate::inference::providers::provider_trait::WrappedProvider;
 use crate::inference::providers::sglang::SGLangProvider;
 use crate::inference::providers::tgi::TGIProvider;
 use crate::inference::types::batch::{
@@ -47,8 +48,9 @@ use crate::{
             deepseek::DeepSeekProvider, fireworks::FireworksProvider,
             gcp_vertex_anthropic::GCPVertexAnthropicProvider,
             gcp_vertex_gemini::GCPVertexGeminiProvider, mistral::MistralProvider,
-            openai::OpenAIProvider, provider_trait::InferenceProvider, together::TogetherProvider,
-            vllm::VLLMProvider, xai::XAIProvider,
+            openai::OpenAIProvider, openrouter::OpenRouterProvider,
+            provider_trait::InferenceProvider, together::TogetherProvider, vllm::VLLMProvider,
+            xai::XAIProvider,
         },
         types::{ModelInferenceRequest, ModelInferenceResponse, ProviderInferenceResponse},
     },
@@ -510,6 +512,7 @@ impl ModelProvider {
             ProviderConfig::Hyperbolic(_) => "hyperbolic",
             ProviderConfig::Mistral(_) => "mistral",
             ProviderConfig::OpenAI(_) => "openai",
+            ProviderConfig::OpenRouter(_) => "openrouter",
             ProviderConfig::Together(_) => "together",
             ProviderConfig::VLLM(_) => "vllm",
             ProviderConfig::XAI(_) => "xai",
@@ -536,6 +539,7 @@ impl ModelProvider {
             ProviderConfig::Hyperbolic(provider) => Some(provider.model_name()),
             ProviderConfig::Mistral(provider) => Some(provider.model_name()),
             ProviderConfig::OpenAI(provider) => Some(provider.model_name()),
+            ProviderConfig::OpenRouter(provider) => Some(provider.model_name()),
             ProviderConfig::Together(provider) => Some(provider.model_name()),
             ProviderConfig::VLLM(provider) => Some(provider.model_name()),
             ProviderConfig::XAI(provider) => Some(provider.model_name()),
@@ -580,6 +584,7 @@ pub enum ProviderConfig {
     Hyperbolic(HyperbolicProvider),
     Mistral(MistralProvider),
     OpenAI(OpenAIProvider),
+    OpenRouter(OpenRouterProvider),
     SGLang(SGLangProvider),
     TGI(TGIProvider),
     Together(TogetherProvider),
@@ -596,6 +601,7 @@ pub enum ProviderConfig {
 #[serde(deny_unknown_fields)]
 pub enum HostedProviderKind {
     OpenAI,
+    TGI,
 }
 
 #[derive(Debug, TensorZeroDeserialize, VariantNames)]
@@ -670,6 +676,11 @@ pub(super) enum UninitializedProviderConfig {
         api_key_location: Option<CredentialLocation>,
     },
     OpenAI {
+        model_name: String,
+        api_base: Option<Url>,
+        api_key_location: Option<CredentialLocation>,
+    },
+    OpenRouter {
         model_name: String,
         api_base: Option<Url>,
         api_key_location: Option<CredentialLocation>,
@@ -750,17 +761,25 @@ impl UninitializedProviderConfig {
                     return Err(Error::new(ErrorDetails::Config { message: "AWS Sagemaker provider requires a region to be provided, or `allow_auto_detect_region = true`.".to_string() }));
                 }
 
-                let self_hosted = match hosted_provider {
-                    HostedProviderKind::OpenAI => {
-                        OpenAIProvider::new(model_name, None, Some(CredentialLocation::None))?
-                    }
-                };
+                let self_hosted: Box<dyn WrappedProvider + Send + Sync + 'static> =
+                    match hosted_provider {
+                        HostedProviderKind::OpenAI => Box::new(OpenAIProvider::new(
+                            model_name,
+                            None,
+                            Some(CredentialLocation::None),
+                        )?),
+                        HostedProviderKind::TGI => Box::new(TGIProvider::new(
+                            Url::parse("http://tensorzero-unreachable-domain-please-file-a-bug-report.invalid").map_err(|e| {
+                                Error::new(ErrorDetails::InternalError { message: format!("Failed to parse fake TGI endpoint: `{e}`. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new") })
+                            })?,
+                            Some(CredentialLocation::None),
+                        )?),
+                    };
                 // NB: We need to make an async call here to initialize the AWS Sagemaker client.
 
                 let provider = tokio::task::block_in_place(move || {
                     tokio::runtime::Handle::current().block_on(async {
-                        AWSSagemakerProvider::new(endpoint_name, Box::new(self_hosted), region)
-                            .await
+                        AWSSagemakerProvider::new(endpoint_name, self_hosted, region).await
                     })
                 })?;
 
@@ -829,6 +848,15 @@ impl UninitializedProviderConfig {
             } => {
                 ProviderConfig::OpenAI(OpenAIProvider::new(model_name, api_base, api_key_location)?)
             }
+            UninitializedProviderConfig::OpenRouter {
+                model_name,
+                api_base,
+                api_key_location,
+            } => ProviderConfig::OpenRouter(OpenRouterProvider::new(
+                model_name,
+                api_base,
+                api_key_location,
+            )?),
             UninitializedProviderConfig::Together {
                 model_name,
                 api_key_location,
@@ -917,6 +945,9 @@ impl ModelProvider {
             ProviderConfig::OpenAI(provider) => {
                 provider.infer(request, client, api_keys, self).await
             }
+            ProviderConfig::OpenRouter(provider) => {
+                provider.infer(request, client, api_keys, self).await
+            }
             ProviderConfig::Together(provider) => {
                 provider.infer(request, client, api_keys, self).await
             }
@@ -985,6 +1016,9 @@ impl ModelProvider {
                 provider.infer_stream(request, client, api_keys, self).await
             }
             ProviderConfig::OpenAI(provider) => {
+                provider.infer_stream(request, client, api_keys, self).await
+            }
+            ProviderConfig::OpenRouter(provider) => {
                 provider.infer_stream(request, client, api_keys, self).await
             }
             ProviderConfig::Together(provider) => {
@@ -1076,6 +1110,11 @@ impl ModelProvider {
                     .await
             }
             ProviderConfig::OpenAI(provider) => {
+                provider
+                    .start_batch_inference(requests, client, api_keys)
+                    .await
+            }
+            ProviderConfig::OpenRouter(provider) => {
                 provider
                     .start_batch_inference(requests, client, api_keys)
                     .await
@@ -1177,6 +1216,11 @@ impl ModelProvider {
                     .await
             }
             ProviderConfig::OpenAI(provider) => {
+                provider
+                    .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
+                    .await
+            }
+            ProviderConfig::OpenRouter(provider) => {
                 provider
                     .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
                     .await
@@ -1435,6 +1479,7 @@ const SHORTHAND_MODEL_PREFIXES: &[&str] = &[
     "hyperbolic::",
     "mistral::",
     "openai::",
+    "openrouter::",
     "together::",
     "xai::",
     "dummy::",
