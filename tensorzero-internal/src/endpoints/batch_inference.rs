@@ -520,7 +520,8 @@ async fn poll_batch_inference(
     // Retrieve the relevant model provider
     // Call model.poll_batch_inference on it
     let model_config = models
-        .get(batch_request.model_name.as_ref())?
+        .get(batch_request.model_name.as_ref())
+        .await?
         .ok_or_else(|| {
             Error::new(ErrorDetails::InvalidModel {
                 model_name: batch_request.model_name.to_string(),
