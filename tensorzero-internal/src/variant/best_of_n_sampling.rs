@@ -160,22 +160,21 @@ impl Variant for BestOfNSamplingConfig {
                     name: candidate.to_string(),
                 })
             })?;
-            variant
-                .validate(
-                    function,
-                    models,
-                    embedding_models,
-                    templates,
-                    function_name,
-                    candidate,
-                )
-                .await
-                .map_err(|e| {
-                    Error::new(ErrorDetails::InvalidCandidate {
-                        variant_name: variant_name.to_string(),
-                        message: e.to_string(),
-                    })
-                })?
+            Box::pin(variant.validate(
+                function,
+                models,
+                embedding_models,
+                templates,
+                function_name,
+                candidate,
+            ))
+            .await
+            .map_err(|e| {
+                Error::new(ErrorDetails::InvalidCandidate {
+                    variant_name: variant_name.to_string(),
+                    message: e.to_string(),
+                })
+            })?
         }
         // Validate the evaluator variant
         self.evaluator

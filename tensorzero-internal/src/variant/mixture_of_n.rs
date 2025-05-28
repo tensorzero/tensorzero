@@ -136,22 +136,22 @@ impl Variant for MixtureOfNConfig {
                     name: candidate.to_string(),
                 })
             })?;
-            variant
-                .validate(
-                    function,
-                    models,
-                    embedding_models,
-                    templates,
-                    function_name,
-                    candidate,
-                )
-                .await
-                .map_err(|e| {
-                    Error::new(ErrorDetails::InvalidCandidate {
-                        variant_name: variant_name.to_string(),
-                        message: e.to_string(),
-                    })
-                })?
+            // Required by the compiler due to recursion (we call the top-level `validate`)
+            Box::pin(variant.validate(
+                function,
+                models,
+                embedding_models,
+                templates,
+                function_name,
+                candidate,
+            ))
+            .await
+            .map_err(|e| {
+                Error::new(ErrorDetails::InvalidCandidate {
+                    variant_name: variant_name.to_string(),
+                    message: e.to_string(),
+                })
+            })?
         }
         // Validate the evaluator variant
         self.fuser
