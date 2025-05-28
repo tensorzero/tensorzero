@@ -10,7 +10,7 @@ Set `TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzer
 ```bash
 uv venv  # Create a new virtual environment
 source .venv/bin/activate # Activate environment
-uv pip install xformers --index-url https://download.pytorch.org/whl/<your-cuda-version> # Install torch
+uv pip install xformers --index-url https://download.pytorch.org/whl/<your-cuda-version> # Install xformers
 uv pip install -r requirements.txt # Install the dependencies
 ```
 

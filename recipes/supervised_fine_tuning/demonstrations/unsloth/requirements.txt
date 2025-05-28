@@ -388,7 +388,9 @@ colorama==0.4.6 ; sys_platform == 'win32' \
 comm==0.2.2 \
     --hash=sha256:3fd7a84065306e07bea1773df6eb8282de51ba82f77c72f9c85716ab11fe980e \
     --hash=sha256:e6fb86cb70ff661ee8c9c14e7d36d6de3b4066f1441be4063df9c5009f0a64d3
-    # via ipykernel
+    # via
+    #   ipykernel
+    #   ipywidgets
 cut-cross-entropy==25.1.1 ; python_full_version >= '3.10' \
     --hash=sha256:5fe5924509248b1aea5c890f8887c6a7759f7c8b1ebc0490e42c247c4f7c1e34 \
     --hash=sha256:e46f26d348f6a67927d17e65c5a212e795be13dcad5b10a77a200d6b8102d9d1
@@ -642,7 +644,9 @@ httpcore==1.0.9 \
 httpx==0.28.1 \
     --hash=sha256:75e98c5f16b0f35b567856f597f06ff2270a374470a5c2392242528e3e3e42fc \
     --hash=sha256:d909fcccc110f8c7faf814ca82a9a4d816bc5a6dbfea25d6591d6985b8ba59ad
-    # via jupyterlab
+    # via
+    #   jupyterlab
+    #   tensorzero
 huggingface-hub==0.32.2 \
     --hash=sha256:64a288b1eadad6b60bbfd50f0e52fd6cfa2ef77ab13c3e8a834a038ae929de54 \
     --hash=sha256:f8fcf14603237eadf96dbe577d30b330f8c27b4a0a31e8f6c94fdc25e021fdb8
@@ -684,19 +688,29 @@ ipykernel==6.29.5 \
 ipython==8.18.1 ; python_full_version < '3.10' \
     --hash=sha256:ca6f079bb33457c66e233e4580ebfc4128855b4cf6370dddd73842a9563e8a27 \
     --hash=sha256:e8267419d72d81955ec1177f8a29aaa90ac80ad647499201119e2f05e99aa397
-    # via ipykernel
+    # via
+    #   ipykernel
+    #   ipywidgets
 ipython==8.36.0 ; python_full_version == '3.10.*' \
     --hash=sha256:12b913914d010dcffa2711505ec8be4bf0180742d97f1e5175e51f22086428c1 \
     --hash=sha256:24658e9fe5c5c819455043235ba59cfffded4a35936eefceceab6b192f7092ff
-    # via ipykernel
+    # via
+    #   ipykernel
+    #   ipywidgets
 ipython==9.2.0 ; python_full_version >= '3.11' \
     --hash=sha256:62a9373dbc12f28f9feaf4700d052195bf89806279fc8ca11f3f54017d04751b \
     --hash=sha256:fef5e33c4a1ae0759e0bba5917c9db4eb8c53fee917b6a526bd973e1ca5159f6
-    # via ipykernel
+    # via
+    #   ipykernel
+    #   ipywidgets
 ipython-pygments-lexers==1.1.1 ; python_full_version >= '3.11' \
     --hash=sha256:09c0138009e56b6854f9535736f4171d855c8c08a563a0dcd8022f78355c7e81 \
     --hash=sha256:a9462224a505ade19a605f71f8fa63c2048833ce50abc86768a0d81d876dc81c
     # via ipython
+ipywidgets==8.1.7 \
+    --hash=sha256:15f1ac050b9ccbefd45dccfbb2ef6bed0029d8278682d569d71b8dd96bee0376 \
+    --hash=sha256:764f2602d25471c213919b8a1997df04bef869251db4ca8efba1b76b1bd9f7bb
+    # via tensorzero-recipe-sft-unsloth-demonstrations
 isoduration==20.11.0 \
     --hash=sha256:ac2f9015137935279eac671f94f89eb00584f940f5dc49462a0c4ee692ba1bd9 \
     --hash=sha256:b2904c2a4228c3d44f409c8ae8e2370eb21a26f7ac2ec5446df141dde3452042
@@ -786,6 +800,10 @@ jupyterlab-server==2.27.3 \
     # via
     #   jupyterlab
     #   notebook
+jupyterlab-widgets==3.0.15 \
+    --hash=sha256:2920888a0c2922351a9202817957a68c07d99673504d6cd37345299e971bb08b \
+    --hash=sha256:d59023d7d7ef71400d51e6fee9a88867f6e65e10a4201605d2d7f3e8f012a31c
+    # via ipywidgets
 lz4==4.4.4 \
     --hash=sha256:017f8d269a739405a59d68a4d63d23a8df23e3bb2c70aa069b7563af08dfdffb \
     --hash=sha256:070fd0627ec4393011251a094e08ed9fdcc78cb4e7ab28f507638eee4e39abda \
@@ -2216,6 +2234,16 @@ sympy==1.14.0 \
     --hash=sha256:d3d3fe8df1e5a0b42f0e7bdf50541697dbe7d23746e894990c030e2b05e72517 \
     --hash=sha256:e091cc3e99d2141a0ba2847328f5479b05d94a6635cb96148ccb3f34671bd8f5
     # via torch
+tensorzero==2025.5.7 \
+    --hash=sha256:3d7fb155532c10d68483400a054749b34335e7a2e7b0190303cd113144e91f85 \
+    --hash=sha256:51baa722424dc6ce3ed5906105b078ef69c4f2b61c00af04cacb9579f39a8b5e \
+    --hash=sha256:6285f04302bae68b9e79faabccb15369250a1fc111d1ebf10969e8f9f9fab174 \
+    --hash=sha256:84b1c7acfa07bdb2501678306b7c28d4eb42662d7259d875c0b96df585edd72a \
+    --hash=sha256:bcaa89db9acec4f87fc16614a81f86e52c4d718b3f434af39ed6de3524427374 \
+    --hash=sha256:c191e182ce0e63cb07769936c9ef30d79e407a877a95c8b6fe5062255e28bd24 \
+    --hash=sha256:c6e78e96e1691c7049110615b31a047de5293664f786e31a7cad20f0958d894c \
+    --hash=sha256:d29d4d53f13547d0a05e9380ab7c12a1c65e535034b8ac28ee45eedd29faaf71
+    # via tensorzero-recipe-sft-unsloth-demonstrations
 terminado==0.18.1 \
     --hash=sha256:a4468e1b37bb318f8a86514f65814e1afc977cf29b3992a4500d9dd305dcceb0 \
     --hash=sha256:de09f2c4b85de4765f7714688fff57d3e75bad1f909b589fde880460c753fd2e
@@ -2378,6 +2406,7 @@ traitlets==5.14.3 \
     #   comm
     #   ipykernel
     #   ipython
+    #   ipywidgets
     #   jupyter-client
     #   jupyter-core
     #   jupyter-events
@@ -2445,6 +2474,7 @@ typing-extensions==4.13.2 \
     #   python-json-logger
     #   referencing
     #   rich
+    #   tensorzero
     #   torch
     #   typeguard
     #   tyro
@@ -2484,6 +2514,36 @@ urllib3==2.4.0 \
     # via
     #   clickhouse-connect
     #   requests
+uuid-utils==0.11.0 \
+    --hash=sha256:05bfd684cb55825bc5d4c340bfce3a90009e662491e7bdfd5f667a367e0a11e4 \
+    --hash=sha256:07cd17ecef3bfdf319d8e6583334f4c8e71d9950503b69d6722999c88a42dbe2 \
+    --hash=sha256:094445ccd323bc5507e28e9d6d86b983513efcf19ab59c2dd75239cef765631a \
+    --hash=sha256:1012595220f945fe09641f1365a8a06915bf432cac1b31ebd262944934a9b787 \
+    --hash=sha256:18420eb3316bb514f09f2da15750ac135478c3a12a704e2c5fb59eab642bb255 \
+    --hash=sha256:18cf2b7083da7f3cca0517647213129eb16d20d7ed0dd74b3f4f8bff2aa334ea \
+    --hash=sha256:2c8346b3688b2df0baae4d3ff47cd84c765aa57cf103077e32806d66f1fcd689 \
+    --hash=sha256:35cd3fc718a673e4516e87afb9325558969eca513aa734515b9031d1b651bbb1 \
+    --hash=sha256:37c4805af61a7cce899597d34e7c3dd5cb6a8b4b93a90fbca3826b071ba544df \
+    --hash=sha256:4065cf17bbe97f6d8ccc7dc6a0bae7d28fd4797d7f32028a5abd979aeb7bf7c9 \
+    --hash=sha256:5455b145cb6f647888f3c4fd38ec177cf51479c73c6a44503d4b7a70f45d9870 \
+    --hash=sha256:5c8b7cf201990ee3140956e541967bd556a7365ec738cb504b04187ad89c757a \
+    --hash=sha256:6430b53d343215f85269ffd74e1d1f4b25ae1031acf0ac24ff3d5721f6a06f48 \
+    --hash=sha256:691f576327836f93102f2bf8882eb67416452bab03c3dd8c31d009c4e85dd2aa \
+    --hash=sha256:6f6a306878b2327b79d65bd18d5521ef8b3775c2b03a5054b1b6f602cd876cc3 \
+    --hash=sha256:912e9ae2b5c2b72bd98046ee83e1b8fa22489b4a25f44495d1c0999fa6dde237 \
+    --hash=sha256:9930137fd6d59c681f7e013ae9343b4b9d27f7e6efce4ecb259336e15ba578b8 \
+    --hash=sha256:9966df55bed5d538ba2e9cc40115796480f437f9007727116ef99dc2f42bd5fa \
+    --hash=sha256:9f7f7e0245bcedbc4ff61ad4000fd661dc93677264c0566b31010d6da0b86a63 \
+    --hash=sha256:be2e6e4318d23195887fa74fa1d64565a34f7127fdcf22918954981d79765f68 \
+    --hash=sha256:c7a7f415edb5aea38bc53057c8aff4b31d35e192f2902f6ac10f2e52d3f52ae0 \
+    --hash=sha256:cb04b6c604968424b7e6398d54debbdd5b771b39fc1e648c6eabf3f1dc20582e \
+    --hash=sha256:ce73c719e0baebc8b1652e7663bec7d4db53edbd7be1affe92b1035fc80f409b \
+    --hash=sha256:d37289ab72aa30b5550bfa64d91431c62c89e4969bdf989988aa97f918d5f803 \
+    --hash=sha256:db821c98a95f9d69ebf9c442bcf764548c4c5feebd6012a881233fcdc8f47ff4 \
+    --hash=sha256:ed325e0c40e0f59ae82b347f534df954b50cedf12bf60d025625538530e1965d \
+    --hash=sha256:f1b29c4aa76586c67e865548c862b0dee98359d59eda78b58d58290dd0dd240e \
+    --hash=sha256:f51374cd3280e5a8c524c51ed09901cf2268907371e1b3dc59484a92e25f070a
+    # via tensorzero
 wcwidth==0.2.13 \
     --hash=sha256:3da69048e4540d84af32131829ff948f1e022c1c6bdb8d6102117aac784f6859 \
     --hash=sha256:72ea0c06399eb286d978fdedb6923a9eb47e1c486ce63e9b4e64fc18303972b5
@@ -2508,6 +2568,10 @@ wheel==0.45.1 \
     # via
     #   unsloth
     #   unsloth-zoo
+widgetsnbextension==4.0.14 \
+    --hash=sha256:4875a9eaf72fbf5079dc372a51a9f268fc38d46f767cbf85c43a36da5cb9b575 \
+    --hash=sha256:a3629b04e3edb893212df862038c7232f62973373869db5084aed739b437b5af
+    # via ipywidgets
 xformers==0.0.30 \
     --hash=sha256:357875986f50f105f445dc9a002c8450623cd4a6a469865c463285d0376fe77b \
     --hash=sha256:37c96f8154109383c3c046d43492fa713aa2c90788a0dde2274104177cdcdddd \
