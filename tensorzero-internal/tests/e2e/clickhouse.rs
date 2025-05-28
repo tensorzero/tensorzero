@@ -237,8 +237,9 @@ async fn run_migration_0021_with_data<R: Future<Output = bool>, F: FnOnce() -> R
     clickhouse: &ClickHouseConnectionInfo,
     run_migration: F,
 ) -> bool {
-    let initial_chat_inference_count: u64 = count_table_rows(clickhouse, "ChatInference").await;
-    let initial_json_inference_count: u64 = count_table_rows(clickhouse, "JsonInference").await;
+    // Our fixtures apply two tags per inference
+    let initial_chat_inference_count: u64 = 2 * count_table_rows(clickhouse, "ChatInference").await;
+    let initial_json_inference_count: u64 = 2 * count_table_rows(clickhouse, "JsonInference").await;
 
     let clean_start = run_migration().await;
 
