@@ -32,7 +32,7 @@ use tensorzero_internal::{
     gateway_util::ShutdownHandle,
     inference::types::{
         extra_body::UnfilteredInferenceExtraBody, extra_headers::UnfilteredInferenceExtraHeaders,
-        image::serialize_with_file_data,
+        file::serialize_with_file_data,
     },
 };
 use tensorzero_rust::{

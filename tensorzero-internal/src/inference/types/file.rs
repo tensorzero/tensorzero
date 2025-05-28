@@ -178,7 +178,7 @@ pub fn sanitize_raw_request(input_messages: &[RequestMessage], mut raw_request: 
 #[cfg(test)]
 mod tests {
     use crate::inference::types::{
-        image::sanitize_raw_request,
+        file::sanitize_raw_request,
         resolved_input::FileWithPath,
         storage::{StorageKind, StoragePath},
         Base64File, ContentBlock, FileKind, RequestMessage, Role,
