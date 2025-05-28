@@ -36,7 +36,7 @@ pub type EmbeddingModelTable = BaseModelTable<EmbeddingModelConfig>;
 impl ShorthandModelConfig for EmbeddingModelConfig {
     const SHORTHAND_MODEL_PREFIXES: &[&str] = &["openai::"];
     const MODEL_TYPE: &str = "Embedding model";
-    fn from_shorthand(provider_type: &str, model_name: &str) -> Result<Self, Error> {
+    async fn from_shorthand(provider_type: &str, model_name: &str) -> Result<Self, Error> {
         let model_name = model_name.to_string();
         let provider_config = match provider_type {
             "openai" => {
