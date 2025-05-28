@@ -19,12 +19,16 @@ PART_SIZE = 8388608
 FIXTURES = [
     "large_chat_inference_v2.parquet",
     "large_chat_model_inference_v2.parquet",
-    "large_json_inference.parquet",
-    "large_json_model_inference.parquet",
+    "large_json_inference_v2.parquet",
+    "large_json_model_inference_v2.parquet",
     "large_chat_boolean_feedback.parquet",
     "large_chat_float_feedback.parquet",
     "large_chat_comment_feedback.parquet",
     "large_chat_demonstration_feedback.parquet",
+    "large_json_boolean_feedback.parquet",
+    "large_json_float_feedback.parquet",
+    "large_json_comment_feedback.parquet",
+    "large_json_demonstration_feedback.parquet",
 ]
 R2_BUCKET = "https://pub-147e9850a60643208c411e70b636e956.r2.dev"
 S3_FIXTURES_DIR = Path("./s3-fixtures")
