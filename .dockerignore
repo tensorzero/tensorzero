@@ -11,3 +11,6 @@ target-rust-analyzer
 /recipes
 /examples
 !/examples/integrations/cursor/experimental
+!/examples/quickstart/package.json
+!/examples/integrations/helicone/package.json
+!/examples/guides/tool-use/package.json
