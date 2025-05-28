@@ -987,6 +987,18 @@ model = "openai::gpt-4o-mini-2024-07-18"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
+[functions.basic_test.variants.gcp_vertex_gemini_shorthand]
+type = "chat_completion"
+model = "gcp_vertex_gemini::projects/tensorzero-public/locations/us-central1/publishers/google/models/gemini-2.0-flash-001"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.gcp_vertex_gemini_shorthand_endpoint]
+type = "chat_completion"
+model = "gcp_vertex_gemini::projects/tensorzero-public/locations/us-central1/endpoints/945488740422254592"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
 [functions.basic_test.variants.o4-mini]
 type = "chat_completion"
 model = "o4-mini"

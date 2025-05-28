@@ -54,6 +54,8 @@ jobs:
           cache: |
             rust
 
+      - uses: dtolnay/rust-toolchain@stable
+
       - name: Login to DockerHub
         uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772
         with:
