@@ -336,13 +336,18 @@ impl GCPVertexGeminiProvider {
     //
     // This is *not* a full url - we append ':generateContent' or ':streamGenerateContent' to the end of the path as needed.
     pub fn new_shorthand(project_url_path: String) -> Result<Self, Error> {
-        let credentials = build_creds_caching_default_with_fn(
-            None,
-            default_api_key_location(),
-            PROVIDER_TYPE,
-            &DEFAULT_CREDENTIALS,
-            |creds| GCPVertexCredentials::try_from((creds, PROVIDER_TYPE)),
-        )?;
+        let cred_location = default_api_key_location();
+        let credentials = if matches!(cred_location, CredentialLocation::Sdk) {
+            make_gcp_sdk_credentials(PROVIDER_TYPE).await
+        } else {
+            build_creds_caching_default_with_fn(
+                None,
+                cred_location,
+                PROVIDER_TYPE,
+                &DEFAULT_CREDENTIALS,
+                |creds| GCPVertexCredentials::try_from((creds, PROVIDER_TYPE)),
+            )?
+        };
 
         let shorthand_url = parse_shorthand_url(&project_url_path)?;
         let (location, model_id) = match shorthand_url {
