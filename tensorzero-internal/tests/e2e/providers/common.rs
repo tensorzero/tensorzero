@@ -1464,6 +1464,17 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
                 "Unexpected error: {res}"
             );
         }
+        "openrouter" => {
+            assert!(
+                res["error"].as_str().unwrap().contains("400 Bad Request")
+                    || res["error"].as_str().unwrap().contains("Invalid API Key")
+                    || res["error"]
+                        .as_str()
+                        .unwrap()
+                        .contains("No auth credentials found"),
+                "Unexpected error: {res}"
+            );
+        }
         "sglang" | "tgi" => {
             assert!(
                 res["error"]
@@ -2333,7 +2344,7 @@ pub async fn test_streaming_invalid_request_with_provider(provider: E2ETestProvi
         "stream": true,
         "extra_body": [
             {
-                "variant_name": "aws-sagemaker",
+                "variant_name": "aws-sagemaker-openai",
                 "pointer": "/messages/0/content",
                 "value": 123,
             },
@@ -2368,6 +2379,10 @@ pub async fn test_streaming_invalid_request_with_provider(provider: E2ETestProvi
 }
 
 pub async fn test_simple_streaming_inference_request_with_provider(provider: E2ETestProvider) {
+    // We use a serverless Sagemaker endpoint, which doesn't support streaming
+    if provider.variant_name == "aws-sagemaker-tgi" {
+        return;
+    }
     let episode_id = Uuid::now_v7();
     let tag_value = Uuid::now_v7().to_string();
     // Generate random u32
@@ -8517,7 +8532,29 @@ pub async fn check_parallel_tool_use_inference_response(
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
-    assert_eq!(output.len(), 2);
+
+    let is_openrouter = provider.model_provider_name == "openrouter";
+    if is_openrouter {
+        // For OpenRouter, check that there are at least 2 tool calls
+        // (OpenRouter may include an empty text block)
+        let tool_calls = output
+            .iter()
+            .filter(|block| matches!(block, ContentBlock::ToolCall(_)))
+            .count();
+        assert_eq!(
+            tool_calls, 2,
+            "Expected 2 tool calls for OpenRouter, got {tool_calls}"
+        );
+    } else {
+        // For other providers, expect exactly 2 blocks total
+        assert_eq!(
+            output.len(),
+            2,
+            "Expected exactly 2 output blocks, got {}",
+            output.len()
+        );
+    }
+
     let mut tool_call_names = vec![];
     for block in output {
         match block {
@@ -8525,8 +8562,12 @@ pub async fn check_parallel_tool_use_inference_response(
                 tool_call_names.push(tool_call.name);
                 serde_json::from_str::<Value>(&tool_call.arguments).unwrap();
             }
+            ContentBlock::Text(text) if text.text.is_empty() && is_openrouter => {
+                // Skip empty text blocks for OpenRouter
+                continue;
+            }
             _ => {
-                panic!("Expected a tool call, got {block:?}");
+                panic!("Expected a tool call or empty text (for OpenRouter), got {block:?}");
             }
         }
     }
@@ -9157,22 +9198,58 @@ pub async fn check_json_mode_inference_response(
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
-    assert_eq!(output.len(), 1);
-    match &output[0] {
-        ContentBlock::Text(text) => {
-            let _: Value = serde_json::from_str(&text.text).unwrap();
-            assert!(text.text.to_lowercase().contains("tokyo"));
+
+    let is_openrouter = provider.model_provider_name == "openrouter";
+    if is_openrouter {
+        // OpenRouter may return both an empty text block and a tool_call block
+        assert!(
+            output.len() <= 2,
+            "Expected at most 2 output blocks for OpenRouter, got {}",
+            output.len()
+        );
+    } else {
+        // For other providers, expect exactly one block
+        assert_eq!(
+            output.len(),
+            1,
+            "Expected exactly 1 output block, got {}",
+            output.len()
+        );
+    }
+
+    // Check for valid content in the output
+    let mut found_valid_content = false;
+    for output_block in &output {
+        match output_block {
+            ContentBlock::Text(text) if text.text.is_empty() && is_openrouter => {
+                // Skip empty text blocks from OpenRouter
+                continue;
+            }
+            ContentBlock::Text(text) => {
+                let _: Value = serde_json::from_str(&text.text).unwrap();
+                assert!(text.text.to_lowercase().contains("tokyo"));
+                found_valid_content = true;
+            }
+            ContentBlock::ToolCall(tool_call) => {
+                // OpenRouter may use tool_call format
+                assert_eq!(tool_call.name, "respond");
+                let arguments: Value = serde_json::from_str(&tool_call.arguments).unwrap();
+                let answer = arguments.get("answer").unwrap().as_str().unwrap();
+                assert!(answer.to_lowercase().contains("tokyo"));
+                found_valid_content = true;
+            }
+            _ => {
+                panic!("Expected a text block or tool_call (for OpenRouter), got {output_block:?}");
+            }
         }
-        ContentBlock::ToolCall(tool_call) => {
-            // Handles implicit tool calls
-            assert_eq!(tool_call.name, "respond");
-            let arguments: Value = serde_json::from_str(&tool_call.arguments).unwrap();
-            let answer = arguments.get("answer").unwrap().as_str().unwrap();
-            assert!(answer.to_lowercase().contains("tokyo"));
-        }
-        _ => {
-            panic!("Expected a text block, got {:?}", output[0]);
-        }
+    }
+
+    // OpenRouter must have at least one valid content block
+    if is_openrouter {
+        assert!(
+            found_valid_content,
+            "No valid JSON content found in OpenRouter response"
+        );
     }
 }
 
@@ -9404,22 +9481,59 @@ pub async fn check_dynamic_json_mode_inference_response(
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
-    assert_eq!(output.len(), 1);
-    match &output[0] {
-        ContentBlock::Text(text) => {
-            let _: Value = serde_json::from_str(&text.text).unwrap();
-            assert!(&text.text.to_lowercase().contains("tokyo"));
+
+    let is_openrouter = provider.model_provider_name == "openrouter";
+    if is_openrouter {
+        // OpenRouter may return both an empty text block and a tool_call block
+        assert!(
+            output.len() <= 2,
+            "Expected at most 2 output blocks for OpenRouter, got {}",
+            output.len()
+        );
+    } else {
+        // For other providers, expect exactly one block
+        assert_eq!(
+            output.len(),
+            1,
+            "Expected exactly 1 output block, got {}",
+            output.len()
+        );
+    }
+
+    // Check for valid content in the output
+    let mut found_valid_content = false;
+    for output_block in &output {
+        match output_block {
+            ContentBlock::Text(text) if text.text.is_empty() && is_openrouter => {
+                // Skip empty text blocks from OpenRouter
+                continue;
+            }
+            ContentBlock::Text(text) => {
+                let _: Value = serde_json::from_str(&text.text).unwrap();
+                assert!(&text.text.to_lowercase().contains("tokyo"));
+                found_valid_content = true;
+            }
+            ContentBlock::ToolCall(tool_call) => {
+                // OpenRouter may use tool_call format
+                assert_eq!(tool_call.name, "respond");
+                let arguments: Value = serde_json::from_str(&tool_call.arguments).unwrap();
+                let response = arguments.get("response").unwrap().as_str().unwrap();
+                assert!(response.to_lowercase().contains("tokyo"));
+                found_valid_content = true;
+            }
+            _ => {
+                panic!("Expected a text block or tool_call (for OpenRouter), got {output_block:?}");
+            }
         }
-        ContentBlock::ToolCall(tool_call) => {
-            // Handles implicit tool calls
-            assert_eq!(tool_call.name, "respond");
-            let arguments: Value = serde_json::from_str(&tool_call.arguments).unwrap();
-            let answer = arguments.get("response").unwrap().as_str().unwrap();
-            assert!(answer.to_lowercase().contains("tokyo"));
-        }
-        _ => {
-            panic!("Expected a text block, got {:?}", output[0]);
-        }
+    }
+
+    // OpenRouter must have at least one valid content block
+    // We do this check because OpenRouter sometimes responds with empty content blocks
+    if is_openrouter {
+        assert!(
+            found_valid_content,
+            "No valid JSON content found in OpenRouter response"
+        );
     }
 }
 
@@ -10038,7 +10152,23 @@ pub async fn test_multi_turn_parallel_tool_use_inference_request_with_provider(
 
     for content_block in response_json.get("content").unwrap().as_array().unwrap() {
         let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-        assert_eq!(content_block_type, "tool_call");
+
+        // Special handling for OpenRouter empty text blocks
+        let is_openrouter = provider.model_provider_name == "openrouter";
+        if content_block_type == "text" && is_openrouter {
+            // For OpenRouter, skip empty text blocks
+            let text = content_block.get("text").unwrap().as_str().unwrap();
+            if text.is_empty() {
+                continue;
+            } else {
+                panic!("Unexpected text block with non-empty content: {text}");
+            }
+        }
+
+        assert_eq!(
+            content_block_type, "tool_call",
+            "Expected tool_call, got {content_block_type}"
+        );
 
         if content_block.get("name").unwrap().as_str().unwrap() == "get_temperature" {
             tool_results.push(json!(
@@ -10313,7 +10443,23 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
 
     for content_block in response_json.get("content").unwrap().as_array().unwrap() {
         let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-        assert_eq!(content_block_type, "tool_call");
+
+        // Special handling for OpenRouter empty text blocks
+        let is_openrouter = provider.model_provider_name == "openrouter";
+        if content_block_type == "text" && is_openrouter {
+            // For OpenRouter, skip empty text blocks
+            let text = content_block.get("text").unwrap().as_str().unwrap();
+            if text.is_empty() {
+                continue;
+            } else {
+                panic!("Unexpected text block with non-empty content: {text}");
+            }
+        }
+
+        assert_eq!(
+            content_block_type, "tool_call",
+            "Expected tool_call, got {content_block_type}"
+        );
 
         if content_block.get("name").unwrap().as_str().unwrap() == "get_temperature" {
             tool_results.push(json!(

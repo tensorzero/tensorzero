@@ -1,4 +1,4 @@
-#![allow(clippy::print_stdout)]
+#![allow(clippy::print_stdout, clippy::print_stderr)]
 
 use std::cell::Cell;
 use std::future::Future;
@@ -9,6 +9,7 @@ use reqwest::Client;
 use secrecy::{ExposeSecret, SecretString};
 use serde_json::json;
 use tensorzero_internal::clickhouse::migration_manager::migration_trait::Migration;
+use tokio::runtime::Handle;
 use tracing_test::traced_test;
 use uuid::Uuid;
 
@@ -27,7 +28,34 @@ use tensorzero_internal::clickhouse::migration_manager::{self, make_all_migratio
 use tensorzero_internal::clickhouse::test_helpers::{get_clickhouse, CLICKHOUSE_URL};
 use tensorzero_internal::clickhouse::ClickHouseConnectionInfo;
 
-fn get_clean_clickhouse() -> ClickHouseConnectionInfo {
+struct DeleteDbOnDrop {
+    database: String,
+    client: ClickHouseConnectionInfo,
+}
+
+impl Drop for DeleteDbOnDrop {
+    fn drop(&mut self) {
+        eprintln!("Dropping database: {}", self.database);
+        let client = self.client.clone();
+        let database = self.database.clone();
+        tokio::task::block_in_place(|| {
+            Handle::current().block_on(async move {
+                client
+                    .run_query_synchronous(format!("DROP DATABASE {database}"), None)
+                    .await
+                    .unwrap();
+                eprintln!("Database dropped: {database}");
+            })
+        });
+    }
+}
+
+/// Creates a fresh ClickHouse database.
+/// Returns a `ClickHouseConnectionInfo` for the db, along with a `DeleteDbOnDrop`
+/// that deletes the database when the `DeleteDbOnDrop` is dropped (which will
+/// happen even if the test panics).
+/// This helps to reduce peak disk usage on CI.
+fn get_clean_clickhouse() -> (ClickHouseConnectionInfo, DeleteDbOnDrop) {
     let database = format!(
         "tensorzero_e2e_tests_migration_manager_{}",
         Uuid::now_v7().simple()
@@ -36,13 +64,20 @@ fn get_clean_clickhouse() -> ClickHouseConnectionInfo {
     clickhouse_url.set_path("");
     clickhouse_url.set_query(Some(format!("database={database}").as_str()));
 
-    ClickHouseConnectionInfo::Production {
+    let clickhouse = ClickHouseConnectionInfo::Production {
         database_url: SecretString::from(clickhouse_url.to_string()),
         database: database.clone(),
         // This works around an issue with ClickHouse Cloud where long-lived connections
         // are abruptly closed by the server.
         client: Client::builder().pool_max_idle_per_host(0).build().unwrap(),
-    }
+    };
+    (
+        clickhouse.clone(),
+        DeleteDbOnDrop {
+            database,
+            client: clickhouse,
+        },
+    )
 }
 
 /// A helper macro to work with `#[traced_test]`. We need to generate a new `#[traced_test]`
@@ -188,6 +223,24 @@ async fn run_migration_0009_with_data<R: Future<Output = bool>, F: FnOnce() -> R
     clean_start
 }
 
+async fn run_migration_0021_with_data<R: Future<Output = bool>, F: FnOnce() -> R>(
+    clickhouse: &ClickHouseConnectionInfo,
+    run_migration: F,
+) -> bool {
+    let initial_chat_inference_count: u64 = count_table_rows(clickhouse, "ChatInference").await;
+    let initial_json_inference_count: u64 = count_table_rows(clickhouse, "JsonInference").await;
+
+    let clean_start = run_migration().await;
+
+    let final_tag_inference_count: u64 = count_table_rows(clickhouse, "TagInference").await;
+    assert_eq!(
+        initial_chat_inference_count + initial_json_inference_count,
+        final_tag_inference_count,
+    );
+
+    clean_start
+}
+
 async fn run_migration_0020_with_data<R: Future<Output = bool>, F: FnOnce() -> R>(
     clickhouse: &ClickHouseConnectionInfo,
     run_migration: F,
@@ -326,9 +379,9 @@ async fn run_migration_0020_with_data<R: Future<Output = bool>, F: FnOnce() -> R
     clean_start
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_clickhouse_migration_manager() {
-    let clickhouse = get_clean_clickhouse();
+    let (clickhouse, _cleanup_db) = get_clean_clickhouse();
     clickhouse.create_database().await.unwrap();
     // Run it twice to test that it is a no-op the second time
     clickhouse.create_database().await.unwrap();
@@ -382,7 +435,20 @@ async fn test_clickhouse_migration_manager() {
                     initial_clean_start.set(false);
                     run_migration_0009_with_data(clickhouse, run_migration).await
                 }
-                "Migration0020" => run_migration_0020_with_data(clickhouse, run_migration).await,
+                "Migration0020" => {
+                    assert!(
+                        !initial_clean_start.get(),
+                        "Migration0020 should not be run on a clean start"
+                    );
+                    run_migration_0020_with_data(clickhouse, run_migration).await
+                }
+                "Migration0021" => {
+                    assert!(
+                        !initial_clean_start.get(),
+                        "Migration0021 should not be run on a clean start"
+                    );
+                    run_migration_0021_with_data(clickhouse, run_migration).await
+                }
                 _ => run_migration().await,
             };
 
@@ -434,14 +500,6 @@ async fn test_clickhouse_migration_manager() {
         [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]
     );
     run_all(&migrations).await;
-
-    let database = clickhouse.database();
-    tracing::info!("Attempting to drop test database: {database}");
-
-    clickhouse
-        .run_query_synchronous(format!("DROP DATABASE {database}"), None)
-        .await
-        .unwrap();
 }
 
 #[tokio::test]
@@ -461,15 +519,16 @@ async fn test_bad_clickhouse_write() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_clean_clickhouse_start() {
-    let clickhouse = get_clean_clickhouse();
+    let (clickhouse, _cleanup_db) = get_clean_clickhouse();
     migration_manager::run(&clickhouse).await.unwrap();
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_concurrent_clickhouse_migrations() {
-    let clickhouse = Arc::new(get_clean_clickhouse());
+    let (clickhouse, _cleanup_db) = get_clean_clickhouse();
+    let clickhouse = Arc::new(clickhouse);
     let num_concurrent_starts = 50;
     let mut handles = Vec::with_capacity(num_concurrent_starts);
     for _ in 0..num_concurrent_starts {
@@ -487,9 +546,9 @@ async fn test_concurrent_clickhouse_migrations() {
 /// the database.
 /// This test enforces that the migration will error if there would be an invalid database state
 /// rather than brick the database.
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_migration_0013_old_table() {
-    let clickhouse = get_clean_clickhouse();
+    let (clickhouse, _cleanup_db) = get_clean_clickhouse();
     clickhouse.create_database().await.unwrap();
 
     // When creating a new migration, add it to the end of this array,
@@ -564,9 +623,9 @@ async fn test_migration_0013_old_table() {
 /// For this test, we will run all the migrations up to 0011, add some data to
 /// the JSONInference table, then run migration 0013.
 /// This should fail.
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_migration_0013_data_no_table() {
-    let clickhouse = get_clean_clickhouse();
+    let (clickhouse, _cleanup_db) = get_clean_clickhouse();
     clickhouse.create_database().await.unwrap();
 
     // When creating a new migration, add it to the end of this array,

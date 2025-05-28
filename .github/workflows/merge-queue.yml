@@ -26,6 +26,7 @@ env:
   MODAL_SECRET: ${{ secrets.MODAL_SECRET }}
   MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
   R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
   R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
   SGLANG_API_KEY: ${{ secrets.SGLANG_API_KEY }}
@@ -37,9 +38,9 @@ env:
   XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
 
 jobs:
-  # batch-tests:
-  #   uses: ./.github/workflows/batch-test.yml
-  #   secrets: inherit
+  batch-tests:
+    uses: ./.github/workflows/batch-test.yml
+    secrets: inherit
   live-tests:
     runs-on: namespace-profile-tensorzero-8x16
 
@@ -58,6 +59,8 @@ jobs:
 
       - name: Configure Namespace-powered Buildx
         uses: namespacelabs/nscloud-setup-buildx-action@84ca8c58fdf372d6a4750476cd09b7b96ee778ca
+
+      - uses: dtolnay/rust-toolchain@stable
 
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
         with:
@@ -240,7 +243,7 @@ jobs:
   # See 'ci/README.md' at the repository root for more details.
   check-all-live-tests-passed:
     if: always()
-    needs: [check-production-docker-container, live-tests]
+    needs: [check-production-docker-container, live-tests, batch-tests]
     runs-on: ubuntu-latest
     steps:
       - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}

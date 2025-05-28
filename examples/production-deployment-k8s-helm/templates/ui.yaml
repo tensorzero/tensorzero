@@ -1,0 +1,64 @@
+{{- if .Values.ui.deploy }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "tensorzero.fullname" . }}-ui
+  labels:
+    {{- include "tensorzero.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ui
+spec:
+  replicas: {{ .Values.ui.replicaCount | default 1 }}
+  selector:
+    matchLabels:
+      {{- include "tensorzero.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: ui
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ toYaml .Values.configMap | sha256sum }}
+      labels:
+        {{- include "tensorzero.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: ui
+    spec:
+      containers:
+        - name: ui
+          image: "{{ .Values.ui.image.repository }}:{{ .Values.ui.image.tag }}"
+          imagePullPolicy: {{ .Values.ui.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 4000
+              protocol: TCP
+          env:
+            {{- if .Values.ui.additionalEnv }}
+            {{- if and .Values.ui.additionalEnv.secretName .Values.ui.additionalEnv.keys }}
+            {{- range .Values.ui.additionalEnv.keys }}
+            - name: {{ .name }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $.Values.ui.additionalEnv.secretName }}
+                  key: {{ .key }}
+            {{- end }}
+            {{- end }}
+            {{- end }}
+          volumeMounts:
+            - name: config-volume
+              mountPath: /app/config
+          resources:
+            {{- toYaml .Values.ui.resources | nindent 12 }}
+      volumes:
+        - name: config-volume
+          configMap:
+            name: {{ include "tensorzero.fullname" . }}
+      {{- with .Values.ui.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.ui.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.ui.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }} 

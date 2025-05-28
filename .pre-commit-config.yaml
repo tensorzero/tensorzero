@@ -13,6 +13,10 @@ repos:
       - id: check-vcs-permalinks
       - id: check-xml
       - id: check-yaml
+        exclude: |
+          (?x)^(
+              examples/production-deployment-k8s-helm/templates/.*\.yaml
+          )$
       - id: detect-private-key
         exclude: |
           (?x)^(
@@ -43,7 +47,7 @@ repos:
 
       - id: cargo-deny
         name: cargo deny
-        entry: cargo deny check advisories bans
+        entry: cargo deny check
         language: system
         types: [rust]
         pass_filenames: false
@@ -135,8 +139,8 @@ repos:
           - typescript
         pass_filenames: false
 
-      - id: notebooks-compile-validate
-        name: Compile & validate notebooks
+      - id: compile-check-notebooks
+        name: compile-check-notebooks
         entry: ci/compile-check-notebooks.sh all
         language: system # run in the host environment (needs uvx)
         # Restrict to files that matter so other commits don't pay the cost
