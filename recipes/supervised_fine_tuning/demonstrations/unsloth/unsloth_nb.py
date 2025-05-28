@@ -1,0 +1,605 @@
+# %%
+# type: ignore
+
+# %% [markdown]
+# # Unsloth Supervised Fine-Tuning
+#
+# This recipe allows TensorZero users to fine-tune models using Unsloth and their own data.
+# Since TensorZero automatically logs all inferences and feedback, it is straightforward to fine-tune a model using your own data and any prompt you want.
+#
+# To get started:
+#
+# - Set the `TENSORZERO_CLICKHOUSE_URL` environment variable. For example: `TENSORZERO_CLICKHOUSE_URL="http://chuser:chpassword@localhost:8123/tensorzero"`
+# - Update the following parameters:
+
+# %%
+CONFIG_PATH = "../../../../examples/data-extraction-ner/config/tensorzero.toml"
+
+FUNCTION_NAME = "extract_entities"
+
+# The name of the variant to use to grab the templates used for fine-tuning
+TEMPLATE_VARIANT_NAME = "gpt_4o_mini"  # It's OK that this variant uses a different model than the one we're fine-tuning
+
+# Fraction of the data to use for validation
+VAL_FRACTION = 0.2
+
+# Maximum number of samples to use for fine-tuning
+MAX_SAMPLES = 100_000
+
+# Random seed
+SEED = 42
+
+# %% [markdown]
+# Select a model to fine tune
+
+# %%
+# The name of the model to fine-tune (supported models: https://docs.unsloth.ai/get-started/all-our-models)
+MODEL_NAME = "unsloth/Meta-Llama-3.1-8B-Instruct"
+
+MAX_SEQ_LENGTH = 8192  # Choose any! Unsloth supports RoPE Scaling internally!
+
+MODEL_DTYPE = (
+    None  # None for auto detection. Float16 for Tesla T4, V100, Bfloat16 for Ampere+
+)
+
+LOAD_IN_4BIT = True  # Use 4bit quantization to reduce memory usage. Can be False.
+
+# %% [markdown]
+# Choose the appropriate chat template for the selected model
+
+# %%
+from unsloth.chat_templates import CHAT_TEMPLATES
+
+print(list(CHAT_TEMPLATES.keys()))
+
+# %%
+CHAT_TEMPLATE = "llama-3.1"
+
+# %% [markdown]
+# Set training parameters
+
+# %%
+NUM_EPOCHS = 1
+
+LEARNING_RATE = 2e-4
+
+BATCH_SIZE = 4
+
+# %% [markdown]
+# Optionally, use Low Rank Adaptation
+
+# %%
+# Whether to use LoRA or not. Set to False for full model fine-tuning
+USE_LORA = True
+
+# LoRA Parameters
+LORA_R = 8  # LoRA rank (the bottleneck dimension in the adaptation matrices)
+LORA_ALPHA = 16  # LoRA scaling factor (sometimes set to 2x the rank)
+LORA_DROPOUT = 0.0  # Dropout rate applied to the LoRA layers (sometimes 0.05 or 0.1)
+LORA_TARGETS = [  # Which modules to inject LoRA into (often q_proj, v_proj, or all linear layers in attention)
+    "q_proj",
+    "k_proj",
+    "v_proj",
+    "o_proj",
+    "gate_proj",
+    "up_proj",
+    "down_proj",
+]
+LORA_BIAS = "none"  # Whether to add bias in LoRA adapters (rarely needed)
+
+# %%
+import json
+import os
+import subprocess
+import tempfile
+import warnings
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+import numpy as np
+import toml
+from clickhouse_connect import get_client
+from datasets import Dataset
+from minijinja import Environment
+from tensorzero.util import uuid7
+from transformers import TrainingArguments
+from trl import SFTTrainer
+from unsloth import FastLanguageModel, is_bfloat16_supported
+from unsloth.chat_templates import get_chat_template
+
+# %% [markdown]
+# Load the TensorZero configuration file.
+
+# %%
+config_path = Path(CONFIG_PATH)
+
+assert config_path.exists(), f"{CONFIG_PATH} does not exist"
+assert config_path.is_file(), f"{CONFIG_PATH} is not a file"
+
+with config_path.open("r") as f:
+    config = toml.load(f)
+
+# %% [markdown]
+# Retrieve the configuration for the variant with the templates we'll use for fine-tuning.
+#
+
+# %%
+assert "functions" in config, "No `[functions]` section found in config"
+assert FUNCTION_NAME in config["functions"], (
+    f"No function named `{FUNCTION_NAME}` found in config"
+)
+assert "variants" in config["functions"][FUNCTION_NAME], (
+    f"No variants section found for function `{FUNCTION_NAME}`"
+)
+assert TEMPLATE_VARIANT_NAME in config["functions"][FUNCTION_NAME]["variants"], (
+    f"No variant named `{TEMPLATE_VARIANT_NAME}` found in function `{FUNCTION_NAME}`"
+)
+
+function_type = config["functions"][FUNCTION_NAME]["type"]
+variant = config["functions"][FUNCTION_NAME]["variants"][TEMPLATE_VARIANT_NAME]
+
+variant
+
+# %% [markdown]
+# Retrieve the system, user, and assistant templates in the variant (if any), and initialize a minijinja environment with them.
+#
+
+# %%
+templates = {}
+
+if "assistant_template" in variant:
+    assistant_template_path = config_path.parent / variant["assistant_template"]
+    with assistant_template_path.open("r") as f:
+        templates["assistant"] = f.read()
+
+if "system_template" in variant:
+    system_template_path = config_path.parent / variant["system_template"]
+    with system_template_path.open("r") as f:
+        templates["system"] = f.read()
+
+if "user_template" in variant:
+    user_template_path = config_path.parent / variant["user_template"]
+    with user_template_path.open("r") as f:
+        templates["user"] = f.read()
+
+env = Environment(templates=templates)
+
+# %% [markdown]
+# Initialize the ClickHouse client.
+#
+
+# %%
+assert "TENSORZERO_CLICKHOUSE_URL" in os.environ, (
+    "TENSORZERO_CLICKHOUSE_URL environment variable not set"
+)
+
+clickhouse_client = get_client(dsn=os.environ["TENSORZERO_CLICKHOUSE_URL"])
+
+# %% [markdown]
+# Determine the ClickHouse table name for the function.
+
+# %%
+inference_table_name = {"chat": "ChatInference", "json": "JsonInference"}.get(
+    function_type
+)
+
+if inference_table_name is None:
+    raise ValueError(f"Unsupported function type: {function_type}")
+
+# %% [markdown]
+# Query the inferences and feedback from ClickHouse.
+#
+# If the metric is a float metric, we need to filter the data based on the threshold.
+
+# %%
+query = f"""
+SELECT
+    i.variant_name,
+    i.input,
+    i.output,
+    f.value,
+    i.episode_id
+FROM
+    {inference_table_name} i
+JOIN
+    (SELECT
+        inference_id,
+        value,
+        ROW_NUMBER() OVER (PARTITION BY inference_id ORDER BY timestamp DESC) as rn
+    FROM
+        DemonstrationFeedback
+    ) f ON i.id = f.inference_id AND f.rn = 1
+WHERE
+    i.function_name = %(function_name)s
+    AND i.variant_name = %(variant_name)s
+LIMIT %(max_samples)s
+"""
+
+params = {
+    "function_name": FUNCTION_NAME,
+    "max_samples": MAX_SAMPLES,
+}
+
+df = clickhouse_client.query_df(query, params)
+
+df.head()
+
+
+# %% [markdown]
+# Render the inputs using the templates.
+
+# %%
+def render_message(message: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
+    role = message["role"]
+    assert role in ["user", "assistant"], f"Invalid role: {role}"
+    content: List[str] = []
+    tool_calls: List[Dict[str, Any]] = []
+    rendered_messages: List[Dict[str, Any]] = []
+
+    for content_block in message["content"]:
+        if content_block["type"] == "text":
+            parsed_content = content_block["value"]
+            if not isinstance(parsed_content, str):
+                parsed_content = env.render_template(role, **parsed_content)
+            content.append(parsed_content)
+        elif content_block["type"] == "raw_text":
+            content.append(content_block["value"])
+        elif content_block["type"] == "thought":
+            content.append(f"<think>{content_block['text']}</think>")
+        elif content_block["type"] == "tool_call" and role == "assistant":
+            tool_calls.append(
+                {
+                    "function": {
+                        "arguments": json.dumps(content_block["arguments"]),
+                        "name": content_block["name"],
+                    },
+                    "id": content_block["id"],
+                    "type": "function",
+                }
+            )
+        elif content_block["type"] == "tool_result" and role == "user":
+            # Tool results get priority so that they follow the tool call in the conversation.
+            # Any other "user" content will be appended in another message below.
+            rendered_messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": content_block["id"],
+                    "content": content_block["result"],
+                }
+            )
+        else:
+            warnings.warn(
+                f"We do not support content block type: {content_block['type']}, dropping example.",
+                UserWarning,
+            )
+            return None
+
+    if content or tool_calls:
+        role_message: Dict[str, Any] = {"role": role}
+        if content:
+            role_message["content"] = "\n".join(content)
+        if tool_calls:
+            role_message["tool_calls"] = tool_calls
+        rendered_messages.append(role_message)
+
+    return rendered_messages
+
+
+def render_output(
+    output: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """
+    Parses the assistant message from an observation using the provided function configuration.
+    """
+    content: List[str] = []
+    tool_calls: List[Dict[str, Any]] = []
+
+    if function_type == "json":
+        return {"role": "assistant", "content": output["raw"]}
+    elif function_type == "chat":
+        for content_block in output:
+            if content_block["type"] == "text":
+                content.append(content_block["text"])
+            elif content_block["type"] == "thought":
+                content.append(f"<think>{content_block['text']}</think>")
+            elif content_block["type"] == "tool_call":
+                tool_calls.append(
+                    {
+                        "function": {
+                            "arguments": json.dumps(content_block["arguments"]),
+                            "name": content_block["name"],
+                        },
+                        "id": content_block["id"],
+                        "type": "function",
+                    }
+                )
+            else:
+                warnings.warn(
+                    f"We do not support content block type: {content_block['type']}, dropping example.",
+                    UserWarning,
+                )
+                return None
+    else:
+        raise ValueError(f"Unsupported function type: {function_type}")
+
+    # Once we finish collecting all blocks, create one assistant message.
+    output_message: Dict[str, Any] = {"role": "assistant"}
+    if content:
+        output_message["content"] = content
+    if tool_calls:
+        output_message["tool_calls"] = tool_calls
+
+    return output_message
+
+
+def sample_to_openai_messages(sample) -> List[Dict[str, Any]]:
+    function_input = json.loads(sample["input"])
+
+    rendered_messages = []
+
+    # Add the system message to the rendered messages
+    # If there is data passed in or a system template there must be a system message
+    system = function_input.get("system", {})
+    if len(system) > 0 or system_template_path:
+        if system_template_path:
+            system_message = env.render_template("system", **system)
+            rendered_messages.append({"role": "system", "content": system_message})
+        else:
+            rendered_messages.append({"role": "system", "content": system})
+
+    # Add the input messages to the rendered messages
+    for message in function_input["messages"]:
+        rendered_message = render_message(message)
+        if rendered_message is None:
+            # `render_message` will return None if the message contains an unknown or unsupported content block.
+            # The entire example is dropped if this is the case.
+            return None
+        rendered_messages.extend(render_message(message))
+
+    # Add the output to the messages
+    output = json.loads(sample["value"])
+    rendered_output = render_output(output)
+    if rendered_output is None:
+        # `render_output` will return None if the output contains an unknown or unsupported content block.
+        # The entire example is dropped if this is the case.
+        return None
+    rendered_messages.append(rendered_output)
+
+    return {"messages": rendered_messages}
+
+
+df["openai_messages"] = df.apply(sample_to_openai_messages, axis=1)
+
+# Drop null rows
+df = df[df["openai_messages"].notna()]
+
+df.head()
+
+# %% [markdown]
+# Split the data into training and validation sets for fine-tuning.
+#
+
+# %%
+# Get unique episode_ids
+unique_episode_ids = df["episode_id"].unique()
+
+# Shuffle the unique episode_ids
+np.random.seed(42)
+np.random.shuffle(unique_episode_ids)
+
+# Calculate the split index for episode_ids
+split_index = int(len(unique_episode_ids) * (1 - VAL_FRACTION))
+
+# Split the episode_ids into training and validation sets
+train_episode_ids = unique_episode_ids[:split_index]
+val_episode_ids = unique_episode_ids[split_index:]
+
+# Create training and validation DataFrames based on episode_ids
+train_df = df[df["episode_id"].isin(train_episode_ids)]
+val_df = df[df["episode_id"].isin(val_episode_ids)]
+
+print(f"Training set size: {len(train_df)}")
+print(f"Validation set size: {len(val_df)}")
+print(f"Actual validation fraction: {len(val_df) / len(df):.2f}")
+
+# %% [markdown]
+# Instantiate the model and tokenizer
+
+# %%
+model, tokenizer = FastLanguageModel.from_pretrained(
+    model_name=MODEL_NAME,
+    max_seq_length=MAX_SEQ_LENGTH,
+    dtype=MODEL_DTYPE,
+    load_in_4bit=LOAD_IN_4BIT,
+    # token = "hf_...", # use one if using gated models like meta-llama/Llama-2-7b-hf
+)
+
+# %% [markdown]
+# Apply the chat completion template
+
+# %%
+tokenizer = get_chat_template(
+    tokenizer,
+    chat_template=CHAT_TEMPLATE,
+)
+
+
+# %%
+def formatting_prompts_func(examples):
+    convos = examples["messages"]
+    texts = tokenizer.apply_chat_template(
+        convos, tokenize=False, add_generation_prompt=False
+    )
+    return {
+        "text": texts,
+    }
+
+
+# %%
+train_dataset = Dataset.from_list(
+    train_df["openai_messages"].map(formatting_prompts_func).to_list()
+)
+eval_dataset = Dataset.from_list(
+    val_df["openai_messages"].map(formatting_prompts_func).to_list()
+)
+
+# %% [markdown]
+# Set LoRA parameters
+
+# %%
+if USE_LORA:
+    model = FastLanguageModel.get_peft_model(
+        model,
+        r=LORA_R,
+        lora_alpha=LORA_ALPHA,
+        lora_dropout=LORA_DROPOUT,
+        target_modules=LORA_TARGETS,
+        bias=LORA_BIAS,
+        # [NEW] "unsloth" uses 30% less VRAM, fits 2x larger batch sizes!
+        use_gradient_checkpointing="unsloth",  # True or "unsloth" for very long context
+        random_state=SEED,
+        use_rslora=False,  # Unsloth supports rank stabilized LoRA
+        loftq_config=None,  # And LoftQ
+    )
+
+# %% [markdown]
+# Build the trainer
+
+# %%
+trainer = SFTTrainer(
+    model=model,
+    tokenizer=tokenizer,
+    train_dataset=train_dataset,
+    eval_dataset=eval_dataset,
+    max_seq_length=MAX_SEQ_LENGTH,
+    dataset_num_proc=2,
+    packing=False,  # Can make training 5x faster for short sequences.
+    args=TrainingArguments(
+        eval_strategy="steps",
+        eval_steps=20,
+        per_device_train_batch_size=BATCH_SIZE,
+        per_device_eval_batch_size=BATCH_SIZE,
+        gradient_accumulation_steps=1,
+        learning_rate=LEARNING_RATE,
+        weight_decay=0.01,
+        num_train_epochs=NUM_EPOCHS,  # Set this for 1 full training run.
+        lr_scheduler_type="linear",
+        warmup_steps=5,
+        logging_steps=10,
+        save_strategy="no",
+        seed=SEED,
+        bf16=is_bfloat16_supported(),
+        fp16=not is_bfloat16_supported(),
+        optim="adamw_8bit",
+        report_to="none",  # Use this for WandB etc
+    ),
+)
+
+# %% [markdown]
+# Train the model
+
+# %%
+os.environ["UNSLOTH_RETURN_LOGITS"] = "1"
+trainer_stats = trainer.train()
+
+# %% [markdown]
+# Now that the model is done training, we need to [deploy](https://docs.fireworks.ai/fine-tuning/fine-tuning-models#deploying-and-using-a-model) it to Fireworks serverless inference. If you need high or guaranteed throughput you can also deploy the model to [reserved capacity](https://docs.fireworks.ai/deployments/reservations) or an on-demand [deployment](https://docs.fireworks.ai/guides/ondemand-deployments).
+
+# %%
+base_model_id = "llama-v3p1-8b-instruct"
+fine_tuned_model_id = f"{MODEL_NAME.lower().replace('/', '-').replace('.', 'p')}-{str(uuid7()).split('-')[-1]}"
+
+with tempfile.TemporaryDirectory() as tmpdirname:
+    print(f"Saving to temp dir: {tmpdirname}")
+    model.save_pretrained(tmpdirname)
+    tokenizer.save_pretrained(tmpdirname)
+
+    base_model_path = f"accounts/fireworks/models/{base_model_id}"
+    command = [
+        "firectl",
+        "create",
+        "model",
+        fine_tuned_model_id,
+        tmpdirname,
+        "--base-model",
+        base_model_path,
+    ]
+    try:
+        result = subprocess.run(command, capture_output=True)
+        stdout = result.stdout.decode("utf-8")
+        print("Command output:", stdout)
+    except subprocess.CalledProcessError as e:
+        print("Error occurred:", e.stderr)
+
+
+# %%
+def get_model_id(stdout: str) -> str:
+    for line in stdout.splitlines():
+        if line.strip().startswith("Name:"):
+            return line.split(":")[1].strip()
+    raise ValueError("Model ID not found in output")
+
+
+model_identifier = get_model_id(stdout)
+
+model_identifier
+
+# %%
+command = ["firectl", "deploy", model_identifier]
+print(" ".join(command))
+result = subprocess.run(command, capture_output=True)
+if result.returncode != 0:
+    print(result.stderr.decode("utf-8"))
+else:
+    stdout = result.stdout.decode("utf-8")
+    print(stdout)
+
+# %% [markdown]
+# Once the model is deployed, you can add the fine-tuned model to your config file.
+
+# %%
+model_config = {
+    "models": {
+        model_identifier: {
+            "routing": ["fireworks"],
+            "providers": {
+                "fireworks": {"type": "fireworks", "model_name": model_identifier}
+            },
+        }
+    }
+}
+
+print(toml.dumps(model_config))
+
+# %% [markdown]
+# Finally, add a new variant to your function to use the fine-tuned model.
+
+# %%
+variant_config = {
+    "type": "chat_completion",
+    "weight": 0,
+    "model": model_identifier,
+}
+
+system_template = variant.get("system_template")
+if system_template:
+    variant_config["system_template"] = system_template
+
+user_template = variant.get("user_template")
+if user_template:
+    variant_config["user_template"] = user_template
+
+assistant_template = variant.get("assistant_template")
+if assistant_template:
+    variant_config["assistant_template"] = assistant_template
+
+full_variant_config = {
+    "functions": {FUNCTION_NAME: {"variants": {model_identifier: variant_config}}}
+}
+
+print(toml.dumps(full_variant_config))
+
+# %% [markdown]
+# You're all set!
+#
+# You can change the weight to enable a gradual rollout of the new model.
