@@ -129,6 +129,7 @@ struct InferenceMetadata {
     pub cached: bool,
     pub extra_body: UnfilteredInferenceExtraBody,
     pub extra_headers: UnfilteredInferenceExtraHeaders,
+    pub include_original_response: bool,
 }
 
 pub type InferenceCredentials = HashMap<String, SecretString>;
@@ -218,14 +219,6 @@ pub async fn inference(
     let inference_id = Uuid::now_v7();
     span.record("inference_id", inference_id.to_string());
     validate_tags(&params.tags, params.internal)?;
-
-    if params.include_original_response && params.stream.unwrap_or(false) {
-        return Err(ErrorDetails::InvalidRequest {
-            message: "Cannot set both `include_original_response` and `stream` to `true`"
-                .to_string(),
-        }
-        .into());
-    }
 
     // Retrieve or generate the episode ID
     let episode_id = params.episode_id.unwrap_or(Uuid::now_v7());
@@ -408,6 +401,7 @@ pub async fn inference(
                 cached: model_used_info.cached,
                 extra_body,
                 extra_headers,
+                include_original_response: params.include_original_response,
             };
 
             let stream = create_stream(
@@ -609,6 +603,7 @@ fn create_stream(
                 cached,
                 extra_body,
                 extra_headers,
+                include_original_response: _,
             } = metadata;
 
             let config = config.clone();
@@ -685,6 +680,7 @@ fn prepare_response_chunk(
         metadata.episode_id,
         metadata.variant_name.clone(),
         metadata.cached,
+        metadata.include_original_response,
     )
 }
 
@@ -960,6 +956,8 @@ pub struct ChatInferenceResponseChunk {
     pub usage: Option<Usage>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub finish_reason: Option<FinishReason>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub original_chunk: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -972,6 +970,8 @@ pub struct JsonInferenceResponseChunk {
     pub usage: Option<Usage>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub finish_reason: Option<FinishReason>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub original_chunk: Option<String>,
 }
 
 const ZERO_USAGE: Usage = Usage {
@@ -986,6 +986,7 @@ impl InferenceResponseChunk {
         episode_id: Uuid,
         variant_name: String,
         cached: bool,
+        include_original_response: bool,
     ) -> Option<Self> {
         Some(match inference_result {
             InferenceResultChunk::Chat(result) => {
@@ -1002,6 +1003,7 @@ impl InferenceResponseChunk {
                         result.usage
                     },
                     finish_reason: result.finish_reason,
+                    original_chunk: include_original_response.then_some(result.raw_response),
                 })
             }
             InferenceResultChunk::Json(result) => {
@@ -1021,6 +1023,7 @@ impl InferenceResponseChunk {
                         result.usage
                     },
                     finish_reason: result.finish_reason,
+                    original_chunk: include_original_response.then_some(result.raw_response),
                 })
             }
         })
@@ -1172,6 +1175,7 @@ mod tests {
             cached: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
+            include_original_response: false,
         };
 
         let result = prepare_response_chunk(&inference_metadata, chunk).unwrap();
@@ -1223,6 +1227,7 @@ mod tests {
             cached: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
+            include_original_response: false,
         };
 
         let result = prepare_response_chunk(&inference_metadata, chunk).unwrap();
