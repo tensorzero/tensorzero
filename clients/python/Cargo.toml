@@ -6,7 +6,7 @@ name = "tensorzero-python"
 version.workspace = true
 rust-version.workspace = true
 edition = "2021"
-license = "Apache-2.0"
+license.workspace = true
 
 [lints]
 workspace = true

@@ -251,7 +251,7 @@ jobs:
           cargo hack clippy --all-targets --each-feature -- -D warnings
 
       - name: Run cargo-deny
-        run: cargo deny check advisories bans
+        run: cargo deny check
 
       - name: Test (Rust)
         run: |
