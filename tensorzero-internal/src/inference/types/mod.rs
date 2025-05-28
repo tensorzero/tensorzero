@@ -5,8 +5,8 @@ use extra_body::{FullExtraBodyConfig, UnfilteredInferenceExtraBody};
 use extra_headers::{FullExtraHeadersConfig, UnfilteredInferenceExtraHeaders};
 use futures::stream::Peekable;
 use futures::Stream;
-use image::sanitize_raw_request;
-pub use image::{Base64File, File, FileKind};
+use file::sanitize_raw_request;
+pub use file::{Base64File, File, FileKind};
 use itertools::Itertools;
 use resolved_input::FileWithPath;
 pub use resolved_input::{ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent};
@@ -41,7 +41,7 @@ use crate::{jsonschema_util::DynamicJSONSchema, tool::ToolCallConfigDatabaseInse
 pub mod batch;
 pub mod extra_body;
 pub mod extra_headers;
-pub mod image;
+pub mod file;
 pub mod resolved_input;
 pub mod storage;
 
