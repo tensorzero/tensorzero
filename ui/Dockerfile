@@ -19,8 +19,10 @@ FROM base AS package-jsons-layer
 WORKDIR /src
 COPY . .
 
-# Archive only package.json and pnpm-lock.yaml recursively
-RUN find . -type f \( -name package.json -o -name pnpm-lock.yaml \) \
+# Archive only package.json and pnpm-lock.yaml recursively, skipping .venv/ and node_modules and .vite
+# pnpm needs these files for the workspace to work
+RUN find . -type d \( -name .venv -o -name node_modules -o -name .vite \) -prune -false -o \
+    -type f \( -name package.json -o -name pnpm-lock.yaml -o -name pnpm-workspace.yaml \) \
     -exec tar --transform='s|^\./||' --no-recursion -rf /tmp/packages.tar {} \;
 
 # ========== development-dependencies-env ==========
@@ -76,12 +78,13 @@ FROM base AS build-env
 
 WORKDIR /app
 
+# Copy dependencies from development-dependencies-env
+COPY --from=development-dependencies-env /app/node_modules /app/node_modules
+COPY --from=development-dependencies-env /app/ui/node_modules* /app/ui/node_modules
+
 COPY . .
 
 COPY --from=minijinja-build-env /build/ui/app/utils/minijinja/pkg ./ui/app/utils/minijinja/pkg
-
-# Ensure pnpm workspace links are set up correctly
-RUN pnpm install --frozen-lockfile
 
 RUN pnpm --filter=tensorzero-ui run build
 
@@ -106,26 +109,31 @@ RUN useradd -m -s /bin/sh ui
 
 RUN apt-get update && apt-get install -y curl python3 && rm -rf /var/lib/apt/lists/*
 
-COPY ./ui/entrypoint.sh /app/entrypoint.sh
-RUN chmod +x /app/entrypoint.sh
-
-COPY ./optimization-server /build/optimization-server
-COPY --from=python-build-env /build/clients/python /build/clients/python
-COPY --from=python-build-env /build/optimization-server/.venv /build/optimization-server/.venv
-# Workaround for uv issue
-#COPY ./clients/python /clients/python
-
-COPY --from=production-dependencies-env /app/node_modules /app/node_modules
-COPY --from=production-dependencies-env /app/ui/node_modules* /app/ui/node_modules
-
-COPY --from=build-env /app/ui/build /app/build
-
-COPY --from=evaluations-build-env /release/evaluations /usr/local/bin/evaluations
-
 WORKDIR /app
 
+# Copy package.json files for workspace structure
 COPY --from=package-jsons-layer /tmp/packages.tar /tmp/packages.tar
 RUN tar -vxf /tmp/packages.tar -C .
+
+# Copy production dependencies
+COPY --from=production-dependencies-env /app/node_modules /app/node_modules
+COPY --from=production-dependencies-env /app/ui/node_modules /app/ui/node_modules
+
+# Copy the built UI
+COPY --from=build-env /app/ui/build /app/ui/build
+
+# Copy Python optimization server and its dependencies
+COPY --from=python-build-env /build/optimization-server /build/optimization-server
+COPY --from=python-build-env /build/clients/python /build/clients/python
+COPY --from=python-build-env /build/optimization-server/.venv  /build/optimization-server/.venv
+
+# Copy evaluations binary
+COPY --from=evaluations-build-env /release/evaluations /usr/local/bin/evaluations
+
+# Copy entrypoint script
+# This script calls into the /app/ui directory using `pnpm --filter=tensorzero-ui run start`
+COPY ./ui/entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
 
 USER ui
 
