@@ -316,6 +316,7 @@ fn stream_anthropic(
 
                         let response = data.and_then(|data| {
                             anthropic_to_tensorzero_stream_message(
+                                message.data,
                                 data,
                                 start_time.elapsed(),
                                 &mut current_tool_id,
@@ -917,19 +918,12 @@ enum GCPVertexAnthropicStreamMessage {
 /// There is no need to do the same bookkeeping for TextDelta chunks since they come with an index (which we use as an ID for a text chunk).
 /// See the Anthropic [docs](https://docs.anthropic.com/en/api/messages-streaming) on streaming messages for details on the types of events and their semantics.
 fn anthropic_to_tensorzero_stream_message(
+    raw_message: String,
     message: GCPVertexAnthropicStreamMessage,
     message_latency: Duration,
     current_tool_id: &mut Option<String>,
     current_tool_name: &mut Option<String>,
 ) -> Result<Option<ProviderInferenceResponseChunk>, Error> {
-    let raw_message = serde_json::to_string(&message).map_err(|e| {
-        Error::new(ErrorDetails::Serialization {
-            message: format!(
-                "Error parsing response from Anthropic: {}",
-                DisplayOrDebugGateway::new(e)
-            ),
-        })
-    })?;
     match message {
         GCPVertexAnthropicStreamMessage::ContentBlockDelta { delta, index } => match delta {
             GCPVertexAnthropicMessageBlock::TextDelta { text } => {
@@ -2093,6 +2087,7 @@ mod tests {
         };
         let latency = Duration::from_millis(100);
         let result = anthropic_to_tensorzero_stream_message(
+            "my_raw_chunk".to_string(),
             content_block_delta,
             latency,
             &mut current_tool_id,
@@ -2121,6 +2116,7 @@ mod tests {
         };
         let latency = Duration::from_millis(100);
         let result = anthropic_to_tensorzero_stream_message(
+            "my_raw_chunk".to_string(),
             content_block_delta,
             latency,
             &mut current_tool_id,
@@ -2148,6 +2144,7 @@ mod tests {
         };
         let latency = Duration::from_millis(100);
         let result = anthropic_to_tensorzero_stream_message(
+            "my_raw_chunk".to_string(),
             content_block_delta,
             latency,
             &mut current_tool_id,
@@ -2178,6 +2175,7 @@ mod tests {
         };
         let latency = Duration::from_millis(110);
         let result = anthropic_to_tensorzero_stream_message(
+            "my_raw_chunk".to_string(),
             content_block_start,
             latency,
             &mut current_tool_id,
@@ -2208,6 +2206,7 @@ mod tests {
         };
         let latency = Duration::from_millis(120);
         let result = anthropic_to_tensorzero_stream_message(
+            "my_raw_chunk".to_string(),
             content_block_start,
             latency,
             &mut current_tool_id,
@@ -2235,6 +2234,7 @@ mod tests {
         };
         let latency = Duration::from_millis(130);
         let result = anthropic_to_tensorzero_stream_message(
+            "my_raw_chunk".to_string(),
             content_block_start,
             latency,
             &mut current_tool_id,
@@ -2255,6 +2255,7 @@ mod tests {
         let content_block_stop = GCPVertexAnthropicStreamMessage::ContentBlockStop { index: 2 };
         let latency = Duration::from_millis(120);
         let result = anthropic_to_tensorzero_stream_message(
+            "my_raw_chunk".to_string(),
             content_block_stop,
             latency,
             &mut current_tool_id,
@@ -2269,6 +2270,7 @@ mod tests {
         };
         let latency = Duration::from_millis(130);
         let result = anthropic_to_tensorzero_stream_message(
+            "my_raw_chunk".to_string(),
             error_message,
             latency,
             &mut current_tool_id,
@@ -2295,6 +2297,7 @@ mod tests {
         };
         let latency = Duration::from_millis(140);
         let result = anthropic_to_tensorzero_stream_message(
+            "my_raw_chunk".to_string(),
             message_delta,
             latency,
             &mut current_tool_id,
@@ -2315,6 +2318,7 @@ mod tests {
         };
         let latency = Duration::from_millis(150);
         let result = anthropic_to_tensorzero_stream_message(
+            "my_raw_chunk".to_string(),
             message_start,
             latency,
             &mut current_tool_id,
@@ -2333,6 +2337,7 @@ mod tests {
         let message_stop = GCPVertexAnthropicStreamMessage::MessageStop;
         let latency = Duration::from_millis(160);
         let result = anthropic_to_tensorzero_stream_message(
+            "my_raw_chunk".to_string(),
             message_stop,
             latency,
             &mut current_tool_id,
@@ -2345,6 +2350,7 @@ mod tests {
         let ping = GCPVertexAnthropicStreamMessage::Ping {};
         let latency = Duration::from_millis(170);
         let result = anthropic_to_tensorzero_stream_message(
+            "my_raw_chunk".to_string(),
             ping,
             latency,
             &mut current_tool_id,

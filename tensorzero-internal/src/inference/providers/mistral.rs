@@ -367,7 +367,7 @@ pub fn stream_mistral(
                             }.into());
                         let latency = start_time.elapsed();
                         let stream_message = data.and_then(|d| {
-                            mistral_to_tensorzero_chunk(d, latency)
+                            mistral_to_tensorzero_chunk(message.data, d, latency)
                         });
                         yield stream_message;
                     }
@@ -744,17 +744,10 @@ struct MistralChatChunk {
 
 /// Maps a Mistral chunk to a TensorZero chunk for streaming inferences
 fn mistral_to_tensorzero_chunk(
+    raw_message: String,
     mut chunk: MistralChatChunk,
     latency: Duration,
 ) -> Result<ProviderInferenceResponseChunk, Error> {
-    let raw_message = serde_json::to_string(&chunk).map_err(|e| {
-        Error::new(ErrorDetails::Serialization {
-            message: format!(
-                "Error parsing response from Mistral: {}",
-                DisplayOrDebugGateway::new(e)
-            ),
-        })
-    })?;
     if chunk.choices.len() > 1 {
         return Err(ErrorDetails::InferenceServer {
             message: "Response has invalid number of choices: {}. Expected 1.".to_string(),
