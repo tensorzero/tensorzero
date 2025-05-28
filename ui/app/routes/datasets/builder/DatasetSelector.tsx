@@ -5,10 +5,10 @@ import {
   FormItem,
   FormLabel,
 } from "~/components/ui/form";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Button } from "~/components/ui/button";
 import { ChevronDown } from "lucide-react";
-import { Dataset, PlusSquare, TableCheck } from "~/components/icons/Icons";
+import { Table, TablePlus, TableCheck, } from "~/components/icons/Icons";
 import {
   Command,
   CommandEmpty,
@@ -20,6 +20,7 @@ import {
 import clsx from "clsx";
 import type { DatasetCountInfo } from "~/utils/clickhouse/datasets";
 import type { DatasetBuilderFormValues } from "./types";
+import { useClickOutside } from "~/hooks/use-click-outside";
 
 export function DatasetSelector({
   control,
@@ -52,23 +53,7 @@ export function DatasetSelector({
     }
   };
 
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (commandRef.current && !commandRef.current.contains(event.target as Node)) {
-        setOpen(false);
-      }
-    };
-
-    if (open) {
-      document.addEventListener("mousedown", handleClickOutside);
-    } else {
-      document.removeEventListener("mousedown", handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, [open]);
+  useClickOutside(commandRef, () => setOpen(false));
 
   return (
     <FormField
@@ -77,22 +62,22 @@ export function DatasetSelector({
       render={({ field }) => (
         <FormItem className="flex flex-col gap-y-1">
           <FormLabel className="text-fg-primary font-medium text-sm">Dataset</FormLabel>
-          <div className="w-full max-w-160 space-y-2">
+          <div className="w-full max-w-160 space-y-1">
             <div className="relative h-10">
             <div 
               ref={commandRef} 
               className={clsx(
-                "absolute top-0 left-0 right-0 z-50",
-                "rounded-lg border border-border bg-background",
-                "transition-shadow transition-transform ease-out duration-300",
-                open ? "shadow-2xl" : "hover:shadow-xs active:shadow-none active:scale-99 hover:scale-100.5 scale-100 shadow-none"
+                "absolute top-0 left-0 right-0 z-50 rounded-lg border border-border bg-background transition-shadow transition-transform ease-out duration-300",
+                open ? "shadow-2xl" : "hover:shadow-xs active:shadow-none active:scale-99 scale-100 shadow-none"
               )}
             >
+              {/* -------- Selector button -------- */}
               <Button
                 variant="ghost"
                 role="combobox"
+                type="button"
                 aria-expanded={open}
-                className="w-full hover:bg-transparent font-normal cursor-pointer group"
+                className="w-full px-3 hover:bg-transparent font-normal cursor-pointer group"
                 onClick={() => setOpen(!open)}
               >
                 <div className="min-w-0 flex-1">
@@ -103,10 +88,11 @@ export function DatasetSelector({
                       );
                       if (existingDataset) {
                         return (
+                          // Selector — existing dataset
                           <div className="flex w-full min-w-0 flex-1 items-center gap-x-2">
-                            <Dataset
+                            <Table
                               size={16}
-                              className="text-fg-muted shrink-0"
+                              className="h-4 w-4 shrink-0 text-green-700"
                             />
                             <span className="truncate font-mono text-sm">
                               {existingDataset.dataset_name}
@@ -114,26 +100,31 @@ export function DatasetSelector({
                           </div>
                         );
                       } else {
+                        // Selector — new dataset
                         return (
-                          <div className="flex w-full items-center gap-x-1">
-                            <div className="flex min-w-0 flex-1 items-center gap-x-1">
-                              <PlusSquare className="h-4 w-4 shrink-0 text-blue-600" />
-                              <span className="truncate font-mono text-sm">
-                                {field.value}
-                              </span>
-                            </div>
+                          <div className="flex w-full min-w-0 flex-1 items-center gap-x-2">
+                            <TablePlus className="h-4 w-4 shrink-0 text-blue-600" />
+                            <span className="truncate font-mono text-sm">
+                              {field.value}
+                            </span>
                           </div>
                         );
                       }
                     })()
                   ) : (
-                    <span className="text-fg-secondary flex text-sm">
-                      Create or select a dataset
-                    </span>
+                    // Selector — empty state
+                    <div className="flex items-center gap-x-2 text-fg-muted">
+                      <Table className="h-4 w-4 shrink-0 text-fg-muted" />
+                      <span className="text-fg-secondary flex text-sm">
+                        Select a dataset
+                      </span>
+                    </div>
                   )}
                 </div>
                 <ChevronDown className={clsx("ml-2 h-4 w-4 shrink-0 text-fg-muted group-hover:text-fg-tertiary transition-colors transition-transform ease-out duration-300", open ? "-rotate-180" : "rotate-0")} />
               </Button>
+
+              {/* -------- Command -------- */}
 
               <Command
                 className={clsx(
@@ -142,7 +133,7 @@ export function DatasetSelector({
                 )}
               >
                 <CommandInput
-                  placeholder="Dataset name..."
+                  placeholder="Create or find a dataset..."
                   value={inputValue}
                   onValueChange={handleInputChange}
                 />
@@ -162,7 +153,7 @@ export function DatasetSelector({
                         className="flex items-center justify-between"
                       >
                         <div className="flex items-center">
-                          <PlusSquare
+                          <TablePlus
                             className={clsx(
                               "mr-2 h-4 w-4",
                               inputValue.trim()
@@ -198,7 +189,7 @@ export function DatasetSelector({
                     heading={
                       <div className="text-fg-tertiary flex w-full items-center justify-between">
                         <span>Existing Datasets</span>
-                        <span className="text-right">Rows</span>
+                        <span>Rows</span>
                       </div>
                     }
                   >
@@ -221,7 +212,7 @@ export function DatasetSelector({
                               className="text-green-700"
                             />
                           ) : (
-                            <Dataset size={16} className="text-fg-muted" />
+                            <Table size={16} className="text-fg-muted" />
                           )}
                           <span
                             className={clsx(
