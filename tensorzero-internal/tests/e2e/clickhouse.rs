@@ -145,17 +145,27 @@ async fn insert_large_fixtures(clickhouse: &ClickHouseConnectionInfo) {
     // We use our latest fixtures - new columns will get ignored when inserting.
     for (file, table) in [
         ("large_chat_inference_v2.parquet", "ChatInference"),
-        ("large_json_inference.parquet", "JsonInference"),
+        ("large_json_inference_v2.parquet", "JsonInference"),
         (
             "large_chat_boolean_feedback.parquet",
             "BooleanMetricFeedback",
         ),
+        (
+            "large_json_boolean_feedback.parquet",
+            "BooleanMetricFeedback",
+        ),
         ("large_chat_comment_feedback.parquet", "CommentFeedback"),
+        ("large_json_comment_feedback.parquet", "CommentFeedback"),
         (
             "large_chat_demonstration_feedback.parquet",
             "DemonstrationFeedback",
         ),
+        (
+            "large_json_demonstration_feedback.parquet",
+            "DemonstrationFeedback",
+        ),
         ("large_chat_float_feedback.parquet", "FloatMetricFeedback"),
+        ("large_json_float_feedback.parquet", "FloatMetricFeedback"),
     ] {
         let mut command = tokio::process::Command::new("docker");
         command.args([
