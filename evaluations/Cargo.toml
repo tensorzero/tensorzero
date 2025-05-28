@@ -3,6 +3,7 @@ name = "evaluations"
 version.workspace = true
 edition = "2021"
 rust-version.workspace = true
+license.workspace = true
 
 [[test]]
 name = "e2e"
