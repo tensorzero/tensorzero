@@ -1,7 +1,9 @@
 [package]
 name = "tensorzero-internal"
 version.workspace = true
+rust-version.workspace = true
 edition = "2021"
+license.workspace = true
 
 
 [features]
