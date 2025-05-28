@@ -76,6 +76,8 @@ jobs:
         with:
           cache-provider: "buildjet"
 
+      # Start testing workload identity federation credentials once the SDK adds support: https://github.com/googleapis/google-cloud-rust/issues/1342
+
       # - uses: 'google-github-actions/auth@v2'
       #   with:
       #     project_id: 'tensozero-public'
