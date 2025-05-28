@@ -187,7 +187,145 @@ fn make_gcp_object_store(
     })
 }
 
+#[derive(Debug, Eq, PartialEq)]
+enum ShorthandUrl<'a> {
+    // We enforce that the publisher is 'google' when parsing the url
+    Publisher {
+        location: &'a str,
+        model_id: &'a str,
+    },
+    Endpoint {
+        location: &'a str,
+        endpoint_id: &'a str,
+    },
+}
+
+// 'projects/<project_id>/locations/<location>/publishers/<publisher>/models/<model_id>'
+fn parse_shorthand_url(shorthand_url: &str) -> Result<ShorthandUrl, Error> {
+    let components: Vec<&str> = shorthand_url.split('/').collect_vec();
+    let [projects, _project_id, locations, location, publishers_or_endpoint, ..] = &components[..]
+    else {
+        return Err(Error::new(ErrorDetails::Config {
+            message: format!("GCP shorthand url is not in the expected format (should start with `projects/<project_id>/locations/<location>'): `{shorthand_url}`"),
+        }));
+    };
+
+    if projects != &"projects" {
+        return Err(Error::new(ErrorDetails::Config {
+            message: format!("GCP shorthand url does not start with 'projects': `{shorthand_url}`"),
+        }));
+    }
+    if locations != &"locations" {
+        return Err(Error::new(ErrorDetails::Config {
+            message: format!("GCP shorthand url does contain '/locations/': `{shorthand_url}`"),
+        }));
+    }
+
+    if publishers_or_endpoint == &"publishers" {
+        let publisher = components.get(5).ok_or_else(|| {
+            Error::new(ErrorDetails::Config {
+                message: format!(
+                    "GCP shorthand url does not contain a publisher: `{shorthand_url}`"
+                ),
+            })
+        })?;
+        if publisher != &"google" {
+            return Err(Error::new(ErrorDetails::Config {
+                message: format!(
+                    "GCP Vertex Geminishorthand url has non-`google` publisher: `{shorthand_url}`"
+                ),
+            }));
+        }
+        let models = components.get(6).ok_or_else(|| {
+            Error::new(ErrorDetails::Config {
+                message: format!(
+                    "GCP shorthand url does not contain a model or endpoint: `{shorthand_url}`"
+                ),
+            })
+        })?;
+        if models != &"models" {
+            return Err(Error::new(ErrorDetails::Config {
+                message: format!("GCP shorthand url does not contain a model: `{shorthand_url}`"),
+            }));
+        }
+        let model_id = components.get(7).ok_or_else(|| {
+            Error::new(ErrorDetails::Config {
+                message: format!(
+                    "GCP shorthand url does not contain a model id: `{shorthand_url}`"
+                ),
+            })
+        })?;
+        Ok(ShorthandUrl::Publisher { location, model_id })
+    } else if publishers_or_endpoint == &"endpoints" {
+        let endpoint = components.get(5).ok_or_else(|| {
+            Error::new(ErrorDetails::Config {
+                message: format!(
+                    "GCP shorthand url does not contain an endpoint: `{shorthand_url}`"
+                ),
+            })
+        })?;
+        Ok(ShorthandUrl::Endpoint {
+            endpoint_id: endpoint,
+            location,
+        })
+    } else {
+        Err(Error::new(ErrorDetails::Config {
+            message: format!(
+                "GCP shorthand url does not contain a publisher or endpoint: `{shorthand_url}`"
+            ),
+        }))
+    }
+}
+
 impl GCPVertexGeminiProvider {
+    // Constructs a provider from a shorthand string of the form:
+    // *
+    // * 'projects/<project_id>/locations/<location>/endpoints/XXX'
+    //
+    // This is *not* a full url - we append ':generateContent' or ':streamGenerateContent' to the end of the path as needed.
+    pub fn new_shorthand(project_url_path: String) -> Result<Self, Error> {
+        let credentials = build_creds_caching_default_with_fn(
+            None,
+            default_api_key_location(),
+            PROVIDER_TYPE,
+            &DEFAULT_CREDENTIALS,
+            |creds| GCPVertexCredentials::try_from((creds, PROVIDER_TYPE)),
+        )?;
+
+        let shorthand_url = parse_shorthand_url(&project_url_path)?;
+        let (location, model_id) = match shorthand_url {
+            ShorthandUrl::Publisher { location, model_id } => (location, model_id.to_string()),
+            ShorthandUrl::Endpoint {
+                location,
+                endpoint_id,
+            } => (location, format!("endpoints/{endpoint_id}")),
+        };
+
+        let request_url = format!(
+            "https://{location}-aiplatform.googleapis.com/v1/{project_url_path}:generateContent"
+        );
+        let streaming_request_url = format!("https://{location}-aiplatform.googleapis.com/v1/{project_url_path}:streamGenerateContent?alt=sse");
+        let audience = format!("https://{location}-aiplatform.googleapis.com/");
+        let api_v1_base_url = Url::parse(&format!(
+            "https://{location}-aiplatform.googleapis.com/v1/"
+        ))
+        .map_err(|e| {
+            Error::new(ErrorDetails::InternalError {
+                message: format!("Failed to parse base URL - this should never happen: {e}"),
+            })
+        })?;
+
+        Ok(GCPVertexGeminiProvider {
+            api_v1_base_url,
+            request_url,
+            streaming_request_url,
+            batch_config: None,
+            audience,
+            credentials,
+            model_id,
+        })
+    }
+
     pub fn new(
         model_id: String,
         location: String,
@@ -2890,6 +3028,46 @@ mod tests {
         let err = result.unwrap_err().get_owned_details();
         assert!(
             matches!(err, ErrorDetails::GCPCredentials { message } if message.contains("Invalid credential_location"))
+        );
+    }
+
+    #[test]
+    fn test_shorthand_url_parse() {
+        use super::parse_shorthand_url;
+
+        let err1 = parse_shorthand_url("bad-shor-hand-url")
+            .unwrap_err()
+            .to_string();
+        assert_eq!(err1, "GCP shorthand url is not in the expected format (should start with `projects/<project_id>/locations/<location>'): `bad-shor-hand-url`");
+
+        let missing_components =
+            parse_shorthand_url("projects/tensorzero-public/locations/us-central1/")
+                .unwrap_err()
+                .to_string();
+        assert_eq!(missing_components, "GCP shorthand url does not contain a publisher or endpoint: `projects/tensorzero-public/locations/us-central1/`");
+
+        let non_google_publisher = parse_shorthand_url("projects/tensorzero-public/locations/us-central1/publishers/not-google/models/gemini-2.0-flash-001").unwrap_err().to_string();
+        assert_eq!(non_google_publisher, "GCP Vertex Geminishorthand url has non-`google` publisher: `projects/tensorzero-public/locations/us-central1/publishers/not-google/models/gemini-2.0-flash-001`");
+
+        let valid_model_url = parse_shorthand_url("projects/tensorzero-public/locations/us-central1/publishers/google/models/gemini-2.0-flash-001").unwrap();
+        assert_eq!(
+            valid_model_url,
+            ShorthandUrl::Publisher {
+                location: "us-central1",
+                model_id: "gemini-2.0-flash-001"
+            }
+        );
+
+        let valid_endpoint_url = parse_shorthand_url(
+            "projects/tensorzero-public/locations/us-central1/endpoints/945488740422254592",
+        )
+        .unwrap();
+        assert_eq!(
+            valid_endpoint_url,
+            ShorthandUrl::Endpoint {
+                location: "us-central1",
+                endpoint_id: "945488740422254592"
+            }
         );
     }
 }
