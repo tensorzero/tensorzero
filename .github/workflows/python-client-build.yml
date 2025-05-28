@@ -27,7 +27,7 @@ jobs:
       - run: rustup toolchain install stable --profile minimal
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
         with:
-          save-if: ${{ github.ref == 'refs/heads/master' }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Build wheels
         uses: PyO3/maturin-action@b3709a81b3e175ce3ede866725776fee42465311
         with:
