@@ -586,6 +586,7 @@ pub(super) fn prepare_groq_messages<'a>(
 
 /// If there are no tools passed or the tools are empty, return None for both tools and tool_choice
 /// Otherwise convert the tool choice and tools to Groq format
+/// NOTE: parallel tool calls are unreliable, and specific tool choice doesn't work
 pub(super) fn prepare_groq_tools<'a>(
     request: &'a ModelInferenceRequest,
 ) -> (
