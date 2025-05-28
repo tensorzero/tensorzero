@@ -1,8 +1,7 @@
-<img src="https://github.com/user-attachments/assets/47d67430-386d-4675-82ad-d4734d3262d9" width=128 height=128>
 
-# TensorZero
+<img src="https://github.com/user-attachments/assets/47d67430-386d-4675-82ad-d4734d3262d9" style="width: 128px; height: 128px;">
 
-**TensorZero creates a feedback loop for optimizing LLM applications — turning production data into smarter, faster, and cheaper models.**
+**TensorZero is an open-source, self-hosted platform that creates a feedback loop for optimizing LLM applications — turning production data into smarter, faster, and cheaper models.**
 
 1. Integrate our model gateway
 2. Send metrics or feedback
@@ -19,28 +18,30 @@ It provides a **data & learning flywheel for LLMs** by unifying:
 
 ---
 
-<p align="center">
-  <b><a href="https://www.tensorzero.com/" target="_blank">Website</a></b>
-  ·
-  <b><a href="https://www.tensorzero.com/docs" target="_blank">Docs</a></b>
-  ·
-  <b><a href="https://www.x.com/tensorzero" target="_blank">Twitter</a></b>
-  ·
-  <b><a href="https://www.tensorzero.com/slack" target="_blank">Slack</a></b>
-  ·
-  <b><a href="https://www.tensorzero.com/discord" target="_blank">Discord</a></b>
-  <br>
-  <br>
-  <b><a href="https://www.tensorzero.com/docs/quickstart" target="_blank">Quick Start (5min)</a></b>
-  ·
-  <b><a href="https://www.tensorzero.com/docs/gateway/tutorial" target="_blank">Comprehensive Tutorial</a></b>
-  ·
-  <b><a href="https://www.tensorzero.com/docs/gateway/deployment" target="_blank">Deployment Guide</a></b>
-  ·
-  <b><a href="https://www.tensorzero.com/docs/gateway/api-reference" target="_blank">API Reference</a></b>
-  ·
-  <b><a href="https://www.tensorzero.com/docs/gateway/deployment" target="_blank">Configuration Reference</a></b>
-</p>
+<div style="text-align: center;">
+  <p>
+    <b><a href="https://www.tensorzero.com/" target="_blank">Website</a></b>
+    ·
+    <b><a href="https://www.tensorzero.com/docs" target="_blank">Docs</a></b>
+    ·
+    <b><a href="https://www.x.com/tensorzero" target="_blank">Twitter</a></b>
+    ·
+    <b><a href="https://www.tensorzero.com/slack" target="_blank">Slack</a></b>
+    ·
+    <b><a href="https://www.tensorzero.com/discord" target="_blank">Discord</a></b>
+    <br>
+    <br>
+    <b><a href="https://www.tensorzero.com/docs/quickstart" target="_blank">Quick Start (5min)</a></b>
+    ·
+    <b><a href="https://www.tensorzero.com/docs/gateway/tutorial" target="_blank">Comprehensive Tutorial</a></b>
+    ·
+    <b><a href="https://www.tensorzero.com/docs/gateway/deployment" target="_blank">Deployment Guide</a></b>
+    ·
+    <b><a href="https://www.tensorzero.com/docs/gateway/api-reference" target="_blank">API Reference</a></b>
+    ·
+    <b><a href="https://www.tensorzero.com/docs/gateway/deployment" target="_blank">Configuration Reference</a></b>
+  </p>
+</div>
 
 ---
 
