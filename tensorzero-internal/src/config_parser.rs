@@ -314,7 +314,7 @@ impl<'c> Config<'c> {
         let config = if cfg!(feature = "e2e_tests") || !validate_credentials {
             SKIP_CREDENTIAL_VALIDATION.set(&(), || Self::load_from_toml(config_table, base_path))?
         } else {
-            Self::load_from_toml(config_table, base_path)?
+            Self::load_from_toml(config_table, base_path).await?
         };
 
         if validate_credentials {
@@ -326,7 +326,7 @@ impl<'c> Config<'c> {
         Ok(config)
     }
 
-    fn load_from_toml(table: toml::Table, base_path: PathBuf) -> Result<Config<'c>, Error> {
+    async fn load_from_toml(table: toml::Table, base_path: PathBuf) -> Result<Config<'c>, Error> {
         if table.is_empty() {
             tracing::info!("Config file is empty, so only default functions will be available.")
         }
@@ -404,7 +404,7 @@ impl<'c> Config<'c> {
         )?;
 
         // Validate the config
-        config.validate()?;
+        config.validate().await?;
 
         // We add the evaluations after validation since we will be writing tensorzero:: functions to the functions map
         // and tensorzero:: metrics to the metrics map
@@ -432,13 +432,15 @@ impl<'c> Config<'c> {
                         )?;
                     }
                 }
-                evaluation_function_config.validate(
-                    &config.tools,
-                    &mut config.models,
-                    &config.embedding_models,
-                    &config.templates,
-                    &evaluation_function_name,
-                )?;
+                evaluation_function_config
+                    .validate(
+                        &config.tools,
+                        &mut config.models,
+                        &config.embedding_models,
+                        &config.templates,
+                        &evaluation_function_name,
+                    )
+                    .await?;
                 config
                     .functions
                     .insert(evaluation_function_name, evaluation_function_config);
@@ -462,7 +464,7 @@ impl<'c> Config<'c> {
 
     /// Validate the config
     #[instrument(skip_all)]
-    fn validate(&mut self) -> Result<(), Error> {
+    async fn validate(&mut self) -> Result<(), Error> {
         // Validate each function
         for (function_name, function) in &self.functions {
             if function_name.starts_with("tensorzero::") {
@@ -473,13 +475,15 @@ impl<'c> Config<'c> {
                 }
                 .into());
             }
-            function.validate(
-                &self.tools,
-                &mut self.models, // NOTE: in here there might be some models created using shorthand initialization
-                &self.embedding_models,
-                &self.templates,
-                function_name,
-            )?;
+            function
+                .validate(
+                    &self.tools,
+                    &mut self.models, // NOTE: in here there might be some models created using shorthand initialization
+                    &self.embedding_models,
+                    &self.templates,
+                    function_name,
+                )
+                .await?;
         }
 
         // Ensure that no metrics are named "comment" or "demonstration"
@@ -585,11 +589,11 @@ impl<'c> Config<'c> {
     }
 
     /// Get a model by name
-    pub fn get_model<'a>(
+    pub async fn get_model<'a>(
         &'a self,
         model_name: &Arc<str>,
     ) -> Result<CowNoClone<'a, ModelConfig>, Error> {
-        self.models.get(model_name)?.ok_or_else(|| {
+        self.models.get(model_name).await?.ok_or_else(|| {
             Error::new(ErrorDetails::UnknownModel {
                 name: model_name.to_string(),
             })

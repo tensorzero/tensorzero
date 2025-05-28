@@ -335,10 +335,10 @@ impl GCPVertexGeminiProvider {
     // * 'projects/<project_id>/locations/<location>/endpoints/XXX'
     //
     // This is *not* a full url - we append ':generateContent' or ':streamGenerateContent' to the end of the path as needed.
-    pub fn new_shorthand(project_url_path: String) -> Result<Self, Error> {
+    pub async fn new_shorthand(project_url_path: String) -> Result<Self, Error> {
         let cred_location = default_api_key_location();
         let credentials = if matches!(cred_location, CredentialLocation::Sdk) {
-            make_gcp_sdk_credentials(PROVIDER_TYPE).await
+            make_gcp_sdk_credentials(PROVIDER_TYPE).await?
         } else {
             build_creds_caching_default_with_fn(
                 None,

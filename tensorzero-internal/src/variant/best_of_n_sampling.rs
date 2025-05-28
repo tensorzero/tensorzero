@@ -144,12 +144,12 @@ impl Variant for BestOfNSamplingConfig {
         .into())
     }
 
-    fn validate(
+    async fn validate(
         &self,
         function: &FunctionConfig,
         models: &mut ModelTable,
         embedding_models: &EmbeddingModelTable,
-        templates: &TemplateConfig,
+        templates: &TemplateConfig<'_>,
         function_name: &str,
         variant_name: &str,
     ) -> Result<(), Error> {
@@ -169,22 +169,26 @@ impl Variant for BestOfNSamplingConfig {
                     function_name,
                     candidate,
                 )
+                .await
                 .map_err(|e| {
                     Error::new(ErrorDetails::InvalidCandidate {
                         variant_name: variant_name.to_string(),
                         message: e.to_string(),
                     })
-                })?;
+                })?
         }
         // Validate the evaluator variant
-        self.evaluator.inner.validate(
-            function,
-            models,
-            embedding_models,
-            templates,
-            function_name,
-            variant_name,
-        )?;
+        self.evaluator
+            .inner
+            .validate(
+                function,
+                models,
+                embedding_models,
+                templates,
+                function_name,
+                variant_name,
+            )
+            .await?;
         Ok(())
     }
 
@@ -425,7 +429,7 @@ async fn inner_select_best_candidate<'a, 'request>(
         // Return the selected index and None for the model inference result
         return Ok((Some(selected_index), None));
     }
-    let model_config = models.get(&evaluator.inner.model)?.ok_or_else(|| {
+    let model_config = models.get(&evaluator.inner.model).await?.ok_or_else(|| {
         Error::new(ErrorDetails::UnknownModel {
             name: evaluator.inner.model.to_string(),
         })

@@ -1507,7 +1507,7 @@ pub type ModelTable = BaseModelTable<ModelConfig>;
 impl ShorthandModelConfig for ModelConfig {
     const SHORTHAND_MODEL_PREFIXES: &[&str] = SHORTHAND_MODEL_PREFIXES;
     const MODEL_TYPE: &str = "Model";
-    fn from_shorthand(provider_type: &str, model_name: &str) -> Result<Self, Error> {
+    async fn from_shorthand(provider_type: &str, model_name: &str) -> Result<Self, Error> {
         let model_name = model_name.to_string();
         let provider_config = match provider_type {
             "anthropic" => ProviderConfig::Anthropic(AnthropicProvider::new(model_name, None)?),
@@ -1520,9 +1520,9 @@ impl ShorthandModelConfig for ModelConfig {
             "google_ai_studio_gemini" => ProviderConfig::GoogleAIStudioGemini(
                 GoogleAIStudioGeminiProvider::new(model_name, None)?,
             ),
-            "gcp_vertex_gemini" => {
-                ProviderConfig::GCPVertexGemini(GCPVertexGeminiProvider::new_shorthand(model_name)?)
-            }
+            "gcp_vertex_gemini" => ProviderConfig::GCPVertexGemini(
+                GCPVertexGeminiProvider::new_shorthand(model_name).await?,
+            ),
             "hyperbolic" => ProviderConfig::Hyperbolic(HyperbolicProvider::new(model_name, None)?),
             "mistral" => ProviderConfig::Mistral(MistralProvider::new(model_name, None)?),
             "openai" => ProviderConfig::OpenAI(OpenAIProvider::new(model_name, None, None)?),
@@ -2304,8 +2304,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_validate_or_create_model_config() {
+    #[tokio::test]
+    async fn test_validate_or_create_model_config() {
         let model_table = ModelTable::default();
         // Test that we can get or create a model config
         model_table.validate("dummy::gpt-4o").unwrap();
@@ -2313,6 +2313,7 @@ mod tests {
         assert_eq!(model_table.static_model_len(), 0);
         let model_config = model_table
             .get("dummy::gpt-4o")
+            .await
             .unwrap()
             .expect("Missing dummy model");
         assert_eq!(model_config.routing, vec!["dummy".into()]);
