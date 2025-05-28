@@ -10,7 +10,7 @@ use serde_json::Value;
 use tokio::time::Instant;
 
 use crate::cache::ModelProviderRequest;
-use crate::config_parser::SKIP_CREDENTIAL_VALIDATION;
+use crate::config_parser::skip_credential_validation;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
@@ -64,7 +64,7 @@ pub async fn make_gcp_sdk_credentials(
     let creds_result = google_cloud_auth::credentials::Builder::default().build();
 
     let handle_err = |e| {
-        if SKIP_CREDENTIAL_VALIDATION.is_set() {
+        if skip_credential_validation() {
             #[cfg(any(test, feature = "e2e_tests"))]
             {
                 tracing::warn!(

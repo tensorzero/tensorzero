@@ -16,7 +16,7 @@ use crate::cache::{
     cache_lookup, cache_lookup_streaming, start_cache_write, start_cache_write_streaming,
     CacheData, ModelProviderRequest, NonStreamingCacheData, StreamingCacheData,
 };
-use crate::config_parser::{ProviderTypesConfig, SKIP_CREDENTIAL_VALIDATION};
+use crate::config_parser::{skip_credential_validation, ProviderTypesConfig};
 use crate::endpoints::inference::InferenceClients;
 use crate::inference::providers::aws_sagemaker::AWSSagemakerProvider;
 #[cfg(any(test, feature = "e2e_tests"))]
@@ -1396,7 +1396,7 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
             CredentialLocation::Env(key_name) => match env::var(key_name) {
                 Ok(value) => Ok(Credential::Static(SecretString::from(value))),
                 Err(_) => {
-                    if SKIP_CREDENTIAL_VALIDATION.is_set() {
+                    if skip_credential_validation() {
                         #[cfg(any(test, feature = "e2e_tests"))]
                         {
                             tracing::warn!(
@@ -1417,7 +1417,7 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
                 let path = match env::var(&env_key) {
                     Ok(path) => path,
                     Err(_) => {
-                        if SKIP_CREDENTIAL_VALIDATION.is_set() {
+                        if skip_credential_validation() {
                             #[cfg(any(test, feature = "e2e_tests"))]
                             {
                                 tracing::warn!(
@@ -1440,7 +1440,7 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
                 match fs::read_to_string(path) {
                     Ok(contents) => Ok(Credential::FileContents(SecretString::from(contents))),
                     Err(e) => {
-                        if SKIP_CREDENTIAL_VALIDATION.is_set() {
+                        if skip_credential_validation() {
                             #[cfg(any(test, feature = "e2e_tests"))]
                             {
                                 tracing::warn!(
@@ -1462,7 +1462,7 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
             CredentialLocation::Path(path) => match fs::read_to_string(path) {
                 Ok(contents) => Ok(Credential::FileContents(SecretString::from(contents))),
                 Err(e) => {
-                    if SKIP_CREDENTIAL_VALIDATION.is_set() {
+                    if skip_credential_validation() {
                         #[cfg(any(test, feature = "e2e_tests"))]
                         {
                             tracing::warn!(
@@ -1610,6 +1610,7 @@ mod tests {
     use std::{borrow::Cow, cell::Cell};
 
     use crate::cache::CacheEnabledMode;
+    use crate::config_parser::SKIP_CREDENTIAL_VALIDATION;
     use crate::tool::{ToolCallConfig, ToolChoice};
     use crate::{
         cache::CacheOptions,
@@ -2334,7 +2335,7 @@ mod tests {
             .into()
         );
         // Test that it works with an initialized model
-        let anthropic_provider_config = SKIP_CREDENTIAL_VALIDATION.set(&(), || {
+        let anthropic_provider_config = SKIP_CREDENTIAL_VALIDATION.sync_scope((), || {
             ProviderConfig::Anthropic(AnthropicProvider::new("claude".to_string(), None).unwrap())
         });
         let anthropic_model_config = ModelConfig {
