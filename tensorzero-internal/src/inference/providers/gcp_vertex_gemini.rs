@@ -295,12 +295,22 @@ impl GCPVertexGeminiProvider {
         )?;
 
         let shorthand_url = parse_shorthand_url(&project_url_path)?;
-        let (location, model_id) = match shorthand_url {
-            ShorthandUrl::Publisher { location, model_id } => (location, model_id.to_string()),
+        let (location, model_id, endpoint_id, model_or_endpoint_id) = match shorthand_url {
+            ShorthandUrl::Publisher { location, model_id } => (
+                location,
+                Some(model_id.to_string()),
+                None,
+                model_id.to_string(),
+            ),
             ShorthandUrl::Endpoint {
                 location,
                 endpoint_id,
-            } => (location, format!("endpoints/{endpoint_id}")),
+            } => (
+                location,
+                None,
+                Some(endpoint_id.to_string()),
+                endpoint_id.to_string(),
+            ),
         };
 
         let request_url = format!(
@@ -325,6 +335,8 @@ impl GCPVertexGeminiProvider {
             audience,
             credentials,
             model_id,
+            endpoint_id,
+            model_or_endpoint_id,
         })
     }
 
