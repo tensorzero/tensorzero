@@ -10,9 +10,9 @@ fi
 BASE_URL=$(echo "$TENSORZERO_CLICKHOUSE_URL" | sed -E 's#(https?://[^/]+).*#\1#')
 
 # Attempt to ping ClickHouse and check for OK response
-echo "Pinging ClickHouse at $BASE_URL/ping to verify connectivity..."
+echo "Pinging ClickHouse at /ping to verify connectivity..."
 if ! curl -s --connect-timeout 5 "$BASE_URL/ping" > /dev/null; then
-  echo "Error: Failed to connect to ClickHouse at $BASE_URL/ping"
+  echo "Error: Failed to connect to ClickHouse at /ping"
   exit 1
 fi
 
