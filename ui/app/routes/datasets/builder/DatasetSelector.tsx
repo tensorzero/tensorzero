@@ -62,8 +62,7 @@ export function DatasetSelector({
       render={({ field }) => (
         <FormItem className="flex flex-col gap-y-1">
           <FormLabel className="text-fg-primary font-medium text-sm">Dataset</FormLabel>
-          <div className="w-full space-y-1">
-            <div className="relative h-10">
+          <div className="w-full relative h-10">
             <div 
               ref={commandRef} 
               className={clsx(
@@ -240,8 +239,7 @@ export function DatasetSelector({
                   </CommandGroup>
                 </CommandList>
               </Command>
-            </div>
-            </div>
+          </div>
           </div>
           {(() => {
             if (field.value) {

@@ -1,4 +1,4 @@
-import { FormField, FormLabel } from "~/components/ui/form";
+import { FormField, FormItem, FormLabel } from "~/components/ui/form";
 import { RadioGroup, RadioGroupItem } from "~/components/ui/radio-group";
 import { useWatch, type Control } from "react-hook-form";
 import type { DatasetBuilderFormValues } from "./types";
@@ -43,8 +43,8 @@ export default function OutputSourceSelector({
       control={control}
       name={fieldName}
       render={({ field }) => (
-        <div>
-          <FormLabel>Outputs</FormLabel>
+        <FormItem className="flex flex-col gap-y-1">
+          <FormLabel>Output</FormLabel>
           <div className="border border-border bg-bg-primary rounded-lg">
             <RadioGroup onValueChange={field.onChange} value={field.value} className="flex flex-col gap-0">
               <FormLabel
@@ -52,14 +52,14 @@ export default function OutputSourceSelector({
                 className="flex items-center space-x-2 px-3 py-3 border-b border-border cursor-pointer"
               >
                 <RadioGroupItem value="none" id="none" />
-                <span>Without outputs</span>
+                <span>Without output</span>
               </FormLabel>
               <FormLabel
                 htmlFor="inference"
                 className="w-full flex items-center space-x-2 px-3 py-3 border-b border-border cursor-pointer"
               >
                 <RadioGroupItem value="inference" id="inference" />
-                <span className="w-full">With outputs from inference</span>
+                <span className="w-full">With inference output</span>
               </FormLabel>
               <FormLabel
                 htmlFor="demonstration"
@@ -76,7 +76,7 @@ export default function OutputSourceSelector({
                   disabled={demonstrationCount === 0}
                 />
                 <div className="flex items-center gap-2">
-                  <span>With outputs from demonstration</span>
+                  <span>With demonstration output</span>
                   <Badge variant="secondary">
                     {demonstrationCount.toLocaleString()} available
                   </Badge>
@@ -84,7 +84,7 @@ export default function OutputSourceSelector({
               </FormLabel>
             </RadioGroup>
           </div>
-        </div>
+        </FormItem>
       )}
     />
   );
