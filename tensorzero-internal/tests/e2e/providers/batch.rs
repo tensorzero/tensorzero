@@ -734,8 +734,8 @@ pub async fn test_start_simple_image_batch_inference_request_with_provider(
                 "content": [
                     {"type": "text", "value": "What kind of animal is in this image?"},
                     {
-                        "type": "image",
-                        "image": {
+                        "type": "file",
+                        "file": {
                             "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
                             "mime_type": "image/png",
                         },

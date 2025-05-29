@@ -1656,8 +1656,8 @@ pub async fn check_base64_image_response(
                 "content": [
                     {"type": "text", "value": "Describe the contents of the image"},
                     {
-                        "type": "image",
-                        "image": {
+                        "type": "file",
+                        "file": {
                             "url": null,
                             "mime_type": "image/png",
                         },
@@ -1812,8 +1812,8 @@ pub async fn check_url_image_response(
                 "content": [
                     {"type": "text", "value": "Describe the contents of the image"},
                     {
-                        "type": "image",
-                        "image": {
+                        "type": "file",
+                        "file": {
                             "url": image_url.to_string(),
                             "mime_type": "image/png",
                         },
@@ -2184,8 +2184,8 @@ pub async fn check_simple_image_inference_response(
                 "content": [
                     {"type": "text", "value": "What kind of animal is in this image?"},
                     {
-                        "type": "image",
-                        "image": {
+                        "type": "file",
+                        "file": {
                             "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
                             "mime_type": "image/png",
                         },
