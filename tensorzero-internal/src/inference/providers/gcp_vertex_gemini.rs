@@ -1357,6 +1357,7 @@ fn stream_gcp_vertex_gemini(
                             }
                         };
                         let response = GCPVertexGeminiStreamResponseWithMetadata {
+                            raw_response: message.data,
                             response: data,
                             latency: start_time.elapsed(),
 
@@ -2066,6 +2067,7 @@ impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceR
 }
 
 struct GCPVertexGeminiStreamResponseWithMetadata {
+    raw_response: String,
     response: GCPVertexGeminiResponse,
     latency: Duration,
 }
@@ -2073,21 +2075,17 @@ struct GCPVertexGeminiStreamResponseWithMetadata {
 impl TryFrom<GCPVertexGeminiStreamResponseWithMetadata> for ProviderInferenceResponseChunk {
     type Error = Error;
     fn try_from(response: GCPVertexGeminiStreamResponseWithMetadata) -> Result<Self, Self::Error> {
-        let GCPVertexGeminiStreamResponseWithMetadata { response, latency } = response;
-
-        let raw = serde_json::to_string(&response).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!(
-                    "Error serializing streaming response from GCP Vertex Gemini: {e}"
-                ),
-            })
-        })?;
+        let GCPVertexGeminiStreamResponseWithMetadata {
+            response,
+            latency,
+            raw_response,
+        } = response;
 
         let first_candidate = response.candidates.into_iter().next().ok_or_else(|| {
             Error::new(ErrorDetails::InferenceServer {
                 message: "GCP Vertex Gemini response has no candidates".to_string(),
                 raw_request: None,
-                raw_response: Some(raw.clone()),
+                raw_response: Some(raw_response.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
@@ -2112,7 +2110,7 @@ impl TryFrom<GCPVertexGeminiStreamResponseWithMetadata> for ProviderInferenceRes
             response
                 .usage_metadata
                 .map(|usage_metadata| usage_metadata.into()),
-            raw,
+            raw_response,
             latency,
             first_candidate
                 .finish_reason

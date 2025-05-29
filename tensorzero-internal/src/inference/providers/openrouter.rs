@@ -414,7 +414,7 @@ pub fn stream_openrouter(
 
                         let latency = start_time.elapsed();
                         let stream_message = data.and_then(|d| {
-                            openrouter_to_tensorzero_chunk(d, latency, &mut tool_call_ids, &mut tool_call_names)
+                            openrouter_to_tensorzero_chunk(message.data, d, latency, &mut tool_call_ids, &mut tool_call_names)
                         });
                         yield stream_message;
                     }
@@ -1380,22 +1380,12 @@ struct OpenRouterChatChunk {
 
 /// Maps an OpenRouter chunk to a TensorZero chunk for streaming inferences
 fn openrouter_to_tensorzero_chunk(
+    raw_message: String,
     mut chunk: OpenRouterChatChunk,
     latency: Duration,
     tool_call_ids: &mut Vec<String>,
     tool_names: &mut Vec<String>,
 ) -> Result<ProviderInferenceResponseChunk, Error> {
-    let raw_message = serde_json::to_string(&chunk).map_err(|e| {
-        Error::new(ErrorDetails::InferenceServer {
-            message: format!(
-                "Error parsing response from OpenRouter: {}",
-                DisplayOrDebugGateway::new(e)
-            ),
-            raw_request: None,
-            raw_response: Some(serde_json::to_string(&chunk).unwrap_or_default()),
-            provider_type: PROVIDER_TYPE.to_string(),
-        })
-    })?;
     if chunk.choices.len() > 1 {
         return Err(ErrorDetails::InferenceServer {
             message: "Response has invalid number of choices: {}. Expected 1.".to_string(),
@@ -2341,6 +2331,7 @@ mod tests {
         let mut tool_call_ids = vec!["id1".to_string()];
         let mut tool_call_names = vec!["name1".to_string()];
         let message = openrouter_to_tensorzero_chunk(
+            "my_raw_chunk".to_string(),
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
@@ -2374,6 +2365,7 @@ mod tests {
             usage: None,
         };
         let message = openrouter_to_tensorzero_chunk(
+            "my_raw_chunk".to_string(),
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
@@ -2408,6 +2400,7 @@ mod tests {
             usage: None,
         };
         let error = openrouter_to_tensorzero_chunk(
+            "my_raw_chunk".to_string(),
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
@@ -2443,6 +2436,7 @@ mod tests {
             usage: None,
         };
         let message = openrouter_to_tensorzero_chunk(
+            "my_raw_chunk".to_string(),
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
@@ -2476,6 +2470,7 @@ mod tests {
             }),
         };
         let message = openrouter_to_tensorzero_chunk(
+            "my_raw_chunk".to_string(),
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
