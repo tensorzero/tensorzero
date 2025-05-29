@@ -520,7 +520,7 @@ class TensorZeroTypeEncoder(JSONEncoder):
 
 
 @dataclass
-class ChatInferenceExample:
+class StoredChatInference:
     function_name: str
     variant_name: str
     input: InferenceInput
@@ -532,7 +532,7 @@ class ChatInferenceExample:
 
 
 @dataclass
-class JsonInferenceExample:
+class StoredJsonInference:
     function_name: str
     variant_name: str
     input: InferenceInput
@@ -543,7 +543,7 @@ class JsonInferenceExample:
     type: Literal["json"] = "json"
 
 
-InferenceExample = Union[ChatInferenceExample, JsonInferenceExample]
+StoredInference = Union[StoredChatInference, StoredJsonInference]
 
 
 ToolChoice = Union[Literal["auto", "required", "off"], Dict[Literal["specific"], str]]

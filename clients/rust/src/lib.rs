@@ -5,12 +5,12 @@ use std::{
 
 use futures::future::join_all;
 use git::GitInfo;
-use inference_example::render_stored_inference;
 use input_handling::reresolve_input_for_fine_tuning;
 use reqwest::header::HeaderMap;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use serde_json::Value;
 use std::fmt::Debug;
+use stored_inference::render_stored_inference;
 use tensorzero_internal::{
     config_parser::Config,
     endpoints::{
@@ -33,9 +33,9 @@ use uuid::Uuid;
 mod client_inference_params;
 mod client_input;
 mod git;
-mod inference_example;
-pub use inference_example::{
-    ChatInferenceExample, InferenceExample, JsonInferenceExample, RenderedStoredInference,
+mod stored_inference;
+pub use stored_inference::{
+    RenderedStoredInference, StoredChatInference, StoredInference, StoredJsonInference,
 };
 pub mod input_handling;
 pub use client_inference_params::{ClientInferenceParams, ClientSecretString};
@@ -754,7 +754,7 @@ impl Client {
     ///            In future we will make this behavior configurable by the caller.
     pub async fn experimental_render_inferences(
         &self,
-        mut inference_examples: Vec<InferenceExample>,
+        mut stored_inferences: Vec<StoredInference>,
         variants: HashMap<String, String>, // Map from function name to variant name
     ) -> Result<Vec<RenderedStoredInference>, TensorZeroError> {
         let ClientMode::EmbeddedGateway { gateway, .. } = &self.mode else {
@@ -768,7 +768,7 @@ impl Client {
         };
         validate_variant_pins(&variants, &gateway.state.config)
             .map_err(|e| TensorZeroError::Other { source: e.into() })?;
-        let resolution_futures = inference_examples.iter_mut().map(|inference_example| {
+        let resolution_futures = stored_inferences.iter_mut().map(|inference_example| {
             // Create a future for each call to reresolve_input_for_fine_tuning.
             // This function modifies inference_example.input_mut() in place.
             // `self` (the client) is passed by immutable reference.
@@ -784,14 +784,14 @@ impl Client {
         // Ensure that the number of results matches the number of inference examples.
         // This should be guaranteed to be true based on the code above, but we assert it anyway.
         assert_eq!(
-            inference_examples.len(),
+            stored_inferences.len(),
             results.len(),
             "Mismatch between number of inference examples and resolution results. This indicates a bug."
         );
 
-        let final_rendered_examples: Vec<RenderedStoredInference> = inference_examples
-            .into_iter() // Consumes Vec<InferenceExample>; elements are already mutated
-            .zip(results.into_iter()) // Creates an iterator of (InferenceExample, Result<(), Error>)
+        let final_rendered_examples: Vec<RenderedStoredInference> = stored_inferences
+            .into_iter() // Consumes Vec<StoredInference>; elements are already mutated
+            .zip(results.into_iter()) // Creates an iterator of (StoredInference, Result<(), Error>)
             .filter_map(|(example, resolution_result)| {
                 // Filter out examples where reresolve_input_for_fine_tuning failed.
                 // If resolution_result is Ok, map Some(()) to Some(example).
@@ -799,7 +799,7 @@ impl Client {
                 resolution_result.ok().map(|_| example)
             })
             .filter_map(|resolved_example| {
-                // resolved_example is an InferenceExample that was successfully processed by reresolve.
+                // resolved_example is a StoredInference that was successfully processed by reresolve.
                 // Now, attempt to render it.
                 // render_stored_inference returns Result<RenderedStoredInference, Error>.
                 // .ok() converts this to Option<RenderedStoredInference>.

@@ -24,10 +24,10 @@ from tensorzero import (
     ExtraBody,
     FeedbackResponse,
     InferenceChunk,
-    InferenceExample,
     InferenceInput,
     InferenceResponse,
     JsonDatapointInsert,
+    StoredInference,
 )
 from tensorzero.internal import ModelInput, ToolCallConfigDatabaseInsert
 
@@ -267,14 +267,14 @@ class TensorZeroGateway(BaseTensorZeroGateway):
     def experimental_render_inferences(
         self,
         *,
-        inference_examples: List[InferenceExample],
+        stored_inferences: List[StoredInference],
         variants: Dict[str, str],
     ) -> List[RenderedStoredInference]:
         """
-        Render a list of inference examples into a list of rendered inference examples.
+        Render a list of stored inferences into a list of rendered stored inferences.
 
         This function performs two main tasks:
-        1. Resolves all network resources (e.g., images) in the inference examples.
+        1. Resolves all network resources (e.g., images) in the stored inference.
         2. Prepares all messages into "simple" messages that have been templated for a particular variant.
            To do this, the function needs to know which variant to use for each function that might appear in the data.
 
@@ -282,9 +282,9 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         the function has no variant specified, or the process of downloading resources fails.
         In the future, this behavior may be made configurable by the caller.
 
-        :param inference_examples: A list of inference examples to render.
+        :param stored_inferences: A list of stored inferences to render.
         :param variants: A mapping from function name to variant name.
-        :return: A list of rendered inference examples.
+        :return: A list of rendered stored inferences.
         """
 
     def close(self) -> None:
@@ -526,14 +526,14 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
     async def experimental_render_inferences(
         self,
         *,
-        inference_examples: List[InferenceExample],
+        stored_inferences: List[StoredInference],
         variants: Dict[str, str],
     ) -> List[RenderedStoredInference]:
         """
-        Render a list of inference examples into a list of rendered inference examples.
+        Render a list of stored inferences into a list of rendered stored inferences.
 
         This function performs two main tasks:
-        1. Resolves all network resources (e.g., images) in the inference examples.
+        1. Resolves all network resources (e.g., images) in the stored inferences.
         2. Prepares all messages into "simple" messages that have been templated for a particular variant.
            To do this, the function needs to know which variant to use for each function that might appear in the data.
 
@@ -541,9 +541,9 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         the function has no variant specified, or the process of downloading resources fails.
         In the future, this behavior may be made configurable by the caller.
 
-        :param inference_examples: A list of inference examples to render.
+        :param stored_inferences: A list of stored inferences to render.
         :param variants: A mapping from function name to variant name.
-        :return: A list of rendered inference examples.
+        :return: A list of rendered stored inferences.
         """
 
     async def close(self) -> None:

@@ -884,9 +884,9 @@ impl TensorZeroGateway {
         }
     }
 
-    /// Render a list of inference examples into a list of rendered inference examples.
+    /// Render a list of stored inferences into a list of rendered stored inferences.
     /// There are two things that need to happen in this function:
-    /// 1. We need to resolve all network resources (e.g. images) in the inference examples.
+    /// 1. We need to resolve all network resources (e.g. images) in the stored inferences.
     /// 2. We need to prepare all messages into "simple" messages that have been templated for a particular variant.
     ///    To do this, we need to know what variant to use for each function that might appear in the data.
     ///
@@ -894,21 +894,21 @@ impl TensorZeroGateway {
     ///            has no variant specified, or where the process of downloading resources fails.
     ///            In future we will make this behavior configurable by the caller.
     ///
-    /// :param inference_examples: A list of inference examples to render.
+    /// :param stored_inferences: A list of stored inferences to render.
     /// :param variants: A map from function name to variant name.
-    /// :return: A list of rendered inference examples.
-    #[pyo3(signature = (*, inference_examples, variants))]
+    /// :return: A list of rendered stored inferences.
+    #[pyo3(signature = (*, stored_inferences, variants))]
     fn experimental_render_inferences(
         this: PyRef<'_, Self>,
-        inference_examples: Vec<Bound<'_, PyAny>>,
+        stored_inferences: Vec<Bound<'_, PyAny>>,
         variants: HashMap<String, String>,
     ) -> PyResult<Vec<RenderedStoredInference>> {
         let client = this.as_super().client.clone();
-        let inference_examples = inference_examples
+        let stored_inferences = stored_inferences
             .iter()
             .map(|x| deserialize_from_pyobj(this.py(), x))
             .collect::<Result<Vec<_>, _>>()?;
-        let fut = client.experimental_render_inferences(inference_examples, variants);
+        let fut = client.experimental_render_inferences(stored_inferences, variants);
         tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))
     }
 }
@@ -1415,9 +1415,9 @@ impl AsyncTensorZeroGateway {
         })
     }
 
-    /// Render a list of inference examples into a list of rendered inference examples.
+    /// Render a list of stored inferences into a list of rendered stored inferences.
     /// There are two things that need to happen in this function:
-    /// 1. We need to resolve all network resources (e.g. images) in the inference examples.
+    /// 1. We need to resolve all network resources (e.g. images) in the stored inferences.
     /// 2. We need to prepare all messages into "simple" messages that have been templated for a particular variant.
     ///    To do this, we need to know what variant to use for each function that might appear in the data.
     ///
@@ -1425,23 +1425,23 @@ impl AsyncTensorZeroGateway {
     ///            has no variant specified, or where the process of downloading resources fails.
     ///            In future we will make this behavior configurable by the caller.
     ///
-    /// :param inference_examples: A list of inference examples to render.
+    /// :param stored_inferences: A list of stored inferences to render.
     /// :param variants: A map from function name to variant name.
-    /// :return: A list of rendered inference examples.
-    #[pyo3(signature = (*, inference_examples, variants))]
+    /// :return: A list of rendered stored inferences.
+    #[pyo3(signature = (*, stored_inferences, variants))]
     fn experimental_render_inferences<'a>(
         this: PyRef<'a, Self>,
-        inference_examples: Vec<Bound<'a, PyAny>>,
+        stored_inferences: Vec<Bound<'a, PyAny>>,
         variants: HashMap<String, String>,
     ) -> PyResult<Bound<'a, PyAny>> {
         let client = this.as_super().client.clone();
-        let inference_examples = inference_examples
+        let stored_inferences = stored_inferences
             .iter()
             .map(|x| deserialize_from_pyobj(this.py(), x))
             .collect::<Result<Vec<_>, _>>()?;
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             let res = client
-                .experimental_render_inferences(inference_examples, variants)
+                .experimental_render_inferences(stored_inferences, variants)
                 .await;
             Python::with_gil(|py| match res {
                 Ok(inferences) => Ok(PyList::new(py, inferences)?.unbind()),

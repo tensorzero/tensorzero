@@ -6,10 +6,10 @@ import pytest
 import pytest_asyncio
 from tensorzero import (
     AsyncTensorZeroGateway,
-    ChatInferenceExample,
     ImageBase64,
-    JsonInferenceExample,
     JsonInferenceOutput,
+    StoredChatInference,
+    StoredJsonInference,
     TensorZeroGateway,
     Text,
     Thought,
@@ -49,8 +49,8 @@ async def async_client():
 
 def test_sync_render_inferences_success(sync_client: TensorZeroGateway):
     rendered_inferences = sync_client.experimental_render_inferences(
-        inference_examples=[
-            ChatInferenceExample(
+        stored_inferences=[
+            StoredChatInference(
                 function_name="basic_test",
                 variant_name="default",
                 input={
@@ -120,7 +120,7 @@ def test_sync_render_inferences_success(sync_client: TensorZeroGateway):
                     parallel_tool_calls=False,
                 ),
             ),
-            JsonInferenceExample(
+            StoredJsonInference(
                 function_name="json_success",
                 variant_name="dummy",
                 input={
@@ -270,8 +270,8 @@ def test_sync_render_inferences_nonexistent_function(
 ):
     """Test that render_inferences drops if the function does not exist at all."""
     rendered_inferences = sync_client.experimental_render_inferences(
-        inference_examples=[
-            ChatInferenceExample(
+        stored_inferences=[
+            StoredChatInference(
                 function_name="non_existent_function",
                 variant_name="default",
                 input={
@@ -302,8 +302,8 @@ def test_sync_render_inferences_nonexistent_function(
 def test_sync_render_inferences_unspecified_function(sync_client: TensorZeroGateway):
     """Test that render_inferences drops if the function is not specified in the variants map."""
     rendered_inferences = sync_client.experimental_render_inferences(
-        inference_examples=[
-            ChatInferenceExample(
+        stored_inferences=[
+            StoredChatInference(
                 function_name="non_existent_function",
                 variant_name="default",
                 input={
@@ -335,8 +335,8 @@ def test_sync_render_inferences_no_variant(sync_client: TensorZeroGateway):
     """Test that render_inferences drops an example if the variant is not found and logs a warning."""
     with pytest.raises(Exception) as excinfo:
         sync_client.experimental_render_inferences(
-            inference_examples=[
-                ChatInferenceExample(
+            stored_inferences=[
+                StoredChatInference(
                     function_name="basic_test",  # This function exists in the config
                     variant_name="non_existent_variant",
                     input={
@@ -370,8 +370,8 @@ def test_sync_render_inferences_missing_variable(
 ):
     """Test that render_inferences drops an example if a template variable is missing."""
     rendered_inferences = sync_client.experimental_render_inferences(
-        inference_examples=[
-            ChatInferenceExample(
+        stored_inferences=[
+            StoredChatInference(
                 function_name="basic_test",  # Uses assistant_name in system prompt
                 variant_name="default",
                 input={
@@ -402,8 +402,8 @@ def test_sync_render_inferences_missing_variable(
 @pytest.mark.asyncio
 async def test_async_render_inferences_success(async_client: AsyncTensorZeroGateway):
     rendered_inferences = await async_client.experimental_render_inferences(
-        inference_examples=[
-            ChatInferenceExample(
+        stored_inferences=[
+            StoredChatInference(
                 function_name="basic_test",
                 variant_name="default",
                 input={
@@ -473,7 +473,7 @@ async def test_async_render_inferences_success(async_client: AsyncTensorZeroGate
                     parallel_tool_calls=False,
                 ),
             ),
-            JsonInferenceExample(
+            StoredJsonInference(
                 function_name="json_success",
                 variant_name="dummy",
                 input={
@@ -624,8 +624,8 @@ async def test_async_render_inferences_nonexistent_function(
 ):
     """Test that render_inferences drops if the function does not exist at all."""
     rendered_inferences = await async_client.experimental_render_inferences(
-        inference_examples=[
-            ChatInferenceExample(
+        stored_inferences=[
+            StoredChatInference(
                 function_name="non_existent_function",
                 variant_name="default",
                 input={
@@ -659,8 +659,8 @@ async def test_async_render_inferences_unspecified_function(
 ):
     """Test that render_inferences drops if the function is not specified in the variants map."""
     rendered_inferences = await async_client.experimental_render_inferences(
-        inference_examples=[
-            ChatInferenceExample(
+        stored_inferences=[
+            StoredChatInference(
                 function_name="non_existent_function",
                 variant_name="default",
                 input={
@@ -695,8 +695,8 @@ async def test_async_render_inferences_no_variant(
     """Test that render_inferences drops an example if the variant is not found and logs a warning."""
     with pytest.raises(Exception) as excinfo:
         await async_client.experimental_render_inferences(
-            inference_examples=[
-                ChatInferenceExample(
+            stored_inferences=[
+                StoredChatInference(
                     function_name="basic_test",  # This function exists in the config
                     variant_name="non_existent_variant",
                     input={
@@ -731,8 +731,8 @@ async def test_async_render_inferences_missing_variable(
 ):
     """Test that render_inferences drops an example if a template variable is missing."""
     rendered_inferences = await async_client.experimental_render_inferences(
-        inference_examples=[
-            ChatInferenceExample(
+        stored_inferences=[
+            StoredChatInference(
                 function_name="basic_test",  # Uses assistant_name in system prompt
                 variant_name="default",
                 input={

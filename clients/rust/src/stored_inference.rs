@@ -21,20 +21,20 @@ use tensorzero_internal::{
 };
 use uuid::Uuid;
 
-/// Represents an inference example to be used for optimization.
+/// Represents an stored inference to be used for optimization.
 /// These are retrieved from the database in this format.
 /// NOTE / TODO: As an incremental step we are deserializing this enum from Python.
 /// in the final version we should instead make this a native PyO3 class and
 /// avoid deserialization entirely unless given a dict.
 #[derive(Debug, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum InferenceExample {
-    Chat(ChatInferenceExample),
-    Json(JsonInferenceExample),
+pub enum StoredInference {
+    Chat(StoredChatInference),
+    Json(StoredJsonInference),
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
-pub struct ChatInferenceExample {
+pub struct StoredChatInference {
     pub function_name: String,
     pub variant_name: String,
     pub input: ResolvedInput,
@@ -45,7 +45,7 @@ pub struct ChatInferenceExample {
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
-pub struct JsonInferenceExample {
+pub struct StoredJsonInference {
     pub function_name: String,
     pub variant_name: String,
     pub input: ResolvedInput,
@@ -55,30 +55,30 @@ pub struct JsonInferenceExample {
     pub output_schema: Value,
 }
 
-impl InferenceExample {
+impl StoredInference {
     pub fn input_mut(&mut self) -> &mut ResolvedInput {
         match self {
-            InferenceExample::Chat(example) => &mut example.input,
-            InferenceExample::Json(example) => &mut example.input,
+            StoredInference::Chat(example) => &mut example.input,
+            StoredInference::Json(example) => &mut example.input,
         }
     }
     pub fn input(&self) -> &ResolvedInput {
         match self {
-            InferenceExample::Chat(example) => &example.input,
-            InferenceExample::Json(example) => &example.input,
+            StoredInference::Chat(example) => &example.input,
+            StoredInference::Json(example) => &example.input,
         }
     }
 
     pub fn function_name(&self) -> &str {
         match self {
-            InferenceExample::Chat(example) => &example.function_name,
-            InferenceExample::Json(example) => &example.function_name,
+            StoredInference::Chat(example) => &example.function_name,
+            StoredInference::Json(example) => &example.function_name,
         }
     }
 }
 
 /// Represents an inference that has been prepared for fine-tuning.
-/// This is constructed by rendering an InferenceExample with a variant for messages
+/// This is constructed by rendering a StoredInference with a variant for messages
 /// and by resolving all network resources (e.g. images).
 #[cfg_attr(feature = "pyo3", pyclass)]
 #[derive(Debug, PartialEq)]
@@ -142,12 +142,12 @@ impl RenderedStoredInference {
     }
 }
 
-/// Convert an InferenceExample's input to a ModelInput.
+/// Convert a StoredInference's input to a ModelInput.
 /// `variants` should be a map from function name to variant name, i.e. what variant to use for a particular function
-/// as the inference example is being rendered.
+/// as the stored inference is being rendered.
 /// This does not handle resolving network resources (e.g. images).
 fn render_model_input(
-    inference_example: &InferenceExample,
+    inference_example: &StoredInference,
     config: &Config,
     variants: &HashMap<String, String>,
 ) -> Result<ModelInput, Error> {
@@ -210,19 +210,19 @@ fn render_model_input(
     )
 }
 
-/// Render an InferenceExample to a RenderedStoredInference.
+/// Render a StoredInference to a RenderedStoredInference.
 /// `variants` should be a map from function name to variant name, i.e. what variant to use for a particular function
 /// as the inference example is being rendered.
 ///
 /// This does not handle resolving network resources (e.g. images).
 pub fn render_stored_inference(
-    inference_example: InferenceExample,
+    inference_example: StoredInference,
     config: &Config,
     variants: &HashMap<String, String>,
 ) -> Result<RenderedStoredInference, Error> {
     let model_input = render_model_input(&inference_example, config, variants)?;
     match inference_example {
-        InferenceExample::Chat(example) => Ok(RenderedStoredInference {
+        StoredInference::Chat(example) => Ok(RenderedStoredInference {
             function_name: example.function_name,
             variant_name: example.variant_name,
             input: model_input,
@@ -232,7 +232,7 @@ pub fn render_stored_inference(
             tool_params: Some(example.tool_params),
             output_schema: None,
         }),
-        InferenceExample::Json(example) => {
+        StoredInference::Json(example) => {
             let output: Vec<ContentBlockOutput> = match example.output.raw {
                 Some(raw) => vec![raw.into()],
                 None => vec![],

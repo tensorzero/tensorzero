@@ -2,8 +2,7 @@ use object_store::path::Path;
 use serde_json::json;
 use std::collections::HashMap;
 use tensorzero::{
-    ChatInferenceExample, InferenceExample, JsonInferenceExample, Role, StorageKind, StoragePath,
-    Tool,
+    Role, StorageKind, StoragePath, StoredChatInference, StoredInference, StoredJsonInference, Tool,
 };
 use tensorzero_internal::{
     inference::types::{
@@ -18,28 +17,28 @@ use uuid::Uuid;
 
 use crate::providers::common::make_embedded_gateway;
 
-/// Test that the render_inferences function works when given an empty array of inference examples.
+/// Test that the render_inferences function works when given an empty array of stored inferences.
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_render_inferences_empty() {
     let client = make_embedded_gateway().await;
 
-    // Test with an empty inference examples array.
-    let inference_examples = vec![];
+    // Test with an empty stored inferences array.
+    let stored_inferences = vec![];
     let rendered_inferences = client
-        .experimental_render_inferences(inference_examples, HashMap::new())
+        .experimental_render_inferences(stored_inferences, HashMap::new())
         .await
         .unwrap();
     assert!(rendered_inferences.is_empty());
 }
 
-/// Test that the render_inferences function drops the inference example when the variants map is empty.
+/// Test that the render_inferences function drops the stored inference when the variants map is empty.
 /// Also test that a warning is logged.
 #[tokio::test(flavor = "multi_thread")]
 #[traced_test]
 pub async fn test_render_inferences_no_function() {
     let client = make_embedded_gateway().await;
 
-    let inference_examples = vec![InferenceExample::Chat(ChatInferenceExample {
+    let stored_inferences = vec![StoredInference::Chat(StoredChatInference {
         function_name: "basic_test".to_string(),
         variant_name: "dummy".to_string(),
         input: ResolvedInput {
@@ -58,7 +57,7 @@ pub async fn test_render_inferences_no_function() {
     })];
 
     let rendered_inferences = client
-        .experimental_render_inferences(inference_examples, HashMap::new())
+        .experimental_render_inferences(stored_inferences, HashMap::new())
         .await
         .unwrap();
     assert!(rendered_inferences.is_empty());
@@ -72,7 +71,7 @@ pub async fn test_render_inferences_no_function() {
 pub async fn test_render_inferences_no_variant() {
     let client = make_embedded_gateway().await;
 
-    let inference_examples = vec![InferenceExample::Chat(ChatInferenceExample {
+    let stored_inferences = vec![StoredInference::Chat(StoredChatInference {
         function_name: "basic_test".to_string(),
         variant_name: "dummy".to_string(),
         input: ResolvedInput {
@@ -92,7 +91,7 @@ pub async fn test_render_inferences_no_variant() {
 
     let error = client
         .experimental_render_inferences(
-            inference_examples,
+            stored_inferences,
             HashMap::from([("basic_test".to_string(), "notavariant".to_string())]),
         )
         .await
@@ -113,7 +112,7 @@ pub async fn test_render_inferences_no_variant() {
 pub async fn test_render_inferences_missing_variable() {
     let client = make_embedded_gateway().await;
 
-    let inference_examples = vec![InferenceExample::Chat(ChatInferenceExample {
+    let stored_inferences = vec![StoredInference::Chat(StoredChatInference {
         function_name: "basic_test".to_string(),
         variant_name: "dummy".to_string(),
         input: ResolvedInput {
@@ -133,7 +132,7 @@ pub async fn test_render_inferences_missing_variable() {
 
     let rendered_inferences = client
         .experimental_render_inferences(
-            inference_examples,
+            stored_inferences,
             HashMap::from([("basic_test".to_string(), "test".to_string())]),
         )
         .await
@@ -148,8 +147,8 @@ pub async fn test_render_inferences_missing_variable() {
 pub async fn test_render_inferences_normal() {
     let client = make_embedded_gateway().await;
 
-    let inference_examples = vec![
-        InferenceExample::Chat(ChatInferenceExample {
+    let stored_inferences = vec![
+        StoredInference::Chat(StoredChatInference {
             function_name: "basic_test".to_string(),
             variant_name: "dummy".to_string(),
             input: ResolvedInput {
@@ -166,7 +165,7 @@ pub async fn test_render_inferences_normal() {
             inference_id: Uuid::now_v7(),
             tool_params: ToolCallConfigDatabaseInsert::default(),
         }),
-        InferenceExample::Json(JsonInferenceExample {
+        StoredInference::Json(StoredJsonInference {
             function_name: "json_success".to_string(),
             variant_name: "dummy".to_string(),
             input: ResolvedInput {
@@ -186,7 +185,7 @@ pub async fn test_render_inferences_normal() {
             inference_id: Uuid::now_v7(),
             output_schema: json!({}), // This should be taken as-is
         }),
-        InferenceExample::Chat(ChatInferenceExample {
+        StoredInference::Chat(StoredChatInference {
             function_name: "weather_helper".to_string(),
             variant_name: "dummy".to_string(),
             input: ResolvedInput {
@@ -218,7 +217,7 @@ pub async fn test_render_inferences_normal() {
                 parallel_tool_calls: None,
             },
         }),
-        InferenceExample::Chat(ChatInferenceExample {
+        StoredInference::Chat(StoredChatInference {
             function_name: "basic_test".to_string(),
             variant_name: "gpt-4o-mini-2024-07-18".to_string(),
             input: ResolvedInput {
@@ -258,7 +257,7 @@ pub async fn test_render_inferences_normal() {
 
     let rendered_inferences = client
         .experimental_render_inferences(
-            inference_examples,
+            stored_inferences,
             HashMap::from([
                 ("json_success".to_string(), "test".to_string()),
                 ("weather_helper".to_string(), "anthropic".to_string()),
