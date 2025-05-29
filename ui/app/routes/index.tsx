@@ -13,6 +13,7 @@ import {
   Documentation,
   Dataset,
   GridCheck,
+  DynamicEvaluation,
 } from "~/components/icons/Icons";
 import {
   countInferencesByFunction,
@@ -163,8 +164,14 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             <FeatureCard
               source="/evaluations"
               icon={GridCheck}
-              title="Evaluations"
+              title="Static Evaluations"
               description={`${numEvaluations} evaluations, ${numEvaluationRuns} runs`}
+            />
+            <FeatureCard
+              source="/dynamic_evaluations"
+              icon={DynamicEvaluation}
+              title="Dynamic Evaluations"
+              description={`TODO`}
             />
           </div>
         </div>
