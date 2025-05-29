@@ -23,7 +23,7 @@
 - Install LiteLLM: `pip install 'litellm[proxy]'==1.34.42`
 - Install Rust 1.80.1.
 - Install `vegeta` [→](https://github.com/tsenart/vegeta).
-- Set the the `OPENAI_API_KEY` environment variable to anything (e.g. `OPENAI_API_KEY=test`).
+- Set the `OPENAI_API_KEY` environment variable to anything (e.g. `OPENAI_API_KEY=test`).
 
 ### Test Setup
 
