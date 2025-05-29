@@ -62,7 +62,7 @@ export function DatasetSelector({
       render={({ field }) => (
         <FormItem className="flex flex-col gap-y-1">
           <FormLabel className="text-fg-primary font-medium text-sm">Dataset</FormLabel>
-          <div className="w-full max-w-160 space-y-1">
+          <div className="w-full space-y-1">
             <div className="relative h-10">
             <div 
               ref={commandRef} 

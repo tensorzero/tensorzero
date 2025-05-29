@@ -6,6 +6,7 @@ import { useFetcher } from "react-router";
 import type { MetricsWithFeedbackData } from "~/utils/clickhouse/feedback";
 import { useEffect, useMemo } from "react";
 import { Badge } from "~/components/ui/badge";
+import clsx from "clsx";
 
 export default function OutputSourceSelector({
   control,
@@ -43,35 +44,44 @@ export default function OutputSourceSelector({
       name={fieldName}
       render={({ field }) => (
         <div>
-          <FormLabel>Outputs to be used in dataset</FormLabel>
-          <div className="mt-2 grid gap-x-8 gap-y-2">
-            <RadioGroup onValueChange={field.onChange} value={field.value}>
-              <div className="flex h-5 items-center space-x-2">
+          <FormLabel>Outputs</FormLabel>
+          <div className="border border-border bg-bg-primary rounded-lg">
+            <RadioGroup onValueChange={field.onChange} value={field.value} className="flex flex-col gap-0">
+              <FormLabel
+                htmlFor="none"
+                className="flex items-center space-x-2 px-3 py-3 border-b border-border cursor-pointer"
+              >
                 <RadioGroupItem value="none" id="none" />
-                <FormLabel htmlFor="none">None</FormLabel>
-              </div>
-              <div className="flex h-5 items-center space-x-2">
+                <span>Without outputs</span>
+              </FormLabel>
+              <FormLabel
+                htmlFor="inference"
+                className="w-full flex items-center space-x-2 px-3 py-3 border-b border-border cursor-pointer"
+              >
                 <RadioGroupItem value="inference" id="inference" />
-                <FormLabel htmlFor="inference">Inference</FormLabel>
-              </div>
-              <div className="flex h-5 items-center space-x-2">
+                <span className="w-full">With outputs from inference</span>
+              </FormLabel>
+              <FormLabel
+                htmlFor="demonstration"
+                className={clsx(
+                  "flex items-center space-x-2 px-3 py-3",
+                  demonstrationCount === 0
+                    ? "opacity-50 cursor-not-allowed"
+                    : "cursor-pointer",
+                )}
+              >
                 <RadioGroupItem
                   value="demonstration"
                   id="demonstration"
                   disabled={demonstrationCount === 0}
                 />
-                <FormLabel
-                  htmlFor="demonstration"
-                  className={`flex items-center gap-2 ${
-                    demonstrationCount === 0 ? "opacity-50" : ""
-                  }`}
-                >
-                  Demonstration
+                <div className="flex items-center gap-2">
+                  <span>With outputs from demonstration</span>
                   <Badge variant="secondary">
                     {demonstrationCount.toLocaleString()} available
                   </Badge>
-                </FormLabel>
-              </div>
+                </div>
+              </FormLabel>
             </RadioGroup>
           </div>
         </div>

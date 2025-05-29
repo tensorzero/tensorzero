@@ -106,9 +106,9 @@ export function DatasetBuilderForm({
         return "Success";
       default:
         if (isNewDataset) {
-          return "Create Dataset";
+          return `Create new dataset with ${countToInsert?.toLocaleString()} rows`;
         } else {
-          return "Insert Into Dataset";
+          return `Insert ${countToInsert?.toLocaleString()} rows into dataset`;
         }
     }
   }
@@ -119,9 +119,8 @@ export function DatasetBuilderForm({
         onSubmit={(e) => {
           handleSubmit(onSubmit)(e);
         }}
-        className="space-y-6"
+        className="space-y-6 max-w-160"
       >
-        <div className="space-y-6">
           <DatasetSelector
             control={form.control}
             dataset_counts={dataset_counts}
@@ -133,38 +132,48 @@ export function DatasetBuilderForm({
             inferenceCount={counts.inferenceCount}
             config={config}
           />
-          <CurationMetricSelector<DatasetBuilderFormValues>
-            control={form.control}
-            name="metric_name"
-            functionFieldName="function"
-            feedbackCount={counts.feedbackCount}
-            curatedInferenceCount={counts.curatedInferenceCount}
-            config={config}
-            removeDemonstrations={true}
-          />
-          <OutputSourceSelector control={form.control} />
-        </div>
-        <DatasetCountDisplay
-          control={form.control}
-          setCountToInsert={setCountToInsert}
-        />
-        <Button
-          type="submit"
-          disabled={
-            submissionPhase !== "idle" ||
-            countToInsert === null ||
-            countToInsert === 0 ||
-            !selectedDataset
-          }
-          onClick={() => {
-            if (submissionPhase === "complete") {
-              setSubmissionPhase("idle");
-              form.clearErrors("root");
-            }
-          }}
-        >
-          {getButtonText(isNewDataset)}
-        </Button>
+          {functionName && (
+            <CurationMetricSelector<DatasetBuilderFormValues>
+              control={form.control}
+              name="metric_name"
+              functionFieldName="function"
+              feedbackCount={counts.feedbackCount}
+              curatedInferenceCount={counts.curatedInferenceCount}
+              config={config}
+              removeDemonstrations={true}
+            />
+          )}
+          {functionName && (
+            <OutputSourceSelector control={form.control} />
+          )}
+          {functionName && (
+            <div className="space-y-2">
+              <DatasetCountDisplay
+                control={form.control}
+                setCountToInsert={setCountToInsert}
+                functionInferenceCount={counts.inferenceCount}
+                metricFeedbackCount={counts.feedbackCount}
+                metricCuratedInferenceCount={counts.curatedInferenceCount}
+              />
+              <Button
+                type="submit"
+                disabled={
+                  submissionPhase !== "idle" ||
+                  countToInsert === null ||
+                  countToInsert === 0 ||
+                  !selectedDataset
+                }
+                onClick={() => {
+                  if (submissionPhase === "complete") {
+                    setSubmissionPhase("idle");
+                    form.clearErrors("root");
+                  }
+                }}
+              >
+                {getButtonText(isNewDataset)}
+              </Button>
+            </div>
+          )}
         {form.formState.errors.root && (
           <p className="mt-2 text-sm text-red-500">
             {form.formState.errors.root.message}
