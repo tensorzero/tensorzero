@@ -188,7 +188,7 @@ fn make_gcp_object_store(
 }
 
 #[derive(Debug, Eq, PartialEq)]
-enum ShorthandUrl<'a> {
+pub enum ShorthandUrl<'a> {
     // We enforce that the publisher is 'google' when parsing the url
     Publisher {
         location: &'a str,
@@ -200,8 +200,13 @@ enum ShorthandUrl<'a> {
     },
 }
 
-// 'projects/<project_id>/locations/<location>/publishers/<publisher>/models/<model_id>'
-fn parse_shorthand_url(shorthand_url: &str) -> Result<ShorthandUrl, Error> {
+// Parses strings of the form:
+// * 'projects/<project_id>/locations/<location>/publishers/<publisher>/models/<model_id>'
+// * 'projects/<project_id>/locations/<location>/endpoints/<endpoint_id>'
+pub fn parse_shorthand_url<'a>(
+    shorthand_url: &'a str,
+    expected_publisher: &str,
+) -> Result<ShorthandUrl<'a>, Error> {
     let components: Vec<&str> = shorthand_url.split('/').collect_vec();
     let [projects, _project_id, locations, location, publishers_or_endpoint, ..] = &components[..]
     else {
@@ -229,10 +234,10 @@ fn parse_shorthand_url(shorthand_url: &str) -> Result<ShorthandUrl, Error> {
                 ),
             })
         })?;
-        if publisher != &"google" {
+        if *publisher != expected_publisher {
             return Err(Error::new(ErrorDetails::Config {
                 message: format!(
-                    "GCP Vertex Geminishorthand url has non-`google` publisher: `{shorthand_url}`"
+                    "GCP shorthand url has publisher `{publisher}`, expected `{expected_publisher}` : `{shorthand_url}`"
                 ),
             }));
         }
@@ -279,7 +284,7 @@ fn parse_shorthand_url(shorthand_url: &str) -> Result<ShorthandUrl, Error> {
 
 impl GCPVertexGeminiProvider {
     // Constructs a provider from a shorthand string of the form:
-    // *
+    // * 'projects/<project_id>/locations/<location>/publishers/google/models/XXX'
     // * 'projects/<project_id>/locations/<location>/endpoints/XXX'
     //
     // This is *not* a full url - we append ':generateContent' or ':streamGenerateContent' to the end of the path as needed.
@@ -292,7 +297,8 @@ impl GCPVertexGeminiProvider {
             |creds| GCPVertexCredentials::try_from((creds, PROVIDER_TYPE)),
         )?;
 
-        let shorthand_url = parse_shorthand_url(&project_url_path)?;
+        // We only support model urls with the publisher 'google' (which includes all of the Gemini models)
+        let shorthand_url = parse_shorthand_url(&project_url_path, "google")?;
         let (location, model_id) = match shorthand_url {
             ShorthandUrl::Publisher { location, model_id } => (location, model_id.to_string()),
             ShorthandUrl::Endpoint {
@@ -3032,21 +3038,23 @@ mod tests {
     fn test_shorthand_url_parse() {
         use super::parse_shorthand_url;
 
-        let err1 = parse_shorthand_url("bad-shor-hand-url")
+        let err1 = parse_shorthand_url("bad-shorthand-url", "google")
             .unwrap_err()
             .to_string();
-        assert_eq!(err1, "GCP shorthand url is not in the expected format (should start with `projects/<project_id>/locations/<location>'): `bad-shor-hand-url`");
+        assert_eq!(err1, "GCP shorthand url is not in the expected format (should start with `projects/<project_id>/locations/<location>'): `bad-shorthand-url`");
 
-        let missing_components =
-            parse_shorthand_url("projects/tensorzero-public/locations/us-central1/")
-                .unwrap_err()
-                .to_string();
+        let missing_components = parse_shorthand_url(
+            "projects/tensorzero-public/locations/us-central1/",
+            "google",
+        )
+        .unwrap_err()
+        .to_string();
         assert_eq!(missing_components, "GCP shorthand url does not contain a publisher or endpoint: `projects/tensorzero-public/locations/us-central1/`");
 
-        let non_google_publisher = parse_shorthand_url("projects/tensorzero-public/locations/us-central1/publishers/not-google/models/gemini-2.0-flash-001").unwrap_err().to_string();
-        assert_eq!(non_google_publisher, "GCP Vertex Geminishorthand url has non-`google` publisher: `projects/tensorzero-public/locations/us-central1/publishers/not-google/models/gemini-2.0-flash-001`");
+        let non_google_publisher = parse_shorthand_url("projects/tensorzero-public/locations/us-central1/publishers/not-google/models/gemini-2.0-flash-001", "google").unwrap_err().to_string();
+        assert_eq!(non_google_publisher, "GCP shorthand url has publisher `not-google`, expected `google` : `projects/tensorzero-public/locations/us-central1/publishers/not-google/models/gemini-2.0-flash-001`");
 
-        let valid_model_url = parse_shorthand_url("projects/tensorzero-public/locations/us-central1/publishers/google/models/gemini-2.0-flash-001").unwrap();
+        let valid_model_url = parse_shorthand_url("projects/tensorzero-public/locations/us-central1/publishers/google/models/gemini-2.0-flash-001", "google").unwrap();
         assert_eq!(
             valid_model_url,
             ShorthandUrl::Publisher {
@@ -3057,6 +3065,7 @@ mod tests {
 
         let valid_endpoint_url = parse_shorthand_url(
             "projects/tensorzero-public/locations/us-central1/endpoints/945488740422254592",
+            "google",
         )
         .unwrap();
         assert_eq!(
