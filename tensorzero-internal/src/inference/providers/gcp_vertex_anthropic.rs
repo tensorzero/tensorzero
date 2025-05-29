@@ -5,12 +5,12 @@ use std::time::Duration;
 use futures::StreamExt;
 use reqwest::StatusCode;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
-use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::time::Instant;
 
 use crate::cache::ModelProviderRequest;
+use crate::config_parser::skip_credential_validation;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
@@ -56,20 +56,66 @@ pub struct GCPVertexAnthropicProvider {
 
 static DEFAULT_CREDENTIALS: OnceLock<GCPVertexCredentials> = OnceLock::new();
 
+pub async fn make_gcp_sdk_credentials(
+    // This is only used in test mode
+    #[cfg_attr(not(any(test, feature = "e2e_tests")), expect(unused_variables))]
+    provider_type: &str,
+) -> Result<GCPVertexCredentials, Error> {
+    let creds_result = google_cloud_auth::credentials::Builder::default().build();
+
+    let handle_err = |e| {
+        if skip_credential_validation() {
+            #[cfg(any(test, feature = "e2e_tests"))]
+            {
+                tracing::warn!(
+                    "Failed to get GCP SDK credentials for a model provider of type `{provider_type}`, so the associated tests will likely fail: {e}",
+                );
+            }
+            Ok(GCPVertexCredentials::None)
+        } else {
+            Err(Error::new(ErrorDetails::GCPCredentials {
+                message: format!(
+                    "Failed to create GCP Vertex credentials from SDK: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
+            }))
+        }
+    };
+
+    let creds = match creds_result {
+        Ok(creds) => creds,
+        Err(e) => {
+            return handle_err(e);
+        }
+    };
+    // Test that the credentials are valid by getting headers
+    match creds.headers(http::Extensions::default()).await {
+        Ok(_) => Ok(GCPVertexCredentials::Sdk(creds)),
+        Err(e) => handle_err(e),
+    }
+}
+
 impl GCPVertexAnthropicProvider {
-    pub fn new(
+    pub async fn new(
         model_id: String,
         location: String,
         project_id: String,
         api_key_location: Option<CredentialLocation>,
     ) -> Result<Self, Error> {
-        let credentials = build_creds_caching_default_with_fn(
-            api_key_location,
-            default_api_key_location(),
-            PROVIDER_TYPE,
-            &DEFAULT_CREDENTIALS,
-            |creds| GCPVertexCredentials::try_from((creds, PROVIDER_TYPE)),
-        )?;
+        let default_location = default_api_key_location();
+        let cred_location = api_key_location.as_ref().unwrap_or(&default_location);
+
+        let credentials = if matches!(cred_location, CredentialLocation::Sdk) {
+            make_gcp_sdk_credentials(PROVIDER_TYPE).await?
+        } else {
+            build_creds_caching_default_with_fn(
+                api_key_location,
+                default_api_key_location(),
+                PROVIDER_TYPE,
+                &DEFAULT_CREDENTIALS,
+                |creds| GCPVertexCredentials::try_from((creds, PROVIDER_TYPE)),
+            )?
+        };
         let request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/anthropic/models/{model_id}:rawPredict");
         let streaming_request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/anthropic/models/{model_id}:streamRawPredict");
         let audience = format!("https://{location}-aiplatform.googleapis.com/");
@@ -119,13 +165,14 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
             model_name,
             &mut request_body,
         )?;
-        let api_key = self
+        let auth_headers = self
             .credentials
-            .get_api_key(&self.audience, dynamic_api_keys)?;
+            .get_auth_headers(&self.audience, dynamic_api_keys)
+            .await?;
         let start_time = Instant::now();
         let res = http_client
             .post(&self.request_url)
-            .bearer_auth(api_key.expose_secret())
+            .headers(auth_headers)
             .json(&request_body)
             .headers(headers)
             .send()
@@ -224,13 +271,14 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
                 ),
             })
         })?;
-        let api_key = self
+        let auth_headers = self
             .credentials
-            .get_api_key(&self.audience, dynamic_api_keys)?;
+            .get_auth_headers(&self.audience, dynamic_api_keys)
+            .await?;
         let start_time = Instant::now();
         let event_source = http_client
             .post(&self.streaming_request_url)
-            .bearer_auth(api_key.expose_secret())
+            .headers(auth_headers)
             .header("content-type", "application/json")
             .json(&request_body)
             .headers(headers)

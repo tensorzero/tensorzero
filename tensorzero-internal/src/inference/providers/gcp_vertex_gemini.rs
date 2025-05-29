@@ -6,6 +6,8 @@ use std::time::Duration;
 
 use axum::http;
 use futures::StreamExt;
+use google_cloud_auth::credentials::Credentials;
+use http::{HeaderMap, HeaderValue};
 use itertools::Itertools;
 use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 use object_store::gcp::{GcpCredential, GoogleCloudStorageBuilder};
@@ -48,6 +50,7 @@ use crate::model::{
 };
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
+use super::gcp_vertex_anthropic::make_gcp_sdk_credentials;
 use super::helpers::{inject_extra_request_data, parse_jsonl_batch_file, JsonlBatchFileInfo};
 use super::openai::convert_stream_error;
 
@@ -130,7 +133,7 @@ fn join_cloud_paths(dir: &str, file: &str) -> String {
 /// Constructs a new `ObjectStore` instance for the bucket specified by `gs_url`
 /// with the provided credentials.
 /// We call this on each batch start/poll request, as we might be using dynamic credentials.
-fn make_gcp_object_store(
+async fn make_gcp_object_store(
     gs_url: &str,
     credentials: &GCPVertexCredentials,
     dynamic_api_keys: &InferenceCredentials,
@@ -167,6 +170,55 @@ fn make_gcp_object_store(
                 builder.with_credentials(Arc::new(StaticCredentialProvider::new(GcpCredential {
                     bearer: key.expose_secret().to_string(),
                 })));
+        }
+        GCPVertexCredentials::Sdk(creds) => {
+            let headers = creds
+                .headers(http::Extensions::default())
+                .await
+                .map_err(|e| {
+                    Error::new(ErrorDetails::GCPCredentials {
+                        message: format!("Failed to get GCP access token: {e}"),
+                    })
+                })?;
+
+            // The 'object_store' crate requires us to use a bearer auth token, so try to extract that from the produced headers
+            // In the future, we may want to use the GCP object store sdk crate directly, so that we can support all of the
+            // auth methods
+            if headers.len() != 1 {
+                return Err(Error::new(ErrorDetails::GCPCredentials {
+                    message: format!(
+                        "Expected GCP SDK to produce exactly one auth headers, found: {:?}",
+                        headers.keys()
+                    ),
+                }));
+            }
+
+            let header_value = headers.get("Authorization").ok_or_else(|| {
+                Error::new(ErrorDetails::GCPCredentials {
+                    message: format!(
+                        "Expected GCP SDK to produce an Authorization header, found: {:?}",
+                        headers.keys()
+                    ),
+                })
+            })?;
+
+            if let Some(bearer_token) = header_value
+                .to_str()
+                .ok()
+                .and_then(|s| s.strip_prefix("Bearer "))
+            {
+                builder = builder.with_credentials(Arc::new(StaticCredentialProvider::new(
+                    GcpCredential {
+                        bearer: bearer_token.to_string(),
+                    },
+                )));
+            } else {
+                return Err(Error::new(ErrorDetails::GCPCredentials {
+                    message:
+                        "Expected GCP SDK to produce a Bearer token in the Authorization header"
+                            .to_string(),
+                }));
+            }
         }
         GCPVertexCredentials::None => {
             return Err(Error::new(ErrorDetails::ApiKeyMissing {
@@ -284,13 +336,18 @@ impl GCPVertexGeminiProvider {
     //
     // This is *not* a full url - we append ':generateContent' or ':streamGenerateContent' to the end of the path as needed.
     pub async fn new_shorthand(project_url_path: String) -> Result<Self, Error> {
-        let credentials = build_creds_caching_default_with_fn(
-            None,
-            default_api_key_location(),
-            PROVIDER_TYPE,
-            &DEFAULT_CREDENTIALS,
-            |creds| GCPVertexCredentials::try_from((creds, PROVIDER_TYPE)),
-        )?;
+        let cred_location = default_api_key_location();
+        let credentials = if matches!(cred_location, CredentialLocation::Sdk) {
+            make_gcp_sdk_credentials(PROVIDER_TYPE).await?
+        } else {
+            build_creds_caching_default_with_fn(
+                None,
+                cred_location,
+                PROVIDER_TYPE,
+                &DEFAULT_CREDENTIALS,
+                |creds| GCPVertexCredentials::try_from((creds, PROVIDER_TYPE)),
+            )?
+        };
 
         let shorthand_url = parse_shorthand_url(&project_url_path)?;
         let (location, model_id) = match shorthand_url {
@@ -326,20 +383,31 @@ impl GCPVertexGeminiProvider {
         })
     }
 
-    pub fn new(
+    pub async fn new(
         model_id: String,
         location: String,
         project_id: String,
         api_key_location: Option<CredentialLocation>,
         provider_types: &ProviderTypesConfig,
     ) -> Result<Self, Error> {
-        let credentials = build_creds_caching_default_with_fn(
-            api_key_location,
-            default_api_key_location(),
-            PROVIDER_TYPE,
-            &DEFAULT_CREDENTIALS,
-            |creds| GCPVertexCredentials::try_from((creds, PROVIDER_TYPE)),
-        )?;
+        let default_location = default_api_key_location();
+        let cred_location = api_key_location.as_ref().unwrap_or(&default_location);
+
+        let credentials = if matches!(cred_location, CredentialLocation::Sdk) {
+            make_gcp_sdk_credentials(PROVIDER_TYPE).await?
+        } else {
+            build_creds_caching_default_with_fn(
+                api_key_location,
+                default_api_key_location(),
+                PROVIDER_TYPE,
+                &DEFAULT_CREDENTIALS,
+                |creds| GCPVertexCredentials::try_from((creds, PROVIDER_TYPE)),
+            )?
+        };
+
+        let request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model_id}:generateContent");
+        let streaming_request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model_id}:streamGenerateContent?alt=sse");
+        let audience = format!("https://{location}-aiplatform.googleapis.com/");
         let api_v1_base_url = Url::parse(&format!(
             "https://{location}-aiplatform.googleapis.com/v1/"
         ))
@@ -348,9 +416,6 @@ impl GCPVertexGeminiProvider {
                 message: format!("Failed to parse base URL - this should never happen: {e}"),
             })
         })?;
-        let request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model_id}:generateContent");
-        let streaming_request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model_id}:streamGenerateContent?alt=sse");
-        let audience = format!("https://{location}-aiplatform.googleapis.com/");
 
         let batch_config = match &provider_types.gcp_vertex_gemini {
             Some(GCPProviderTypeConfig { batch: Some(GCPBatchConfigType::CloudStorage(GCPBatchConfigCloudStorage {
@@ -402,7 +467,8 @@ impl GCPVertexGeminiProvider {
                     &join_cloud_paths(&gcs_output_directory, "predictions.jsonl"),
                     api_key,
                     dynamic_api_keys,
-                )?;
+                )
+                .await?;
                 let data = store_and_path
                     .store
                     .get(&store_and_path.path)
@@ -448,6 +514,7 @@ pub enum GCPVertexCredentials {
         raw: SecretString,
     },
     Dynamic(String),
+    Sdk(Credentials),
     None,
 }
 
@@ -596,26 +663,53 @@ enum GCPVertexJobState {
 }
 
 impl GCPVertexCredentials {
-    pub fn get_api_key<'a>(
+    pub async fn get_auth_headers<'a>(
         &'a self,
         audience: &'a str,
         dynamic_api_keys: &'a InferenceCredentials,
-    ) -> Result<Cow<'a, SecretString>, Error> {
-        match self {
+    ) -> Result<HeaderMap, Error> {
+        let bearer_token = match self {
             GCPVertexCredentials::Static { parsed, raw: _ } => {
-                Ok(Cow::Owned(parsed.get_jwt_token(audience)?.into()))
+                Cow::Owned(parsed.get_jwt_token(audience)?)
             }
-            GCPVertexCredentials::Dynamic(key_name) => Ok(Cow::Borrowed(
-                dynamic_api_keys.get(key_name).ok_or_else(|| {
-                    Error::new(ErrorDetails::ApiKeyMissing {
-                        provider_name: PROVIDER_NAME.to_string(),
+            GCPVertexCredentials::Dynamic(key_name) => Cow::Borrowed(
+                dynamic_api_keys
+                    .get(key_name)
+                    .ok_or_else(|| {
+                        Error::new(ErrorDetails::ApiKeyMissing {
+                            provider_name: PROVIDER_NAME.to_string(),
+                        })
+                    })?
+                    .expose_secret(),
+            ),
+            GCPVertexCredentials::Sdk(creds) => {
+                return creds
+                    .headers(http::Extensions::default())
+                    .await
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::GCPCredentials {
+                            message: format!("Failed to get GCP access token: {e}"),
+                        })
                     })
-                })?,
-            )),
-            GCPVertexCredentials::None => Err(Error::new(ErrorDetails::ApiKeyMissing {
-                provider_name: PROVIDER_NAME.to_string(),
-            })),
-        }
+            }
+            GCPVertexCredentials::None => {
+                return Err(Error::new(ErrorDetails::ApiKeyMissing {
+                    provider_name: PROVIDER_NAME.to_string(),
+                }))
+            }
+        };
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "Authorization",
+            HeaderValue::from_str(&format!("Bearer {bearer_token}",)).map_err(|e| {
+                Error::new(ErrorDetails::GCPCredentials {
+                    message: format!(
+                        "Failed to create GCP Vertex Gemini credentials from SDK: {e}",
+                    ),
+                })
+            })?,
+        );
+        Ok(headers)
     }
 }
 
@@ -774,14 +868,15 @@ impl InferenceProvider for GCPVertexGeminiProvider {
             provider_request.model_name,
             &mut request_body,
         )?;
-        let api_key = self
+        let auth_headers = self
             .credentials
-            .get_api_key(&self.audience, dynamic_api_keys)?;
+            .get_auth_headers(&self.audience, dynamic_api_keys)
+            .await?;
         let start_time = Instant::now();
         let res = http_client
             .post(&self.request_url)
-            .bearer_auth(api_key.expose_secret())
             .json(&request_body)
+            .headers(auth_headers)
             .headers(headers)
             .send()
             .await
@@ -888,14 +983,15 @@ impl InferenceProvider for GCPVertexGeminiProvider {
             })
         })?;
 
-        let api_key = self
+        let auth_headers = self
             .credentials
-            .get_api_key(&self.audience, dynamic_api_keys)?;
+            .get_auth_headers(&self.audience, dynamic_api_keys)
+            .await?;
         let start_time = Instant::now();
         let event_source = http_client
             .post(&self.streaming_request_url)
-            .bearer_auth(api_key.expose_secret())
             .json(&request_body)
+            .headers(auth_headers)
             .headers(headers)
             .eventsource()
             .map_err(|e| {
@@ -928,9 +1024,10 @@ impl InferenceProvider for GCPVertexGeminiProvider {
             .into());
         };
 
-        let api_key = self
+        let auth_headers = self
             .credentials
-            .get_api_key(&self.audience, dynamic_api_keys)?;
+            .get_auth_headers(&self.audience, dynamic_api_keys)
+            .await?;
 
         let mut raw_requests = Vec::with_capacity(requests.len());
         let mut jsonl_data = Vec::new();
@@ -968,7 +1065,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
         // For now, we use the same set of credentials for writing to Google Cloud Storage as we do for invoking
         // the Vertex API. In the future, we may want to allow configuring a separate set of credentials.
         let store_and_path =
-            make_gcp_object_store(&input_source_url, &self.credentials, dynamic_api_keys)?;
+            make_gcp_object_store(&input_source_url, &self.credentials, dynamic_api_keys).await?;
 
         store_and_path
             .store
@@ -1012,7 +1109,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
 
         let res = http_client
             .post(batch_config.batch_request_url.clone())
-            .bearer_auth(api_key.expose_secret())
+            .headers(auth_headers)
             .body(raw_request.clone())
             .header(http::header::CONTENT_TYPE, "application/json")
             .send()
@@ -1097,9 +1194,10 @@ impl InferenceProvider for GCPVertexGeminiProvider {
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<PollBatchInferenceResponse, Error> {
-        let api_key = self
+        let auth_headers = self
             .credentials
-            .get_api_key(&self.audience, dynamic_api_keys)?;
+            .get_auth_headers(&self.audience, dynamic_api_keys)
+            .await?;
 
         let batch_params: GCPVertexBatchParams = serde_json::from_value(
             batch_request.batch_params.clone().into_owned(),
@@ -1128,7 +1226,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
 
         let res = http_client
             .get(job_poll_url)
-            .bearer_auth(api_key.expose_secret())
+            .headers(auth_headers)
             .header(http::header::CONTENT_TYPE, "application/json")
             .send()
             .await
