@@ -119,13 +119,16 @@ export function DatasetBuilderForm({
         onSubmit={(e) => {
           handleSubmit(onSubmit)(e);
         }}
-        className="space-y-6 max-w-160"
+        className="space-y-2 max-w-160"
       >
-          <DatasetSelector
-            control={form.control}
-            dataset_counts={dataset_counts}
-            setIsNewDataset={setIsNewDataset}
-          />
+        <div className="space-y-2 w-full p-3 border border-border rounded-2xl">
+            <DatasetSelector
+              control={form.control}
+              dataset_counts={dataset_counts}
+              setIsNewDataset={setIsNewDataset}
+            />
+          </div>
+          <div className="space-y-6 w-full p-3 border border-border rounded-2xl">
           <FunctionSelector<DatasetBuilderFormValues>
             control={form.control}
             name="function"
@@ -147,32 +150,33 @@ export function DatasetBuilderForm({
             <OutputSourceSelector control={form.control} />
           )}
           {functionName && (
-            <div className="space-y-2">
-              <DatasetCountDisplay
-                control={form.control}
-                setCountToInsert={setCountToInsert}
-                functionInferenceCount={counts.inferenceCount}
-                metricFeedbackCount={counts.feedbackCount}
-                metricCuratedInferenceCount={counts.curatedInferenceCount}
-              />
-              <Button
-                type="submit"
-                disabled={
-                  submissionPhase !== "idle" ||
-                  countToInsert === null ||
-                  countToInsert === 0 ||
-                  !selectedDataset
+            <DatasetCountDisplay
+              control={form.control}
+              setCountToInsert={setCountToInsert}
+              functionInferenceCount={counts.inferenceCount}
+              metricFeedbackCount={counts.feedbackCount}
+              metricCuratedInferenceCount={counts.curatedInferenceCount}
+            />
+          )}
+          </div>
+          {functionName && (
+            <Button
+              type="submit"
+              disabled={
+                submissionPhase !== "idle" ||
+                countToInsert === null ||
+                countToInsert === 0 ||
+                !selectedDataset
+              }
+              onClick={() => {
+                if (submissionPhase === "complete") {
+                  setSubmissionPhase("idle");
+                  form.clearErrors("root");
                 }
-                onClick={() => {
-                  if (submissionPhase === "complete") {
-                    setSubmissionPhase("idle");
-                    form.clearErrors("root");
-                  }
-                }}
-              >
-                {getButtonText(isNewDataset)}
-              </Button>
-            </div>
+              }}
+            >
+              {getButtonText(isNewDataset)}
+            </Button>
           )}
         {form.formState.errors.root && (
           <p className="mt-2 text-sm text-red-500">

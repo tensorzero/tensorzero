@@ -31,7 +31,7 @@ export function DatasetCountDisplay({
     rowsToInsertCount !== null;
 
   return (
-    <div className="w-full border-t border-border text-sm text-fg-secondary">
+    <div className="w-full text-sm text-fg-secondary">
       {functionInferenceCount !== null && (
         <div className="flex flex-row items-center px-3 py-2 border-b border-border justify-between gap-x-2">
           <span>Function Inferences</span>
@@ -51,7 +51,7 @@ export function DatasetCountDisplay({
         </div>
       )}
       {rowsToInsertCount !== null && (
-        <div className="flex flex-row items-center px-3 py-2 font-medium border-b border-border text-fg-primary justify-between gap-x-2">
+        <div className="flex flex-row items-center px-3 py-2 font-medium text-fg-primary justify-between gap-x-2">
           <span>Rows to Insert</span>
           <span className="font-medium">{rowsToInsertCount.toLocaleString()}</span>
         </div>
