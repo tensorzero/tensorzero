@@ -121,7 +121,7 @@ impl Variant for DiclConfig {
             &mut inference_params,
         )?;
 
-        let model_config = models.models.get(&self.model)?.ok_or_else(|| {
+        let model_config = models.models.get(&self.model).await?.ok_or_else(|| {
             Error::new(ErrorDetails::UnknownModel {
                 name: self.model.to_string(),
             })
@@ -186,7 +186,7 @@ impl Variant for DiclConfig {
             &mut inference_params,
         )?;
 
-        let model_config = models.models.get(&self.model)?.ok_or_else(|| {
+        let model_config = models.models.get(&self.model).await?.ok_or_else(|| {
             Error::new(ErrorDetails::UnknownModel {
                 name: self.model.to_string(),
             })
@@ -211,12 +211,12 @@ impl Variant for DiclConfig {
         Ok((inference_result_stream, model_used_info))
     }
 
-    fn validate(
+    async fn validate(
         &self,
         _function: &FunctionConfig,
         models: &mut ModelTable,
         embedding_models: &EmbeddingModelTable,
-        _templates: &TemplateConfig,
+        _templates: &TemplateConfig<'_>,
         function_name: &str,
         variant_name: &str,
     ) -> Result<(), Error> {
@@ -237,7 +237,7 @@ impl Variant for DiclConfig {
         // Validate that the generation model and embedding model are valid
         models.validate(&self.model)?;
         let embedding_model = embedding_models
-            .get(&self.embedding_model)?
+            .get(&self.embedding_model).await?
             .ok_or_else(|| Error::new(ErrorDetails::Config {
                 message: format!(
                     "`functions.{function_name}.variants.{variant_name}`: `embedding_model` must be a valid embedding model name"
@@ -320,7 +320,8 @@ impl DiclConfig {
         })?;
 
         let embedding_model = embedding_models
-            .get(&self.embedding_model)?
+            .get(&self.embedding_model)
+            .await?
             .ok_or_else(|| {
                 Error::new(ErrorDetails::Inference {
                     message: format!("Embedding model {} not found", self.embedding_model),

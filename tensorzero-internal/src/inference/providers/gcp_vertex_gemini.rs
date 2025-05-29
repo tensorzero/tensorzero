@@ -283,7 +283,7 @@ impl GCPVertexGeminiProvider {
     // * 'projects/<project_id>/locations/<location>/endpoints/XXX'
     //
     // This is *not* a full url - we append ':generateContent' or ':streamGenerateContent' to the end of the path as needed.
-    pub fn new_shorthand(project_url_path: String) -> Result<Self, Error> {
+    pub async fn new_shorthand(project_url_path: String) -> Result<Self, Error> {
         let credentials = build_creds_caching_default_with_fn(
             None,
             default_api_key_location(),
