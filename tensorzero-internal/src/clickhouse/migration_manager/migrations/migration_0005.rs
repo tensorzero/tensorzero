@@ -168,17 +168,14 @@ impl Migration for Migration0005<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        "\
-            -- Drop the materialized views\n\
-            DROP VIEW IF EXISTS ChatInferenceTagView;\n\
-            DROP VIEW IF EXISTS JsonInferenceTagView;\n\
-            \n
-            -- Drop the `InferenceTag` table\n\
-            DROP TABLE IF EXISTS InferenceTag;\n\
-            \n\
-            -- Drop the `tags` column from the original inference tables\n\
-            ALTER TABLE ChatInference DROP COLUMN tags;\n\
-            ALTER TABLE JsonInference DROP COLUMN tags;\n\
+        "/* Drop the materialized views */\
+            DROP VIEW IF EXISTS ChatInferenceTagView;
+            DROP VIEW IF EXISTS JsonInferenceTagView;
+            /* Drop the `InferenceTag` table */\
+            DROP TABLE IF EXISTS InferenceTag;
+            /* Drop the `tags` column from the original inference tables */\
+            ALTER TABLE ChatInference DROP COLUMN tags;
+            ALTER TABLE JsonInference DROP COLUMN tags;
         "
         .to_string()
     }
