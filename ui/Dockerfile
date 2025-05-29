@@ -7,12 +7,14 @@ COPY --from=ghcr.io/astral-sh/uv:0.6.6 /uv /uvx /bin/
 RUN npm install -g pnpm
 
 # ========== cargo-chef-planner ==========
+
 FROM lukemathwalker/cargo-chef:latest-rust-1 AS chef
 WORKDIR /app
 
 FROM chef AS planner
 COPY . .
 RUN cargo chef prepare --recipe-path recipe.json
+
 # ========== package-jsons-layer ==========
 
 FROM base AS package-jsons-layer
