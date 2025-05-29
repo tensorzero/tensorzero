@@ -24,6 +24,10 @@ import { getDatasetCounts } from "~/utils/clickhouse/datasets.server";
 import { countTotalEvaluationRuns } from "~/utils/clickhouse/evaluations.server";
 import { useConfig } from "~/context/config";
 import type { Route } from "./+types/index";
+import {
+  countDynamicEvaluationProjects,
+  countDynamicEvaluationRuns,
+} from "~/utils/clickhouse/dynamic_evaluations.server";
 
 interface FeatureCardProps {
   source: string;
@@ -74,14 +78,26 @@ function FooterLink({ source, icon: Icon, children }: FooterLinkProps) {
 }
 
 export async function loader() {
-  const countsInfo = await countInferencesByFunction();
-  const config = await getConfig();
+  const [
+    countsInfo,
+    config,
+    numEpisodes,
+    datasetCounts,
+    numEvaluationRuns,
+    numDynamicEvaluationRuns,
+    numDynamicEvaluationRunProjects,
+  ] = await Promise.all([
+    countInferencesByFunction(),
+    getConfig(),
+    countEpisodes(),
+    getDatasetCounts(),
+    countTotalEvaluationRuns(),
+    countDynamicEvaluationRuns(),
+    countDynamicEvaluationProjects(),
+  ]);
   const totalInferences = countsInfo.reduce((acc, curr) => acc + curr.count, 0);
   const numFunctions = Object.keys(config.functions).length;
-  const numEpisodes = await countEpisodes();
-  const datasetCounts = await getDatasetCounts();
   const numDatasets = datasetCounts.length;
-  const numEvaluationRuns = await countTotalEvaluationRuns();
 
   return {
     totalInferences,
@@ -89,6 +105,8 @@ export async function loader() {
     numEpisodes,
     numDatasets,
     numEvaluationRuns,
+    numDynamicEvaluationRuns,
+    numDynamicEvaluationRunProjects,
   };
 }
 
@@ -99,6 +117,8 @@ export default function Home({ loaderData }: Route.ComponentProps) {
     numEpisodes,
     numDatasets,
     numEvaluationRuns,
+    numDynamicEvaluationRuns,
+    numDynamicEvaluationRunProjects,
   } = loaderData;
   const config = useConfig();
   const numEvaluations = Object.keys(config.evaluations).length;
@@ -171,7 +191,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               source="/dynamic_evaluations"
               icon={DynamicEvaluation}
               title="Dynamic Evaluations"
-              description={`TODO`}
+              description={`${numDynamicEvaluationRunProjects} projects, ${numDynamicEvaluationRuns} runs`}
             />
           </div>
         </div>
