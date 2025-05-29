@@ -1720,7 +1720,7 @@ pub async fn check_base64_image_response(
 
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(
-        raw_request.contains("<TENSORZERO_FILe_0>"),
+        raw_request.contains("<TENSORZERO_FILE_0>"),
         "Unexpected raw_request: {raw_request}"
     );
     assert!(
