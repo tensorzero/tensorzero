@@ -457,7 +457,10 @@ async fn test_rollback_helper(migration_num: usize, logs_contain: fn(&str) -> bo
 
     run_rollback_instructions(&fresh_clickhouse, &*migrations[migration_num]).await;
 
-    // TODO - remove this
+    // The rollback for Migration0000 drops the entire database, which will cause '_cleanup_fresh_clickhouse'
+    // to try to run commands on a non-existent database.
+    // We make sure that the database exists at the end of the rollback to prevent '_cleanup_fresh_clickhouse' from
+    // panicking on drop.
     fresh_clickhouse.create_database().await.unwrap();
 }
 
