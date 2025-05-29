@@ -2484,7 +2484,7 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
 
         println!("API response chunk: {chunk_json:#?}");
 
-        // The `original_chunk` field shouuld only be set if we enable the `include_original_response` flag
+        // The `original_chunk` field should only be set if we enable the `include_original_response` flag
         if include_original_response {
             assert!(chunk_json.get("original_chunk").is_some());
         } else {
