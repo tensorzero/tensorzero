@@ -147,6 +147,7 @@ class ChatInferenceResponse:
     content: List[ContentBlock]
     usage: Usage
     finish_reason: Optional[FinishReason] = None
+    original_response: Optional[str] = None
 
 
 @dataclass
@@ -157,6 +158,7 @@ class JsonInferenceResponse:
     output: JsonInferenceOutput
     usage: Usage
     finish_reason: Optional[FinishReason] = None
+    original_response: Optional[str] = None
 
 
 class Message(TypedDict):
@@ -187,6 +189,7 @@ def parse_inference_response(data: Dict[str, Any]) -> InferenceResponse:
             content=[parse_content_block(block) for block in data["content"]],  # type: ignore
             usage=Usage(**data["usage"]),
             finish_reason=finish_reason_enum,
+            original_response=data.get("original_response"),
         )
     elif "output" in data and isinstance(data["output"], dict):
         output = cast(Dict[str, Any], data["output"])
@@ -200,6 +203,7 @@ def parse_inference_response(data: Dict[str, Any]) -> InferenceResponse:
             output=JsonInferenceOutput(**output),
             usage=Usage(**data["usage"]),
             finish_reason=finish_reason_enum,
+            original_response=data.get("original_response"),
         )
     else:
         raise ValueError("Unable to determine response type")

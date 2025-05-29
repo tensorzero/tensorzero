@@ -1,11 +1,4 @@
 # ┌────────────────────────────────────────────────────────────────────────────┐
-# │                                  GENERAL                                   │
-# └────────────────────────────────────────────────────────────────────────────┘
-
-[gateway]
-debug = true
-
-# ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                 FUNCTIONS                                  │
 # └────────────────────────────────────────────────────────────────────────────┘
 
@@ -65,6 +58,7 @@ type = "experimental_chain_of_thought"
 model = "openai::gpt-4.1-mini"
 system_template = "functions/judge_answer/gpt-4.1-mini/system_template.minijinja"
 user_template = "functions/judge_answer/gpt-4.1-mini/user_template.minijinja"
+json_mode = "strict"
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                   TOOLS                                    │

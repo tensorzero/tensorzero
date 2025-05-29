@@ -317,7 +317,7 @@ impl Variant for ChatCompletionConfig {
             false,
             &mut inference_params,
         )?;
-        let model_config = models.models.get(&self.model)?.ok_or_else(|| {
+        let model_config = models.models.get(&self.model).await?.ok_or_else(|| {
             Error::new(ErrorDetails::UnknownModel {
                 name: self.model.to_string(),
             })
@@ -352,7 +352,7 @@ impl Variant for ChatCompletionConfig {
             true,
             &mut inference_params,
         )?;
-        let model_config = models.models.get(&self.model)?.ok_or_else(|| {
+        let model_config = models.models.get(&self.model).await?.ok_or_else(|| {
             Error::new(ErrorDetails::UnknownModel {
                 name: self.model.to_string(),
             })
@@ -376,12 +376,12 @@ impl Variant for ChatCompletionConfig {
     ///    - If the template requires variables, the schema is provided.
     ///  - That the model name is a valid model
     ///  - That the weight is non-negative
-    fn validate(
+    async fn validate(
         &self,
         function: &FunctionConfig,
         models: &mut ModelTable,
         _embedding_models: &EmbeddingModelTable,
-        templates: &TemplateConfig,
+        templates: &TemplateConfig<'_>,
         function_name: &str,
         variant_name: &str,
     ) -> Result<(), Error> {
@@ -476,7 +476,7 @@ impl Variant for ChatCompletionConfig {
                 self.prepare_request(input, function, inference_config, false, inference_param)?;
             inference_requests.push(request);
         }
-        let model_config = models.models.get(&self.model)?.ok_or_else(|| {
+        let model_config = models.models.get(&self.model).await?.ok_or_else(|| {
             Error::new(ErrorDetails::UnknownModel {
                 name: self.model.to_string(),
             })
