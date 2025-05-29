@@ -1,6 +1,6 @@
 # Release Guide
 
-This guide documents the steps to release a new version of TensorZero .
+This guide documents the steps to release a new version of TensorZero.
 
 You can inspect the Git SHA used to build a particular image tag with:
 `docker image inspect tensorzero/ui:latest | jq '.[0].Config.Labels["org.opencontainers.image.revision"]'`

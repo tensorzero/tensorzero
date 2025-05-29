@@ -611,7 +611,7 @@ impl TryFrom<&ContentBlock> for Option<BedrockContentBlock> {
 
                 Ok(Some(BedrockContentBlock::ToolResult(tool_result_block)))
             }
-            ContentBlock::Image(_) => Err(Error::new(ErrorDetails::UnsupportedContentBlockType {
+            ContentBlock::File(_) => Err(Error::new(ErrorDetails::UnsupportedContentBlockType {
                 content_block_type: "image".to_string(),
                 provider_type: PROVIDER_TYPE.to_string(),
             })),

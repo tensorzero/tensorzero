@@ -32,9 +32,9 @@ use tensorzero_internal::inference::types::TextKind;
 use tensorzero_internal::{
     cache::CacheEnabledMode,
     inference::types::{
-        resolved_input::ImageWithPath,
+        resolved_input::FileWithPath,
         storage::{StorageKind, StoragePath},
-        Base64Image, ContentBlock, ContentBlockChatOutput, Image, ImageKind, RequestMessage, Role,
+        Base64File, ContentBlock, ContentBlockChatOutput, File, FileKind, RequestMessage, Role,
         Text,
     },
     tool::{ToolCall, ToolResult},
@@ -883,7 +883,7 @@ pub async fn test_url_image_inference_with_provider_and_store(
                             ClientInputMessageContent::Text(TextKind::Text {
                                 text: "Describe the contents of the image".to_string(),
                             }),
-                            ClientInputMessageContent::Image(Image::Url {
+                            ClientInputMessageContent::File(File::Url {
                                 url: image_url.clone(),
                             }),
                         ],
@@ -943,8 +943,8 @@ pub async fn test_base64_image_inference_with_provider_and_store(
                             ClientInputMessageContent::Text(TextKind::Text {
                                 text: "Describe the contents of the image".to_string(),
                             }),
-                            ClientInputMessageContent::Image(Image::Base64 {
-                                mime_type: ImageKind::Png,
+                            ClientInputMessageContent::File(File::Base64 {
+                                mime_type: FileKind::Png,
                                 data: image_data.clone(),
                             }),
                         ],
@@ -1656,8 +1656,8 @@ pub async fn check_base64_image_response(
                 "content": [
                     {"type": "text", "value": "Describe the contents of the image"},
                     {
-                        "type": "image",
-                        "image": {
+                        "type": "file",
+                        "file": {
                             "url": null,
                             "mime_type": "image/png",
                         },
@@ -1697,11 +1697,11 @@ pub async fn check_base64_image_response(
                 ContentBlock::Text(Text {
                     text: "Describe the contents of the image".to_string(),
                 }),
-                ContentBlock::Image(ImageWithPath {
-                    image: Base64Image {
+                ContentBlock::File(FileWithPath {
+                    file: Base64File {
                         url: None,
                         data: None,
-                        mime_type: ImageKind::Png,
+                        mime_type: FileKind::Png,
                     },
                     storage_path: expected_storage_path.clone(),
                 })
@@ -1720,7 +1720,7 @@ pub async fn check_base64_image_response(
 
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(
-        raw_request.contains("<TENSORZERO_IMAGE_0>"),
+        raw_request.contains("<TENSORZERO_FILE_0>"),
         "Unexpected raw_request: {raw_request}"
     );
     assert!(
@@ -1812,8 +1812,8 @@ pub async fn check_url_image_response(
                 "content": [
                     {"type": "text", "value": "Describe the contents of the image"},
                     {
-                        "type": "image",
-                        "image": {
+                        "type": "file",
+                        "file": {
                             "url": image_url.to_string(),
                             "mime_type": "image/png",
                         },
@@ -1847,11 +1847,11 @@ pub async fn check_url_image_response(
                 role: Role::User,
                 content: vec![ContentBlock::Text(Text {
                     text: "Describe the contents of the image".to_string(),
-                }), ContentBlock::Image(ImageWithPath {
-                    image: Base64Image {
+                }), ContentBlock::File(FileWithPath {
+                    file: Base64File {
                         url: Some(image_url.clone()),
                         data: None,
-                        mime_type: ImageKind::Png,
+                        mime_type: FileKind::Png,
                     },
                     storage_path: StoragePath {
                         kind: kind.clone(),
@@ -1873,7 +1873,7 @@ pub async fn check_url_image_response(
 
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(
-        raw_request.contains("<TENSORZERO_IMAGE_0>"),
+        raw_request.contains("<TENSORZERO_FILE_0>"),
         "Unexpected raw_request: {raw_request}"
     );
     assert!(
@@ -2184,8 +2184,8 @@ pub async fn check_simple_image_inference_response(
                 "content": [
                     {"type": "text", "value": "What kind of animal is in this image?"},
                     {
-                        "type": "image",
-                        "image": {
+                        "type": "file",
+                        "file": {
                             "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
                             "mime_type": "image/png",
                         },

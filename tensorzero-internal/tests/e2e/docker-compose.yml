@@ -23,7 +23,7 @@ services:
       timeout: 1s
 
   minio:
-    image: bitnami/minio
+    image: bitnami/minio:2025.4.22
     ports:
       - "8000:9000" # API port
       - "9001:9001" # Console port
