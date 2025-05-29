@@ -189,7 +189,8 @@ fn make_gcp_object_store(
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum ShorthandUrl<'a> {
-    // We enforce that the publisher is 'google' when parsing the url
+    // We enforce that the publisher is 'google' or 'anthropic' when parsing the url,
+    // depending on which model provider is parsing the shorthand url.
     Publisher {
         location: &'a str,
         model_id: &'a str,
