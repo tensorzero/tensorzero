@@ -185,12 +185,20 @@ function MessageContent({
                 }
               />
             );
-          case "image":
-            return <ImageBlock key={index} image={block} />;
-          case "image_error":
+          case "file":
+            if (block.file.mime_type.startsWith("image/")) {
+              return <ImageBlock key={index} image={block} />;
+            } else {
+              return (
+                <div key={index}>
+                  <SkeletonImage error={`Unsupported file type: ${block.file.mime_type}`} />
+                </div>
+              )
+            }
+          case "file_error":
             return (
               <div key={index}>
-                <SkeletonImage error={true} />
+                <SkeletonImage error="Failed to retrieve image." />
               </div>
             );
           default:

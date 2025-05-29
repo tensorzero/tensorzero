@@ -8,19 +8,19 @@ use url::Url;
 use crate::error::{Error, ErrorDetails};
 use aws_smithy_types::base64;
 
-use super::{resolved_input::ImageWithPath, ContentBlock, RequestMessage};
+use super::{resolved_input::FileWithPath, ContentBlock, RequestMessage};
 
-scoped_thread_local!(static SERIALIZE_IMAGE_DATA: ());
+scoped_thread_local!(static SERIALIZE_FILE_DATA: ());
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub enum ImageEncoding {
+pub enum FileEncoding {
     Base64,
     Url,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
-pub enum ImageKind {
+pub enum FileKind {
     #[serde(rename = "image/jpeg")]
     Jpeg,
     #[serde(rename = "image/png")]
@@ -29,34 +29,53 @@ pub enum ImageKind {
     WebP,
 }
 
-impl Display for ImageKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl FileKind {
+    /// Produces an error if this is not an image
+    pub fn require_image(&self, provider_type: &str) -> Result<(), Error> {
+        if !self.is_image() {
+            return Err(Error::new(ErrorDetails::UnsupportedContentBlockType {
+                content_block_type: format!("file: {self}"),
+                provider_type: provider_type.to_string(),
+            }));
+        }
+        Ok(())
+    }
+
+    pub fn is_image(&self) -> bool {
         match self {
-            ImageKind::Jpeg => write!(f, "image/jpeg"),
-            ImageKind::Png => write!(f, "image/png"),
-            ImageKind::WebP => write!(f, "image/webp"),
+            FileKind::Jpeg | FileKind::Png | FileKind::WebP => true,
         }
     }
 }
 
-fn skip_serialize_image_data(_: &Option<String>) -> bool {
-    !SERIALIZE_IMAGE_DATA.is_set()
+impl Display for FileKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            FileKind::Jpeg => write!(f, "image/jpeg"),
+            FileKind::Png => write!(f, "image/png"),
+            FileKind::WebP => write!(f, "image/webp"),
+        }
+    }
+}
+
+fn skip_serialize_file_data(_: &Option<String>) -> bool {
+    !SERIALIZE_FILE_DATA.is_set()
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
-pub struct Base64Image {
-    // The original url we used to download the image
+pub struct Base64File {
+    // The original url we used to download the file
     pub url: Option<Url>,
-    pub mime_type: ImageKind,
+    pub mime_type: FileKind,
     // TODO - should we add a wrapper type to enforce base64?
-    #[serde(skip_serializing_if = "skip_serialize_image_data")]
+    #[serde(skip_serializing_if = "skip_serialize_file_data")]
     #[serde(default)]
     // This is normally `Some`, unless it was deserialized from ClickHouse
     // (with the image data stripped out).
     pub data: Option<String>,
 }
 
-impl Base64Image {
+impl Base64File {
     pub fn data(&self) -> Result<&String, Error> {
         self.data.as_ref().ok_or_else(|| {
             Error::new(ErrorDetails::InternalError {
@@ -66,8 +85,8 @@ impl Base64Image {
     }
 }
 
-pub fn serialize_with_image_data<T: Serialize>(value: &T) -> Result<Value, Error> {
-    SERIALIZE_IMAGE_DATA.set(&(), || {
+pub fn serialize_with_file_data<T: Serialize>(value: &T) -> Result<Value, Error> {
+    SERIALIZE_FILE_DATA.set(&(), || {
         serde_json::to_value(value).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing value: {e}"),
@@ -78,15 +97,15 @@ pub fn serialize_with_image_data<T: Serialize>(value: &T) -> Result<Value, Error
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(untagged, deny_unknown_fields)]
-pub enum Image {
+pub enum File {
     Url { url: Url },
-    Base64 { mime_type: ImageKind, data: String },
+    Base64 { mime_type: FileKind, data: String },
 }
 
-impl Image {
-    pub async fn take_or_fetch(self, client: &reqwest::Client) -> Result<Base64Image, Error> {
+impl File {
+    pub async fn take_or_fetch(self, client: &reqwest::Client) -> Result<Base64File, Error> {
         match self {
-            Image::Url { url } => {
+            File::Url { url } => {
                 let response = client.get(url.clone()).send().await.map_err(|e| {
                     Error::new(ErrorDetails::BadImageFetch {
                         url: url.clone(),
@@ -100,9 +119,9 @@ impl Image {
                     })
                 })?;
                 let kind = match image::guess_format(&bytes) {
-                    Ok(image::ImageFormat::Jpeg) => ImageKind::Jpeg,
-                    Ok(image::ImageFormat::Png) => ImageKind::Png,
-                    Ok(image::ImageFormat::WebP) => ImageKind::WebP,
+                    Ok(image::ImageFormat::Jpeg) => FileKind::Jpeg,
+                    Ok(image::ImageFormat::Png) => FileKind::Png,
+                    Ok(image::ImageFormat::WebP) => FileKind::WebP,
                     Ok(format) => {
                         return Err(Error::new(ErrorDetails::BadImageFetch {
                             url: url.clone(),
@@ -117,16 +136,16 @@ impl Image {
                     }
                 };
                 let data = base64::encode(bytes);
-                Ok(Base64Image {
+                Ok(Base64File {
                     url: Some(url.clone()),
                     mime_type: kind,
                     data: Some(data),
                 })
             }
-            Image::Base64 {
+            File::Base64 {
                 mime_type: kind,
                 data,
-            } => Ok(Base64Image {
+            } => Ok(Base64File {
                 url: None,
                 mime_type: kind,
                 data: Some(data),
@@ -141,13 +160,13 @@ pub fn sanitize_raw_request(input_messages: &[RequestMessage], mut raw_request: 
     let mut i = 0;
     for message in input_messages {
         for content in &message.content {
-            if let ContentBlock::Image(ImageWithPath {
-                image,
+            if let ContentBlock::File(FileWithPath {
+                file,
                 storage_path: _,
             }) = content
             {
-                if let Some(data) = &image.data {
-                    raw_request = raw_request.replace(data, &format!("<TENSORZERO_IMAGE_{i}>"));
+                if let Some(data) = &file.data {
+                    raw_request = raw_request.replace(data, &format!("<TENSORZERO_FILE_{i}>"));
                 }
                 i += 1;
             }
@@ -159,10 +178,10 @@ pub fn sanitize_raw_request(input_messages: &[RequestMessage], mut raw_request: 
 #[cfg(test)]
 mod tests {
     use crate::inference::types::{
-        image::sanitize_raw_request,
-        resolved_input::ImageWithPath,
+        file::sanitize_raw_request,
+        resolved_input::FileWithPath,
         storage::{StorageKind, StoragePath},
-        Base64Image, ContentBlock, ImageKind, RequestMessage, Role,
+        Base64File, ContentBlock, FileKind, RequestMessage, Role,
     };
 
     #[test]
@@ -178,10 +197,10 @@ mod tests {
                     RequestMessage {
                         role: Role::User,
                         content: vec![
-                            ContentBlock::Image(ImageWithPath {
-                                image: Base64Image {
+                            ContentBlock::File(FileWithPath {
+                                file: Base64File {
                                     url: None,
-                                    mime_type: ImageKind::Jpeg,
+                                    mime_type: FileKind::Jpeg,
                                     data: Some("my-image-1-data".to_string()),
                                 },
                                 storage_path: StoragePath {
@@ -190,10 +209,10 @@ mod tests {
                                         .unwrap(),
                                 },
                             }),
-                            ContentBlock::Image(ImageWithPath {
-                                image: Base64Image {
+                            ContentBlock::File(FileWithPath {
+                                file: Base64File {
                                     url: None,
-                                    mime_type: ImageKind::Jpeg,
+                                    mime_type: FileKind::Jpeg,
                                     data: Some("my-image-2-data".to_string()),
                                 },
                                 storage_path: StoragePath {
@@ -202,10 +221,10 @@ mod tests {
                                         .unwrap(),
                                 },
                             }),
-                            ContentBlock::Image(ImageWithPath {
-                                image: Base64Image {
+                            ContentBlock::File(FileWithPath {
+                                file: Base64File {
                                     url: None,
-                                    mime_type: ImageKind::Jpeg,
+                                    mime_type: FileKind::Jpeg,
                                     data: Some("my-image-1-data".to_string()),
                                 },
                                 storage_path: StoragePath {
@@ -219,10 +238,10 @@ mod tests {
                     RequestMessage {
                         role: Role::User,
                         content: vec![
-                            ContentBlock::Image(ImageWithPath {
-                                image: Base64Image {
+                            ContentBlock::File(FileWithPath {
+                                file: Base64File {
                                     url: None,
-                                    mime_type: ImageKind::Jpeg,
+                                    mime_type: FileKind::Jpeg,
                                     data: Some("my-image-3-data".to_string()),
                                 },
                                 storage_path: StoragePath {
@@ -231,10 +250,10 @@ mod tests {
                                         .unwrap(),
                                 },
                             }),
-                            ContentBlock::Image(ImageWithPath {
-                                image: Base64Image {
+                            ContentBlock::File(FileWithPath {
+                                file: Base64File {
                                     url: None,
-                                    mime_type: ImageKind::Jpeg,
+                                    mime_type: FileKind::Jpeg,
                                     data: Some("my-image-1-data".to_string()),
                                 },
                                 storage_path: StoragePath {
@@ -248,8 +267,8 @@ mod tests {
                 ],
                 "First my-image-1-data then my-image-2-data then my-image-3-data".to_string()
             ),
-            // Each occurrence of the image data should be replaced with the first matching image content block
-            "First <TENSORZERO_IMAGE_0> then <TENSORZERO_IMAGE_1> then <TENSORZERO_IMAGE_3>"
+            // Each occurrence of the file data should be replaced with the first matching file content block
+            "First <TENSORZERO_FILE_0> then <TENSORZERO_FILE_1> then <TENSORZERO_FILE_3>"
                 .to_string()
         );
     }
