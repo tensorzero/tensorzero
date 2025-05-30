@@ -1493,6 +1493,7 @@ const SHORTHAND_MODEL_PREFIXES: &[&str] = &[
     "fireworks::",
     "google_ai_studio_gemini::",
     "gcp_vertex_gemini::",
+    "gcp_vertex_anthropic::",
     "hyperbolic::",
     "mistral::",
     "openai::",
@@ -1522,6 +1523,9 @@ impl ShorthandModelConfig for ModelConfig {
             ),
             "gcp_vertex_gemini" => ProviderConfig::GCPVertexGemini(
                 GCPVertexGeminiProvider::new_shorthand(model_name).await?,
+            ),
+            "gcp_vertex_anthropic" => ProviderConfig::GCPVertexAnthropic(
+                GCPVertexAnthropicProvider::new_shorthand(model_name).await?,
             ),
             "hyperbolic" => ProviderConfig::Hyperbolic(HyperbolicProvider::new(model_name, None)?),
             "mistral" => ProviderConfig::Mistral(MistralProvider::new(model_name, None)?),
