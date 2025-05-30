@@ -488,7 +488,7 @@ macro_rules! generate_provider_tests {
             }
         }
 
-        #[tokio::test]
+        #[tokio::test(flavor = "multi_thread")]
         async fn test_pdf_inference_store_filesystem() {
             let providers = $func().await.pdf_inference;
             for provider in providers {
@@ -594,6 +594,14 @@ type = "chat"
 [functions.pdf_test.variants.openai]
 type = "chat_completion"
 model = "openai::gpt-4o-mini-2024-07-18"
+
+[functions.pdf_test.variants.gcp_vertex_gemini]
+type = "chat_completion"
+model = "gcp_vertex_gemini::projects/tensorzero-public/locations/us-central1/publishers/google/models/gemini-2.0-flash-lite"
+
+[functions.pdf_test.variants.anthropic]
+type = "chat_completion"
+model = "anthropic::claude-3-5-sonnet-20241022"
 "#;
 
 pub static FERRIS_PNG: &[u8] = include_bytes!("./ferris.png");

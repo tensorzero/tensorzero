@@ -485,7 +485,10 @@ enum AnthropicMessageContent<'a> {
         text: &'a str,
     },
     Image {
-        source: AnthropicImageSource,
+        source: AnthropicDocumentSource,
+    },
+    Document {
+        source: AnthropicDocumentSource,
     },
     ToolResult {
         tool_use_id: &'a str,
@@ -502,17 +505,19 @@ enum AnthropicMessageContent<'a> {
     },
 }
 
+/// This is used by Anthropic for both images and documents -
+/// the only different is the outer `AnthropicMessageContent`
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub struct AnthropicImageSource {
-    pub r#type: AnthropicImageType,
+pub struct AnthropicDocumentSource {
+    pub r#type: AnthropicDocumentType,
     pub media_type: FileKind,
     pub data: String,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub enum AnthropicImageType {
+pub enum AnthropicDocumentType {
     Base64,
 }
 
@@ -569,16 +574,19 @@ impl<'a> TryFrom<&'a ContentBlock> for Option<FlattenUnknown<'a, AnthropicMessag
                 file,
                 storage_path: _,
             }) => {
-                file.mime_type.require_image(PROVIDER_TYPE)?;
-                Ok(Some(FlattenUnknown::Normal(
-                    AnthropicMessageContent::Image {
-                        source: AnthropicImageSource {
-                            r#type: AnthropicImageType::Base64,
-                            media_type: file.mime_type,
-                            data: file.data()?.clone(),
-                        },
-                    },
-                )))
+                let document = AnthropicDocumentSource {
+                    r#type: AnthropicDocumentType::Base64,
+                    media_type: file.mime_type,
+                    data: file.data()?.clone(),
+                };
+                match file.mime_type {
+                    FileKind::Png | FileKind::Jpeg | FileKind::WebP => Ok(Some(
+                        FlattenUnknown::Normal(AnthropicMessageContent::Image { source: document }),
+                    )),
+                    FileKind::Pdf => Ok(Some(FlattenUnknown::Normal(
+                        AnthropicMessageContent::Document { source: document },
+                    ))),
+                }
             }
             ContentBlock::Thought(thought) => Ok(Some(FlattenUnknown::Normal(
                 AnthropicMessageContent::Thinking {
