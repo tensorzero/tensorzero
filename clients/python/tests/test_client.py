@@ -1222,7 +1222,7 @@ def test_image_inference_base64(sync_client: TensorZeroGateway):
     json_content = json.loads(content[0].text)
     assert json_content == [
         {
-            "image": {"url": None, "mime_type": "image/png"},
+            "file": {"url": None, "mime_type": "image/png"},
             "storage_path": {
                 "kind": {"type": "disabled"},
                 "path": "observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png",
@@ -1264,7 +1264,7 @@ def test_image_inference_url(sync_client: TensorZeroGateway):
     json_content = json.loads(content[0].text)
     assert json_content == [
         {
-            "image": {
+            "file": {
                 "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
                 "mime_type": "image/png",
             },

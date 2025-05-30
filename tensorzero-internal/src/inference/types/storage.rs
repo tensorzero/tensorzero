@@ -3,7 +3,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::error::{Error, ErrorDetails};
 
-use super::{Base64Image, ImageKind};
+use super::{Base64File, FileKind};
 
 /// Configuration for the object storage backend
 /// Currently, we only support S3-compatible object storage and local filesystem storage
@@ -46,24 +46,25 @@ impl StorageKind {
     fn prefix(&self) -> &str {
         ""
     }
-    pub fn image_path(self, image: &Base64Image) -> Result<StoragePath, Error> {
+    pub fn file_path(self, image: &Base64File) -> Result<StoragePath, Error> {
         let hash = blake3::hash(
             image
                 .data
                 .as_ref()
                 .ok_or_else(|| {
                     Error::new(ErrorDetails::InternalError {
-                        message: "Image data should have been present in `StorageKind.image_path`"
+                        message: "Image data should have been present in `StorageKind.file_path`"
                             .to_string(),
                     })
                 })?
                 .as_bytes(),
         );
         let suffix = match image.mime_type {
-            ImageKind::Jpeg => "jpg",
-            ImageKind::Png => "png",
-            ImageKind::WebP => "webp",
+            FileKind::Jpeg => "jpg",
+            FileKind::Png => "png",
+            FileKind::WebP => "webp",
         };
+        // TODO - change this to 'files' instead of 'images': https://github.com/tensorzero/tensorzero/issues/2266
         let path = Path::parse(format!(
             "{}observability/images/{hash}.{suffix}",
             self.prefix()

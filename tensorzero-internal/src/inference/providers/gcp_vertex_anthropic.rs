@@ -5,18 +5,18 @@ use std::time::Duration;
 use futures::StreamExt;
 use reqwest::StatusCode;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
-use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::time::Instant;
 
 use crate::cache::ModelProviderRequest;
+use crate::config_parser::skip_credential_validation;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
-use crate::inference::types::resolved_input::ImageWithPath;
+use crate::inference::types::resolved_input::FileWithPath;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk, FunctionType,
     Latency, ModelInferenceRequestJsonMode, Role, Text, TextChunk,
@@ -57,6 +57,45 @@ pub struct GCPVertexAnthropicProvider {
 }
 
 static DEFAULT_CREDENTIALS: OnceLock<GCPVertexCredentials> = OnceLock::new();
+
+pub async fn make_gcp_sdk_credentials(
+    // This is only used in test mode
+    #[cfg_attr(not(any(test, feature = "e2e_tests")), expect(unused_variables))]
+    provider_type: &str,
+) -> Result<GCPVertexCredentials, Error> {
+    let creds_result = google_cloud_auth::credentials::Builder::default().build();
+
+    let handle_err = |e| {
+        if skip_credential_validation() {
+            #[cfg(any(test, feature = "e2e_tests"))]
+            {
+                tracing::warn!(
+                    "Failed to get GCP SDK credentials for a model provider of type `{provider_type}`, so the associated tests will likely fail: {e}",
+                );
+            }
+            Ok(GCPVertexCredentials::None)
+        } else {
+            Err(Error::new(ErrorDetails::GCPCredentials {
+                message: format!(
+                    "Failed to create GCP Vertex credentials from SDK: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
+            }))
+        }
+    };
+
+    let creds = match creds_result {
+        Ok(creds) => creds,
+        Err(e) => {
+            return handle_err(e);
+        }
+    };
+    // Test that the credentials are valid by getting headers
+    match creds.headers(http::Extensions::default()).await {
+        Ok(_) => Ok(GCPVertexCredentials::Sdk(creds)),
+        Err(e) => handle_err(e),
+    }
+}
 
 impl GCPVertexAnthropicProvider {
     // Constructs a provider from a shorthand string of the form:
@@ -100,19 +139,26 @@ impl GCPVertexAnthropicProvider {
         })
     }
 
-    pub fn new(
+    pub async fn new(
         model_id: String,
         location: String,
         project_id: String,
         api_key_location: Option<CredentialLocation>,
     ) -> Result<Self, Error> {
-        let credentials = build_creds_caching_default_with_fn(
-            api_key_location,
-            default_api_key_location(),
-            PROVIDER_TYPE,
-            &DEFAULT_CREDENTIALS,
-            |creds| GCPVertexCredentials::try_from((creds, PROVIDER_TYPE)),
-        )?;
+        let default_location = default_api_key_location();
+        let cred_location = api_key_location.as_ref().unwrap_or(&default_location);
+
+        let credentials = if matches!(cred_location, CredentialLocation::Sdk) {
+            make_gcp_sdk_credentials(PROVIDER_TYPE).await?
+        } else {
+            build_creds_caching_default_with_fn(
+                api_key_location,
+                default_api_key_location(),
+                PROVIDER_TYPE,
+                &DEFAULT_CREDENTIALS,
+                |creds| GCPVertexCredentials::try_from((creds, PROVIDER_TYPE)),
+            )?
+        };
         let request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/anthropic/models/{model_id}:rawPredict");
         let streaming_request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/anthropic/models/{model_id}:streamRawPredict");
         let audience = format!("https://{location}-aiplatform.googleapis.com/");
@@ -162,13 +208,14 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
             model_name,
             &mut request_body,
         )?;
-        let api_key = self
+        let auth_headers = self
             .credentials
-            .get_api_key(&self.audience, dynamic_api_keys)?;
+            .get_auth_headers(&self.audience, dynamic_api_keys)
+            .await?;
         let start_time = Instant::now();
         let res = http_client
             .post(&self.request_url)
-            .bearer_auth(api_key.expose_secret())
+            .headers(auth_headers)
             .json(&request_body)
             .headers(headers)
             .send()
@@ -267,13 +314,14 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
                 ),
             })
         })?;
-        let api_key = self
+        let auth_headers = self
             .credentials
-            .get_api_key(&self.audience, dynamic_api_keys)?;
+            .get_auth_headers(&self.audience, dynamic_api_keys)
+            .await?;
         let start_time = Instant::now();
         let event_source = http_client
             .post(&self.streaming_request_url)
-            .bearer_auth(api_key.expose_secret())
+            .headers(auth_headers)
             .header("content-type", "application/json")
             .json(&request_body)
             .headers(headers)
@@ -359,6 +407,7 @@ fn stream_anthropic(
 
                         let response = data.and_then(|data| {
                             anthropic_to_tensorzero_stream_message(
+                                message.data,
                                 data,
                                 start_time.elapsed(),
                                 &mut current_tool_id,
@@ -519,18 +568,21 @@ impl<'a> TryFrom<&'a ContentBlock>
                     }],
                 },
             ))),
-            ContentBlock::Image(ImageWithPath {
-                image,
+            ContentBlock::File(FileWithPath {
+                file,
                 storage_path: _,
-            }) => Ok(Some(FlattenUnknown::Normal(
-                GCPVertexAnthropicMessageContent::Image {
-                    source: AnthropicImageSource {
-                        r#type: AnthropicImageType::Base64,
-                        media_type: image.mime_type,
-                        data: image.data()?.clone(),
+            }) => {
+                file.mime_type.require_image(PROVIDER_TYPE)?;
+                Ok(Some(FlattenUnknown::Normal(
+                    GCPVertexAnthropicMessageContent::Image {
+                        source: AnthropicImageSource {
+                            r#type: AnthropicImageType::Base64,
+                            media_type: file.mime_type,
+                            data: file.data()?.clone(),
+                        },
                     },
-                },
-            ))),
+                )))
+            }
             // We don't support thought blocks being passed in from a request.
             // These are only possible to be passed in in the scenario where the
             // output of a chat completion is used as an input to another model inference,
@@ -960,19 +1012,12 @@ enum GCPVertexAnthropicStreamMessage {
 /// There is no need to do the same bookkeeping for TextDelta chunks since they come with an index (which we use as an ID for a text chunk).
 /// See the Anthropic [docs](https://docs.anthropic.com/en/api/messages-streaming) on streaming messages for details on the types of events and their semantics.
 fn anthropic_to_tensorzero_stream_message(
+    raw_message: String,
     message: GCPVertexAnthropicStreamMessage,
     message_latency: Duration,
     current_tool_id: &mut Option<String>,
     current_tool_name: &mut Option<String>,
 ) -> Result<Option<ProviderInferenceResponseChunk>, Error> {
-    let raw_message = serde_json::to_string(&message).map_err(|e| {
-        Error::new(ErrorDetails::Serialization {
-            message: format!(
-                "Error parsing response from Anthropic: {}",
-                DisplayOrDebugGateway::new(e)
-            ),
-        })
-    })?;
     match message {
         GCPVertexAnthropicStreamMessage::ContentBlockDelta { delta, index } => match delta {
             GCPVertexAnthropicMessageBlock::TextDelta { text } => {
@@ -2136,6 +2181,7 @@ mod tests {
         };
         let latency = Duration::from_millis(100);
         let result = anthropic_to_tensorzero_stream_message(
+            "my_raw_chunk".to_string(),
             content_block_delta,
             latency,
             &mut current_tool_id,
@@ -2164,6 +2210,7 @@ mod tests {
         };
         let latency = Duration::from_millis(100);
         let result = anthropic_to_tensorzero_stream_message(
+            "my_raw_chunk".to_string(),
             content_block_delta,
             latency,
             &mut current_tool_id,
@@ -2191,6 +2238,7 @@ mod tests {
         };
         let latency = Duration::from_millis(100);
         let result = anthropic_to_tensorzero_stream_message(
+            "my_raw_chunk".to_string(),
             content_block_delta,
             latency,
             &mut current_tool_id,
@@ -2221,6 +2269,7 @@ mod tests {
         };
         let latency = Duration::from_millis(110);
         let result = anthropic_to_tensorzero_stream_message(
+            "my_raw_chunk".to_string(),
             content_block_start,
             latency,
             &mut current_tool_id,
@@ -2251,6 +2300,7 @@ mod tests {
         };
         let latency = Duration::from_millis(120);
         let result = anthropic_to_tensorzero_stream_message(
+            "my_raw_chunk".to_string(),
             content_block_start,
             latency,
             &mut current_tool_id,
@@ -2278,6 +2328,7 @@ mod tests {
         };
         let latency = Duration::from_millis(130);
         let result = anthropic_to_tensorzero_stream_message(
+            "my_raw_chunk".to_string(),
             content_block_start,
             latency,
             &mut current_tool_id,
@@ -2298,6 +2349,7 @@ mod tests {
         let content_block_stop = GCPVertexAnthropicStreamMessage::ContentBlockStop { index: 2 };
         let latency = Duration::from_millis(120);
         let result = anthropic_to_tensorzero_stream_message(
+            "my_raw_chunk".to_string(),
             content_block_stop,
             latency,
             &mut current_tool_id,
@@ -2312,6 +2364,7 @@ mod tests {
         };
         let latency = Duration::from_millis(130);
         let result = anthropic_to_tensorzero_stream_message(
+            "my_raw_chunk".to_string(),
             error_message,
             latency,
             &mut current_tool_id,
@@ -2338,6 +2391,7 @@ mod tests {
         };
         let latency = Duration::from_millis(140);
         let result = anthropic_to_tensorzero_stream_message(
+            "my_raw_chunk".to_string(),
             message_delta,
             latency,
             &mut current_tool_id,
@@ -2358,6 +2412,7 @@ mod tests {
         };
         let latency = Duration::from_millis(150);
         let result = anthropic_to_tensorzero_stream_message(
+            "my_raw_chunk".to_string(),
             message_start,
             latency,
             &mut current_tool_id,
@@ -2376,6 +2431,7 @@ mod tests {
         let message_stop = GCPVertexAnthropicStreamMessage::MessageStop;
         let latency = Duration::from_millis(160);
         let result = anthropic_to_tensorzero_stream_message(
+            "my_raw_chunk".to_string(),
             message_stop,
             latency,
             &mut current_tool_id,
@@ -2388,6 +2444,7 @@ mod tests {
         let ping = GCPVertexAnthropicStreamMessage::Ping {};
         let latency = Duration::from_millis(170);
         let result = anthropic_to_tensorzero_stream_message(
+            "my_raw_chunk".to_string(),
             ping,
             latency,
             &mut current_tool_id,

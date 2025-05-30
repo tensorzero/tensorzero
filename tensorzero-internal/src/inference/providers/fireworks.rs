@@ -600,7 +600,7 @@ fn stream_fireworks(
 
                         let latency = start_time.elapsed();
                         let stream_message = data.and_then(|d| {
-                            fireworks_to_tensorzero_chunk(d, latency, &mut tool_call_ids, &mut tool_call_names, &mut thinking_state, parse_think_blocks)
+                            fireworks_to_tensorzero_chunk(message.data, d, latency, &mut tool_call_ids, &mut tool_call_names, &mut thinking_state, parse_think_blocks)
                         });
                         yield stream_message;
                     }
@@ -618,6 +618,7 @@ fn stream_fireworks(
 /// It processes the content and tool calls from the Fireworks response, updating the tool call IDs and names.
 /// If parsing think blocks is enabled, it also processes the thinking state and extracts reasoning.
 fn fireworks_to_tensorzero_chunk(
+    raw_message: String,
     mut chunk: FireworksChatChunk,
     latency: Duration,
     tool_call_ids: &mut Vec<String>,
@@ -625,17 +626,6 @@ fn fireworks_to_tensorzero_chunk(
     thinking_state: &mut ThinkingState,
     parse_think_blocks: bool,
 ) -> Result<ProviderInferenceResponseChunk, Error> {
-    let raw_message = serde_json::to_string(&chunk).map_err(|e| {
-        Error::new(ErrorDetails::InferenceServer {
-            message: format!(
-                "Error parsing response from Fireworks: {}",
-                DisplayOrDebugGateway::new(e)
-            ),
-            raw_request: None,
-            raw_response: Some(serde_json::to_string(&chunk).unwrap_or_default()),
-            provider_type: PROVIDER_TYPE.to_string(),
-        })
-    })?;
     if chunk.choices.len() > 1 {
         return Err(ErrorDetails::InferenceServer {
             message: "Response has invalid number of choices: {}. Expected 1.".to_string(),
@@ -1131,6 +1121,7 @@ mod tests {
         let mut tool_call_names = vec!["name1".to_string()];
         let mut thinking_state = ThinkingState::Normal;
         let message = fireworks_to_tensorzero_chunk(
+            "my_raw_chunk".to_string(),
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
@@ -1168,6 +1159,7 @@ mod tests {
             usage: None,
         };
         let message = fireworks_to_tensorzero_chunk(
+            "my_raw_chunk".to_string(),
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
@@ -1197,6 +1189,7 @@ mod tests {
             }),
         };
         let message = fireworks_to_tensorzero_chunk(
+            "my_raw_chunk".to_string(),
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
@@ -1236,6 +1229,7 @@ mod tests {
 
         // With parsing enabled
         let result = fireworks_to_tensorzero_chunk(
+            "my_raw_chunk".to_string(),
             chunk.clone(),
             Duration::from_millis(100),
             &mut tool_call_ids,
@@ -1263,6 +1257,7 @@ mod tests {
         };
 
         let result = fireworks_to_tensorzero_chunk(
+            "my_raw_chunk".to_string(),
             chunk,
             Duration::from_millis(100),
             &mut tool_call_ids,
@@ -1295,6 +1290,7 @@ mod tests {
         };
 
         let result = fireworks_to_tensorzero_chunk(
+            "my_raw_chunk".to_string(),
             chunk,
             Duration::from_millis(100),
             &mut tool_call_ids,
@@ -1322,6 +1318,7 @@ mod tests {
         };
 
         let result = fireworks_to_tensorzero_chunk(
+            "my_raw_chunk".to_string(),
             chunk,
             Duration::from_millis(100),
             &mut tool_call_ids,
@@ -1358,6 +1355,7 @@ mod tests {
         let mut tool_call_names = vec![];
         let mut thinking_state = ThinkingState::Normal;
         let message = fireworks_to_tensorzero_chunk(
+            "my_raw_chunk".to_string(),
             chunk,
             Duration::from_millis(50),
             &mut tool_call_ids,
@@ -1401,6 +1399,7 @@ mod tests {
         let mut thinking_state = ThinkingState::Normal;
 
         let result = fireworks_to_tensorzero_chunk(
+            "my_raw_chunk".to_string(),
             chunk,
             Duration::from_millis(100),
             &mut tool_call_ids,
@@ -1443,6 +1442,7 @@ mod tests {
         };
 
         let result = fireworks_to_tensorzero_chunk(
+            "my_raw_chunk".to_string(),
             chunk,
             Duration::from_millis(100),
             &mut tool_call_ids,

@@ -33,7 +33,7 @@ use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use crate::inference::types::{
-    current_timestamp, ContentBlockChatOutput, ContentBlockChunk, FinishReason, Image, ImageKind,
+    current_timestamp, ContentBlockChatOutput, ContentBlockChunk, File, FileKind, FinishReason,
     Input, InputMessage, InputMessageContent, Role, TextKind, Usage,
 };
 use crate::tool::{
@@ -660,7 +660,7 @@ pub enum TextContent {
     },
 }
 
-fn parse_base64_image_data_url(url: &str) -> Result<(ImageKind, &str), Error> {
+fn parse_base64_image_data_url(url: &str) -> Result<(FileKind, &str), Error> {
     let Some(url) = url.strip_prefix("data:") else {
         return Err(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
             message: "Image data URL must start with `data:`".to_string(),
@@ -672,9 +672,9 @@ fn parse_base64_image_data_url(url: &str) -> Result<(ImageKind, &str), Error> {
         }));
     };
     let image_type = match mime_type {
-        "image/jpeg" => ImageKind::Jpeg,
-        "image/png" => ImageKind::Png,
-        "image/webp" => ImageKind::WebP,
+        "image/jpeg" => FileKind::Jpeg,
+        "image/png" => FileKind::Png,
+        "image/webp" => FileKind::WebP,
         _ => {
             return Err(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
                 message: format!("Unsupported content type `{mime_type}`: - only `image/jpeg`, `image/png``, and `image/webp` image data URLs are supported"),
@@ -698,9 +698,9 @@ fn convert_openai_message_content(content: Value) -> Result<Vec<InputMessageCont
                         if image_url.url.scheme() == "data" {
                             let url_str = image_url.url.to_string();
                             let (mime_type, data) = parse_base64_image_data_url(&url_str)?;
-                            InputMessageContent::Image(Image::Base64 { mime_type, data: data.to_string() })
+                            InputMessageContent::File(File::Base64 { mime_type, data: data.to_string() })
                         } else {
-                            InputMessageContent::Image(Image::Url { url: image_url.url })
+                            InputMessageContent::File(File::Url { url: image_url.url })
                         }
                     }
                     Err(e) => {
@@ -1585,15 +1585,15 @@ mod tests {
     #[test]
     fn test_parse_base64() {
         assert_eq!(
-            (ImageKind::Jpeg, "YWJjCg=="),
+            (FileKind::Jpeg, "YWJjCg=="),
             parse_base64_image_data_url("data:image/jpeg;base64,YWJjCg==").unwrap()
         );
         assert_eq!(
-            (ImageKind::Png, "YWJjCg=="),
+            (FileKind::Png, "YWJjCg=="),
             parse_base64_image_data_url("data:image/png;base64,YWJjCg==").unwrap()
         );
         assert_eq!(
-            (ImageKind::WebP, "YWJjCg=="),
+            (FileKind::WebP, "YWJjCg=="),
             parse_base64_image_data_url("data:image/webp;base64,YWJjCg==").unwrap()
         );
         let err = parse_base64_image_data_url("data:image/svg;base64,YWJjCg==")
