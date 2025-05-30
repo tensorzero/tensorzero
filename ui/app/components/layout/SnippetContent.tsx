@@ -267,7 +267,7 @@ export function ImageMessage({ url, downloadName }: ImageMessageProps) {
   );
 }
 
-interface ImageErrorMessageProps {  
+interface ImageErrorMessageProps {
   error: string;
 }
 
