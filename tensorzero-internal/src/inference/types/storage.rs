@@ -63,10 +63,10 @@ impl StorageKind {
             FileKind::Jpeg => "jpg",
             FileKind::Png => "png",
             FileKind::WebP => "webp",
+            FileKind::Pdf => "pdf",
         };
-        // TODO - change this to 'files' instead of 'images': https://github.com/tensorzero/tensorzero/issues/2266
         let path = Path::parse(format!(
-            "{}observability/images/{hash}.{suffix}",
+            "{}observability/files/{hash}.{suffix}",
             self.prefix()
         ))
         .map_err(|e| {
