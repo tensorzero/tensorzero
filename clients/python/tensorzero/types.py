@@ -79,12 +79,29 @@ class ImageBase64:
 
 
 @dataclass
+class FileBase64:
+    data: str
+    mime_type: str
+
+    def to_dict(self) -> Dict[str, Any]:
+        return dict(type="file", data=self.data, mime_type=self.mime_type)
+
+
+@dataclass
 class ImageUrl:
     # This class does not subclass ContentBlock since it cannot be output by the API.
     url: str
 
     def to_dict(self) -> Dict[str, Any]:
         return dict(type="image", url=self.url)
+
+
+@dataclass
+class FileUrl:
+    url: str
+
+    def to_dict(self) -> Dict[str, Any]:
+        return dict(type="file", url=self.url)
 
 
 @dataclass
