@@ -394,8 +394,6 @@ jobs:
       - name: "Free up disk space"
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
-          sudo docker image prune --all --force
-          sudo docker builder prune -a
       - run: df -h
       - name: Install cargo-nextest
         uses: taiki-e/install-action@37bdc826eaedac215f638a96472df572feab0f9b

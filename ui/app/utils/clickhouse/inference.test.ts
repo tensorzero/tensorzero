@@ -304,13 +304,13 @@ test("queryInferenceTableByEpisodeId pages through a sample of results correctly
 test("queryInferenceTableBounds", async () => {
   const bounds = await queryInferenceTableBounds();
   expect(bounds.first_id).toBe("01934c9a-be70-74e2-8e6d-8eb19531638c");
-  expect(bounds.last_id).toBe("0196fdd6-25f1-72ba-8dc0-be7a0d9df2c5");
+  expect(bounds.last_id).toBe("0197177a-7c00-70a2-82a6-741f60a03b2e");
 });
 
 test("queryEpisodeTableBounds", async () => {
   const bounds = await queryEpisodeTableBounds();
   expect(bounds.first_id).toBe("01934c9a-be70-74e2-8e6d-8eb19531638c");
-  expect(bounds.last_id).toBe("0196fdd6-25f1-72ba-8dc0-be7a0d9df2c5");
+  expect(bounds.last_id).toBe("0197177a-7c00-70a2-82a6-741f60a03b2e");
 });
 
 test("queryInferenceTableBounds with episode_id", async () => {
@@ -599,7 +599,7 @@ describe("getAdjacentInferenceIds", () => {
       lastInferenceId.data[0].last_inference_id,
     );
     expect(adjacentInferenceIds.previous_id).toBe(
-      "0196eea6-42cb-7bf1-a56a-534459f08dd5",
+      "0197177a-7c00-70a2-82a6-72ac87d2ff77",
     );
     expect(adjacentInferenceIds.next_id).toBeNull();
   });
