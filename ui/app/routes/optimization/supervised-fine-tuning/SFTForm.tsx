@@ -141,7 +141,6 @@ export function SFTForm({
               <FunctionSelector<SFTFormValues>
                 control={form.control}
                 name="function"
-                inferenceCount={counts.inferenceCount}
                 config={config}
                 hide_default_function={true}
               />

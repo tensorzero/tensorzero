@@ -5,7 +5,6 @@ import type { DatasetBuilderFormValues } from "./types";
 import { useFetcher } from "react-router";
 import type { MetricsWithFeedbackData } from "~/utils/clickhouse/feedback";
 import { useEffect, useMemo } from "react";
-import { Badge } from "~/components/ui/badge";
 import clsx from "clsx";
 
 export default function OutputSourceSelector({
@@ -43,8 +42,8 @@ export default function OutputSourceSelector({
       control={control}
       name={fieldName}
       render={({ field }) => (
-        <FormItem className="flex flex-col gap-y-1">
-          <FormLabel>Output</FormLabel>
+        <FormItem className="flex flex-col gap-1">
+          <FormLabel>Outputs</FormLabel>
           <div className="border border-border bg-bg-primary rounded-lg">
             <RadioGroup onValueChange={field.onChange} value={field.value} className="flex flex-col gap-0">
               <FormLabel
@@ -52,14 +51,14 @@ export default function OutputSourceSelector({
                 className="flex items-center space-x-2 px-3 py-3 border-b border-border cursor-pointer"
               >
                 <RadioGroupItem value="none" id="none" />
-                <span>Without output</span>
+                <span>Without outputs</span>
               </FormLabel>
               <FormLabel
                 htmlFor="inference"
                 className="w-full flex items-center space-x-2 px-3 py-3 border-b border-border cursor-pointer"
               >
                 <RadioGroupItem value="inference" id="inference" />
-                <span className="w-full">With inference output</span>
+                <span className="w-full">With inference outputs</span>
               </FormLabel>
               <FormLabel
                 htmlFor="demonstration"
@@ -75,11 +74,11 @@ export default function OutputSourceSelector({
                   id="demonstration"
                   disabled={demonstrationCount === 0}
                 />
-                <div className="flex items-center gap-2">
-                  <span>With demonstration output</span>
-                  <Badge variant="secondary">
+                <div className="flex items-center justify-between w-full gap-2">
+                  <span>With demonstration outputs</span>
+                  <span className="text-fg-tertiary text-xs">
                     {demonstrationCount.toLocaleString()} available
-                  </Badge>
+                  </span>
                 </div>
               </FormLabel>
             </RadioGroup>

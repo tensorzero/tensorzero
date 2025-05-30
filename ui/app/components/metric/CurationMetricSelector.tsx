@@ -6,21 +6,28 @@ import {
   type PathValue,
 } from "react-hook-form";
 import { Config } from "~/utils/config";
-import { FormField, FormItem, FormLabel } from "~/components/ui/form";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "~/components/ui/select";
-import { Skeleton } from "~/components/ui/skeleton";
+  FormField,
+  FormItem,
+  FormLabel,
+} from "~/components/ui/form";
 import { Input } from "~/components/ui/input";
 import MetricBadges from "~/components/metric/MetricBadges";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useFetcher } from "react-router";
 import type { MetricsWithFeedbackData } from "~/utils/clickhouse/feedback";
-import { Badge } from "~/components/ui/badge";
+import { Button } from "~/components/ui/button";
+import { ChevronDown } from "lucide-react";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "~/components/ui/command";
+import clsx from "clsx";
+import { useClickOutside } from "~/hooks/use-click-outside";
 
 type CurationMetricSelectorProps<T extends Record<string, unknown>> = {
   control: Control<T>;
@@ -28,7 +35,7 @@ type CurationMetricSelectorProps<T extends Record<string, unknown>> = {
   functionFieldName: Path<T>;
   feedbackCount: number | null;
   curatedInferenceCount: number | null;
-  removeDemonstrations?: boolean;
+  totalFunctionInferenceCount?: number | null;
   config: Config;
 };
 
@@ -48,13 +55,14 @@ export default function CurationMetricSelector<
   control,
   name,
   functionFieldName,
-  feedbackCount,
-  curatedInferenceCount,
+  totalFunctionInferenceCount,
   config,
-  removeDemonstrations = false,
 }: CurationMetricSelectorProps<T>) {
   const metricsFetcher = useFetcher<MetricsWithFeedbackData>();
   const { getValues, setValue } = useFormContext<T>();
+  const [open, setOpen] = useState(false);
+  const [inputValue, setInputValue] = useState("");
+  const commandRef = useRef<HTMLDivElement>(null);
 
   const functionValue = useWatch({
     control,
@@ -76,11 +84,21 @@ export default function CurationMetricSelector<
     return new Set(
       metricsFetcher.data.metrics
         .filter(
-          (m) => !removeDemonstrations || m.metric_name !== "demonstration",
+          (m) =>
+            m.metric_name !== "demonstration" && m.metric_name !== "comment",
         )
         .map((m) => m.metric_name),
     );
-  }, [metricsFetcher.data, removeDemonstrations]);
+  }, [metricsFetcher.data]);
+
+  useClickOutside(commandRef, () => setOpen(false));
+
+  const handleInputChange = (input: string) => {
+    setInputValue(input);
+    if (input.trim() !== "" && !open) {
+      setOpen(true);
+    }
+  };
 
   const isLoading = metricsFetcher.state === "loading";
 
@@ -100,113 +118,211 @@ export default function CurationMetricSelector<
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [functionValue, validMetrics, getValues, setValue]);
 
+  // Determine if the selector should be disabled and what cursor to show
+  const isSelectorDisabled = 
+    !functionValue || 
+    isLoading || 
+    (functionValue && !isLoading && validMetrics.size === 0);
+
   return (
     <FormField
       control={control}
       name={name}
       render={({ field }) => (
-        <FormItem className="flex flex-col gap-y-1">
-          <FormLabel>Metric</FormLabel>
-          <div className="w-full space-y-2">
-            <div className="space-y-2">
-              <Select
-                onValueChange={(value: string) => {
-                  const metricValue = value === "none" ? null : value;
-                  field.onChange(metricValue);
-                }}
-                value={(field.value ?? "none") as string}
-                disabled={!functionValue || isLoading}
+        <FormItem className="w-full flex flex-col gap-1">
+            <FormLabel>Metric</FormLabel>
+            <div className="relative h-10">
+              <div
+                ref={commandRef}
+                className={clsx(
+                  "absolute top-0 left-0 right-0 z-48 rounded-lg border border-border bg-background transition-shadow transition-transform ease-out duration-300",
+                  open
+                    ? "shadow-2xl"
+                    : "hover:shadow-xs active:shadow-none active:scale-99 scale-100 shadow-none",
+                )}
               >
-                <SelectTrigger>
-                  <SelectValue
-                    placeholder={
-                      isLoading ? "Loading metrics..." : "Select a metric"
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">
-                    <div className="flex w-full items-center justify-between">
-                      <span>None</span>
-                    </div>
-                  </SelectItem>
-                  {Object.entries(config.metrics).map(([name, metric]) => {
-                    const metricFeedback = metricsFetcher.data?.metrics.find(
-                      (m) => m.metric_name === name,
-                    );
-
-                    return (
-                      <SelectItem key={name} value={name}>
-                        <div className="flex w-full items-center justify-between">
-                          <span>{name}</span>
-                          <div className="ml-2 flex items-center gap-2">
-                            <Badge className="bg-gray-200 text-gray-800 dark:bg-gray-900 dark:text-gray-300">
-                              Count:{" "}
-                              {metricFeedback
-                                ? metricFeedback.feedback_count
-                                : 0}
-                            </Badge>
-                            <MetricBadges metric={metric} />
-                          </div>
-                        </div>
-                      </SelectItem>
-                    );
-                  })}
-                </SelectContent>
-              </Select>
-
-              {field.value && config.metrics[field.value]?.type === "float" && (
-                <FormField
-                  control={control}
-                  name={"threshold" as Path<T>}
-                  render={({ field: thresholdField }) => (
-                    <div className="rounded-lg bg-gray-100 p-4">
-                      <FormLabel>Threshold</FormLabel>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        {...thresholdField}
-                        value={thresholdField.value?.toString() ?? ""}
-                        className="border-none bg-transparent focus:ring-0"
-                        onChange={(e) => {
-                          thresholdField.onChange(Number(e.target.value));
-                        }}
-                      />
-                    </div>
+                <Button
+                  variant="ghost"
+                  role="combobox"
+                  type="button"
+                  aria-expanded={open}
+                  className={clsx(
+                    "w-full px-3 hover:bg-transparent font-normal group cursor-pointer",
+                    isSelectorDisabled && "cursor-not-allowed"
                   )}
-                />
-              )}
+                  onClick={() => setOpen(!open)}
+                  disabled={isSelectorDisabled}
+                >
+                  <div className="min-w-0 flex-1">
+                    {(() => {
+                      const currentMetricName = field.value as string | null;
+                      const selectedMetricDetails = currentMetricName ? config.metrics[currentMetricName] : undefined;
+
+                      if (currentMetricName && selectedMetricDetails) {
+                        return (
+                          <div className="flex w-full min-w-0 flex-1 items-center gap-x-2">
+                            <span className="truncate text-sm">
+                              {currentMetricName}
+                            </span>
+                          </div>
+                        );
+                      } else if (currentMetricName === null) {
+                        return (
+                          <div className="flex items-center gap-x-2 text-fg-muted">
+                            <span className="text-fg-secondary flex text-sm">
+                              None
+                            </span>
+                          </div>
+                        );
+                      } else {
+                        return (
+                          <div className="flex items-center gap-x-2 text-fg-muted">
+                            <span className="text-fg-secondary flex text-sm">
+                              {isLoading
+                                ? "Loading metrics..."
+                                : !functionValue || (functionValue && validMetrics.size === 0)
+                                ? "No metrics available"
+                                : "Select a metric"}
+                            </span>
+                          </div>
+                        );
+                      }
+                    })()}
+                  </div>
+                  <ChevronDown
+                    className={clsx(
+                      "ml-2 h-4 w-4 shrink-0 text-fg-muted group-hover:text-fg-tertiary transition-colors transition-transform ease-out duration-300",
+                      open ? "-rotate-180" : "rotate-0",
+                    )}
+                  />
+                </Button>
+                <Command
+                  className={clsx(
+                    "border-t border-border rounded-none bg-transparent overflow-hidden transition-all ease-out duration-300",
+                    open ? "max-h-[500px] opacity-100" : "max-h-0 opacity-0",
+                  )}
+                >
+                  <CommandInput
+                    placeholder="Find a metric..."
+                    value={inputValue}
+                    onValueChange={handleInputChange}
+                  />
+                  <CommandList>
+                    <CommandEmpty className="px-4 py-2 text-sm">
+                      No metrics found.
+                    </CommandEmpty>
+                    <CommandGroup
+                      heading={
+                        <div className="text-fg-tertiary flex w-full items-center justify-between">
+                          <span>Function Metrics</span>
+                          <span>Inferences</span>
+                        </div>
+                      }
+                    >
+                      <CommandItem
+                        key="none"
+                        value="none"
+                        onSelect={() => {
+                          field.onChange(null);
+                          setInputValue("");
+                          setOpen(false);
+                        }}
+                        className="group flex w-full items-center justify-between cursor-pointer"
+                      >
+                        <span>None</span>
+                        {totalFunctionInferenceCount !== null && typeof totalFunctionInferenceCount !== 'undefined' && (
+                          <span
+                            className={clsx(
+                              "min-w-8 flex-shrink-0 text-right text-sm whitespace-nowrap text-fg-tertiary font-normal",
+                            )}
+                          >
+                            {totalFunctionInferenceCount.toLocaleString()}
+                          </span>
+                        )}
+                      </CommandItem>
+                      {Object.entries(config.metrics)
+                        .filter(
+                          ([metricName]) =>
+                            metricName !== "demonstration" &&
+                            metricName !== "comment",
+                        )
+                        .sort(([metricNameA], [metricNameB]) => {
+                          const isSelectableA = validMetrics.has(metricNameA);
+                          const isSelectableB = validMetrics.has(metricNameB);
+                          if (isSelectableA && !isSelectableB) {
+                            return -1;
+                          }
+                          if (!isSelectableA && isSelectableB) {
+                            return 1;
+                          }
+                          return 0;
+                        })
+                        .map(([metricName, metricConfig]) => {
+                          const isSelectable = validMetrics.has(metricName);
+                          const metricFeedback = metricsFetcher.data?.metrics.find(
+                            (m) => m.metric_name === metricName,
+                          );
+                          return (
+                            <CommandItem
+                              key={metricName}
+                              value={metricName}
+                              disabled={!isSelectable}
+                              onSelect={() => {
+                                if (!isSelectable) return;
+                                field.onChange(metricName);
+                                setInputValue("");
+                                setOpen(false);
+                              }}
+                              className={clsx(
+                                "group flex w-full items-center justify-between",
+                                isSelectable ? "cursor-pointer" : "opacity-50 cursor-not-allowed",
+                              )}
+                            >
+                              <span className="truncate">{metricName}</span>
+                              <div className="ml-2 flex items-center gap-2">
+                                <MetricBadges metric={metricConfig} />
+                                <span
+                                  className={clsx(
+                                    "min-w-8 flex-shrink-0 text-right text-sm whitespace-nowrap",
+                                    field.value === metricName
+                                      ? "text-fg-secondary font-medium"
+                                      : "text-fg-tertiary font-normal",
+                                  )}
+                                >
+                                  {metricFeedback
+                                    ? metricFeedback.feedback_count.toLocaleString()
+                                    : "0"}
+                                </span>
+                              </div>
+                            </CommandItem>
+                          );
+                        })}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </div>
             </div>
 
-            <div className="text-muted-foreground space-y-1 text-sm">
-              <div>
-                Feedbacks:{" "}
-                {/* If field.value is empty string (unselected), show loading skeleton */}
-                {field.value === "" ? (
-                  <Skeleton className="inline-block h-4 w-16 align-middle" />
-                ) : /* If field.value is null (selected "None"), show N/A */
-                field.value === null ? (
-                  <span className="font-medium">N/A</span>
-                ) : (
-                  /* Otherwise show the actual feedback count */
-                  <span className="font-medium">{feedbackCount}</span>
+            {field.value && config.metrics[field.value as string]?.type === "float" && (
+              <FormField
+                control={control}
+                name={"threshold" as Path<T>}
+                render={({ field: thresholdField }) => (
+                  <FormItem className="flex flex-col gap-1 pt-2">
+                    <FormLabel>Threshold</FormLabel>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      {...thresholdField}
+                      value={thresholdField.value?.toString() ?? ""}
+                      onChange={(e) => {
+                        thresholdField.onChange(Number(e.target.value));
+                        }}
+                    />
+                  </FormItem>
                 )}
-              </div>
-              <div>
-                Curated Inferences:{" "}
-                {/* If field.value is empty string (unselected), show loading skeleton */}
-                {field.value === "" ? (
-                  <Skeleton className="inline-block h-4 w-16 align-middle" />
-                ) : /* If field.value is null (selected "None"), show N/A */
-                field.value === null ? (
-                  <span className="font-medium">N/A</span>
-                ) : (
-                  /* Otherwise show the actual curated inference count */
-                  <span className="font-medium">{curatedInferenceCount}</span>
-                )}
-              </div>
-            </div>
-          </div>
+              />
+            )}
         </FormItem>
       )}
     />

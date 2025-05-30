@@ -105,6 +105,12 @@ export function DatasetBuilderForm({
       case "complete":
         return "Success";
       default:
+        if (!selectedDataset) {
+          return "Select a dataset";
+        }
+        if (!functionName) {
+          return "Select a function";
+        }
         if (isNewDataset) {
           return `Create new dataset with ${countToInsert?.toLocaleString()} rows`;
         } else {
@@ -119,37 +125,36 @@ export function DatasetBuilderForm({
         onSubmit={(e) => {
           handleSubmit(onSubmit)(e);
         }}
-        className="space-y-2 max-w-160"
+        className="flex flex-col gap-3 max-w-160"
       >
-        <div className="space-y-2 w-full p-3 border border-border rounded-2xl">
+        <div className="flex flex-col gap-3 w-full p-3 border border-border rounded-2xl">
+          <span className="text-fg-primary text-lg font-medium">Create or update a dataset</span>
             <DatasetSelector
               control={form.control}
               dataset_counts={dataset_counts}
               setIsNewDataset={setIsNewDataset}
             />
           </div>
-          <div className="space-y-6 w-full p-3 border border-border rounded-2xl">
+          <div className="flex flex-col gap-3 w-full p-3 border border-border rounded-2xl">
+            <span className="text-fg-primary text-lg font-medium">Use data from</span>
+            <div className="flex flex-col gap-6">
           <FunctionSelector<DatasetBuilderFormValues>
             control={form.control}
             name="function"
-            inferenceCount={counts.inferenceCount}
             config={config}
           />
           {functionName && (
+            <>
             <CurationMetricSelector<DatasetBuilderFormValues>
               control={form.control}
               name="metric_name"
               functionFieldName="function"
               feedbackCount={counts.feedbackCount}
               curatedInferenceCount={counts.curatedInferenceCount}
+              totalFunctionInferenceCount={counts.inferenceCount}
               config={config}
-              removeDemonstrations={true}
             />
-          )}
-          {functionName && (
             <OutputSourceSelector control={form.control} />
-          )}
-          {functionName && (
             <DatasetCountDisplay
               control={form.control}
               setCountToInsert={setCountToInsert}
@@ -157,10 +162,12 @@ export function DatasetBuilderForm({
               metricFeedbackCount={counts.feedbackCount}
               metricCuratedInferenceCount={counts.curatedInferenceCount}
             />
+            </>
           )}
           </div>
-          {functionName && (
+          </div>
             <Button
+              className="w-fit"
               type="submit"
               disabled={
                 submissionPhase !== "idle" ||
@@ -177,7 +184,6 @@ export function DatasetBuilderForm({
             >
               {getButtonText(isNewDataset)}
             </Button>
-          )}
         {form.formState.errors.root && (
           <p className="mt-2 text-sm text-red-500">
             {form.formState.errors.root.message}

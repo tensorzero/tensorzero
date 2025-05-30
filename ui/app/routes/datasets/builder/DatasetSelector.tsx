@@ -3,7 +3,6 @@ import {
   FormDescription,
   FormField,
   FormItem,
-  FormLabel,
 } from "~/components/ui/form";
 import { useRef, useState } from "react";
 import { Button } from "~/components/ui/button";
@@ -61,7 +60,6 @@ export function DatasetSelector({
       name="dataset"
       render={({ field }) => (
         <FormItem className="flex flex-col gap-y-1">
-          <FormLabel className="text-fg-primary font-medium text-sm">Dataset</FormLabel>
           <div className="w-full relative h-10">
             <div 
               ref={commandRef} 
@@ -254,7 +252,7 @@ export function DatasetSelector({
                 );
               }
             }
-            return null; // Return null if no existing dataset is selected or no value
+            return null;
           })()}
         </FormItem>
       )}

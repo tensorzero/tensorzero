@@ -1,6 +1,6 @@
 import type { Control, Path } from "react-hook-form";
 import { Config } from "~/utils/config";
-import { FormField, FormItem, FormLabel } from "~/components/ui/form";
+import { FormField, FormItem } from "~/components/ui/form";
 import { useRef, useState } from "react";
 import { Button } from "~/components/ui/button";
 import { ChevronDown } from "lucide-react";
@@ -20,7 +20,6 @@ import { getFunctionTypeIcon } from "~/utils/icon";
 type FunctionSelectorProps<T extends Record<string, unknown>> = {
   control: Control<T>;
   name: Path<T>;
-  inferenceCount: number | null;
   config: Config;
   hide_default_function?: boolean;
 };
@@ -28,7 +27,6 @@ type FunctionSelectorProps<T extends Record<string, unknown>> = {
 export function FunctionSelector<T extends Record<string, unknown>>({
   control,
   name,
-  inferenceCount,
   config,
   hide_default_function = false,
 }: FunctionSelectorProps<T>) {
@@ -55,7 +53,6 @@ export function FunctionSelector<T extends Record<string, unknown>>({
       name={name}
       render={({ field }) => (
         <FormItem className="flex flex-col gap-y-1">
-          <FormLabel className="text-fg-primary font-medium text-sm">Function</FormLabel>
           <div className="w-full space-y-1">
             <div className="relative h-10">
               <div
@@ -159,13 +156,6 @@ export function FunctionSelector<T extends Record<string, unknown>>({
                 </Command>
               </div>
             </div>
-            {/*
-            {field.value && (
-              <FormDescription className="text-fg-tertiary font-medium">
-                Inferences: {inferenceCount?.toLocaleString()}
-              </FormDescription>
-            )}
-            */}
           </div>
         </FormItem>
       )}
