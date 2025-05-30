@@ -51,13 +51,10 @@ test("should be able to add comment feedback via the episode page", async ({
   // Click the submit button
   await page.getByText("Submit Feedback").click();
 
-  // Wait for the page to load
-  await page.waitForLoadState("networkidle");
+  await page.waitForURL((url) => url.searchParams.has("newFeedbackId"), {
+    timeout: 10000,
+  });
 
-  // sleep for 1 second
-  await page.waitForTimeout(1000);
-
-  // Get the search param `newFeedbackId` from the url
   const newFeedbackId = new URL(page.url()).searchParams.get("newFeedbackId");
   if (!newFeedbackId) {
     throw new Error("newFeedbackId is not present in the url");
