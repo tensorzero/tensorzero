@@ -1350,7 +1350,6 @@ def test_file_inference_url(sync_client: TensorZeroGateway):
     assert isinstance(result, ChatInferenceResponse)
     assert input == input_copy, "Input should not be modified by the client"
     assert result.variant_name == "dummy::extract_images"
-    assert isinstance(result, ChatInferenceResponse)
     content = result.content
     assert len(content) == 1
     assert content[0].type == "text"
