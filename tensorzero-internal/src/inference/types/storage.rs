@@ -4,6 +4,8 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use crate::error::{Error, ErrorDetails};
 
 use super::{Base64File, FileKind};
+#[cfg(feature = "pyo3")]
+use pyo3::prelude::*;
 
 /// Configuration for the object storage backend
 /// Currently, we only support S3-compatible object storage and local filesystem storage
@@ -79,6 +81,7 @@ impl StorageKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "pyo3", pyclass)]
 pub struct StoragePath {
     pub kind: StorageKind,
     #[serde(

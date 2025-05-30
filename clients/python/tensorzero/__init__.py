@@ -4,7 +4,12 @@ from importlib.metadata import version
 import httpx
 
 from .client import AsyncTensorZeroGateway, BaseTensorZeroGateway, TensorZeroGateway
-from .tensorzero import _start_http_gateway as _start_http_gateway
+from .tensorzero import (
+    RenderedStoredInference,
+)
+from .tensorzero import (
+    _start_http_gateway as _start_http_gateway,
+)
 from .types import (
     BaseTensorZeroError,
     ChatDatapointInsert,
@@ -30,15 +35,23 @@ from .types import (
     JsonInferenceResponse,
     Message,
     RawText,
+    StoredChatInference,
+    StoredInference,
+    StoredJsonInference,
     System,
     TensorZeroError,
     TensorZeroInternalError,
     Text,
     TextChunk,
+    Thought,
     ThoughtChunk,
+    Tool,
     ToolCall,
     ToolCallChunk,
+    ToolChoice,
+    ToolParams,
     ToolResult,
+    UnknownContentBlock,
     Usage,
 )
 
@@ -48,6 +61,7 @@ __all__ = [
     "BaseTensorZeroGateway",
     "ChatDatapointInsert",
     "ChatInferenceDatapointInput",  # DEPRECATED
+    "StoredChatInference",
     "ChatInferenceResponse",
     "ContentBlock",
     "Datapoint",
@@ -61,25 +75,33 @@ __all__ = [
     "ImageBase64",
     "ImageUrl",
     "InferenceChunk",
+    "StoredInference",
     "InferenceInput",
     "InferenceResponse",
     "JsonDatapointInsert",
     "JsonInferenceDatapointInput",  # DEPRECATED
     "JsonInferenceOutput",
+    "StoredJsonInference",
     "JsonInferenceResponse",
     "Message",
     "patch_openai_client",
     "RawText",
+    "RenderedStoredInference",
     "System",
     "TensorZeroError",
     "TensorZeroGateway",
     "TensorZeroInternalError",
     "Text",
     "TextChunk",
+    "Thought",
     "ThoughtChunk",
+    "Tool",
+    "ToolChoice",
+    "ToolParams",
     "ToolCall",
     "ToolCallChunk",
     "ToolResult",
+    "UnknownContentBlock",
     "Usage",
 ]
 
