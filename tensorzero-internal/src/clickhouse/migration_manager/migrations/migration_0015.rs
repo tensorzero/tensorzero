@@ -60,12 +60,9 @@ impl Migration for Migration0015<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        "\
-            -- Change the columns back to non-nullable types\n\
-            ALTER TABLE ModelInference
-            MODIFY COLUMN input_tokens UInt32;\n\
-            ALTER TABLE ModelInference
-            MODIFY COLUMN output_tokens UInt32;\n\
+        "/* Change the columns back to non-nullable types */\
+            ALTER TABLE ModelInference MODIFY COLUMN input_tokens UInt32;
+            ALTER TABLE ModelInference MODIFY COLUMN output_tokens UInt32;
             "
         .to_string()
     }

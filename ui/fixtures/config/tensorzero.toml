@@ -37,6 +37,17 @@ model_name = "ft:gpt-4o-mini-2024-07-18:tensorzero::ALHEaw1j"
 # │                                 FUNCTIONS                                  │
 # └────────────────────────────────────────────────────────────────────────────┘
 
+[functions.json_success_no_input_schema]
+type = "json"
+output_schema = "functions/json_success_no_input_schema/output_schema.json"
+
+[functions.json_success_no_input_schema.variants.test]
+type = "chat_completion"
+weight = 1
+model = "dummy::json"
+max_tokens = 100
+json_mode = "strict"
+
 [functions.dummy_function]
 type = "chat"
 
