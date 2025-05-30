@@ -283,6 +283,9 @@ pub enum ErrorDetails {
     MissingBatchInferenceResponse {
         inference_id: Option<Uuid>,
     },
+    MissingFileExtension {
+        file_name: String,
+    },
     ModelProvidersExhausted {
         provider_errors: HashMap<String, Error>,
     },
@@ -362,6 +365,9 @@ pub enum ErrorDetails {
     UuidInFuture {
         raw_uuid: String,
     },
+    UnsupportedFileExtension {
+        extension: String,
+    },
     RouteNotFound {
         path: String,
         method: String,
@@ -427,6 +433,7 @@ impl ErrorDetails {
             ErrorDetails::MiniJinjaTemplateMissing { .. } => tracing::Level::ERROR,
             ErrorDetails::MiniJinjaTemplateRender { .. } => tracing::Level::ERROR,
             ErrorDetails::MissingBatchInferenceResponse { .. } => tracing::Level::WARN,
+            ErrorDetails::MissingFileExtension { .. } => tracing::Level::WARN,
             ErrorDetails::ModelProvidersExhausted { .. } => tracing::Level::ERROR,
             ErrorDetails::ModelValidation { .. } => tracing::Level::ERROR,
             ErrorDetails::Observability { .. } => tracing::Level::ERROR,
@@ -444,6 +451,7 @@ impl ErrorDetails {
             ErrorDetails::UnknownTool { .. } => tracing::Level::ERROR,
             ErrorDetails::UnknownVariant { .. } => tracing::Level::WARN,
             ErrorDetails::UnknownMetric { .. } => tracing::Level::WARN,
+            ErrorDetails::UnsupportedFileExtension { .. } => tracing::Level::WARN,
             ErrorDetails::UnsupportedModelProviderForBatchInference { .. } => tracing::Level::WARN,
             ErrorDetails::UnsupportedVariantForBatchInference { .. } => tracing::Level::WARN,
             ErrorDetails::UnsupportedVariantForFunctionType { .. } => tracing::Level::ERROR,
@@ -513,6 +521,7 @@ impl ErrorDetails {
             ErrorDetails::MiniJinjaTemplateMissing { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::MiniJinjaTemplateRender { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::MissingBatchInferenceResponse { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::MissingFileExtension { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::ModelProvidersExhausted { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ModelValidation { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::Observability { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -530,6 +539,7 @@ impl ErrorDetails {
             ErrorDetails::UnknownTool { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::UnknownVariant { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::UnknownMetric { .. } => StatusCode::NOT_FOUND,
+            ErrorDetails::UnsupportedFileExtension { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::UnsupportedModelProviderForBatchInference { .. } => {
                 StatusCode::INTERNAL_SERVER_ERROR
             }
@@ -831,6 +841,12 @@ impl std::fmt::Display for ErrorDetails {
                 ),
                 None => write!(f, "Missing batch inference response"),
             },
+            ErrorDetails::MissingFileExtension { file_name } => {
+                write!(
+                    f,
+                    "Could not determine file extension for file: {file_name}"
+                )
+            }
             ErrorDetails::ModelProvidersExhausted { provider_errors } => {
                 write!(
                     f,
@@ -883,6 +899,9 @@ impl std::fmt::Display for ErrorDetails {
                     f,
                     "Unsupported model provider for batch inference: {provider_type}"
                 )
+            }
+            ErrorDetails::UnsupportedFileExtension { extension } => {
+                write!(f, "Unsupported file extension: {extension}")
             }
             ErrorDetails::UnsupportedVariantForBatchInference { variant_name } => {
                 match variant_name {

@@ -1234,6 +1234,7 @@ def test_image_inference_base64(sync_client: TensorZeroGateway):
 
 
 def test_file_inference_base64(sync_client: TensorZeroGateway):
+    # Test image with File block
     basepath = path.dirname(__file__)
     with open(
         f"{basepath}/../../../tensorzero-internal/tests/e2e/providers/ferris.png", "rb"
@@ -1276,6 +1277,53 @@ def test_file_inference_base64(sync_client: TensorZeroGateway):
             "storage_path": {
                 "kind": {"type": "disabled"},
                 "path": "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png",
+            },
+        }
+    ]
+    # Test pdf with File block
+    basepath = path.dirname(__file__)
+    with open(
+        f"{basepath}/../../../tensorzero-internal/tests/e2e/providers/deepseek_paper.pdf",
+        "rb",
+    ) as f:
+        deepseek_paper_pdf = base64.b64encode(f.read()).decode("ascii")
+
+    input = {
+        "system": "You are a helpful assistant named Alfred Pennyworth.",
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    FileBase64(
+                        data=deepseek_paper_pdf,
+                        mime_type="application/pdf",
+                    )
+                ],
+            }
+        ],
+    }
+    input_copy = deepcopy(input)
+    result = sync_client.inference(
+        model_name="dummy::require_pdf",
+        input=input,
+        episode_id=uuid7(),
+    )
+    assert isinstance(result, ChatInferenceResponse)
+    assert input == input_copy, "Input should not be modified by the client"
+    assert result.variant_name == "dummy::require_pdf"
+    content = result.content
+    assert len(content) == 1
+    assert content[0].type == "text"
+    assert isinstance(content[0], Text)
+    assert content[0].text is not None
+    print(content[0].text)
+    json_content = json.loads(content[0].text)
+    assert json_content == [
+        {
+            "file": {"url": None, "mime_type": "application/pdf"},
+            "storage_path": {
+                "kind": {"type": "disabled"},
+                "path": "observability/files/3e127d9a726f6be0fd81d73ccea97d96ec99419f59650e01d49183cd3be999ef.pdf",
             },
         }
     ]

@@ -191,9 +191,11 @@ function MessageContent({
             } else {
               return (
                 <div key={index}>
-                  <SkeletonImage error={`Unsupported file type: ${block.file.mime_type}`} />
+                  <SkeletonImage
+                    error={`Unsupported file type: ${block.file.mime_type}`}
+                  />
                 </div>
-              )
+              );
             }
           case "file_error":
             return (

@@ -94,7 +94,7 @@ async function resolveContent(
           file: await resolveFile({
             type: "file",
             file: content.image,
-            storage_path: content.storage_path
+            storage_path: content.storage_path,
           }),
           storage_path: content.storage_path,
         };
@@ -103,7 +103,7 @@ async function resolveContent(
           type: "file_error",
           error: error instanceof Error ? error.message : String(error),
         };
-      }      
+      }
     case "file":
       try {
         return {
@@ -140,7 +140,7 @@ async function resolveModelInferenceContent(
           file: await resolveFile({
             type: "file",
             file: content.image,
-            storage_path: content.storage_path
+            storage_path: content.storage_path,
           }),
           storage_path: content.storage_path,
         };
@@ -164,9 +164,7 @@ async function resolveModelInferenceContent(
       }
   }
 }
-async function resolveFile(
-  content: FileContent,
-): Promise<ResolvedBase64File> {
+async function resolveFile(content: FileContent): Promise<ResolvedBase64File> {
   const object = await tensorZeroClient.getObject(content.storage_path);
   const json = JSON.parse(object);
   const dataURL = `data:${content.file.mime_type};base64,${json.data}`;

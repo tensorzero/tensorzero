@@ -1244,6 +1244,44 @@ async def test_async_multi_block_image_base64(async_client):
 
 
 @pytest.mark.asyncio
+async def test_async_multi_block_file_base64(async_client):
+    basepath = os.path.dirname(__file__)
+    with open(
+        f"{basepath}/../../../tensorzero-internal/tests/e2e/providers/deepseek_paper.pdf",
+        "rb",
+    ) as f:
+        deepseek_paper_pdf = base64.b64encode(f.read()).decode("ascii")
+
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": "Output exactly two words describing the image",
+                },
+                {
+                    "type": "file",
+                    "file": {"file_data": deepseek_paper_pdf, "filename": "test.pdf"},
+                },
+            ],
+        },
+    ]
+    episode_id = str(uuid7())
+    result = await async_client.chat.completions.create(
+        extra_body={"tensorzero::episode_id": episode_id},
+        messages=messages,
+        model="tensorzero::model_name::dummy::require_pdf",
+    )
+    assert result.choices[0].message.content is not None
+    json_content = json.loads(result.choices[0].message.content)
+    assert json_content[0]["storage_path"] == {
+        "kind": {"type": "disabled"},
+        "path": "observability/files/3e127d9a726f6be0fd81d73ccea97d96ec99419f59650e01d49183cd3be999ef.pdf",
+    }
+
+
+@pytest.mark.asyncio
 async def test_async_multi_turn_parallel_tool_use(async_client):
     episode_id = str(uuid7())
 
