@@ -163,25 +163,20 @@ async fn main() -> Result<()> {
                 };
                 all_diff_trees.extend(trees);
             }
-            let mut best_ted_info = None;
-            for diff_tree in all_diff_trees {
-                // TODO: do all the DFS once for each tree (maybe lazily) and memoize the results.
-                // TODO: skip all checks here or in the inner loop where the tree size difference is larger than the minimum TED
-                // already found.
-                let ted = minimum_ted(
-                    &tree_info.tree.root_node(),
-                    &tree_info.src,
-                    &diff_tree.tree.root_node(),
-                    &diff_tree.src,
-                );
-                if best_ted_info.is_none() {
-                    best_ted_info = Some(ted);
-                } else if let Some(ted_info) = best_ted_info.as_ref() {
-                    if ted.min_ted < ted_info.min_ted {
-                        best_ted_info = Some(ted);
-                    }
-                }
-            }
+            let best_ted_info = all_diff_trees
+                .par_iter()
+                .map(|diff_tree| {
+                    // TODO: do all the DFS once for each tree (maybe lazily) and memoize the results.
+                    // TODO: skip all checks here or in the inner loop where the tree size difference is larger than the minimum TED
+                    // already found.
+                    minimum_ted(
+                        &tree_info.tree.root_node(),
+                        &tree_info.src,
+                        &diff_tree.tree.root_node(),
+                        &diff_tree.src,
+                    )
+                })
+                .min_by_key(|ted| ted.min_ted);
             let Some(best_ted_info) = best_ted_info.as_ref() else {
                 continue;
             };
