@@ -1,5 +1,5 @@
 import type { Control } from "react-hook-form";
-import { FormField, FormItem, FormLabel } from "~/components/ui/form";
+import { FormField, FormItem } from "~/components/ui/form";
 import type { SFTFormValues } from "./types";
 import { ModelOptionSchema, type ModelOption } from "./model_options";
 import { useState } from "react";
@@ -75,9 +75,7 @@ export function ModelSelector({
       control={control}
       name="model"
       render={({ field }) => (
-        <FormItem>
-          <FormLabel>Model</FormLabel>
-          <div className="grid gap-x-8 md:grid-cols-2">
+        <FormItem className="w-full flex flex-col gap-1">
             <div className="w-full space-y-2">
               <Popover open={open} onOpenChange={setOpen}>
                 <PopoverTrigger className="border-gray-200" asChild>
@@ -147,7 +145,6 @@ export function ModelSelector({
                 </PopoverContent>
               </Popover>
             </div>
-          </div>
         </FormItem>
       )}
     />

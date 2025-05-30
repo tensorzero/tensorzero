@@ -128,15 +128,23 @@ export function SFTForm({
   }
 
   return (
-    <div className="mt-4">
       <Form {...form}>
         <form
           onSubmit={(e) => {
             handleSubmit(onSubmit)(e);
           }}
-          className="space-y-6"
+          className="flex flex-col gap-3 max-w-160"
         >
-          <div className="space-y-6">
+          <div className="flex flex-col gap-3 w-full p-3 border border-border rounded-2xl">
+            <span className="text-fg-primary text-lg font-medium">Fine-tune model</span>
+            <ModelSelector control={form.control} models={models} />
+            {errors.model && (
+              <p className="text-xs text-red-500">{errors.model.message}</p>
+            )}
+          </div>
+          <div className="flex flex-col gap-3 w-full p-3 border border-border rounded-2xl">
+            <span className="text-fg-primary text-lg font-medium">Use data from</span>
+            <div className="flex flex-col gap-6">
             <div className="flex flex-col gap-1">
               <FunctionSelector<SFTFormValues>
                 control={form.control}
@@ -150,46 +158,46 @@ export function SFTForm({
                 </p>
               )}
             </div>
+            {functionName && (
+              <>
+              {/* Metric selector */}
+              <div className="flex flex-col gap-1">
+                <CurationMetricSelector<SFTFormValues>
+                  control={form.control}
+                  name="metric"
+                  functionFieldName="function"
+                  feedbackCount={counts.feedbackCount}
+                  curatedInferenceCount={counts.curatedInferenceCount}
+                  config={config}
+                />
+  
+                {errors.metric && (
+                  <p className="text-xs text-red-500">{errors.metric.message}</p>
+                )}
+              </div>
 
-            <div className="flex flex-col">
-              <CurationMetricSelector<SFTFormValues>
+              {/* Variant selector */}
+              <div className="flex flex-col gap-1">
+                <VariantSelector
+                  control={form.control}
+                  chatCompletionVariants={getChatCompletionVariantsForFunction()}
+                />
+  
+                {errors.variant && (
+                  <p className="text-xs text-red-500">{errors.variant.message}</p>
+                )}
+              </div>
+
+              <AdvancedParametersAccordion
                 control={form.control}
-                name="metric"
-                functionFieldName="function"
-                feedbackCount={counts.feedbackCount}
-                curatedInferenceCount={counts.curatedInferenceCount}
-                config={config}
+                maxSamplesLimit={counts.inferenceCount ?? undefined}
               />
-
-              {errors.metric && (
-                <p className="text-xs text-red-500">{errors.metric.message}</p>
-              )}
-            </div>
-
-            <div className="flex flex-col gap-1">
-              <VariantSelector
-                control={form.control}
-                chatCompletionVariants={getChatCompletionVariantsForFunction()}
-              />
-
-              {errors.variant && (
-                <p className="text-xs text-red-500">{errors.variant.message}</p>
-              )}
-            </div>
-
-            <div className="flex flex-col gap-1">
-              <ModelSelector control={form.control} models={models} />
-              {errors.model && (
-                <p className="text-xs text-red-500">{errors.model.message}</p>
-              )}
-            </div>
-            <AdvancedParametersAccordion
-              control={form.control}
-              maxSamplesLimit={counts.inferenceCount ?? undefined}
-            />
+            </>
+          )}
           </div>
-
+          </div>
           <Button
+            className="w-fit"
             type="submit"
             disabled={submissionPhase !== "idle" || isCuratedInferenceCountLow}
           >
@@ -200,6 +208,5 @@ export function SFTForm({
           )}
         </form>
       </Form>
-    </div>
   );
 }
