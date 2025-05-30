@@ -84,7 +84,6 @@ class FileBase64(ContentBlock):
 
 @dataclass
 class ImageUrl(ContentBlock):
-    # This class does not subclass ContentBlock since it cannot be output by the API.
     url: str
     type: str = "image"
 
