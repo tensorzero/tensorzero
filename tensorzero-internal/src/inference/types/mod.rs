@@ -3,10 +3,10 @@ use crate::inference::types::batch::deserialize_optional_json_string;
 use derive_builder::Builder;
 use extra_body::{FullExtraBodyConfig, UnfilteredInferenceExtraBody};
 use extra_headers::{FullExtraHeadersConfig, UnfilteredInferenceExtraHeaders};
+use file::sanitize_raw_request;
+pub use file::{Base64File, File, FileKind};
 use futures::stream::Peekable;
 use futures::Stream;
-use image::sanitize_raw_request;
-pub use image::{Base64Image, Image, ImageKind};
 use itertools::Itertools;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
@@ -14,7 +14,7 @@ use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyList};
 #[cfg(feature = "pyo3")]
 use pyo3_helpers::content_block_to_python;
-use resolved_input::ImageWithPath;
+use resolved_input::FileWithPath;
 pub use resolved_input::{ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{Map, Value};
@@ -47,7 +47,7 @@ use crate::{jsonschema_util::DynamicJSONSchema, tool::ToolCallConfigDatabaseInse
 pub mod batch;
 pub mod extra_body;
 pub mod extra_headers;
-pub mod image;
+pub mod file;
 #[cfg(feature = "pyo3")]
 pub mod pyo3_helpers;
 pub mod resolved_input;
@@ -139,21 +139,21 @@ impl InputMessageContent {
                 );
                 ResolvedInputMessageContent::Text { value }
             }
-            InputMessageContent::Image(image) => {
+            InputMessageContent::File(file) => {
                 let storage_kind = context
                     .object_store_info
                     .as_ref()
                     .ok_or_else(|| {
                         Error::new(ErrorDetails::ObjectStoreUnconfigured {
-                            block_type: "image".to_string(),
+                            block_type: "file".to_string(),
                         })
                     })?
                     .kind
                     .clone();
-                let image = image.take_or_fetch(context.client).await?;
-                let path = storage_kind.image_path(&image)?;
-                ResolvedInputMessageContent::Image(ImageWithPath {
-                    image,
+                let file = file.take_or_fetch(context.client).await?;
+                let path = storage_kind.file_path(&file)?;
+                ResolvedInputMessageContent::File(FileWithPath {
+                    file,
                     storage_path: path,
                 })
             }
@@ -188,7 +188,8 @@ pub enum InputMessageContent {
         value: String,
     },
     Thought(Thought),
-    Image(Image),
+    #[serde(alias = "image")]
+    File(File),
     /// An unknown content block type, used to allow passing provider-specific
     /// content blocks (e.g. Anthropic's "redacted_thinking") in and out
     /// of TensorZero.
@@ -284,7 +285,8 @@ pub enum ContentBlock {
     Text(Text),
     ToolCall(ToolCall),
     ToolResult(ToolResult),
-    Image(ImageWithPath),
+    #[serde(alias = "image")]
+    File(FileWithPath),
     Thought(Thought),
     /// Represents an unknown provider-specific content block.
     /// We pass this along as-is without any validation or transformation.

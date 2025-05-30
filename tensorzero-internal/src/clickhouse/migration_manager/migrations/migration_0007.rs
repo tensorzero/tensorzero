@@ -176,13 +176,11 @@ impl Migration for Migration0007<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        "\
-            -- Drop the materialized views\n\
-            DROP VIEW IF EXISTS ChatInferenceByEpisodeView;\n\
-            DROP VIEW IF EXISTS JsonInferenceByEpisodeIdView;\n\
-            \n\
-            -- Drop the table\n\
-            DROP TABLE IF EXISTS InferenceByEpisodeId;\n\
+        "/* Drop the materialized views */\
+            DROP VIEW IF EXISTS ChatInferenceByEpisodeView;
+            DROP VIEW IF EXISTS JsonInferenceByEpisodeIdView;
+            /* Drop the table */\
+            DROP TABLE IF EXISTS InferenceByEpisodeId;
             "
         .to_string()
     }

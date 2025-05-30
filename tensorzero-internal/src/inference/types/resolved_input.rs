@@ -3,7 +3,7 @@ use serde_json::Value;
 
 use crate::tool::{ToolCall, ToolResult};
 
-use super::{storage::StoragePath, Base64Image, Role, Thought};
+use super::{storage::StoragePath, Base64File, Role, Thought};
 
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
@@ -40,7 +40,8 @@ pub enum ResolvedInputMessageContent {
         value: String,
     },
     Thought(Thought),
-    Image(ImageWithPath),
+    #[serde(alias = "image")]
+    File(FileWithPath),
     Unknown {
         data: Value,
         model_provider_name: Option<String>,
@@ -50,7 +51,8 @@ pub enum ResolvedInputMessageContent {
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all))]
-pub struct ImageWithPath {
-    pub image: Base64Image,
+pub struct FileWithPath {
+    #[serde(alias = "image")]
+    pub file: Base64File,
     pub storage_path: StoragePath,
 }

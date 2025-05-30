@@ -107,6 +107,8 @@ tracing-opentelemetry-instrumentation-sdk = { workspace = true, features = [
 tower-http = { workspace = true }
 tower-layer = "0.3.3"
 pyo3 = { workspace = true, optional = true }
+google-cloud-auth = "0.20.0"
+
 
 [dev-dependencies]
 tempfile = "3.20.0"

@@ -275,8 +275,8 @@ fn prepare_request_message(
             ResolvedInputMessageContent::ToolResult(tool_result) => {
                 content.push(ContentBlock::ToolResult(tool_result.clone()));
             }
-            ResolvedInputMessageContent::Image(image) => {
-                content.push(ContentBlock::Image(image.clone()));
+            ResolvedInputMessageContent::File(image) => {
+                content.push(ContentBlock::File(image.clone()));
             }
             ResolvedInputMessageContent::Thought(thought) => {
                 content.push(ContentBlock::Thought(thought.clone()));

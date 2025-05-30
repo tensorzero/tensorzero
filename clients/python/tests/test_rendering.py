@@ -6,7 +6,7 @@ import pytest
 import pytest_asyncio
 from tensorzero import (
     AsyncTensorZeroGateway,
-    ImageBase64,
+    FileBase64,
     JsonInferenceOutput,
     StoredChatInference,
     StoredJsonInference,
@@ -193,12 +193,10 @@ def test_sync_render_inferences_success(sync_client: TensorZeroGateway):
     assert message.role == "user"
     content = message.content
     assert len(content) == 1
-    assert isinstance(content[0], ImageBase64)
-    assert content[0].type == "image"
+    assert isinstance(content[0], FileBase64)
+    assert content[0].type == "file"
     assert content[0].mime_type == "image/png"
     assert len(content[0].data) > 1000
-    assert content[0].mime_type == "image/png"
-    assert content[0].type == "image"
 
     assert isinstance(output, list)
     assert len(output) == 1
@@ -547,8 +545,8 @@ async def test_async_render_inferences_success(async_client: AsyncTensorZeroGate
     assert message.role == "user"
     content = message.content
     assert len(content) == 1
-    assert isinstance(content[0], ImageBase64)
-    assert content[0].type == "image"
+    assert isinstance(content[0], FileBase64)
+    assert content[0].type == "file"
     assert content[0].mime_type == "image/png"
     assert len(content[0].data) > 1000
 

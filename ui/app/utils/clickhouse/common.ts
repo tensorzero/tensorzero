@@ -58,17 +58,17 @@ export const toolResultContentSchema = z
   .strict();
 export type ToolResultContent = z.infer<typeof toolResultContentSchema>;
 
-export const base64ImageSchema = z.object({
+export const base64FileSchema = z.object({
   url: z.string().nullable(),
   mime_type: z.string(),
 });
-export type Base64Image = z.infer<typeof base64ImageSchema>;
+export type Base64File = z.infer<typeof base64FileSchema>;
 
-export const resolvedBase64ImageSchema = z.object({
+export const resolvedBase64FileSchema = z.object({
   url: z.string(),
   mime_type: z.string(),
 });
-export type ResolvedBase64Image = z.infer<typeof resolvedBase64ImageSchema>;
+export type ResolvedBase64File = z.infer<typeof resolvedBase64FileSchema>;
 
 export const storageKindSchema = z.discriminatedUnion("type", [
   z
@@ -102,24 +102,33 @@ export type StoragePath = z.infer<typeof storagePathSchema>;
 
 export const imageContentSchema = z.object({
   type: z.literal("image"),
-  image: base64ImageSchema,
+  image: base64FileSchema,
   storage_path: storagePathSchema,
 });
+// Legacy 'image' content block stored in the database
+// All new images are written out with the 'file' content block type
 export type ImageContent = z.infer<typeof imageContentSchema>;
 
-export const resolvedImageContentSchema = z.object({
-  type: z.literal("image"),
-  image: resolvedBase64ImageSchema,
+export const fileContentSchema = z.object({
+  type: z.literal("file"),
+  file: base64FileSchema,
   storage_path: storagePathSchema,
 });
-export type ResolvedImageContent = z.infer<typeof resolvedImageContentSchema>;
+export type FileContent = z.infer<typeof fileContentSchema>;
 
-export const resolvedImageContentErrorSchema = z.object({
-  type: z.literal("image_error"),
+export const resolvedFileContentSchema = z.object({
+  type: z.literal("file"),
+  file: resolvedBase64FileSchema,
+  storage_path: storagePathSchema,
+});
+export type ResolvedFileContent = z.infer<typeof resolvedFileContentSchema>;
+
+export const resolvedFileContentErrorSchema = z.object({
+  type: z.literal("file_error"),
   error: z.string(),
 });
 export type ResolvedImageContentError = z.infer<
-  typeof resolvedImageContentErrorSchema
+  typeof resolvedFileContentErrorSchema
 >;
 
 // Types for input to TensorZero
@@ -128,6 +137,7 @@ export const inputMessageContentSchema = z.discriminatedUnion("type", [
   toolCallContentSchema,
   toolResultContentSchema,
   imageContentSchema,
+  fileContentSchema,
   rawTextInputSchema,
 ]);
 export type InputMessageContent = z.infer<typeof inputMessageContentSchema>;
@@ -139,6 +149,7 @@ export const modelInferenceInputMessageContentSchema = z.discriminatedUnion(
     toolCallContentSchema,
     toolResultContentSchema,
     imageContentSchema,
+    fileContentSchema,
     rawTextInputSchema,
   ],
 );
@@ -150,8 +161,8 @@ export const resolvedInputMessageContentSchema = z.discriminatedUnion("type", [
   textInputSchema,
   toolCallContentSchema,
   toolResultContentSchema,
-  resolvedImageContentSchema,
-  resolvedImageContentErrorSchema,
+  resolvedFileContentSchema,
+  resolvedFileContentErrorSchema,
   rawTextInputSchema,
 ]);
 
@@ -221,6 +232,7 @@ export const contentBlockSchema = z.discriminatedUnion("type", [
   toolCallContentSchema,
   toolResultContentSchema,
   imageContentSchema,
+  fileContentSchema,
   rawTextInputSchema,
 ]);
 export type ContentBlock = z.infer<typeof contentBlockSchema>;

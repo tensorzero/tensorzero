@@ -546,14 +546,6 @@ fn validate_clickhouse_url_get_db_name(url: &Url) -> Result<Option<String>, Erro
         .into());
     }
 
-    // Validate the port
-    if url.port().is_none() {
-        return Err(ErrorDetails::Config {
-            message: "Missing port in ClickHouse URL".to_string(),
-        }
-        .into());
-    }
-
     // Validate that none of the query strings have key "database"
     if url.query_pairs().any(|(key, _)| key == "database") {
         return Err(ErrorDetails::Config {
@@ -660,15 +652,15 @@ mod tests {
         let result = validate_clickhouse_url_get_db_name(&database_url).unwrap();
         assert_eq!(result, Some("database".to_string()));
 
-        let database_url = Url::parse("http://localhost/").unwrap();
-        let err = validate_clickhouse_url_get_db_name(&database_url).unwrap_err();
-        assert_eq!(
-            err,
-            ErrorDetails::Config {
-                message: "Missing port in ClickHouse URL".to_string(),
-            }
-            .into()
-        );
+        let database_url = Url::parse("https://localhost:443/").unwrap();
+        assert!(validate_clickhouse_url_get_db_name(&database_url)
+            .unwrap()
+            .is_none());
+
+        let database_url = Url::parse("http://default:password@clickhouse.cloud.io:443").unwrap();
+        assert!(validate_clickhouse_url_get_db_name(&database_url)
+            .unwrap()
+            .is_none());
 
         let database_url = Url::parse("http://localhost:8123").unwrap();
         assert!(validate_clickhouse_url_get_db_name(&database_url).is_ok());

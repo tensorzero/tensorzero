@@ -35,11 +35,11 @@ fn import_text_content_block(py: Python<'_>) -> PyResult<&Py<PyAny>> {
     })
 }
 
-fn import_image_content_block(py: Python<'_>) -> PyResult<&Py<PyAny>> {
-    static IMAGE_CONTENT_BLOCK: GILOnceCell<Py<PyAny>> = GILOnceCell::new();
-    IMAGE_CONTENT_BLOCK.get_or_try_init::<_, PyErr>(py, || {
+fn import_file_content_block(py: Python<'_>) -> PyResult<&Py<PyAny>> {
+    static FILE_CONTENT_BLOCK: GILOnceCell<Py<PyAny>> = GILOnceCell::new();
+    FILE_CONTENT_BLOCK.get_or_try_init::<_, PyErr>(py, || {
         let self_module = PyModule::import(py, "tensorzero.types")?;
-        Ok(self_module.getattr("ImageBase64")?.unbind())
+        Ok(self_module.getattr("FileBase64")?.unbind())
     })
 }
 
@@ -84,13 +84,13 @@ pub fn content_block_to_python(
             let text_content_block = import_text_content_block(py)?;
             text_content_block.call1(py, (text.text.clone(),))
         }
-        ContentBlock::Image(image) => {
-            let image_content_block = import_image_content_block(py)?;
-            image_content_block.call1(
+        ContentBlock::File(file) => {
+            let file_content_block = import_file_content_block(py)?;
+            file_content_block.call1(
                 py,
                 (
-                    image.image.data.clone().unwrap_or("".to_string()),
-                    image.image.mime_type.to_string(),
+                    file.file.data.clone().unwrap_or("".to_string()),
+                    file.file.mime_type.to_string(),
                 ),
             )
         }

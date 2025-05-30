@@ -76,9 +76,23 @@ class ImageBase64(ContentBlock):
 
 
 @dataclass
+class FileBase64(ContentBlock):
+    data: str
+    mime_type: str
+    type: str = "file"
+
+
+@dataclass
 class ImageUrl(ContentBlock):
+    # This class does not subclass ContentBlock since it cannot be output by the API.
     url: str
     type: str = "image"
+
+
+@dataclass
+class FileUrl(ContentBlock):
+    url: str
+    type: str = "file"
 
 
 @dataclass

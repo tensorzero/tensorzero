@@ -32,9 +32,9 @@ use tensorzero_internal::inference::types::TextKind;
 use tensorzero_internal::{
     cache::CacheEnabledMode,
     inference::types::{
-        resolved_input::ImageWithPath,
+        resolved_input::FileWithPath,
         storage::{StorageKind, StoragePath},
-        Base64Image, ContentBlock, ContentBlockChatOutput, Image, ImageKind, RequestMessage, Role,
+        Base64File, ContentBlock, ContentBlockChatOutput, File, FileKind, RequestMessage, Role,
         Text,
     },
     tool::{ToolCall, ToolResult},
@@ -87,6 +87,7 @@ pub struct E2ETestProviders {
     pub json_mode_off_inference: Vec<E2ETestProvider>,
 
     pub image_inference: Vec<E2ETestProvider>,
+    pub pdf_inference: Vec<E2ETestProvider>,
 
     pub shorthand_inference: Vec<E2ETestProvider>,
 }
@@ -203,6 +204,7 @@ macro_rules! generate_provider_tests {
         use $crate::providers::common::test_streaming_invalid_request_with_provider;
         use $crate::providers::common::test_json_mode_off_inference_request_with_provider;
         use $crate::providers::common::test_multiple_text_blocks_in_message_with_provider;
+        use $crate::providers::common::test_pdf_inference_with_provider_filesystem;
 
         #[tokio::test]
         async fn test_simple_inference_request() {
@@ -486,8 +488,16 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[tokio::test(flavor = "multi_thread")]
+        async fn test_pdf_inference_store_filesystem() {
+            let providers = $func().await.pdf_inference;
+            for provider in providers {
+                test_pdf_inference_with_provider_filesystem(provider).await;
+            }
+        }
 
-        #[tokio::test]
+
+        #[tokio::test(flavor = "multi_thread")]
         async fn test_image_inference_store_filesystem() {
             let providers = $func().await.image_inference;
             for provider in providers {
@@ -496,7 +506,7 @@ macro_rules! generate_provider_tests {
         }
 
 
-        #[tokio::test]
+        #[tokio::test(flavor = "multi_thread")]
         async fn test_image_url_inference_store_filesystem() {
             let providers = $func().await.image_inference;
             for provider in providers {
@@ -505,7 +515,7 @@ macro_rules! generate_provider_tests {
         }
 
 
-        #[tokio::test]
+        #[tokio::test(flavor = "multi_thread")]
         async fn test_image_inference_store_amazon_s3() {
             let providers = $func().await.image_inference;
             for provider in providers {
@@ -577,7 +587,25 @@ macro_rules! generate_provider_tests {
     };
 }
 
+pub const PDF_FUNCTION_CONFIG: &str = r#"
+[functions.pdf_test]
+type = "chat"
+
+[functions.pdf_test.variants.openai]
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"
+
+[functions.pdf_test.variants.gcp_vertex_gemini]
+type = "chat_completion"
+model = "gcp_vertex_gemini::projects/tensorzero-public/locations/us-central1/publishers/google/models/gemini-2.0-flash-lite"
+
+[functions.pdf_test.variants.anthropic]
+type = "chat_completion"
+model = "anthropic::claude-3-5-sonnet-20241022"
+"#;
+
 pub static FERRIS_PNG: &[u8] = include_bytes!("./ferris.png");
+pub static DEEPSEEK_PAPER_PDF: &[u8] = include_bytes!("./deepseek_paper.pdf");
 
 pub const IMAGE_FUNCTION_CONFIG: &str = r#"
 [functions.image_test]
@@ -645,18 +673,22 @@ pub async fn test_image_url_inference_with_provider_filesystem(provider: E2ETest
 
     // Check that image was stored in filesystem
     let result = std::fs::read(temp_dir.path().join(
-        "observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png",
+        "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png",
     ))
     .unwrap();
     assert_eq!(result, FERRIS_PNG);
 }
 
-async fn check_object_fetch(data: AppStateData, storage_path: &StoragePath) {
-    check_object_fetch_via_embedded(data.clone(), storage_path).await;
-    check_object_fetch_via_gateway(storage_path).await;
+async fn check_object_fetch(data: AppStateData, storage_path: &StoragePath, expected_data: &[u8]) {
+    check_object_fetch_via_embedded(data.clone(), storage_path, expected_data).await;
+    check_object_fetch_via_gateway(storage_path, expected_data).await;
 }
 
-async fn check_object_fetch_via_embedded(data: AppStateData, storage_path: &StoragePath) {
+async fn check_object_fetch_via_embedded(
+    data: AppStateData,
+    storage_path: &StoragePath,
+    expected_data: &[u8],
+) {
     let res = get_object_handler(
         State(data),
         Query(PathParams {
@@ -668,13 +700,13 @@ async fn check_object_fetch_via_embedded(data: AppStateData, storage_path: &Stor
     assert_eq!(
         res.0,
         ObjectResponse {
-            data: BASE64_STANDARD.encode(FERRIS_PNG),
+            data: BASE64_STANDARD.encode(expected_data),
             reused_object_store: true,
         }
     );
 }
 
-async fn check_object_fetch_via_gateway(storage_path: &StoragePath) {
+async fn check_object_fetch_via_gateway(storage_path: &StoragePath, expected_data: &[u8]) {
     // Try using the running HTTP gateway (which is *not* configured with an object store)
     // to fetch the `StoragePath`
     let client = reqwest::Client::new();
@@ -691,10 +723,53 @@ async fn check_object_fetch_via_gateway(storage_path: &StoragePath) {
     assert_eq!(
         response_json,
         serde_json::json!({
-            "data": BASE64_STANDARD.encode(FERRIS_PNG),
+            "data": BASE64_STANDARD.encode(expected_data),
             "reused_object_store": false,
         })
     );
+}
+
+/// We already test all of our object store providers with image inputs,
+/// so there's no need to re-test them with PDF inputs.
+/// All of our PDF-capable providers are tested against the filesystem object store.
+pub async fn test_pdf_inference_with_provider_filesystem(provider: E2ETestProvider) {
+    let temp_dir = tempfile::tempdir().unwrap();
+    println!("Temporary pdf dir: {}", temp_dir.path().to_string_lossy());
+    let (client, storage_path) = test_base64_pdf_inference_with_provider_and_store(
+        provider,
+        &StorageKind::Filesystem {
+            path: temp_dir.path().to_string_lossy().to_string(),
+        },
+        &format!(
+            r#"
+        [object_storage]
+        type = "filesystem"
+        path = "{}"
+
+        {PDF_FUNCTION_CONFIG}
+        "#,
+            temp_dir.path().to_string_lossy()
+        ),
+        "",
+    )
+    .await;
+
+    // Check that PDF was stored in filesystem
+    let result = std::fs::read(temp_dir.path().join(
+        "observability/files/3e127d9a726f6be0fd81d73ccea97d96ec99419f59650e01d49183cd3be999ef.pdf",
+    ))
+    .unwrap();
+    // Don't use assert_eq! because we don't want to print the entire PDF if the check fails
+    assert!(
+        result == DEEPSEEK_PAPER_PDF,
+        "PDF in object store does not match expect pdf"
+    );
+    check_object_fetch(
+        client.get_app_state_data().unwrap().clone(),
+        &storage_path,
+        DEEPSEEK_PAPER_PDF,
+    )
+    .await;
 }
 
 pub async fn test_image_inference_with_provider_filesystem(provider: E2ETestProvider) {
@@ -721,11 +796,16 @@ pub async fn test_image_inference_with_provider_filesystem(provider: E2ETestProv
 
     // Check that image was stored in filesystem
     let result = std::fs::read(temp_dir.path().join(
-        "observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png",
+        "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png",
     ))
     .unwrap();
     assert_eq!(result, FERRIS_PNG);
-    check_object_fetch(client.get_app_state_data().unwrap().clone(), &storage_path).await;
+    check_object_fetch(
+        client.get_app_state_data().unwrap().clone(),
+        &storage_path,
+        FERRIS_PNG,
+    )
+    .await;
 }
 
 pub async fn test_image_inference_with_provider_amazon_s3(provider: E2ETestProvider) {
@@ -775,6 +855,7 @@ pub async fn test_image_inference_with_provider_amazon_s3(provider: E2ETestProvi
     check_object_fetch(
         tensorzero_client.get_app_state_data().unwrap().clone(),
         &storage_path,
+        FERRIS_PNG,
     )
     .await;
 
@@ -796,7 +877,7 @@ pub async fn test_image_inference_with_provider_s3_compatible(
     prefix: &str,
 ) -> (tensorzero::Client, String, StoragePath) {
     let expected_key =
-        format!("{prefix}observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png");
+        format!("{prefix}observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png");
 
     // Check that object is deleted
     let err = client
@@ -883,7 +964,7 @@ pub async fn test_url_image_inference_with_provider_and_store(
                             ClientInputMessageContent::Text(TextKind::Text {
                                 text: "Describe the contents of the image".to_string(),
                             }),
-                            ClientInputMessageContent::Image(Image::Url {
+                            ClientInputMessageContent::File(File::Url {
                                 url: image_url.clone(),
                             }),
                         ],
@@ -916,6 +997,68 @@ pub async fn test_url_image_inference_with_provider_and_store(
     }
 }
 
+pub async fn test_base64_pdf_inference_with_provider_and_store(
+    provider: E2ETestProvider,
+    kind: &StorageKind,
+    config_toml: &str,
+    prefix: &str,
+) -> (tensorzero::Client, StoragePath) {
+    let episode_id = Uuid::now_v7();
+
+    let pdf_data = BASE64_STANDARD.encode(DEEPSEEK_PAPER_PDF);
+
+    let client = make_embedded_gateway_with_config(config_toml).await;
+    let mut storage_path = None;
+
+    for should_be_cached in [false, true] {
+        let response = client
+            .inference(ClientInferenceParams {
+                function_name: Some("pdf_test".to_string()),
+                variant_name: Some(provider.variant_name.clone()),
+                episode_id: Some(episode_id),
+                input: ClientInput {
+                    system: None,
+                    messages: vec![ClientInputMessage {
+                        role: Role::User,
+                        content: vec![
+                            ClientInputMessageContent::Text(TextKind::Text {
+                                text: "Describe the contents of the PDF".to_string(),
+                            }),
+                            ClientInputMessageContent::File(File::Base64 {
+                                mime_type: FileKind::Pdf,
+                                data: pdf_data.clone(),
+                            }),
+                        ],
+                    }],
+                },
+                cache_options: CacheParamsOptions {
+                    enabled: CacheEnabledMode::On,
+                    max_age_s: Some(10),
+                },
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+
+        let InferenceOutput::NonStreaming(response) = response else {
+            panic!("Expected non-streaming inference response");
+        };
+
+        let latest_storage_path = check_base64_pdf_response(
+            response,
+            Some(episode_id),
+            &provider,
+            should_be_cached,
+            kind,
+            prefix,
+        )
+        .await;
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        storage_path = Some(latest_storage_path);
+    }
+    (client, storage_path.unwrap())
+}
+
 pub async fn test_base64_image_inference_with_provider_and_store(
     provider: E2ETestProvider,
     kind: &StorageKind,
@@ -943,8 +1086,8 @@ pub async fn test_base64_image_inference_with_provider_and_store(
                             ClientInputMessageContent::Text(TextKind::Text {
                                 text: "Describe the contents of the image".to_string(),
                             }),
-                            ClientInputMessageContent::Image(Image::Base64 {
-                                mime_type: ImageKind::Png,
+                            ClientInputMessageContent::File(File::Base64 {
+                                mime_type: FileKind::Png,
                                 data: image_data.clone(),
                             }),
                         ],
@@ -1578,6 +1721,162 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
     check_simple_inference_response(response_json, Some(episode_id), &provider, false, true).await;
 }
 
+pub async fn check_base64_pdf_response(
+    response: InferenceResponse,
+    episode_id: Option<Uuid>,
+    provider: &E2ETestProvider,
+    should_be_cached: bool,
+    kind: &StorageKind,
+    prefix: &str,
+) -> StoragePath {
+    let inference_id = response.inference_id();
+
+    let episode_id_response = response.episode_id();
+    if let Some(episode_id) = episode_id {
+        assert_eq!(episode_id_response, episode_id);
+    }
+
+    let InferenceResponse::Chat(response) = response else {
+        panic!("Expected chat inference response");
+    };
+
+    let content = response.content;
+    assert_eq!(content.len(), 1);
+    let content_block = content.first().unwrap();
+    let ContentBlockChatOutput::Text(text) = content_block else {
+        panic!("Expected text content block: {content_block:?}");
+    };
+    let content = &text.text;
+    assert!(
+        content.to_lowercase().contains("deepseek"),
+        "Content should contain 'deepseek': {content}"
+    );
+
+    let usage = response.usage;
+    let input_tokens = usage.input_tokens;
+    let output_tokens = usage.output_tokens;
+    if should_be_cached {
+        assert_eq!(input_tokens, 0);
+        assert_eq!(output_tokens, 0);
+    } else {
+        assert!(input_tokens > 0);
+        assert!(output_tokens > 0);
+    }
+
+    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Check if ClickHouse is ok - ChatInference Table
+    let clickhouse = get_clickhouse().await;
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    println!("ClickHouse - ChatInference: {result:#?}");
+
+    let id = result.get("id").unwrap().as_str().unwrap();
+    let id = Uuid::parse_str(id).unwrap();
+    assert_eq!(id, inference_id);
+
+    let function_name = result.get("function_name").unwrap().as_str().unwrap();
+    assert_eq!(function_name, "pdf_test");
+
+    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
+    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
+    if let Some(episode_id) = episode_id {
+        assert_eq!(retrieved_episode_id, episode_id);
+    }
+
+    let input: Value =
+        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+
+    let kind_json = serde_json::to_value(kind).unwrap();
+
+    let correct_input = json!({
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "value": "Describe the contents of the PDF"},
+                    {
+                        "type": "file",
+                        "file": {
+                            "url": null,
+                            "mime_type": "application/pdf",
+                        },
+                        "storage_path": {
+                            "kind": kind_json,
+                            "path": format!("{prefix}observability/files/3e127d9a726f6be0fd81d73ccea97d96ec99419f59650e01d49183cd3be999ef.pdf"),
+                        },
+                    }
+                ]
+            }
+        ]
+    });
+    assert_eq!(input, correct_input);
+
+    // Check the ModelInference Table
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    println!("ClickHouse - ModelInference: {result:#?}");
+
+    let model_inference_id = result.get("id").unwrap().as_str().unwrap();
+    assert!(Uuid::parse_str(model_inference_id).is_ok());
+
+    let expected_storage_path = StoragePath {
+        kind: kind.clone(),
+        path: Path::parse(format!("{prefix}observability/files/3e127d9a726f6be0fd81d73ccea97d96ec99419f59650e01d49183cd3be999ef.pdf")).unwrap(),
+    };
+
+    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
+    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    assert_eq!(
+        input_messages,
+        vec![RequestMessage {
+            role: Role::User,
+            content: vec![
+                ContentBlock::Text(Text {
+                    text: "Describe the contents of the PDF".to_string(),
+                }),
+                ContentBlock::File(FileWithPath {
+                    file: Base64File {
+                        url: None,
+                        data: None,
+                        mime_type: FileKind::Pdf,
+                    },
+                    storage_path: expected_storage_path.clone(),
+                })
+            ]
+        },]
+    );
+
+    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
+    assert_eq!(inference_id_result, inference_id);
+
+    let model_name = result.get("model_name").unwrap().as_str().unwrap();
+    assert_eq!(model_name, provider.model_name);
+    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
+    assert_eq!(model_provider_name, provider.model_provider_name);
+
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(
+        raw_request.contains("<TENSORZERO_FILE_0>"),
+        "Unexpected raw_request: {raw_request}"
+    );
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
+    assert_eq!(
+        result.get("cached").unwrap().as_bool().unwrap(),
+        should_be_cached
+    );
+    expected_storage_path
+}
+
 pub async fn check_base64_image_response(
     response: InferenceResponse,
     episode_id: Option<Uuid>,
@@ -1656,14 +1955,14 @@ pub async fn check_base64_image_response(
                 "content": [
                     {"type": "text", "value": "Describe the contents of the image"},
                     {
-                        "type": "image",
-                        "image": {
+                        "type": "file",
+                        "file": {
                             "url": null,
                             "mime_type": "image/png",
                         },
                         "storage_path": {
                             "kind": kind_json,
-                            "path": format!("{prefix}observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"),
+                            "path": format!("{prefix}observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"),
                         },
                     }
                 ]
@@ -1684,7 +1983,7 @@ pub async fn check_base64_image_response(
 
     let expected_storage_path = StoragePath {
         kind: kind.clone(),
-        path: Path::parse(format!("{prefix}observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png")).unwrap(),
+        path: Path::parse(format!("{prefix}observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png")).unwrap(),
     };
 
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
@@ -1697,11 +1996,11 @@ pub async fn check_base64_image_response(
                 ContentBlock::Text(Text {
                     text: "Describe the contents of the image".to_string(),
                 }),
-                ContentBlock::Image(ImageWithPath {
-                    image: Base64Image {
+                ContentBlock::File(FileWithPath {
+                    file: Base64File {
                         url: None,
                         data: None,
-                        mime_type: ImageKind::Png,
+                        mime_type: FileKind::Png,
                     },
                     storage_path: expected_storage_path.clone(),
                 })
@@ -1720,7 +2019,7 @@ pub async fn check_base64_image_response(
 
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(
-        raw_request.contains("<TENSORZERO_IMAGE_0>"),
+        raw_request.contains("<TENSORZERO_FILE_0>"),
         "Unexpected raw_request: {raw_request}"
     );
     assert!(
@@ -1812,14 +2111,14 @@ pub async fn check_url_image_response(
                 "content": [
                     {"type": "text", "value": "Describe the contents of the image"},
                     {
-                        "type": "image",
-                        "image": {
+                        "type": "file",
+                        "file": {
                             "url": image_url.to_string(),
                             "mime_type": "image/png",
                         },
                         "storage_path": {
                             "kind": kind_json,
-                            "path": "observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"
+                            "path": "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"
                         },
                     }
                 ]
@@ -1847,15 +2146,15 @@ pub async fn check_url_image_response(
                 role: Role::User,
                 content: vec![ContentBlock::Text(Text {
                     text: "Describe the contents of the image".to_string(),
-                }), ContentBlock::Image(ImageWithPath {
-                    image: Base64Image {
+                }), ContentBlock::File(FileWithPath {
+                    file: Base64File {
                         url: Some(image_url.clone()),
                         data: None,
-                        mime_type: ImageKind::Png,
+                        mime_type: FileKind::Png,
                     },
                     storage_path: StoragePath {
                         kind: kind.clone(),
-                        path: Path::parse("observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png").unwrap(),
+                        path: Path::parse("observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png").unwrap(),
                     }
                 })]
             },
@@ -1873,7 +2172,7 @@ pub async fn check_url_image_response(
 
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(
-        raw_request.contains("<TENSORZERO_IMAGE_0>"),
+        raw_request.contains("<TENSORZERO_FILE_0>"),
         "Unexpected raw_request: {raw_request}"
     );
     assert!(
@@ -2184,14 +2483,14 @@ pub async fn check_simple_image_inference_response(
                 "content": [
                     {"type": "text", "value": "What kind of animal is in this image?"},
                     {
-                        "type": "image",
-                        "image": {
+                        "type": "file",
+                        "file": {
                             "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
                             "mime_type": "image/png",
                         },
                         "storage_path": {
                             "kind": {"type": "disabled"},
-                            "path": "observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"
+                            "path": "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"
                         }
                     }
                 ]

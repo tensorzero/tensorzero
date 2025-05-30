@@ -6,8 +6,8 @@ use tensorzero::{
 };
 use tensorzero_internal::{
     inference::types::{
-        resolved_input::ImageWithPath, Base64Image, ContentBlock, ContentBlockChatOutput,
-        ContentBlockOutput, ImageKind, JsonInferenceOutput, ResolvedInput, ResolvedInputMessage,
+        resolved_input::FileWithPath, Base64File, ContentBlock, ContentBlockChatOutput,
+        ContentBlockOutput, FileKind, JsonInferenceOutput, ResolvedInput, ResolvedInputMessage,
         ResolvedInputMessageContent,
     },
     tool::{ToolCallConfigDatabaseInsert, ToolCallOutput, ToolChoice},
@@ -228,10 +228,10 @@ pub async fn test_render_inferences_normal() {
                         ResolvedInputMessageContent::Text {
                             value: json!("What is this a picture of?"),
                         },
-                        ResolvedInputMessageContent::Image(ImageWithPath {
-                            image: Base64Image {
+                        ResolvedInputMessageContent::File(FileWithPath {
+                            file: Base64File {
                                 url: None,
-                                mime_type: ImageKind::Png,
+                                mime_type: FileKind::Png,
                                 data: None,
                             },
                             storage_path: StoragePath {
@@ -377,12 +377,12 @@ pub async fn test_render_inferences_normal() {
     };
     assert_eq!(text.text, "What is this a picture of?");
 
-    let ContentBlock::Image(image) = &fourth_message.content[1] else {
-        panic!("Expected image content");
+    let ContentBlock::File(file) = &fourth_message.content[1] else {
+        panic!("Expected file content");
     };
 
     // Check that the base64 string is > 1000 chars
-    if let Some(data) = &image.image.data {
+    if let Some(data) = &file.file.data {
         assert!(data.len() > 1000);
     } else {
         panic!("Expected base64 data");

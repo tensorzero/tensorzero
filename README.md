@@ -111,7 +111,6 @@ It provides a **data & learning flywheel for LLMs** by unifying:
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/hyperbolic">Hyperbolic</a></b></li>
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/mistral">Mistral</a></b></li>
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/openai">OpenAI</a></b></li>
-        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/openrouter">OpenRouter</a></b></li>
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/together">Together</a></b></li>
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/vllm">vLLM</a></b></li>
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/xai">xAI</a></b></li>
@@ -350,7 +349,7 @@ Optimize your prompts programmatically using research-driven optimization techni
     <td width="50%" align="center" valign="middle"><img src="https://github.com/user-attachments/assets/d81a7c37-382f-4c46-840f-e6c2593301db" alt="MIPROv2 diagram"></td>
     <td width="50%" align="center" valign="middle">
       TensorZero comes with several optimization recipes, but you can also easily create your own.
-      This example shows to optimize a TensorZero function using an arbitrary tool — here, DSPy, a popular library for automated prompt engineering.
+      This example shows how to optimize a TensorZero function using an arbitrary tool — here, DSPy, a popular library for automated prompt engineering.
     </td>
   </tr>
 </table>

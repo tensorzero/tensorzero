@@ -35,7 +35,7 @@ use tensorzero_internal::{
     gateway_util::ShutdownHandle,
     inference::types::{
         extra_body::UnfilteredInferenceExtraBody, extra_headers::UnfilteredInferenceExtraHeaders,
-        image::serialize_with_image_data,
+        file::serialize_with_file_data,
     },
 };
 use tensorzero_rust::{
@@ -1512,7 +1512,7 @@ impl AsyncTensorZeroGateway {
                     for inference in inferences {
                         dict_inferences.push(serialize_to_dict(
                             py,
-                            serialize_with_image_data(&inference).map_err(|e| {
+                            serialize_with_file_data(&inference).map_err(|e| {
                                 convert_error(py, TensorZeroError::Other { source: e.into() })
                             })?,
                         )?);
