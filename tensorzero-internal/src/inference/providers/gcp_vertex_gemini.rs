@@ -40,8 +40,8 @@ use crate::inference::types::{
     ProviderInferenceResponseChunk, RequestMessage, Usage,
 };
 use crate::inference::types::{
-    ContentBlock, ContentBlockChunk, ContentBlockOutput, FinishReason, FlattenUnknown, Latency,
-    ModelInferenceRequestJsonMode, ProviderInferenceResponseArgs,
+    ContentBlock, ContentBlockChunk, ContentBlockOutput, FileKind, FinishReason, FlattenUnknown,
+    Latency, ModelInferenceRequestJsonMode, ProviderInferenceResponseArgs,
     ProviderInferenceResponseStreamInner, Role, Text, TextChunk,
 };
 use crate::model::{
@@ -1494,7 +1494,11 @@ impl<'a> TryFrom<&'a ContentBlock> for Option<FlattenUnknown<'a, GCPVertexGemini
                 file,
                 storage_path: _,
             }) => {
-                file.mime_type.require_image(PROVIDER_TYPE)?;
+                // All of our FileKinds are supported by GCP Vertex Gemini
+                // If we add more, make sure to check their docs to see if they support it.
+                match file.mime_type {
+                    FileKind::Png | FileKind::Jpeg | FileKind::WebP | FileKind::Pdf => {}
+                }
                 Ok(Some(FlattenUnknown::Normal(
                     GCPVertexGeminiContentPart::InlineData {
                         inline_data: GCPVertexInlineData {

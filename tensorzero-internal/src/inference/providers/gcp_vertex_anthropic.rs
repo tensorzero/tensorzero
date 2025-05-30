@@ -32,8 +32,8 @@ use crate::model::{build_creds_caching_default_with_fn, CredentialLocation};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use super::anthropic::{
-    prefill_json_chunk_response, prefill_json_response, AnthropicImageSource, AnthropicImageType,
-    AnthropicMessageDelta, AnthropicStopReason,
+    prefill_json_chunk_response, prefill_json_response, AnthropicDocumentSource,
+    AnthropicDocumentType, AnthropicMessageDelta, AnthropicStopReason,
 };
 use super::gcp_vertex_gemini::{
     default_api_key_location, parse_shorthand_url, GCPVertexCredentials, ShorthandUrl,
@@ -503,7 +503,7 @@ enum GCPVertexAnthropicMessageContent<'a> {
         text: &'a str,
     },
     Image {
-        source: AnthropicImageSource,
+        source: AnthropicDocumentSource,
     },
     ToolResult {
         tool_use_id: &'a str,
@@ -575,8 +575,8 @@ impl<'a> TryFrom<&'a ContentBlock>
                 file.mime_type.require_image(PROVIDER_TYPE)?;
                 Ok(Some(FlattenUnknown::Normal(
                     GCPVertexAnthropicMessageContent::Image {
-                        source: AnthropicImageSource {
-                            r#type: AnthropicImageType::Base64,
+                        source: AnthropicDocumentSource {
+                            r#type: AnthropicDocumentType::Base64,
                             media_type: file.mime_type,
                             data: file.data()?.clone(),
                         },
