@@ -51,6 +51,28 @@ impl FileKind {
     }
 }
 
+impl TryFrom<&str> for FileKind {
+    type Error = Error;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        let extension = value.split('.').last().ok_or_else(|| {
+            Error::new(ErrorDetails::MissingFileExtension {
+                file_name: value.to_string(),
+            })
+        })?;
+        match extension {
+            "jpg" => Ok(FileKind::Jpeg),
+            "jpeg" => Ok(FileKind::Jpeg),
+            "png" => Ok(FileKind::Png),
+            "webp" => Ok(FileKind::WebP),
+            "pdf" => Ok(FileKind::Pdf),
+            _ => Err(Error::new(ErrorDetails::UnsupportedFileExtension {
+                extension: extension.to_string(),
+            })),
+        }
+    }
+}
+
 impl Display for FileKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
