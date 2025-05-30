@@ -110,6 +110,10 @@ def main():
     with concurrent.futures.ThreadPoolExecutor() as executor:
         executor.map(process_fixture, FIXTURES)
 
+    for fixture in FIXTURES:
+        print(f"Fixture {fixture}:")
+        os.system(f"parquet-tools inspect {S3_FIXTURES_DIR / fixture}")
+
 
 if __name__ == "__main__":
     main()
