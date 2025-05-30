@@ -52,6 +52,7 @@ import { HumanFeedbackModal } from "~/components/feedback/HumanFeedbackModal";
 import { HumanFeedbackForm } from "~/components/feedback/HumanFeedbackForm";
 import { isServerRequestError } from "~/utils/common";
 import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
+import { codeToHtml } from "shiki";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { inference_id } = params;
@@ -117,8 +118,20 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     });
   }
 
+  const [inferenceParams, toolParams] = await Promise.all([
+    processJson(
+      inference.inference_params,
+      `inference params: ${inference_id}`,
+    ),
+    inference.function_type === "chat"
+      ? processJson(inference.tool_params, `tool params: ${inference_id}`)
+      : Promise.resolve(null),
+  ]);
+
   return {
     inference,
+    inferenceParams,
+    toolParams,
     model_inferences,
     feedback,
     feedback_bounds,
@@ -201,6 +214,8 @@ type ModalType = "human-feedback" | "variant-response" | null;
 export default function InferencePage({ loaderData }: Route.ComponentProps) {
   const {
     inference,
+    inferenceParams,
+    toolParams,
     model_inferences,
     feedback,
     feedback_bounds,
@@ -411,13 +426,13 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
 
         <SectionLayout>
           <SectionHeader heading="Inference Parameters" />
-          <ParameterCard parameters={inference.inference_params} />
+          <ParameterCard parameters={inferenceParams.raw} />
         </SectionLayout>
 
         {inference.function_type === "chat" && (
           <SectionLayout>
             <SectionHeader heading="Tool Parameters" />
-            <ParameterCard parameters={inference.tool_params} />
+            {toolParams && <ParameterCard parameters={toolParams.raw} />}
           </SectionLayout>
         )}
 
@@ -514,4 +529,28 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
       </div>
     </div>
   );
+}
+
+async function processJson(object: object, objectRef: string) {
+  let raw: string | null = null;
+  let html: string | null = null;
+  try {
+    raw = JSON.stringify(object, null, 2);
+    html = await highlightCode(raw).catch((error) => {
+      console.error(
+        `Syntax error highlighting error for ${objectRef}. Using raw JSON instead.`,
+        error,
+      );
+      return null;
+    });
+  } catch {
+    throw data(`Failed to parse JSON for ${objectRef}`, { status: 500 });
+  }
+
+  return { raw, html };
+}
+
+async function highlightCode(code: string, args?: { lang?: "json" }) {
+  const { lang = "json" } = args || {};
+  return await codeToHtml(code, { lang, theme: "vitesse-dark" });
 }
