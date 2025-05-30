@@ -27,6 +27,8 @@ pub enum FileKind {
     Png,
     #[serde(rename = "image/webp")]
     WebP,
+    #[serde(rename = "application/pdf")]
+    Pdf,
 }
 
 impl FileKind {
@@ -44,6 +46,7 @@ impl FileKind {
     pub fn is_image(&self) -> bool {
         match self {
             FileKind::Jpeg | FileKind::Png | FileKind::WebP => true,
+            FileKind::Pdf => false,
         }
     }
 }
@@ -54,6 +57,7 @@ impl Display for FileKind {
             FileKind::Jpeg => write!(f, "image/jpeg"),
             FileKind::Png => write!(f, "image/png"),
             FileKind::WebP => write!(f, "image/webp"),
+            FileKind::Pdf => write!(f, "application/pdf"),
         }
     }
 }
