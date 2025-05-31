@@ -317,6 +317,7 @@ impl MetricConfig {
             MetricConfigLevel::Inference => "id",
             MetricConfigLevel::Episode => "episode_id",
         }
+    }
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
