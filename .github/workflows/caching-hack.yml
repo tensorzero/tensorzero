@@ -15,3 +15,20 @@ on:
 jobs:
   check-python-client-build:
     uses: ./.github/workflows/python-client-build.yml
+
+  build-gateway:
+    strategy:
+      matrix:
+        runner:
+          - ubuntu-latest
+          - windows-latest
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
+        with:
+          cache-provider: "buildjet"
+          # We use this cache key from other jobs that need to build the gateway
+          shared-key: "build-gateway-cache"
+      - run: cargo build-e2e
