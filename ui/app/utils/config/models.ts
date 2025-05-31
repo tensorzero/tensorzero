@@ -71,7 +71,8 @@ export type GCPVertexAnthropicProviderConfig = z.infer<
 
 export const GCPVertexGeminiProviderConfigSchema = z.object({
   type: z.literal("gcp_vertex_gemini"),
-  model_id: z.string(),
+  model_id: z.string().optional(), // Exactly one of model_id or endpoint_id must be provided
+  endpoint_id: z.string().optional(),
   location: z.string(),
   project_id: z.string(),
 });
