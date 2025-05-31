@@ -122,7 +122,7 @@ export function SnippetMessage({
   // Default variant - simple wrapper with padding
   return (
     <div className="relative w-full">
-      <div className="bg-bg-primary w-full overflow-hidden rounded-lg p-5">
+      <div className="bg-bg-primary flex w-full flex-col gap-4 overflow-hidden rounded-lg p-5">
         {children}
       </div>
     </div>

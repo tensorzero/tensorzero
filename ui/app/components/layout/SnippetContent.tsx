@@ -107,7 +107,7 @@ export function TextMessage({
   }
 
   return (
-    <div className="relative flex max-w-200 min-w-80 flex-col gap-2">
+    <div className="relative flex min-w-80 flex-col gap-2">
       <Label
         text={label}
         icon={<AlignLeft className="text-fg-muted h-3 w-3" />}
@@ -129,7 +129,7 @@ interface InputTextMessageProps {
 
 export function InputTextMessage({ content }: InputTextMessageProps) {
   return (
-    <div className="flex max-w-200 min-w-80 flex-col gap-1">
+    <div className="flex min-w-80 flex-col gap-1">
       <Label
         text="Text"
         icon={<AlignLeft className="text-fg-muted h-3 w-3" />}
@@ -149,7 +149,7 @@ export function TextMessageWithArguments({
   content,
 }: TextMessageWithArgumentsProps) {
   return (
-    <div className="flex max-w-200 min-w-80 flex-col gap-1.5">
+    <div className="flex min-w-80 flex-col gap-1.5">
       <Label
         text="Text (Arguments)"
         icon={<AlignLeft className="text-fg-muted h-3 w-3" />}
@@ -174,7 +174,7 @@ export function ToolCallMessage({
   toolCallId,
 }: ToolCallMessageProps) {
   return (
-    <div className="flex max-w-200 min-w-80 flex-col gap-1 overflow-x-auto">
+    <div className="flex min-w-80 flex-col gap-1 overflow-x-auto">
       <Label
         text="Tool Call"
         icon={<Terminal className="text-fg-muted h-3 w-3" />}
@@ -212,7 +212,7 @@ export function ToolResultMessage({
   toolResultId,
 }: ToolResultMessageProps) {
   return (
-    <div className="flex max-w-200 min-w-80 flex-col gap-1 overflow-x-auto">
+    <div className="flex min-w-80 flex-col gap-1 overflow-x-auto">
       <Label
         text="Tool Result"
         icon={<ArrowRight className="text-fg-muted h-3 w-3" />}
