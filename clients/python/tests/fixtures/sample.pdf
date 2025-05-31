@@ -1,0 +1,5 @@
+from reportlab.pdfgen import canvas
+
+c = canvas.Canvas("tests/fixtures/sample.pdf")
+c.drawString(100, 750, "This is a test PDF for TensorZero.")
+c.save()

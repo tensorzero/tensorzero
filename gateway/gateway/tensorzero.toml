@@ -1,0 +1,3 @@
+[pdf]
+max_file_size_mb = 10
+allowed_mime_types = ["application/pdf"]
