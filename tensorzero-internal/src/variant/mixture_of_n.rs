@@ -120,12 +120,12 @@ impl Variant for MixtureOfNConfig {
         .into())
     }
 
-    fn validate(
+    async fn validate(
         &self,
         function: &FunctionConfig,
         models: &mut ModelTable,
         embedding_models: &EmbeddingModelTable,
-        templates: &TemplateConfig,
+        templates: &TemplateConfig<'_>,
         function_name: &str,
         variant_name: &str,
     ) -> Result<(), Error> {
@@ -136,31 +136,35 @@ impl Variant for MixtureOfNConfig {
                     name: candidate.to_string(),
                 })
             })?;
-            variant
-                .validate(
-                    function,
-                    models,
-                    embedding_models,
-                    templates,
-                    function_name,
-                    candidate,
-                )
-                .map_err(|e| {
-                    Error::new(ErrorDetails::InvalidCandidate {
-                        variant_name: variant_name.to_string(),
-                        message: e.to_string(),
-                    })
-                })?;
+            // Required by the compiler due to recursion (we call the top-level `validate`)
+            Box::pin(variant.validate(
+                function,
+                models,
+                embedding_models,
+                templates,
+                function_name,
+                candidate,
+            ))
+            .await
+            .map_err(|e| {
+                Error::new(ErrorDetails::InvalidCandidate {
+                    variant_name: variant_name.to_string(),
+                    message: e.to_string(),
+                })
+            })?
         }
         // Validate the evaluator variant
-        self.fuser.inner.validate(
-            function,
-            models,
-            embedding_models,
-            templates,
-            function_name,
-            variant_name,
-        )?;
+        self.fuser
+            .inner
+            .validate(
+                function,
+                models,
+                embedding_models,
+                templates,
+                function_name,
+                variant_name,
+            )
+            .await?;
         Ok(())
     }
 
@@ -370,7 +374,7 @@ async fn inner_fuse_candidates<'a, 'request>(
         }
         .into());
     }
-    let model_config = models.get(&fuser.inner.model)?.ok_or_else(|| {
+    let model_config = models.get(&fuser.inner.model).await?.ok_or_else(|| {
         Error::new(ErrorDetails::UnknownModel {
             name: fuser.inner.model.to_string(),
         })

@@ -458,7 +458,7 @@ fn stream_deepseek(
 
                         let latency = start_time.elapsed();
                         let stream_message = data.and_then(|d| {
-                            deepseek_to_tensorzero_chunk(d, latency, &mut tool_call_ids, &mut tool_call_names)
+                            deepseek_to_tensorzero_chunk(message.data, d, latency, &mut tool_call_ids, &mut tool_call_names)
                         });
                         yield stream_message;
                     }
@@ -515,22 +515,12 @@ struct DeepSeekChatChunk {
 
 /// Maps a DeepSeek chunk to a TensorZero chunk for streaming inferences
 fn deepseek_to_tensorzero_chunk(
+    raw_message: String,
     mut chunk: DeepSeekChatChunk,
     latency: Duration,
     tool_call_ids: &mut Vec<String>,
     tool_names: &mut Vec<String>,
 ) -> Result<ProviderInferenceResponseChunk, Error> {
-    let raw_message = serde_json::to_string(&chunk).map_err(|e| {
-        Error::new(ErrorDetails::InferenceServer {
-            message: format!(
-                "Error parsing response from DeepSeek: {}",
-                DisplayOrDebugGateway::new(e)
-            ),
-            raw_request: None,
-            raw_response: Some(serde_json::to_string(&chunk).unwrap_or_default()),
-            provider_type: PROVIDER_TYPE.to_string(),
-        })
-    })?;
     if chunk.choices.len() > 1 {
         return Err(ErrorDetails::InferenceServer {
             message: "Response has invalid number of choices: {}. Expected 1.".to_string(),

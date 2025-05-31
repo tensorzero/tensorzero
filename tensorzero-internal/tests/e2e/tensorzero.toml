@@ -188,7 +188,7 @@ type = "gcp_vertex_gemini"
 model_id = "gemini-2.0-flash-001"
 location = "us-central1"
 project_id = "tensorzero-public"
-
+credential_location = "sdk"
 
 [models."gemini-2.5-pro-preview-05-06"]
 routing = ["gcp_vertex_gemini"]
@@ -978,6 +978,13 @@ max_tokens = 100
 [functions.basic_test.variants.gcp_vertex_gemini_shorthand_endpoint]
 type = "chat_completion"
 model = "gcp_vertex_gemini::projects/tensorzero-public/locations/us-central1/endpoints/945488740422254592"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+# Note - GCP doesn't allow fine-tuning any Anthropic models, so we just test the 'publishers/anthropic' shorthand
+[functions.basic_test.variants.gcp_vertex_anthropic_shorthand]
+type = "chat_completion"
+model = "gcp_vertex_anthropic::projects/tensorzero-public/locations/us-central1/publishers/anthropic/models/claude-3-haiku@20240307"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 

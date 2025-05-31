@@ -304,18 +304,16 @@ impl Migration for Migration0009<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        "\
-            -- Drop the materialized views\n\
-            DROP VIEW IF EXISTS BooleanMetricFeedbackByTargetIdView;\n\
-            DROP VIEW IF EXISTS CommentFeedbackByTargetIdView;\n\
-            DROP VIEW IF EXISTS DemonstrationFeedbackByInferenceIdView;\n\
-            DROP VIEW IF EXISTS FloatMetricFeedbackByTargetIdView;\n\
-            \n\
-            -- Drop the tables\n\
-            DROP TABLE IF EXISTS BooleanMetricFeedbackByTargetId;\n\
-            DROP TABLE IF EXISTS CommentFeedbackByTargetId;\n\
-            DROP TABLE IF EXISTS DemonstrationFeedbackByInferenceId;\n\
-            DROP TABLE IF EXISTS FloatMetricFeedbackByTargetId;\n\
+        "/* Drop the materialized views */\
+            DROP VIEW IF EXISTS BooleanMetricFeedbackByTargetIdView;
+            DROP VIEW IF EXISTS CommentFeedbackByTargetIdView;
+            DROP VIEW IF EXISTS DemonstrationFeedbackByInferenceIdView;
+            DROP VIEW IF EXISTS FloatMetricFeedbackByTargetIdView;
+            /* Drop the tables */\
+            DROP TABLE IF EXISTS BooleanMetricFeedbackByTargetId;
+            DROP TABLE IF EXISTS CommentFeedbackByTargetId;
+            DROP TABLE IF EXISTS DemonstrationFeedbackByInferenceId;
+            DROP TABLE IF EXISTS FloatMetricFeedbackByTargetId;
             "
         .to_string()
     }

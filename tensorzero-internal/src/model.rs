@@ -16,7 +16,7 @@ use crate::cache::{
     cache_lookup, cache_lookup_streaming, start_cache_write, start_cache_write_streaming,
     CacheData, ModelProviderRequest, NonStreamingCacheData, StreamingCacheData,
 };
-use crate::config_parser::{ProviderTypesConfig, SKIP_CREDENTIAL_VALIDATION};
+use crate::config_parser::{skip_credential_validation, ProviderTypesConfig};
 use crate::endpoints::inference::InferenceClients;
 use crate::inference::providers::aws_sagemaker::AWSSagemakerProvider;
 #[cfg(any(test, feature = "e2e_tests"))]
@@ -809,26 +809,36 @@ impl UninitializedProviderConfig {
                 location,
                 project_id,
                 credential_location: api_key_location,
-            } => ProviderConfig::GCPVertexAnthropic(GCPVertexAnthropicProvider::new(
-                model_id,
-                location,
-                project_id,
-                api_key_location,
-            )?),
+            } => ProviderConfig::GCPVertexAnthropic(tokio::task::block_in_place(move || {
+                tokio::runtime::Handle::current().block_on(async {
+                    GCPVertexAnthropicProvider::new(
+                        model_id,
+                        location,
+                        project_id,
+                        api_key_location,
+                    )
+                    .await
+                })
+            })?),
             UninitializedProviderConfig::GCPVertexGemini {
                 model_id,
                 endpoint_id,
                 location,
                 project_id,
                 credential_location: api_key_location,
-            } => ProviderConfig::GCPVertexGemini(GCPVertexGeminiProvider::new(
-                model_id,
-                endpoint_id,
-                location,
-                project_id,
-                api_key_location,
-                provider_types,
-            )?),
+            } => ProviderConfig::GCPVertexGemini(tokio::task::block_in_place(move || {
+                tokio::runtime::Handle::current().block_on(async {
+                    GCPVertexGeminiProvider::new(
+                        model_id,
+                        endpoint_id,
+                        location,
+                        project_id,
+                        api_key_location,
+                        provider_types,
+                    )
+                    .await
+                })
+            })?),
             UninitializedProviderConfig::GoogleAIStudioGemini {
                 model_name,
                 api_key_location,
@@ -1278,6 +1288,8 @@ pub enum CredentialLocation {
     Dynamic(String),
     /// Direct path to a credential file
     Path(String),
+    /// Use a provider-specific SDK to determine credentials
+    Sdk,
     None,
 }
 
@@ -1295,6 +1307,8 @@ impl<'de> Deserialize<'de> for CredentialLocation {
             Ok(CredentialLocation::Dynamic(inner.to_string()))
         } else if let Some(inner) = s.strip_prefix("path::") {
             Ok(CredentialLocation::Path(inner.to_string()))
+        } else if s == "sdk" {
+            Ok(CredentialLocation::Sdk)
         } else if s == "none" {
             Ok(CredentialLocation::None)
         } else {
@@ -1310,6 +1324,7 @@ pub enum Credential {
     Static(SecretString),
     FileContents(SecretString),
     Dynamic(String),
+    Sdk,
     None,
     Missing,
 }
@@ -1384,7 +1399,7 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
             CredentialLocation::Env(key_name) => match env::var(key_name) {
                 Ok(value) => Ok(Credential::Static(SecretString::from(value))),
                 Err(_) => {
-                    if SKIP_CREDENTIAL_VALIDATION.is_set() {
+                    if skip_credential_validation() {
                         #[cfg(any(test, feature = "e2e_tests"))]
                         {
                             tracing::warn!(
@@ -1405,7 +1420,7 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
                 let path = match env::var(&env_key) {
                     Ok(path) => path,
                     Err(_) => {
-                        if SKIP_CREDENTIAL_VALIDATION.is_set() {
+                        if skip_credential_validation() {
                             #[cfg(any(test, feature = "e2e_tests"))]
                             {
                                 tracing::warn!(
@@ -1428,7 +1443,7 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
                 match fs::read_to_string(path) {
                     Ok(contents) => Ok(Credential::FileContents(SecretString::from(contents))),
                     Err(e) => {
-                        if SKIP_CREDENTIAL_VALIDATION.is_set() {
+                        if skip_credential_validation() {
                             #[cfg(any(test, feature = "e2e_tests"))]
                             {
                                 tracing::warn!(
@@ -1450,7 +1465,7 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
             CredentialLocation::Path(path) => match fs::read_to_string(path) {
                 Ok(contents) => Ok(Credential::FileContents(SecretString::from(contents))),
                 Err(e) => {
-                    if SKIP_CREDENTIAL_VALIDATION.is_set() {
+                    if skip_credential_validation() {
                         #[cfg(any(test, feature = "e2e_tests"))]
                         {
                             tracing::warn!(
@@ -1469,6 +1484,7 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
                 }
             },
             CredentialLocation::Dynamic(key_name) => Ok(Credential::Dynamic(key_name.clone())),
+            CredentialLocation::Sdk => Ok(Credential::Sdk),
             CredentialLocation::None => Ok(Credential::None),
         }
     }
@@ -1480,6 +1496,7 @@ const SHORTHAND_MODEL_PREFIXES: &[&str] = &[
     "fireworks::",
     "google_ai_studio_gemini::",
     "gcp_vertex_gemini::",
+    "gcp_vertex_anthropic::",
     "hyperbolic::",
     "mistral::",
     "openai::",
@@ -1494,7 +1511,7 @@ pub type ModelTable = BaseModelTable<ModelConfig>;
 impl ShorthandModelConfig for ModelConfig {
     const SHORTHAND_MODEL_PREFIXES: &[&str] = SHORTHAND_MODEL_PREFIXES;
     const MODEL_TYPE: &str = "Model";
-    fn from_shorthand(provider_type: &str, model_name: &str) -> Result<Self, Error> {
+    async fn from_shorthand(provider_type: &str, model_name: &str) -> Result<Self, Error> {
         let model_name = model_name.to_string();
         let provider_config = match provider_type {
             "anthropic" => ProviderConfig::Anthropic(AnthropicProvider::new(model_name, None)?),
@@ -1507,9 +1524,12 @@ impl ShorthandModelConfig for ModelConfig {
             "google_ai_studio_gemini" => ProviderConfig::GoogleAIStudioGemini(
                 GoogleAIStudioGeminiProvider::new(model_name, None)?,
             ),
-            "gcp_vertex_gemini" => {
-                ProviderConfig::GCPVertexGemini(GCPVertexGeminiProvider::new_shorthand(model_name)?)
-            }
+            "gcp_vertex_gemini" => ProviderConfig::GCPVertexGemini(
+                GCPVertexGeminiProvider::new_shorthand(model_name).await?,
+            ),
+            "gcp_vertex_anthropic" => ProviderConfig::GCPVertexAnthropic(
+                GCPVertexAnthropicProvider::new_shorthand(model_name).await?,
+            ),
             "hyperbolic" => ProviderConfig::Hyperbolic(HyperbolicProvider::new(model_name, None)?),
             "mistral" => ProviderConfig::Mistral(MistralProvider::new(model_name, None)?),
             "openai" => ProviderConfig::OpenAI(OpenAIProvider::new(model_name, None, None)?),
@@ -1597,6 +1617,7 @@ mod tests {
     use std::{borrow::Cow, cell::Cell};
 
     use crate::cache::CacheEnabledMode;
+    use crate::config_parser::SKIP_CREDENTIAL_VALIDATION;
     use crate::tool::{ToolCallConfig, ToolChoice};
     use crate::{
         cache::CacheOptions,
@@ -2291,8 +2312,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_validate_or_create_model_config() {
+    #[tokio::test]
+    async fn test_validate_or_create_model_config() {
         let model_table = ModelTable::default();
         // Test that we can get or create a model config
         model_table.validate("dummy::gpt-4o").unwrap();
@@ -2300,6 +2321,7 @@ mod tests {
         assert_eq!(model_table.static_model_len(), 0);
         let model_config = model_table
             .get("dummy::gpt-4o")
+            .await
             .unwrap()
             .expect("Missing dummy model");
         assert_eq!(model_config.routing, vec!["dummy".into()]);
@@ -2320,7 +2342,7 @@ mod tests {
             .into()
         );
         // Test that it works with an initialized model
-        let anthropic_provider_config = SKIP_CREDENTIAL_VALIDATION.set(&(), || {
+        let anthropic_provider_config = SKIP_CREDENTIAL_VALIDATION.sync_scope((), || {
             ProviderConfig::Anthropic(AnthropicProvider::new("claude".to_string(), None).unwrap())
         });
         let anthropic_model_config = ModelConfig {

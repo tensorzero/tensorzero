@@ -171,6 +171,7 @@ async fn get_providers() -> E2ETestProviders {
         json_mode_inference: json_providers.clone(),
         json_mode_off_inference: json_mode_off_providers.clone(),
         image_inference: image_providers.clone(),
+        pdf_inference: image_providers.clone(),
 
         shorthand_inference: shorthand_providers.clone(),
     }
@@ -1444,7 +1445,7 @@ async fn test_content_block_text_field() {
 // We already test Amazon S3 with all image providers, so let's test Google Cloud Storage
 // (which is S3-compatible) with just OpenAI to save time and money.
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 pub async fn test_image_inference_with_provider_gcp_storage() {
     use crate::providers::common::test_image_inference_with_provider_s3_compatible;
     use crate::providers::common::IMAGE_FUNCTION_CONFIG;
