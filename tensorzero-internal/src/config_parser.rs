@@ -4,6 +4,7 @@ use object_store::{ObjectStore, PutPayload};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tensorzero_derive::TensorZeroDeserialize;
@@ -48,7 +49,7 @@ pub struct Config<'c> {
     pub models: ModelTable,                    // model name => model config
     pub embedding_models: EmbeddingModelTable, // embedding model name => embedding model config
     pub functions: HashMap<String, Arc<FunctionConfig>>, // function name => function config
-    pub metrics: HashMap<String, MetricConfig>, // metric name => metric config
+    pub metrics: MetricConfigTable,            // metric name => metric config
     pub tools: HashMap<String, Arc<StaticToolConfig>>, // tool name => tool config
     pub evaluations: HashMap<String, Arc<EvaluationConfig>>, // evaluation name => evaluation config
     pub templates: TemplateConfig<'c>,
@@ -256,12 +257,49 @@ pub struct OtlpTracesConfig {
     pub enabled: bool,
 }
 
+#[derive(Debug, Default, Deserialize, PartialEq)]
+#[serde(transparent)]
+pub struct MetricConfigTable(HashMap<String, MetricConfig>);
+
+impl Deref for MetricConfigTable {
+    type Target = HashMap<String, MetricConfig>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for MetricConfigTable {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl MetricConfigTable {
+    pub fn table_name(&self, metric_name: &str) -> Option<&str> {
+        match metric_name {
+            "comment" => Some("CommentFeedback"),
+            "demonstration" => Some("DemonstrationFeedback"),
+            _ => self.get(metric_name).map(|c| c.table_name()),
+        }
+    }
+}
+
 #[derive(Debug, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct MetricConfig {
     pub r#type: MetricConfigType,
     pub optimize: MetricConfigOptimize,
     pub level: MetricConfigLevel,
+}
+
+impl MetricConfig {
+    pub fn table_name(&self) -> &str {
+        match self.r#type {
+            MetricConfigType::Boolean => "BooleanMetricFeedback",
+            MetricConfigType::Float => "FloatMetricFeedback",
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
@@ -398,7 +436,7 @@ impl<'c> Config<'c> {
                 })
             })?,
             functions,
-            metrics: uninitialized_config.metrics,
+            metrics: MetricConfigTable::default(),
             tools,
             evaluations: HashMap::new(),
             templates,
@@ -659,7 +697,7 @@ struct UninitializedConfig {
     #[serde(default)]
     pub functions: HashMap<String, UninitializedFunctionConfig>, // function name => function config
     #[serde(default)]
-    pub metrics: HashMap<String, MetricConfig>, // metric name => metric config
+    pub metrics: MetricConfigTable, // metric name => metric config
     #[serde(default)]
     pub tools: HashMap<String, UninitializedToolConfig>, // tool name => tool config
     #[serde(default)]
