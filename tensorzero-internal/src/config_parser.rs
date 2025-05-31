@@ -283,6 +283,17 @@ impl MetricConfigTable {
             _ => self.get(metric_name).map(|c| c.table_name()),
         }
     }
+
+    // Useful for SQL query building to know this for a particular metric
+    pub fn inference_table_column_name(&self, metric_name: &str) -> Option<&str> {
+        match metric_name {
+            "comment" => None,
+            "demonstration" => Some("id"),
+            _ => self
+                .get(metric_name)
+                .map(|c| c.inference_table_column_name()),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
@@ -300,6 +311,12 @@ impl MetricConfig {
             MetricConfigType::Float => "FloatMetricFeedback",
         }
     }
+
+    pub fn inference_table_column_name(&self) -> &str {
+        match self.level {
+            MetricConfigLevel::Inference => "id",
+            MetricConfigLevel::Episode => "episode_id",
+        }
 }
 
 #[derive(Debug, Deserialize, PartialEq)]

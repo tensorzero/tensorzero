@@ -38,6 +38,13 @@ impl FunctionConfig {
             FunctionConfig::Json(_) => FunctionConfigType::Json,
         }
     }
+
+    pub fn table_name(&self) -> &str {
+        match self {
+            FunctionConfig::Chat(_) => "ChatInference",
+            FunctionConfig::Json(_) => "JsonInference",
+        }
+    }
 }
 
 #[derive(Debug, Default)]

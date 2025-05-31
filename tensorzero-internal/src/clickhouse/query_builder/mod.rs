@@ -1,3 +1,5 @@
+use crate::config_parser::Config;
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum InferenceOutputSource {
     Inference,
@@ -41,12 +43,12 @@ pub struct BooleanMetricNode {
 }
 
 #[derive(Debug, Clone)]
-pub enum FilterTreeNode {
+pub enum InferenceFilterTreeNode {
     FloatMetric(FloatMetricNode),
     BooleanMetric(BooleanMetricNode),
-    And(Vec<FilterTreeNode>),
-    Or(Vec<FilterTreeNode>),
-    Not(Box<FilterTreeNode>),
+    And(Vec<InferenceFilterTreeNode>),
+    Or(Vec<InferenceFilterTreeNode>),
+    Not(Box<InferenceFilterTreeNode>),
 }
 
 /// Represents a parameter to be set for the ClickHouse query.
@@ -65,31 +67,17 @@ pub struct QueryParameter {
 /// to their string values. The client executing the query is responsible for
 /// setting these parameters (e.g., via `SET param_p0 = 'value'` or `SET param_p1 = 123`).
 pub fn generate_list_inferences_sql(
+    config: &Config,
     function_name: &str,
-    filters: Option<&FilterTreeNode>,
+    variant_name: Option<&str>,
+    filters: Option<&InferenceFilterTreeNode>,
     output_source: &InferenceOutputSource,
+    // TODO: add ORDER BY options
     limit: Option<i64>,
     offset: Option<i64>,
-    config: &QueryConfig,
 ) -> (String, Vec<QueryParameter>) {
     let mut params_map: Vec<QueryParameter> = Vec::new();
     let mut param_idx_counter = 0; // Counter for unique parameter names
-
-    // Helper to add a parameter and return its SQL placeholder {name:CHType}
-    // The internal_name (e.g. p0, p1) is stored in params_map with its value.
-    let mut add_param_fn = |value: String,
-                            ch_type: &str,
-                            params_map_ref: &mut Vec<QueryParameter>,
-                            counter: &mut usize|
-     -> String {
-        let internal_name = format!("p{}", *counter);
-        *counter += 1;
-        params_map_ref.push(QueryParameter {
-            name: internal_name.clone(),
-            value,
-        });
-        format!("{{{}:{}}}", internal_name, ch_type)
-    };
 
     let mut select_clauses = vec![
         "i.input".to_string(),
@@ -101,7 +89,7 @@ pub fn generate_list_inferences_sql(
     let mut where_clauses: Vec<String> = Vec::new();
 
     // Add function_name filter
-    let fn_param_placeholder = add_param_fn(
+    let fn_param_placeholder = add_parameter(
         function_name.to_string(),
         "String",
         &mut params_map,
@@ -109,11 +97,27 @@ pub fn generate_list_inferences_sql(
     );
     where_clauses.push(format!("i.function_name = {}", fn_param_placeholder));
 
+    // Add variant_name filter
+    if let Some(variant_name) = variant_name {
+        let variant_name_param_placeholder = add_parameter(
+            variant_name.to_string(),
+            "String",
+            &mut params_map,
+            &mut param_idx_counter,
+        );
+        where_clauses.push(format!(
+            "i.variant_name = {}",
+            variant_name_param_placeholder
+        ));
+    }
+
     // Handle OutputSource
     match output_source {
         InferenceOutputSource::Inference => { /* inference_output already selected */ }
         InferenceOutputSource::Demonstration => {
             select_clauses.push("demo_f.value AS \"demonstration_output\"".to_string()); // Quoted alias
+
+            // TODO(viraj, urgently): use GROUP BY here instead of window function
             join_clauses.push(format!(
                 "JOIN \
                  (SELECT \
@@ -122,19 +126,21 @@ pub fn generate_list_inferences_sql(
                     ROW_NUMBER() OVER (PARTITION BY inference_id ORDER BY timestamp DESC) as rn \
                   FROM \"{}\" \
                  ) AS demo_f ON i.\"{}\" = demo_f.inference_id AND demo_f.rn = 1", // Quoted table/column names from config
-                config.demonstration_feedback_table_name,
-                config.inference_id_column_in_inference_table
+                config.metrics.table_name("demonstration"),
+                config.metrics.inference_table_column_name("demonstration")
             ));
         }
     }
 
-    // Handle Filters
+    // NOTE: you can get the table name for the inferences we want to query from config.get_function(function_name).table_name()
+    // Handle Filter Tree
     if let Some(filter_node) = filters {
+        // @Gemini, I got to here and everything above here in the file is sensible but the problems start below.
+        // TODO (Viraj, urgently): keep reading from here
         let feedback_sql_condition = build_feedback_filter_sql_recursive(
             filter_node,
             &mut params_map,
             &mut param_idx_counter,
-            &mut add_param_fn,
         );
         if !feedback_sql_condition.is_empty() {
             join_clauses.push(format!(
@@ -174,7 +180,7 @@ pub fn generate_list_inferences_sql(
     }
 
     if let Some(l) = limit {
-        let limit_param_placeholder = add_param_fn(
+        let limit_param_placeholder = add_parameter(
             l.to_string(),
             "UInt64",
             &mut params_map,
@@ -184,7 +190,7 @@ pub fn generate_list_inferences_sql(
     }
 
     if let Some(o) = offset {
-        let offset_param_placeholder = add_param_fn(
+        let offset_param_placeholder = add_parameter(
             o.to_string(),
             "UInt64",
             &mut params_map,
@@ -196,22 +202,38 @@ pub fn generate_list_inferences_sql(
     (sql, params_map)
 }
 
+/// Helper to add a parameter and return its SQL placeholder {name:CHType}
+/// The internal_name (e.g. p0, p1) is stored in params_map with its value.
+fn add_parameter(
+    value: String,
+    ch_type: &str,
+    params_map: &mut Vec<QueryParameter>,
+    counter: &mut usize,
+) -> String {
+    let internal_name = format!("p{}", *counter);
+    *counter += 1;
+    params_map.push(QueryParameter {
+        name: internal_name.clone(),
+        value,
+    });
+    format!("{{{}:{}}}", internal_name, ch_type)
+}
+
 /// Recursively builds the SQL condition for the WHERE clause of the feedback subquery.
 fn build_feedback_filter_sql_recursive(
-    node: &FilterTreeNode,
+    node: &InferenceFilterTreeNode,
     params_map: &mut Vec<QueryParameter>,
     param_idx_counter: &mut usize,
-    add_param_fn: &mut dyn FnMut(String, &str, &mut Vec<QueryParameter>, &mut usize) -> String,
 ) -> String {
-    match &node.variant {
-        FilterTreeNodeVariant::FloatMetric(fm_node) => {
-            let metric_name_placeholder = add_param_fn(
+    match node {
+        InferenceFilterTreeNode::FloatMetric(fm_node) => {
+            let metric_name_placeholder = add_parameter(
                 fm_node.metric_name.clone(),
                 "String",
                 params_map,
                 param_idx_counter,
             );
-            let value_placeholder = add_param_fn(
+            let value_placeholder = add_parameter(
                 fm_node.value.to_string(),
                 "Float64",
                 params_map,
@@ -220,12 +242,12 @@ fn build_feedback_filter_sql_recursive(
             format!(
                 "(metric_name = {} AND value {} {})",
                 metric_name_placeholder,
-                fm_node.operator.to_sql(),
+                fm_node.comparison_operator.to_sql(),
                 value_placeholder
             )
         }
-        FilterTreeNodeVariant::BooleanMetric(bm_node) => {
-            let metric_name_placeholder = add_param_fn(
+        InferenceFilterTreeNode::BooleanMetric(bm_node) => {
+            let metric_name_placeholder = add_parameter(
                 bm_node.metric_name.clone(),
                 "String",
                 params_map,
@@ -238,22 +260,17 @@ fn build_feedback_filter_sql_recursive(
             };
             // ClickHouse 'Bool' type is an alias for UInt8 restricted to 0 or 1.
             let value_placeholder =
-                add_param_fn(bool_value_str, "Bool", params_map, param_idx_counter);
+                add_parameter(bool_value_str, "Bool", params_map, param_idx_counter);
             format!(
                 "(metric_name = {} AND value = {})",
                 metric_name_placeholder, value_placeholder
             )
         }
-        FilterTreeNodeVariant::And(children) => {
+        InferenceFilterTreeNode::And(children) => {
             let child_sqls: Vec<String> = children
                 .iter()
                 .map(|child| {
-                    build_feedback_filter_sql_recursive(
-                        child,
-                        params_map,
-                        param_idx_counter,
-                        add_param_fn,
-                    )
+                    build_feedback_filter_sql_recursive(child, params_map, param_idx_counter)
                 })
                 .filter(|s| !s.is_empty())
                 .collect();
@@ -263,16 +280,11 @@ fn build_feedback_filter_sql_recursive(
                 format!("({})", child_sqls.join(" AND "))
             }
         }
-        FilterTreeNodeVariant::Or(children) => {
+        InferenceFilterTreeNode::Or(children) => {
             let child_sqls: Vec<String> = children
                 .iter()
                 .map(|child| {
-                    build_feedback_filter_sql_recursive(
-                        child,
-                        params_map,
-                        param_idx_counter,
-                        add_param_fn,
-                    )
+                    build_feedback_filter_sql_recursive(child, params_map, param_idx_counter)
                 })
                 .filter(|s| !s.is_empty())
                 .collect();
@@ -282,13 +294,9 @@ fn build_feedback_filter_sql_recursive(
                 format!("({})", child_sqls.join(" OR "))
             }
         }
-        FilterTreeNodeVariant::Not(child) => {
-            let child_sql = build_feedback_filter_sql_recursive(
-                child.as_ref(),
-                params_map,
-                param_idx_counter,
-                add_param_fn,
-            );
+        InferenceFilterTreeNode::Not(child) => {
+            let child_sql =
+                build_feedback_filter_sql_recursive(child.as_ref(), params_map, param_idx_counter);
             if child_sql.is_empty() {
                 "".to_string()
             } else {
