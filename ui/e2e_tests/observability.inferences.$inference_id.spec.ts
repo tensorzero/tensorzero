@@ -181,11 +181,9 @@ test("should be able to add float feedback via the inference page", async ({
   // Click the submit button
   await page.getByText("Submit Feedback").click();
 
-  // Wait for the page to load
-  await page.waitForLoadState("networkidle");
-
-  // sleep for 500ms
-  await page.waitForTimeout(500);
+  await page.waitForURL((url) => url.searchParams.has("newFeedbackId"), {
+    timeout: 10000,
+  });
 
   // Verify the feedback value is visible in the table cell
   await expect(
@@ -227,17 +225,15 @@ test("should be able to add boolean feedback via the inference page", async ({
   // Click the submit button
   await page.getByText("Submit Feedback").click();
 
-  // Wait for the page to load
-  await page.waitForLoadState("networkidle");
+  await page.waitForURL((url) => url.searchParams.has("newFeedbackId"), {
+    timeout: 10000,
+  });
 
-  // sleep for 1000ms
-  await page.waitForTimeout(1000);
-
-  // Get the search param `newFeedbackId` from the url
   const newFeedbackId = new URL(page.url()).searchParams.get("newFeedbackId");
   if (!newFeedbackId) {
     throw new Error("newFeedbackId is not present in the url");
   }
+
   // Assert that the feedback value is visible in its table cell
   await expect(page.getByRole("cell", { name: newFeedbackId })).toBeVisible();
 });
@@ -280,13 +276,10 @@ test("should be able to add json demonstration feedback via the inference page",
   // Click the submit button
   await page.getByText("Submit Feedback").click();
 
-  // Wait for the page to load
-  await page.waitForLoadState("networkidle");
+  await page.waitForURL((url) => url.searchParams.has("newFeedbackId"), {
+    timeout: 10000,
+  });
 
-  // sleep for 1 second
-  await page.waitForTimeout(1000);
-
-  // Get the search param `newFeedbackId` from the url
   const newFeedbackId = new URL(page.url()).searchParams.get("newFeedbackId");
   if (!newFeedbackId) {
     throw new Error("newFeedbackId is not present in the url");
@@ -331,11 +324,9 @@ test("should be able to add chat demonstration feedback via the inference page",
   // Click the submit button
   await page.getByText("Submit Feedback").click();
 
-  // Wait for the page to load
-  await page.waitForLoadState("networkidle");
-
-  // sleep for 1 second
-  await page.waitForTimeout(1000);
+  await page.waitForURL((url) => url.searchParams.has("newFeedbackId"), {
+    timeout: 10000,
+  });
 
   // Get the search param `newFeedbackId` from the url
   const newFeedbackId = new URL(page.url()).searchParams.get("newFeedbackId");

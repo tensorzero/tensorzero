@@ -1,6 +1,19 @@
 {
+  "scripts": {
+    "ui:dev": "pnpm --filter=tensorzero-ui dev",
+    "ui:storybook": "pnpm --filter=tensorzero-ui storybook",
+    "ui:test": "pnpm --filter=tensorzero-ui test",
+    "ui:test:e2e": "pnpm --filter=tensorzero-ui test-e2e",
+    "clean:node": "find . -name 'node_modules' -type d -prune -exec rm -rf '{}' +"
+  },
   "devDependencies": {
-    "@typescript-eslint/eslint-plugin": "^8.18.2",
-    "@typescript-eslint/parser": "^8.18.2"
+    "typescript": "^5.8.2"
+  },
+  "packageManager": "pnpm@10.7.0",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "msw"
+    ]
   }
 }

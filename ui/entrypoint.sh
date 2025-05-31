@@ -39,7 +39,7 @@ fi
 
 cd /app
 
-pnpm run start &
+pnpm --filter=tensorzero-ui run start &
 
 
 source /build/optimization-server/.venv/bin/activate

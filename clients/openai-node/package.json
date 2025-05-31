@@ -28,6 +28,5 @@
     "typescript": "^5.8.2",
     "typescript-eslint": "^8.29.0",
     "vitest": "^3.1.1"
-  },
-  "packageManager": "pnpm@10.6.1"
+  }
 }
