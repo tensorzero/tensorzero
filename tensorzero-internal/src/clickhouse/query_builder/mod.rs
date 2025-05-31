@@ -72,7 +72,6 @@ pub fn generate_list_inferences_sql(
     variant_name: Option<&str>,
     filters: Option<&InferenceFilterTreeNode>,
     output_source: &InferenceOutputSource,
-    // TODO: add ORDER BY options
     limit: Option<i64>,
     offset: Option<i64>,
 ) -> (String, Vec<QueryParameter>) {
@@ -80,22 +79,28 @@ pub fn generate_list_inferences_sql(
     let mut param_idx_counter = 0; // Counter for unique parameter names
 
     let mut select_clauses = vec![
-        "i.input".to_string(),
-        "i.output AS \"inference_output\"".to_string(), // Quoted alias
-        "i.variant_name".to_string(),
-        "i.episode_id".to_string(),
+        "i.input as input".to_string(),
+        "i.output as output".to_string(),
+        "i.variant_name as variant_name".to_string(),
+        "i.episode_id as episode_id".to_string(),
+        "i.id as id".to_string(),
+        "i.timestamp as timestamp".to_string(),
     ];
     let mut join_clauses: Vec<String> = Vec::new();
     let mut where_clauses: Vec<String> = Vec::new();
 
-    // Add function_name filter
-    let fn_param_placeholder = add_parameter(
+    let inference_table_name = config.get_function(function_name).table_name();
+
+    let function_name_param_placeholder = add_parameter(
         function_name.to_string(),
         "String",
         &mut params_map,
         &mut param_idx_counter,
     );
-    where_clauses.push(format!("i.function_name = {}", fn_param_placeholder));
+    where_clauses.push(format!(
+        "i.function_name = {}",
+        function_name_param_placeholder
+    ));
 
     // Add variant_name filter
     if let Some(variant_name) = variant_name {
@@ -117,56 +122,47 @@ pub fn generate_list_inferences_sql(
         InferenceOutputSource::Demonstration => {
             select_clauses.push("demo_f.value AS \"demonstration_output\"".to_string()); // Quoted alias
 
-            // TODO(viraj, urgently): use GROUP BY here instead of window function
+            // NOTE: we may want to pre-filter this prior to the join for performance reasons
             join_clauses.push(format!(
                 "JOIN \
                  (SELECT \
                     inference_id, \
-                    value, \
-                    ROW_NUMBER() OVER (PARTITION BY inference_id ORDER BY timestamp DESC) as rn \
-                  FROM \"{}\" \
-                 ) AS demo_f ON i.\"{}\" = demo_f.inference_id AND demo_f.rn = 1", // Quoted table/column names from config
+                    argMax(value, timestamp) as value \
+                  FROM {} \
+                  GROUP BY inference_id \
+                 ) AS demo_f ON i.{} = demo_f.inference_id",
                 config.metrics.table_name("demonstration"),
                 config.metrics.inference_table_column_name("demonstration")
             ));
         }
     }
 
-    // NOTE: you can get the table name for the inferences we want to query from config.get_function(function_name).table_name()
-    // Handle Filter Tree
     if let Some(filter_node) = filters {
-        // @Gemini, I got to here and everything above here in the file is sensible but the problems start below.
-        // TODO (Viraj, urgently): keep reading from here
-        let feedback_sql_condition = build_feedback_filter_sql_recursive(
+        // Recursively builds the filter condition SQL statement for the WHERE clause
+        //  * adds the JOINed tables it needs
+        //  * adds metric columns to the SELECT clause for visibility and debugging
+        let filter_condition_sql = build_filter_condition_recursive(
             filter_node,
             &mut params_map,
             &mut param_idx_counter,
+            &mut join_clauses,
+            &mut select_clauses,
+            config,
         );
-        if !feedback_sql_condition.is_empty() {
-            join_clauses.push(format!(
-                "JOIN \
-                 (SELECT \
-                    target_id, \
-                    value AS metric_value, \
-                    metric_name, \
-                    ROW_NUMBER() OVER (PARTITION BY target_id ORDER BY timestamp DESC) as rn \
-                  FROM \"{}\" \
-                  WHERE {} \
-                 ) AS metric_f ON i.\"{}\" = metric_f.target_id AND metric_f.rn = 1", // Quoted table/column names
-                config.feedback_table_name,
-                feedback_sql_condition,
-                config.inference_join_key_for_feedback
-            ));
-            select_clauses.push("metric_f.metric_value AS \"filtered_metric_value\"".to_string()); // Quoted alias
-            select_clauses.push("metric_f.metric_name AS \"filtered_metric_name\"".to_string());
-            // Quoted alias
+        if !filter_condition_sql.is_empty() {
+            where_clauses.push(filter_condition_sql);
         }
     }
 
     let mut sql = format!(
-        "SELECT\n    {}\nFROM\n    \"{}\" AS i", // Quoted table name
-        select_clauses.join(",\n    "),
-        config.inference_table_name
+        r#"
+SELECT
+    {select_clauses}
+FROM
+    {inference_table_name} AS i
+    "#,
+        select_clauses = select_clauses.join(",\n    "),
+        inference_table_name = inference_table_name,
     );
 
     if !join_clauses.is_empty() {
@@ -178,6 +174,7 @@ pub fn generate_list_inferences_sql(
         sql.push_str("\nWHERE\n    ");
         sql.push_str(&where_clauses.join(" AND "));
     }
+    // TODO: add ORDER BY
 
     if let Some(l) = limit {
         let limit_param_placeholder = add_parameter(
@@ -188,7 +185,6 @@ pub fn generate_list_inferences_sql(
         );
         sql.push_str(&format!("\nLIMIT {}", limit_param_placeholder));
     }
-
     if let Some(o) = offset {
         let offset_param_placeholder = add_parameter(
             o.to_string(),
