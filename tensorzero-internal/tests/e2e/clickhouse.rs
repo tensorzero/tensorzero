@@ -77,9 +77,11 @@ fn get_clean_clickhouse(allow_db_missing: bool) -> (ClickHouseConnectionInfo, De
     let clickhouse = ClickHouseConnectionInfo::Production {
         database_url: SecretString::from(clickhouse_url.to_string()),
         database: database.clone(),
-        // This works around an issue with ClickHouse Cloud where long-lived connections
+        // This is a hack to work around an issue with ClickHouse Cloud where long-lived connections
         // are abruptly closed by the server.
-        client: Client::builder().pool_max_idle_per_host(0).build().unwrap(),
+        // If it occurs again, re-enable this line.
+        // client: Client::builder().pool_max_idle_per_host(0).build().unwrap(),
+        client: Client::new(),
     };
     (
         clickhouse.clone(),
