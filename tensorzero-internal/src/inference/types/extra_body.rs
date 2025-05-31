@@ -22,6 +22,10 @@ pub struct UnfilteredInferenceExtraBody {
 }
 
 impl UnfilteredInferenceExtraBody {
+    pub fn new(extra_body: Vec<InferenceExtraBody>) -> Self {
+        Self { extra_body }
+    }
+
     pub fn is_empty(&self) -> bool {
         self.extra_body.is_empty()
     }

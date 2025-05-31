@@ -54,6 +54,12 @@ pub use tensorzero_internal::endpoints::inference::{
     InferenceOutput, InferenceParams, InferenceResponse, InferenceResponseChunk, InferenceStream,
 };
 pub use tensorzero_internal::endpoints::object_storage::ObjectResponse;
+pub use tensorzero_internal::inference::types::extra_body::{
+    InferenceExtraBody, UnfilteredInferenceExtraBody,
+};
+pub use tensorzero_internal::inference::types::extra_headers::{
+    InferenceExtraHeader, UnfilteredInferenceExtraHeaders,
+};
 pub use tensorzero_internal::inference::types::storage::{StorageKind, StoragePath};
 pub use tensorzero_internal::inference::types::File;
 pub use tensorzero_internal::inference::types::{
