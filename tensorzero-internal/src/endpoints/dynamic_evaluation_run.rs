@@ -137,7 +137,7 @@ pub async fn dynamic_evaluation_run_episode(
     Ok(DynamicEvaluationRunEpisodeResponse { episode_id })
 }
 
-fn validate_variant_pins(
+pub fn validate_variant_pins(
     variant_pins: &HashMap<String, String>,
     config: &Config<'_>,
 ) -> Result<(), Error> {

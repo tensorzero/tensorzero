@@ -78,10 +78,8 @@ impl Migration for Migration0004<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        "\
-            -- Drop the columns\n\
-            ALTER TABLE ModelInference DROP COLUMN system, DROP COLUMN input_messages, DROP COLUMN output;\n\
-        "
+        "/* Drop the columns */\
+            ALTER TABLE ModelInference DROP COLUMN system, DROP COLUMN input_messages, DROP COLUMN output;"
         .to_string()
     }
 

@@ -44,7 +44,9 @@ tracing-subscriber = "0.3.19"
 tracing-test = { workspace = true }
 
 [features]
-pyo3 = ["dep:pyo3"]
+# Forward this feature to 'tensorzero-internal', so that our types will generate
+# the appropriate pyo3 attributes.
+pyo3 = ["dep:pyo3", "tensorzero-internal/pyo3"]
 default = []
 # Forward this feature to 'tensorzero-internal', so that our embedded
 # client can recognize things like the `dummy` provider

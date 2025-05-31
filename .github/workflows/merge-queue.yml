@@ -18,6 +18,7 @@ env:
   FIREWORKS_ACCOUNT_ID: ${{ secrets.FIREWORKS_ACCOUNT_ID }}
   FORCE_COLOR: 1
   GCP_VERTEX_CREDENTIALS_PATH: ${{ github.workspace }}/gcp_jwt_key.json
+  GOOGLE_APPLICATION_CREDENTIALS: ${{ github.workspace }}/gcp_jwt_key.json
   GCP_STORAGE_ACCESS_KEY_ID: ${{ secrets.GCP_STORAGE_ACCESS_KEY_ID }}
   GCP_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.GCP_STORAGE_SECRET_ACCESS_KEY }}
   GOOGLE_AI_STUDIO_API_KEY: ${{ secrets.GOOGLE_AI_STUDIO_API_KEY }}
@@ -43,7 +44,11 @@ jobs:
     secrets: inherit
   live-tests:
     runs-on: namespace-profile-tensorzero-8x16
-
+    permissions:
+      # Permission to checkout the repository
+      contents: read
+      # Permission to fetch GitHub OIDC token authentication
+      id-token: write
     timeout-minutes: 15
 
     steps:
@@ -57,6 +62,11 @@ jobs:
       - name: Install Namespace CLI
         uses: namespacelabs/nscloud-setup@d1c625762f7c926a54bd39252efff0705fd11c64
 
+      - name: Update rust
+        run: |
+          rustup update stable
+          rustup default stable
+
       - name: Configure Namespace-powered Buildx
         uses: namespacelabs/nscloud-setup-buildx-action@84ca8c58fdf372d6a4750476cd09b7b96ee778ca
 
@@ -65,6 +75,13 @@ jobs:
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
         with:
           cache-provider: "buildjet"
+
+      # Start testing workload identity federation credentials once the SDK adds support: https://github.com/googleapis/google-cloud-rust/issues/1342
+
+      # - uses: 'google-github-actions/auth@v2'
+      #   with:
+      #     project_id: 'tensozero-public'
+      #     workload_identity_provider: 'projects/454541351720/locations/global/workloadIdentityPools/github/providers/tensorzero'
 
       - name: Print Rust version
         run: rustc --version

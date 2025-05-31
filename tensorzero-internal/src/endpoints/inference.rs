@@ -29,10 +29,10 @@ use crate::function::{sample_variant, FunctionConfigChat};
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
-use crate::inference::types::resolved_input::ImageWithPath;
+use crate::inference::types::resolved_input::FileWithPath;
 use crate::inference::types::storage::StoragePath;
 use crate::inference::types::{
-    collect_chunks, Base64Image, ChatInferenceDatabaseInsert, CollectChunksArgs,
+    collect_chunks, Base64File, ChatInferenceDatabaseInsert, CollectChunksArgs,
     ContentBlockChatOutput, ContentBlockChunk, FetchContext, FinishReason, InferenceResult,
     InferenceResultChunk, InferenceResultStream, Input, InternalJsonInferenceOutput,
     JsonInferenceDatabaseInsert, JsonInferenceOutput, ModelInferenceResponseWithMetadata,
@@ -726,9 +726,9 @@ pub struct InferenceDatabaseInsertMetadata {
     pub extra_headers: UnfilteredInferenceExtraHeaders,
 }
 
-async fn write_image(
+async fn write_file(
     object_store: &Option<ObjectStoreInfo>,
-    raw: &Base64Image,
+    raw: &Base64File,
     storage_path: &StoragePath,
 ) -> Result<(), Error> {
     if let Some(object_store) = object_store {
@@ -737,7 +737,7 @@ async fn write_image(
             let data = raw.data()?;
             let bytes = aws_smithy_types::base64::decode(data).map_err(|e| {
                 Error::new(ErrorDetails::ObjectStoreWrite {
-                    message: format!("Failed to decode image as base64: {e:?}"),
+                    message: format!("Failed to decode file as base64: {e:?}"),
                     path: storage_path.clone(),
                 })
             })?;
@@ -755,7 +755,7 @@ async fn write_image(
                 Ok(_) | Err(object_store::Error::AlreadyExists { .. }) => {}
                 Err(e) => {
                     return Err(ErrorDetails::ObjectStoreWrite {
-                        message: format!("Failed to write image to object store: {e:?}"),
+                        message: format!("Failed to write file to object store: {e:?}"),
                         path: storage_path.clone(),
                     }
                     .into());
@@ -764,7 +764,7 @@ async fn write_image(
         }
     } else {
         return Err(ErrorDetails::InternalError {
-            message: "Called `write_image` with no object store configured".to_string(),
+            message: "Called `write_file` with no object store configured".to_string(),
         }
         .into());
     }
@@ -782,14 +782,14 @@ async fn write_inference(
     if config.gateway.observability.enabled.unwrap_or(true) {
         for message in &input.messages {
             for content_block in &message.content {
-                if let ResolvedInputMessageContent::Image(ImageWithPath {
-                    image: raw,
+                if let ResolvedInputMessageContent::File(FileWithPath {
+                    file: raw,
                     storage_path,
                 }) = content_block
                 {
                     futures.push(Box::pin(async {
                         if let Err(e) =
-                            write_image(&config.object_store_info, raw, storage_path).await
+                            write_file(&config.object_store_info, raw, storage_path).await
                         {
                             tracing::error!("Failed to write image to object store: {e:?}");
                         }
@@ -1128,11 +1128,13 @@ impl ChatCompletionInferenceParams {
 mod tests {
     use super::*;
 
+    use serde_json::json;
     use std::time::Duration;
     use uuid::Uuid;
 
     use crate::inference::types::{
-        ChatInferenceResultChunk, ContentBlockChunk, JsonInferenceResultChunk, TextChunk,
+        ChatInferenceResultChunk, ContentBlockChunk, File, FileKind, InputMessageContent,
+        JsonInferenceResultChunk, Role, TextChunk,
     };
 
     #[tokio::test]
@@ -1334,6 +1336,61 @@ mod tests {
             err.to_string()
                 .contains("Model name 'fake_provider::gpt-9000' not found in model table"),
             "Unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn test_deserialize_file_content() {
+        let input_with_url = json!({
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "file",
+                            "url": "https://example.com/file.txt",
+                        }
+                    ]
+                }
+            ]
+        });
+
+        let input_with_url: Input = serde_json::from_value(input_with_url).unwrap();
+        assert_eq!(input_with_url.messages.len(), 1);
+        assert_eq!(input_with_url.messages[0].role, Role::User);
+        assert_eq!(input_with_url.messages[0].content.len(), 1);
+        assert_eq!(
+            input_with_url.messages[0].content[0],
+            InputMessageContent::File(File::Url {
+                url: "https://example.com/file.txt".parse().unwrap(),
+            })
+        );
+
+        let input_with_base64 = json!({
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "file",
+                            "data": "fake_base64_data",
+                            "mime_type": "image/png"
+                        }
+                    ]
+                }
+            ]
+        });
+
+        let input_with_base64: Input = serde_json::from_value(input_with_base64).unwrap();
+        assert_eq!(input_with_base64.messages.len(), 1);
+        assert_eq!(input_with_base64.messages[0].role, Role::User);
+        assert_eq!(input_with_base64.messages[0].content.len(), 1);
+        assert_eq!(
+            input_with_base64.messages[0].content[0],
+            InputMessageContent::File(File::Base64 {
+                mime_type: FileKind::Png,
+                data: "fake_base64_data".to_string(),
+            })
         );
     }
 }
