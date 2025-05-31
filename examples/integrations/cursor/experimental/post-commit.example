@@ -6,7 +6,7 @@ cd "$(git rev-parse --show-toplevel)"
 
 echo "Running cursorzero.."
 
-# run the debug build of cursorzero
-./target/debug/cursorzero "$@"
+# run the installed build of cursorzero
+cursorzero "$@"
 
 echo "done!"
