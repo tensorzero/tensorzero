@@ -148,12 +148,7 @@ LEFT JOIN (
                     params_map,
                     param_idx_counter,
                 );
-                let bool_value_str = if bm_node.value {
-                    "1".to_string()
-                } else {
-                    "0".to_string()
-                };
-                // ClickHouse 'Bool' type is an alias for UInt8 restricted to 0 or 1.
+                let bool_value_str = if bm_node.value { "1" } else { "0" }.to_string();
                 let value_placeholder =
                     add_parameter(bool_value_str, "Bool", params_map, param_idx_counter);
                 // 3. register the JOIN clause
@@ -236,6 +231,16 @@ LEFT JOIN (
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct ListInferencesParams<'a> {
+    pub function_name: &'a str,
+    pub variant_name: Option<&'a str>,
+    pub filters: Option<&'a InferenceFilterTreeNode>,
+    pub output_source: InferenceOutputSource,
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
+}
+
 /// Represents a parameter to be set for the ClickHouse query.
 /// The `name` is the internal name (e.g., "p0", "p1") used in `SET param_<name> = ...`
 /// and in the `{<name>:DataType}` placeholder.
@@ -257,12 +262,7 @@ pub struct QueryParameter {
 /// - handle things like output schema, tool params, etc.
 pub fn generate_list_inferences_sql(
     config: &Config,
-    function_name: &str,
-    variant_name: Option<&str>,
-    filters: Option<&InferenceFilterTreeNode>,
-    output_source: &InferenceOutputSource,
-    limit: Option<i64>,
-    offset: Option<i64>,
+    opts: &ListInferencesParams<'_>,
 ) -> Result<(String, Vec<QueryParameter>), Error> {
     let mut params_map: Vec<QueryParameter> = Vec::new();
     let mut param_idx_counter = 0; // Counter for unique parameter names
@@ -279,11 +279,11 @@ pub fn generate_list_inferences_sql(
     let mut join_clauses: Vec<String> = Vec::new();
     let mut where_clauses: Vec<String> = Vec::new();
 
-    let function_config = config.get_function(function_name)?;
+    let function_config = config.get_function(opts.function_name)?;
     let inference_table_name = function_config.table_name();
 
     let function_name_param_placeholder = add_parameter(
-        function_name.to_string(),
+        opts.function_name.to_string(),
         "String",
         &mut params_map,
         &mut param_idx_counter,
@@ -293,7 +293,7 @@ pub fn generate_list_inferences_sql(
     ));
 
     // Add variant_name filter
-    if let Some(variant_name) = variant_name {
+    if let Some(variant_name) = opts.variant_name {
         let variant_name_param_placeholder = add_parameter(
             variant_name.to_string(),
             "String",
@@ -304,7 +304,7 @@ pub fn generate_list_inferences_sql(
     }
 
     // Handle OutputSource
-    match output_source {
+    match opts.output_source {
         InferenceOutputSource::Inference => {
             select_clauses.insert("i.output as output".to_string());
         }
@@ -325,7 +325,7 @@ pub fn generate_list_inferences_sql(
         }
     }
 
-    if let Some(filter_node) = filters {
+    if let Some(filter_node) = opts.filters {
         // Recursively builds the filter condition SQL statement for the WHERE clause
         //  * adds the JOINed tables it needs
         //  * adds metric columns to the SELECT clause for visibility and debugging
@@ -360,7 +360,7 @@ FROM
     }
     // TODO: add ORDER BY
 
-    if let Some(l) = limit {
+    if let Some(l) = opts.limit {
         let limit_param_placeholder = add_parameter(
             l.to_string(),
             "UInt64",
@@ -369,7 +369,7 @@ FROM
         );
         sql.push_str(&format!("\nLIMIT {limit_param_placeholder}"));
     }
-    if let Some(o) = offset {
+    if let Some(o) = opts.offset {
         let offset_param_placeholder = add_parameter(
             o.to_string(),
             "UInt64",
@@ -399,7 +399,7 @@ fn add_parameter(
     format!("{{{internal_name}:{ch_type}}}")
 }
 
-// Helper to get a join alias given the current counter on join tables
+/// Helper to get a join alias given the current counter on join tables.
 fn get_join_alias(counter: &mut usize) -> String {
     let internal_name = format!("j{}", *counter);
     *counter += 1;
@@ -426,16 +426,15 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn test_simple_query_json_function() {
         let config = get_e2e_config().await;
-        let (sql, params) = generate_list_inferences_sql(
-            &config,
-            "extract_entities",
-            None,
-            None,
-            &InferenceOutputSource::Inference,
-            None,
-            None,
-        )
-        .unwrap();
+        let opts = ListInferencesParams {
+            function_name: "extract_entities",
+            variant_name: None,
+            filters: None,
+            output_source: InferenceOutputSource::Inference,
+            limit: None,
+            offset: None,
+        };
+        let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r#"
 SELECT
     i.episode_id as episode_id,
@@ -459,16 +458,15 @@ WHERE
     #[tokio::test(flavor = "multi_thread")]
     async fn test_simple_query_chat_function() {
         let config = get_e2e_config().await;
-        let (sql, params) = generate_list_inferences_sql(
-            &config,
-            "write_haiku",
-            None,
-            None,
-            &InferenceOutputSource::Inference,
-            None,
-            None,
-        )
-        .unwrap();
+        let opts = ListInferencesParams {
+            function_name: "write_haiku",
+            variant_name: None,
+            filters: None,
+            output_source: InferenceOutputSource::Inference,
+            limit: None,
+            offset: None,
+        };
+        let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r#"
 SELECT
     i.episode_id as episode_id,
@@ -497,16 +495,15 @@ WHERE
             value: 0.5,
             comparison_operator: FloatComparisonOperator::GreaterThan,
         });
-        let (sql, params) = generate_list_inferences_sql(
-            &config,
-            "extract_entities",
-            None,
-            Some(&filter_node),
-            &InferenceOutputSource::Inference,
-            None,
-            None,
-        )
-        .unwrap();
+        let opts = ListInferencesParams {
+            function_name: "extract_entities",
+            variant_name: None,
+            filters: Some(&filter_node),
+            output_source: InferenceOutputSource::Inference,
+            limit: None,
+            offset: None,
+        };
+        let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r#"
 SELECT
     i.episode_id as episode_id,
@@ -549,15 +546,15 @@ WHERE
     #[tokio::test(flavor = "multi_thread")]
     async fn test_unknown_function_name() {
         let config = get_e2e_config().await;
-        let result = generate_list_inferences_sql(
-            &config,
-            "unknown_function_name",
-            None,
-            None,
-            &InferenceOutputSource::Inference,
-            None,
-            None,
-        );
+        let opts = ListInferencesParams {
+            function_name: "unknown_function_name",
+            variant_name: None,
+            filters: None,
+            output_source: InferenceOutputSource::Inference,
+            limit: None,
+            offset: None,
+        };
+        let result = generate_list_inferences_sql(&config, &opts);
         assert!(result.is_err());
         let expected_error = ErrorDetails::UnknownFunction {
             name: "unknown_function_name".to_string(),
@@ -573,15 +570,15 @@ WHERE
             value: 0.5,
             comparison_operator: FloatComparisonOperator::GreaterThan,
         });
-        let result = generate_list_inferences_sql(
-            &config,
-            "extract_entities",
-            None,
-            Some(&filter_node),
-            &InferenceOutputSource::Inference,
-            None,
-            None,
-        );
+        let opts = ListInferencesParams {
+            function_name: "extract_entities",
+            variant_name: None,
+            filters: Some(&filter_node),
+            output_source: InferenceOutputSource::Inference,
+            limit: None,
+            offset: None,
+        };
+        let result = generate_list_inferences_sql(&config, &opts);
         assert!(result.is_err());
         let expected_error = ErrorDetails::InvalidMetricName {
             metric_name: "unknown_metric_name".to_string(),
@@ -592,16 +589,15 @@ WHERE
     #[tokio::test(flavor = "multi_thread")]
     async fn test_demonstration_output_source() {
         let config = get_e2e_config().await;
-        let (sql, params) = generate_list_inferences_sql(
-            &config,
-            "extract_entities",
-            None,
-            None,
-            &InferenceOutputSource::Demonstration,
-            None,
-            None,
-        )
-        .unwrap();
+        let opts = ListInferencesParams {
+            function_name: "extract_entities",
+            variant_name: None,
+            filters: None,
+            output_source: InferenceOutputSource::Demonstration,
+            limit: None,
+            offset: None,
+        };
+        let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r#"
 SELECT
     demo_f.value AS output,
