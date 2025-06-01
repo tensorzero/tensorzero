@@ -264,6 +264,10 @@ pub struct QueryParameter {
 /// to their string values. The client executing the query is responsible for
 /// setting these parameters (e.g., via `SET param_p0 = 'value'` or `SET param_p1 = 123`).
 ///
+/// Very important: if a field is missing (fails to join or similar) it will automatically fail the condition.
+/// This means that it will not be included in the result set unless the null field is in an OR
+/// where another element is true.
+///
 /// TODOs:
 /// - handle selecting the feedback values
 /// - handle things like output schema, tool params, etc.
