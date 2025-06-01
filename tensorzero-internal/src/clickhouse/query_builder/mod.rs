@@ -240,33 +240,18 @@ pub fn generate_list_inferences_sql(
         }
         InferenceOutputSource::Demonstration => {
             select_clauses.insert("demo_f.value AS output".to_string());
-            let Some(demonstration_metric_table_name) = config.metrics.table_name("demonstration")
-            else {
-                return Err(Error::new(ErrorDetails::Config {
-                    message: "Demonstration metric not found in config. This should never happen. Please file a bug report."
-                        .to_string(),
-                }));
-            };
-            let Some(demonstration_metric_table_column_name) =
-                config.metrics.inference_table_column_name("demonstration")
-            else {
-                return Err(Error::new(ErrorDetails::Config {
-                    message: "Demonstration metric not found in config. This should never happen. Please file a bug report."
-                        .to_string(),
-                }));
-            };
 
             // NOTE: we may want to pre-filter this via subqueries or CTEs prior to the join for performance reasons
-            join_clauses.push(format!(
+            join_clauses.push(
                 "JOIN \
                  (SELECT \
                     inference_id, \
                     argMax(value, timestamp) as value \
-                  FROM {} \
+                  FROM DemonstrationFeedback \
                   GROUP BY inference_id \
-                 ) AS demo_f ON i.{} = demo_f.inference_id",
-                demonstration_metric_table_name, demonstration_metric_table_column_name
-            ));
+                 ) AS demo_f ON i.id = demo_f.inference_id"
+                    .to_string(),
+            );
         }
     }
 
