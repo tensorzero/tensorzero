@@ -618,4 +618,657 @@ WHERE
         }];
         assert_eq!(params, expected_params);
     }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_boolean_metric_filter() {
+        let config = get_e2e_config().await;
+        let filter_node = InferenceFilterTreeNode::BooleanMetric(BooleanMetricNode {
+            metric_name: "task_success".to_string(),
+            value: true,
+        });
+        let opts = ListInferencesParams {
+            function_name: "extract_entities",
+            variant_name: None,
+            filters: Some(&filter_node),
+            output_source: InferenceOutputSource::Inference,
+            limit: None,
+            offset: None,
+        };
+        let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
+        let expected_sql = r#"
+SELECT
+    i.episode_id as episode_id,
+    i.id as id,
+    i.input as input,
+    i.output as output,
+    i.timestamp as timestamp,
+    i.variant_name as variant_name
+FROM
+    JsonInference AS i
+LEFT JOIN (
+    SELECT
+        target_id,
+        argMax(value, timestamp) as value
+    FROM BooleanMetricFeedback
+    WHERE metric_name = {p1:String}
+    AND value = {p2:Bool}
+    GROUP BY target_id
+) AS j0 ON i.id = j0.target_id
+WHERE
+    i.function_name = {p0:String} AND j0.value = {p2:Bool}"#;
+        assert_eq!(sql, expected_sql);
+        let expected_params = vec![
+            QueryParameter {
+                name: "p0".to_string(),
+                value: "extract_entities".to_string(),
+            },
+            QueryParameter {
+                name: "p1".to_string(),
+                value: "task_success".to_string(),
+            },
+            QueryParameter {
+                name: "p2".to_string(),
+                value: "1".to_string(),
+            },
+        ];
+        assert_eq!(params, expected_params);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_boolean_metric_filter_false() {
+        let config = get_e2e_config().await;
+        let filter_node = InferenceFilterTreeNode::BooleanMetric(BooleanMetricNode {
+            metric_name: "task_success".to_string(),
+            value: false,
+        });
+        let opts = ListInferencesParams {
+            function_name: "extract_entities",
+            variant_name: None,
+            filters: Some(&filter_node),
+            output_source: InferenceOutputSource::Inference,
+            limit: None,
+            offset: None,
+        };
+        let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
+        let expected_sql = r#"
+SELECT
+    i.episode_id as episode_id,
+    i.id as id,
+    i.input as input,
+    i.output as output,
+    i.timestamp as timestamp,
+    i.variant_name as variant_name
+FROM
+    JsonInference AS i
+LEFT JOIN (
+    SELECT
+        target_id,
+        argMax(value, timestamp) as value
+    FROM BooleanMetricFeedback
+    WHERE metric_name = {p1:String}
+    AND value = {p2:Bool}
+    GROUP BY target_id
+) AS j0 ON i.id = j0.target_id
+WHERE
+    i.function_name = {p0:String} AND j0.value = {p2:Bool}"#;
+        assert_eq!(sql, expected_sql);
+        let expected_params = vec![
+            QueryParameter {
+                name: "p0".to_string(),
+                value: "extract_entities".to_string(),
+            },
+            QueryParameter {
+                name: "p1".to_string(),
+                value: "task_success".to_string(),
+            },
+            QueryParameter {
+                name: "p2".to_string(),
+                value: "0".to_string(),
+            },
+        ];
+        assert_eq!(params, expected_params);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_and_filter_multiple_float_metrics() {
+        let config = get_e2e_config().await;
+        let filter_node = InferenceFilterTreeNode::And(vec![
+            InferenceFilterTreeNode::FloatMetric(FloatMetricNode {
+                metric_name: "jaccard_similarity".to_string(),
+                value: 0.5,
+                comparison_operator: FloatComparisonOperator::GreaterThan,
+            }),
+            InferenceFilterTreeNode::FloatMetric(FloatMetricNode {
+                metric_name: "brevity_score".to_string(),
+                value: 10.0,
+                comparison_operator: FloatComparisonOperator::LessThan,
+            }),
+        ]);
+        let opts = ListInferencesParams {
+            function_name: "extract_entities",
+            variant_name: None,
+            filters: Some(&filter_node),
+            output_source: InferenceOutputSource::Inference,
+            limit: None,
+            offset: None,
+        };
+        let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
+        let expected_sql = r#"
+SELECT
+    i.episode_id as episode_id,
+    i.id as id,
+    i.input as input,
+    i.output as output,
+    i.timestamp as timestamp,
+    i.variant_name as variant_name
+FROM
+    JsonInference AS i
+LEFT JOIN (
+    SELECT
+        target_id,
+        argMax(value, timestamp) as value
+    FROM FloatMetricFeedback
+    WHERE metric_name = {p1:String}
+    AND value > {p2:Float64}
+    GROUP BY target_id
+) AS j0 ON i.id = j0.target_id
+
+LEFT JOIN (
+    SELECT
+        target_id,
+        argMax(value, timestamp) as value
+    FROM FloatMetricFeedback
+    WHERE metric_name = {p3:String}
+    AND value < {p4:Float64}
+    GROUP BY target_id
+) AS j1 ON i.id = j1.target_id
+WHERE
+    i.function_name = {p0:String} AND (COALESCE(j0.value > {p2:Float64}, 0) AND COALESCE(j1.value < {p4:Float64}, 0))"#;
+        assert_eq!(sql, expected_sql);
+        let expected_params = vec![
+            QueryParameter {
+                name: "p0".to_string(),
+                value: "extract_entities".to_string(),
+            },
+            QueryParameter {
+                name: "p1".to_string(),
+                value: "jaccard_similarity".to_string(),
+            },
+            QueryParameter {
+                name: "p2".to_string(),
+                value: "0.5".to_string(),
+            },
+            QueryParameter {
+                name: "p3".to_string(),
+                value: "brevity_score".to_string(),
+            },
+            QueryParameter {
+                name: "p4".to_string(),
+                value: "10".to_string(),
+            },
+        ];
+        assert_eq!(params, expected_params);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_or_filter_mixed_metrics() {
+        let config = get_e2e_config().await;
+        let filter_node = InferenceFilterTreeNode::Or(vec![
+            InferenceFilterTreeNode::FloatMetric(FloatMetricNode {
+                metric_name: "jaccard_similarity".to_string(),
+                value: 0.8,
+                comparison_operator: FloatComparisonOperator::GreaterThanOrEqual,
+            }),
+            InferenceFilterTreeNode::BooleanMetric(BooleanMetricNode {
+                metric_name: "exact_match".to_string(),
+                value: true,
+            }),
+        ]);
+        let opts = ListInferencesParams {
+            function_name: "extract_entities",
+            variant_name: None,
+            filters: Some(&filter_node),
+            output_source: InferenceOutputSource::Inference,
+            limit: None,
+            offset: None,
+        };
+        let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
+        let expected_sql = r#"
+SELECT
+    i.episode_id as episode_id,
+    i.id as id,
+    i.input as input,
+    i.output as output,
+    i.timestamp as timestamp,
+    i.variant_name as variant_name
+FROM
+    JsonInference AS i
+LEFT JOIN (
+    SELECT
+        target_id,
+        argMax(value, timestamp) as value
+    FROM FloatMetricFeedback
+    WHERE metric_name = {p1:String}
+    AND value >= {p2:Float64}
+    GROUP BY target_id
+) AS j0 ON i.id = j0.target_id
+
+LEFT JOIN (
+    SELECT
+        target_id,
+        argMax(value, timestamp) as value
+    FROM BooleanMetricFeedback
+    WHERE metric_name = {p3:String}
+    AND value = {p4:Bool}
+    GROUP BY target_id
+) AS j1 ON i.id = j1.target_id
+WHERE
+    i.function_name = {p0:String} AND (COALESCE(j0.value >= {p2:Float64}, 0) OR COALESCE(j1.value = {p4:Bool}, 0))"#;
+        assert_eq!(sql, expected_sql);
+        let expected_params = vec![
+            QueryParameter {
+                name: "p0".to_string(),
+                value: "extract_entities".to_string(),
+            },
+            QueryParameter {
+                name: "p1".to_string(),
+                value: "jaccard_similarity".to_string(),
+            },
+            QueryParameter {
+                name: "p2".to_string(),
+                value: "0.8".to_string(),
+            },
+            QueryParameter {
+                name: "p3".to_string(),
+                value: "exact_match".to_string(),
+            },
+            QueryParameter {
+                name: "p4".to_string(),
+                value: "1".to_string(),
+            },
+        ];
+        assert_eq!(params, expected_params);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_not_filter() {
+        let config = get_e2e_config().await;
+        let filter_node = InferenceFilterTreeNode::Not(Box::new(
+            InferenceFilterTreeNode::BooleanMetric(BooleanMetricNode {
+                metric_name: "task_success".to_string(),
+                value: true,
+            }),
+        ));
+        let opts = ListInferencesParams {
+            function_name: "extract_entities",
+            variant_name: None,
+            filters: Some(&filter_node),
+            output_source: InferenceOutputSource::Inference,
+            limit: None,
+            offset: None,
+        };
+        let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
+        let expected_sql = r#"
+SELECT
+    i.episode_id as episode_id,
+    i.id as id,
+    i.input as input,
+    i.output as output,
+    i.timestamp as timestamp,
+    i.variant_name as variant_name
+FROM
+    JsonInference AS i
+LEFT JOIN (
+    SELECT
+        target_id,
+        argMax(value, timestamp) as value
+    FROM BooleanMetricFeedback
+    WHERE metric_name = {p1:String}
+    AND value = {p2:Bool}
+    GROUP BY target_id
+) AS j0 ON i.id = j0.target_id
+WHERE
+    i.function_name = {p0:String} AND NOT (COALESCE(j0.value = {p2:Bool}, 1))"#;
+        assert_eq!(sql, expected_sql);
+        let expected_params = vec![
+            QueryParameter {
+                name: "p0".to_string(),
+                value: "extract_entities".to_string(),
+            },
+            QueryParameter {
+                name: "p1".to_string(),
+                value: "task_success".to_string(),
+            },
+            QueryParameter {
+                name: "p2".to_string(),
+                value: "1".to_string(),
+            },
+        ];
+        assert_eq!(params, expected_params);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_nested_complex_filter() {
+        let config = get_e2e_config().await;
+        let filter_node = InferenceFilterTreeNode::And(vec![
+            InferenceFilterTreeNode::Or(vec![
+                InferenceFilterTreeNode::FloatMetric(FloatMetricNode {
+                    metric_name: "jaccard_similarity".to_string(),
+                    value: 0.7,
+                    comparison_operator: FloatComparisonOperator::GreaterThan,
+                }),
+                InferenceFilterTreeNode::FloatMetric(FloatMetricNode {
+                    metric_name: "brevity_score".to_string(),
+                    value: 5.0,
+                    comparison_operator: FloatComparisonOperator::LessThanOrEqual,
+                }),
+            ]),
+            InferenceFilterTreeNode::Not(Box::new(InferenceFilterTreeNode::BooleanMetric(
+                BooleanMetricNode {
+                    metric_name: "task_success".to_string(),
+                    value: false,
+                },
+            ))),
+        ]);
+        let opts = ListInferencesParams {
+            function_name: "extract_entities",
+            variant_name: None,
+            filters: Some(&filter_node),
+            output_source: InferenceOutputSource::Inference,
+            limit: None,
+            offset: None,
+        };
+        let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
+        let expected_sql = r#"
+SELECT
+    i.episode_id as episode_id,
+    i.id as id,
+    i.input as input,
+    i.output as output,
+    i.timestamp as timestamp,
+    i.variant_name as variant_name
+FROM
+    JsonInference AS i
+LEFT JOIN (
+    SELECT
+        target_id,
+        argMax(value, timestamp) as value
+    FROM FloatMetricFeedback
+    WHERE metric_name = {p1:String}
+    AND value > {p2:Float64}
+    GROUP BY target_id
+) AS j0 ON i.id = j0.target_id
+
+LEFT JOIN (
+    SELECT
+        target_id,
+        argMax(value, timestamp) as value
+    FROM FloatMetricFeedback
+    WHERE metric_name = {p3:String}
+    AND value <= {p4:Float64}
+    GROUP BY target_id
+) AS j1 ON i.id = j1.target_id
+
+LEFT JOIN (
+    SELECT
+        target_id,
+        argMax(value, timestamp) as value
+    FROM BooleanMetricFeedback
+    WHERE metric_name = {p5:String}
+    AND value = {p6:Bool}
+    GROUP BY target_id
+) AS j2 ON i.id = j2.target_id
+WHERE
+    i.function_name = {p0:String} AND (COALESCE((COALESCE(j0.value > {p2:Float64}, 0) OR COALESCE(j1.value <= {p4:Float64}, 0)), 0) AND COALESCE(NOT (COALESCE(j2.value = {p6:Bool}, 1)), 0))"#;
+        assert_eq!(sql, expected_sql);
+        assert_eq!(params.len(), 7); // p0 (function) + 6 metric-related params
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_variant_name_filter() {
+        let config = get_e2e_config().await;
+        let opts = ListInferencesParams {
+            function_name: "extract_entities",
+            variant_name: Some("v1"),
+            filters: None,
+            output_source: InferenceOutputSource::Inference,
+            limit: None,
+            offset: None,
+        };
+        let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
+        let expected_sql = r#"
+SELECT
+    i.episode_id as episode_id,
+    i.id as id,
+    i.input as input,
+    i.output as output,
+    i.timestamp as timestamp,
+    i.variant_name as variant_name
+FROM
+    JsonInference AS i
+WHERE
+    i.function_name = {p0:String} AND i.variant_name = {p1:String}"#;
+        assert_eq!(sql, expected_sql);
+        let expected_params = vec![
+            QueryParameter {
+                name: "p0".to_string(),
+                value: "extract_entities".to_string(),
+            },
+            QueryParameter {
+                name: "p1".to_string(),
+                value: "v1".to_string(),
+            },
+        ];
+        assert_eq!(params, expected_params);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_limit_and_offset() {
+        let config = get_e2e_config().await;
+        let opts = ListInferencesParams {
+            function_name: "extract_entities",
+            variant_name: None,
+            filters: None,
+            output_source: InferenceOutputSource::Inference,
+            limit: Some(50),
+            offset: Some(100),
+        };
+        let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
+        let expected_sql = r#"
+SELECT
+    i.episode_id as episode_id,
+    i.id as id,
+    i.input as input,
+    i.output as output,
+    i.timestamp as timestamp,
+    i.variant_name as variant_name
+FROM
+    JsonInference AS i
+WHERE
+    i.function_name = {p0:String}
+LIMIT {p1:UInt64}
+OFFSET {p2:UInt64}"#;
+        assert_eq!(sql, expected_sql);
+        let expected_params = vec![
+            QueryParameter {
+                name: "p0".to_string(),
+                value: "extract_entities".to_string(),
+            },
+            QueryParameter {
+                name: "p1".to_string(),
+                value: "50".to_string(),
+            },
+            QueryParameter {
+                name: "p2".to_string(),
+                value: "100".to_string(),
+            },
+        ];
+        assert_eq!(params, expected_params);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_all_float_comparison_operators() {
+        let config = get_e2e_config().await;
+        let operators = vec![
+            (FloatComparisonOperator::LessThan, "<"),
+            (FloatComparisonOperator::LessThanOrEqual, "<="),
+            (FloatComparisonOperator::Equal, "="),
+            (FloatComparisonOperator::GreaterThan, ">"),
+            (FloatComparisonOperator::GreaterThanOrEqual, ">="),
+            (FloatComparisonOperator::NotEqual, "!="),
+        ];
+
+        for (op, expected_op_str) in operators {
+            let filter_node = InferenceFilterTreeNode::FloatMetric(FloatMetricNode {
+                metric_name: "jaccard_similarity".to_string(),
+                value: 0.5,
+                comparison_operator: op,
+            });
+            let opts = ListInferencesParams {
+                function_name: "extract_entities",
+                variant_name: None,
+                filters: Some(&filter_node),
+                output_source: InferenceOutputSource::Inference,
+                limit: None,
+                offset: None,
+            };
+            let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
+            let expected_sql = format!(
+                r#"
+SELECT
+    i.episode_id as episode_id,
+    i.id as id,
+    i.input as input,
+    i.output as output,
+    i.timestamp as timestamp,
+    i.variant_name as variant_name
+FROM
+    JsonInference AS i
+LEFT JOIN (
+    SELECT
+        target_id,
+        argMax(value, timestamp) as value
+    FROM FloatMetricFeedback
+    WHERE metric_name = {{p1:String}}
+    AND value {expected_op_str} {{p2:Float64}}
+    GROUP BY target_id
+) AS j0 ON i.id = j0.target_id
+WHERE
+    i.function_name = {{p0:String}} AND j0.value {expected_op_str} {{p2:Float64}}"#,
+            );
+            assert_eq!(sql, expected_sql);
+            let expected_params = vec![
+                QueryParameter {
+                    name: "p0".to_string(),
+                    value: "extract_entities".to_string(),
+                },
+                QueryParameter {
+                    name: "p1".to_string(),
+                    value: "jaccard_similarity".to_string(),
+                },
+                QueryParameter {
+                    name: "p2".to_string(),
+                    value: "0.5".to_string(),
+                },
+            ];
+            assert_eq!(params, expected_params);
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_combined_variant_filter_and_metrics() {
+        let config = get_e2e_config().await;
+        let filter_node = InferenceFilterTreeNode::And(vec![
+            InferenceFilterTreeNode::FloatMetric(FloatMetricNode {
+                metric_name: "jaccard_similarity".to_string(),
+                value: 0.6,
+                comparison_operator: FloatComparisonOperator::GreaterThan,
+            }),
+            InferenceFilterTreeNode::BooleanMetric(BooleanMetricNode {
+                metric_name: "exact_match".to_string(),
+                value: true,
+            }),
+        ]);
+        let opts = ListInferencesParams {
+            function_name: "extract_entities",
+            variant_name: Some("production"),
+            filters: Some(&filter_node),
+            output_source: InferenceOutputSource::Demonstration,
+            limit: Some(25),
+            offset: Some(50),
+        };
+        let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
+        let expected_sql = r#"
+SELECT
+    demo_f.value AS output,
+    i.episode_id as episode_id,
+    i.id as id,
+    i.input as input,
+    i.timestamp as timestamp,
+    i.variant_name as variant_name
+FROM
+    JsonInference AS i
+JOIN (SELECT inference_id, argMax(value, timestamp) as value FROM DemonstrationFeedback GROUP BY inference_id ) AS demo_f ON i.id = demo_f.inference_id
+
+LEFT JOIN (
+    SELECT
+        target_id,
+        argMax(value, timestamp) as value
+    FROM FloatMetricFeedback
+    WHERE metric_name = {p2:String}
+    AND value > {p3:Float64}
+    GROUP BY target_id
+) AS j0 ON i.id = j0.target_id
+
+LEFT JOIN (
+    SELECT
+        target_id,
+        argMax(value, timestamp) as value
+    FROM BooleanMetricFeedback
+    WHERE metric_name = {p4:String}
+    AND value = {p5:Bool}
+    GROUP BY target_id
+) AS j1 ON i.id = j1.target_id
+WHERE
+    i.function_name = {p0:String} AND i.variant_name = {p1:String} AND (COALESCE(j0.value > {p3:Float64}, 0) AND COALESCE(j1.value = {p5:Bool}, 0))
+LIMIT {p6:UInt64}
+OFFSET {p7:UInt64}"#;
+        assert_eq!(sql, expected_sql);
+
+        let expected_params = vec![
+            QueryParameter {
+                name: "p0".to_string(),
+                value: "extract_entities".to_string(),
+            },
+            QueryParameter {
+                name: "p1".to_string(),
+                value: "production".to_string(),
+            },
+            QueryParameter {
+                name: "p2".to_string(),
+                value: "jaccard_similarity".to_string(),
+            },
+            QueryParameter {
+                name: "p3".to_string(),
+                value: "0.6".to_string(),
+            },
+            QueryParameter {
+                name: "p4".to_string(),
+                value: "exact_match".to_string(),
+            },
+            QueryParameter {
+                name: "p5".to_string(),
+                value: "1".to_string(),
+            },
+            QueryParameter {
+                name: "p6".to_string(),
+                value: "25".to_string(),
+            },
+            QueryParameter {
+                name: "p7".to_string(),
+                value: "50".to_string(),
+            },
+        ];
+        assert_eq!(params, expected_params);
+    }
 }
