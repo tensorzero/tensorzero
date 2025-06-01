@@ -123,6 +123,8 @@ LEFT JOIN (
 ) AS {join_alias} ON i.{inference_table_column_name} = {join_alias}.target_id"#
                 ));
                 // 4. return the filter condition
+                // NOTE: if the join_alias is NULL, the filter condition will be NULL also
+                // We handle this farther up the recursive tree
                 Ok(format!(
                     "{join_alias}.value {comparison_operator} {value_placeholder}"
                 ))
@@ -168,6 +170,8 @@ LEFT JOIN (
 ) AS {join_alias} ON i.{inference_table_column_name} = {join_alias}.target_id"#
                 ));
                 // 4. return the filter condition
+                // NOTE: if the join_alias is NULL, the filter condition will be NULL also
+                // We handle this farther up the recursive tree
                 Ok(format!("{join_alias}.value = {value_placeholder}"))
             }
             InferenceFilterTreeNode::And(children) => {
@@ -183,7 +187,12 @@ LEFT JOIN (
                             join_idx_counter,
                         )
                     })
-                    .collect::<Result<Vec<String>, Error>>()?;
+                    .collect::<Result<Vec<String>, Error>>()?
+                    .into_iter()
+                    // We need to coalesce the filter condition to 0 if the join_alias is NULL
+                    // For an AND filter we want to return 0 if any of the children are NULL
+                    .map(|s| format!("COALESCE({s}, 0)"))
+                    .collect::<Vec<String>>();
                 let child_sqls_str = child_sqls.join(" AND ");
                 Ok(format!("({child_sqls_str})"))
             }
@@ -200,7 +209,12 @@ LEFT JOIN (
                             join_idx_counter,
                         )
                     })
-                    .collect::<Result<Vec<String>, Error>>()?;
+                    .collect::<Result<Vec<String>, Error>>()?
+                    .into_iter()
+                    // We need to coalesce the filter condition to 0 if the join_alias is NULL
+                    // For an OR filter we want to return 0 if all of the children are NULL
+                    .map(|s| format!("COALESCE({s}, 0)"))
+                    .collect::<Vec<String>>();
                 let child_sqls_str = child_sqls.join(" OR ");
                 Ok(format!("({child_sqls_str})"))
             }
@@ -213,7 +227,10 @@ LEFT JOIN (
                     param_idx_counter,
                     join_idx_counter,
                 )?;
-                Ok(format!("NOT ({child_sql})"))
+                // We need to coalesce the filter condition to 1 if the join_alias is NULL
+                // For a NOT filter we want to still be false if the join_alias is NULL
+                // NOTE to reviewer: Is this the behavior we want?
+                Ok(format!("NOT (COALESCE({child_sql}, 1))"))
             }
         }
     }
