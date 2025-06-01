@@ -58,6 +58,19 @@ pub enum InferenceFilterTreeNode {
 }
 
 impl InferenceFilterTreeNode {
+    /// Converts the filter tree to a ClickHouse SQL string.
+    ///
+    /// The returned string will contain the filter condition that should be added to the WHERE clause.
+    /// The `params_map` is updated with the parameters used in the filter condition.
+    /// The `join_clauses` is updated with the JOIN clauses.
+    /// The `param_idx_counter` is updated with the current index of the parameter.
+    /// The `join_idx_counter` is updated with the current index of the join alias.
+    /// The `_select_clauses` is not used *yet*--we will want to add metric columns to the SELECT clause for visibility and debugging.
+    ///
+    /// NOTE: This is not efficient at all yet. We are doing a lot of JOINs and GROUP BYs.
+    /// We may be able to do this more efficiently by using subqueries and CTEs.
+    /// We're also doing a join per filter. In principle if there is a subtree of the tree that uses the same joined table,
+    /// we could push the condition down into the query before the join
     pub fn to_clickhouse_sql(
         &self,
         config: &Config,
@@ -367,7 +380,7 @@ fn add_parameter(
     format!("{{{internal_name}:{ch_type}}}")
 }
 
-// Helper to get a join alias
+// Helper to get a join alias given the current counter on join tables
 fn get_join_alias(counter: &mut usize) -> String {
     let internal_name = format!("j{}", *counter);
     *counter += 1;
