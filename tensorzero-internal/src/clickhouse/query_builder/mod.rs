@@ -1,5 +1,5 @@
 use itertools::Itertools;
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 
 use crate::{
     config_parser::Config,
@@ -75,7 +75,7 @@ impl InferenceFilterTreeNode {
         &self,
         config: &Config,
         params_map: &mut Vec<QueryParameter>,
-        _select_clauses: &mut HashSet<String>,
+        _select_clauses: &mut BTreeSet<String>,
         join_clauses: &mut Vec<String>,
         param_idx_counter: &mut usize,
         join_idx_counter: &mut usize,
@@ -240,7 +240,7 @@ LEFT JOIN (
 /// The `name` is the internal name (e.g., "p0", "p1") used in `SET param_<name> = ...`
 /// and in the `{<name>:DataType}` placeholder.
 /// The `value` is the string representation of the value.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct QueryParameter {
     pub name: String,
     pub value: String,
@@ -251,6 +251,10 @@ pub struct QueryParameter {
 /// The returned `Vec<QueryParameter>` contains the mapping from placeholder names (e.g., "p0")
 /// to their string values. The client executing the query is responsible for
 /// setting these parameters (e.g., via `SET param_p0 = 'value'` or `SET param_p1 = 123`).
+///
+/// TODOs:
+/// - handle selecting the feedback values
+/// - handle things like output schema, tool params, etc.
 pub fn generate_list_inferences_sql(
     config: &Config,
     function_name: &str,
@@ -264,7 +268,7 @@ pub fn generate_list_inferences_sql(
     let mut param_idx_counter = 0; // Counter for unique parameter names
     let mut join_idx_counter = 0; // Counter for unique join aliases
 
-    let mut select_clauses = HashSet::from([
+    let mut select_clauses = BTreeSet::from([
         "i.input as input".to_string(),
         "i.variant_name as variant_name".to_string(),
         "i.episode_id as episode_id".to_string(),
@@ -309,7 +313,7 @@ pub fn generate_list_inferences_sql(
 
             // NOTE: we may want to pre-filter this via subqueries or CTEs prior to the join for performance reasons
             join_clauses.push(
-                "JOIN \
+                "\nJOIN \
                  (SELECT \
                     inference_id, \
                     argMax(value, timestamp) as value \
@@ -341,14 +345,12 @@ pub fn generate_list_inferences_sql(
 SELECT
     {select_clauses}
 FROM
-    {inference_table_name} AS i
-    "#,
+    {inference_table_name} AS i"#,
         select_clauses = select_clauses.iter().join(",\n    "),
         inference_table_name = inference_table_name,
     );
 
     if !join_clauses.is_empty() {
-        sql.push('\n');
         sql.push_str(&join_clauses.join("\n"));
     }
 
@@ -402,4 +404,222 @@ fn get_join_alias(counter: &mut usize) -> String {
     let internal_name = format!("j{}", *counter);
     *counter += 1;
     internal_name
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use super::*;
+
+    async fn get_e2e_config() -> Config<'static> {
+        // Read the e2e config file
+        Config::load_from_path_optional_verify_credentials(
+            Path::new("tests/e2e/tensorzero.toml"),
+            false,
+        )
+        .await
+        .unwrap()
+    }
+
+    /// Tests the simplest possible query: list inferences for a function with no filters
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_simple_query_json_function() {
+        let config = get_e2e_config().await;
+        let (sql, params) = generate_list_inferences_sql(
+            &config,
+            "extract_entities",
+            None,
+            None,
+            &InferenceOutputSource::Inference,
+            None,
+            None,
+        )
+        .unwrap();
+        let expected_sql = r#"
+SELECT
+    i.episode_id as episode_id,
+    i.id as id,
+    i.input as input,
+    i.output as output,
+    i.timestamp as timestamp,
+    i.variant_name as variant_name
+FROM
+    JsonInference AS i
+WHERE
+    i.function_name = {p0:String}"#;
+        assert_eq!(sql, expected_sql);
+        let expected_params = vec![QueryParameter {
+            name: "p0".to_string(),
+            value: "extract_entities".to_string(),
+        }];
+        assert_eq!(params, expected_params);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_simple_query_chat_function() {
+        let config = get_e2e_config().await;
+        let (sql, params) = generate_list_inferences_sql(
+            &config,
+            "write_haiku",
+            None,
+            None,
+            &InferenceOutputSource::Inference,
+            None,
+            None,
+        )
+        .unwrap();
+        let expected_sql = r#"
+SELECT
+    i.episode_id as episode_id,
+    i.id as id,
+    i.input as input,
+    i.output as output,
+    i.timestamp as timestamp,
+    i.variant_name as variant_name
+FROM
+    ChatInference AS i
+WHERE
+    i.function_name = {p0:String}"#;
+        assert_eq!(sql, expected_sql);
+        let expected_params = vec![QueryParameter {
+            name: "p0".to_string(),
+            value: "write_haiku".to_string(),
+        }];
+        assert_eq!(params, expected_params);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_simple_query_with_float_filters() {
+        let config = get_e2e_config().await;
+        let filter_node = InferenceFilterTreeNode::FloatMetric(FloatMetricNode {
+            metric_name: "jaccard_similarity".to_string(),
+            value: 0.5,
+            comparison_operator: FloatComparisonOperator::GreaterThan,
+        });
+        let (sql, params) = generate_list_inferences_sql(
+            &config,
+            "extract_entities",
+            None,
+            Some(&filter_node),
+            &InferenceOutputSource::Inference,
+            None,
+            None,
+        )
+        .unwrap();
+        let expected_sql = r#"
+SELECT
+    i.episode_id as episode_id,
+    i.id as id,
+    i.input as input,
+    i.output as output,
+    i.timestamp as timestamp,
+    i.variant_name as variant_name
+FROM
+    JsonInference AS i
+LEFT JOIN (
+    SELECT
+        target_id,
+        argMax(value, timestamp) as value
+    FROM FloatMetricFeedback
+    WHERE metric_name = {p1:String}
+    AND value > {p2:Float64}
+    GROUP BY target_id
+) AS j0 ON i.id = j0.target_id
+WHERE
+    i.function_name = {p0:String} AND j0.value > {p2:Float64}"#;
+        assert_eq!(sql, expected_sql);
+        let expected_params = vec![
+            QueryParameter {
+                name: "p0".to_string(),
+                value: "extract_entities".to_string(),
+            },
+            QueryParameter {
+                name: "p1".to_string(),
+                value: "jaccard_similarity".to_string(),
+            },
+            QueryParameter {
+                name: "p2".to_string(),
+                value: "0.5".to_string(),
+            },
+        ];
+        assert_eq!(params, expected_params);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_unknown_function_name() {
+        let config = get_e2e_config().await;
+        let result = generate_list_inferences_sql(
+            &config,
+            "unknown_function_name",
+            None,
+            None,
+            &InferenceOutputSource::Inference,
+            None,
+            None,
+        );
+        assert!(result.is_err());
+        let expected_error = ErrorDetails::UnknownFunction {
+            name: "unknown_function_name".to_string(),
+        };
+        assert_eq!(result.unwrap_err().get_details(), &expected_error);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_unknown_metric_name() {
+        let config = get_e2e_config().await;
+        let filter_node = InferenceFilterTreeNode::FloatMetric(FloatMetricNode {
+            metric_name: "unknown_metric_name".to_string(),
+            value: 0.5,
+            comparison_operator: FloatComparisonOperator::GreaterThan,
+        });
+        let result = generate_list_inferences_sql(
+            &config,
+            "extract_entities",
+            None,
+            Some(&filter_node),
+            &InferenceOutputSource::Inference,
+            None,
+            None,
+        );
+        assert!(result.is_err());
+        let expected_error = ErrorDetails::InvalidMetricName {
+            metric_name: "unknown_metric_name".to_string(),
+        };
+        assert_eq!(result.unwrap_err().get_details(), &expected_error);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_demonstration_output_source() {
+        let config = get_e2e_config().await;
+        let (sql, params) = generate_list_inferences_sql(
+            &config,
+            "extract_entities",
+            None,
+            None,
+            &InferenceOutputSource::Demonstration,
+            None,
+            None,
+        )
+        .unwrap();
+        let expected_sql = r#"
+SELECT
+    demo_f.value AS output,
+    i.episode_id as episode_id,
+    i.id as id,
+    i.input as input,
+    i.timestamp as timestamp,
+    i.variant_name as variant_name
+FROM
+    JsonInference AS i
+JOIN (SELECT inference_id, argMax(value, timestamp) as value FROM DemonstrationFeedback GROUP BY inference_id ) AS demo_f ON i.id = demo_f.inference_id
+WHERE
+    i.function_name = {p0:String}"#;
+        assert_eq!(sql, expected_sql);
+        let expected_params = vec![QueryParameter {
+            name: "p0".to_string(),
+            value: "extract_entities".to_string(),
+        }];
+        assert_eq!(params, expected_params);
+    }
 }
