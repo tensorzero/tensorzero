@@ -274,18 +274,16 @@ pub fn generate_list_inferences_sql(
         // Recursively builds the filter condition SQL statement for the WHERE clause
         //  * adds the JOINed tables it needs
         //  * adds metric columns to the SELECT clause for visibility and debugging
-        // let filter_condition_sql = build_feedback_filter_sql_recursive(
-        //     filter_node,
-        //     &mut params_map,
-        //     &mut param_idx_counter,
-        //     &mut join_clauses,
-        //     &mut select_clauses,
-        //     config,
-        // );
-        // if !filter_condition_sql.is_empty() {
-        //     where_clauses.push(filter_condition_sql);
-        // }
-        todo!()
+        let filter_condition_sql = filter_node.to_clickhouse_sql(
+            &mut params_map,
+            &mut select_clauses,
+            &mut join_clauses,
+            &mut param_idx_counter,
+            &mut join_idx_counter,
+        );
+        if !filter_condition_sql.is_empty() {
+            where_clauses.push(filter_condition_sql);
+        }
     }
 
     let mut sql = format!(
