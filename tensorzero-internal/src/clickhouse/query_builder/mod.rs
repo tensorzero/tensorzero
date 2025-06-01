@@ -60,18 +60,31 @@ pub enum InferenceFilterTreeNode {
 impl InferenceFilterTreeNode {
     pub fn to_clickhouse_sql(
         &self,
+        config: &Config,
         params_map: &mut Vec<QueryParameter>,
-        select_clauses: &mut HashSet<String>,
+        _select_clauses: &mut HashSet<String>,
         join_clauses: &mut Vec<String>,
         param_idx_counter: &mut usize,
         join_idx_counter: &mut usize,
-    ) -> String {
-        // TODO (everywhere): add select and join clauses as appropriate
+    ) -> Result<String, Error> {
         match self {
             InferenceFilterTreeNode::FloatMetric(fm_node) => {
+                let metric_config = config
+                    .metrics
+                    .get(fm_node.metric_name.as_str())
+                    .ok_or_else(|| {
+                        Error::new(ErrorDetails::InvalidMetricName {
+                            metric_name: fm_node.metric_name.clone(),
+                        })
+                    })?;
+                let inference_table_column_name = metric_config.level.inference_column_name();
+
+                // 1. Create an alias for the join condition we'll need
+                let join_alias = get_join_alias(join_idx_counter);
+                // 2. Set up query parameters
                 let metric_name_placeholder = add_parameter(
                     fm_node.metric_name.clone(),
-                    "Identifier",
+                    "String",
                     params_map,
                     param_idx_counter,
                 );
@@ -81,14 +94,39 @@ impl InferenceFilterTreeNode {
                     params_map,
                     param_idx_counter,
                 );
-                format!(
-                    "(metric_name = {} AND value {} {})",
-                    metric_name_placeholder,
-                    fm_node.comparison_operator.to_clickhouse_operator(),
-                    value_placeholder
-                )
+
+                // 3. register the LEFT JOIN clause
+                let comparison_operator = fm_node.comparison_operator.to_clickhouse_operator();
+                join_clauses.push(format!(
+                    r#"
+LEFT JOIN (
+    SELECT
+        target_id,
+        argMax(value, timestamp) as value
+    FROM FloatMetricFeedback
+    WHERE metric_name = {metric_name_placeholder}
+    AND value {comparison_operator} {value_placeholder}
+    GROUP BY target_id
+) AS {join_alias} ON i.{inference_table_column_name} = {join_alias}.target_id"#
+                ));
+                // 4. return the filter condition
+                Ok(format!(
+                    "{join_alias}.value {comparison_operator} {value_placeholder}"
+                ))
             }
             InferenceFilterTreeNode::BooleanMetric(bm_node) => {
+                let metric_config = config
+                    .metrics
+                    .get(bm_node.metric_name.as_str())
+                    .ok_or_else(|| {
+                        Error::new(ErrorDetails::InvalidMetricName {
+                            metric_name: bm_node.metric_name.clone(),
+                        })
+                    })?;
+                let inference_table_column_name = metric_config.level.inference_column_name();
+                // 1. Create an alias for the join condition we'll need
+                let join_alias = get_join_alias(join_idx_counter);
+                // 2. Set up query parameters
                 let metric_name_placeholder = add_parameter(
                     bm_node.metric_name.clone(),
                     "String",
@@ -103,64 +141,66 @@ impl InferenceFilterTreeNode {
                 // ClickHouse 'Bool' type is an alias for UInt8 restricted to 0 or 1.
                 let value_placeholder =
                     add_parameter(bool_value_str, "Bool", params_map, param_idx_counter);
-                format!(
-                    "(metric_name = {} AND value = {})",
-                    metric_name_placeholder, value_placeholder
-                )
+                // 3. register the JOIN clause
+                join_clauses.push(format!(
+                    r#"
+LEFT JOIN (
+    SELECT
+        target_id,
+        argMax(value, timestamp) as value
+    FROM BooleanMetricFeedback
+    WHERE metric_name = {metric_name_placeholder}
+    AND value = {value_placeholder}
+    GROUP BY target_id
+) AS {join_alias} ON i.{inference_table_column_name} = {join_alias}.target_id"#
+                ));
+                // 4. return the filter condition
+                Ok(format!("{join_alias}.value = {value_placeholder}"))
             }
             InferenceFilterTreeNode::And(children) => {
                 let child_sqls: Vec<String> = children
                     .iter()
                     .map(|child| {
                         child.to_clickhouse_sql(
+                            config,
                             params_map,
-                            select_clauses,
+                            _select_clauses,
                             join_clauses,
                             param_idx_counter,
                             join_idx_counter,
                         )
                     })
-                    .filter(|s| !s.is_empty())
-                    .collect();
-                if child_sqls.is_empty() {
-                    "".to_string()
-                } else {
-                    format!("({})", child_sqls.join(" AND "))
-                }
+                    .collect::<Result<Vec<String>, Error>>()?;
+                let child_sqls_str = child_sqls.join(" AND ");
+                Ok(format!("({child_sqls_str})"))
             }
             InferenceFilterTreeNode::Or(children) => {
                 let child_sqls: Vec<String> = children
                     .iter()
                     .map(|child| {
                         child.to_clickhouse_sql(
+                            config,
                             params_map,
-                            select_clauses,
+                            _select_clauses,
                             join_clauses,
                             param_idx_counter,
                             join_idx_counter,
                         )
                     })
-                    .filter(|s| !s.is_empty())
-                    .collect();
-                if child_sqls.is_empty() {
-                    "".to_string()
-                } else {
-                    format!("({})", child_sqls.join(" OR "))
-                }
+                    .collect::<Result<Vec<String>, Error>>()?;
+                let child_sqls_str = child_sqls.join(" OR ");
+                Ok(format!("({child_sqls_str})"))
             }
             InferenceFilterTreeNode::Not(child) => {
                 let child_sql = child.to_clickhouse_sql(
+                    config,
                     params_map,
-                    select_clauses,
+                    _select_clauses,
                     join_clauses,
                     param_idx_counter,
                     join_idx_counter,
-                );
-                if child_sql.is_empty() {
-                    "".to_string()
-                } else {
-                    format!("NOT ({})", child_sql)
-                }
+                )?;
+                Ok(format!("NOT ({child_sql})"))
             }
         }
     }
@@ -215,8 +255,7 @@ pub fn generate_list_inferences_sql(
         &mut param_idx_counter,
     );
     where_clauses.push(format!(
-        "i.function_name = {}",
-        function_name_param_placeholder
+        "i.function_name = {function_name_param_placeholder}"
     ));
 
     // Add variant_name filter
@@ -227,10 +266,7 @@ pub fn generate_list_inferences_sql(
             &mut params_map,
             &mut param_idx_counter,
         );
-        where_clauses.push(format!(
-            "i.variant_name = {}",
-            variant_name_param_placeholder
-        ));
+        where_clauses.push(format!("i.variant_name = {variant_name_param_placeholder}"));
     }
 
     // Handle OutputSource
@@ -260,15 +296,14 @@ pub fn generate_list_inferences_sql(
         //  * adds the JOINed tables it needs
         //  * adds metric columns to the SELECT clause for visibility and debugging
         let filter_condition_sql = filter_node.to_clickhouse_sql(
+            config,
             &mut params_map,
             &mut select_clauses,
             &mut join_clauses,
             &mut param_idx_counter,
             &mut join_idx_counter,
-        );
-        if !filter_condition_sql.is_empty() {
-            where_clauses.push(filter_condition_sql);
-        }
+        )?;
+        where_clauses.push(filter_condition_sql);
     }
 
     let mut sql = format!(
@@ -283,7 +318,7 @@ FROM
     );
 
     if !join_clauses.is_empty() {
-        sql.push_str("\n");
+        sql.push('\n');
         sql.push_str(&join_clauses.join("\n"));
     }
 
@@ -300,7 +335,7 @@ FROM
             &mut params_map,
             &mut param_idx_counter,
         );
-        sql.push_str(&format!("\nLIMIT {}", limit_param_placeholder));
+        sql.push_str(&format!("\nLIMIT {limit_param_placeholder}"));
     }
     if let Some(o) = offset {
         let offset_param_placeholder = add_parameter(
@@ -309,7 +344,7 @@ FROM
             &mut params_map,
             &mut param_idx_counter,
         );
-        sql.push_str(&format!("\nOFFSET {}", offset_param_placeholder));
+        sql.push_str(&format!("\nOFFSET {offset_param_placeholder}"));
     }
 
     Ok((sql, params_map))
@@ -329,7 +364,7 @@ fn add_parameter(
         name: internal_name.clone(),
         value,
     });
-    format!("{{{}:{}}}", internal_name, ch_type)
+    format!("{{{internal_name}:{ch_type}}}")
 }
 
 // Helper to get a join alias

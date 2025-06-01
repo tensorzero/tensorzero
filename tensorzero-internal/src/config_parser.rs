@@ -293,6 +293,15 @@ impl std::fmt::Display for MetricConfigLevel {
     }
 }
 
+impl MetricConfigLevel {
+    pub fn inference_column_name(&self) -> &str {
+        match self {
+            MetricConfigLevel::Inference => "id",
+            MetricConfigLevel::Episode => "episode_id",
+        }
+    }
+}
+
 impl<'c> Config<'c> {
     pub async fn load_and_verify_from_path(config_path: &Path) -> Result<Config<'c>, Error> {
         Self::load_from_path_optional_verify_credentials(config_path, true).await
