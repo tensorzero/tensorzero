@@ -96,17 +96,13 @@ impl InferenceFilterTreeNode {
                 let join_alias = get_join_alias(join_idx_counter);
                 // 2. Set up query parameters
                 let metric_name_placeholder = add_parameter(
-                    fm_node.metric_name.clone(),
+                    &fm_node.metric_name,
                     "String",
                     params_map,
                     param_idx_counter,
                 );
-                let value_placeholder = add_parameter(
-                    fm_node.value.to_string(),
-                    "Float64",
-                    params_map,
-                    param_idx_counter,
-                );
+                let value_placeholder =
+                    add_parameter(fm_node.value, "Float64", params_map, param_idx_counter);
 
                 // 3. register the LEFT JOIN clause
                 let comparison_operator = fm_node.comparison_operator.to_clickhouse_operator();
@@ -143,12 +139,12 @@ LEFT JOIN (
                 let join_alias = get_join_alias(join_idx_counter);
                 // 2. Set up query parameters
                 let metric_name_placeholder = add_parameter(
-                    bm_node.metric_name.clone(),
+                    &bm_node.metric_name,
                     "String",
                     params_map,
                     param_idx_counter,
                 );
-                let bool_value_str = if bm_node.value { "1" } else { "0" }.to_string();
+                let bool_value_str = if bm_node.value { "1" } else { "0" };
                 let value_placeholder =
                     add_parameter(bool_value_str, "Bool", params_map, param_idx_counter);
                 // 3. register the JOIN clause
@@ -283,7 +279,7 @@ pub fn generate_list_inferences_sql(
     let inference_table_name = function_config.table_name();
 
     let function_name_param_placeholder = add_parameter(
-        opts.function_name.to_string(),
+        opts.function_name,
         "String",
         &mut params_map,
         &mut param_idx_counter,
@@ -295,7 +291,7 @@ pub fn generate_list_inferences_sql(
     // Add variant_name filter
     if let Some(variant_name) = opts.variant_name {
         let variant_name_param_placeholder = add_parameter(
-            variant_name.to_string(),
+            variant_name,
             "String",
             &mut params_map,
             &mut param_idx_counter,
@@ -361,21 +357,13 @@ FROM
     // TODO: add ORDER BY
 
     if let Some(l) = opts.limit {
-        let limit_param_placeholder = add_parameter(
-            l.to_string(),
-            "UInt64",
-            &mut params_map,
-            &mut param_idx_counter,
-        );
+        let limit_param_placeholder =
+            add_parameter(l, "UInt64", &mut params_map, &mut param_idx_counter);
         sql.push_str(&format!("\nLIMIT {limit_param_placeholder}"));
     }
     if let Some(o) = opts.offset {
-        let offset_param_placeholder = add_parameter(
-            o.to_string(),
-            "UInt64",
-            &mut params_map,
-            &mut param_idx_counter,
-        );
+        let offset_param_placeholder =
+            add_parameter(o, "UInt64", &mut params_map, &mut param_idx_counter);
         sql.push_str(&format!("\nOFFSET {offset_param_placeholder}"));
     }
 
@@ -384,8 +372,8 @@ FROM
 
 /// Helper to add a parameter and return its SQL placeholder {name:CHType}
 /// The internal_name (e.g. p0, p1) is stored in params_map with its value.
-fn add_parameter(
-    value: String,
+fn add_parameter<T: ToString>(
+    value: T,
     ch_type: &str,
     params_map: &mut Vec<QueryParameter>,
     counter: &mut usize,
@@ -394,7 +382,7 @@ fn add_parameter(
     *counter += 1;
     params_map.push(QueryParameter {
         name: internal_name.clone(),
-        value,
+        value: value.to_string(),
     });
     format!("{{{internal_name}:{ch_type}}}")
 }
