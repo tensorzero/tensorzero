@@ -1,5 +1,8 @@
 use itertools::Itertools;
-use std::collections::BTreeSet;
+use std::{
+    collections::BTreeSet,
+    fmt::{self, Display},
+};
 
 use crate::{
     config_parser::Config,
@@ -97,12 +100,16 @@ impl InferenceFilterTreeNode {
                 // 2. Set up query parameters
                 let metric_name_placeholder = add_parameter(
                     &fm_node.metric_name,
-                    "String",
+                    ClickhouseType::String,
                     params_map,
                     param_idx_counter,
                 );
-                let value_placeholder =
-                    add_parameter(fm_node.value, "Float64", params_map, param_idx_counter);
+                let value_placeholder = add_parameter(
+                    fm_node.value,
+                    ClickhouseType::Float64,
+                    params_map,
+                    param_idx_counter,
+                );
 
                 // 3. register the LEFT JOIN clause
                 let comparison_operator = fm_node.comparison_operator.to_clickhouse_operator();
@@ -140,13 +147,17 @@ LEFT JOIN (
                 // 2. Set up query parameters
                 let metric_name_placeholder = add_parameter(
                     &bm_node.metric_name,
-                    "String",
+                    ClickhouseType::String,
                     params_map,
                     param_idx_counter,
                 );
                 let bool_value_str = if bm_node.value { "1" } else { "0" };
-                let value_placeholder =
-                    add_parameter(bool_value_str, "Bool", params_map, param_idx_counter);
+                let value_placeholder = add_parameter(
+                    bool_value_str,
+                    ClickhouseType::Bool,
+                    params_map,
+                    param_idx_counter,
+                );
                 // 3. register the JOIN clause
                 join_clauses.push(format!(
                     r#"
@@ -280,7 +291,7 @@ pub fn generate_list_inferences_sql(
 
     let function_name_param_placeholder = add_parameter(
         opts.function_name,
-        "String",
+        ClickhouseType::String,
         &mut params_map,
         &mut param_idx_counter,
     );
@@ -292,7 +303,7 @@ pub fn generate_list_inferences_sql(
     if let Some(variant_name) = opts.variant_name {
         let variant_name_param_placeholder = add_parameter(
             variant_name,
-            "String",
+            ClickhouseType::String,
             &mut params_map,
             &mut param_idx_counter,
         );
@@ -357,24 +368,51 @@ FROM
     // TODO: add ORDER BY
 
     if let Some(l) = opts.limit {
-        let limit_param_placeholder =
-            add_parameter(l, "UInt64", &mut params_map, &mut param_idx_counter);
+        let limit_param_placeholder = add_parameter(
+            l,
+            ClickhouseType::UInt64,
+            &mut params_map,
+            &mut param_idx_counter,
+        );
         sql.push_str(&format!("\nLIMIT {limit_param_placeholder}"));
     }
     if let Some(o) = opts.offset {
-        let offset_param_placeholder =
-            add_parameter(o, "UInt64", &mut params_map, &mut param_idx_counter);
+        let offset_param_placeholder = add_parameter(
+            o,
+            ClickhouseType::UInt64,
+            &mut params_map,
+            &mut param_idx_counter,
+        );
         sql.push_str(&format!("\nOFFSET {offset_param_placeholder}"));
     }
 
     Ok((sql, params_map))
 }
 
+#[derive(Debug, Clone, PartialEq)]
+enum ClickhouseType {
+    String,
+    Float64,
+    Bool,
+    UInt64,
+}
+
+impl Display for ClickhouseType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ClickhouseType::String => write!(f, "String"),
+            ClickhouseType::Float64 => write!(f, "Float64"),
+            ClickhouseType::Bool => write!(f, "Bool"),
+            ClickhouseType::UInt64 => write!(f, "UInt64"),
+        }
+    }
+}
+
 /// Helper to add a parameter and return its SQL placeholder {name:CHType}
 /// The internal_name (e.g. p0, p1) is stored in params_map with its value.
 fn add_parameter<T: ToString>(
     value: T,
-    ch_type: &str,
+    ch_type: ClickhouseType,
     params_map: &mut Vec<QueryParameter>,
     counter: &mut usize,
 ) -> String {
