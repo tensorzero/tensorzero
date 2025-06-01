@@ -7,6 +7,7 @@ use std::{
 use crate::{
     config_parser::Config,
     error::{Error, ErrorDetails},
+    function::FunctionConfig,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -279,18 +280,11 @@ pub fn generate_list_inferences_sql(
     let mut param_idx_counter = 0; // Counter for unique parameter names
     let mut join_idx_counter = 0; // Counter for unique join aliases
 
-    let mut select_clauses = BTreeSet::from([
-        "i.input as input".to_string(),
-        "i.variant_name as variant_name".to_string(),
-        "i.episode_id as episode_id".to_string(),
-        "i.id as id".to_string(),
-        "i.timestamp as timestamp".to_string(),
-        // We don't select output here because it's handled separately based on the output_source
-    ]);
+    let function_config = config.get_function(opts.function_name)?;
+    let mut select_clauses = get_select_clauses(&function_config);
     let mut join_clauses: Vec<String> = Vec::new();
     let mut where_clauses: Vec<String> = Vec::new();
 
-    let function_config = config.get_function(opts.function_name)?;
     let inference_table_name = function_config.table_name();
 
     let function_name_param_placeholder = add_parameter(
@@ -436,6 +430,26 @@ fn get_join_alias(counter: &mut usize) -> String {
     internal_name
 }
 
+fn get_select_clauses(function_config: &FunctionConfig) -> BTreeSet<String> {
+    let mut select_clauses = BTreeSet::from([
+        "i.input as input".to_string(),
+        "i.variant_name as variant_name".to_string(),
+        "i.episode_id as episode_id".to_string(),
+        "i.id as id".to_string(),
+        "i.timestamp as timestamp".to_string(),
+        // We don't select output here because it's handled separately based on the output_source
+    ]);
+    match function_config {
+        FunctionConfig::Json(_) => {
+            select_clauses.insert("i.output_schema as output_schema".to_string());
+        }
+        FunctionConfig::Chat(_) => {
+            select_clauses.insert("i.tool_params as tool_params".to_string());
+        }
+    }
+    select_clauses
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::Path;
@@ -471,6 +485,7 @@ SELECT
     i.id as id,
     i.input as input,
     i.output as output,
+    i.output_schema as output_schema,
     i.timestamp as timestamp,
     i.variant_name as variant_name
 FROM
@@ -504,6 +519,7 @@ SELECT
     i.input as input,
     i.output as output,
     i.timestamp as timestamp,
+    i.tool_params as tool_params,
     i.variant_name as variant_name
 FROM
     ChatInference AS i
@@ -540,6 +556,7 @@ SELECT
     i.id as id,
     i.input as input,
     i.output as output,
+    i.output_schema as output_schema,
     i.timestamp as timestamp,
     i.variant_name as variant_name
 FROM
@@ -634,6 +651,7 @@ SELECT
     i.episode_id as episode_id,
     i.id as id,
     i.input as input,
+    i.output_schema as output_schema,
     i.timestamp as timestamp,
     i.variant_name as variant_name
 FROM
@@ -671,6 +689,7 @@ SELECT
     i.id as id,
     i.input as input,
     i.output as output,
+    i.output_schema as output_schema,
     i.timestamp as timestamp,
     i.variant_name as variant_name
 FROM
@@ -726,6 +745,7 @@ SELECT
     i.id as id,
     i.input as input,
     i.output as output,
+    i.output_schema as output_schema,
     i.timestamp as timestamp,
     i.variant_name as variant_name
 FROM
@@ -789,6 +809,7 @@ SELECT
     i.id as id,
     i.input as input,
     i.output as output,
+    i.output_schema as output_schema,
     i.timestamp as timestamp,
     i.variant_name as variant_name
 FROM
@@ -869,6 +890,7 @@ SELECT
     i.id as id,
     i.input as input,
     i.output as output,
+    i.output_schema as output_schema,
     i.timestamp as timestamp,
     i.variant_name as variant_name
 FROM
@@ -944,6 +966,7 @@ SELECT
     i.id as id,
     i.input as input,
     i.output as output,
+    i.output_schema as output_schema,
     i.timestamp as timestamp,
     i.variant_name as variant_name
 FROM
@@ -1015,6 +1038,7 @@ SELECT
     i.id as id,
     i.input as input,
     i.output as output,
+    i.output_schema as output_schema,
     i.timestamp as timestamp,
     i.variant_name as variant_name
 FROM
@@ -1072,6 +1096,7 @@ SELECT
     i.id as id,
     i.input as input,
     i.output as output,
+    i.output_schema as output_schema,
     i.timestamp as timestamp,
     i.variant_name as variant_name
 FROM
@@ -1110,6 +1135,7 @@ SELECT
     i.id as id,
     i.input as input,
     i.output as output,
+    i.output_schema as output_schema,
     i.timestamp as timestamp,
     i.variant_name as variant_name
 FROM
@@ -1170,6 +1196,7 @@ SELECT
     i.id as id,
     i.input as input,
     i.output as output,
+    i.output_schema as output_schema,
     i.timestamp as timestamp,
     i.variant_name as variant_name
 FROM
@@ -1234,6 +1261,7 @@ SELECT
     i.episode_id as episode_id,
     i.id as id,
     i.input as input,
+    i.output_schema as output_schema,
     i.timestamp as timestamp,
     i.variant_name as variant_name
 FROM
