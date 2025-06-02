@@ -42,7 +42,7 @@ use crate::inference::types::{
 use crate::inference::types::{
     ContentBlock, ContentBlockChunk, ContentBlockOutput, FileKind, FinishReason, FlattenUnknown,
     Latency, ModelInferenceRequestJsonMode, ProviderInferenceResponseArgs,
-    ProviderInferenceResponseStreamInner, Role, Text, TextChunk,
+    ProviderInferenceResponseStreamInner, Role, Text, TextChunk, Thought, ThoughtChunk,
 };
 use crate::model::{
     build_creds_caching_default_with_fn, fully_qualified_name, Credential, CredentialLocation,
@@ -1824,7 +1824,18 @@ struct GCPVertexGeminiResponseFunctionCall {
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-enum GCPVertexGeminiResponseContentPart {
+struct GCPVertexGeminiResponseContentPart {
+    #[serde(default)]
+    thought: bool,
+    #[serde(default)]
+    thought_signature: Option<String>,
+    #[serde(flatten)]
+    data: FlattenUnknown<'static, GCPVertexGeminiResponseContentPartData>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+enum GCPVertexGeminiResponseContentPartData {
     Text(String),
     // TODO (if needed): InlineData { inline_data: Blob },
     // TODO (if needed): FileData { file_data: FileData },
@@ -1840,12 +1851,44 @@ impl TryFrom<GCPVertexGeminiResponseContentPart> for ContentBlockChunk {
     /// So there is no issue with bookkeeping IDs for content blocks.
     /// We should revisit this if they begin to support it.
     fn try_from(part: GCPVertexGeminiResponseContentPart) -> Result<Self, Self::Error> {
-        match part {
-            GCPVertexGeminiResponseContentPart::Text(text) => Ok(ContentBlockChunk::Text(TextChunk {
-                text,
-                id: "0".to_string(),
-            })),
-            GCPVertexGeminiResponseContentPart::FunctionCall(function_call) => {
+        if part.thought {
+            match part.data {
+                FlattenUnknown::Normal(GCPVertexGeminiResponseContentPartData::Text(text)) => {
+                    return Ok(ContentBlockChunk::Thought(ThoughtChunk {
+                        id: "0".to_string(),
+                        text: Some(text),
+                        signature: part.thought_signature,
+                    }));
+                }
+                // Handle 'thought/thoughtSignature' with no other fields
+                FlattenUnknown::Unknown(obj) if obj.as_object().is_some_and(|m| m.is_empty()) => {
+                    return Ok(ContentBlockChunk::Thought(ThoughtChunk {
+                        id: "0".to_string(),
+                        text: None,
+                        signature: part.thought_signature,
+                    }));
+                }
+                _ => {
+                    return Err(Error::new(ErrorDetails::InferenceServer {
+                        message: "Thought part in GCP Vertex Gemini response must be a text block"
+                            .to_string(),
+                        provider_type: PROVIDER_TYPE.to_string(),
+                        raw_request: None,
+                        raw_response: Some(serde_json::to_string(&part).unwrap_or_default()),
+                    }));
+                }
+            }
+        }
+        match part.data {
+            FlattenUnknown::Normal(GCPVertexGeminiResponseContentPartData::Text(text)) => {
+                Ok(ContentBlockChunk::Text(TextChunk {
+                    text,
+                    id: "0".to_string(),
+                }))
+            }
+            FlattenUnknown::Normal(GCPVertexGeminiResponseContentPartData::FunctionCall(
+                function_call,
+            )) => {
                 let arguments = serialize_or_log(&function_call.args);
                 Ok(ContentBlockChunk::ToolCall(ToolCallChunk {
                     raw_name: function_call.name,
@@ -1853,14 +1896,22 @@ impl TryFrom<GCPVertexGeminiResponseContentPart> for ContentBlockChunk {
                     id: "0".to_string(),
                 }))
             }
-            GCPVertexGeminiResponseContentPart::ExecutableCode(_) => {
-                Err(Error::new(ErrorDetails::InferenceServer {
-                    message: "executableCode is not supported in streaming response for GCP Vertex Gemini".to_string(),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: None,
-                    raw_response: Some(serde_json::to_string(&part).unwrap_or_default()),
-                }))
-            }
+            FlattenUnknown::Normal(
+                GCPVertexGeminiResponseContentPartData::ExecutableCode(_),
+            ) => Err(Error::new(ErrorDetails::InferenceServer {
+                message:
+                    "executableCode is not supported in streaming response for GCP Vertex Gemini"
+                        .to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
+                raw_request: None,
+                raw_response: Some(serde_json::to_string(&part).unwrap_or_default()),
+            })),
+            FlattenUnknown::Unknown(part) => Err(Error::new(ErrorDetails::InferenceServer {
+                message: "Unknown content part in GCP Vertex Gemini response".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
+                raw_request: None,
+                raw_response: Some(part.to_string()),
+            })),
         }
     }
 }
@@ -1870,9 +1921,44 @@ fn convert_to_output(
     provider_name: &str,
     part: GCPVertexGeminiResponseContentPart,
 ) -> Result<ContentBlockOutput, Error> {
-    match part {
-        GCPVertexGeminiResponseContentPart::Text(text) => Ok(text.into()),
-        GCPVertexGeminiResponseContentPart::FunctionCall(function_call) => {
+    // We currently only support text thoughts - if we get anything else, turn it into
+    // an `unknown` block
+    if part.thought {
+        match part.data {
+            FlattenUnknown::Normal(GCPVertexGeminiResponseContentPartData::Text(text)) => {
+                return Ok(ContentBlockOutput::Thought(Thought {
+                    signature: part.thought_signature,
+                    text,
+                }));
+            }
+            // Handle 'thought/thoughtSignature' with no other fields
+            FlattenUnknown::Unknown(obj) if obj.as_object().is_some_and(|m| m.is_empty()) => {
+                return Ok(ContentBlockOutput::Thought(Thought {
+                    signature: part.thought_signature,
+                    text: "".to_string(),
+                }));
+            }
+            _ => {
+                return Ok(ContentBlockOutput::Unknown {
+                    data: serde_json::to_value(part).map_err(|e| {
+                        Error::new(ErrorDetails::Serialization {
+                            message: format!(
+                                "Error serializing thought part returned from GCP: {e}"
+                            ),
+                        })
+                    })?,
+                    model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
+                });
+            }
+        }
+    }
+    match part.data {
+        FlattenUnknown::Normal(GCPVertexGeminiResponseContentPartData::Text(text)) => {
+            Ok(text.into())
+        }
+        FlattenUnknown::Normal(GCPVertexGeminiResponseContentPartData::FunctionCall(
+            function_call,
+        )) => {
             Ok(ContentBlockOutput::ToolCall(ToolCall {
                 name: function_call.name,
                 arguments: serde_json::to_string(&function_call.args).map_err(|e| {
@@ -1886,7 +1972,7 @@ fn convert_to_output(
                 id: Uuid::now_v7().to_string(),
             }))
         }
-        GCPVertexGeminiResponseContentPart::ExecutableCode(data) => {
+        FlattenUnknown::Normal(GCPVertexGeminiResponseContentPartData::ExecutableCode(data)) => {
             Ok(ContentBlockOutput::Unknown {
                 data: serde_json::json!({
                     "executableCode": data,
@@ -1894,6 +1980,10 @@ fn convert_to_output(
                 model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
             })
         }
+        FlattenUnknown::Unknown(data) => Ok(ContentBlockOutput::Unknown {
+            data: data.into_owned(),
+            model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
+        }),
     }
 }
 
@@ -2576,8 +2666,14 @@ mod tests {
 
     #[test]
     fn test_gcp_to_t0_response() {
-        let part = GCPVertexGeminiResponseContentPart::Text("test_assistant".to_string());
-        let content = GCPVertexGeminiResponseContent { parts: vec![part] };
+        let part = GCPVertexGeminiResponseContentPartData::Text("test_assistant".to_string());
+        let content = GCPVertexGeminiResponseContent {
+            parts: vec![GCPVertexGeminiResponseContentPart {
+                thought: false,
+                thought_signature: None,
+                data: FlattenUnknown::Normal(part),
+            }],
+        };
         let candidate = GCPVertexGeminiResponseCandidate {
             content: Some(content),
             finish_reason: Some(GCPVertexGeminiFinishReason::Stop),
@@ -2654,15 +2750,28 @@ mod tests {
             Some("test_system".to_string())
         );
         assert_eq!(model_inference_response.input_messages, vec![]);
-        let text_part =
-            GCPVertexGeminiResponseContentPart::Text("Here's the weather information:".to_string());
-        let function_call_part =
-            GCPVertexGeminiResponseContentPart::FunctionCall(GCPVertexGeminiResponseFunctionCall {
+        let text_part = GCPVertexGeminiResponseContentPartData::Text(
+            "Here's the weather information:".to_string(),
+        );
+        let function_call_part = GCPVertexGeminiResponseContentPartData::FunctionCall(
+            GCPVertexGeminiResponseFunctionCall {
                 name: "get_temperature".to_string(),
                 args: json!({"location": "New York", "unit": "celsius"}),
-            });
+            },
+        );
         let content = GCPVertexGeminiResponseContent {
-            parts: vec![text_part, function_call_part],
+            parts: vec![
+                GCPVertexGeminiResponseContentPart {
+                    thought: false,
+                    thought_signature: None,
+                    data: FlattenUnknown::Normal(text_part),
+                },
+                GCPVertexGeminiResponseContentPart {
+                    thought: false,
+                    thought_signature: None,
+                    data: FlattenUnknown::Normal(function_call_part),
+                },
+            ],
         };
         let candidate = GCPVertexGeminiResponseCandidate {
             content: Some(content),
@@ -2756,27 +2865,46 @@ mod tests {
             }]
         );
 
-        let text_part1 =
-            GCPVertexGeminiResponseContentPart::Text("Here's the weather information:".to_string());
-        let function_call_part =
-            GCPVertexGeminiResponseContentPart::FunctionCall(GCPVertexGeminiResponseFunctionCall {
+        let text_part1 = GCPVertexGeminiResponseContentPartData::Text(
+            "Here's the weather information:".to_string(),
+        );
+        let function_call_part = GCPVertexGeminiResponseContentPartData::FunctionCall(
+            GCPVertexGeminiResponseFunctionCall {
                 name: "get_temperature".to_string(),
                 args: json!({"location": "New York", "unit": "celsius"}),
-            });
-        let text_part2 = GCPVertexGeminiResponseContentPart::Text(
+            },
+        );
+        let text_part2 = GCPVertexGeminiResponseContentPartData::Text(
             "And here's a restaurant recommendation:".to_string(),
         );
-        let function_call_part2 =
-            GCPVertexGeminiResponseContentPart::FunctionCall(GCPVertexGeminiResponseFunctionCall {
+        let function_call_part2 = GCPVertexGeminiResponseContentPartData::FunctionCall(
+            GCPVertexGeminiResponseFunctionCall {
                 name: "get_restaurant".to_string(),
                 args: json!({"cuisine": "Italian", "price_range": "moderate"}),
-            });
+            },
+        );
         let content = GCPVertexGeminiResponseContent {
             parts: vec![
-                text_part1,
-                function_call_part,
-                text_part2,
-                function_call_part2,
+                GCPVertexGeminiResponseContentPart {
+                    thought: false,
+                    thought_signature: None,
+                    data: FlattenUnknown::Normal(text_part1),
+                },
+                GCPVertexGeminiResponseContentPart {
+                    thought: false,
+                    thought_signature: None,
+                    data: FlattenUnknown::Normal(function_call_part),
+                },
+                GCPVertexGeminiResponseContentPart {
+                    thought: false,
+                    thought_signature: None,
+                    data: FlattenUnknown::Normal(text_part2),
+                },
+                GCPVertexGeminiResponseContentPart {
+                    thought: false,
+                    thought_signature: None,
+                    data: FlattenUnknown::Normal(function_call_part2),
+                },
             ],
         };
         let candidate = GCPVertexGeminiResponseCandidate {
