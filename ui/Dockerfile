@@ -132,9 +132,6 @@ COPY --from=python-build-env /build/optimization-server/.venv  /build/optimizati
 # Copy evaluations binary
 COPY --from=evaluations-build-env /release/evaluations /usr/local/bin/evaluations
 
-# Copy tensorzero.toml configuration file
-COPY ./ui/fixtures/config/tensorzero.e2e.toml /app/ui/config/tensorzero.toml
-
 # Copy entrypoint script
 # This script calls into the /app/ui directory using `pnpm --filter=tensorzero-ui run start`
 COPY ./ui/entrypoint.sh /app/entrypoint.sh
@@ -145,6 +142,6 @@ USER ui
 EXPOSE 4000
 
 ENV HOST=0.0.0.0
-ENV TENSORZERO_UI_CONFIG_PATH=/app/ui/config/tensorzero.toml
+ENV TENSORZERO_UI_CONFIG_PATH=/app/config/tensorzero.toml
 
 ENTRYPOINT ["./entrypoint.sh"]
