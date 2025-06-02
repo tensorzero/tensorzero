@@ -4348,10 +4348,7 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
     let output = result.get("output").unwrap().as_str().unwrap();
     let mut output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
     // We don't care about thoughts in this test
-    output = output
-        .into_iter()
-        .filter(|block| !matches!(block, ContentBlock::Thought(_)))
-        .collect();
+    output.retain(|block| !matches!(block, ContentBlock::Thought(_)));
 
     let first = output.first().unwrap();
     match first {
@@ -4524,10 +4521,7 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
         serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
 
     // We don't care about thoughts in this test
-    output_clickhouse = output_clickhouse
-        .into_iter()
-        .filter(|block| block["type"] != "thought")
-        .collect();
+    output_clickhouse.retain(|block| block["type"] != "thought");
 
     assert!(!output_clickhouse
         .iter()
@@ -4656,10 +4650,7 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
     let output = result.get("output").unwrap().as_str().unwrap();
     let mut output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
     // We don't care about thoughts in this test
-    output = output
-        .into_iter()
-        .filter(|block| !matches!(block, ContentBlock::Thought(_)))
-        .collect();
+    output.retain(|block| !matches!(block, ContentBlock::Thought(_)));
 
     let first = output.first().unwrap();
     match first {
@@ -9432,10 +9423,7 @@ pub async fn check_json_mode_inference_response(
     let output = result.get("output").unwrap().as_str().unwrap();
     let mut output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
     // We don't care about thoughts in this test
-    output = output
-        .into_iter()
-        .filter(|block| !matches!(block, ContentBlock::Thought(_)))
-        .collect();
+    output.retain(|block| !matches!(block, ContentBlock::Thought(_)));
 
     let is_openrouter = provider.model_provider_name == "openrouter";
     if is_openrouter {
@@ -9720,10 +9708,7 @@ pub async fn check_dynamic_json_mode_inference_response(
     let output = result.get("output").unwrap().as_str().unwrap();
     let mut output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
     // We don't care about thoughts in this test
-    output = output
-        .into_iter()
-        .filter(|block| !matches!(block, ContentBlock::Thought(_)))
-        .collect();
+    output.retain(|block| !matches!(block, ContentBlock::Thought(_)));
 
     let is_openrouter = provider.model_provider_name == "openrouter";
     if is_openrouter {
