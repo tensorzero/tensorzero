@@ -5,6 +5,11 @@ Set `TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzer
 
 ## Setup
 
+### Optional: Dev Container
+
+We have provided a Dev Container config in `.devcontainer` to help users of VS Code who want to run the notebook on a remote server.
+To use our container, follow the [VS Code Instructions](https://code.visualstudio.com/docs/devcontainers/containers#_open-a-folder-on-a-remote-ssh-host-in-a-container), then proceed with the "Using `uv`" instructions below.
+
 ### Using [`uv`](https://github.com/astral-sh/uv) (Recommended)
 
 ```bash
