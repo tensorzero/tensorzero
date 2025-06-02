@@ -4,12 +4,14 @@
 # %% [markdown]
 # # Unsloth Supervised Fine-Tuning
 #
-# This recipe allows TensorZero users to fine-tune models using Unsloth and their own data.
+# This recipe allows TensorZero users to fine-tune models using [Unsloth](https://unsloth.ai) and their own data.
 # Since TensorZero automatically logs all inferences and feedback, it is straightforward to fine-tune a model using your own data and any prompt you want.
+#
+# We demonstrate how to deploy a LoRA fine-tuned model for serverless inference using [Fireworks](https://fireworks.ai). Full instructions to deploy LoRA or full fine-tuned models are provided by [Fireworks](https://docs.fireworks.ai/fine-tuning/fine-tuning-models), [Together](https://docs.together.ai/docs/deploying-a-fine-tuned-model), and other inference providers. You can also use [vLLM](https://docs.vllm.ai/en/latest/examples/online_serving/api_client.html) to serve your fine-tuned model locally. The TensorZero client seemlessly integrates inference using your fine-tuned model for any of these approaches.
 #
 # To get started:
 #
-# - Set the `TENSORZERO_CLICKHOUSE_URL` environment variable. For example: `TENSORZERO_CLICKHOUSE_URL="http://chuser:chpassword@localhost:8123/tensorzero"`
+# - Set your `TENSORZERO_CLICKHOUSE_URL` enironment variable to point to the database containing the historical inferences you'd like to train on.
 # - Update the following parameters:
 
 # %%
@@ -53,6 +55,8 @@ from unsloth.chat_templates import CHAT_TEMPLATES
 print(list(CHAT_TEMPLATES.keys()))
 
 # %%
+# Choose the chat template corresponding the the model you're fine-tuning.
+# For example, if you're fine-tuning "unsloth/Meta-Llama-3.1-8B-Instruct" you should use "llama-3.1"
 CHAT_TEMPLATE = "llama-3.1"
 
 # %% [markdown]
@@ -66,7 +70,9 @@ LEARNING_RATE = 2e-4
 BATCH_SIZE = 4
 
 # %% [markdown]
-# Optionally, use Low Rank Adaptation
+# Optionally, use Low Rank Adaptation.
+#
+# Some [Fireworks Models]() support [serverless LoRA deployment](https://docs.fireworks.ai/fine-tuning/fine-tuning-models), but full fine-tuning usually needs some form of reserved capacity.
 
 # %%
 # Whether to use LoRA or not. Set to False for full model fine-tuning
@@ -188,8 +194,6 @@ if inference_table_name is None:
 
 # %% [markdown]
 # Query the inferences and feedback from ClickHouse.
-#
-# If the metric is a float metric, we need to filter the data based on the threshold.
 
 # %%
 query = f"""
