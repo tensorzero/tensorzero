@@ -81,7 +81,6 @@ jobs:
         id: e2e_tests
         env:
           TENSORZERO_CI: 1
-          TENSORZERO_UI_CONFIG_PATH: ui/fixtures/config/tensorzero.e2e.toml
         continue-on-error: true
         run: pnpm ui:test:e2e
 
