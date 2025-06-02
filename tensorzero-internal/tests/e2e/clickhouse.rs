@@ -3,6 +3,7 @@
 use std::cell::Cell;
 use std::future::Future;
 use std::sync::Arc;
+use std::time::Duration;
 
 use paste::paste;
 use reqwest::Client;
@@ -82,7 +83,10 @@ fn get_clean_clickhouse(allow_db_missing: bool) -> (ClickHouseConnectionInfo, De
         // If it occurs again, re-enable this line.
         // client: Client::builder().pool_max_idle_per_host(0).build().unwrap(),
         // See https://github.com/ClickHouse/clickhouse-rs/blob/abf7448e54261c586be849c48291b9321f506b2f/src/http_client.rs#L45
-        client: Client::new().pool_idle_timeout(Duration::from_secs(3)),
+        client: Client::builder()
+            .pool_idle_timeout(Duration::from_secs(3))
+            .build()
+            .unwrap(),
     };
     (
         clickhouse.clone(),
