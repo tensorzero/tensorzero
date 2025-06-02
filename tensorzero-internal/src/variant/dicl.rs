@@ -831,7 +831,7 @@ mod tests {
                             ResolvedInputMessageContent::Text {
                                 value: json!("What is the name of the capital city of Japan?"),
                             },
-                            ResolvedInputMessageContent::File(FileWithPath {
+                            ResolvedInputMessageContent::File(Box::new(FileWithPath {
                                 file: Base64File {
                                     url: None,
                                     mime_type: mime::IMAGE_PNG,
@@ -841,7 +841,7 @@ mod tests {
                                     kind: StorageKind::Disabled,
                                     path: Default::default(),
                                 },
-                            }),
+                            })),
                         ],
                     }],
                 })

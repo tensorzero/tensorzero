@@ -82,6 +82,6 @@ async fn test_conversion() {
     else {
         panic!("Expected file");
     };
-    assert_eq!(mime_type, mime::IMAGE_PNG);
+    assert_eq!(mime_type, &mime::IMAGE_PNG);
     assert!(!data.is_empty());
 }

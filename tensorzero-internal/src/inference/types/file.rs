@@ -202,7 +202,7 @@ mod tests {
                     RequestMessage {
                         role: Role::User,
                         content: vec![
-                            ContentBlock::File(FileWithPath {
+                            ContentBlock::File(Box::new(FileWithPath {
                                 file: Base64File {
                                     url: None,
                                     mime_type: mime::IMAGE_JPEG,
@@ -213,8 +213,8 @@ mod tests {
                                     path: object_store::path::Path::parse("my-image-1-path")
                                         .unwrap(),
                                 },
-                            }),
-                            ContentBlock::File(FileWithPath {
+                            })),
+                            ContentBlock::File(Box::new(FileWithPath {
                                 file: Base64File {
                                     url: None,
                                     mime_type: mime::IMAGE_JPEG,
@@ -225,8 +225,8 @@ mod tests {
                                     path: object_store::path::Path::parse("my-image-2-path")
                                         .unwrap(),
                                 },
-                            }),
-                            ContentBlock::File(FileWithPath {
+                            })),
+                            ContentBlock::File(Box::new(FileWithPath {
                                 file: Base64File {
                                     url: None,
                                     mime_type: mime::IMAGE_JPEG,
@@ -237,13 +237,13 @@ mod tests {
                                     path: object_store::path::Path::parse("my-image-1-path")
                                         .unwrap(),
                                 },
-                            }),
+                            })),
                         ],
                     },
                     RequestMessage {
                         role: Role::User,
                         content: vec![
-                            ContentBlock::File(FileWithPath {
+                            ContentBlock::File(Box::new(FileWithPath {
                                 file: Base64File {
                                     url: None,
                                     mime_type: mime::IMAGE_JPEG,
@@ -254,8 +254,8 @@ mod tests {
                                     path: object_store::path::Path::parse("my-image-3-path")
                                         .unwrap(),
                                 },
-                            }),
-                            ContentBlock::File(FileWithPath {
+                            })),
+                            ContentBlock::File(Box::new(FileWithPath {
                                 file: Base64File {
                                     url: None,
                                     mime_type: mime::IMAGE_JPEG,
@@ -266,7 +266,7 @@ mod tests {
                                     path: object_store::path::Path::parse("my-image-1-path")
                                         .unwrap(),
                                 },
-                            })
+                            }))
                         ],
                     }
                 ],

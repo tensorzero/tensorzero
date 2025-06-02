@@ -234,14 +234,14 @@ mod tests {
         };
 
         // Create the resolved input message content with an image
-        let resolved_content = ResolvedInputMessageContent::File(FileWithPath {
+        let resolved_content = ResolvedInputMessageContent::File(Box::new(FileWithPath {
             file: Base64File {
                 url: Some(Url::parse("http://notaurl.com").unwrap()),
                 mime_type: mime::IMAGE_JPEG,
                 data: Some(image_data.to_string()),
             },
             storage_path: storage_path.clone(),
-        });
+        }));
 
         // Call the function under test
         let result = resolved_input_message_content_to_client_input_message_content(

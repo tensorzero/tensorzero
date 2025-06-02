@@ -965,6 +965,7 @@ pub async fn test_url_image_inference_with_provider_and_store(
                             }),
                             ClientInputMessageContent::File(File::Url {
                                 url: image_url.clone(),
+                                mime_type: None,
                             }),
                         ],
                     }],
@@ -1839,14 +1840,14 @@ pub async fn check_base64_pdf_response(
                 ContentBlock::Text(Text {
                     text: "Describe the contents of the PDF".to_string(),
                 }),
-                ContentBlock::File(FileWithPath {
+                ContentBlock::File(Box::new(FileWithPath {
                     file: Base64File {
                         url: None,
                         data: None,
                         mime_type: mime::APPLICATION_PDF,
                     },
                     storage_path: expected_storage_path.clone(),
-                })
+                }))
             ]
         },]
     );
@@ -1995,14 +1996,14 @@ pub async fn check_base64_image_response(
                 ContentBlock::Text(Text {
                     text: "Describe the contents of the image".to_string(),
                 }),
-                ContentBlock::File(FileWithPath {
+                ContentBlock::File(Box::new(FileWithPath {
                     file: Base64File {
                         url: None,
                         data: None,
                         mime_type: mime::IMAGE_PNG,
                     },
                     storage_path: expected_storage_path.clone(),
-                })
+                }))
             ]
         },]
     );
@@ -2145,7 +2146,7 @@ pub async fn check_url_image_response(
                 role: Role::User,
                 content: vec![ContentBlock::Text(Text {
                     text: "Describe the contents of the image".to_string(),
-                }), ContentBlock::File(FileWithPath {
+                }), ContentBlock::File(Box::new(FileWithPath {
                     file: Base64File {
                         url: Some(image_url.clone()),
                         data: None,
@@ -2155,7 +2156,7 @@ pub async fn check_url_image_response(
                         kind: kind.clone(),
                         path: Path::parse("observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png").unwrap(),
                     }
-                })]
+                }))]
             },
         ]
     );
