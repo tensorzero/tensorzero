@@ -1,3 +1,5 @@
+use query_builder::generate_list_inferences_sql;
+use query_builder::ListInferencesParams;
 use reqwest::multipart::Form;
 use reqwest::multipart::Part;
 use reqwest::Client;
@@ -15,6 +17,7 @@ pub mod query_builder;
 #[cfg(any(test, feature = "e2e_tests"))]
 pub mod test_helpers;
 
+use crate::config_parser::Config;
 use crate::error::DisplayOrDebugGateway;
 use crate::error::{Error, ErrorDetails};
 
@@ -402,6 +405,19 @@ impl ClickHouseConnectionInfo {
                 }
             }
         }
+    }
+
+    pub async fn list_inferences(
+        &self,
+        config: &Config<'_>,
+        opts: &ListInferencesParams<'_>,
+    ) -> Result<Vec<Inference>, Error> {
+        // TODO: this needs to return a Vec<StoredInference>
+        // (currently this is defined in the Rust client but we need to move it here)
+        let (sql, params) = generate_list_inferences_sql(config, opts)?;
+        let response = self.run_query_synchronous(sql, Some(&params)).await?;
+        let inferences: Vec<Inference> = serde_json::from_str(&response)?;
+        Ok(inferences)
     }
 }
 
