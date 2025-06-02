@@ -133,7 +133,7 @@ COPY --from=python-build-env /build/optimization-server/.venv  /build/optimizati
 COPY --from=evaluations-build-env /release/evaluations /usr/local/bin/evaluations
 
 # Copy tensorzero.toml configuration file
-COPY ./ui/fixtures/config/tensorzero.e2e.toml /app/config/tensorzero.toml
+COPY ./ui/fixtures/config/tensorzero.e2e.toml /app/ui/config/tensorzero.toml
 
 # Copy entrypoint script
 # This script calls into the /app/ui directory using `pnpm --filter=tensorzero-ui run start`
