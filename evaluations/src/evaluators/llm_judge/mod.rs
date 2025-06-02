@@ -480,6 +480,7 @@ mod tests {
                 role: Role::User,
                 content: vec![ClientInputMessageContent::File(File::Url {
                     url: Url::parse("https://example.com/image.png").unwrap(),
+                    mime_type: None,
                 })],
             }],
         };

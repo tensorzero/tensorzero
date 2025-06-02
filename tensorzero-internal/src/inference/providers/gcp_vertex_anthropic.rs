@@ -16,6 +16,7 @@ use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
+use crate::inference::types::file::require_image;
 use crate::inference::types::resolved_input::FileWithPath;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk, FunctionType,
@@ -572,12 +573,12 @@ impl<'a> TryFrom<&'a ContentBlock>
                 file,
                 storage_path: _,
             }) => {
-                file.mime_type.require_image(PROVIDER_TYPE)?;
+                require_image(&file.mime_type, PROVIDER_TYPE)?;
                 Ok(Some(FlattenUnknown::Normal(
                     GCPVertexAnthropicMessageContent::Image {
                         source: AnthropicDocumentSource {
                             r#type: AnthropicDocumentType::Base64,
-                            media_type: file.mime_type,
+                            media_type: file.mime_type.to_string(),
                             data: file.data()?.clone(),
                         },
                     },

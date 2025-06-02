@@ -34,8 +34,7 @@ use tensorzero_internal::{
     inference::types::{
         resolved_input::FileWithPath,
         storage::{StorageKind, StoragePath},
-        Base64File, ContentBlock, ContentBlockChatOutput, File, FileKind, RequestMessage, Role,
-        Text,
+        Base64File, ContentBlock, ContentBlockChatOutput, File, RequestMessage, Role, Text,
     },
     tool::{ToolCall, ToolResult},
 };
@@ -1025,7 +1024,7 @@ pub async fn test_base64_pdf_inference_with_provider_and_store(
                                 text: "Describe the contents of the PDF".to_string(),
                             }),
                             ClientInputMessageContent::File(File::Base64 {
-                                mime_type: FileKind::Pdf,
+                                mime_type: mime::APPLICATION_PDF,
                                 data: pdf_data.clone(),
                             }),
                         ],
@@ -1087,7 +1086,7 @@ pub async fn test_base64_image_inference_with_provider_and_store(
                                 text: "Describe the contents of the image".to_string(),
                             }),
                             ClientInputMessageContent::File(File::Base64 {
-                                mime_type: FileKind::Png,
+                                mime_type: mime::IMAGE_PNG,
                                 data: image_data.clone(),
                             }),
                         ],
@@ -1844,7 +1843,7 @@ pub async fn check_base64_pdf_response(
                     file: Base64File {
                         url: None,
                         data: None,
-                        mime_type: FileKind::Pdf,
+                        mime_type: mime::APPLICATION_PDF,
                     },
                     storage_path: expected_storage_path.clone(),
                 })
@@ -2000,7 +1999,7 @@ pub async fn check_base64_image_response(
                     file: Base64File {
                         url: None,
                         data: None,
-                        mime_type: FileKind::Png,
+                        mime_type: mime::IMAGE_PNG,
                     },
                     storage_path: expected_storage_path.clone(),
                 })
@@ -2150,7 +2149,7 @@ pub async fn check_url_image_response(
                     file: Base64File {
                         url: Some(image_url.clone()),
                         data: None,
-                        mime_type: FileKind::Png,
+                        mime_type: mime::IMAGE_PNG,
                     },
                     storage_path: StoragePath {
                         kind: kind.clone(),

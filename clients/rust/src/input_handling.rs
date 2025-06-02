@@ -176,7 +176,7 @@ mod tests {
     use object_store::path::Path;
 
     use tensorzero_internal::inference::types::{
-        resolved_input::FileWithPath, storage::StorageKind, Base64File, FileKind,
+        resolved_input::FileWithPath, storage::StorageKind, Base64File,
     };
     use url::Url;
 
@@ -237,7 +237,7 @@ mod tests {
         let resolved_content = ResolvedInputMessageContent::File(FileWithPath {
             file: Base64File {
                 url: Some(Url::parse("http://notaurl.com").unwrap()),
-                mime_type: FileKind::Jpeg,
+                mime_type: mime::IMAGE_JPEG,
                 data: Some(image_data.to_string()),
             },
             storage_path: storage_path.clone(),
@@ -257,7 +257,7 @@ mod tests {
                 mime_type: result_mime_type,
                 data: result_data,
             }) => {
-                assert_eq!(result_mime_type, FileKind::Jpeg);
+                assert_eq!(result_mime_type, mime::IMAGE_JPEG);
                 assert_eq!(result_data, image_data);
             }
             _ => panic!("Expected ClientInputMessageContent::Image, got something else"),

@@ -1,5 +1,4 @@
-use std::fmt::{self, Display};
-
+use mime::MediaType;
 use scoped_tls::scoped_thread_local;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -20,69 +19,14 @@ pub enum FileEncoding {
     Url,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
-pub enum FileKind {
-    #[serde(rename = "image/jpeg")]
-    Jpeg,
-    #[serde(rename = "image/png")]
-    Png,
-    #[serde(rename = "image/webp")]
-    WebP,
-    #[serde(rename = "application/pdf")]
-    Pdf,
-}
-
-impl FileKind {
-    /// Produces an error if this is not an image
-    pub fn require_image(&self, provider_type: &str) -> Result<(), Error> {
-        if !self.is_image() {
-            return Err(Error::new(ErrorDetails::UnsupportedContentBlockType {
-                content_block_type: format!("file: {self}"),
-                provider_type: provider_type.to_string(),
-            }));
-        }
-        Ok(())
+pub fn require_image(mime_type: &MediaType, provider_type: &str) -> Result<(), Error> {
+    if mime_type.type_() != mime::IMAGE {
+        return Err(Error::new(ErrorDetails::UnsupportedContentBlockType {
+            content_block_type: format!("file: {mime_type}"),
+            provider_type: provider_type.to_string(),
+        }));
     }
-
-    pub fn is_image(&self) -> bool {
-        match self {
-            FileKind::Jpeg | FileKind::Png | FileKind::WebP => true,
-            FileKind::Pdf => false,
-        }
-    }
-}
-
-impl TryFrom<&str> for FileKind {
-    type Error = Error;
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        let extension = value.split('.').last().ok_or_else(|| {
-            Error::new(ErrorDetails::MissingFileExtension {
-                file_name: value.to_string(),
-            })
-        })?;
-        match extension {
-            "jpg" => Ok(FileKind::Jpeg),
-            "jpeg" => Ok(FileKind::Jpeg),
-            "png" => Ok(FileKind::Png),
-            "webp" => Ok(FileKind::WebP),
-            "pdf" => Ok(FileKind::Pdf),
-            _ => Err(Error::new(ErrorDetails::UnsupportedFileExtension {
-                extension: extension.to_string(),
-            })),
-        }
-    }
-}
-
-impl Display for FileKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            FileKind::Jpeg => write!(f, "image/jpeg"),
-            FileKind::Png => write!(f, "image/png"),
-            FileKind::WebP => write!(f, "image/webp"),
-            FileKind::Pdf => write!(f, "application/pdf"),
-        }
-    }
+    Ok(())
 }
 
 fn skip_serialize_file_data(_: &Option<String>) -> bool {
@@ -94,7 +38,7 @@ fn skip_serialize_file_data(_: &Option<String>) -> bool {
 pub struct Base64File {
     // The original url we used to download the file
     pub url: Option<Url>,
-    pub mime_type: FileKind,
+    pub mime_type: MediaType,
     // TODO - should we add a wrapper type to enforce base64?
     #[serde(skip_serializing_if = "skip_serialize_file_data")]
     #[serde(default)]
@@ -139,56 +83,76 @@ pub fn serialize_with_file_data<T: Serialize>(value: &T) -> Result<Value, Error>
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(untagged, deny_unknown_fields)]
 pub enum File {
-    Url { url: Url },
-    Base64 { mime_type: FileKind, data: String },
+    Url {
+        url: Url,
+        #[serde(default)]
+        mime_type: Option<MediaType>,
+    },
+    Base64 {
+        mime_type: MediaType,
+        data: String,
+    },
 }
 
 impl File {
     pub async fn take_or_fetch(self, client: &reqwest::Client) -> Result<Base64File, Error> {
         match self {
-            File::Url { url } => {
+            File::Url { url, mime_type } => {
                 let response = client.get(url.clone()).send().await.map_err(|e| {
                     Error::new(ErrorDetails::BadImageFetch {
                         url: url.clone(),
                         message: format!("Error fetching image: {e:?}"),
                     })
                 })?;
+
+                let mime_type = if let Some(mime_type) = mime_type {
+                    mime_type
+                } else if let Some(content_type) =
+                    response.headers().get(http::header::CONTENT_TYPE)
+                {
+                    content_type
+                        .to_str()
+                        .map_err(|e| {
+                            Error::new(ErrorDetails::BadImageFetch {
+                                url: url.clone(),
+                                message: format!("Content-Type header is not a valid string: {e}"),
+                            })
+                        })?
+                        .parse::<MediaType>()
+                        .map_err(|e| {
+                            Error::new(ErrorDetails::BadImageFetch {
+                                url: url.clone(),
+                                message: format!(
+                                    "Content-Type header is not a valid mime type: {e}"
+                                ),
+                            })
+                        })?
+                } else {
+                    return Err(Error::new(ErrorDetails::BadImageFetch {
+                        url: url.clone(),
+                        message:
+                            "`mime_type` not provided, and no Content-Type response header found"
+                                .to_string(),
+                    }));
+                };
+
                 let bytes = response.bytes().await.map_err(|e| {
                     Error::new(ErrorDetails::BadImageFetch {
                         url: url.clone(),
                         message: format!("Error reading image bytes: {e}"),
                     })
                 })?;
-                let kind = match image::guess_format(&bytes) {
-                    Ok(image::ImageFormat::Jpeg) => FileKind::Jpeg,
-                    Ok(image::ImageFormat::Png) => FileKind::Png,
-                    Ok(image::ImageFormat::WebP) => FileKind::WebP,
-                    Ok(format) => {
-                        return Err(Error::new(ErrorDetails::BadImageFetch {
-                            url: url.clone(),
-                            message: format!("Unsupported image format: {format:?}"),
-                        }))
-                    }
-                    Err(e) => {
-                        return Err(Error::new(ErrorDetails::BadImageFetch {
-                            url,
-                            message: format!("Error guessing image format: {e}"),
-                        }))
-                    }
-                };
+
                 let data = base64::encode(bytes);
                 Ok(Base64File {
                     url: Some(url.clone()),
-                    mime_type: kind,
+                    mime_type,
                     data: Some(data),
                 })
             }
-            File::Base64 {
-                mime_type: kind,
-                data,
-            } => Ok(Base64File {
+            File::Base64 { mime_type, data } => Ok(Base64File {
                 url: None,
-                mime_type: kind,
+                mime_type,
                 data: Some(data),
             }),
         }
@@ -222,7 +186,7 @@ mod tests {
         file::sanitize_raw_request,
         resolved_input::FileWithPath,
         storage::{StorageKind, StoragePath},
-        Base64File, ContentBlock, FileKind, RequestMessage, Role,
+        Base64File, ContentBlock, RequestMessage, Role,
     };
 
     #[test]
@@ -241,7 +205,7 @@ mod tests {
                             ContentBlock::File(FileWithPath {
                                 file: Base64File {
                                     url: None,
-                                    mime_type: FileKind::Jpeg,
+                                    mime_type: mime::IMAGE_JPEG,
                                     data: Some("my-image-1-data".to_string()),
                                 },
                                 storage_path: StoragePath {
@@ -253,7 +217,7 @@ mod tests {
                             ContentBlock::File(FileWithPath {
                                 file: Base64File {
                                     url: None,
-                                    mime_type: FileKind::Jpeg,
+                                    mime_type: mime::IMAGE_JPEG,
                                     data: Some("my-image-2-data".to_string()),
                                 },
                                 storage_path: StoragePath {
@@ -265,7 +229,7 @@ mod tests {
                             ContentBlock::File(FileWithPath {
                                 file: Base64File {
                                     url: None,
-                                    mime_type: FileKind::Jpeg,
+                                    mime_type: mime::IMAGE_JPEG,
                                     data: Some("my-image-1-data".to_string()),
                                 },
                                 storage_path: StoragePath {
@@ -282,7 +246,7 @@ mod tests {
                             ContentBlock::File(FileWithPath {
                                 file: Base64File {
                                     url: None,
-                                    mime_type: FileKind::Jpeg,
+                                    mime_type: mime::IMAGE_JPEG,
                                     data: Some("my-image-3-data".to_string()),
                                 },
                                 storage_path: StoragePath {
@@ -294,7 +258,7 @@ mod tests {
                             ContentBlock::File(FileWithPath {
                                 file: Base64File {
                                     url: None,
-                                    mime_type: FileKind::Jpeg,
+                                    mime_type: mime::IMAGE_JPEG,
                                     data: Some("my-image-1-data".to_string()),
                                 },
                                 storage_path: StoragePath {

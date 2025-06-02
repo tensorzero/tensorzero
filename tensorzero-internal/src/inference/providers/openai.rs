@@ -1,5 +1,6 @@
 use futures::{Stream, StreamExt, TryStreamExt};
 use lazy_static::lazy_static;
+use mime::MediaType;
 use reqwest::multipart::{Form, Part};
 use reqwest::StatusCode;
 use reqwest_eventsource::{Event, RequestBuilderExt};
@@ -26,6 +27,7 @@ use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse
 use crate::inference::types::batch::{
     ProviderBatchInferenceOutput, ProviderBatchInferenceResponse,
 };
+use crate::inference::types::file::require_image;
 use crate::inference::types::resolved_input::FileWithPath;
 use crate::inference::types::{
     batch::{BatchStatus, StartBatchProviderInferenceResponse},
@@ -35,7 +37,7 @@ use crate::inference::types::{
     TextChunk, Usage,
 };
 use crate::inference::types::{
-    FileKind, FinishReason, ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner,
+    FinishReason, ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner,
 };
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
@@ -1249,6 +1251,58 @@ pub(super) fn tensorzero_to_openai_messages(
     }
 }
 
+pub fn mime_type_to_ext(mime_type: &MediaType) -> Result<Option<&'static str>, Error> {
+    Ok(match mime_type {
+        _ if mime_type == &mime::IMAGE_JPEG => Some("jpg"),
+        _ if mime_type == &mime::IMAGE_PNG => Some("png"),
+        _ if mime_type == &mime::IMAGE_GIF => Some("gif"),
+        _ if mime_type == &mime::APPLICATION_PDF => Some("pdf"),
+        _ if mime_type == "image/webp" => Some("webp"),
+        _ => {
+            let guess = mime_guess::get_mime_extensions_str(&mime_type.to_string())
+                .and_then(|types| types.last());
+            if guess.is_some() {
+                tracing::warn!("Guessed file extension {guess:?} for mime-type {mime_type} - this may not be correct");
+            }
+            guess.map(|g| *g)
+        }
+    })
+}
+
+pub fn filename_to_mime_type(filename: &str) -> Result<MediaType, Error> {
+    let ext = filename.split('.').last().ok_or_else(|| {
+        Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
+            message: "File name must contain a file extension".to_string(),
+        })
+    })?;
+
+    Ok(match ext {
+        "jpeg" | "jpg" => mime::IMAGE_JPEG,
+        "png" => mime::IMAGE_PNG,
+        "gif" => mime::IMAGE_GIF,
+        "pdf" => mime::APPLICATION_PDF,
+        "webp" => "image/webp".parse::<MediaType>().map_err(|_| {
+            Error::new(ErrorDetails::InternalError {
+                message: "Unknown mime-type `image/webp`. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.".to_string(),
+            })
+        })?,
+        _ => {
+            let mime_type = mime_guess::from_ext(ext).first().ok_or_else(|| {
+                Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
+                    message: format!("Unknown file extension `{ext}`"),
+                })
+            })?;
+            tracing::warn!("Guessed mime-type `{mime_type}` for file with extension `{ext}` - this may not be correct");
+            // Reparse to handle different `mime` crate versions
+            mime_type.to_string().parse::<MediaType>().map_err(|_| {
+                Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
+                    message: format!("Unknown mime-type `{mime_type}`"),
+                })
+            })?
+        }
+    })
+}
+
 fn tensorzero_to_openai_user_messages(
     content_blocks: &[ContentBlock],
 ) -> Result<Vec<OpenAIRequestMessage<'_>>, Error> {
@@ -1280,25 +1334,30 @@ fn tensorzero_to_openai_user_messages(
                 storage_path: _,
             }) => {
                 let data = format!("data:{};base64,{}", file.mime_type, file.data()?);
-                match file.mime_type {
-                    FileKind::Jpeg | FileKind::Png | FileKind::WebP => {
-                        user_content_blocks.push(OpenAIContentBlock::ImageUrl {
-                            image_url: OpenAIImageUrl {
-                                // This will only produce an error if we pass in a bad
-                                // `Base64File` (with missing file data)
-                                url: data,
-                            },
-                        });
-                    }
-                    FileKind::Pdf => {
-                        user_content_blocks.push(OpenAIContentBlock::File {
-                            file: OpenAIFile {
-                                file_data: Cow::Owned(data),
-                                // TODO - should we allow the user to specify the file name?
-                                filename: Cow::Borrowed("input.pdf"),
-                            },
-                        });
-                    }
+                if file.mime_type.type_() == mime::IMAGE {
+                    user_content_blocks.push(OpenAIContentBlock::ImageUrl {
+                        image_url: OpenAIImageUrl {
+                            // This will only produce an error if we pass in a bad
+                            // `Base64File` (with missing file data)
+                            url: data,
+                        },
+                    });
+                } else {
+                    // OpenAI doesn't document how they determine the content type of the base64 blob
+                    // - let's try to pick a good suffix for the filename, in case they don't sniff
+                    // the mime type from the actual file content.
+                    let suffix = mime_type_to_ext(&file.mime_type)?.ok_or_else(|| {
+                        Error::new(ErrorDetails::InvalidMessage {
+                            message: format!("Mime type {} has no filetype suffix", file.mime_type),
+                        })
+                    })?;
+                    user_content_blocks.push(OpenAIContentBlock::File {
+                        file: OpenAIFile {
+                            file_data: Cow::Owned(data),
+                            // TODO - should we allow the user to specify the file name?
+                            filename: Cow::Owned(format!("input.{suffix}")),
+                        },
+                    });
                 }
             }
             ContentBlock::Thought(_) => {
@@ -1368,7 +1427,7 @@ fn tensorzero_to_openai_assistant_messages(
                 file,
                 storage_path: _,
             }) => {
-                file.mime_type.require_image(PROVIDER_TYPE)?;
+                require_image(&file.mime_type, PROVIDER_TYPE)?;
                 assistant_content_blocks.push(OpenAIContentBlock::ImageUrl {
                     image_url: OpenAIImageUrl {
                         // This will only produce an error if we pass in a bad

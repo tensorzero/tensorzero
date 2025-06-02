@@ -1130,7 +1130,7 @@ mod tests {
     use uuid::Uuid;
 
     use crate::inference::types::{
-        ChatInferenceResultChunk, ContentBlockChunk, File, FileKind, InputMessageContent,
+        ChatInferenceResultChunk, ContentBlockChunk, File, InputMessageContent,
         JsonInferenceResultChunk, Role, TextChunk,
     };
 
@@ -1358,6 +1358,7 @@ mod tests {
             input_with_url.messages[0].content[0],
             InputMessageContent::File(File::Url {
                 url: "https://example.com/file.txt".parse().unwrap(),
+                mime_type: None,
             })
         );
 
@@ -1383,7 +1384,7 @@ mod tests {
         assert_eq!(
             input_with_base64.messages[0].content[0],
             InputMessageContent::File(File::Base64 {
-                mime_type: FileKind::Png,
+                mime_type: mime::IMAGE_PNG,
                 data: "fake_base64_data".to_string(),
             })
         );

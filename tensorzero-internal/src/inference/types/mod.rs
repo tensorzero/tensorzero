@@ -4,7 +4,7 @@ use derive_builder::Builder;
 use extra_body::{FullExtraBodyConfig, UnfilteredInferenceExtraBody};
 use extra_headers::{FullExtraHeadersConfig, UnfilteredInferenceExtraHeaders};
 use file::sanitize_raw_request;
-pub use file::{Base64File, File, FileKind};
+pub use file::{Base64File, File};
 use futures::stream::Peekable;
 use futures::Stream;
 use itertools::Itertools;

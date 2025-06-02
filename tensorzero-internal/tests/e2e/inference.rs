@@ -25,7 +25,7 @@ use tensorzero_internal::{
             DUMMY_STREAMING_TOOL_RESPONSE, DUMMY_TOOL_RESPONSE,
         },
         types::{
-            ContentBlock, ContentBlockOutput, File, FileKind, RequestMessage, ResolvedInput,
+            ContentBlock, ContentBlockOutput, File, RequestMessage, ResolvedInput,
             ResolvedInputMessageContent, Role, Text, TextKind,
         },
     },
@@ -2852,7 +2852,7 @@ async fn test_image_inference_without_object_store() {
                             text: "Describe the contents of the image".to_string(),
                         }),
                         ClientInputMessageContent::File(File::Base64 {
-                            mime_type: FileKind::Png,
+                            mime_type: mime::IMAGE_PNG,
                             data: BASE64_STANDARD.encode(FERRIS_PNG),
                         }),
                     ],

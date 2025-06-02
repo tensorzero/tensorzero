@@ -649,7 +649,7 @@ mod tests {
         inference::types::{
             resolved_input::FileWithPath,
             storage::{StorageKind, StoragePath},
-            Base64File, FileKind, ResolvedInputMessage, ResolvedInputMessageContent, Role, Text,
+            Base64File, ResolvedInputMessage, ResolvedInputMessageContent, Role, Text,
         },
         tool::{ToolCall, ToolCallOutput},
     };
@@ -834,7 +834,7 @@ mod tests {
                             ResolvedInputMessageContent::File(FileWithPath {
                                 file: Base64File {
                                     url: None,
-                                    mime_type: FileKind::Png,
+                                    mime_type: mime::IMAGE_PNG,
                                     data: Some("ABC".to_string()),
                                 },
                                 storage_path: StoragePath {

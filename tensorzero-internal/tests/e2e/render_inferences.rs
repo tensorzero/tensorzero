@@ -7,7 +7,7 @@ use tensorzero::{
 use tensorzero_internal::{
     inference::types::{
         resolved_input::FileWithPath, Base64File, ContentBlock, ContentBlockChatOutput,
-        ContentBlockOutput, FileKind, JsonInferenceOutput, ResolvedInput, ResolvedInputMessage,
+        ContentBlockOutput, JsonInferenceOutput, ResolvedInput, ResolvedInputMessage,
         ResolvedInputMessageContent,
     },
     tool::{ToolCallConfigDatabaseInsert, ToolCallOutput, ToolChoice},
@@ -231,7 +231,7 @@ pub async fn test_render_inferences_normal() {
                         ResolvedInputMessageContent::File(FileWithPath {
                             file: Base64File {
                                 url: None,
-                                mime_type: FileKind::Png,
+                                mime_type: mime::IMAGE_PNG,
                                 data: None,
                             },
                             storage_path: StoragePath {

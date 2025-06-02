@@ -40,8 +40,8 @@ use crate::inference::types::{
     ProviderInferenceResponseChunk, RequestMessage, Usage,
 };
 use crate::inference::types::{
-    ContentBlock, ContentBlockChunk, ContentBlockOutput, FileKind, FinishReason, FlattenUnknown,
-    Latency, ModelInferenceRequestJsonMode, ProviderInferenceResponseArgs,
+    ContentBlock, ContentBlockChunk, ContentBlockOutput, FinishReason, FlattenUnknown, Latency,
+    ModelInferenceRequestJsonMode, ProviderInferenceResponseArgs,
     ProviderInferenceResponseStreamInner, Role, Text, TextChunk,
 };
 use crate::model::{
@@ -1493,21 +1493,14 @@ impl<'a> TryFrom<&'a ContentBlock> for Option<FlattenUnknown<'a, GCPVertexGemini
             ContentBlock::File(FileWithPath {
                 file,
                 storage_path: _,
-            }) => {
-                // All of our FileKinds are supported by GCP Vertex Gemini
-                // If we add more, make sure to check their docs to see if they support it.
-                match file.mime_type {
-                    FileKind::Png | FileKind::Jpeg | FileKind::WebP | FileKind::Pdf => {}
-                }
-                Ok(Some(FlattenUnknown::Normal(
-                    GCPVertexGeminiContentPart::InlineData {
-                        inline_data: GCPVertexInlineData {
-                            mime_type: file.mime_type.to_string(),
-                            data: file.data()?.as_str(),
-                        },
+            }) => Ok(Some(FlattenUnknown::Normal(
+                GCPVertexGeminiContentPart::InlineData {
+                    inline_data: GCPVertexInlineData {
+                        mime_type: file.mime_type.to_string(),
+                        data: file.data()?.as_str(),
                     },
-                )))
-            }
+                },
+            ))),
             // We don't support thought blocks being passed in from a request.
             // These are only possible to be passed in in the scenario where the
             // output of a chat completion is used as an input to another model inference,
