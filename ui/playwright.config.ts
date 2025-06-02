@@ -22,7 +22,7 @@ export default defineConfig({
   /* Opt out of parallel tests on CI. */
   workers: process.env.TENSORZERO_CI ? 1 : undefined,
   /* Fail immediately while we're debugging the CI issue */
-  //   maxFailures: process.env.TENSORZERO_CI ? 1 : undefined,
+  maxFailures: process.env.TENSORZERO_CI ? 1 : undefined,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
   reporter: "html",
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
