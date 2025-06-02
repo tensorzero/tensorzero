@@ -751,12 +751,7 @@ impl Client {
 
     pub async fn experimental_list_inferences(
         &self,
-        function_name: String,
-        variant_name: Option<String>,
-        filters: Option<InferenceFilterTreeNode>,
-        output_source: InferenceOutputSource,
-        limit: Option<u64>,
-        offset: Option<u64>,
+        params: ListInferencesParams<'_>,
     ) -> Result<Vec<StoredInference>, TensorZeroError> {
         let ClientMode::EmbeddedGateway { gateway, .. } = &self.mode else {
             return Err(TensorZeroError::Other {
@@ -766,14 +761,6 @@ impl Client {
                 })
                 .into(),
             });
-        };
-        let params = ListInferencesParams {
-            function_name: function_name.as_str(),
-            variant_name: variant_name.as_deref(),
-            filters: filters.as_ref(),
-            output_source,
-            limit,
-            offset,
         };
         let inferences = gateway
             .state
