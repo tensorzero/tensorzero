@@ -271,7 +271,6 @@ pub struct QueryParameter {
 ///
 /// TODOs:
 /// - handle selecting the feedback values
-/// - handle things like output schema, tool params, etc.
 pub fn generate_list_inferences_sql(
     config: &Config,
     opts: &ListInferencesParams<'_>,
@@ -442,9 +441,11 @@ fn get_select_clauses(function_config: &FunctionConfig) -> BTreeSet<String> {
     match function_config {
         FunctionConfig::Json(_) => {
             select_clauses.insert("i.output_schema as output_schema".to_string());
+            select_clauses.insert("'json' as type".to_string());
         }
         FunctionConfig::Chat(_) => {
             select_clauses.insert("i.tool_params as tool_params".to_string());
+            select_clauses.insert("'chat' as type".to_string());
         }
     }
     select_clauses
@@ -481,6 +482,7 @@ mod tests {
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r#"
 SELECT
+    'json' as type,
     i.episode_id as episode_id,
     i.id as id,
     i.input as input,
@@ -514,6 +516,7 @@ WHERE
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r#"
 SELECT
+    'chat' as type,
     i.episode_id as episode_id,
     i.id as id,
     i.input as input,
@@ -552,6 +555,7 @@ WHERE
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r#"
 SELECT
+    'json' as type,
     i.episode_id as episode_id,
     i.id as id,
     i.input as input,
@@ -647,6 +651,7 @@ WHERE
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r#"
 SELECT
+    'json' as type,
     demo_f.value AS output,
     i.episode_id as episode_id,
     i.id as id,
@@ -685,6 +690,7 @@ WHERE
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r#"
 SELECT
+    'json' as type,
     i.episode_id as episode_id,
     i.id as id,
     i.input as input,
@@ -741,6 +747,7 @@ WHERE
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r#"
 SELECT
+    'json' as type,
     i.episode_id as episode_id,
     i.id as id,
     i.input as input,
@@ -805,6 +812,7 @@ WHERE
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r#"
 SELECT
+    'json' as type,
     i.episode_id as episode_id,
     i.id as id,
     i.input as input,
@@ -886,6 +894,7 @@ WHERE
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r#"
 SELECT
+    'json' as type,
     i.episode_id as episode_id,
     i.id as id,
     i.input as input,
@@ -962,6 +971,7 @@ WHERE
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r#"
 SELECT
+    'json' as type,
     i.episode_id as episode_id,
     i.id as id,
     i.input as input,
@@ -1034,6 +1044,7 @@ WHERE
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r#"
 SELECT
+    'json' as type,
     i.episode_id as episode_id,
     i.id as id,
     i.input as input,
@@ -1092,6 +1103,7 @@ WHERE
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r#"
 SELECT
+    'json' as type,
     i.episode_id as episode_id,
     i.id as id,
     i.input as input,
@@ -1131,6 +1143,7 @@ WHERE
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r#"
 SELECT
+    'json' as type,
     i.episode_id as episode_id,
     i.id as id,
     i.input as input,
@@ -1192,6 +1205,7 @@ OFFSET {p2:UInt64}"#;
             let expected_sql = format!(
                 r#"
 SELECT
+    'json' as type,
     i.episode_id as episode_id,
     i.id as id,
     i.input as input,
@@ -1257,6 +1271,7 @@ WHERE
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r#"
 SELECT
+    'json' as type,
     demo_f.value AS output,
     i.episode_id as episode_id,
     i.id as id,

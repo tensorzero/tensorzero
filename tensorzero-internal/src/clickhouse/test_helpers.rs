@@ -7,6 +7,7 @@ use crate::endpoints::dynamic_evaluation_run::{
     DynamicEvaluationRunEpisodeRow, DynamicEvaluationRunRow,
 };
 
+#[cfg(feature = "e2e_tests")]
 use super::escape_string_for_clickhouse_literal;
 use super::ClickHouseConnectionInfo;
 use serde::Deserialize;
