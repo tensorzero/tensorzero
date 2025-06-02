@@ -43,6 +43,10 @@ pub use client_inference_params::{ClientInferenceParams, ClientSecretString};
 pub use client_input::{ClientInput, ClientInputMessage, ClientInputMessageContent};
 
 pub use tensorzero_internal::cache::CacheParamsOptions;
+pub use tensorzero_internal::clickhouse::query_builder::{
+    BooleanMetricNode, FloatComparisonOperator, FloatMetricNode, InferenceFilterTreeNode,
+    InferenceOutputSource, ListInferencesParams,
+};
 pub use tensorzero_internal::endpoints::datasets::{
     ChatInferenceDatapoint, Datapoint, JsonInferenceDatapoint,
 };
@@ -743,6 +747,41 @@ impl Client {
                 .await?)
             }
         }
+    }
+
+    pub async fn experimental_list_inferences(
+        &self,
+        function_name: String,
+        variant_name: Option<String>,
+        filters: Option<InferenceFilterTreeNode>,
+        output_source: InferenceOutputSource,
+        limit: Option<u64>,
+        offset: Option<u64>,
+    ) -> Result<Vec<StoredInference>, TensorZeroError> {
+        let ClientMode::EmbeddedGateway { gateway, .. } = &self.mode else {
+            return Err(TensorZeroError::Other {
+                source: tensorzero_internal::error::Error::new(ErrorDetails::InvalidClientMode {
+                    mode: "Http".to_string(),
+                    message: "This function is only available in EmbeddedGateway mode".to_string(),
+                })
+                .into(),
+            });
+        };
+        let params = ListInferencesParams {
+            function_name: function_name.as_str(),
+            variant_name: variant_name.as_deref(),
+            filters: filters.as_ref(),
+            output_source,
+            limit,
+            offset,
+        };
+        let inferences = gateway
+            .state
+            .clickhouse_connection_info
+            .list_inferences(&gateway.state.config, &params)
+            .await
+            .map_err(err_to_http)?;
+        Ok(inferences)
     }
 
     /// There are two things that need to happen in this function:

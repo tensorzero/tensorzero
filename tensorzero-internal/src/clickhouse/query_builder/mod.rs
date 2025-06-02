@@ -245,8 +245,8 @@ pub struct ListInferencesParams<'a> {
     pub variant_name: Option<&'a str>,
     pub filters: Option<&'a InferenceFilterTreeNode>,
     pub output_source: InferenceOutputSource,
-    pub limit: Option<i64>,
-    pub offset: Option<i64>,
+    pub limit: Option<u64>,
+    pub offset: Option<u64>,
 }
 
 /// Represents a parameter to be set for the ClickHouse query.
