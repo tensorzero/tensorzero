@@ -1,5 +1,3 @@
-use query_builder::generate_list_inferences_sql;
-use query_builder::ListInferencesParams;
 use reqwest::multipart::Form;
 use reqwest::multipart::Part;
 use reqwest::Client;
@@ -22,6 +20,8 @@ use crate::clickhouse::types::StoredInference;
 use crate::config_parser::Config;
 use crate::error::DisplayOrDebugGateway;
 use crate::error::{Error, ErrorDetails};
+use query_builder::generate_list_inferences_sql;
+use query_builder::ListInferencesParams;
 
 #[derive(Debug, Clone)]
 pub enum ClickHouseConnectionInfo {
