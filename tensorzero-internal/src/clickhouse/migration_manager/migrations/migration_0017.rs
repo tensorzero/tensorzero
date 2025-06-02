@@ -64,11 +64,10 @@ impl Migration for Migration0017<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        "\
-            -- Drop the columns\n\
-            ALTER TABLE ModelInferenceCache\n\
-            DROP COLUMN IF EXISTS input_tokens,\n\
-            DROP COLUMN IF EXISTS output_tokens;\n\
+        "/* Drop the columns */\
+            ALTER TABLE ModelInferenceCache \
+            DROP COLUMN IF EXISTS input_tokens,\
+            DROP COLUMN IF EXISTS output_tokens;\
             "
         .to_string()
     }

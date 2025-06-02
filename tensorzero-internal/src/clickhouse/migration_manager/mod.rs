@@ -29,14 +29,18 @@ use migrations::migration_0027::Migration0027;
 use migrations::migration_0028::Migration0028;
 use migrations::migration_0029::Migration0029;
 
+/// This must match the number of migrations returned by `make_all_migrations` - the tests
+/// will panic if they don't match.
+pub const NUM_MIGRATIONS: usize = 23;
+
 /// Constructs (but does not run) a vector of all our database migrations.
 /// This is the single source of truth for all migration - it's used during startup to migrate
 /// the database, and in our ClickHouse tests to verify that the migrations apply correctly
 /// to a fresh database.
-pub fn make_all_migrations(
-    clickhouse: &ClickHouseConnectionInfo,
-) -> Vec<Box<dyn Migration + Send + Sync + '_>> {
-    vec![
+pub fn make_all_migrations<'a>(
+    clickhouse: &'a ClickHouseConnectionInfo,
+) -> Vec<Box<dyn Migration + Send + Sync + 'a>> {
+    let migrations: Vec<Box<dyn Migration + Send + Sync + 'a>> = vec![
         Box::new(Migration0000 { clickhouse }),
         // BANNED: This migration is no longer needed because it is deleted and replaced by migration 0010
         // Box::new(Migration0001 { clickhouse }),
@@ -72,7 +76,13 @@ pub fn make_all_migrations(
         Box::new(Migration0027 { clickhouse }),
         Box::new(Migration0028 { clickhouse }),
         Box::new(Migration0029 { clickhouse }),
-    ]
+    ];
+    assert_eq!(
+        migrations.len(),
+        NUM_MIGRATIONS,
+        "Please update the NUM_MIGRATIONS constant to match the number of migrations"
+    );
+    migrations
 }
 
 pub async fn run(clickhouse: &ClickHouseConnectionInfo) -> Result<(), Error> {

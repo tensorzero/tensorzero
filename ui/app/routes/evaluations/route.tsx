@@ -111,7 +111,7 @@ export default function EvaluationSummaryPage({
       <LaunchEvaluationModal
         isOpen={launchEvaluationModalIsOpen}
         onClose={() => setLaunchEvaluationModalIsOpen(false)}
-        dataset_names={dataset_names}
+        datasetNames={dataset_names}
       />
     </PageLayout>
   );

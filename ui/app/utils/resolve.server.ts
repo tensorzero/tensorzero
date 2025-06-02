@@ -1,9 +1,9 @@
 import type {
-  ImageContent,
+  FileContent,
   ModelInferenceInput,
   ModelInferenceInputMessage,
   ModelInferenceInputMessageContent,
-  ResolvedBase64Image,
+  ResolvedBase64File,
   ResolvedInputMessageContent,
 } from "./clickhouse/common";
 import type { InputMessageContent } from "./clickhouse/common";
@@ -90,12 +90,29 @@ async function resolveContent(
     case "image":
       try {
         return {
-          ...content,
-          image: await resolveImage(content as ImageContent),
+          type: "file",
+          file: await resolveFile({
+            type: "file",
+            file: content.image,
+            storage_path: content.storage_path,
+          }),
+          storage_path: content.storage_path,
         };
       } catch (error) {
         return {
-          type: "image_error",
+          type: "file_error",
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
+    case "file":
+      try {
+        return {
+          ...content,
+          file: await resolveFile(content as FileContent),
+        };
+      } catch (error) {
+        return {
+          type: "file_error",
           error: error instanceof Error ? error.message : String(error),
         };
       }
@@ -115,28 +132,44 @@ async function resolveModelInferenceContent(
     case "tool_result":
     case "raw_text":
       return content;
+    // Convert legacy 'image' content block to 'file' when resolving input
     case "image":
       try {
         return {
-          ...content,
-          image: await resolveImage(content as ImageContent),
+          type: "file",
+          file: await resolveFile({
+            type: "file",
+            file: content.image,
+            storage_path: content.storage_path,
+          }),
+          storage_path: content.storage_path,
         };
       } catch (error) {
         return {
-          type: "image_error",
+          type: "file_error",
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
+    case "file":
+      try {
+        return {
+          ...content,
+          file: await resolveFile(content as FileContent),
+        };
+      } catch (error) {
+        return {
+          type: "file_error",
           error: error instanceof Error ? error.message : String(error),
         };
       }
   }
 }
-async function resolveImage(
-  content: ImageContent,
-): Promise<ResolvedBase64Image> {
+async function resolveFile(content: FileContent): Promise<ResolvedBase64File> {
   const object = await tensorZeroClient.getObject(content.storage_path);
   const json = JSON.parse(object);
-  const dataURL = `data:${content.image.mime_type};base64,${json.data}`;
+  const dataURL = `data:${content.file.mime_type};base64,${json.data}`;
   return {
     url: dataURL,
-    mime_type: content.image.mime_type,
+    mime_type: content.file.mime_type,
   };
 }

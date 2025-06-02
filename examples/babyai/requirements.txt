@@ -40,7 +40,7 @@ attrs==25.3.0 \
     #   referencing
 baba @ git+https://github.com/nacloos/baba-is-ai.git@ad466e027ad0a08f253ac2bf48550a2eb21b5ecc
     # via balrog
-balrog @ git+ssh://git@github.com/balrog-ai/BALROG.git@36d4b24e8b2d01065d6e65ff1b139c796908be1b
+balrog @ git+ssh://****@github.com/balrog-ai/BALROG.git@36d4b24e8b2d01065d6e65ff1b139c796908be1b
     # via tensorzero-examples-babyai
 balrog-nle==0.9.0 \
     --hash=sha256:10cd24d8483353ceb58c8c817d5134bc6edd60017a0f71dc465031bfeb66b957 \

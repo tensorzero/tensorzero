@@ -1,18 +1,23 @@
 use std::{
-    cmp::Ordering, env, fmt::Display, future::Future, path::PathBuf, sync::Arc, time::Duration,
+    cmp::Ordering, collections::HashMap, env, fmt::Display, future::Future, path::PathBuf,
+    sync::Arc, time::Duration,
 };
 
+use futures::future::join_all;
 use git::GitInfo;
+use input_handling::reresolve_input_for_fine_tuning;
 use reqwest::header::HeaderMap;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use serde_json::Value;
 use std::fmt::Debug;
+use stored_inference::render_stored_inference;
 use tensorzero_internal::{
     config_parser::Config,
     endpoints::{
         datasets::InsertDatapointParams,
         dynamic_evaluation_run::{
-            DynamicEvaluationRunEpisodeParams, DynamicEvaluationRunEpisodeResponse,
+            validate_variant_pins, DynamicEvaluationRunEpisodeParams,
+            DynamicEvaluationRunEpisodeResponse,
         },
         validate_tags,
     },
@@ -28,8 +33,11 @@ use uuid::Uuid;
 mod client_inference_params;
 mod client_input;
 mod git;
+mod stored_inference;
+pub use stored_inference::{
+    RenderedStoredInference, StoredChatInference, StoredInference, StoredJsonInference,
+};
 pub mod input_handling;
-
 pub use client_inference_params::{ClientInferenceParams, ClientSecretString};
 pub use client_input::{ClientInput, ClientInputMessage, ClientInputMessageContent};
 
@@ -47,7 +55,7 @@ pub use tensorzero_internal::endpoints::inference::{
 };
 pub use tensorzero_internal::endpoints::object_storage::ObjectResponse;
 pub use tensorzero_internal::inference::types::storage::{StorageKind, StoragePath};
-pub use tensorzero_internal::inference::types::Image;
+pub use tensorzero_internal::inference::types::File;
 pub use tensorzero_internal::inference::types::{
     ContentBlockChunk, Input, InputMessage, InputMessageContent, Role,
 };
@@ -734,6 +742,73 @@ impl Client {
                 .await?)
             }
         }
+    }
+
+    /// There are two things that need to happen in this function:
+    /// 1. We need to resolve all network resources (e.g. images) in the inference examples.
+    /// 2. We need to prepare all messages into "simple" messages that have been templated for a particular variant.
+    ///    To do this, we need to know what variant to use for each function that might appear in the data.
+    ///
+    /// IMPORTANT: For now, this function drops datapoints which are bad, e.g. ones where templating fails, the function
+    ///            has no variant specified, or where the process of downloading resources fails.
+    ///            In future we will make this behavior configurable by the caller.
+    pub async fn experimental_render_inferences(
+        &self,
+        mut stored_inferences: Vec<StoredInference>,
+        variants: HashMap<String, String>, // Map from function name to variant name
+    ) -> Result<Vec<RenderedStoredInference>, TensorZeroError> {
+        let ClientMode::EmbeddedGateway { gateway, .. } = &self.mode else {
+            return Err(TensorZeroError::Other {
+                source: tensorzero_internal::error::Error::new(ErrorDetails::InvalidClientMode {
+                    mode: "Http".to_string(),
+                    message: "This function is only available in EmbeddedGateway mode".to_string(),
+                })
+                .into(),
+            });
+        };
+        validate_variant_pins(&variants, &gateway.state.config)
+            .map_err(|e| TensorZeroError::Other { source: e.into() })?;
+        let resolution_futures = stored_inferences.iter_mut().map(|inference_example| {
+            // Create a future for each call to reresolve_input_for_fine_tuning.
+            // This function modifies inference_example.input_mut() in place.
+            // `self` (the client) is passed by immutable reference.
+            reresolve_input_for_fine_tuning(inference_example.input_mut(), self)
+        });
+
+        // Await all futures concurrently.
+        // For now, we drop the errors here.
+        // They are logged on construction in the task.
+        // TODO: make it configurable whether to drop or error on failures.
+        let results = join_all(resolution_futures).await;
+
+        // Ensure that the number of results matches the number of inference examples.
+        // This should be guaranteed to be true based on the code above, but we assert it anyway.
+        assert_eq!(
+            stored_inferences.len(),
+            results.len(),
+            "Mismatch between number of inference examples and resolution results. This indicates a bug."
+        );
+
+        let final_rendered_examples: Vec<RenderedStoredInference> = stored_inferences
+            .into_iter() // Consumes Vec<StoredInference>; elements are already mutated
+            .zip(results.into_iter()) // Creates an iterator of (StoredInference, Result<(), Error>)
+            .filter_map(|(example, resolution_result)| {
+                // Filter out examples where reresolve_input_for_fine_tuning failed.
+                // If resolution_result is Ok, map Some(()) to Some(example).
+                // If resolution_result is Err, .ok() yields None, so filter_map drops it.
+                resolution_result.ok().map(|_| example)
+            })
+            .filter_map(|resolved_example| {
+                // resolved_example is a StoredInference that was successfully processed by reresolve.
+                // Now, attempt to render it.
+                // render_stored_inference returns Result<RenderedStoredInference, Error>.
+                // .ok() converts this to Option<RenderedStoredInference>.
+                // filter_map will keep Some(RenderedStoredInference) and discard None (if rendering failed).
+                render_stored_inference(resolved_example, &gateway.state.config, &variants).ok()
+            })
+            .collect();
+
+        Ok(final_rendered_examples)
     }
 
     async fn parse_http_response<T: serde::de::DeserializeOwned>(

@@ -286,6 +286,12 @@ fn find_duplicate_header(headers: &http::HeaderMap) -> Option<HeaderName> {
     None
 }
 
+fn is_openrouter_request(uri: &http::Uri) -> bool {
+    uri.host()
+        .map(|h| h.eq_ignore_ascii_case("openrouter.ai"))
+        .unwrap_or(false)
+}
+
 pub async fn run_server(args: Args, server_started: oneshot::Sender<SocketAddr>) {
     use tracing_subscriber::EnvFilter;
 
@@ -324,6 +330,32 @@ pub async fn run_server(args: Args, server_started: oneshot::Sender<SocketAddr>)
                 let args = args_clone.clone();
                 async move {
                     let (parts, body) = req.into_parts();
+
+                    // On OpenRouter requests we want to take advantage of their custom headers identifying the referer.
+                    // If these are missing, we fail with a bad request so an E2E test catches it in the CI.
+                    tracing::debug!("Headers: {:?}", &parts.headers);
+                    if is_openrouter_request(&parts.uri) {
+                        let has_title = parts.headers.get("X-Title").map(|v| v.as_bytes() == b"TensorZero").unwrap_or(false);
+                        let has_referer = parts.headers.get("HTTP-Referer").map(|v| v.as_bytes() == b"https://www.tensorzero.com/").unwrap_or(false);
+
+                        if !has_title || !has_referer {
+                            let missing = if !has_title && !has_referer {
+                                "X-Title and HTTP-Referer"
+                            } else if !has_title {
+                                "X-Title"
+                            } else {
+                                "HTTP-Referer"
+                            };
+
+                            tracing::error!(url = ?parts.uri, "Missing or incorrect required header(s) for OpenRouter: {missing}");
+                            return Ok(http::Response::builder()
+                                .status(http::StatusCode::BAD_REQUEST)
+                                .body(BoxBody::new(reqwest::Body::from(
+                                    format!("provider-proxy: Missing or incorrect required header(s) for OpenRouter: {missing}"),
+                                )))
+                                .unwrap());
+                        }
+                    }
                     // While duplicate headers are allowed by the HTTP spec (the values get concatenated),
                     // we never intentionally send duplicate headers from tensorzero.
                     // We check for this and error to catch mistakes in our code

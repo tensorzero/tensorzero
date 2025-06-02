@@ -1,8 +1,12 @@
 use std::{collections::HashMap, sync::Arc};
 
+#[cfg(feature = "pyo3")]
+use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+#[cfg(feature = "pyo3")]
+use crate::inference::types::pyo3_helpers::serialize_to_dict;
 use crate::{
     error::{Error, ErrorDetails},
     jsonschema_util::{DynamicJSONSchema, StaticJSONSchema},
@@ -21,12 +25,37 @@ use crate::{
 /// A Tool object describes how a tool can be dynamically configured by the user.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "pyo3", pyclass)]
 pub struct Tool {
     pub description: String,
     pub parameters: Value,
     pub name: String,
     #[serde(default)]
     pub strict: bool,
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl Tool {
+    #[getter]
+    pub fn get_parameters<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        serialize_to_dict(py, self.parameters.clone()).map(|x| x.into_bound(py))
+    }
+
+    #[getter]
+    pub fn get_description(&self) -> &str {
+        &self.description
+    }
+
+    #[getter]
+    pub fn get_name(&self) -> &str {
+        &self.name
+    }
+
+    #[getter]
+    pub fn get_strict(&self) -> bool {
+        self.strict
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -75,15 +104,6 @@ pub struct DynamicImplicitToolConfig {
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct ToolCallConfig {
     pub tools_available: Vec<ToolConfig>,
-    pub tool_choice: ToolChoice,
-    pub parallel_tool_calls: Option<bool>,
-}
-
-/// ToolCallConfigDatabaseInsert is a lightweight version of ToolCallConfig that can be serialized and cloned.
-/// It is used to insert the ToolCallConfig into the database.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct ToolCallConfigDatabaseInsert {
-    pub tools_available: Vec<Tool>,
     pub tool_choice: ToolChoice,
     pub parallel_tool_calls: Option<bool>,
 }
@@ -182,6 +202,33 @@ impl ToolCallConfig {
     }
 }
 
+/// ToolCallConfigDatabaseInsert is a lightweight version of ToolCallConfig that can be serialized and cloned.
+/// It is used to insert the ToolCallConfig into the database.
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(feature = "pyo3", pyclass)]
+pub struct ToolCallConfigDatabaseInsert {
+    pub tools_available: Vec<Tool>,
+    pub tool_choice: ToolChoice,
+    // TODO: decide what we want the Python interface to be for ToolChoice
+    // This is complicated because ToolChoice is an enum with some simple arms and some
+    // struct arms. We would likely need to land on one of the serde options for enums (tagged?)
+    pub parallel_tool_calls: Option<bool>,
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl ToolCallConfigDatabaseInsert {
+    #[getter]
+    pub fn get_tools_available(&self) -> Vec<Tool> {
+        self.tools_available.clone()
+    }
+
+    #[getter]
+    pub fn get_parallel_tool_calls(&self) -> Option<bool> {
+        self.parallel_tool_calls
+    }
+}
+
 /// A struct to hold the dynamic tool parameters passed at inference time.
 /// These should override the function-level tool parameters.
 /// `allowed_tools` should be a subset of the configured tools for the function.
@@ -211,6 +258,7 @@ pub struct BatchDynamicToolParamsWithSize(pub BatchDynamicToolParams, pub usize)
 
 /// A ToolCall is a request by a model to call a Tool
 #[derive(Clone, Debug, PartialEq, Serialize)]
+#[cfg_attr(feature = "pyo3", pyclass(get_all))]
 pub struct ToolCall {
     pub name: String,
     pub arguments: String,
@@ -285,6 +333,7 @@ impl<'de> Deserialize<'de> for ToolCall {
 /// A ToolCallOutput is a request by a model to call a Tool
 /// in the form that we return to the client / ClickHouse
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "pyo3", pyclass)]
 pub struct ToolCallOutput {
     pub arguments: Option<Value>,
     pub id: String,
@@ -341,6 +390,7 @@ impl ToolCallConfig {
 }
 
 /// A ToolResult is the outcome of a ToolCall, which we may want to present back to the model
+#[cfg_attr(feature = "pyo3", pyclass(get_all))]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ToolResult {

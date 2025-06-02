@@ -892,7 +892,7 @@ describe("OpenAI Compatibility", () => {
       },
       seed: 69,
       "tensorzero::cache_options": {
-        max_age_s: 10,
+        max_age_s: 30, // NOTE: This was 10s and we actually occasionally time out on CI.
         enabled: "on",
       },
     });
@@ -1127,6 +1127,49 @@ describe("OpenAI Compatibility", () => {
     });
 
     expect(result.choices[0].message.content?.toLowerCase()).toContain("crab");
+  });
+
+  it("should handle multi-block file_base64", async () => {
+    // Read PDF file and convert to base64
+    const pdfPath = path.join(
+      __dirname,
+      "../../../tensorzero-internal/tests/e2e/providers/deepseek_paper.pdf"
+    );
+    const deepseekPaperPdf = fs.readFileSync(pdfPath).toString("base64");
+
+    const messages: ChatCompletionMessageParam[] = [
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: "Output exactly two words describing the image",
+          },
+          {
+            type: "file",
+            file: {
+              file_data: deepseekPaperPdf,
+              filename: "test.pdf",
+            },
+          },
+        ],
+      },
+    ];
+
+    const episodeId = uuidv7();
+    const result = await client.chat.completions.create({
+      messages,
+      model: "tensorzero::model_name::dummy::require_pdf",
+      // @ts-expect-error - custom TensorZero property
+      "tensorzero::episode_id": episodeId,
+    });
+
+    expect(result.choices[0].message.content).not.toBeNull();
+    const jsonContent = JSON.parse(result.choices[0].message.content!);
+    expect(jsonContent[0].storage_path).toEqual({
+      kind: { type: "disabled" },
+      path: "observability/files/3e127d9a726f6be0fd81d73ccea97d96ec99419f59650e01d49183cd3be999ef.pdf",
+    });
   });
 });
 

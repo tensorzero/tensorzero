@@ -6,6 +6,7 @@ interface KVChipProps extends HTMLAttributes<HTMLDivElement> {
   v: string;
   k_href?: string;
   v_href?: string;
+  separator?: string;
 }
 
 export default function KVChip({
@@ -13,6 +14,7 @@ export default function KVChip({
   v,
   k_href,
   v_href,
+  separator = ":",
   ...props
 }: KVChipProps) {
   return (
@@ -25,7 +27,7 @@ export default function KVChip({
         ) : (
           <span>{k}</span>
         )}
-        <span>:</span>
+        <span className="text-gray-400">{separator}</span>
         {v_href ? (
           <Link to={v_href} className="text-blue-600 hover:underline">
             {v}

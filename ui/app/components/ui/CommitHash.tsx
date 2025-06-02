@@ -41,6 +41,7 @@ export function CommitHash({ tags }: CommitHashProps) {
                 v={shortHash}
                 k_href={branchLink}
                 v_href={commitLink}
+                separator="@"
               />
             ) : (
               <Code className="flex items-center gap-1 rounded bg-gray-100 px-2 py-0.5 font-mono text-xs">

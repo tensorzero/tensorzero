@@ -42,6 +42,8 @@ from tensorzero import (
     ChatInferenceResponse,
     DynamicEvaluationRunResponse,
     FeedbackResponse,
+    FileBase64,
+    FileUrl,
     FinishReason,
     ImageBase64,
     ImageUrl,
@@ -342,7 +344,7 @@ async def test_async_reasoning_inference(async_client: AsyncTensorZeroGateway):
     )
     assert isinstance(result, ChatInferenceResponse)
     assert result.variant_name == "reasoner"
-    assert isinstance(result, ChatInferenceResponse)
+    assert result.original_response is None
     content = result.content
     assert len(content) == 2
     assert isinstance(content[0], Thought)
@@ -1222,10 +1224,106 @@ def test_image_inference_base64(sync_client: TensorZeroGateway):
     json_content = json.loads(content[0].text)
     assert json_content == [
         {
-            "image": {"url": None, "mime_type": "image/png"},
+            "file": {"url": None, "mime_type": "image/png"},
             "storage_path": {
                 "kind": {"type": "disabled"},
-                "path": "observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png",
+                "path": "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png",
+            },
+        }
+    ]
+
+
+def test_file_inference_base64(sync_client: TensorZeroGateway):
+    # Test image with File block
+    basepath = path.dirname(__file__)
+    with open(
+        f"{basepath}/../../../tensorzero-internal/tests/e2e/providers/ferris.png", "rb"
+    ) as f:
+        ferris_png = base64.b64encode(f.read()).decode("ascii")
+
+    input = {
+        "system": "You are a helpful assistant named Alfred Pennyworth.",
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    FileBase64(
+                        data=ferris_png,
+                        mime_type="image/png",
+                    )
+                ],
+            }
+        ],
+    }
+    input_copy = deepcopy(input)
+    result = sync_client.inference(
+        model_name="dummy::extract_images",
+        input=input,
+        episode_id=uuid7(),  # This would not typically be done but this partially verifies that uuid7 is using a correct implementation
+        # because the gateway validates some of the properties needed
+    )
+    assert isinstance(result, ChatInferenceResponse)
+    assert input == input_copy, "Input should not be modified by the client"
+    assert result.variant_name == "dummy::extract_images"
+    content = result.content
+    assert len(content) == 1
+    assert content[0].type == "text"
+    assert isinstance(content[0], Text)
+    assert content[0].text is not None
+    json_content = json.loads(content[0].text)
+    assert json_content == [
+        {
+            "file": {"url": None, "mime_type": "image/png"},
+            "storage_path": {
+                "kind": {"type": "disabled"},
+                "path": "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png",
+            },
+        }
+    ]
+    # Test pdf with File block
+    basepath = path.dirname(__file__)
+    with open(
+        f"{basepath}/../../../tensorzero-internal/tests/e2e/providers/deepseek_paper.pdf",
+        "rb",
+    ) as f:
+        deepseek_paper_pdf = base64.b64encode(f.read()).decode("ascii")
+
+    input = {
+        "system": "You are a helpful assistant named Alfred Pennyworth.",
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    FileBase64(
+                        data=deepseek_paper_pdf,
+                        mime_type="application/pdf",
+                    )
+                ],
+            }
+        ],
+    }
+    input_copy = deepcopy(input)
+    result = sync_client.inference(
+        model_name="dummy::require_pdf",
+        input=input,
+        episode_id=uuid7(),
+    )
+    assert isinstance(result, ChatInferenceResponse)
+    assert input == input_copy, "Input should not be modified by the client"
+    assert result.variant_name == "dummy::require_pdf"
+    content = result.content
+    assert len(content) == 1
+    assert content[0].type == "text"
+    assert isinstance(content[0], Text)
+    assert content[0].text is not None
+    print(content[0].text)
+    json_content = json.loads(content[0].text)
+    assert json_content == [
+        {
+            "file": {"url": None, "mime_type": "application/pdf"},
+            "storage_path": {
+                "kind": {"type": "disabled"},
+                "path": "observability/files/3e127d9a726f6be0fd81d73ccea97d96ec99419f59650e01d49183cd3be999ef.pdf",
             },
         }
     ]
@@ -1264,13 +1362,58 @@ def test_image_inference_url(sync_client: TensorZeroGateway):
     json_content = json.loads(content[0].text)
     assert json_content == [
         {
-            "image": {
+            "file": {
                 "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
                 "mime_type": "image/png",
             },
             "storage_path": {
                 "kind": {"type": "disabled"},
-                "path": "observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png",
+                "path": "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png",
+            },
+        }
+    ]
+
+
+def test_file_inference_url(sync_client: TensorZeroGateway):
+    input = {
+        "system": "You are a helpful assistant named Alfred Pennyworth.",
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    FileUrl(
+                        url="https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png"
+                    )
+                ],
+            }
+        ],
+    }
+    input_copy = deepcopy(input)
+    result = sync_client.inference(
+        model_name="dummy::extract_images",
+        input=input,
+        episode_id=uuid7(),  # This would not typically be done but this partially verifies that uuid7 is using a correct implementation
+        # because the gateway validates some of the properties needed
+    )
+    assert isinstance(result, ChatInferenceResponse)
+    assert input == input_copy, "Input should not be modified by the client"
+    assert result.variant_name == "dummy::extract_images"
+    content = result.content
+    assert len(content) == 1
+    assert content[0].type == "text"
+    assert isinstance(content[0], Text)
+    assert content[0].text is not None
+    json_content = json.loads(content[0].text)
+    print(json_content)
+    assert json_content == [
+        {
+            "file": {
+                "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
+                "mime_type": "image/png",
+            },
+            "storage_path": {
+                "kind": {"type": "disabled"},
+                "path": "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png",
             },
         }
     ]
@@ -3193,3 +3336,34 @@ def test_sync_multiple_text_blocks(sync_client: TensorZeroGateway):
             ]
         },
     )
+
+
+def test_sync_include_original_response_chat(sync_client: TensorZeroGateway):
+    response = sync_client.inference(
+        model_name="dummy::good",
+        input={"messages": [{"role": "user", "content": "Hello, world!"}]},
+        include_original_response=True,
+    )
+    assert isinstance(response, ChatInferenceResponse)
+    assert (
+        response.original_response
+        == '{\n  "id": "id",\n  "object": "text.completion",\n  "created": 1618870400,\n  "model": "text-davinci-002",\n  "choices": [\n    {\n      "text": "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.",\n      "index": 0,\n      "logprobs": null,\n      "finish_reason": null\n    }\n  ]\n}'
+    )
+
+
+def test_sync_include_original_response_json(sync_client: TensorZeroGateway):
+    response = sync_client.inference(
+        function_name="json_success",
+        input={
+            "system": {"assistant_name": "foo"},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "arguments": {"country": "US"}}],
+                }
+            ],
+        },
+        include_original_response=True,
+    )
+    assert isinstance(response, JsonInferenceResponse)
+    assert response.original_response == '{"answer":"Hello"}'

@@ -1,7 +1,6 @@
 use object_store::aws::AmazonS3Builder;
 use object_store::local::LocalFileSystem;
 use object_store::{ObjectStore, PutPayload};
-use scoped_tls::scoped_thread_local;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -29,7 +28,19 @@ use crate::variant::mixture_of_n::UninitializedMixtureOfNConfig;
 use crate::variant::{Variant, VariantConfig};
 use std::error::Error as StdError;
 
-scoped_thread_local!(pub(crate) static SKIP_CREDENTIAL_VALIDATION: ());
+tokio::task_local! {
+    /// When set, we skip performing credential validation in model providers
+    /// This is used when running in e2e test mode, and by the 'evaluations' binary
+    /// We need to access this from async code (e.g. when looking up GCP SDK credentials),
+    /// so this needs to be a tokio task-local (as a task may be moved between threads)
+    pub(crate) static SKIP_CREDENTIAL_VALIDATION: ();
+}
+
+pub fn skip_credential_validation() -> bool {
+    // tokio::task_local doesn't have an 'is_set' method, so we call 'try_with'
+    // (which returns an `Err` if the task-local is not set)
+    SKIP_CREDENTIAL_VALIDATION.try_with(|_| ()).is_ok()
+}
 
 #[derive(Debug, Default)]
 pub struct Config<'c> {
@@ -312,9 +323,11 @@ impl<'c> Config<'c> {
             }
         };
         let config = if cfg!(feature = "e2e_tests") || !validate_credentials {
-            SKIP_CREDENTIAL_VALIDATION.set(&(), || Self::load_from_toml(config_table, base_path))?
+            SKIP_CREDENTIAL_VALIDATION
+                .scope((), Self::load_from_toml(config_table, base_path))
+                .await?
         } else {
-            Self::load_from_toml(config_table, base_path)?
+            Self::load_from_toml(config_table, base_path).await?
         };
 
         if validate_credentials {
@@ -326,7 +339,7 @@ impl<'c> Config<'c> {
         Ok(config)
     }
 
-    fn load_from_toml(table: toml::Table, base_path: PathBuf) -> Result<Config<'c>, Error> {
+    async fn load_from_toml(table: toml::Table, base_path: PathBuf) -> Result<Config<'c>, Error> {
         if table.is_empty() {
             tracing::info!("Config file is empty, so only default functions will be available.")
         }
@@ -404,7 +417,7 @@ impl<'c> Config<'c> {
         )?;
 
         // Validate the config
-        config.validate()?;
+        config.validate().await?;
 
         // We add the evaluations after validation since we will be writing tensorzero:: functions to the functions map
         // and tensorzero:: metrics to the metrics map
@@ -432,13 +445,15 @@ impl<'c> Config<'c> {
                         )?;
                     }
                 }
-                evaluation_function_config.validate(
-                    &config.tools,
-                    &mut config.models,
-                    &config.embedding_models,
-                    &config.templates,
-                    &evaluation_function_name,
-                )?;
+                evaluation_function_config
+                    .validate(
+                        &config.tools,
+                        &mut config.models,
+                        &config.embedding_models,
+                        &config.templates,
+                        &evaluation_function_name,
+                    )
+                    .await?;
                 config
                     .functions
                     .insert(evaluation_function_name, evaluation_function_config);
@@ -462,7 +477,7 @@ impl<'c> Config<'c> {
 
     /// Validate the config
     #[instrument(skip_all)]
-    fn validate(&mut self) -> Result<(), Error> {
+    async fn validate(&mut self) -> Result<(), Error> {
         // Validate each function
         for (function_name, function) in &self.functions {
             if function_name.starts_with("tensorzero::") {
@@ -473,13 +488,15 @@ impl<'c> Config<'c> {
                 }
                 .into());
             }
-            function.validate(
-                &self.tools,
-                &mut self.models, // NOTE: in here there might be some models created using shorthand initialization
-                &self.embedding_models,
-                &self.templates,
-                function_name,
-            )?;
+            function
+                .validate(
+                    &self.tools,
+                    &mut self.models, // NOTE: in here there might be some models created using shorthand initialization
+                    &self.embedding_models,
+                    &self.templates,
+                    function_name,
+                )
+                .await?;
         }
 
         // Ensure that no metrics are named "comment" or "demonstration"
@@ -585,11 +602,11 @@ impl<'c> Config<'c> {
     }
 
     /// Get a model by name
-    pub fn get_model<'a>(
+    pub async fn get_model<'a>(
         &'a self,
         model_name: &Arc<str>,
     ) -> Result<CowNoClone<'a, ModelConfig>, Error> {
-        self.models.get(model_name)?.ok_or_else(|| {
+        self.models.get(model_name).await?.ok_or_else(|| {
             Error::new(ErrorDetails::UnknownModel {
                 name: model_name.to_string(),
             })
@@ -963,18 +980,22 @@ mod tests {
     use crate::{embeddings::EmbeddingProviderConfig, variant::JsonMode};
 
     /// Ensure that the sample valid config can be parsed without panicking
-    #[test]
-    fn test_config_from_toml_table_valid() {
+    #[tokio::test]
+    async fn test_config_from_toml_table_valid() {
         let config = get_sample_valid_config();
         let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        Config::load_from_toml(config, base_path.clone()).expect("Failed to load config");
+        Config::load_from_toml(config, base_path.clone())
+            .await
+            .expect("Failed to load config");
 
         // Ensure that removing the `[metrics]` section still parses the config
         let mut config = get_sample_valid_config();
         config
             .remove("metrics")
             .expect("Failed to remove `[metrics]` section");
-        let config = Config::load_from_toml(config, base_path).expect("Failed to load config");
+        let config = Config::load_from_toml(config, base_path)
+            .await
+            .expect("Failed to load config");
 
         // Check that the JSON mode is set properly on the JSON variants
         let prompt_a_json_mode = match config
@@ -1066,6 +1087,7 @@ mod tests {
         let embedding_model = config
             .embedding_models
             .get("text-embedding-3-small")
+            .await
             .expect("Error getting embedding model")
             .unwrap();
         assert_eq!(embedding_model.routing, vec!["openai".into()]);
@@ -1188,13 +1210,15 @@ mod tests {
     }
 
     /// Ensure that the config parsing correctly handles the `gateway.bind_address` field
-    #[test]
-    fn test_config_gateway_bind_address() {
+    #[tokio::test]
+    async fn test_config_gateway_bind_address() {
         let mut config = get_sample_valid_config();
         let base_path = PathBuf::new();
 
         // Test with a valid bind address
-        let parsed_config = Config::load_from_toml(config.clone(), base_path.clone()).unwrap();
+        let parsed_config = Config::load_from_toml(config.clone(), base_path.clone())
+            .await
+            .unwrap();
         assert_eq!(
             parsed_config.gateway.bind_address.unwrap().to_string(),
             "0.0.0.0:3000"
@@ -1202,7 +1226,9 @@ mod tests {
 
         // Test with missing gateway section
         config.remove("gateway");
-        let parsed_config = Config::load_from_toml(config.clone(), base_path.clone()).unwrap();
+        let parsed_config = Config::load_from_toml(config.clone(), base_path.clone())
+            .await
+            .unwrap();
         assert!(parsed_config.gateway.bind_address.is_none());
 
         // Test with missing bind_address
@@ -1210,7 +1236,9 @@ mod tests {
             "gateway".to_string(),
             toml::Value::Table(toml::Table::new()),
         );
-        let parsed_config = Config::load_from_toml(config.clone(), base_path.clone()).unwrap();
+        let parsed_config = Config::load_from_toml(config.clone(), base_path.clone())
+            .await
+            .unwrap();
         assert!(parsed_config.gateway.bind_address.is_none());
 
         // Test with invalid bind address
@@ -1218,7 +1246,7 @@ mod tests {
             "bind_address".to_string(),
             toml::Value::String("invalid_address".to_string()),
         );
-        let result = Config::load_from_toml(config, base_path);
+        let result = Config::load_from_toml(config, base_path).await;
         assert_eq!(
             result.unwrap_err(),
             Error::new(ErrorDetails::Config {
@@ -1228,8 +1256,8 @@ mod tests {
     }
 
     /// Ensure that the config parsing fails when the `[models]` section is missing
-    #[test]
-    fn test_config_from_toml_table_missing_models() {
+    #[tokio::test]
+    async fn test_config_from_toml_table_missing_models() {
         let mut config = get_sample_valid_config();
         let base_path = PathBuf::new();
         config
@@ -1243,7 +1271,7 @@ mod tests {
             .retain(|k, _| k == "generate_draft");
 
         assert_eq!(
-            Config::load_from_toml(config, base_path).unwrap_err(),
+            Config::load_from_toml(config, base_path).await.unwrap_err(),
             Error::new(ErrorDetails::Config {
                 message: "Model name 'gpt-3.5-turbo' not found in model table".to_string()
             })
@@ -1251,8 +1279,8 @@ mod tests {
     }
 
     /// Ensure that the config parsing fails when the `[providers]` section is missing
-    #[test]
-    fn test_config_from_toml_table_missing_providers() {
+    #[tokio::test]
+    async fn test_config_from_toml_table_missing_providers() {
         let mut config = get_sample_valid_config();
         config["models"]["claude-3-haiku-20240307"]
             .as_table_mut()
@@ -1260,7 +1288,7 @@ mod tests {
             .remove("providers")
             .expect("Failed to remove `[providers]` section");
         let base_path = PathBuf::new();
-        let result = Config::load_from_toml(config, base_path);
+        let result = Config::load_from_toml(config, base_path).await;
         assert_eq!(
             result.unwrap_err(),
             Error::new(ErrorDetails::Config {
@@ -1270,8 +1298,8 @@ mod tests {
     }
 
     /// Ensure that the config parsing fails when the model credentials are missing
-    #[test]
-    fn test_config_from_toml_table_missing_credentials() {
+    #[tokio::test]
+    async fn test_config_from_toml_table_missing_credentials() {
         let mut config = get_sample_valid_config();
         let base_path = PathBuf::new();
 
@@ -1332,7 +1360,9 @@ mod tests {
             }),
         );
 
-        let error = Config::load_from_toml(config.clone(), base_path.clone()).unwrap_err();
+        let error = Config::load_from_toml(config.clone(), base_path.clone())
+            .await
+            .unwrap_err();
         assert_eq!(
             error,
             Error::new(ErrorDetails::Config {
@@ -1343,14 +1373,14 @@ mod tests {
     }
 
     /// Ensure that the config parsing fails when referencing a nonexistent function
-    #[test]
-    fn test_config_from_toml_table_nonexistent_function() {
+    #[tokio::test]
+    async fn test_config_from_toml_table_nonexistent_function() {
         let mut config = get_sample_valid_config();
         config
             .remove("functions")
             .expect("Failed to remove `[functions]` section");
         let base_path = PathBuf::new();
-        let result = Config::load_from_toml(config, base_path);
+        let result = Config::load_from_toml(config, base_path).await;
         assert_eq!(
             result.unwrap_err(),
             ErrorDetails::Config {
@@ -1363,8 +1393,8 @@ mod tests {
     }
 
     /// Ensure that the config parsing fails when the `[variants]` section is missing
-    #[test]
-    fn test_config_from_toml_table_missing_variants() {
+    #[tokio::test]
+    async fn test_config_from_toml_table_missing_variants() {
         let mut config = get_sample_valid_config();
         config["functions"]["generate_draft"]
             .as_table_mut()
@@ -1372,7 +1402,7 @@ mod tests {
             .remove("variants")
             .expect("Failed to remove `[variants]` section");
         let base_path = PathBuf::new();
-        let result = Config::load_from_toml(config, base_path);
+        let result = Config::load_from_toml(config, base_path).await;
         assert_eq!(
             result.unwrap_err(),
             ErrorDetails::Config {
@@ -1383,12 +1413,12 @@ mod tests {
     }
 
     /// Ensure that the config parsing fails when there are extra variables at the root level
-    #[test]
-    fn test_config_from_toml_table_extra_variables_root() {
+    #[tokio::test]
+    async fn test_config_from_toml_table_extra_variables_root() {
         let mut config = get_sample_valid_config();
         config.insert("enable_agi".into(), true.into());
         let base_path = PathBuf::new();
-        let result = Config::load_from_toml(config, base_path);
+        let result = Config::load_from_toml(config, base_path).await;
         assert!(result
             .unwrap_err()
             .to_string()
@@ -1396,15 +1426,15 @@ mod tests {
     }
 
     /// Ensure that the config parsing fails when there are extra variables for models
-    #[test]
-    fn test_config_from_toml_table_extra_variables_models() {
+    #[tokio::test]
+    async fn test_config_from_toml_table_extra_variables_models() {
         let mut config = get_sample_valid_config();
         config["models"]["claude-3-haiku-20240307"]
             .as_table_mut()
             .expect("Failed to get `models.claude-3-haiku-20240307` section")
             .insert("enable_agi".into(), true.into());
         let base_path = PathBuf::new();
-        let result = Config::load_from_toml(config, base_path);
+        let result = Config::load_from_toml(config, base_path).await;
         assert!(result
             .unwrap_err()
             .to_string()
@@ -1412,8 +1442,8 @@ mod tests {
     }
 
     /// Ensure that the config parsing fails when there models with blacklisted names
-    #[test]
-    fn test_config_from_toml_table_blacklisted_models() {
+    #[tokio::test]
+    async fn test_config_from_toml_table_blacklisted_models() {
         let mut config = get_sample_valid_config();
 
         let claude_config = config["models"]
@@ -1427,7 +1457,7 @@ mod tests {
             .insert("anthropic::claude-3-haiku-20240307".into(), claude_config);
 
         let base_path = PathBuf::new();
-        let result = Config::load_from_toml(config, base_path);
+        let result = Config::load_from_toml(config, base_path).await;
         let error = result.unwrap_err().to_string();
         assert!(error
             .contains("models: Model name 'anthropic::claude-3-haiku-20240307' contains a reserved prefix"),
@@ -1435,15 +1465,15 @@ mod tests {
     }
 
     /// Ensure that the config parsing fails when there are extra variables for providers
-    #[test]
-    fn test_config_from_toml_table_extra_variables_providers() {
+    #[tokio::test]
+    async fn test_config_from_toml_table_extra_variables_providers() {
         let mut config = get_sample_valid_config();
         config["models"]["claude-3-haiku-20240307"]["providers"]["anthropic"]
             .as_table_mut()
             .expect("Failed to get `models.claude-3-haiku-20240307.providers.anthropic` section")
             .insert("enable_agi".into(), true.into());
         let base_path = PathBuf::new();
-        let result = Config::load_from_toml(config, base_path);
+        let result = Config::load_from_toml(config, base_path).await;
         assert!(result
             .unwrap_err()
             .to_string()
@@ -1451,15 +1481,15 @@ mod tests {
     }
 
     /// Ensure that the config parsing fails when there are extra variables for functions
-    #[test]
-    fn test_config_from_toml_table_extra_variables_functions() {
+    #[tokio::test]
+    async fn test_config_from_toml_table_extra_variables_functions() {
         let mut config = get_sample_valid_config();
         config["functions"]["generate_draft"]
             .as_table_mut()
             .expect("Failed to get `functions.generate_draft` section")
             .insert("enable_agi".into(), true.into());
         let base_path = PathBuf::new();
-        let result = Config::load_from_toml(config, base_path);
+        let result = Config::load_from_toml(config, base_path).await;
         assert!(result
             .unwrap_err()
             .to_string()
@@ -1467,15 +1497,15 @@ mod tests {
     }
 
     /// Ensure that the config parsing defaults properly for JSON functions with no output schema
-    #[test]
-    fn test_config_from_toml_table_json_function_no_output_schema() {
+    #[tokio::test]
+    async fn test_config_from_toml_table_json_function_no_output_schema() {
         let mut config = get_sample_valid_config();
         config["functions"]["json_with_schemas"]
             .as_table_mut()
             .expect("Failed to get `functions.generate_draft` section")
             .remove("output_schema");
         let base_path = PathBuf::new();
-        let result = Config::load_from_toml(config, base_path);
+        let result = Config::load_from_toml(config, base_path).await;
         let config = result.unwrap();
         // Check that the output schema is set to {}
         let output_schema = match &**config.functions.get("json_with_schemas").unwrap() {
@@ -1487,15 +1517,15 @@ mod tests {
     }
 
     /// Ensure that the config parsing fails when there are extra variables for variants
-    #[test]
-    fn test_config_from_toml_table_extra_variables_variants() {
+    #[tokio::test]
+    async fn test_config_from_toml_table_extra_variables_variants() {
         let mut config = get_sample_valid_config();
         config["functions"]["generate_draft"]["variants"]["openai_promptA"]
             .as_table_mut()
             .expect("Failed to get `functions.generate_draft.variants.openai_promptA` section")
             .insert("enable_agi".into(), true.into());
         let base_path = PathBuf::new();
-        let result = Config::load_from_toml(config, base_path);
+        let result = Config::load_from_toml(config, base_path).await;
         assert!(result
             .unwrap_err()
             .to_string()
@@ -1503,15 +1533,15 @@ mod tests {
     }
 
     /// Ensure that the config parsing fails when there are extra variables for metrics
-    #[test]
-    fn test_config_from_toml_table_extra_variables_metrics() {
+    #[tokio::test]
+    async fn test_config_from_toml_table_extra_variables_metrics() {
         let mut config = get_sample_valid_config();
         config["metrics"]["task_success"]
             .as_table_mut()
             .expect("Failed to get `metrics.task_success` section")
             .insert("enable_agi".into(), true.into());
         let base_path = PathBuf::new();
-        let result = Config::load_from_toml(config, base_path);
+        let result = Config::load_from_toml(config, base_path).await;
         assert!(result
             .unwrap_err()
             .to_string()
@@ -1519,12 +1549,12 @@ mod tests {
     }
 
     /// Ensure that the config validation fails when a model has no providers in `routing`
-    #[test]
-    fn test_config_validate_model_empty_providers() {
+    #[tokio::test]
+    async fn test_config_validate_model_empty_providers() {
         let mut config = get_sample_valid_config();
         config["models"]["gpt-3.5-turbo"]["routing"] = toml::Value::Array(vec![]);
         let base_path = PathBuf::new();
-        let result = Config::load_from_toml(config, base_path);
+        let result = Config::load_from_toml(config, base_path).await;
         let error = result.unwrap_err();
         assert!(error
             .to_string()
@@ -1532,33 +1562,33 @@ mod tests {
     }
 
     /// Ensure that the config validation fails when there are duplicate routing entries
-    #[test]
-    fn test_config_validate_model_duplicate_routing_entry() {
+    #[tokio::test]
+    async fn test_config_validate_model_duplicate_routing_entry() {
         let mut config = get_sample_valid_config();
         config["models"]["gpt-3.5-turbo"]["routing"] =
             toml::Value::Array(vec!["openai".into(), "openai".into()]);
-        let result = Config::load_from_toml(config, PathBuf::new());
+        let result = Config::load_from_toml(config, PathBuf::new()).await;
         let error = result.unwrap_err().to_string();
         assert!(error.contains("`models.gpt-3.5-turbo.routing`: duplicate entry `openai`"));
     }
 
     /// Ensure that the config validation fails when a routing entry does not exist in providers
-    #[test]
-    fn test_config_validate_model_routing_entry_not_in_providers() {
+    #[tokio::test]
+    async fn test_config_validate_model_routing_entry_not_in_providers() {
         let mut config = get_sample_valid_config();
         config["models"]["gpt-3.5-turbo"]["routing"] = toml::Value::Array(vec!["closedai".into()]);
-        let result = Config::load_from_toml(config, PathBuf::new());
+        let result = Config::load_from_toml(config, PathBuf::new()).await;
         assert!(result.unwrap_err().to_string().contains("`models.gpt-3.5-turbo`: `routing` contains entry `closedai` that does not exist in `providers`"));
     }
 
     /// Ensure that the config loading fails when the system schema does not exist
-    #[test]
-    fn test_config_system_schema_does_not_exist() {
+    #[tokio::test]
+    async fn test_config_system_schema_does_not_exist() {
         let mut sample_config = get_sample_valid_config();
         sample_config["functions"]["templates_with_variables_chat"]["system_schema"] =
             "non_existent_file.json".into();
         let base_path = PathBuf::new();
-        let result = Config::load_from_toml(sample_config, base_path);
+        let result = Config::load_from_toml(sample_config, base_path).await;
         assert_eq!(
             result.unwrap_err(),
             ErrorDetails::JsonSchema {
@@ -1569,7 +1599,7 @@ mod tests {
         sample_config["functions"]["templates_with_variables_json"]["system_schema"] =
             "non_existent_file.json".into();
         let base_path = PathBuf::new();
-        let result = Config::load_from_toml(sample_config, base_path);
+        let result = Config::load_from_toml(sample_config, base_path).await;
         assert_eq!(
             result.unwrap_err(),
             ErrorDetails::JsonSchema {
@@ -1579,13 +1609,13 @@ mod tests {
     }
 
     /// Ensure that the config loading fails when the user schema does not exist
-    #[test]
-    fn test_config_user_schema_does_not_exist() {
+    #[tokio::test]
+    async fn test_config_user_schema_does_not_exist() {
         let mut sample_config = get_sample_valid_config();
         sample_config["functions"]["templates_with_variables_chat"]["user_schema"] =
             "non_existent_file.json".into();
         let base_path = PathBuf::new();
-        let result = Config::load_from_toml(sample_config, base_path);
+        let result = Config::load_from_toml(sample_config, base_path).await;
         assert_eq!(
             result.unwrap_err(),
             ErrorDetails::JsonSchema {
@@ -1596,7 +1626,7 @@ mod tests {
         sample_config["functions"]["templates_with_variables_json"]["user_schema"] =
             "non_existent_file.json".into();
         let base_path = PathBuf::new();
-        let result = Config::load_from_toml(sample_config, base_path);
+        let result = Config::load_from_toml(sample_config, base_path).await;
         assert_eq!(
             result.unwrap_err(),
             ErrorDetails::JsonSchema {
@@ -1606,13 +1636,13 @@ mod tests {
     }
 
     /// Ensure that the config loading fails when the assistant schema does not exist
-    #[test]
-    fn test_config_assistant_schema_does_not_exist() {
+    #[tokio::test]
+    async fn test_config_assistant_schema_does_not_exist() {
         let mut sample_config = get_sample_valid_config();
         sample_config["functions"]["templates_with_variables_chat"]["assistant_schema"] =
             "non_existent_file.json".into();
         let base_path = PathBuf::new();
-        let result = Config::load_from_toml(sample_config, base_path);
+        let result = Config::load_from_toml(sample_config, base_path).await;
         assert_eq!(
             result.unwrap_err(),
             ErrorDetails::JsonSchema {
@@ -1623,7 +1653,7 @@ mod tests {
         sample_config["functions"]["templates_with_variables_json"]["assistant_schema"] =
             "non_existent_file.json".into();
         let base_path = PathBuf::new();
-        let result = Config::load_from_toml(sample_config, base_path);
+        let result = Config::load_from_toml(sample_config, base_path).await;
         assert_eq!(
             result.unwrap_err(),
             ErrorDetails::JsonSchema {
@@ -1633,8 +1663,8 @@ mod tests {
     }
 
     /// Ensure that the config loading fails when the system schema is missing but is needed
-    #[test]
-    fn test_config_system_schema_is_needed() {
+    #[tokio::test]
+    async fn test_config_system_schema_is_needed() {
         let mut sample_config = get_sample_valid_config();
         sample_config["functions"]["templates_with_variables_chat"]
             .as_table_mut()
@@ -1646,7 +1676,7 @@ mod tests {
             .unwrap()
             .remove("best_of_n");
         let base_path = PathBuf::new();
-        let result = Config::load_from_toml(sample_config, base_path);
+        let result = Config::load_from_toml(sample_config, base_path).await;
         assert_eq!(
             result.unwrap_err(),
             ErrorDetails::Config {
@@ -1659,7 +1689,7 @@ mod tests {
             .unwrap()
             .remove("system_schema");
         let base_path = PathBuf::new();
-        let result = Config::load_from_toml(sample_config, base_path);
+        let result = Config::load_from_toml(sample_config, base_path).await;
         assert_eq!(
             result.unwrap_err(),
             ErrorDetails::Config {
@@ -1669,8 +1699,8 @@ mod tests {
     }
 
     /// Ensure that the config loading fails when the user schema is missing but is needed
-    #[test]
-    fn test_config_user_schema_is_needed() {
+    #[tokio::test]
+    async fn test_config_user_schema_is_needed() {
         let mut sample_config = get_sample_valid_config();
         sample_config["functions"]["templates_with_variables_chat"]
             .as_table_mut()
@@ -1681,7 +1711,7 @@ mod tests {
             .unwrap()
             .remove("best_of_n");
         let base_path = PathBuf::new();
-        let result = Config::load_from_toml(sample_config, base_path);
+        let result = Config::load_from_toml(sample_config, base_path).await;
         assert_eq!(
             result.unwrap_err(),
             ErrorDetails::Config {
@@ -1695,7 +1725,7 @@ mod tests {
             .unwrap()
             .remove("user_schema");
         let base_path = PathBuf::new();
-        let result = Config::load_from_toml(sample_config, base_path);
+        let result = Config::load_from_toml(sample_config, base_path).await;
         assert_eq!(
             result.unwrap_err(),
             ErrorDetails::Config {
@@ -1705,8 +1735,8 @@ mod tests {
     }
 
     /// Ensure that the config loading fails when the assistant schema is missing but is needed
-    #[test]
-    fn test_config_assistant_schema_is_needed() {
+    #[tokio::test]
+    async fn test_config_assistant_schema_is_needed() {
         let mut sample_config = get_sample_valid_config();
         sample_config["functions"]["templates_with_variables_chat"]
             .as_table_mut()
@@ -1718,7 +1748,7 @@ mod tests {
             .unwrap()
             .remove("best_of_n");
         let base_path = PathBuf::new();
-        let result = Config::load_from_toml(sample_config, base_path);
+        let result = Config::load_from_toml(sample_config, base_path).await;
         assert_eq!(
             result.unwrap_err(),
             ErrorDetails::Config {
@@ -1731,7 +1761,7 @@ mod tests {
             .unwrap()
             .remove("assistant_schema");
         let base_path = PathBuf::new();
-        let result = Config::load_from_toml(sample_config, base_path);
+        let result = Config::load_from_toml(sample_config, base_path).await;
         assert_eq!(
             result.unwrap_err(),
             ErrorDetails::Config {
@@ -1741,8 +1771,8 @@ mod tests {
     }
 
     /// Ensure that config loading fails when a nonexistent candidate is specified in a variant
-    #[test]
-    fn test_config_best_of_n_candidate_not_found() {
+    #[tokio::test]
+    async fn test_config_best_of_n_candidate_not_found() {
         let mut sample_config = get_sample_valid_config();
         sample_config["functions"]["templates_with_variables_chat"]["variants"]
             .as_table_mut()
@@ -1756,7 +1786,7 @@ mod tests {
                 toml::Value::Array(vec!["non_existent_candidate".into()]),
             );
         let base_path = PathBuf::new();
-        let result = Config::load_from_toml(sample_config, base_path);
+        let result = Config::load_from_toml(sample_config, base_path).await;
         assert_eq!(
             result.unwrap_err(),
             ErrorDetails::UnknownCandidate {
@@ -1767,13 +1797,13 @@ mod tests {
     }
 
     /// Ensure that the config validation fails when a function variant has a negative weight
-    #[test]
-    fn test_config_validate_function_variant_negative_weight() {
+    #[tokio::test]
+    async fn test_config_validate_function_variant_negative_weight() {
         let mut config = get_sample_valid_config();
         config["functions"]["generate_draft"]["variants"]["openai_promptA"]["weight"] =
             toml::Value::Float(-1.0);
         let base_path = PathBuf::new();
-        let result = Config::load_from_toml(config, base_path);
+        let result = Config::load_from_toml(config, base_path).await;
         assert_eq!(
             result.unwrap_err(),
             ErrorDetails::Config {
@@ -1783,13 +1813,13 @@ mod tests {
     }
 
     /// Ensure that the config validation fails when a variant has a model that does not exist in the models section
-    #[test]
-    fn test_config_validate_variant_model_not_in_models() {
+    #[tokio::test]
+    async fn test_config_validate_variant_model_not_in_models() {
         let mut config = get_sample_valid_config();
         config["functions"]["generate_draft"]["variants"]["openai_promptA"]["model"] =
             "non_existent_model".into();
         let base_path = PathBuf::new();
-        let result = Config::load_from_toml(config, base_path);
+        let result = Config::load_from_toml(config, base_path).await;
 
         assert_eq!(
             result.unwrap_err(),
@@ -1801,13 +1831,13 @@ mod tests {
     }
 
     /// Ensure that the config validation fails when a variant has a template that does not exist
-    #[test]
-    fn test_config_validate_variant_template_nonexistent() {
+    #[tokio::test]
+    async fn test_config_validate_variant_template_nonexistent() {
         let mut config = get_sample_valid_config();
         config["functions"]["generate_draft"]["variants"]["openai_promptA"]["system_template"] =
             "nonexistent_template".into();
         let base_path = PathBuf::new();
-        let result = Config::load_from_toml(config, base_path);
+        let result = Config::load_from_toml(config, base_path).await;
 
         assert_eq!(
             result.unwrap_err(),
@@ -1819,12 +1849,12 @@ mod tests {
     }
 
     /// Ensure that the config validation fails when an evaluation points at a nonexistent function
-    #[test]
-    fn test_config_validate_evaluation_function_nonexistent() {
+    #[tokio::test]
+    async fn test_config_validate_evaluation_function_nonexistent() {
         let mut config = get_sample_valid_config();
         config["evaluations"]["evaluation1"]["function_name"] = "nonexistent_function".into();
         let base_path = PathBuf::new();
-        let result = Config::load_from_toml(config, base_path);
+        let result = Config::load_from_toml(config, base_path).await;
 
         assert_eq!(
             result.unwrap_err(),
@@ -1838,8 +1868,8 @@ mod tests {
     }
 
     /// Ensure that the config validation fails when an evaluation name contains `::`
-    #[test]
-    fn test_config_validate_evaluation_name_contains_double_colon() {
+    #[tokio::test]
+    async fn test_config_validate_evaluation_name_contains_double_colon() {
         let mut config = get_sample_valid_config();
         let evaluation1 = config["evaluations"]["evaluation1"].clone();
         config
@@ -1849,7 +1879,7 @@ mod tests {
             .unwrap()
             .insert("bad::evaluation".to_string(), evaluation1);
         let base_path = PathBuf::new();
-        let result = Config::load_from_toml(config, base_path);
+        let result = Config::load_from_toml(config, base_path).await;
 
         assert_eq!(
             result.unwrap_err(),
@@ -1863,8 +1893,8 @@ mod tests {
     }
 
     /// Ensure that the config validation fails when a function has a tool that does not exist in the tools section
-    #[test]
-    fn test_config_validate_function_nonexistent_tool() {
+    #[tokio::test]
+    async fn test_config_validate_function_nonexistent_tool() {
         let mut config = get_sample_valid_config();
         config["functions"]["generate_draft"]
             .as_table_mut()
@@ -1873,7 +1903,7 @@ mod tests {
         config["functions"]["generate_draft"]["tools"] =
             toml::Value::Array(vec!["non_existent_tool".into()]);
         let base_path = PathBuf::new();
-        let result = Config::load_from_toml(config, base_path);
+        let result = Config::load_from_toml(config, base_path).await;
 
         assert_eq!(
             result.unwrap_err(),
@@ -1884,8 +1914,8 @@ mod tests {
     }
 
     /// Ensure that the config validation fails when a function name starts with `tensorzero::`
-    #[test]
-    fn test_config_validate_function_name_tensorzero_prefix() {
+    #[tokio::test]
+    async fn test_config_validate_function_name_tensorzero_prefix() {
         let mut config = get_sample_valid_config();
 
         // Rename an existing function to start with `tensorzero::`
@@ -1900,7 +1930,7 @@ mod tests {
             .insert("tensorzero::bad_function".to_string(), old_function_entry);
 
         let base_path = PathBuf::new();
-        let result = Config::load_from_toml(config, base_path);
+        let result = Config::load_from_toml(config, base_path).await;
         assert_eq!(
             result.unwrap_err(),
             Error::new(ErrorDetails::Config {
@@ -1911,8 +1941,8 @@ mod tests {
     }
 
     /// Ensure that the config validation fails when a metric name starts with `tensorzero::`
-    #[test]
-    fn test_config_validate_metric_name_tensorzero_prefix() {
+    #[tokio::test]
+    async fn test_config_validate_metric_name_tensorzero_prefix() {
         let mut config = get_sample_valid_config();
 
         // Rename an existing metric to start with `tensorzero::`
@@ -1927,7 +1957,7 @@ mod tests {
             .insert("tensorzero::bad_metric".to_string(), old_metric_entry);
 
         let base_path = PathBuf::new();
-        let result = Config::load_from_toml(config, base_path);
+        let result = Config::load_from_toml(config, base_path).await;
         assert_eq!(
             result.unwrap_err(),
             Error::new(ErrorDetails::Config {
@@ -1938,8 +1968,8 @@ mod tests {
     }
 
     /// Ensure that the config validation fails when a model name starts with `tensorzero::`
-    #[test]
-    fn test_config_validate_model_name_tensorzero_prefix() {
+    #[tokio::test]
+    async fn test_config_validate_model_name_tensorzero_prefix() {
         let mut config = get_sample_valid_config();
 
         // Rename an existing model to start with `tensorzero::`
@@ -1954,7 +1984,7 @@ mod tests {
             .insert("tensorzero::bad_model".to_string(), old_model_entry);
 
         let base_path = PathBuf::new();
-        let result = Config::load_from_toml(config, base_path);
+        let result = Config::load_from_toml(config, base_path).await;
         assert_eq!(
             result.unwrap_err(),
             Error::new(ErrorDetails::Config {
@@ -1965,8 +1995,8 @@ mod tests {
     }
 
     /// Ensure that the config validation fails when an embedding model name starts with `tensorzero::`
-    #[test]
-    fn test_config_validate_embedding_model_name_tensorzero_prefix() {
+    #[tokio::test]
+    async fn test_config_validate_embedding_model_name_tensorzero_prefix() {
         let mut config = get_sample_valid_config();
 
         // Rename an existing embedding model to start with `tensorzero::`
@@ -1981,7 +2011,7 @@ mod tests {
         );
 
         let base_path = PathBuf::new();
-        let result = Config::load_from_toml(config, base_path);
+        let result = Config::load_from_toml(config, base_path).await;
         assert_eq!(
                 result.unwrap_err(),
                 Error::new(ErrorDetails::Config {
@@ -1993,8 +2023,8 @@ mod tests {
     }
 
     /// Ensure that the config validation fails when a tool name starts with `tensorzero::`
-    #[test]
-    fn test_config_validate_tool_name_tensorzero_prefix() {
+    #[tokio::test]
+    async fn test_config_validate_tool_name_tensorzero_prefix() {
         let mut config = get_sample_valid_config();
 
         // Clone an existing tool and add a new one with tensorzero:: prefix
@@ -2010,7 +2040,7 @@ mod tests {
             .insert("tensorzero::bad_tool".to_string(), old_tool_entry);
 
         let base_path = PathBuf::new();
-        let result = Config::load_from_toml(config, base_path);
+        let result = Config::load_from_toml(config, base_path).await;
         assert_eq!(
             result.unwrap_err(),
             Error::new(ErrorDetails::Config {
@@ -2020,8 +2050,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_config_validate_chat_function_json_mode() {
+    #[tokio::test]
+    async fn test_config_validate_chat_function_json_mode() {
         let mut config = get_sample_valid_config();
 
         // Insert `json_mode = "on"` into a variant config for a chat function.
@@ -2031,7 +2061,7 @@ mod tests {
             .insert("json_mode".to_string(), "on".into());
 
         let base_path = PathBuf::new();
-        let result = Config::load_from_toml(config, base_path);
+        let result = Config::load_from_toml(config, base_path).await;
 
         // Check that the config is rejected, since `generate_draft` is not a json function
         let err_msg = result.unwrap_err().to_string();
@@ -2043,8 +2073,8 @@ mod tests {
 
     /// If you also want to confirm a variant name starting with `tensorzero::` fails
     /// (only do this if your `function.validate` logic checks variant names):
-    #[test]
-    fn test_config_validate_variant_name_tensorzero_prefix() {
+    #[tokio::test]
+    async fn test_config_validate_variant_name_tensorzero_prefix() {
         let mut config = get_sample_valid_config();
 
         // For demonstration, rename an existing variant inside `generate_draft`:
@@ -2060,7 +2090,7 @@ mod tests {
 
         // This test will only pass if your code actually rejects variant names with that prefix
         let base_path = PathBuf::new();
-        let result = Config::load_from_toml(config, base_path);
+        let result = Config::load_from_toml(config, base_path).await;
 
         // Adjust the expected message if your code gives a different error shape for variants
         // Or remove this test if variant names are *not* validated in that manner
@@ -2071,8 +2101,8 @@ mod tests {
     }
 
     /// Ensure that the config validation fails when a model provider's name starts with `tensorzero::`
-    #[test]
-    fn test_config_validate_model_provider_name_tensorzero_prefix() {
+    #[tokio::test]
+    async fn test_config_validate_model_provider_name_tensorzero_prefix() {
         let mut config = get_sample_valid_config();
 
         // Rename an existing provider to start with `tensorzero::`
@@ -2097,17 +2127,18 @@ mod tests {
         }
 
         let base_path = PathBuf::new();
-        let result = Config::load_from_toml(config, base_path);
+        let result = Config::load_from_toml(config, base_path).await;
 
         assert!(result.unwrap_err().to_string().contains("`models.gpt-3.5-turbo.routing`: Provider name cannot start with 'tensorzero::': tensorzero::openai"));
     }
 
     /// Ensure that get_templates returns the correct templates
-    #[test]
-    fn test_get_all_templates() {
+    #[tokio::test]
+    async fn test_get_all_templates() {
         let config_table = get_sample_valid_config();
-        let config =
-            Config::load_from_toml(config_table, PathBuf::new()).expect("Failed to load config");
+        let config = Config::load_from_toml(config_table, PathBuf::new())
+            .await
+            .expect("Failed to load config");
 
         // Get all templates
         let templates = config.get_templates();
@@ -2279,8 +2310,8 @@ mod tests {
         assert_eq!(templates.len(), 22);
     }
 
-    #[test]
-    fn test_load_bad_config_error_path() {
+    #[tokio::test]
+    async fn test_load_bad_config_error_path() {
         let config_str = r#"
 [functions.bash_assistant]
 type = "chat"
@@ -2297,13 +2328,14 @@ thinking = { type = "enabled", budget_tokens = 1024 }
         let config = toml::from_str(config_str).expect("Failed to parse sample config");
         let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let err = Config::load_from_toml(config, base_path.clone())
+            .await
             .expect_err("Config loading should fail")
             .to_string();
         assert_eq!(err, "functions.bash_assistant: variants.anthropic_claude_3_7_sonnet_20250219: extra_body: invalid type: map, expected a sequence");
     }
 
-    #[test]
-    fn test_config_load_shorthand_models_only() {
+    #[tokio::test]
+    async fn test_config_load_shorthand_models_only() {
         let config_str = r#"
         # ┌────────────────────────────────────────────────────────────────────────────┐
         # │                                  GENERAL                                   │
@@ -2333,7 +2365,9 @@ thinking = { type = "enabled", budget_tokens = 1024 }
 
         let config = toml::from_str(config_str).expect("Failed to parse sample config");
         let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        Config::load_from_toml(config, base_path.clone()).expect("Failed to load config");
+        Config::load_from_toml(config, base_path.clone())
+            .await
+            .expect("Failed to load config");
     }
 
     #[tokio::test]
@@ -2373,8 +2407,8 @@ thinking = { type = "enabled", budget_tokens = 1024 }
         );
     }
 
-    #[test]
-    fn test_model_provider_unknown_field() {
+    #[tokio::test]
+    async fn test_model_provider_unknown_field() {
         let config_str = r#"
         # ┌────────────────────────────────────────────────────────────────────────────┐
         # │                                  GENERAL                                   │
@@ -2396,6 +2430,7 @@ thinking = { type = "enabled", budget_tokens = 1024 }
         let config = toml::from_str(config_str).expect("Failed to parse sample config");
         let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let err = Config::load_from_toml(config, base_path.clone())
+            .await
             .expect_err("Config should fail to load");
         assert!(
             err.to_string().contains("unknown field `my_bad_key`"),
@@ -2430,8 +2465,9 @@ thinking = { type = "enabled", budget_tokens = 1024 }
         let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
         let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let err =
-            Config::load_from_toml(config, base_path.clone()).expect_err("Failed to load bedrock");
+        let err = Config::load_from_toml(config, base_path.clone())
+            .await
+            .expect_err("Failed to load bedrock");
         let err_msg = err.to_string();
         assert!(
             err_msg
@@ -2462,8 +2498,9 @@ thinking = { type = "enabled", budget_tokens = 1024 }
         let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
         let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let err =
-            Config::load_from_toml(config, base_path.clone()).expect_err("Failed to load bedrock");
+        let err = Config::load_from_toml(config, base_path.clone())
+            .await
+            .expect_err("Failed to load bedrock");
         let err_msg = err.to_string();
         assert!(
             err_msg.contains("Failed to determine AWS region."),
@@ -2498,6 +2535,7 @@ thinking = { type = "enabled", budget_tokens = 1024 }
 
         let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         Config::load_from_toml(config, base_path.clone())
+            .await
             .expect("Failed to construct config with valid AWS bedrock provider");
     }
 
@@ -2715,8 +2753,8 @@ thinking = { type = "enabled", budget_tokens = 1024 }
     }
 
     #[traced_test]
-    #[test]
-    fn test_deprecated_missing_json_mode() {
+    #[tokio::test]
+    async fn test_deprecated_missing_json_mode() {
         let config_str = r#"
         [gateway]
         bind_address = "0.0.0.0:3000"
@@ -2766,7 +2804,8 @@ thinking = { type = "enabled", budget_tokens = 1024 }
         let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
 
         SKIP_CREDENTIAL_VALIDATION
-            .set(&(), || Config::load_from_toml(config, base_path))
+            .scope((), Config::load_from_toml(config, base_path))
+            .await
             .unwrap();
 
         assert!(!logs_contain("good_variant"));

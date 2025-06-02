@@ -1,11 +1,4 @@
 # ┌────────────────────────────────────────────────────────────────────────────┐
-# │                                  GENERAL                                   │
-# └────────────────────────────────────────────────────────────────────────────┘
-
-[gateway]
-debug = true
-
-# ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                 FUNCTIONS                                  │
 # └────────────────────────────────────────────────────────────────────────────┘
 
@@ -15,19 +8,9 @@ tools = ["think", "search_wikipedia", "load_wikipedia_page", "answer_question"]
 tool_choice = "required"
 parallel_tool_calls = true
 
-[functions.multi_hop_rag_agent.variants.baseline]
-type = "chat_completion"
-model = "openai::gpt-4o-mini"
-system_template = "functions/multi_hop_rag_agent/baseline/system_template.txt"
-
 [functions.multi_hop_rag_agent.variants."gpt-4.1-mini"]
 type = "chat_completion"
 model = "openai::gpt-4.1-mini"
-system_template = "functions/multi_hop_rag_agent/baseline/system_template.txt"
-
-[functions.multi_hop_rag_agent.variants."gemini-2.5-flash"]
-type = "chat_completion"
-model = "google_ai_studio_gemini::gemini-2.5-flash-preview-04-17"
 system_template = "functions/multi_hop_rag_agent/baseline/system_template.txt"
 
 [functions.multi_hop_rag_agent.variants."claude-3.5-haiku"]
@@ -39,19 +22,14 @@ system_template = "functions/multi_hop_rag_agent/baseline/system_template.txt"
 type = "chat"
 system_schema = "functions/compact_context/system_schema.json"
 
-[functions.compact_context.variants.baseline]
+[functions.compact_context.variants."gpt-4.1-mini"]
 type = "chat_completion"
-model = "openai::gpt-4o-mini"
+model = "openai::gpt-4.1-mini"
 system_template = "functions/compact_context/baseline/system_template.minijinja"
 
-[functions.compact_context.variants."gpt-4.1-nano"]
+[functions.compact_context.variants."claude-3.5-haiku"]
 type = "chat_completion"
-model = "openai::gpt-4.1-nano"
-system_template = "functions/compact_context/baseline/system_template.minijinja"
-
-[functions.compact_context.variants."gemini-2.5-flash"]
-type = "chat_completion"
-model = "google_ai_studio_gemini::gemini-2.5-flash-preview-04-17"
+model = "anthropic::claude-3-5-haiku-20241022"
 system_template = "functions/compact_context/baseline/system_template.minijinja"
 
 [functions.judge_answer]
@@ -65,6 +43,7 @@ type = "experimental_chain_of_thought"
 model = "openai::gpt-4.1-mini"
 system_template = "functions/judge_answer/gpt-4.1-mini/system_template.minijinja"
 user_template = "functions/judge_answer/gpt-4.1-mini/user_template.minijinja"
+json_mode = "strict"
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                   TOOLS                                    │

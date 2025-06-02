@@ -14,7 +14,9 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "2025.5.7"
+version = "2025.5.9"
+rust-version = "1.85.0"
+license = "Apache-2.0"
 
 [workspace.dependencies]
 reqwest = { version = "0.12.15", features = [
@@ -49,7 +51,9 @@ object_store = { version = "0.12.1", features = ["serde", "aws", "gcp"] }
 rand = "0.9.1"
 chrono = { version = "0.4.41", features = ["serde"] }
 git2 = { version = "0.20.2", default-features = false }
-tracing-opentelemetry-instrumentation-sdk = { version = "0.28.0", features = ["tracing_level_info"] }
+tracing-opentelemetry-instrumentation-sdk = { version = "0.28.0", features = [
+    "tracing_level_info",
+] }
 tower-http = { version = "0.6.4", features = ["trace"] }
 
 [workspace.lints.rust]

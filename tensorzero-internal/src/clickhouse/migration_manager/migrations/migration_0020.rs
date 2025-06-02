@@ -387,19 +387,16 @@ impl Migration for Migration0020<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        "\
-            -- Drop the materialized views\n\
-            DROP VIEW IF EXISTS ChatInferenceByIdView;\n\
-            DROP VIEW IF EXISTS JsonInferenceByIdView;\n\
-            DROP VIEW IF EXISTS ChatInferenceByEpisodeIdView;\n\
-            DROP VIEW IF EXISTS JsonInferenceByEpisodeIdView;\n\
-            \n\
-            -- Drop the function\n\
-            DROP FUNCTION IF EXISTS uint_to_uuid;\n\
-            \n\
-            -- Drop the tables\n\
-            DROP TABLE IF EXISTS InferenceById;\n\
-            DROP TABLE IF EXISTS InferenceByEpisodeId;\n\
+        "/* Drop the materialized views */\
+            DROP VIEW IF EXISTS ChatInferenceByIdView;
+            DROP VIEW IF EXISTS JsonInferenceByIdView;
+            DROP VIEW IF EXISTS ChatInferenceByEpisodeIdView;
+            DROP VIEW IF EXISTS JsonInferenceByEpisodeIdView;
+            /* Drop the function */\
+            DROP FUNCTION IF EXISTS uint_to_uuid;
+            /* Drop the tables */\
+            DROP TABLE IF EXISTS InferenceById;
+            DROP TABLE IF EXISTS InferenceByEpisodeId;
             "
         .to_string()
     }

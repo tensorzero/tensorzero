@@ -41,6 +41,14 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
+    let pdf_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "gcp_vertex_gemini".to_string(),
+        model_name: "gcp_vertex_gemini::projects/tensorzero-public/locations/us-central1/publishers/google/models/gemini-2.0-flash-lite".into(),
+        model_provider_name: "gcp_vertex_gemini".into(),
+        credentials: HashMap::new(),
+    }];
+
     let extra_body_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "gcp-vertex-gemini-flash-extra-body".to_string(),
@@ -96,6 +104,20 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
+    let shorthand_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "gcp_vertex_gemini_shorthand".to_string(),
+        model_name: "gcp_vertex_gemini::projects/tensorzero-public/locations/us-central1/publishers/google/models/gemini-2.0-flash-001".into(),
+        model_provider_name: "gcp_vertex_gemini".into(),
+        credentials: HashMap::new(),
+    }, E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "gcp_vertex_gemini_shorthand_endpoint".to_string(),
+        model_name: "gcp_vertex_gemini::projects/tensorzero-public/locations/us-central1/endpoints/945488740422254592".into(),
+        model_provider_name: "gcp_vertex_gemini".into(),
+        credentials: HashMap::new(),
+    }];
+
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
         extra_body_inference: extra_body_providers,
@@ -109,9 +131,9 @@ async fn get_providers() -> E2ETestProviders {
         parallel_tool_use_inference: vec![],
         json_mode_inference: json_providers.clone(),
         json_mode_off_inference: json_mode_off_providers.clone(),
-        image_inference: image_providers,
-
-        shorthand_inference: vec![],
+        image_inference: image_providers.clone(),
+        pdf_inference: pdf_providers,
+        shorthand_inference: shorthand_providers.clone(),
     }
 }
 

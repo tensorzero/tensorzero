@@ -17,6 +17,7 @@ import uuid_utils
 import tensorzero.internal_optimization_server_types as iost
 from tensorzero import (
     ChatDatapointInsert,
+    ContentBlock,
     Datapoint,
     DynamicEvaluationRunEpisodeResponse,
     DynamicEvaluationRunResponse,
@@ -26,7 +27,20 @@ from tensorzero import (
     InferenceInput,
     InferenceResponse,
     JsonDatapointInsert,
+    StoredInference,
 )
+from tensorzero.internal import ModelInput, ToolCallConfigDatabaseInsert
+
+@final
+class RenderedStoredInference:
+    function_name: str
+    variant_name: str
+    input: ModelInput
+    output: List[ContentBlock]
+    episode_id: UUID
+    inference_id: UUID
+    tool_params: Optional[ToolCallConfigDatabaseInsert]
+    output_schema: Optional[Dict[str, Any]]
 
 class BaseTensorZeroGateway:
     pass
@@ -96,6 +110,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         cache_options: Optional[Dict[str, Any]] = None,
         extra_body: Optional[List[ExtraBody | Dict[str, Any]]] = None,
         extra_headers: Optional[List[Dict[str, Any]]] = None,
+        include_original_response: Optional[bool] = None,
     ) -> Union[InferenceResponse, Iterator[InferenceChunk]]:
         """
         Make a POST request to the /inference endpoint.
@@ -126,6 +141,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         :param tags: If set, adds tags to the inference request.
         :param extra_body: If set, injects extra fields into the provider request body.
         :param extra_headers: If set, injects extra headers into the provider request.
+        :param include_original_response: If set, add an `original_response` field to the response, containing the raw string response from the model.
         :return: If stream is false, returns an InferenceResponse.
                  If stream is true, returns an async iterator that yields InferenceChunks as they come in.
         """
@@ -250,6 +266,29 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         :return: A `Datapoint` instance.
         """
 
+    def experimental_render_inferences(
+        self,
+        *,
+        stored_inferences: List[StoredInference],
+        variants: Dict[str, str],
+    ) -> List[RenderedStoredInference]:
+        """
+        Render a list of stored inferences into a list of rendered stored inferences.
+
+        This function performs two main tasks:
+        1. Resolves all network resources (e.g., images) in the stored inference.
+        2. Prepares all messages into "simple" messages that have been templated for a particular variant.
+           To do this, the function needs to know which variant to use for each function that might appear in the data.
+
+        IMPORTANT: For now, this function drops datapoints that are invalid, such as those where templating fails,
+        the function has no variant specified, or the process of downloading resources fails.
+        In the future, this behavior may be made configurable by the caller.
+
+        :param stored_inferences: A list of stored inferences to render.
+        :param variants: A mapping from function name to variant name.
+        :return: A list of rendered stored inferences.
+        """
+
     def close(self) -> None:
         """
         Close the connection to the TensorZero gateway.
@@ -332,6 +371,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         cache_options: Optional[Dict[str, Any]] = None,
         extra_body: Optional[List[ExtraBody | Dict[str, Any]]] = None,
         extra_headers: Optional[List[Dict[str, Any]]] = None,
+        include_original_response: Optional[bool] = None,
     ) -> Union[InferenceResponse, AsyncIterator[InferenceChunk]]:
         """
         Make a POST request to the /inference endpoint.
@@ -362,6 +402,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         :param tags: If set, adds tags to the inference request.
         :param extra_body: If set, injects extra fields into the provider request body.
         :param extra_headers: If set, injects extra headers into the provider request.
+        :param include_original_response: If set, add an `original_response` field to the response, containing the raw string response from the model.
         :return: If stream is false, returns an InferenceResponse.
                  If stream is true, returns an async iterator that yields InferenceChunks as they come in.
         """
@@ -486,6 +527,29 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         :return: A `Datapoint` instance.
         """
 
+    async def experimental_render_inferences(
+        self,
+        *,
+        stored_inferences: List[StoredInference],
+        variants: Dict[str, str],
+    ) -> List[RenderedStoredInference]:
+        """
+        Render a list of stored inferences into a list of rendered stored inferences.
+
+        This function performs two main tasks:
+        1. Resolves all network resources (e.g., images) in the stored inferences.
+        2. Prepares all messages into "simple" messages that have been templated for a particular variant.
+           To do this, the function needs to know which variant to use for each function that might appear in the data.
+
+        IMPORTANT: For now, this function drops datapoints that are invalid, such as those where templating fails,
+        the function has no variant specified, or the process of downloading resources fails.
+        In the future, this behavior may be made configurable by the caller.
+
+        :param stored_inferences: A list of stored inferences to render.
+        :param variants: A mapping from function name to variant name.
+        :return: A list of rendered stored inferences.
+        """
+
     async def close(self) -> None:
         """
         Close the connection to the TensorZero gateway.
@@ -529,4 +593,5 @@ __all__ = [
     "TensorZeroGateway",
     "LocalHttpGateway",
     "_start_http_gateway",
+    "RenderedStoredInference",
 ]

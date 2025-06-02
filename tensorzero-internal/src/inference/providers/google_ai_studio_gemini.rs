@@ -17,7 +17,7 @@ use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
-use crate::inference::types::resolved_input::ImageWithPath;
+use crate::inference::types::resolved_input::FileWithPath;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, serialize_or_log, ModelInferenceRequest,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
@@ -357,6 +357,7 @@ fn stream_google_ai_studio_gemini(
                             }
                         };
                         yield GoogleAIStudioGeminiResponseWithMetadata {
+                            raw_response: message.data,
                             response: data,
                             latency: start_time.elapsed(),
                         }.try_into();
@@ -477,15 +478,18 @@ impl<'a> TryFrom<&'a ContentBlock> for Option<FlattenUnknown<'a, GeminiPart<'a>>
                     },
                 })))
             }
-            ContentBlock::Image(ImageWithPath {
-                image,
+            ContentBlock::File(FileWithPath {
+                file,
                 storage_path: _,
-            }) => Ok(Some(FlattenUnknown::Normal(GeminiPart::InlineData {
-                inline_data: GeminiInlineData {
-                    mime_type: image.mime_type.to_string(),
-                    data: image.data()?.as_str(),
-                },
-            }))),
+            }) => {
+                file.mime_type.require_image(PROVIDER_TYPE)?;
+                Ok(Some(FlattenUnknown::Normal(GeminiPart::InlineData {
+                    inline_data: GeminiInlineData {
+                        mime_type: file.mime_type.to_string(),
+                        data: file.data()?.as_str(),
+                    },
+                })))
+            }
 
             // We don't support thought blocks being passed in from a request.
             // These are only possible to be passed in in the scenario where the
@@ -949,26 +953,23 @@ impl<'a> TryFrom<GeminiResponseWithMetadata<'a>> for ProviderInferenceResponse {
 struct GoogleAIStudioGeminiResponseWithMetadata {
     response: GeminiResponse,
     latency: Duration,
+    raw_response: String,
 }
 
 impl TryFrom<GoogleAIStudioGeminiResponseWithMetadata> for ProviderInferenceResponseChunk {
     type Error = Error;
     fn try_from(response: GoogleAIStudioGeminiResponseWithMetadata) -> Result<Self, Self::Error> {
-        let GoogleAIStudioGeminiResponseWithMetadata { response, latency } = response;
-
-        let raw = serde_json::to_string(&response).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!(
-                    "Error serializing streaming response from Google AI Studio Gemini: {e}"
-                ),
-            })
-        })?;
+        let GoogleAIStudioGeminiResponseWithMetadata {
+            response,
+            latency,
+            raw_response,
+        } = response;
 
         let first_candidate = response.candidates.into_iter().next().ok_or_else(|| {
             Error::new(ErrorDetails::InferenceServer {
                 message: "Google AI Studio Gemini response has no candidates".to_string(),
                 raw_request: None,
-                raw_response: Some(raw.clone()),
+                raw_response: Some(raw_response.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
@@ -997,7 +998,7 @@ impl TryFrom<GoogleAIStudioGeminiResponseWithMetadata> for ProviderInferenceResp
         Ok(ProviderInferenceResponseChunk::new(
             content,
             usage,
-            raw,
+            raw_response,
             latency,
             first_candidate
                 .finish_reason
@@ -1897,6 +1898,7 @@ mod tests {
         };
 
         let response_with_metadata = GoogleAIStudioGeminiResponseWithMetadata {
+            raw_response: "my_raw_chunk".to_string(),
             response,
             latency: Duration::from_millis(100),
         };
@@ -1943,6 +1945,7 @@ mod tests {
         };
 
         let response_with_metadata = GoogleAIStudioGeminiResponseWithMetadata {
+            raw_response: "my_raw_chunk".to_string(),
             response,
             latency: Duration::from_millis(50),
         };
@@ -1986,6 +1989,7 @@ mod tests {
         };
 
         let response_with_metadata = GoogleAIStudioGeminiResponseWithMetadata {
+            raw_response: "my_raw_chunk".to_string(),
             response,
             latency: Duration::from_millis(75),
         };
@@ -2025,6 +2029,7 @@ mod tests {
         };
 
         let response_with_metadata = GoogleAIStudioGeminiResponseWithMetadata {
+            raw_response: "my_raw_chunk".to_string(),
             response,
             latency: Duration::from_millis(120),
         };
@@ -2065,6 +2070,7 @@ mod tests {
         };
 
         let response_with_metadata = GoogleAIStudioGeminiResponseWithMetadata {
+            raw_response: "my_raw_chunk".to_string(),
             response,
             latency: Duration::from_millis(60),
         };
@@ -2097,6 +2103,7 @@ mod tests {
         };
 
         let response_with_metadata = GoogleAIStudioGeminiResponseWithMetadata {
+            raw_response: "my_raw_chunk".to_string(),
             response,
             latency: Duration::from_millis(30),
         };
@@ -2159,6 +2166,7 @@ mod tests {
             };
 
             let response_with_metadata = GoogleAIStudioGeminiResponseWithMetadata {
+                raw_response: "my_raw_chunk".to_string(),
                 response,
                 latency: Duration::from_millis(10),
             };
