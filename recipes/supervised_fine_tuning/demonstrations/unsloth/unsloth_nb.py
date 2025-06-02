@@ -103,15 +103,30 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import numpy as np
+import pandas as pd
 import toml
 from clickhouse_connect import get_client
 from datasets import Dataset
-from minijinja import Environment
+from tensorzero import (
+    ContentBlock,
+    RawText,
+    StoredChatInference,
+    StoredJsonInference,
+    TensorZeroGateway,
+    Text,
+    Thought,
+    ToolCall,
+    ToolResult,
+)
+from tensorzero.internal import OutputMessage
 from tensorzero.util import uuid7
 from transformers import TrainingArguments
 from trl import SFTTrainer
 from unsloth import FastLanguageModel, is_bfloat16_supported
 from unsloth.chat_templates import get_chat_template
+
+# %%
+TENSORZERO_GATEWAY_URL = "http://localhost:3000"
 
 # %% [markdown]
 # Load the TensorZero configuration file.
@@ -147,30 +162,6 @@ variant = config["functions"][FUNCTION_NAME]["variants"][TEMPLATE_VARIANT_NAME]
 variant
 
 # %% [markdown]
-# Retrieve the system, user, and assistant templates in the variant (if any), and initialize a minijinja environment with them.
-#
-
-# %%
-templates = {}
-
-if "assistant_template" in variant:
-    assistant_template_path = config_path.parent / variant["assistant_template"]
-    with assistant_template_path.open("r") as f:
-        templates["assistant"] = f.read()
-
-if "system_template" in variant:
-    system_template_path = config_path.parent / variant["system_template"]
-    with system_template_path.open("r") as f:
-        templates["system"] = f.read()
-
-if "user_template" in variant:
-    user_template_path = config_path.parent / variant["user_template"]
-    with user_template_path.open("r") as f:
-        templates["user"] = f.read()
-
-env = Environment(templates=templates)
-
-# %% [markdown]
 # Initialize the ClickHouse client.
 #
 
@@ -196,13 +187,17 @@ if inference_table_name is None:
 # Query the inferences and feedback from ClickHouse.
 
 # %%
+inference_col = "tool_params" if function_type == "chat" else "output_schema"
+
 query = f"""
 SELECT
     i.variant_name,
     i.input,
     i.output,
     f.value,
-    i.episode_id
+    i.episode_id,
+    i.id,
+    i.{inference_col},
 FROM
     {inference_table_name} i
 JOIN
@@ -215,7 +210,6 @@ JOIN
     ) f ON i.id = f.inference_id AND f.rn = 1
 WHERE
     i.function_name = %(function_name)s
-    AND i.variant_name = %(variant_name)s
 LIMIT %(max_samples)s
 """
 
@@ -228,183 +222,51 @@ df = clickhouse_client.query_df(query, params)
 
 df.head()
 
-
 # %% [markdown]
-# Render the inputs using the templates.
+# Load and render the stored inferences
 
 # %%
-def render_message(message: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
-    role = message["role"]
-    assert role in ["user", "assistant"], f"Invalid role: {role}"
-    content: List[str] = []
-    tool_calls: List[Dict[str, Any]] = []
-    rendered_messages: List[Dict[str, Any]] = []
-
-    for content_block in message["content"]:
-        if content_block["type"] == "text":
-            parsed_content = content_block["value"]
-            if not isinstance(parsed_content, str):
-                parsed_content = env.render_template(role, **parsed_content)
-            content.append(parsed_content)
-        elif content_block["type"] == "raw_text":
-            content.append(content_block["value"])
-        elif content_block["type"] == "thought":
-            content.append(f"<think>{content_block['text']}</think>")
-        elif content_block["type"] == "tool_call" and role == "assistant":
-            tool_calls.append(
-                {
-                    "function": {
-                        "arguments": json.dumps(content_block["arguments"]),
-                        "name": content_block["name"],
-                    },
-                    "id": content_block["id"],
-                    "type": "function",
-                }
-            )
-        elif content_block["type"] == "tool_result" and role == "user":
-            # Tool results get priority so that they follow the tool call in the conversation.
-            # Any other "user" content will be appended in another message below.
-            rendered_messages.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": content_block["id"],
-                    "content": content_block["result"],
-                }
-            )
-        else:
-            warnings.warn(
-                f"We do not support content block type: {content_block['type']}, dropping example.",
-                UserWarning,
-            )
-            return None
-
-    if content or tool_calls:
-        role_message: Dict[str, Any] = {"role": role}
-        if content:
-            role_message["content"] = "\n".join(content)
-        if tool_calls:
-            role_message["tool_calls"] = tool_calls
-        rendered_messages.append(role_message)
-
-    return rendered_messages
-
-
-def render_output(
-    output: List[Dict[str, Any]],
-) -> Dict[str, Any]:
-    """
-    Parses the assistant message from an observation using the provided function configuration.
-    """
-    content: List[str] = []
-    tool_calls: List[Dict[str, Any]] = []
-
-    if function_type == "json":
-        return {"role": "assistant", "content": output["raw"]}
-    elif function_type == "chat":
-        for content_block in output:
-            if content_block["type"] == "text":
-                content.append(content_block["text"])
-            elif content_block["type"] == "thought":
-                content.append(f"<think>{content_block['text']}</think>")
-            elif content_block["type"] == "tool_call":
-                tool_calls.append(
-                    {
-                        "function": {
-                            "arguments": json.dumps(content_block["arguments"]),
-                            "name": content_block["name"],
-                        },
-                        "id": content_block["id"],
-                        "type": "function",
-                    }
-                )
-            else:
-                warnings.warn(
-                    f"We do not support content block type: {content_block['type']}, dropping example.",
-                    UserWarning,
-                )
-                return None
-    else:
-        raise ValueError(f"Unsupported function type: {function_type}")
-
-    # Once we finish collecting all blocks, create one assistant message.
-    output_message: Dict[str, Any] = {"role": "assistant"}
-    if content:
-        output_message["content"] = content
-    if tool_calls:
-        output_message["tool_calls"] = tool_calls
-
-    return output_message
-
-
-def sample_to_openai_messages(sample) -> List[Dict[str, Any]]:
-    function_input = json.loads(sample["input"])
-
-    rendered_messages = []
-
-    # Add the system message to the rendered messages
-    # If there is data passed in or a system template there must be a system message
-    system = function_input.get("system", {})
-    if len(system) > 0 or system_template_path:
-        if system_template_path:
-            system_message = env.render_template("system", **system)
-            rendered_messages.append({"role": "system", "content": system_message})
-        else:
-            rendered_messages.append({"role": "system", "content": system})
-
-    # Add the input messages to the rendered messages
-    for message in function_input["messages"]:
-        rendered_message = render_message(message)
-        if rendered_message is None:
-            # `render_message` will return None if the message contains an unknown or unsupported content block.
-            # The entire example is dropped if this is the case.
-            return None
-        rendered_messages.extend(render_message(message))
-
-    # Add the output to the messages
-    output = json.loads(sample["value"])
-    rendered_output = render_output(output)
-    if rendered_output is None:
-        # `render_output` will return None if the output contains an unknown or unsupported content block.
-        # The entire example is dropped if this is the case.
-        return None
-    rendered_messages.append(rendered_output)
-
-    return {"messages": rendered_messages}
-
-
-df["openai_messages"] = df.apply(sample_to_openai_messages, axis=1)
-
-# Drop null rows
-df = df[df["openai_messages"].notna()]
-
-df.head()
-
-# %% [markdown]
-# Split the data into training and validation sets for fine-tuning.
-#
+tensorzero_client = TensorZeroGateway.build_embedded(
+    config_file=CONFIG_PATH,
+    clickhouse_url=os.environ["TENSORZERO_CLICKHOUSE_URL"],
+    timeout=15,
+)
 
 # %%
-# Get unique episode_ids
-unique_episode_ids = df["episode_id"].unique()
+stored_inferences = []
+for _, row in df.iterrows():
+    input_data = json.loads(row["input"])
+    output_data = json.loads(row["output"])
+    if function_type == "chat":
+        stored_inferences.append(
+            StoredChatInference(
+                function_name=FUNCTION_NAME,
+                variant_name=row["variant_name"],
+                input=input_data,
+                output=output_data,
+                episode_id=row["episode_id"],
+                inference_id=row["id"],
+                tool_params=json.loads(row["tool_params"]),
+            )
+        )
+    elif function_type == "json":
+        stored_inferences.append(
+            StoredJsonInference(
+                function_name=FUNCTION_NAME,
+                variant_name=row["variant_name"],
+                input=input_data,
+                output=output_data,
+                episode_id=row["episode_id"],
+                inference_id=row["id"],
+                output_schema=json.loads(row["output_schema"]),
+            )
+        )
 
-# Shuffle the unique episode_ids
-np.random.seed(42)
-np.random.shuffle(unique_episode_ids)
-
-# Calculate the split index for episode_ids
-split_index = int(len(unique_episode_ids) * (1 - VAL_FRACTION))
-
-# Split the episode_ids into training and validation sets
-train_episode_ids = unique_episode_ids[:split_index]
-val_episode_ids = unique_episode_ids[split_index:]
-
-# Create training and validation DataFrames based on episode_ids
-train_df = df[df["episode_id"].isin(train_episode_ids)]
-val_df = df[df["episode_id"].isin(val_episode_ids)]
-
-print(f"Training set size: {len(train_df)}")
-print(f"Validation set size: {len(val_df)}")
-print(f"Actual validation fraction: {len(val_df) / len(df):.2f}")
+# %%
+rendered_inferences = tensorzero_client.experimental_render_inferences(
+    stored_inferences=stored_inferences,
+    variants={FUNCTION_NAME: TEMPLATE_VARIANT_NAME},
+)
 
 # %% [markdown]
 # Instantiate the model and tokenizer
@@ -428,24 +290,151 @@ tokenizer = get_chat_template(
 )
 
 
+# %% [markdown]
+# Reformat the rendered inferences to ChatML and tokenize
+
+
 # %%
-def formatting_prompts_func(examples):
-    convos = examples["messages"]
-    texts = tokenizer.apply_chat_template(
-        convos, tokenize=False, add_generation_prompt=False
+def message_to_chatml(message: OutputMessage) -> Optional[List[Dict[str, Any]]]:
+    chatml_messages: List[Dict[str, Any]] = []
+    assert message.role in ["user", "assistant"], f"Invalid role: {message.role}"
+    content: List[str] = []
+    tool_calls: List[Dict[str, Any]] = []
+    for content_block in message.content:
+        if isinstance(content_block, Text):
+            assert content_block.arguments is None, "Arguments should be None"
+            content.append(content_block.text)
+        elif isinstance(content_block, RawText):
+            content.append(content_block.value)
+        elif isinstance(content_block, Thought):
+            content.append(f"<think>{content_block['text']}</think>")
+        elif isinstance(content_block, ToolCall):
+            tool_calls.append(
+                {
+                    "function": {
+                        "arguments": content_block.raw_arguments,
+                        "name": content_block.name,
+                    },
+                    "id": content_block.id,
+                    "type": "function",
+                }
+            )
+        elif isinstance(content_block, ToolResult):
+            # Tool results get priority so that they follow the tool call in the conversation.
+            # Any other "user" content will be appended in another message below.
+            chatml_messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": content_block.id,
+                    "content": content_block.result,
+                }
+            )
+        else:
+            warnings.warn(
+                f"We do not support content block type: {type(content_block)}, dropping example.",
+                UserWarning,
+            )
+            return None
+    if content or tool_calls:
+        chatml_message: Dict[str, Any] = {"role": message.role}
+        if content:
+            chatml_message["content"] = "\n".join(content)
+        if tool_calls:
+            chatml_message["tool_calls"] = tool_calls
+        chatml_messages.append(chatml_message)
+
+    return chatml_messages
+
+
+def output_to_chatml(output: List[ContentBlock]) -> Dict[str, Any]:
+    content: List[str] = []
+    tool_calls: List[Dict[str, Any]] = []
+
+    for content_block in output:
+        if isinstance(content_block, Text):
+            assert content_block.arguments is None, "Arguments should be None"
+            content.append(content_block.text)
+        elif isinstance(content_block, Thought):
+            content.append(f"<think>{content_block['text']}</think>")
+        elif isinstance(content_block, ToolCall):
+            tool_calls.append(
+                {
+                    "function": {
+                        "arguments": content_block.raw_arguments,
+                        "name": content_block.name,
+                    },
+                    "id": content_block.id,
+                    "type": "function",
+                }
+            )
+        else:
+            warnings.warn(
+                f"We do not support content block type: {type(content_block)}, dropping example.",
+                UserWarning,
+            )
+            return None
+
+    # Once we finish collecting all blocks, create one assistant message.
+    output_message: Dict[str, Any] = {"role": "assistant"}
+    if content:
+        output_message["content"] = content
+    if tool_calls:
+        output_message["tool_calls"] = tool_calls
+
+    return output_message
+
+
+conversations = []
+for rendered_inference in rendered_inferences:
+    messages = []
+    model_input = rendered_inference.input
+    if model_input.system is not None:
+        messages.append({"role": "system", "content": model_input.system})
+    for message in model_input.messages:
+        messages.extend(message_to_chatml(message))
+    messages.append(output_to_chatml(rendered_inference.output))
+    tokenized_messages = tokenizer.apply_chat_template(
+        messages, tokenize=False, add_generation_prompt=False
     )
-    return {
-        "text": texts,
-    }
 
+    # Drop conversations that have unknown content
+    if all(msg is not None for msg in messages):
+        conversations.append(
+            {"text": tokenized_messages, "episode_id": rendered_inference.episode_id}
+        )
+
+conversations = pd.DataFrame(conversations)
+
+# %% [markdown]
+# Split the data into training and validation sets for fine-tuning.
+#
 
 # %%
-train_dataset = Dataset.from_list(
-    train_df["openai_messages"].map(formatting_prompts_func).to_list()
-)
-eval_dataset = Dataset.from_list(
-    val_df["openai_messages"].map(formatting_prompts_func).to_list()
-)
+# Get unique episode_ids
+unique_episode_ids = conversations["episode_id"].unique()
+
+# Shuffle the unique episode_ids
+np.random.seed(42)
+np.random.shuffle(unique_episode_ids)
+
+# Calculate the split index for episode_ids
+split_index = int(len(unique_episode_ids) * (1 - VAL_FRACTION))
+
+# Split the episode_ids into training and validation sets
+train_episode_ids = unique_episode_ids[:split_index]
+val_episode_ids = unique_episode_ids[split_index:]
+
+# Create training and validation DataFrames based on episode_ids
+train_df = conversations[conversations["episode_id"].isin(train_episode_ids)]
+val_df = conversations[conversations["episode_id"].isin(val_episode_ids)]
+
+# Convert to huggingface dataset
+train_dataset = Dataset.from_pandas(train_df.drop("episode_id", axis=1))
+eval_dataset = Dataset.from_pandas(val_df.drop("episode_id", axis=1))
+
+print(f"Training set size: {len(train_df)}")
+print(f"Validation set size: {len(val_df)}")
+print(f"Actual validation fraction: {len(val_df) / len(df):.2f}")
 
 # %% [markdown]
 # Set LoRA parameters

@@ -19,6 +19,6 @@ uv pip install -r requirements.txt # Install the dependencies
 We recommend using Python 3.10+ and a virtual environment.
 
 ```bash
-pip install torch [--index-url https://download.pytorch.org/whl/<your-cuda-version>]
+pip install xformers --index-url https://download.pytorch.org/whl/<your-cuda-version> # Install xformers
 pip install -r requirements.txt
 ```
