@@ -479,10 +479,11 @@ impl<'a> TryFrom<&'a ContentBlock> for Option<FlattenUnknown<'a, GeminiPart<'a>>
                     },
                 })))
             }
-            ContentBlock::File(FileWithPath {
-                file,
-                storage_path: _,
-            }) => {
+            ContentBlock::File(file) => {
+                let FileWithPath {
+                    file,
+                    storage_path: _,
+                } = &**file;
                 require_image(&file.mime_type, PROVIDER_TYPE)?;
                 Ok(Some(FlattenUnknown::Normal(GeminiPart::InlineData {
                     inline_data: GeminiInlineData {

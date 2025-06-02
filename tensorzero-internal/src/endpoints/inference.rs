@@ -786,11 +786,12 @@ async fn write_inference(
     if config.gateway.observability.enabled.unwrap_or(true) {
         for message in &input.messages {
             for content_block in &message.content {
-                if let ResolvedInputMessageContent::File(FileWithPath {
-                    file: raw,
-                    storage_path,
-                }) = content_block
-                {
+                if let ResolvedInputMessageContent::File(file) = content_block {
+                    let FileWithPath {
+                        file: raw,
+                        storage_path,
+                    } = &**file;
+
                     futures.push(Box::pin(async {
                         if let Err(e) =
                             write_file(&config.object_store_info, raw, storage_path).await

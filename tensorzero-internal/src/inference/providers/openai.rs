@@ -1259,18 +1259,18 @@ pub fn mime_type_to_ext(mime_type: &MediaType) -> Result<Option<&'static str>, E
         _ if mime_type == &mime::APPLICATION_PDF => Some("pdf"),
         _ if mime_type == "image/webp" => Some("webp"),
         _ => {
-            let guess = mime_guess::get_mime_extensions_str(&mime_type.to_string())
+            let guess = mime_guess::get_mime_extensions_str(mime_type.as_ref())
                 .and_then(|types| types.last());
             if guess.is_some() {
                 tracing::warn!("Guessed file extension {guess:?} for mime-type {mime_type} - this may not be correct");
             }
-            guess.map(|g| *g)
+            guess.copied()
         }
     })
 }
 
 pub fn filename_to_mime_type(filename: &str) -> Result<MediaType, Error> {
-    let ext = filename.split('.').last().ok_or_else(|| {
+    let ext = filename.split('.').next_back().ok_or_else(|| {
         Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
             message: "File name must contain a file extension".to_string(),
         })
@@ -1329,10 +1329,11 @@ fn tensorzero_to_openai_user_messages(
                     tool_call_id: &tool_result.id,
                 }));
             }
-            ContentBlock::File(FileWithPath {
-                file,
-                storage_path: _,
-            }) => {
+            ContentBlock::File(file) => {
+                let FileWithPath {
+                    file,
+                    storage_path: _,
+                } = &**file;
                 let data = format!("data:{};base64,{}", file.mime_type, file.data()?);
                 if file.mime_type.type_() == mime::IMAGE {
                     user_content_blocks.push(OpenAIContentBlock::ImageUrl {
@@ -1423,10 +1424,11 @@ fn tensorzero_to_openai_assistant_messages(
                     message: "Tool results are not supported in assistant messages".to_string(),
                 }));
             }
-            ContentBlock::File(FileWithPath {
-                file,
-                storage_path: _,
-            }) => {
+            ContentBlock::File(file) => {
+                let FileWithPath {
+                    file,
+                    storage_path: _,
+                } = &**file;
                 require_image(&file.mime_type, PROVIDER_TYPE)?;
                 assistant_content_blocks.push(OpenAIContentBlock::ImageUrl {
                     image_url: OpenAIImageUrl {

@@ -165,11 +165,11 @@ pub fn sanitize_raw_request(input_messages: &[RequestMessage], mut raw_request: 
     let mut i = 0;
     for message in input_messages {
         for content in &message.content {
-            if let ContentBlock::File(FileWithPath {
-                file,
-                storage_path: _,
-            }) = content
-            {
+            if let ContentBlock::File(file) = content {
+                let FileWithPath {
+                    file,
+                    storage_path: _,
+                } = &**file;
                 if let Some(data) = &file.data {
                     raw_request = raw_request.replace(data, &format!("<TENSORZERO_FILE_{i}>"));
                 }

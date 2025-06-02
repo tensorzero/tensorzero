@@ -152,10 +152,10 @@ impl InputMessageContent {
                     .clone();
                 let file = file.take_or_fetch(context.client).await?;
                 let path = storage_kind.file_path(&file)?;
-                ResolvedInputMessageContent::File(FileWithPath {
+                ResolvedInputMessageContent::File(Box::new(FileWithPath {
                     file,
                     storage_path: path,
-                })
+                }))
             }
             InputMessageContent::Unknown {
                 data,
@@ -286,7 +286,7 @@ pub enum ContentBlock {
     ToolCall(ToolCall),
     ToolResult(ToolResult),
     #[serde(alias = "image")]
-    File(FileWithPath),
+    File(Box<FileWithPath>),
     Thought(Thought),
     /// Represents an unknown provider-specific content block.
     /// We pass this along as-is without any validation or transformation.

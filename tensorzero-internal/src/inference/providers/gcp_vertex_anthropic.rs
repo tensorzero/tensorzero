@@ -569,16 +569,17 @@ impl<'a> TryFrom<&'a ContentBlock>
                     }],
                 },
             ))),
-            ContentBlock::File(FileWithPath {
-                file,
-                storage_path: _,
-            }) => {
+            ContentBlock::File(file) => {
+                let FileWithPath {
+                    file,
+                    storage_path: _,
+                } = &**file;
                 require_image(&file.mime_type, PROVIDER_TYPE)?;
                 Ok(Some(FlattenUnknown::Normal(
                     GCPVertexAnthropicMessageContent::Image {
                         source: AnthropicDocumentSource {
                             r#type: AnthropicDocumentType::Base64,
-                            media_type: file.mime_type.to_string(),
+                            media_type: file.mime_type.clone(),
                             data: file.data()?.clone(),
                         },
                     },

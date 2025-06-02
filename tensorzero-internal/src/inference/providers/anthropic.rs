@@ -1,5 +1,6 @@
 use futures::StreamExt;
 use lazy_static::lazy_static;
+use mime::MediaType;
 use reqwest::StatusCode;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use secrecy::{ExposeSecret, SecretString};
@@ -511,7 +512,7 @@ enum AnthropicMessageContent<'a> {
 #[serde(rename_all = "snake_case")]
 pub struct AnthropicDocumentSource {
     pub r#type: AnthropicDocumentType,
-    pub media_type: String,
+    pub media_type: MediaType,
     pub data: String,
 }
 
@@ -570,13 +571,14 @@ impl<'a> TryFrom<&'a ContentBlock> for Option<FlattenUnknown<'a, AnthropicMessag
                     }],
                 },
             ))),
-            ContentBlock::File(FileWithPath {
-                file,
-                storage_path: _,
-            }) => {
+            ContentBlock::File(file) => {
+                let FileWithPath {
+                    file,
+                    storage_path: _,
+                } = &**file;
                 let document = AnthropicDocumentSource {
                     r#type: AnthropicDocumentType::Base64,
-                    media_type: file.mime_type.to_string(),
+                    media_type: file.mime_type.clone(),
                     data: file.data()?.clone(),
                 };
                 if file.mime_type.type_() == mime::IMAGE {
