@@ -12,6 +12,7 @@
 # To get started:
 #
 # - Set your `TENSORZERO_CLICKHOUSE_URL` enironment variable to point to the database containing the historical inferences you'd like to train on.
+# - You'll also need to [install](https://docs.fireworks.ai/tools-sdks/firectl/firectl) the CLI tool `firectl` on your machine and sign in with `firectl signin`. You can test that this all worked with `firectl whoami`.
 # - Update the following parameters:
 
 # %%
@@ -37,6 +38,8 @@ SEED = 42
 # %%
 # The name of the model to fine-tune (supported models: https://docs.unsloth.ai/get-started/all-our-models)
 MODEL_NAME = "unsloth/Meta-Llama-3.1-8B-Instruct"
+
+SERVERLESS = True  # Whether to use a serverless deployment. Set to False is full model fine tuning or using LoRA for a model without serverless support
 
 MAX_SEQ_LENGTH = 8192  # Choose any! Unsloth supports RoPE Scaling internally!
 
@@ -76,6 +79,7 @@ BATCH_SIZE = 4
 
 # %%
 # Whether to use LoRA or not. Set to False for full model fine-tuning
+# If set to False, SEVERLESS must also be False as you will need to create your own deployment
 USE_LORA = True
 
 # LoRA Parameters
@@ -503,6 +507,7 @@ base_model_id = "llama-v3p1-8b-instruct"
 fine_tuned_model_id = f"{MODEL_NAME.lower().replace('/', '-').replace('.', 'p')}-{str(uuid7()).split('-')[-1]}"
 
 with tempfile.TemporaryDirectory() as tmpdirname:
+    tmpdirname = "trainer_output"
     print(f"Saving to temp dir: {tmpdirname}")
     model.save_pretrained(tmpdirname)
     tokenizer.save_pretrained(tmpdirname)
@@ -537,15 +542,30 @@ model_identifier = get_model_id(stdout)
 
 model_identifier
 
+# %% [markdown]
+# Create a deployment if not using a model with serverless support, if it does not support serveless addons, or if you are doing full fine-tuning.
+
 # %%
-command = ["firectl", "deploy", model_identifier]
-print(" ".join(command))
-result = subprocess.run(command, capture_output=True)
-if result.returncode != 0:
-    print(result.stderr.decode("utf-8"))
-else:
-    stdout = result.stdout.decode("utf-8")
-    print(stdout)
+if not SERVERLESS:
+    command = ["firectl", "create", "deployment", model_identifier]
+    print(" ".join(command))
+    result = subprocess.run(command, capture_output=True)
+    if result.returncode != 0:
+        print(result.stderr.decode("utf-8"))
+    else:
+        stdout = result.stdout.decode("utf-8")
+        print(stdout)
+
+# %%
+if USE_LORA:
+    command = ["firectl", "load-lora", model_identifier]
+    print(" ".join(command))
+    result = subprocess.run(command, capture_output=True)
+    if result.returncode != 0:
+        print(result.stderr.decode("utf-8"))
+    else:
+        stdout = result.stdout.decode("utf-8")
+        print(stdout)
 
 # %% [markdown]
 # Once the model is deployed, you can add the fine-tuned model to your config file.
