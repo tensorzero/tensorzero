@@ -2863,9 +2863,11 @@ thinking = { type = "enabled", budget_tokens = 1024 }
         let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
         let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let err = Config::load_from_toml(config, base_path.clone())
+        let err = SKIP_CREDENTIAL_VALIDATION
+            .scope((), Config::load_from_toml(config, base_path.clone()))
             .await
-            .expect_err("Failed to catch issue in gcp vertex gemini");
+            .unwrap_err();
+
         let err_msg = err.to_string();
         assert!(
             err_msg
