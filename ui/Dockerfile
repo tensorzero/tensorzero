@@ -145,5 +145,6 @@ USER ui
 EXPOSE 4000
 
 ENV HOST=0.0.0.0
+ENV TENSORZERO_UI_CONFIG_PATH=/app/ui/config/tensorzero.toml
 
 ENTRYPOINT ["./entrypoint.sh"]
