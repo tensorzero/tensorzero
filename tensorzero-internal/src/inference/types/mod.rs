@@ -8,6 +8,12 @@ pub use file::{Base64File, File, FileKind};
 use futures::stream::Peekable;
 use futures::Stream;
 use itertools::Itertools;
+#[cfg(feature = "pyo3")]
+use pyo3::prelude::*;
+#[cfg(feature = "pyo3")]
+use pyo3::types::{PyAny, PyList};
+#[cfg(feature = "pyo3")]
+use pyo3_helpers::content_block_to_python;
 use resolved_input::FileWithPath;
 pub use resolved_input::{ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent};
 use serde::{Deserialize, Deserializer, Serialize};
@@ -42,6 +48,8 @@ pub mod batch;
 pub mod extra_body;
 pub mod extra_headers;
 pub mod file;
+#[cfg(feature = "pyo3")]
+pub mod pyo3_helpers;
 pub mod resolved_input;
 pub mod storage;
 
@@ -238,6 +246,7 @@ impl<'de> Deserialize<'de> for TextKind {
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "pyo3", pyclass)]
 pub enum Role {
     User,
     Assistant,
@@ -253,12 +262,14 @@ pub enum Role {
 /// inference that is called for.
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(feature = "pyo3", pyclass(get_all))]
 pub struct Text {
     pub text: String,
 }
 
 /// Struct that represents Chain of Thought reasoning
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(feature = "pyo3", pyclass(get_all))]
 pub struct Thought {
     pub text: String,
     /// An optional signature - currently, this is only used with Anthropic,
@@ -340,9 +351,29 @@ pub enum ContentBlockChatOutput {
 
 /// A RequestMessage is a message sent to a model
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(feature = "pyo3", pyclass)]
 pub struct RequestMessage {
     pub role: Role,
     pub content: Vec<ContentBlock>,
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl RequestMessage {
+    #[getter]
+    fn get_content<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let content = self
+            .content
+            .iter()
+            .map(|c| content_block_to_python(py, c))
+            .collect::<PyResult<Vec<_>>>()?;
+        PyList::new(py, content).map(|list| list.into_any())
+    }
+
+    #[getter]
+    fn get_role(&self) -> String {
+        self.role.to_string()
+    }
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
@@ -390,6 +421,14 @@ pub struct ModelInferenceRequest<'a> {
     /// This is used by best_of_n/mixture_of_n to force different sub-variants
     /// to have different cache keys.
     pub extra_cache_key: Option<String>,
+}
+
+/// For use in rendering for optimization purposes
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "pyo3", pyclass(get_all))]
+pub struct ModelInput {
+    pub system: Option<String>,
+    pub messages: Vec<RequestMessage>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -1255,6 +1294,25 @@ impl From<ContentBlockChatOutput> for ContentBlock {
                 data,
                 model_provider_name,
             } => ContentBlock::Unknown {
+                data,
+                model_provider_name,
+            },
+        }
+    }
+}
+
+impl From<ContentBlockChatOutput> for ContentBlockOutput {
+    fn from(output: ContentBlockChatOutput) -> Self {
+        match output {
+            ContentBlockChatOutput::Text(text) => ContentBlockOutput::Text(text),
+            ContentBlockChatOutput::ToolCall(tool_call) => {
+                ContentBlockOutput::ToolCall(tool_call.into())
+            }
+            ContentBlockChatOutput::Thought(thought) => ContentBlockOutput::Thought(thought),
+            ContentBlockChatOutput::Unknown {
+                data,
+                model_provider_name,
+            } => ContentBlockOutput::Unknown {
                 data,
                 model_provider_name,
             },

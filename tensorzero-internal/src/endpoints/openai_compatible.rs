@@ -639,12 +639,21 @@ impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
 enum OpenAICompatibleContentBlock {
     Text(TextContent),
     ImageUrl { image_url: OpenAICompatibleImageUrl },
+    File { file: OpenAICompatibleFile },
 }
 
 #[derive(Deserialize, Debug)]
 #[serde(tag = "type", deny_unknown_fields, rename_all = "snake_case")]
 struct OpenAICompatibleImageUrl {
     url: Url,
+}
+
+#[derive(Deserialize, Debug)]
+struct OpenAICompatibleFile {
+    file_data: String,
+    filename: String,
+    // OpenAI supports file_id with their files API
+    // We do not so we require these two fields
 }
 
 #[derive(Deserialize, Debug)]
@@ -702,6 +711,9 @@ fn convert_openai_message_content(content: Value) -> Result<Vec<InputMessageCont
                         } else {
                             InputMessageContent::File(File::Url { url: image_url.url })
                         }
+                    }
+                    Ok(OpenAICompatibleContentBlock::File { file }) => {
+                        InputMessageContent::File(File::Base64 { mime_type: file.filename.as_str().try_into()?, data: file.file_data })
                     }
                     Err(e) => {
                         tracing::warn!(r#"Content block `{val}` was not a valid OpenAI content block. This is deprecated - please use `{{"type": "text", "tensorzero::arguments": {{"custom": "data"}}` to pass arbitrary JSON values to TensorZero: {e}"#);

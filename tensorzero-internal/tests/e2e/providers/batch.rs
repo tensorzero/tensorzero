@@ -658,7 +658,7 @@ pub async fn test_start_simple_image_batch_inference_request_with_provider(
                     ]
                 },
             ]}],
-        "tags": [{"foo": "bar", "test_type": "batch_simple_image", "variant_name": provider.variant_name}],
+        "tags": [{"foo": "bar", "test_type": "batch_simple_image_v2", "variant_name": provider.variant_name}],
     });
 
     let response = Client::new()
@@ -741,7 +741,7 @@ pub async fn test_start_simple_image_batch_inference_request_with_provider(
                         },
                         "storage_path": {
                             "kind": {"type": "disabled"},
-                            "path": "observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"
+                            "path": "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"
                         }
                     }
                 ]
@@ -827,7 +827,7 @@ pub async fn test_poll_existing_simple_image_batch_inference_request_with_provid
         "pending",
         Some(HashMap::from([(
             "test_type".to_string(),
-            "batch_simple_image".to_string(),
+            "batch_simple_image_v2".to_string(),
         )])),
     )
     .await;
@@ -909,7 +909,7 @@ pub async fn test_poll_completed_simple_image_batch_inference_request_with_provi
         &provider.variant_name,
         Some(HashMap::from([(
             "test_type".to_string(),
-            "batch_simple_image".to_string(),
+            "batch_simple_image_v2".to_string(),
         )])),
     )
     .await;

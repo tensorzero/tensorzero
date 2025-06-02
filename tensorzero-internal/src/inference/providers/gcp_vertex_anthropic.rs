@@ -32,10 +32,12 @@ use crate::model::{build_creds_caching_default_with_fn, CredentialLocation};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use super::anthropic::{
-    prefill_json_chunk_response, prefill_json_response, AnthropicImageSource, AnthropicImageType,
-    AnthropicMessageDelta, AnthropicStopReason,
+    prefill_json_chunk_response, prefill_json_response, AnthropicDocumentSource,
+    AnthropicDocumentType, AnthropicMessageDelta, AnthropicStopReason,
 };
-use super::gcp_vertex_gemini::{default_api_key_location, GCPVertexCredentials};
+use super::gcp_vertex_gemini::{
+    default_api_key_location, parse_shorthand_url, GCPVertexCredentials, ShorthandUrl,
+};
 use super::helpers::{inject_extra_request_data, peek_first_chunk};
 use super::openai::convert_stream_error;
 
@@ -96,6 +98,47 @@ pub async fn make_gcp_sdk_credentials(
 }
 
 impl GCPVertexAnthropicProvider {
+    // Constructs a provider from a shorthand string of the form:
+    // * 'projects/<project_id>/locations/<location>/publishers/anthropic/models/XXX'
+    // * 'projects/<project_id>/locations/<location>/endpoints/XXX'
+    //
+    // This is *not* a full url - we append ':generateContent' or ':streamGenerateContent' to the end of the path as needed.
+    pub async fn new_shorthand(project_url_path: String) -> Result<Self, Error> {
+        let credentials = build_creds_caching_default_with_fn(
+            None,
+            default_api_key_location(),
+            PROVIDER_TYPE,
+            &DEFAULT_CREDENTIALS,
+            |creds| GCPVertexCredentials::try_from((creds, PROVIDER_TYPE)),
+        )?;
+
+        // We only support model urls with the publisher 'anthropic'
+        let shorthand_url = parse_shorthand_url(&project_url_path, "anthropic")?;
+        let (location, model_id) = match shorthand_url {
+            ShorthandUrl::Publisher { location, model_id } => (location, model_id.to_string()),
+            ShorthandUrl::Endpoint {
+                location,
+                endpoint_id,
+            } => (location, format!("endpoints/{endpoint_id}")),
+        };
+
+        let request_url = format!(
+            "https://{location}-aiplatform.googleapis.com/v1/{project_url_path}:rawPredict"
+        );
+        let streaming_request_url = format!(
+            "https://{location}-aiplatform.googleapis.com/v1/{project_url_path}:streamRawPredict"
+        );
+        let audience = format!("https://{location}-aiplatform.googleapis.com/");
+
+        Ok(GCPVertexAnthropicProvider {
+            request_url,
+            streaming_request_url,
+            audience,
+            credentials,
+            model_id,
+        })
+    }
+
     pub async fn new(
         model_id: String,
         location: String,
@@ -460,7 +503,7 @@ enum GCPVertexAnthropicMessageContent<'a> {
         text: &'a str,
     },
     Image {
-        source: AnthropicImageSource,
+        source: AnthropicDocumentSource,
     },
     ToolResult {
         tool_use_id: &'a str,
@@ -532,8 +575,8 @@ impl<'a> TryFrom<&'a ContentBlock>
                 file.mime_type.require_image(PROVIDER_TYPE)?;
                 Ok(Some(FlattenUnknown::Normal(
                     GCPVertexAnthropicMessageContent::Image {
-                        source: AnthropicImageSource {
-                            r#type: AnthropicImageType::Base64,
+                        source: AnthropicDocumentSource {
+                            r#type: AnthropicDocumentType::Base64,
                             media_type: file.mime_type,
                             data: file.data()?.clone(),
                         },

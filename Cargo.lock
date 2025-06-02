@@ -1430,7 +1430,7 @@ dependencies = [
 
 [[package]]
 name = "evaluations"
-version = "2025.5.8"
+version = "2025.5.9"
 dependencies = [
  "anyhow",
  "clap",
@@ -1630,7 +1630,7 @@ dependencies = [
 
 [[package]]
 name = "gateway"
-version = "2025.5.8"
+version = "2025.5.9"
 dependencies = [
  "axum",
  "axum-tracing-opentelemetry",
@@ -2649,7 +2649,7 @@ dependencies = [
 
 [[package]]
 name = "minijinja-bindings"
-version = "2025.5.8"
+version = "2025.5.9"
 dependencies = [
  "console_error_panic_hook",
  "minijinja",
@@ -4248,7 +4248,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-internal"
-version = "2025.5.8"
+version = "2025.5.9"
 dependencies = [
  "async-stream",
  "async-trait",
@@ -4290,6 +4290,7 @@ dependencies = [
  "opentelemetry-semantic-conventions",
  "opentelemetry_sdk",
  "paste",
+ "pyo3",
  "rand 0.9.1",
  "reqwest",
  "reqwest-eventsource",
@@ -4322,7 +4323,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-python"
-version = "2025.5.8"
+version = "2025.5.9"
 dependencies = [
  "futures",
  "pyo3",

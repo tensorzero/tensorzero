@@ -4,6 +4,8 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use crate::error::{Error, ErrorDetails};
 
 use super::{Base64File, FileKind};
+#[cfg(feature = "pyo3")]
+use pyo3::prelude::*;
 
 /// Configuration for the object storage backend
 /// Currently, we only support S3-compatible object storage and local filesystem storage
@@ -63,10 +65,10 @@ impl StorageKind {
             FileKind::Jpeg => "jpg",
             FileKind::Png => "png",
             FileKind::WebP => "webp",
+            FileKind::Pdf => "pdf",
         };
-        // TODO - change this to 'files' instead of 'images': https://github.com/tensorzero/tensorzero/issues/2266
         let path = Path::parse(format!(
-            "{}observability/images/{hash}.{suffix}",
+            "{}observability/files/{hash}.{suffix}",
             self.prefix()
         ))
         .map_err(|e| {
@@ -79,6 +81,7 @@ impl StorageKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "pyo3", pyclass)]
 pub struct StoragePath {
     pub kind: StorageKind,
     #[serde(

@@ -5,10 +5,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use url::Url;
 
+use super::{resolved_input::FileWithPath, ContentBlock, RequestMessage};
 use crate::error::{Error, ErrorDetails};
 use aws_smithy_types::base64;
-
-use super::{resolved_input::FileWithPath, ContentBlock, RequestMessage};
+#[cfg(feature = "pyo3")]
+use pyo3::prelude::*;
 
 scoped_thread_local!(static SERIALIZE_FILE_DATA: ());
 
@@ -27,6 +28,8 @@ pub enum FileKind {
     Png,
     #[serde(rename = "image/webp")]
     WebP,
+    #[serde(rename = "application/pdf")]
+    Pdf,
 }
 
 impl FileKind {
@@ -44,6 +47,29 @@ impl FileKind {
     pub fn is_image(&self) -> bool {
         match self {
             FileKind::Jpeg | FileKind::Png | FileKind::WebP => true,
+            FileKind::Pdf => false,
+        }
+    }
+}
+
+impl TryFrom<&str> for FileKind {
+    type Error = Error;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        let extension = value.split('.').last().ok_or_else(|| {
+            Error::new(ErrorDetails::MissingFileExtension {
+                file_name: value.to_string(),
+            })
+        })?;
+        match extension {
+            "jpg" => Ok(FileKind::Jpeg),
+            "jpeg" => Ok(FileKind::Jpeg),
+            "png" => Ok(FileKind::Png),
+            "webp" => Ok(FileKind::WebP),
+            "pdf" => Ok(FileKind::Pdf),
+            _ => Err(Error::new(ErrorDetails::UnsupportedFileExtension {
+                extension: extension.to_string(),
+            })),
         }
     }
 }
@@ -54,6 +80,7 @@ impl Display for FileKind {
             FileKind::Jpeg => write!(f, "image/jpeg"),
             FileKind::Png => write!(f, "image/png"),
             FileKind::WebP => write!(f, "image/webp"),
+            FileKind::Pdf => write!(f, "application/pdf"),
         }
     }
 }
@@ -63,6 +90,7 @@ fn skip_serialize_file_data(_: &Option<String>) -> bool {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[cfg_attr(feature = "pyo3", pyclass)]
 pub struct Base64File {
     // The original url we used to download the file
     pub url: Option<Url>,
@@ -79,9 +107,22 @@ impl Base64File {
     pub fn data(&self) -> Result<&String, Error> {
         self.data.as_ref().ok_or_else(|| {
             Error::new(ErrorDetails::InternalError {
-                message: "Tried to get image data from deserialized Base64Image".to_string(),
+                message: "Tried to get image data from deserialized Base64File".to_string(),
             })
         })
+    }
+}
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl Base64File {
+    #[getter(url)]
+    pub fn url_string(&self) -> Option<String> {
+        self.url.as_ref().map(|u| u.to_string())
+    }
+
+    #[getter(mime_type)]
+    pub fn mime_type_string(&self) -> String {
+        self.mime_type.to_string()
     }
 }
 
