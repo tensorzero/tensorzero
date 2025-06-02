@@ -59,7 +59,7 @@ pub async fn get_inferences_in_time_range(
 
     // Pass the owned query string and the map of string slices
     let results = clickhouse
-        .run_query_synchronous(query.to_string(), Some(&parameters))
+        .run_query_synchronous(query.to_string(), &parameters)
         .await?;
 
     let inferences: Vec<InferenceInfo> = results

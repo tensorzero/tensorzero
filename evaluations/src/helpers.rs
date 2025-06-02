@@ -102,11 +102,11 @@ pub async fn check_static_eval_human_feedback(
     let result = clickhouse
         .run_query_synchronous(
             query.to_string(),
-            Some(&HashMap::from([
+            &HashMap::from([
                 ("metric_name", metric_name),
                 ("datapoint_id", &datapoint_id.to_string()),
                 ("output", &escaped_serialized_output),
-            ])),
+            ]),
         )
         .await?;
     if result.is_empty() {

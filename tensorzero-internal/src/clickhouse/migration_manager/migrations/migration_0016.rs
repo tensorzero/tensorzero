@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::clickhouse::migration_manager::migration_trait::Migration;
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::error::{Error, ErrorDetails};
@@ -72,13 +74,13 @@ impl Migration for Migration0016<'_> {
         let query = "DROP TABLE IF EXISTS ChatInferenceDataset";
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous(query.to_string(), &HashMap::default())
             .await?;
 
         let query = "DROP TABLE IF EXISTS JsonInferenceDataset";
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous(query.to_string(), &HashMap::default())
             .await?;
 
         // Create the `ChatInferenceDatapoint` table
@@ -108,7 +110,7 @@ impl Migration for Migration0016<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous(query.to_string(), &HashMap::default())
             .await?;
 
         // Create the `JsonInferenceDatapoint` table
@@ -131,7 +133,7 @@ impl Migration for Migration0016<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous(query.to_string(), &HashMap::default())
             .await?;
 
         Ok(())

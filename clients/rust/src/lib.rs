@@ -34,8 +34,9 @@ mod client_inference_params;
 mod client_input;
 mod git;
 mod stored_inference;
-pub use stored_inference::{
-    RenderedStoredInference, StoredChatInference, StoredInference, StoredJsonInference,
+pub use stored_inference::RenderedStoredInference;
+pub use tensorzero_internal::clickhouse::types::{
+    StoredChatInference, StoredInference, StoredJsonInference,
 };
 pub mod input_handling;
 pub use client_inference_params::{ClientInferenceParams, ClientSecretString};

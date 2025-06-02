@@ -1,6 +1,7 @@
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
 use std::cell::Cell;
+use std::collections::HashMap;
 use std::future::Future;
 use std::sync::Arc;
 
@@ -44,12 +45,18 @@ impl Drop for DeleteDbOnDrop {
             Handle::current().block_on(async move {
                 if allow_db_missing {
                     client
-                        .run_query_synchronous(format!("DROP DATABASE IF EXISTS {database}"), None)
+                        .run_query_synchronous(
+                            format!("DROP DATABASE IF EXISTS {database}"),
+                            &HashMap::default(),
+                        )
                         .await
                         .unwrap();
                 } else {
                     client
-                        .run_query_synchronous(format!("DROP DATABASE {database}"), None)
+                        .run_query_synchronous(
+                            format!("DROP DATABASE {database}"),
+                            &HashMap::default(),
+                        )
                         .await
                         .unwrap();
                 }
@@ -147,7 +154,7 @@ const MANIFEST_PATH: &str = env!("CARGO_MANIFEST_DIR");
 
 async fn count_table_rows(clickhouse: &ClickHouseConnectionInfo, table: &str) -> u64 {
     clickhouse
-        .run_query_synchronous(format!("SELECT count(*) FROM {table}"), None)
+        .run_query_synchronous(format!("SELECT count(*) FROM {table}"), &HashMap::default())
         .await
         .unwrap()
         .trim()
@@ -329,7 +336,7 @@ async fn run_migration_0020_with_data<R: Future<Output = bool>, F: FnOnce() -> R
     let sample_chat_row = clickhouse
         .run_query_synchronous(
             "SELECT toUInt128(id) as id_uint, toUInt128(episode_id) as episode_id_uint FROM ChatInference LIMIT 1 FORMAT JSONEachRow".to_string(),
-            None,
+            &HashMap::default(),
         )
         .await
         .unwrap();
@@ -343,7 +350,7 @@ async fn run_migration_0020_with_data<R: Future<Output = bool>, F: FnOnce() -> R
     let matching_chat_by_id = clickhouse
         .run_query_synchronous(
             format!("SELECT id_uint, toUInt128(episode_id) as episode_id_uint FROM InferenceById FINAL WHERE function_type = 'chat' AND id_uint = '{sample_chat_id}' LIMIT 1 FORMAT JSONEachRow"),
-            None,
+            &HashMap::default(),
         )
         .await
         .unwrap();
@@ -362,7 +369,7 @@ async fn run_migration_0020_with_data<R: Future<Output = bool>, F: FnOnce() -> R
     let matching_chat_by_episode_id = clickhouse
         .run_query_synchronous(
             format!("SELECT * FROM InferenceByEpisodeId FINAL WHERE function_type = 'chat' AND episode_id_uint = '{sample_chat_episode_id}' LIMIT 1 FORMAT JSONEachRow"),
-            None,
+            &HashMap::default(),
         )
         .await
         .unwrap();
@@ -379,7 +386,7 @@ async fn run_migration_0020_with_data<R: Future<Output = bool>, F: FnOnce() -> R
     let sample_json_row = clickhouse
         .run_query_synchronous(
             "SELECT toUInt128(id) as id_uint, toUInt128(episode_id) as episode_id_uint FROM JsonInference LIMIT 1 FORMAT JSONEachRow".to_string(),
-            None,
+            &HashMap::default(),
         )
         .await
         .unwrap();
@@ -391,7 +398,7 @@ async fn run_migration_0020_with_data<R: Future<Output = bool>, F: FnOnce() -> R
     let matching_json_by_id = clickhouse
         .run_query_synchronous(
             format!("SELECT id_uint, toUInt128(episode_id) as episode_id_uint FROM InferenceById FINAL WHERE function_type = 'json' AND id_uint = '{sample_json_id}' LIMIT 1 FORMAT JSONEachRow"),
-            None,
+            &HashMap::default(),
         )
         .await
         .unwrap();
@@ -408,7 +415,7 @@ async fn run_migration_0020_with_data<R: Future<Output = bool>, F: FnOnce() -> R
     let matching_json_by_episode_id = clickhouse
         .run_query_synchronous(
             format!("SELECT * FROM InferenceByEpisodeId FINAL WHERE function_type = 'json' AND episode_id_uint = '{sample_json_episode_id}' LIMIT 1 FORMAT JSONEachRow"),
-            None,
+            &HashMap::default(),
         )
         .await
         .unwrap();
@@ -436,7 +443,7 @@ async fn run_rollback_instructions(
         }
         println!("Running rollback instruction: {line}");
         clickhouse
-            .run_query_synchronous(line.to_string(), None)
+            .run_query_synchronous(line.to_string(), &HashMap::default())
             .await
             .unwrap();
     }
@@ -750,7 +757,7 @@ async fn test_migration_0013_old_table() {
         ORDER BY id;
     "#;
     let _ = clickhouse
-        .run_query_synchronous(query.to_string(), None)
+        .run_query_synchronous(query.to_string(), &HashMap::default())
         .await
         .unwrap();
     let err = migration_manager::run_migration(
@@ -822,7 +829,7 @@ async fn test_migration_0013_data_no_table() {
         VALUES (generateUUIDv7(), 'test_function', 'test_variant', generateUUIDv7(), 'input', 'output', 'output_schema', 'params', 100)
     "#;
     let _ = clickhouse
-        .run_query_synchronous(query.to_string(), None)
+        .run_query_synchronous(query.to_string(), &HashMap::default())
         .await
         .unwrap();
     let err = migration_manager::run_migration(

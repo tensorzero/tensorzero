@@ -2,6 +2,7 @@ use crate::clickhouse::migration_manager::migration_trait::Migration;
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::error::{Error, ErrorDetails};
 use async_trait::async_trait;
+use std::collections::HashMap;
 
 use super::check_table_exists;
 
@@ -63,7 +64,11 @@ impl Migration for Migration0005<'_> {
                       AND name = 'tags'
                 )"#
             );
-            match self.clickhouse.run_query_synchronous(query, None).await {
+            match self
+                .clickhouse
+                .run_query_synchronous(query, &HashMap::default())
+                .await
+            {
                 Err(e) => {
                     return Err(ErrorDetails::ClickHouseMigration {
                         id: "0005".to_string(),
@@ -105,7 +110,7 @@ impl Migration for Migration0005<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous(query.to_string(), &HashMap::default())
             .await?;
 
         // Add a column `tags` to the `BooleanMetricFeedback` table
@@ -114,7 +119,7 @@ impl Migration for Migration0005<'_> {
             ADD COLUMN IF NOT EXISTS tags Map(String, String) DEFAULT map();"#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous(query.to_string(), &HashMap::default())
             .await?;
 
         // Add a column `tags` to the `JsonInference` table
@@ -123,7 +128,7 @@ impl Migration for Migration0005<'_> {
             ADD COLUMN IF NOT EXISTS tags Map(String, String) DEFAULT map();"#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous(query.to_string(), &HashMap::default())
             .await?;
 
         // In the following few queries we create the materialized views that map the tags from the original tables to the new `InferenceTag` table
@@ -144,7 +149,7 @@ impl Migration for Migration0005<'_> {
             "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous(query.to_string(), &HashMap::default())
             .await?;
 
         // Create the materialized view for the `InferenceTag` table from JsonInference
@@ -162,7 +167,7 @@ impl Migration for Migration0005<'_> {
             "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous(query.to_string(), &HashMap::default())
             .await?;
         Ok(())
     }

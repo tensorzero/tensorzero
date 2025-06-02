@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::clickhouse::migration_manager::migration_trait::Migration;
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::error::Error;
@@ -66,7 +68,7 @@ impl Migration for Migration0000<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous(query.to_string(), &HashMap::default())
             .await?;
 
         // Create the `CommentFeedback` table
@@ -83,7 +85,7 @@ impl Migration for Migration0000<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous(query.to_string(), &HashMap::default())
             .await?;
 
         // Create the `DemonstrationFeedback` table
@@ -99,7 +101,7 @@ impl Migration for Migration0000<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous(query.to_string(), &HashMap::default())
             .await?;
 
         // Create the `FloatMetricFeedback` table
@@ -116,7 +118,7 @@ impl Migration for Migration0000<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous(query.to_string(), &HashMap::default())
             .await?;
 
         // Create the `ChatInference` table
@@ -138,7 +140,7 @@ impl Migration for Migration0000<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous(query.to_string(), &HashMap::default())
             .await?;
 
         // Create the `JsonInference` table
@@ -160,7 +162,7 @@ impl Migration for Migration0000<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous(query.to_string(), &HashMap::default())
             .await?;
 
         // Create the `ModelInference` table
@@ -183,7 +185,7 @@ impl Migration for Migration0000<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous(query.to_string(), &HashMap::default())
             .await?;
 
         Ok(())

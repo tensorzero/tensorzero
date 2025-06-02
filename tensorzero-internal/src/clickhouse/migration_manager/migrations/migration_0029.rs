@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::clickhouse::migration_manager::migration_trait::Migration;
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::error::Error;
@@ -40,13 +42,13 @@ impl Migration for Migration0029<'_> {
         self.clickhouse
             .run_query_synchronous(
                 r#"DROP VIEW IF EXISTS StaticEvaluationHumanFeedbackFloatView;"#.to_string(),
-                None,
+                &HashMap::default(),
             )
             .await?;
         self.clickhouse
             .run_query_synchronous(
                 r#"DROP VIEW IF EXISTS StaticEvaluationHumanFeedbackBooleanView;"#.to_string(),
-                None,
+                &HashMap::default(),
             )
             .await?;
 

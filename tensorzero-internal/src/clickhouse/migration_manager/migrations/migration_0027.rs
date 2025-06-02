@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use std::collections::HashMap;
 
 use super::{check_index_exists, check_table_exists};
 use crate::clickhouse::migration_manager::migration_trait::Migration;
@@ -78,7 +79,7 @@ impl Migration for Migration0027<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(create_index_query.to_string(), None)
+            .run_query_synchronous(create_index_query.to_string(), &HashMap::default())
             .await?;
 
         let materialize_index_query = r#"
@@ -86,7 +87,7 @@ impl Migration for Migration0027<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(materialize_index_query.to_string(), None)
+            .run_query_synchronous(materialize_index_query.to_string(), &HashMap::default())
             .await?;
 
         let create_index_query = r#"
@@ -94,7 +95,7 @@ impl Migration for Migration0027<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(create_index_query.to_string(), None)
+            .run_query_synchronous(create_index_query.to_string(), &HashMap::default())
             .await?;
 
         let materialize_index_query = r#"
@@ -102,7 +103,7 @@ impl Migration for Migration0027<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(materialize_index_query.to_string(), None)
+            .run_query_synchronous(materialize_index_query.to_string(), &HashMap::default())
             .await?;
 
         let create_index_query = r#"
@@ -110,7 +111,7 @@ impl Migration for Migration0027<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(create_index_query.to_string(), None)
+            .run_query_synchronous(create_index_query.to_string(), &HashMap::default())
             .await?;
 
         let materialize_index_query = r#"
@@ -118,7 +119,7 @@ impl Migration for Migration0027<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(materialize_index_query.to_string(), None)
+            .run_query_synchronous(materialize_index_query.to_string(), &HashMap::default())
             .await?;
 
         let create_index_query = r#"
@@ -126,7 +127,7 @@ impl Migration for Migration0027<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(create_index_query.to_string(), None)
+            .run_query_synchronous(create_index_query.to_string(), &HashMap::default())
             .await?;
 
         let materialize_index_query = r#"
@@ -134,7 +135,7 @@ impl Migration for Migration0027<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(materialize_index_query.to_string(), None)
+            .run_query_synchronous(materialize_index_query.to_string(), &HashMap::default())
             .await?;
 
         let create_index_query = r#"
@@ -142,7 +143,7 @@ impl Migration for Migration0027<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(create_index_query.to_string(), None)
+            .run_query_synchronous(create_index_query.to_string(), &HashMap::default())
             .await?;
 
         let materialize_index_query = r#"
@@ -150,7 +151,7 @@ impl Migration for Migration0027<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(materialize_index_query.to_string(), None)
+            .run_query_synchronous(materialize_index_query.to_string(), &HashMap::default())
             .await?;
 
         Ok(())

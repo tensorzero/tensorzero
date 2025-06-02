@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::clickhouse::migration_manager::migration_trait::Migration;
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::error::Error;
@@ -43,7 +45,7 @@ impl Migration for Migration0015<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous(query.to_string(), &HashMap::default())
             .await?;
 
         // Alter the `output_tokens` column of `ModelInference` to be a nullable column
@@ -53,7 +55,7 @@ impl Migration for Migration0015<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous(query.to_string(), &HashMap::default())
             .await?;
 
         Ok(())

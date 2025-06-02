@@ -32,7 +32,7 @@ pub async fn query_dataset(
     ]);
 
     let result = clickhouse_client
-        .run_query_synchronous(query.to_string(), Some(&params))
+        .run_query_synchronous(query.to_string(), &params)
         .await?;
     let datapoints: Vec<Datapoint> = match function_config {
         FunctionConfig::Chat(_) => {

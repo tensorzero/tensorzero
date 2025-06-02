@@ -69,10 +69,10 @@ async fn query_demonstration(
         LIMIT {page_size:UInt32}
         FORMAT JSONEachRow;"#
                 .to_string(),
-            Some(&HashMap::from([
+            &HashMap::from([
                 ("inference_id", inference_id.to_string().as_str()),
                 ("page_size", page_size.to_string().as_str()),
-            ])),
+            ]),
         )
         .await?;
     if result.is_empty() {
@@ -143,7 +143,7 @@ LEFT JOIN JsonInference j
 WHERE uint_to_uuid(i.id_uint) = {id:String}
 FORMAT JSONEachRow;"#
                 .to_string(),
-            Some(&HashMap::from([("id", inference_id.to_string().as_str())])),
+            &HashMap::from([("id", inference_id.to_string().as_str())]),
         )
         .await?;
 
@@ -724,11 +724,9 @@ pub async fn delete_datapoint(
         ("dataset_name", dataset_name.as_str()),
     ]);
 
-    let json_future =
-        clickhouse.run_query_synchronous(json_delete_query.to_string(), Some(&json_params));
+    let json_future = clickhouse.run_query_synchronous(json_delete_query.to_string(), &json_params);
 
-    let chat_future =
-        clickhouse.run_query_synchronous(chat_delete_query.to_string(), Some(&chat_params));
+    let chat_future = clickhouse.run_query_synchronous(chat_delete_query.to_string(), &chat_params);
 
     let (json_result, chat_result) = tokio::join!(json_future, chat_future);
 
@@ -830,7 +828,7 @@ pub async fn list_datapoints(
     ]);
 
     let result = clickhouse
-        .run_query_synchronous(query.to_string(), Some(&params))
+        .run_query_synchronous(query.to_string(), &params)
         .await?;
     if result.is_empty() {
         return Ok(vec![]);
@@ -964,7 +962,7 @@ pub async fn get_datapoint(
     ]);
 
     let result = clickhouse
-        .run_query_synchronous(query.to_string(), Some(&params))
+        .run_query_synchronous(query.to_string(), &params)
         .await?;
     if result.is_empty() {
         return Err(Error::new(ErrorDetails::DatapointNotFound {

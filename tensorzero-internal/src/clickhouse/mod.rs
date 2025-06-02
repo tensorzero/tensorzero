@@ -16,7 +16,9 @@ pub mod migration_manager;
 pub mod query_builder;
 #[cfg(any(test, feature = "e2e_tests"))]
 pub mod test_helpers;
+pub mod types;
 
+use crate::clickhouse::types::StoredInference;
 use crate::config_parser::Config;
 use crate::error::DisplayOrDebugGateway;
 use crate::error::{Error, ErrorDetails};
@@ -205,7 +207,7 @@ impl ClickHouseConnectionInfo {
     pub async fn run_query_synchronous(
         &self,
         query: String,
-        parameters: Option<&HashMap<&str, &str>>,
+        parameters: &HashMap<&str, &str>,
     ) -> Result<String, Error> {
         match self {
             Self::Disabled => Ok("".to_string()),
@@ -217,13 +219,11 @@ impl ClickHouseConnectionInfo {
             } => {
                 let mut database_url = Url::parse(database_url.expose_secret()).map_err(|e| Error::new(ErrorDetails::ClickHouseQuery { message: format!("Error parsing ClickHouse URL: {e}. This should never happen. Please submit a bug report at https://github.com/tensorzero/tensorzero/issues/new") }))?;
                 // Add query parameters if provided
-                if let Some(params) = parameters {
-                    for (key, value) in params {
-                        let param_key = format!("param_{key}");
-                        database_url
-                            .query_pairs_mut()
-                            .append_pair(&param_key, value);
-                    }
+                for (key, value) in parameters {
+                    let param_key = format!("param_{key}");
+                    database_url
+                        .query_pairs_mut()
+                        .append_pair(&param_key, value);
                 }
                 database_url
                     .query_pairs_mut()
@@ -411,12 +411,18 @@ impl ClickHouseConnectionInfo {
         &self,
         config: &Config<'_>,
         opts: &ListInferencesParams<'_>,
-    ) -> Result<Vec<Inference>, Error> {
-        // TODO: this needs to return a Vec<StoredInference>
-        // (currently this is defined in the Rust client but we need to move it here)
+    ) -> Result<Vec<StoredInference>, Error> {
         let (sql, params) = generate_list_inferences_sql(config, opts)?;
-        let response = self.run_query_synchronous(sql, Some(&params)).await?;
-        let inferences: Vec<Inference> = serde_json::from_str(&response)?;
+        let params_map = params
+            .iter()
+            .map(|p| (p.name.as_str(), p.value.as_str()))
+            .collect();
+        let response = self.run_query_synchronous(sql, &params_map).await?;
+        let inferences: Vec<StoredInference> = serde_json::from_str(&response).map_err(|e| {
+            Error::new(ErrorDetails::ClickHouseQuery {
+                message: format!("Failed to deserialize response: {e:?}"),
+            })
+        })?;
         Ok(inferences)
     }
 }

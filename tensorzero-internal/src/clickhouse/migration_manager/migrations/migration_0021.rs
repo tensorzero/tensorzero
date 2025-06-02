@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use async_trait::async_trait;
+use std::collections::HashMap;
 
 use super::{check_column_exists, check_table_exists, get_default_expression};
 use crate::clickhouse::migration_manager::migration_trait::Migration;
@@ -131,7 +132,7 @@ impl Migration for Migration0021<'_> {
                 ORDER BY (key, value, inference_id)"#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous(query.to_string(), &HashMap::default())
             .await?;
 
         // Add the staled_at column to both datapoint tables
@@ -140,7 +141,7 @@ impl Migration for Migration0021<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous(query.to_string(), &HashMap::default())
             .await?;
 
         let query = r#"
@@ -148,7 +149,7 @@ impl Migration for Migration0021<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous(query.to_string(), &HashMap::default())
             .await?;
 
         // Update the defaults of updated_at for the Datapoint tables to be now64
@@ -157,7 +158,7 @@ impl Migration for Migration0021<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous(query.to_string(), &HashMap::default())
             .await?;
 
         let query = r#"
@@ -165,7 +166,7 @@ impl Migration for Migration0021<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous(query.to_string(), &HashMap::default())
             .await?;
 
         // If we are not doing a clean start, we need to add a where clause to the view to only include rows that have been created after the view_timestamp
@@ -195,7 +196,7 @@ impl Migration for Migration0021<'_> {
         );
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous(query.to_string(), &HashMap::default())
             .await?;
 
         let query = format!(
@@ -218,7 +219,7 @@ impl Migration for Migration0021<'_> {
         );
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous(query.to_string(), &HashMap::default())
             .await?;
 
         if !clean_start {
@@ -242,7 +243,9 @@ impl Migration for Migration0021<'_> {
                     WHERE UUIDv7ToDateTime(id) < toDateTime(toUnixTimestamp({view_timestamp}));
                 "#
                 );
-                self.clickhouse.run_query_synchronous(query, None).await
+                self.clickhouse
+                    .run_query_synchronous(query, &HashMap::default())
+                    .await
             };
 
             let insert_json_inference = async {
@@ -262,7 +265,9 @@ impl Migration for Migration0021<'_> {
                     WHERE UUIDv7ToDateTime(id) < toDateTime(toUnixTimestamp({view_timestamp}));
                 "#
                 );
-                self.clickhouse.run_query_synchronous(query, None).await
+                self.clickhouse
+                    .run_query_synchronous(query, &HashMap::default())
+                    .await
             };
 
             tokio::try_join!(insert_chat_inference, insert_json_inference)?;

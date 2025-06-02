@@ -101,14 +101,12 @@ pub async fn get_curated_inferences(
             let rows = clickhouse
                 .run_query_synchronous(
                     query,
-                    Some(
-                        &[
-                            ("function_name", function_name),
-                            ("inference_table_name", inference_table_name),
-                        ]
-                        .into_iter()
-                        .collect(),
-                    ),
+                    &[
+                        ("function_name", function_name),
+                        ("inference_table_name", inference_table_name),
+                    ]
+                    .into_iter()
+                    .collect(),
                 )
                 .await
                 .map_err(|e| TensorZeroError::Other { source: e.into() })?;
@@ -288,7 +286,7 @@ async fn query_curated_metric_data(
 
     // Run the query
     let rows = clickhouse
-        .run_query_synchronous(query, Some(&params.into_iter().collect()))
+        .run_query_synchronous(query, &params.into_iter().collect())
         .await
         .map_err(|e| TensorZeroError::Other { source: e.into() })?;
 
@@ -342,7 +340,7 @@ async fn query_demonstration_data(
         ("function_name", function_name),
     ];
     let rows = clickhouse
-        .run_query_synchronous(query, Some(&params.into_iter().collect()))
+        .run_query_synchronous(query, &params.into_iter().collect())
         .await
         .map_err(|e| TensorZeroError::Other { source: e.into() })?;
 

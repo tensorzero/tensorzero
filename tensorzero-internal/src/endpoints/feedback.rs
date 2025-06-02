@@ -459,7 +459,7 @@ async fn get_function_name(
         "SELECT function_name FROM {table_name} FINAL WHERE {identifier_key} = toUInt128(toUUID('{target_id}'))"
     );
     let function_name = connection_info
-        .run_query_synchronous(query, None)
+        .run_query_synchronous(query, &HashMap::default())
         .await?
         .trim()
         .to_string();
@@ -636,10 +636,10 @@ async fn get_dynamic_demonstration_info(
             let result = clickhouse_client
                 .run_query_synchronous(
                     parameterized_query,
-                    Some(&HashMap::from([
+                    &HashMap::from([
                         ("function_name", function_name),
                         ("inference_id", &inference_id.to_string()),
-                    ])),
+                    ]),
                 )
                 .await?;
 
@@ -664,10 +664,10 @@ async fn get_dynamic_demonstration_info(
             let result = clickhouse_client
                 .run_query_synchronous(
                     parameterized_query,
-                    Some(&HashMap::from([
+                    &HashMap::from([
                         ("function_name", function_name),
                         ("inference_id", &inference_id.to_string()),
-                    ])),
+                    ]),
                 )
                 .await?;
             let result_value = serde_json::from_str::<Value>(&result).map_err(|e| {

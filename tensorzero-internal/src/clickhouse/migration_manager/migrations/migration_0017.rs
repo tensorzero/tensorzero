@@ -2,6 +2,7 @@ use crate::clickhouse::migration_manager::migration_trait::Migration;
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::error::{Error, ErrorDetails};
 use async_trait::async_trait;
+use std::collections::HashMap;
 
 use super::{check_column_exists, check_table_exists};
 
@@ -57,7 +58,7 @@ impl Migration for Migration0017<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous(query.to_string(), &HashMap::default())
             .await?;
 
         Ok(())

@@ -2,6 +2,7 @@ use crate::clickhouse::migration_manager::migration_trait::Migration;
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::error::Error;
 use async_trait::async_trait;
+use std::collections::HashMap;
 
 use super::check_table_exists;
 
@@ -70,7 +71,7 @@ impl Migration for Migration0006<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous(query.to_string(), &HashMap::default())
             .await?;
 
         // Create the `BatchRequest` table
@@ -90,7 +91,7 @@ impl Migration for Migration0006<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous(query.to_string(), &HashMap::default())
             .await?;
 
         // Create the BatchIdByInferenceId table
@@ -104,7 +105,7 @@ impl Migration for Migration0006<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous(query.to_string(), &HashMap::default())
             .await?;
 
         // Create the materialized view for the BatchIdByInferenceId table
@@ -119,7 +120,7 @@ impl Migration for Migration0006<'_> {
             "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous(query.to_string(), &HashMap::default())
             .await?;
         Ok(())
     }

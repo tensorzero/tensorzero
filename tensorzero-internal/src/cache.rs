@@ -437,7 +437,7 @@ pub async fn cache_lookup_inner<T: CacheOutput + DeserializeOwned>(
         query_params.insert("lookback_s", lookback_str.as_str());
     }
     let result = clickhouse_connection_info
-        .run_query_synchronous(query.to_string(), Some(&query_params))
+        .run_query_synchronous(query.to_string(), &query_params)
         .await?;
     if result.is_empty() {
         return Ok(None);

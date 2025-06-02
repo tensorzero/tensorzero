@@ -460,7 +460,9 @@ pub async fn get_batch_request(
                     FORMAT JSONEachRow
                 "#
             );
-            let response = clickhouse.run_query_synchronous(query, None).await?;
+            let response = clickhouse
+                .run_query_synchronous(query, &HashMap::default())
+                .await?;
             if response.is_empty() {
                 return Err(ErrorDetails::BatchNotFound { id: *batch_id }.into());
             }
@@ -491,7 +493,9 @@ pub async fn get_batch_request(
                     FORMAT JSONEachRow
                 "#,
             );
-            let response = clickhouse.run_query_synchronous(query, None).await?;
+            let response = clickhouse
+                .run_query_synchronous(query, &HashMap::default())
+                .await?;
             if response.is_empty() {
                 return Err(ErrorDetails::BatchNotFound { id: *inference_id }.into());
             }
@@ -947,7 +951,7 @@ pub async fn get_batch_inferences(
         inference_ids.iter().map(|id| format!("'{id}'")).join(",")
     );
     let response = clickhouse_connection_info
-        .run_query_synchronous(query, None)
+        .run_query_synchronous(query, &HashMap::default())
         .await?;
     let rows = response
         .lines()
@@ -1002,7 +1006,7 @@ pub async fn get_completed_batch_inference_response(
                     batch_id, batch_request.function_name, batch_request.variant_name
                 );
                 let response = clickhouse_connection_info
-                    .run_query_synchronous(query, None)
+                    .run_query_synchronous(query, &HashMap::default())
                     .await?;
                 let mut inference_responses = Vec::new();
                 for row in response.lines() {
@@ -1052,7 +1056,7 @@ pub async fn get_completed_batch_inference_response(
                     batch_request.variant_name
                 );
                 let response = clickhouse_connection_info
-                    .run_query_synchronous(query, None)
+                    .run_query_synchronous(query, &HashMap::default())
                     .await?;
                 if response.is_empty() {
                     return Err(ErrorDetails::InferenceNotFound {
@@ -1101,7 +1105,7 @@ pub async fn get_completed_batch_inference_response(
                     path_params.batch_id, batch_request.function_name, batch_request.variant_name
                 );
                 let response = clickhouse_connection_info
-                    .run_query_synchronous(query, None)
+                    .run_query_synchronous(query, &HashMap::default())
                     .await?;
                 let mut inference_responses = Vec::new();
                 for row in response.lines() {
@@ -1151,7 +1155,7 @@ pub async fn get_completed_batch_inference_response(
                     batch_request.variant_name
                 );
                 let response = clickhouse_connection_info
-                    .run_query_synchronous(query, None)
+                    .run_query_synchronous(query, &HashMap::default())
                     .await?;
                 if response.is_empty() {
                     return Err(ErrorDetails::InferenceNotFound {
