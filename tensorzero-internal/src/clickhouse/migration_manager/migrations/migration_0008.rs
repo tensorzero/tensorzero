@@ -156,22 +156,20 @@ impl Migration for Migration0008<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        "\
-            -- Change the timing columns back to non-nullable types\n\
-            ALTER TABLE ModelInference
-            MODIFY COLUMN response_time_ms UInt32;\n\
-            ALTER TABLE ChatInference
-            MODIFY COLUMN processing_time_ms UInt32;\n\
-            ALTER TABLE JsonInference
-            MODIFY COLUMN processing_time_ms UInt32;\n\
-            ALTER TABLE BatchRequest
-            MODIFY COLUMN errors Map(UUID, String);\n\
-            -- Drop the columns \n\
-            ALTER TABLE BatchRequest
-            DROP COLUMN raw_request,
-            DROP COLUMN raw_response,
-            DROP COLUMN function_name,
-            DROP COLUMN variant_name;\n\
+        // NOTE - we do not try to roll back the 'BatchRequest.errors' column, as
+        // ALTER TABLE MODIFY COLUMN' cannot change an array back into a Map
+        // There shouldn't be anything in the database when this runs, so this is fine -
+        // re-applying the migration after a rollback will just leave the 'errors' column unchanged
+        "/* Change the timing columns back to non-nullable types */\
+            ALTER TABLE ModelInference MODIFY COLUMN response_time_ms UInt32;
+            ALTER TABLE ChatInference MODIFY COLUMN processing_time_ms UInt32;
+            ALTER TABLE JsonInference MODIFY COLUMN processing_time_ms UInt32;
+            /* Drop the columns */\
+            ALTER TABLE BatchRequest \
+            DROP COLUMN raw_request,\
+            DROP COLUMN raw_response,\
+            DROP COLUMN function_name,\
+            DROP COLUMN variant_name;
         "
         .to_string()
     }
