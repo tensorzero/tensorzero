@@ -556,6 +556,9 @@ if not SERVERLESS:
         stdout = result.stdout.decode("utf-8")
         print(stdout)
 
+# %% [markdown]
+# Load the LoRA addon
+
 # %%
 if USE_LORA:
     command = ["firectl", "load-lora", model_identifier]
