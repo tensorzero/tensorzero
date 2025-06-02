@@ -4747,8 +4747,11 @@ pub async fn check_tool_use_tool_choice_required_inference_response(
 
     let arguments = content_block.get("arguments").unwrap();
     let arguments = arguments.as_object().unwrap();
-    assert!(arguments.len() == 1 || arguments.len() == 2);
-    assert!(arguments.get("location").unwrap().as_str().is_some());
+    // OpenAI occasionally emits a tool call with an empty object for `arguments`
+    assert!(arguments.len() <= 2);
+    if let Some(location) = arguments.get("location") {
+        assert!(location.as_str().is_some())
+    }
     if arguments.len() == 2 {
         let units = arguments.get("units").unwrap().as_str().unwrap();
         assert!(units == "celsius" || units == "fahrenheit");
