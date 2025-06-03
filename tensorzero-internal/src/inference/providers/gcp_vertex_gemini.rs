@@ -61,6 +61,13 @@ const INFERENCE_ID_LABEL: &str = "tensorzero::inference_id";
 
 /// Implements a subset of the GCP Vertex Gemini API as documented [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/generateContent) for non-streaming
 /// and [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/streamGenerateContent) for streaming
+///
+/// Our current behavior around content blocks is:
+/// * In both streaming and non-streaming, we handle 'thought: true' parts with no extra content, or with text content. These become normal 'Thought' blocks (with a signature)
+/// * In non-streaming mode, 'thought: true' parts with non-text content (e.g. an image) are treated as 'unknown' blocks.
+/// * In streaming mode, 'thought: true' parts with non-text content produce an error (since we don't have "unknown" blocks in streaming mode)
+///
+/// In the future, we'll support 'unknown' blocks in streaming mode, and adjust this provider to emit them.
 #[derive(Debug)]
 pub struct GCPVertexGeminiProvider {
     api_v1_base_url: Url,

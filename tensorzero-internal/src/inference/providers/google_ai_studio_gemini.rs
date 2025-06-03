@@ -43,6 +43,7 @@ const PROVIDER_NAME: &str = "Google AI Studio Gemini";
 const PROVIDER_TYPE: &str = "google_ai_studio_gemini";
 
 /// Implements a subset of the Google AI Studio Gemini API as documented [here](https://ai.google.dev/gemini-api/docs/text-generation?lang=rest)
+/// See the `GCPVertexGeminiProvider` struct docs for information about our handling 'thought' and unknown blocks.
 #[derive(Debug)]
 pub struct GoogleAIStudioGeminiProvider {
     model_name: String,
