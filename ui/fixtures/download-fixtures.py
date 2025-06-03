@@ -110,7 +110,9 @@ def main():
 
     # Use ThreadPoolExecutor to download files in parallel
     with concurrent.futures.ThreadPoolExecutor() as executor:
-        executor.map(process_fixture, FIXTURES)
+        # Loop over the results to propagate exceptions
+        for result in executor.map(process_fixture, FIXTURES):
+            assert result is None
 
     for fixture in FIXTURES:
         print(f"Fixture {fixture}:", flush=True)
