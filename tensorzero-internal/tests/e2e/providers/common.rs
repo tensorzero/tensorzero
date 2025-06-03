@@ -204,6 +204,7 @@ macro_rules! generate_provider_tests {
         use $crate::providers::common::test_streaming_invalid_request_with_provider;
         use $crate::providers::common::test_json_mode_off_inference_request_with_provider;
         use $crate::providers::common::test_multiple_text_blocks_in_message_with_provider;
+        use $crate::providers::common::test_streaming_include_original_response_with_provider;
         use $crate::providers::common::test_pdf_inference_with_provider_filesystem;
 
         #[tokio::test]
@@ -247,6 +248,14 @@ macro_rules! generate_provider_tests {
             let providers = $func().await.shorthand_inference;
             for provider in providers {
                 test_simple_inference_request_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_streaming_include_original_response() {
+            let providers = $func().await.simple_inference;
+            for provider in providers {
+                test_streaming_include_original_response_with_provider(provider).await;
             }
         }
 
@@ -2679,12 +2688,34 @@ pub async fn test_simple_streaming_inference_request_with_provider(provider: E2E
     let seed = rand::rng().random_range(0..u32::MAX);
 
     let original_content = test_simple_streaming_inference_request_with_provider_cache(
-        &provider, episode_id, seed, &tag_value, false,
+        &provider, episode_id, seed, &tag_value, false, false,
     )
     .await;
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     let cached_content = test_simple_streaming_inference_request_with_provider_cache(
-        &provider, episode_id, seed, &tag_value, true,
+        &provider, episode_id, seed, &tag_value, true, false,
+    )
+    .await;
+    assert_eq!(original_content, cached_content);
+}
+
+pub async fn test_streaming_include_original_response_with_provider(provider: E2ETestProvider) {
+    // We use a serverless Sagemaker endpoint, which doesn't support streaming
+    if provider.variant_name == "aws-sagemaker-tgi" {
+        return;
+    }
+    let episode_id = Uuid::now_v7();
+    let tag_value = Uuid::now_v7().to_string();
+    // Generate random u32
+    let seed = rand::rng().random_range(0..u32::MAX);
+
+    let original_content = test_simple_streaming_inference_request_with_provider_cache(
+        &provider, episode_id, seed, &tag_value, false, true,
+    )
+    .await;
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    let cached_content = test_simple_streaming_inference_request_with_provider_cache(
+        &provider, episode_id, seed, &tag_value, true, true,
     )
     .await;
     assert_eq!(original_content, cached_content);
@@ -2696,6 +2727,7 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     seed: u32,
     tag_value: &str,
     check_cache: bool,
+    include_original_response: bool,
 ) -> String {
     let extra_headers = get_extra_headers();
     let payload = json!({
@@ -2712,6 +2744,7 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
                 }
             ]},
         "stream": true,
+        "include_original_response": include_original_response,
         "tags": {"key": tag_value},
         "cache_options": {"enabled": "on", "lookback_s": 10},
         "extra_headers": extra_headers.headers,
@@ -2749,6 +2782,13 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
         let chunk_json: Value = serde_json::from_str(&chunk).unwrap();
 
         println!("API response chunk: {chunk_json:#?}");
+
+        // The `original_chunk` field should only be set if we enable the `include_original_response` flag
+        if include_original_response {
+            assert!(chunk_json.get("original_chunk").is_some());
+        } else {
+            assert_eq!(chunk_json.get("original_chunk"), None);
+        }
 
         let chunk_inference_id = chunk_json.get("inference_id").unwrap().as_str().unwrap();
         let chunk_inference_id = Uuid::parse_str(chunk_inference_id).unwrap();
