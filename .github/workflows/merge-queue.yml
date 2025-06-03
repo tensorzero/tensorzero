@@ -94,8 +94,6 @@ jobs:
 
       - name: Install pnpm
         uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda
-        with:
-          version: 10
 
       - name: Configure Namespace cache for Rust, Python (uv), and pnpm
         uses: namespacelabs/nscloud-cache-action@2f50e7d0f70475e6f59a55ba0f05eec9108e77cc
@@ -104,6 +102,9 @@ jobs:
             pnpm
             rust
             uv
+
+      - name: Install JS dependencies
+        run: pnpm install --frozen-lockfile
 
       - name: Login to DockerHub
         uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772
@@ -199,11 +200,6 @@ jobs:
         working-directory: clients/openai-python
         run: |
           uv run pytest
-
-      - name: "Node.js: OpenAI Client: Install dependencies"
-        working-directory: clients/openai-node
-        run: |
-          pnpm install
 
       - name: "Node.js: OpenAI Client: test"
         working-directory: clients/openai-node

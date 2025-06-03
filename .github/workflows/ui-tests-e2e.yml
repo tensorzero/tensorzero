@@ -27,16 +27,12 @@ jobs:
 
       - name: Setup `pnpm`
         uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda
-        with:
-          version: 10
 
       - name: Install `pnpm` dependencies
-        working-directory: ui
         run: pnpm install --frozen-lockfile
 
       - name: Setup Playwright
-        working-directory: ui
-        run: pnpm exec playwright install --with-deps chromium
+        run: pnpm --filter=tensorzero-ui exec playwright install --with-deps chromium
 
       - name: Cache `s3-fixtures`
         uses: namespacelabs/nscloud-cache-action@2f50e7d0f70475e6f59a55ba0f05eec9108e77cc
@@ -83,11 +79,10 @@ jobs:
 
       - name: Run UI E2E tests
         id: e2e_tests
-        working-directory: ui
         env:
           TENSORZERO_CI: 1
         continue-on-error: true
-        run: pnpm test-e2e
+        run: pnpm ui:test:e2e
 
       - name: Print Docker Compose logs
         if: always()
