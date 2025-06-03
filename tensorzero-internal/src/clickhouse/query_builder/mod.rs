@@ -873,6 +873,12 @@ FORMAT JSONEachRow"#;
                 value: 0.5,
                 comparison_operator: FloatComparisonOperator::GreaterThan,
             }),
+            // We test that the join is not duplicated
+            InferenceFilterTreeNode::FloatMetric(FloatMetricNode {
+                metric_name: "jaccard_similarity".to_string(),
+                value: 0.8,
+                comparison_operator: FloatComparisonOperator::LessThan,
+            }),
             InferenceFilterTreeNode::FloatMetric(FloatMetricNode {
                 metric_name: "brevity_score".to_string(),
                 value: 10.0,
@@ -916,11 +922,11 @@ LEFT JOIN (
         target_id,
         argMax(value, timestamp) as value
     FROM FloatMetricFeedback
-    WHERE metric_name = {p3:String}
+    WHERE metric_name = {p4:String}
     GROUP BY target_id
 ) AS j1 ON i.id = j1.target_id
 WHERE
-    i.function_name = {p0:String} AND (COALESCE(j0.value > {p2:Float64}, 0) AND COALESCE(j1.value < {p4:Float64}, 0))
+    i.function_name = {p0:String} AND (COALESCE(j0.value > {p2:Float64}, 0) AND COALESCE(j0.value < {p3:Float64}, 0) AND COALESCE(j1.value < {p5:Float64}, 0))
 FORMAT JSONEachRow"#;
         assert_eq!(sql, expected_sql);
         let expected_params = vec![
@@ -938,10 +944,14 @@ FORMAT JSONEachRow"#;
             },
             QueryParameter {
                 name: "p3".to_string(),
-                value: "brevity_score".to_string(),
+                value: "0.8".to_string(),
             },
             QueryParameter {
                 name: "p4".to_string(),
+                value: "brevity_score".to_string(),
+            },
+            QueryParameter {
+                name: "p5".to_string(),
                 value: "10".to_string(),
             },
         ];
@@ -1034,12 +1044,17 @@ FORMAT JSONEachRow"#;
     #[tokio::test(flavor = "multi_thread")]
     async fn test_not_filter() {
         let config = get_e2e_config().await;
-        let filter_node = InferenceFilterTreeNode::Not(Box::new(
-            InferenceFilterTreeNode::BooleanMetric(BooleanMetricNode {
-                metric_name: "task_success".to_string(),
-                value: true,
-            }),
-        ));
+        let filter_node =
+            InferenceFilterTreeNode::Not(Box::new(InferenceFilterTreeNode::Or(vec![
+                InferenceFilterTreeNode::BooleanMetric(BooleanMetricNode {
+                    metric_name: "task_success".to_string(),
+                    value: true,
+                }),
+                InferenceFilterTreeNode::BooleanMetric(BooleanMetricNode {
+                    metric_name: "task_success".to_string(),
+                    value: false,
+                }),
+            ])));
         let opts = ListInferencesParams {
             function_name: "extract_entities",
             variant_name: None,
@@ -1072,7 +1087,7 @@ LEFT JOIN (
     GROUP BY target_id
 ) AS j0 ON i.id = j0.target_id
 WHERE
-    i.function_name = {p0:String} AND NOT (COALESCE(j0.value = {p2:Bool}, 1))
+    i.function_name = {p0:String} AND NOT (COALESCE((COALESCE(j0.value = {p2:Bool}, 0) OR COALESCE(j0.value = {p3:Bool}, 0)), 1))
 FORMAT JSONEachRow"#;
         assert_eq!(sql, expected_sql);
         let expected_params = vec![
@@ -1087,6 +1102,10 @@ FORMAT JSONEachRow"#;
             QueryParameter {
                 name: "p2".to_string(),
                 value: "1".to_string(),
+            },
+            QueryParameter {
+                name: "p3".to_string(),
+                value: "0".to_string(),
             },
         ];
         assert_eq!(params, expected_params);
