@@ -1,6 +1,5 @@
 use futures::{Stream, StreamExt, TryStreamExt};
 use lazy_static::lazy_static;
-use mime::MediaType;
 use reqwest::multipart::{Form, Part};
 use reqwest::StatusCode;
 use reqwest_eventsource::{Event, RequestBuilderExt};
@@ -27,7 +26,7 @@ use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse
 use crate::inference::types::batch::{
     ProviderBatchInferenceOutput, ProviderBatchInferenceResponse,
 };
-use crate::inference::types::file::require_image;
+use crate::inference::types::file::{mime_type_to_ext, require_image};
 use crate::inference::types::resolved_input::FileWithPath;
 use crate::inference::types::{
     batch::{BatchStatus, StartBatchProviderInferenceResponse},
@@ -1249,58 +1248,6 @@ pub(super) fn tensorzero_to_openai_messages(
         Role::User => tensorzero_to_openai_user_messages(&message.content),
         Role::Assistant => tensorzero_to_openai_assistant_messages(&message.content),
     }
-}
-
-pub fn mime_type_to_ext(mime_type: &MediaType) -> Result<Option<&'static str>, Error> {
-    Ok(match mime_type {
-        _ if mime_type == &mime::IMAGE_JPEG => Some("jpg"),
-        _ if mime_type == &mime::IMAGE_PNG => Some("png"),
-        _ if mime_type == &mime::IMAGE_GIF => Some("gif"),
-        _ if mime_type == &mime::APPLICATION_PDF => Some("pdf"),
-        _ if mime_type == "image/webp" => Some("webp"),
-        _ => {
-            let guess = mime_guess::get_mime_extensions_str(mime_type.as_ref())
-                .and_then(|types| types.last());
-            if guess.is_some() {
-                tracing::warn!("Guessed file extension {guess:?} for mime-type {mime_type} - this may not be correct");
-            }
-            guess.copied()
-        }
-    })
-}
-
-pub fn filename_to_mime_type(filename: &str) -> Result<MediaType, Error> {
-    let ext = filename.split('.').next_back().ok_or_else(|| {
-        Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
-            message: "File name must contain a file extension".to_string(),
-        })
-    })?;
-
-    Ok(match ext {
-        "jpeg" | "jpg" => mime::IMAGE_JPEG,
-        "png" => mime::IMAGE_PNG,
-        "gif" => mime::IMAGE_GIF,
-        "pdf" => mime::APPLICATION_PDF,
-        "webp" => "image/webp".parse::<MediaType>().map_err(|_| {
-            Error::new(ErrorDetails::InternalError {
-                message: "Unknown mime-type `image/webp`. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.".to_string(),
-            })
-        })?,
-        _ => {
-            let mime_type = mime_guess::from_ext(ext).first().ok_or_else(|| {
-                Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
-                    message: format!("Unknown file extension `{ext}`"),
-                })
-            })?;
-            tracing::warn!("Guessed mime-type `{mime_type}` for file with extension `{ext}` - this may not be correct");
-            // Reparse to handle different `mime` crate versions
-            mime_type.to_string().parse::<MediaType>().map_err(|_| {
-                Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
-                    message: format!("Unknown mime-type `{mime_type}`"),
-                })
-            })?
-        }
-    })
 }
 
 fn tensorzero_to_openai_user_messages(

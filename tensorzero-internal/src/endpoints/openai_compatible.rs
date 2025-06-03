@@ -31,9 +31,9 @@ use crate::endpoints::inference::{
 };
 use crate::error::{Error, ErrorDetails};
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
-use crate::inference::providers::openai::filename_to_mime_type;
 use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
+use crate::inference::types::file::filename_to_mime_type;
 use crate::inference::types::{
     current_timestamp, ContentBlockChatOutput, ContentBlockChunk, File, FinishReason, Input,
     InputMessage, InputMessageContent, Role, TextKind, Usage,
@@ -1773,33 +1773,5 @@ mod tests {
                 enabled: CacheEnabledMode::WriteOnly
             }
         );
-    }
-
-    #[test]
-    #[traced_test]
-    fn test_filename_to_mime_type() {
-        assert_eq!(filename_to_mime_type("test.png").unwrap(), mime::IMAGE_PNG);
-        assert_eq!(filename_to_mime_type("test.jpg").unwrap(), mime::IMAGE_JPEG);
-        assert_eq!(
-            filename_to_mime_type("test.jpeg").unwrap(),
-            mime::IMAGE_JPEG
-        );
-        assert_eq!(filename_to_mime_type("test.gif").unwrap(), mime::IMAGE_GIF);
-        assert_eq!(filename_to_mime_type("test.webp").unwrap(), "image/webp");
-        assert_eq!(
-            filename_to_mime_type("test.pdf").unwrap(),
-            mime::APPLICATION_PDF
-        );
-        assert!(!logs_contain("Guessed"))
-    }
-
-    #[test]
-    #[traced_test]
-    fn test_guessed_mime_type_warning() {
-        assert_eq!(
-            filename_to_mime_type("my_file.txt").unwrap(),
-            mime::TEXT_PLAIN
-        );
-        assert!(logs_contain("Guessed"))
     }
 }

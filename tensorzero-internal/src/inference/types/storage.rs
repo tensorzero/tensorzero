@@ -1,12 +1,9 @@
 use object_store::path::Path;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use crate::{
-    error::{Error, ErrorDetails},
-    inference::providers::openai::mime_type_to_ext,
-};
+use crate::error::{Error, ErrorDetails};
 
-use super::Base64File;
+use super::{file::mime_type_to_ext, Base64File};
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
 

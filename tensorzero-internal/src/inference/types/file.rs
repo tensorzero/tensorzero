@@ -180,10 +180,74 @@ pub fn sanitize_raw_request(input_messages: &[RequestMessage], mut raw_request: 
     raw_request
 }
 
+/// Tries to convert a mime type to a file extension, picking an arbitrary extension if there are multiple
+/// extensions for the mime type.
+/// This is used when writing a file input to object storage, and when determining the file name
+/// to provide to OpenAI (which doesn't accept mime types for file input)
+pub fn mime_type_to_ext(mime_type: &MediaType) -> Result<Option<&'static str>, Error> {
+    Ok(match mime_type {
+        _ if mime_type == &mime::IMAGE_JPEG => Some("jpg"),
+        _ if mime_type == &mime::IMAGE_PNG => Some("png"),
+        _ if mime_type == &mime::IMAGE_GIF => Some("gif"),
+        _ if mime_type == &mime::APPLICATION_PDF => Some("pdf"),
+        _ if mime_type == "image/webp" => Some("webp"),
+        _ => {
+            let guess = mime_guess::get_mime_extensions_str(mime_type.as_ref())
+                .and_then(|types| types.last());
+            if guess.is_some() {
+                tracing::warn!("Guessed file extension {guess:?} for mime-type {mime_type} - this may not be correct");
+            }
+            guess.copied()
+        }
+    })
+}
+
+/// Tries to convert a filename to a mime type, based on the file extension.
+/// This picks an arbitrary mime type if there are multiple mime types for the extension.
+///
+/// This is used by the openai-compatible endpoint to determine the mime type for
+/// a file input (the OpenAI chat-completions endpoint doesn't provide a mime type for
+/// file inputs)
+pub fn filename_to_mime_type(filename: &str) -> Result<MediaType, Error> {
+    let ext = filename.split('.').next_back().ok_or_else(|| {
+        Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
+            message: "File name must contain a file extension".to_string(),
+        })
+    })?;
+
+    Ok(match ext {
+        "jpeg" | "jpg" => mime::IMAGE_JPEG,
+        "png" => mime::IMAGE_PNG,
+        "gif" => mime::IMAGE_GIF,
+        "pdf" => mime::APPLICATION_PDF,
+        "webp" => "image/webp".parse::<MediaType>().map_err(|_| {
+            Error::new(ErrorDetails::InternalError {
+                message: "Unknown mime-type `image/webp`. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.".to_string(),
+            })
+        })?,
+        _ => {
+            let mime_type = mime_guess::from_ext(ext).first().ok_or_else(|| {
+                Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
+                    message: format!("Unknown file extension `{ext}`"),
+                })
+            })?;
+            tracing::warn!("Guessed mime-type `{mime_type}` for file with extension `{ext}` - this may not be correct");
+            // Reparse to handle different `mime` crate versions
+            mime_type.to_string().parse::<MediaType>().map_err(|_| {
+                Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
+                    message: format!("Unknown mime-type `{mime_type}`"),
+                })
+            })?
+        }
+    })
+}
+
 #[cfg(test)]
 mod tests {
+    use tracing_test::traced_test;
+
     use crate::inference::types::{
-        file::sanitize_raw_request,
+        file::{filename_to_mime_type, sanitize_raw_request},
         resolved_input::FileWithPath,
         storage::{StorageKind, StoragePath},
         Base64File, ContentBlock, RequestMessage, Role,
@@ -276,5 +340,33 @@ mod tests {
             "First <TENSORZERO_FILE_0> then <TENSORZERO_FILE_1> then <TENSORZERO_FILE_3>"
                 .to_string()
         );
+    }
+
+    #[test]
+    #[traced_test]
+    fn test_filename_to_mime_type() {
+        assert_eq!(filename_to_mime_type("test.png").unwrap(), mime::IMAGE_PNG);
+        assert_eq!(filename_to_mime_type("test.jpg").unwrap(), mime::IMAGE_JPEG);
+        assert_eq!(
+            filename_to_mime_type("test.jpeg").unwrap(),
+            mime::IMAGE_JPEG
+        );
+        assert_eq!(filename_to_mime_type("test.gif").unwrap(), mime::IMAGE_GIF);
+        assert_eq!(filename_to_mime_type("test.webp").unwrap(), "image/webp");
+        assert_eq!(
+            filename_to_mime_type("test.pdf").unwrap(),
+            mime::APPLICATION_PDF
+        );
+        assert!(!logs_contain("Guessed"))
+    }
+
+    #[test]
+    #[traced_test]
+    fn test_guessed_mime_type_warning() {
+        assert_eq!(
+            filename_to_mime_type("my_file.txt").unwrap(),
+            mime::TEXT_PLAIN
+        );
+        assert!(logs_contain("Guessed"))
     }
 }
