@@ -207,6 +207,7 @@ fn render_model_input(
         system_template_name,
         user_template_name,
         assistant_template_name,
+        function_config.template_schema_info(),
     )
 }
 
