@@ -1,4 +1,4 @@
-import { UserPen } from "lucide-react";
+import { UserPen, FlaskConical } from "lucide-react";
 import React from "react";
 
 export interface IconProps {
@@ -497,6 +497,12 @@ export const Evaluation: React.FC<IconProps> = (props) => (
 );
 
 export const UserFeedback: React.FC = () => <UserPen size={12} />;
+
+export const DynamicEvaluation: React.FC<IconProps> = (props) => (
+  <IconWrapper {...props}>
+    <FlaskConical size={16} />
+  </IconWrapper>
+);
 
 export const iconComponents: Record<string, React.FC<IconProps>> = {
   TensorZeroLogo,

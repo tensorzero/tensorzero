@@ -41,6 +41,14 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
+    let pdf_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "gcp_vertex_gemini".to_string(),
+        model_name: "gcp_vertex_gemini::projects/tensorzero-public/locations/us-central1/publishers/google/models/gemini-2.0-flash-lite".into(),
+        model_provider_name: "gcp_vertex_gemini".into(),
+        credentials: HashMap::new(),
+    }];
+
     let extra_body_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "gcp-vertex-gemini-flash-extra-body".to_string(),
@@ -123,15 +131,17 @@ async fn get_providers() -> E2ETestProviders {
         parallel_tool_use_inference: vec![],
         json_mode_inference: json_providers.clone(),
         json_mode_off_inference: json_mode_off_providers.clone(),
-        image_inference: image_providers,
-
+        image_inference: image_providers.clone(),
+        pdf_inference: pdf_providers,
         shorthand_inference: shorthand_providers.clone(),
     }
 }
 
-// Specifying `tool_choice: none` causes Gemini 2.5 Pro to produce an 'executableCode' block.
-// We test that we properly construct an 'unknown' content block in this case.
+// Specifying `tool_choice: none` causes Gemini 2.5 to emit an 'UNEXPECTED_TOOL_CALL'
+// error. For now, we disable this test until we decide how to handle this:
+// https://github.com/tensorzero/tensorzero/issues/2329
 #[tokio::test]
+#[ignore]
 async fn test_gcp_pro_tool_choice_none() {
     let episode_id = Uuid::now_v7();
     let payload = json!({

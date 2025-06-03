@@ -408,7 +408,7 @@ fn stream_tgi(
 
                         let latency = start_time.elapsed();
                         let stream_message = data.and_then(|d| {
-                            tgi_to_tensorzero_chunk(d, latency)
+                            tgi_to_tensorzero_chunk(message.data, d, latency)
                         });
                         yield stream_message;
                     }
@@ -730,20 +730,10 @@ struct TGIChatChunk {
 
 /// Maps an TGI chunk to a TensorZero chunk for streaming inferences
 fn tgi_to_tensorzero_chunk(
+    raw_message: String,
     mut chunk: TGIChatChunk,
     latency: Duration,
 ) -> Result<ProviderInferenceResponseChunk, Error> {
-    let raw_message = serde_json::to_string(&chunk).map_err(|e| {
-        Error::new(ErrorDetails::InferenceServer {
-            message: format!(
-                "Error parsing response from OpenAI: {}",
-                DisplayOrDebugGateway::new(e)
-            ),
-            raw_request: None,
-            raw_response: Some(serde_json::to_string(&chunk).unwrap_or_default()),
-            provider_type: PROVIDER_TYPE.to_string(),
-        })
-    })?;
     if chunk.choices.len() > 1 {
         return Err(ErrorDetails::InferenceServer {
             message: "Response has invalid number of choices: {}. Expected 1.".to_string(),
@@ -982,7 +972,12 @@ mod tests {
             }],
             usage: None,
         };
-        let message = tgi_to_tensorzero_chunk(chunk.clone(), Duration::from_millis(50)).unwrap();
+        let message = tgi_to_tensorzero_chunk(
+            "my_raw_chunk".to_string(),
+            chunk.clone(),
+            Duration::from_millis(50),
+        )
+        .unwrap();
         assert_eq!(
             message.content,
             vec![ContentBlockChunk::Text(TextChunk {
