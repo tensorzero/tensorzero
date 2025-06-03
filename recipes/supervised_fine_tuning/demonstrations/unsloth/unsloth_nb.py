@@ -240,7 +240,7 @@ tensorzero_client = TensorZeroGateway.build_embedded(
 stored_inferences = []
 for _, row in df.iterrows():
     input_data = json.loads(row["input"])
-    output_data = json.loads(row["output"])
+    output_data = json.loads(row["value"])
     if function_type == "chat":
         stored_inferences.append(
             StoredChatInference(
@@ -381,7 +381,7 @@ def output_to_chatml(output: List[ContentBlock]) -> Dict[str, Any]:
     # Once we finish collecting all blocks, create one assistant message.
     output_message: Dict[str, Any] = {"role": "assistant"}
     if content:
-        output_message["content"] = content
+        output_message["content"] = "\n".join(content)
     if tool_calls:
         output_message["tool_calls"] = tool_calls
 
