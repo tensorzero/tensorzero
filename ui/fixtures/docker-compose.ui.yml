@@ -5,8 +5,12 @@ services:
       context: ../..
       dockerfile: ui/Dockerfile
     environment:
-      TENSORZERO_GATEWAY_URL: http://gateway:3000
-      TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures
+      - TENSORZERO_GATEWAY_URL=http://gateway:3000
+      - TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures
+      # Allow overriding these from environment variables
+      - OPENAI_BASE_URL
+      - FIREWORKS_BASE_URL
+      - FIREWORKS_ACCOUNT_ID
     volumes:
       - ./config:/app/config:ro
     env_file:
