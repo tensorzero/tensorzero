@@ -14,6 +14,13 @@ jobs:
   clickhouse-tests-cloud:
     if: github.event_name == 'merge_group'
     runs-on: ubuntu-latest
+    # Note - a concurrency group only allows at most one job to be pending at a time - additional
+    # pending jobs will cause existing pending jobs to be cancelled.
+    # This setting required a merge group concurrency limit of at most 2 - if it's any higher,
+    # jobs will get cancelled, causing spurious failures in the merge queue.
+    concurrency:
+      group: clickhouse-tests-cloud-${{ matrix.cloud_instance.release_channel }}
+      cancel-in-progress: false
     strategy:
       matrix:
         cloud_instance:
