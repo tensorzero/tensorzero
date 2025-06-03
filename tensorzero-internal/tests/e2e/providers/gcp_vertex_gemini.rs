@@ -137,9 +137,11 @@ async fn get_providers() -> E2ETestProviders {
     }
 }
 
-// Specifying `tool_choice: none` causes Gemini 2.5 Pro to produce an 'executableCode' block.
-// We test that we properly construct an 'unknown' content block in this case.
+// Specifying `tool_choice: none` causes Gemini 2.5 to emit an 'UNEXPECTED_TOOL_CALL'
+// error. For now, we disable this test until we decide how to handle this:
+// https://github.com/tensorzero/tensorzero/issues/2329
 #[tokio::test]
+#[ignore]
 async fn test_gcp_pro_tool_choice_none() {
     let episode_id = Uuid::now_v7();
     let payload = json!({

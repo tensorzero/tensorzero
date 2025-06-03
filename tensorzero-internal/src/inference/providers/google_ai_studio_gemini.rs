@@ -27,9 +27,13 @@ use crate::inference::types::{
 use crate::inference::types::{
     ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequestJsonMode,
     ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner, Role, Text, TextChunk,
+    Thought, ThoughtChunk,
 };
 use crate::inference::types::{FinishReason, FlattenUnknown};
-use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
+use crate::model::{
+    build_creds_caching_default, fully_qualified_name, Credential, CredentialLocation,
+    ModelProvider,
+};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use super::gcp_vertex_gemini::process_output_schema;
@@ -40,6 +44,7 @@ const PROVIDER_NAME: &str = "Google AI Studio Gemini";
 const PROVIDER_TYPE: &str = "google_ai_studio_gemini";
 
 /// Implements a subset of the Google AI Studio Gemini API as documented [here](https://ai.google.dev/gemini-api/docs/text-generation?lang=rest)
+/// See the `GCPVertexGeminiProvider` struct docs for information about our handling 'thought' and unknown blocks.
 #[derive(Debug)]
 pub struct GoogleAIStudioGeminiProvider {
     model_name: String,
@@ -146,7 +151,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
         &'a self,
         ModelProviderRequest {
             request,
-            provider_name: _,
+            provider_name,
             model_name,
         }: ModelProviderRequest<'a>,
         http_client: &'a reqwest::Client,
@@ -221,6 +226,8 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
                 raw_response,
                 request: request_body,
                 generic_request: request,
+                model_name,
+                provider_name,
             };
             Ok(response_with_latency.try_into()?)
         } else {
@@ -742,7 +749,19 @@ struct GeminiResponseFunctionCall {
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-enum GeminiResponseContentPart {
+struct GeminiResponseContentPart {
+    #[serde(default)]
+    thought: bool,
+    #[serde(default)]
+    thought_signature: Option<String>,
+    #[serde(flatten)]
+    #[serde(default)]
+    data: FlattenUnknown<'static, GeminiResponseContentPartData>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+enum GeminiResponseContentPartData {
     Text(String),
     // TODO (if needed): InlineData { inline_data: Blob },
     // TODO (if needed): FileData { file_data: FileData },
@@ -751,48 +770,121 @@ enum GeminiResponseContentPart {
     // TODO (if needed): VideoMetadata { video_metadata: VideoMetadata },
 }
 
-impl From<GeminiResponseContentPart> for ContentBlockChunk {
+impl TryFrom<GeminiResponseContentPart> for ContentBlockChunk {
+    type Error = Error;
     /// Google AI Studio Gemini does not support parallel tool calling or multiple content blocks as far as I can tell.
     /// So there is no issue with bookkeeping IDs for content blocks.
     /// We should revisit this if they begin to support it.
-    fn from(part: GeminiResponseContentPart) -> Self {
-        match part {
-            GeminiResponseContentPart::Text(text) => ContentBlockChunk::Text(TextChunk {
-                text,
-                id: "0".to_string(),
-            }),
-            GeminiResponseContentPart::FunctionCall(function_call) => {
+    fn try_from(part: GeminiResponseContentPart) -> Result<Self, Self::Error> {
+        if part.thought {
+            match part.data {
+                FlattenUnknown::Normal(GeminiResponseContentPartData::Text(text)) => {
+                    return Ok(ContentBlockChunk::Thought(ThoughtChunk {
+                        id: "0".to_string(),
+                        text: Some(text),
+                        signature: part.thought_signature,
+                    }));
+                }
+                // Handle 'thought/thoughtSignature' with no other fields
+                FlattenUnknown::Unknown(obj) if obj.as_object().is_some_and(|m| m.is_empty()) => {
+                    return Ok(ContentBlockChunk::Thought(ThoughtChunk {
+                        id: "0".to_string(),
+                        text: None,
+                        signature: part.thought_signature,
+                    }));
+                }
+                _ => {
+                    return Err(Error::new(ErrorDetails::InferenceServer {
+                        message:
+                            format!(
+                                "Thought part in Google AI Studio Gemini response must be a text block: {part:?}"
+                            ),
+                        provider_type: PROVIDER_TYPE.to_string(),
+                        raw_request: None,
+                        raw_response: Some(serde_json::to_string(&part).unwrap_or_default()),
+                    }));
+                }
+            }
+        }
+        match part.data {
+            FlattenUnknown::Normal(GeminiResponseContentPartData::Text(text)) => {
+                Ok(ContentBlockChunk::Text(TextChunk {
+                    text,
+                    id: "0".to_string(),
+                }))
+            }
+            FlattenUnknown::Normal(GeminiResponseContentPartData::FunctionCall(function_call)) => {
                 let arguments = serialize_or_log(&function_call.args);
-                ContentBlockChunk::ToolCall(ToolCallChunk {
+                Ok(ContentBlockChunk::ToolCall(ToolCallChunk {
                     raw_name: function_call.name,
                     raw_arguments: arguments,
                     id: "0".to_string(),
-                })
+                }))
             }
+            FlattenUnknown::Unknown(part) => Err(Error::new(ErrorDetails::InferenceServer {
+                message: "Unknown content part in Google AI Studio Gemini response".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
+                raw_request: None,
+                raw_response: Some(part.to_string()),
+            })),
         }
     }
 }
 
-impl TryFrom<GeminiResponseContentPart> for ContentBlockOutput {
-    type Error = Error;
-    fn try_from(part: GeminiResponseContentPart) -> Result<Self, Self::Error> {
-        match part {
-            GeminiResponseContentPart::Text(text) => Ok(text.into()),
-            GeminiResponseContentPart::FunctionCall(function_call) => {
-                Ok(ContentBlockOutput::ToolCall(ToolCall {
-                    name: function_call.name,
-                    arguments: serde_json::to_string(&function_call.args).map_err(|e| {
+fn convert_part_to_output(
+    model_name: &str,
+    provider_name: &str,
+    part: GeminiResponseContentPart,
+) -> Result<ContentBlockOutput, Error> {
+    if part.thought {
+        match part.data {
+            FlattenUnknown::Normal(GeminiResponseContentPartData::Text(text)) => {
+                return Ok(ContentBlockOutput::Thought(Thought {
+                    signature: part.thought_signature,
+                    text,
+                }));
+            }
+            // Handle 'thought/thoughtSignature' with no other fields
+            FlattenUnknown::Unknown(obj) if obj.as_object().is_some_and(|m| m.is_empty()) => {
+                return Ok(ContentBlockOutput::Thought(Thought {
+                    signature: part.thought_signature,
+                    text: "".to_string(),
+                }));
+            }
+            _ => {
+                return Ok(ContentBlockOutput::Unknown {
+                    data: serde_json::to_value(part).map_err(|e| {
                         Error::new(ErrorDetails::Serialization {
                             message: format!(
-                                "Error serializing function call arguments returned from Gemini: {e}"
+                                "Error serializing thought part returned from GCP: {e}"
                             ),
                         })
                     })?,
-                    // Gemini doesn't have the concept of tool call ID so we generate one for our bookkeeping
-                    id: Uuid::now_v7().to_string(),
-                }))
+                    model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
+                });
             }
         }
+    }
+    match part.data {
+        FlattenUnknown::Normal(GeminiResponseContentPartData::Text(text)) => Ok(text.into()),
+        FlattenUnknown::Normal(GeminiResponseContentPartData::FunctionCall(function_call)) => {
+            Ok(ContentBlockOutput::ToolCall(ToolCall {
+                name: function_call.name,
+                arguments: serde_json::to_string(&function_call.args).map_err(|e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!(
+                            "Error serializing function call arguments returned from Gemini: {e}"
+                        ),
+                    })
+                })?,
+                // Gemini doesn't have the concept of tool call ID so we generate one for our bookkeeping
+                id: Uuid::now_v7().to_string(),
+            }))
+        }
+        FlattenUnknown::Unknown(part) => Ok(ContentBlockOutput::Unknown {
+            data: part.into_owned(),
+            model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
+        }),
     }
 }
 
@@ -874,6 +966,8 @@ struct GeminiResponse {
 }
 
 struct GeminiResponseWithMetadata<'a> {
+    model_name: &'a str,
+    provider_name: &'a str,
     response: GeminiResponse,
     raw_response: String,
     latency: Latency,
@@ -890,6 +984,8 @@ impl<'a> TryFrom<GeminiResponseWithMetadata<'a>> for ProviderInferenceResponse {
             latency,
             request: request_body,
             generic_request,
+            model_name,
+            provider_name,
         } = response;
 
         // Google AI Studio Gemini response can contain multiple candidates and each of these can contain
@@ -908,7 +1004,7 @@ impl<'a> TryFrom<GeminiResponseWithMetadata<'a>> for ProviderInferenceResponse {
             Some(content) => content
                 .parts
                 .into_iter()
-                .map(|part| part.try_into())
+                .map(|part| convert_part_to_output(model_name, provider_name, part))
                 .collect::<Result<Vec<ContentBlockOutput>, Error>>()?,
             None => vec![],
         };
@@ -978,7 +1074,11 @@ impl TryFrom<GoogleAIStudioGeminiResponseWithMetadata> for ProviderInferenceResp
 
         // Gemini sometimes returns chunks without content (e.g. they might have usage only).
         let mut content: Vec<ContentBlockChunk> = match first_candidate.content {
-            Some(content) => content.parts.into_iter().map(|part| part.into()).collect(),
+            Some(content) => content
+                .parts
+                .into_iter()
+                .map(|part| part.try_into())
+                .collect::<Result<Vec<ContentBlockChunk>, Error>>()?,
             None => vec![],
         };
 
@@ -1386,8 +1486,14 @@ mod tests {
 
     #[test]
     fn test_google_ai_studio_gemini_to_t0_response() {
-        let part = GeminiResponseContentPart::Text("test_assistant".to_string());
-        let content = GeminiResponseContent { parts: vec![part] };
+        let part = GeminiResponseContentPartData::Text("test_assistant".to_string());
+        let content = GeminiResponseContent {
+            parts: vec![GeminiResponseContentPart {
+                thought: false,
+                thought_signature: None,
+                data: FlattenUnknown::Normal(part),
+            }],
+        };
         let candidate = GeminiResponseCandidate {
             content: Some(content),
             finish_reason: Some(GeminiFinishReason::Stop),
@@ -1433,6 +1539,8 @@ mod tests {
         let raw_request = serde_json::to_string(&request_body).unwrap();
         let raw_response = "test response".to_string();
         let response_with_latency = GeminiResponseWithMetadata {
+            model_name: "test_model",
+            provider_name: "test_provider",
             response,
             latency: latency.clone(),
             request: serde_json::to_value(&request_body).unwrap(),
@@ -1468,14 +1576,25 @@ mod tests {
             }]
         );
         let text_part =
-            GeminiResponseContentPart::Text("Here's the weather information:".to_string());
+            GeminiResponseContentPartData::Text("Here's the weather information:".to_string());
         let function_call_part =
-            GeminiResponseContentPart::FunctionCall(GeminiResponseFunctionCall {
+            GeminiResponseContentPartData::FunctionCall(GeminiResponseFunctionCall {
                 name: "get_temperature".to_string(),
                 args: json!({"location": "New York", "unit": "celsius"}),
             });
         let content = GeminiResponseContent {
-            parts: vec![text_part, function_call_part],
+            parts: vec![
+                GeminiResponseContentPart {
+                    thought: false,
+                    thought_signature: None,
+                    data: FlattenUnknown::Normal(text_part),
+                },
+                GeminiResponseContentPart {
+                    thought: false,
+                    thought_signature: None,
+                    data: FlattenUnknown::Normal(function_call_part),
+                },
+            ],
         };
         let candidate = GeminiResponseCandidate {
             content: Some(content),
@@ -1521,6 +1640,8 @@ mod tests {
         };
         let raw_request = serde_json::to_string(&request_body).unwrap();
         let response_with_latency = GeminiResponseWithMetadata {
+            model_name: "test_model",
+            provider_name: "test_provider",
             response,
             latency: latency.clone(),
             request: serde_json::to_value(&request_body).unwrap(),
@@ -1569,25 +1690,42 @@ mod tests {
         );
 
         let text_part1 =
-            GeminiResponseContentPart::Text("Here's the weather information:".to_string());
+            GeminiResponseContentPartData::Text("Here's the weather information:".to_string());
         let function_call_part =
-            GeminiResponseContentPart::FunctionCall(GeminiResponseFunctionCall {
+            GeminiResponseContentPartData::FunctionCall(GeminiResponseFunctionCall {
                 name: "get_temperature".to_string(),
                 args: json!({"location": "New York", "unit": "celsius"}),
             });
-        let text_part2 =
-            GeminiResponseContentPart::Text("And here's a restaurant recommendation:".to_string());
+        let text_part2 = GeminiResponseContentPartData::Text(
+            "And here's a restaurant recommendation:".to_string(),
+        );
         let function_call_part2 =
-            GeminiResponseContentPart::FunctionCall(GeminiResponseFunctionCall {
+            GeminiResponseContentPartData::FunctionCall(GeminiResponseFunctionCall {
                 name: "get_restaurant".to_string(),
                 args: json!({"cuisine": "Italian", "price_range": "moderate"}),
             });
         let content = GeminiResponseContent {
             parts: vec![
-                text_part1,
-                function_call_part,
-                text_part2,
-                function_call_part2,
+                GeminiResponseContentPart {
+                    thought: false,
+                    thought_signature: None,
+                    data: FlattenUnknown::Normal(text_part1),
+                },
+                GeminiResponseContentPart {
+                    thought: false,
+                    thought_signature: None,
+                    data: FlattenUnknown::Normal(function_call_part),
+                },
+                GeminiResponseContentPart {
+                    thought: false,
+                    thought_signature: None,
+                    data: FlattenUnknown::Normal(text_part2),
+                },
+                GeminiResponseContentPart {
+                    thought: false,
+                    thought_signature: None,
+                    data: FlattenUnknown::Normal(function_call_part2),
+                },
             ],
         };
         let candidate = GeminiResponseCandidate {
@@ -1613,6 +1751,8 @@ mod tests {
         };
         let raw_request = serde_json::to_string(&request_body).unwrap();
         let response_with_latency = GeminiResponseWithMetadata {
+            model_name: "test_model",
+            provider_name: "test_provider",
             response,
             latency: latency.clone(),
             request: serde_json::to_value(&request_body).unwrap(),
@@ -1883,9 +2023,13 @@ mod tests {
     #[test]
     fn test_try_from_with_content_and_finish_reason() {
         // Setup a response with content and finish reason
-        let text_part = GeminiResponseContentPart::Text("Hello, world!".to_string());
+        let text_part = GeminiResponseContentPartData::Text("Hello, world!".to_string());
         let content = GeminiResponseContent {
-            parts: vec![text_part],
+            parts: vec![GeminiResponseContentPart {
+                thought: false,
+                thought_signature: None,
+                data: FlattenUnknown::Normal(text_part),
+            }],
         };
         let candidate = GeminiResponseCandidate {
             content: Some(content),
@@ -1930,9 +2074,13 @@ mod tests {
     #[test]
     fn test_try_from_without_finish_reason() {
         // Setup a response without finish reason (streaming chunk)
-        let text_part = GeminiResponseContentPart::Text("Partial response".to_string());
+        let text_part = GeminiResponseContentPartData::Text("Partial response".to_string());
         let content = GeminiResponseContent {
-            parts: vec![text_part],
+            parts: vec![GeminiResponseContentPart {
+                thought: false,
+                thought_signature: None,
+                data: FlattenUnknown::Normal(text_part),
+            }],
         };
         let candidate = GeminiResponseCandidate {
             content: Some(content),
@@ -1973,10 +2121,21 @@ mod tests {
     #[test]
     fn test_try_from_with_empty_text_chunks() {
         // Setup a response with empty text chunks that should be filtered out
-        let empty_text = GeminiResponseContentPart::Text("".to_string());
-        let non_empty_text = GeminiResponseContentPart::Text("Non-empty text".to_string());
+        let empty_text = GeminiResponseContentPartData::Text("".to_string());
+        let non_empty_text = GeminiResponseContentPartData::Text("Non-empty text".to_string());
         let content = GeminiResponseContent {
-            parts: vec![empty_text, non_empty_text],
+            parts: vec![
+                GeminiResponseContentPart {
+                    thought: false,
+                    thought_signature: None,
+                    data: FlattenUnknown::Normal(empty_text),
+                },
+                GeminiResponseContentPart {
+                    thought: false,
+                    thought_signature: None,
+                    data: FlattenUnknown::Normal(non_empty_text),
+                },
+            ],
         };
         let candidate = GeminiResponseCandidate {
             content: Some(content),
@@ -2011,12 +2170,17 @@ mod tests {
     #[test]
     fn test_try_from_with_function_call() {
         // Setup a response with a function call
-        let function_call = GeminiResponseContentPart::FunctionCall(GeminiResponseFunctionCall {
-            name: "get_weather".to_string(),
-            args: json!({"location": "New York", "unit": "celsius"}),
-        });
+        let function_call =
+            GeminiResponseContentPartData::FunctionCall(GeminiResponseFunctionCall {
+                name: "get_weather".to_string(),
+                args: json!({"location": "New York", "unit": "celsius"}),
+            });
         let content = GeminiResponseContent {
-            parts: vec![function_call],
+            parts: vec![GeminiResponseContentPart {
+                thought: false,
+                thought_signature: None,
+                data: FlattenUnknown::Normal(function_call),
+            }],
         };
         let candidate = GeminiResponseCandidate {
             content: Some(content),
@@ -2151,9 +2315,13 @@ mod tests {
         ];
 
         for (gemini_reason, expected_reason) in finish_reasons {
-            let text_part = GeminiResponseContentPart::Text("Test".to_string());
+            let text_part = GeminiResponseContentPartData::Text("Test".to_string());
             let content = GeminiResponseContent {
-                parts: vec![text_part],
+                parts: vec![GeminiResponseContentPart {
+                    thought: false,
+                    thought_signature: None,
+                    data: FlattenUnknown::Normal(text_part),
+                }],
             };
             let candidate = GeminiResponseCandidate {
                 content: Some(content),
