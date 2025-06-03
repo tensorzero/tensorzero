@@ -91,8 +91,12 @@ impl JoinRegistry {
             return alias.clone(); // we already have a join for this key
         }
         let alias = format!("j{}", self.aliases.len());
-        self.clauses
-            .push(self.build_clause(&alias, &key, params_map, param_idx_counter));
+        self.clauses.push(Self::build_clause(
+            &alias,
+            &key,
+            params_map,
+            param_idx_counter,
+        ));
         self.aliases.insert(key, alias.clone());
         alias
     }
@@ -103,19 +107,13 @@ impl JoinRegistry {
     }
 
     fn build_clause(
-        &self,
         alias: &str,
         key: &JoinKey,
         params_map: &mut Vec<QueryParameter>,
         param_idx_counter: &mut usize,
     ) -> String {
+        let table_name = key.table.to_clickhouse_table_name();
         let inference_table_column_name = key.inference_column_name;
-        let table_name_placeholder = add_parameter(
-            key.table.to_clickhouse_table_name(),
-            ClickhouseType::Identifier,
-            params_map,
-            param_idx_counter,
-        );
         let metric_name_placeholder = add_parameter(
             &key.metric_name,
             ClickhouseType::String,
@@ -128,7 +126,7 @@ LEFT JOIN (
     SELECT
         target_id,
         argMax(value, timestamp) as value
-    FROM {table_name_placeholder}
+    FROM {table_name}
     WHERE metric_name = {metric_name_placeholder}
     GROUP BY target_id
 ) AS {alias} ON i.{inference_table_column_name} = {alias}.target_id"#
@@ -163,16 +161,15 @@ impl InferenceFilterTreeNode {
     ///
     /// The returned string will contain the filter condition that should be added to the WHERE clause.
     /// The `params_map` is updated with the parameters used in the filter condition.
-    /// The `join_clauses` is updated with the JOIN clauses.
     /// The `param_idx_counter` is updated with the current index of the parameter.
-    /// The `join_idx_counter` is updated with the current index of the join alias.
     /// The `_select_clauses` is not used *yet*--we will want to add metric columns to the SELECT clause for visibility and debugging.
+    /// The `joins` is updated with the JOIN clauses.
     ///
     /// NOTE: This is not efficient at all yet. We are doing a lot of JOINs and GROUP BYs.
     /// We may be able to do this more efficiently by using subqueries and CTEs.
     /// We're also doing a join per filter. In principle if there is a subtree of the tree that uses the same joined table,
     /// we could push the condition down into the query before the join
-    pub fn to_clickhouse_sql(
+    fn to_clickhouse_sql(
         &self,
         config: &Config,
         params_map: &mut Vec<QueryParameter>,
@@ -334,7 +331,7 @@ pub struct QueryParameter {
 ///
 /// TODOs:
 /// - handle selecting the feedback values
-/// - deduplicate the joins
+/// - handle ORDER BY
 pub fn generate_list_inferences_sql(
     config: &Config,
     opts: &ListInferencesParams<'_>,
@@ -455,7 +452,6 @@ FROM
 
 #[derive(Debug, Clone, PartialEq)]
 enum ClickhouseType {
-    Identifier,
     String,
     Float64,
     Bool,
@@ -465,7 +461,6 @@ enum ClickhouseType {
 impl Display for ClickhouseType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ClickhouseType::Identifier => write!(f, "Identifier"),
             ClickhouseType::String => write!(f, "String"),
             ClickhouseType::Float64 => write!(f, "Float64"),
             ClickhouseType::Bool => write!(f, "Bool"),
@@ -489,13 +484,6 @@ fn add_parameter<T: ToString>(
         value: value.to_string(),
     });
     format!("{{{internal_name}:{ch_type}}}")
-}
-
-/// Helper to get a join alias given the current counter on join tables.
-fn get_join_alias(counter: &mut usize) -> String {
-    let internal_name = format!("j{}", *counter);
-    *counter += 1;
-    internal_name
 }
 
 fn get_select_clauses(
