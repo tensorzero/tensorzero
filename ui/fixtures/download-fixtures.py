@@ -8,6 +8,7 @@
 import concurrent.futures
 import hashlib
 import os
+import subprocess
 from pathlib import Path
 
 import requests
@@ -113,7 +114,11 @@ def main():
 
     for fixture in FIXTURES:
         print(f"Fixture {fixture}:")
-        os.system(f"parquet-tools inspect {S3_FIXTURES_DIR / fixture}")
+        subprocess.run(
+            ["parquet-tools", "inspect", S3_FIXTURES_DIR / fixture],
+            check=True,
+            stderr=subprocess.STDOUT,
+        )
 
 
 if __name__ == "__main__":
