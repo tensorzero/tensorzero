@@ -108,6 +108,7 @@ tower-http = { workspace = true }
 tower-layer = "0.3.3"
 pyo3 = { workspace = true, optional = true }
 google-cloud-auth = "0.20.0"
+indexmap = "2.9.0"
 
 
 [dev-dependencies]
