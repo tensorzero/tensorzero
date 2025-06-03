@@ -353,6 +353,9 @@ impl UninitializedEvaluatorConfig {
                         VariantConfig::ChainOfThought(variant) => {
                             variant.inner.weight = Some(1.0);
                         }
+                        VariantConfig::Responses(variant) => {
+                            variant.weight = 1.0;
+                        }
                     };
                 }
                 let user_schema_value: Option<serde_json::Value> = match params.input_format {
@@ -882,6 +885,25 @@ fn check_convert_variant_to_llm_judge_variant(
                         extra_body: variant.inner.extra_body,
                         extra_headers: variant.inner.extra_headers,
                     },
+                },
+            ))
+        }
+        VariantConfig::Responses(variant) => {
+            Ok(UninitializedLLMJudgeVariantConfig::ChatCompletion(
+                UninitializedLLMJudgeChatCompletionVariantConfig {
+                    active: Some(false),
+                    model: variant.model,
+                    system_instructions: PathBuf::from(""),
+                    temperature: variant.temperature,
+                    top_p: variant.top_p,
+                    max_tokens: variant.max_tokens,
+                    presence_penalty: variant.presence_penalty,
+                    frequency_penalty: variant.frequency_penalty,
+                    seed: variant.seed,
+                    json_mode: variant.json_mode.unwrap_or(JsonMode::Off),
+                    retries: variant.retries.unwrap_or_default(),
+                    extra_body: variant.extra_body.first().cloned(),
+                    extra_headers: variant.extra_headers.first().cloned(),
                 },
             ))
         }

@@ -52,6 +52,8 @@ routing = ["openai"]
 type = "openai"
 model_name = "o1-2024-12-17"
 
+
+
 [models."gpt-4o-mini-azure"]
 routing = ["azure"]
 
@@ -940,6 +942,20 @@ model = "openai::gpt-4o-mini-2024-07-18"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
+[functions.basic_test.variants.openai-responses]
+type = "responses"
+weight = 1
+model = "gpt-4o-mini-2024-07-18"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.openai-responses-dynamic]
+type = "responses"
+weight = 1
+model = "gpt-4o-mini-2024-07-18-dynamic"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
 [functions.basic_test.variants.gcp_vertex_gemini_shorthand]
 type = "chat_completion"
 model = "gcp_vertex_gemini::projects/tensorzero-public/locations/us-central1/publishers/google/models/gemini-2.0-flash-001"
@@ -1595,6 +1611,16 @@ system_template = "../../fixtures/config/functions/json_success/prompt/system_te
 user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "implicit_tool"
 max_tokens = 100
+
+[functions.json_success.variants.openai-responses]
+type = "responses"
+weight = 1
+model = "gpt-4o-mini-2024-07-18"
+system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
+json_mode = "on"
+max_tokens = 100
+
 
 [functions.json_success.variants.openai-cot]
 type = "experimental_chain_of_thought"

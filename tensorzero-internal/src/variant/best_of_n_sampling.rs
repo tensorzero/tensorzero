@@ -696,6 +696,7 @@ impl EvaluatorConfig {
                 stream: false,
                 json_mode: json_mode.into(),
                 function_type: FunctionType::Json,
+                api_type: crate::inference::types::ApiType::ChatCompletions,
                 output_schema: Some(EVALUATOR_OUTPUT_SCHEMA.value),
                 extra_body,
                 extra_headers,

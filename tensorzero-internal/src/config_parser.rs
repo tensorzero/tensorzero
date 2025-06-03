@@ -25,6 +25,7 @@ use crate::variant::chain_of_thought::UninitializedChainOfThoughtConfig;
 use crate::variant::chat_completion::UninitializedChatCompletionConfig;
 use crate::variant::dicl::UninitializedDiclConfig;
 use crate::variant::mixture_of_n::UninitializedMixtureOfNConfig;
+use crate::variant::responses::UninitializedResponsesConfig;
 use crate::variant::{Variant, VariantConfig};
 use std::error::Error as StdError;
 
@@ -758,6 +759,8 @@ struct UninitializedFunctionConfigJson {
     output_schema: Option<PathBuf>, // schema will default to {} if not specified
 }
 
+
+
 impl UninitializedFunctionConfig {
     pub fn load<P: AsRef<Path>>(
         self,
@@ -859,6 +862,12 @@ impl UninitializedFunctionConfig {
                                 warn_variant = Some(name.clone());
                             }
                         }
+                        VariantConfig::Responses(responses_config) => {
+                            if responses_config.json_mode.is_none() {
+                                warn_variant = Some(name.clone());
+                            }
+                        }
+
                     }
                     if let Some(warn_variant) = warn_variant {
                         tracing::warn!("Deprecation Warning: `json_mode` is not specified for `[functions.{function_name}.variants.{warn_variant}]` (parent function `{function_name}` is a JSON function), defaulting to `strict`. This field will become required in a future release - see https://github.com/tensorzero/tensorzero/issues/1043 on GitHub for details.");
@@ -874,6 +883,7 @@ impl UninitializedFunctionConfig {
                     description: None,
                 }))
             }
+
         }
     }
 }
@@ -892,6 +902,7 @@ pub enum UninitializedVariantConfig {
     MixtureOfN(UninitializedMixtureOfNConfig),
     #[serde(rename = "experimental_chain_of_thought")]
     ChainOfThought(UninitializedChainOfThoughtConfig),
+    Responses(UninitializedResponsesConfig),
 }
 
 impl UninitializedVariantConfig {
@@ -911,6 +922,9 @@ impl UninitializedVariantConfig {
             }
             UninitializedVariantConfig::ChainOfThought(params) => {
                 Ok(VariantConfig::ChainOfThought(params.load(base_path)?))
+            }
+            UninitializedVariantConfig::Responses(params) => {
+                Ok(VariantConfig::Responses(params.load(base_path)?))
             }
         }
     }
@@ -940,7 +954,7 @@ impl UninitializedToolConfig {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct PathWithContents {
     pub path: PathBuf,
     pub contents: String,

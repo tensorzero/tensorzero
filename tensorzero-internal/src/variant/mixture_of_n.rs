@@ -563,9 +563,10 @@ impl FuserConfig {
             system,
             function,
             inference_config,
-            false,
+            false, // Fuser doesn't stream
             inference_params,
             self.inner.json_mode,
+            crate::inference::types::ApiType::ChatCompletions,
             extra_body,
             extra_headers,
         )?;

@@ -39,6 +39,7 @@ pub mod chain_of_thought;
 pub mod chat_completion;
 pub mod dicl;
 pub mod mixture_of_n;
+pub mod responses;
 
 #[derive(Debug)]
 pub enum VariantConfig {
@@ -47,6 +48,7 @@ pub enum VariantConfig {
     Dicl(dicl::DiclConfig),
     MixtureOfN(mixture_of_n::MixtureOfNConfig),
     ChainOfThought(chain_of_thought::ChainOfThoughtConfig),
+    Responses(responses::ResponsesConfig),
 }
 
 /// This type is used to determine how to enforce JSON mode for a given variant.
@@ -186,6 +188,7 @@ impl VariantConfig {
             VariantConfig::Dicl(params) => params.weight,
             VariantConfig::MixtureOfN(params) => params.weight,
             VariantConfig::ChainOfThought(params) => params.inner.weight,
+            VariantConfig::Responses(params) => Some(params.weight),
         }
     }
 }
@@ -255,6 +258,18 @@ impl Variant for VariantConfig {
                     .await
             }
             VariantConfig::ChainOfThought(params) => {
+                params
+                    .infer(
+                        input,
+                        models,
+                        function,
+                        inference_config,
+                        clients,
+                        inference_params,
+                    )
+                    .await
+            }
+            VariantConfig::Responses(params) => {
                 params
                     .infer(
                         input,
@@ -343,6 +358,18 @@ impl Variant for VariantConfig {
                     )
                     .await
             }
+            VariantConfig::Responses(params) => {
+                params
+                    .infer_stream(
+                        input,
+                        models,
+                        function,
+                        inference_config,
+                        clients,
+                        inference_params,
+                    )
+                    .await
+            }
         }
     }
 
@@ -358,6 +385,18 @@ impl Variant for VariantConfig {
     ) -> Result<StartBatchModelInferenceWithMetadata<'a>, Error> {
         match self {
             VariantConfig::ChatCompletion(params) => {
+                params
+                    .start_batch_inference(
+                        inputs,
+                        models,
+                        function,
+                        inference_configs,
+                        clients,
+                        inference_params,
+                    )
+                    .await
+            }
+            VariantConfig::Responses(params) => {
                 params
                     .start_batch_inference(
                         inputs,
@@ -446,6 +485,18 @@ impl Variant for VariantConfig {
                     )
                     .await
             }
+            VariantConfig::Responses(params) => {
+                params
+                    .validate(
+                        function,
+                        models,
+                        embedding_models,
+                        templates,
+                        function_name,
+                        variant_name,
+                    )
+                    .await
+            }
         }
     }
 
@@ -456,6 +507,7 @@ impl Variant for VariantConfig {
             VariantConfig::Dicl(params) => params.get_all_template_paths(),
             VariantConfig::MixtureOfN(params) => params.get_all_template_paths(),
             VariantConfig::ChainOfThought(params) => params.get_all_template_paths(),
+            VariantConfig::Responses(params) => params.get_all_template_paths(),
         }
     }
 }
@@ -469,6 +521,7 @@ fn prepare_model_inference_request<'a, 'request>(
     stream: bool,
     inference_params: &InferenceParams,
     base_json_mode: Option<JsonMode>,
+    api_type: crate::inference::types::ApiType,
     extra_body: FullExtraBodyConfig,
     extra_headers: FullExtraHeadersConfig,
 ) -> Result<ModelInferenceRequest<'request>, Error>
@@ -498,6 +551,7 @@ where
                 // explicitly requested in `chat_completion` params.
                 json_mode: json_mode.unwrap_or(JsonMode::Off).into(),
                 function_type: FunctionType::Chat,
+                api_type,
                 output_schema: inference_config.dynamic_output_schema.map(|v| &v.value),
                 extra_body,
                 extra_headers,
@@ -534,12 +588,14 @@ where
                 // the `chat_completions` params and the variant config.
                 json_mode: json_mode.unwrap_or(JsonMode::Strict).into(),
                 function_type: FunctionType::Json,
+                api_type,
                 output_schema,
                 extra_body,
                 extra_headers,
                 extra_cache_key: inference_config.extra_cache_key.clone(),
             }
         }
+
     })
 }
 
@@ -630,7 +686,7 @@ async fn infer_model_request_stream<'request>(
     Ok((Box::pin(stream), model_used_info))
 }
 
-#[derive(Debug, Deserialize, Copy, Clone)]
+#[derive(Debug, Deserialize, Serialize, Copy, Clone)]
 pub struct RetryConfig {
     pub num_retries: usize,
     pub max_delay_s: f32,
@@ -772,6 +828,7 @@ mod tests {
             stream,
             &inference_params,
             Some(json_mode),
+            crate::inference::types::ApiType::ChatCompletions,
             Default::default(),
             Default::default(),
         )
@@ -822,6 +879,7 @@ mod tests {
             stream,
             &inference_params,
             Some(json_mode),
+            crate::inference::types::ApiType::ChatCompletions,
             Default::default(),
             Default::default(),
         )
@@ -873,6 +931,7 @@ mod tests {
             Some(json_mode),
             Default::default(),
             Default::default(),
+            Default::default(),
         )
         .unwrap();
 
@@ -895,6 +954,7 @@ mod tests {
             stream,
             &inference_params,
             Some(json_mode),
+            crate::inference::types::ApiType::ChatCompletions,
             Default::default(),
             Default::default(),
         )
@@ -915,6 +975,7 @@ mod tests {
             stream,
             &inference_params,
             Some(json_mode),
+            crate::inference::types::ApiType::ChatCompletions,
             Default::default(),
             Default::default(),
         )

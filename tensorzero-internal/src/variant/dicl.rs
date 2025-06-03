@@ -536,6 +536,7 @@ impl DiclConfig {
             stream,
             inference_params,
             self.json_mode,
+            crate::inference::types::ApiType::ChatCompletions,
             extra_body,
             extra_headers,
         )

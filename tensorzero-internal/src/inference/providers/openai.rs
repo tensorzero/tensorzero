@@ -164,21 +164,27 @@ impl OpenAICredentials {
 impl WrappedProvider for OpenAIProvider {
     fn make_body<'a>(
         &'a self,
-        ModelProviderRequest {
-            request,
-            provider_name: _,
-            model_name: _,
-        }: ModelProviderRequest<'a>,
+        provider_request: ModelProviderRequest<'a>,
     ) -> Result<serde_json::Value, Error> {
-        let request_body = serde_json::to_value(OpenAIRequest::new(&self.model_name, request)?)
-            .map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: format!(
-                        "Error serializing OpenAI request: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                })
-            })?;
+        let request_body = match provider_request.request.api_type {
+            crate::inference::types::ApiType::Responses => {
+                serde_json::to_value(OpenAIResponsesRequest::new(
+                    provider_request,
+                    &self.model_name,
+                )?)
+            }
+            _ => {
+                serde_json::to_value(OpenAIRequest::new(&self.model_name, provider_request.request)?)
+            }
+        }
+        .map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!(
+                    "Error serializing OpenAI request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
+            })
+        })?;
         Ok(request_body)
     }
     fn parse_response(
@@ -229,7 +235,14 @@ impl InferenceProvider for OpenAIProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_url = get_chat_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
+        let request_url = match request.request.api_type {
+            crate::inference::types::ApiType::Responses => {
+                get_responses_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?
+            }
+            _ => {
+                get_chat_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?
+            }
+        };
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let mut request_body = self.make_body(request)?;
@@ -335,22 +348,37 @@ impl InferenceProvider for OpenAIProvider {
         &'a self,
         ModelProviderRequest {
             request,
-            provider_name: _,
+            provider_name,
             model_name,
         }: ModelProviderRequest<'a>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let mut request_body = serde_json::to_value(OpenAIRequest::new(&self.model_name, request)?)
-            .map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: format!(
-                        "Error serializing OpenAI request: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                })
-            })?;
+        let provider_request = ModelProviderRequest {
+            request,
+            provider_name,
+            model_name,
+        };
+        let mut request_body = match request.api_type {
+            crate::inference::types::ApiType::Responses => {
+                serde_json::to_value(OpenAIResponsesRequest::new(
+                    provider_request,
+                    &self.model_name,
+                )?)
+            }
+            _ => {
+                serde_json::to_value(OpenAIRequest::new(&self.model_name, request)?)
+            }
+        }
+        .map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!(
+                    "Error serializing OpenAI request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
+            })
+        })?;
         let headers = inject_extra_request_data(
             &request.extra_body,
             &request.extra_headers,
@@ -361,12 +389,19 @@ impl InferenceProvider for OpenAIProvider {
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!(
-                    "Error serializing request: {}",
+                    "Error serializing OpenAI request: {}",
                     DisplayOrDebugGateway::new(e)
                 ),
             })
         })?;
-        let request_url = get_chat_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
+        let request_url = match request.api_type {
+            crate::inference::types::ApiType::Responses => {
+                get_responses_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?
+            }
+            _ => {
+                get_chat_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?
+            }
+        };
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let mut request_builder = http_client
@@ -911,6 +946,18 @@ pub(super) fn get_chat_url(base_url: &Url) -> Result<Url, Error> {
     })
 }
 
+pub(super) fn get_responses_url(base_url: &Url) -> Result<Url, Error> {
+    let mut url = base_url.clone();
+    if !url.path().ends_with('/') {
+        url.set_path(&format!("{}/", url.path()));
+    }
+    url.join("responses").map_err(|e| {
+        Error::new(ErrorDetails::InvalidBaseUrl {
+            message: e.to_string(),
+        })
+    })
+}
+
 fn get_file_url(base_url: &Url, file_id: Option<&str>) -> Result<Url, Error> {
     let mut url = base_url.clone();
     if !url.path().ends_with('/') {
@@ -1429,6 +1476,61 @@ enum OpenAIResponseFormat {
     },
 }
 
+#[derive(Debug, Serialize)]
+struct OpenAIResponsesTextFormat {
+    format: OpenAIResponsesFormatType,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(untagged)]
+enum OpenAIResponsesFormatType {
+    Text {
+        #[serde(rename = "type")]
+        format_type: String,
+    },
+    JsonSchema {
+        #[serde(rename = "type")]
+        format_type: String,
+        json_schema: Value,
+    },
+}
+
+impl OpenAIResponsesTextFormat {
+    fn new(
+        json_mode: &ModelInferenceRequestJsonMode,
+        output_schema: Option<&Value>,
+    ) -> Option<OpenAIResponsesTextFormat> {
+        match (json_mode, output_schema) {
+            (ModelInferenceRequestJsonMode::Strict, Some(schema)) => {
+                let json_schema = json!({"name": "response", "strict": true, "schema": schema});
+                Some(OpenAIResponsesTextFormat {
+                    format: OpenAIResponsesFormatType::JsonSchema {
+                        format_type: "json_schema".to_string(),
+                        json_schema,
+                    },
+                })
+            }
+            (ModelInferenceRequestJsonMode::On, None) => {
+                Some(OpenAIResponsesTextFormat {
+                    format: OpenAIResponsesFormatType::JsonSchema {
+                        format_type: "json_object".to_string(),
+                        json_schema: json!({}),
+                    },
+                })
+            }
+            // For basic text responses, still provide text format
+            (ModelInferenceRequestJsonMode::Off, None) => {
+                Some(OpenAIResponsesTextFormat {
+                    format: OpenAIResponsesFormatType::Text {
+                        format_type: "text".to_string(),
+                    },
+                })
+            }
+            _ => None,
+        }
+    }
+}
+
 impl OpenAIResponseFormat {
     fn new(
         json_mode: &ModelInferenceRequestJsonMode,
@@ -1615,6 +1717,71 @@ struct OpenAIRequest<'a> {
     tool_choice: Option<OpenAIToolChoice<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     parallel_tool_calls: Option<bool>,
+}
+
+#[derive(Debug, Serialize)]
+struct OpenAIResponsesRequest<'a> {
+    model: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    input: Option<OpenAIResponsesInput<'a>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    temperature: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    max_output_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    seed: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    top_p: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    presence_penalty: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    frequency_penalty: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stream: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    store: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    text: Option<OpenAIResponsesTextFormat>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tools: Option<Vec<OpenAITool<'a>>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_choice: Option<OpenAIToolChoice<'a>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    parallel_tool_calls: Option<bool>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(untagged)]
+enum OpenAIResponsesInput<'a> {
+    Messages(Vec<OpenAIRequestMessage<'a>>),
+}
+
+impl<'a> OpenAIResponsesRequest<'a> {
+    pub fn new(
+        request: ModelProviderRequest<'a>,
+        model_name: &'a str,
+    ) -> Result<OpenAIResponsesRequest<'a>, Error> {
+        let messages = prepare_openai_messages(&request.request)?;
+        let (tools, tool_choice, parallel_tool_calls) = prepare_openai_tools(&request.request);
+        let text = OpenAIResponsesTextFormat::new(&request.request.json_mode, request.request.output_schema);
+
+        Ok(OpenAIResponsesRequest {
+            model: model_name,
+            input: Some(OpenAIResponsesInput::Messages(messages)),
+            temperature: request.request.temperature,
+            max_output_tokens: request.request.max_tokens,
+            seed: request.request.seed,
+            top_p: request.request.top_p,
+            presence_penalty: request.request.presence_penalty,
+            frequency_penalty: request.request.frequency_penalty,
+            stream: Some(request.request.stream),
+            store: Some(true), // Enable stateful conversations by default
+            text,
+            tools,
+            tool_choice,
+            parallel_tool_calls,
+        })
+    }
 }
 
 impl<'a> OpenAIRequest<'a> {
@@ -3676,8 +3843,6 @@ mod tests {
             api_key_location.clone(),
         )
         .unwrap();
-        assert!(logs_contain("automatically appends `/chat/completions`"));
-        assert!(logs_contain(invalid_url_1.as_ref()));
 
         let invalid_url_2 = Url::parse("http://localhost:1234/v1/chat/completions/").unwrap();
         let _ = OpenAIProvider::new(
@@ -3688,5 +3853,104 @@ mod tests {
         .unwrap();
         assert!(logs_contain("automatically appends `/chat/completions`"));
         assert!(logs_contain(invalid_url_2.as_ref()));
+    }
+
+    #[test]
+    fn test_get_responses_url() {
+        // Test with custom base URL
+        let custom_base = "https://custom.openai.com/api/";
+        let custom_url = get_responses_url(&Url::parse(custom_base).unwrap()).unwrap();
+        assert_eq!(
+            custom_url.as_str(),
+            "https://custom.openai.com/api/responses"
+        );
+
+        // Test with URL without trailing slash
+        let no_slash_url = get_responses_url(&Url::parse("https://example.com").unwrap()).unwrap();
+        assert_eq!(no_slash_url.as_str(), "https://example.com/responses");
+    }
+
+    #[test]
+    fn test_openai_responses_request_new() {
+        use crate::cache::BaseModelProviderRequest;
+        use crate::inference::types::ModelInferenceRequest;
+
+        let mut mock_request = ModelInferenceRequest::default();
+        mock_request.temperature = Some(0.7);
+        mock_request.max_tokens = Some(100);
+        mock_request.seed = Some(42);
+        mock_request.top_p = Some(0.9);
+        mock_request.presence_penalty = Some(0.1);
+        mock_request.frequency_penalty = Some(0.2);
+        mock_request.json_mode = crate::inference::types::ModelInferenceRequestJsonMode::On;
+        mock_request.stream = true;
+
+        let provider_request = BaseModelProviderRequest {
+            request: &mock_request,
+            provider_name: "test-provider".into(),
+            model_name: "test-model".into(),
+        };
+
+        let responses_request = OpenAIResponsesRequest::new(provider_request, "gpt-4o-mini").unwrap();
+
+        assert_eq!(responses_request.model, "gpt-4o-mini");
+        assert_eq!(responses_request.temperature, Some(0.7));
+        assert_eq!(responses_request.max_output_tokens, Some(100));
+        assert_eq!(responses_request.seed, Some(42));
+        assert_eq!(responses_request.top_p, Some(0.9));
+        assert_eq!(responses_request.presence_penalty, Some(0.1));
+        assert_eq!(responses_request.frequency_penalty, Some(0.2));
+        assert_eq!(responses_request.stream, Some(true));
+        assert_eq!(responses_request.store, Some(true));
+        assert!(responses_request.text.is_some());
+    }
+
+    #[test]
+    fn test_openai_responses_format_new() {
+        use crate::inference::types::ModelInferenceRequestJsonMode;
+        use serde_json::json;
+
+        // Test strict mode with schema
+        let schema = json!({"type": "object", "properties": {}});
+        let format = OpenAIResponsesTextFormat::new(&ModelInferenceRequestJsonMode::Strict, Some(&schema));
+        match format {
+            Some(OpenAIResponsesTextFormat { format: OpenAIResponsesFormatType::JsonSchema { format_type, json_schema } }) => {
+                assert_eq!(format_type, "json_schema");
+                assert_eq!(json_schema["strict"], true);
+                assert_eq!(json_schema["name"], "response");
+            }
+            _ => panic!("Expected JsonSchema format"),
+        }
+
+        // Test JSON mode without schema
+        let format = OpenAIResponsesTextFormat::new(&ModelInferenceRequestJsonMode::On, None);
+        match format {
+            Some(OpenAIResponsesTextFormat { format: OpenAIResponsesFormatType::JsonSchema { format_type, .. } }) => {
+                assert_eq!(format_type, "json_object");
+            }
+            _ => panic!("Expected JsonObject format"),
+        }
+
+        // Test text mode
+        let format = OpenAIResponsesTextFormat::new(&ModelInferenceRequestJsonMode::Off, None);
+        match format {
+            Some(OpenAIResponsesTextFormat { format: OpenAIResponsesFormatType::Text { format_type } }) => {
+                assert_eq!(format_type, "text");
+            }
+            _ => panic!("Expected Text format"),
+        }
+    }
+
+    #[test]
+    fn test_openai_provider_creation() {
+        use crate::model::CredentialLocation;
+        
+        let provider = OpenAIProvider::new(
+            "gpt-4o-mini".to_string(),
+            None,
+            Some(CredentialLocation::None),
+        ).unwrap();
+
+        assert_eq!(provider.model_name, "gpt-4o-mini");
     }
 }

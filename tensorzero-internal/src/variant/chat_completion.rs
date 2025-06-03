@@ -189,6 +189,7 @@ impl ChatCompletionConfig {
             stream,
             inference_params,
             self.json_mode,
+            crate::inference::types::ApiType::ChatCompletions,
             extra_body,
             extra_headers,
         )
@@ -220,7 +221,7 @@ pub fn prepare_model_input(
     })
 }
 
-fn prepare_system_message(
+pub(super) fn prepare_system_message(
     system: Option<&Value>,
     templates: &TemplateConfig,
     template_name: Option<&str>,
@@ -246,7 +247,7 @@ fn prepare_system_message(
     }})
 }
 
-fn prepare_request_message(
+pub(super) fn prepare_request_message(
     message: &ResolvedInputMessage,
     templates: &TemplateConfig,
     template_name: Option<&str>,

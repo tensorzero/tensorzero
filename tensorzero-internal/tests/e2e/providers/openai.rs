@@ -1688,3 +1688,248 @@ async fn test_log_dropped_thought() {
         "Missing expected log message"
     );
 }
+
+#[tokio::test]
+async fn test_responses_api_basic_inference() {
+    // Test responses variant with regular model (uses Responses API)
+    use std::collections::HashMap;
+    use tensorzero::{
+        ClientBuilder, ClientBuilderMode, ClientInferenceParams, ClientInput, ClientInputMessage,
+        ClientInputMessageContent, InferenceOutput, InferenceResponse, Role,
+    };
+    use tensorzero_internal::inference::types::TextKind;
+    use uuid::Uuid;
+
+    let client = ClientBuilder::new(ClientBuilderMode::HTTPGateway {
+        url: crate::common::get_gateway_endpoint("/"),
+    })
+    .build()
+    .await
+    .unwrap();
+
+    let episode_id = Uuid::now_v7();
+
+    let input = ClientInput {
+        system: Some(serde_json::json!({"assistant_name": "ResponsesBot"})),
+        messages: vec![ClientInputMessage {
+            role: Role::User,
+            content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                text: "What is the capital of Japan?".to_string(),
+            })],
+        }],
+    };
+
+    let params = ClientInferenceParams {
+        function_name: Some("basic_test".to_string()),
+        variant_name: Some("openai-responses".to_string()),
+        episode_id: Some(episode_id),
+        input,
+        stream: Some(false),
+        tags: HashMap::from([
+            ("api_type".to_string(), "responses".to_string())
+        ]),
+        ..Default::default()
+    };
+
+    let response = client.inference(params).await.unwrap();
+
+    println!("Responses API response: {response:#?}");
+
+    // Extract response from InferenceOutput
+    let inference_response = match response {
+        InferenceOutput::NonStreaming(resp) => resp,
+        _ => panic!("Expected non-streaming response"),
+    };
+
+    let inference_id = inference_response.inference_id();
+
+    // Verify content is present
+    match inference_response {
+        InferenceResponse::Chat(chat_response) => {
+            assert!(!chat_response.content.is_empty());
+            // Check that we get valid response content about Tokyo
+            let content_text = serde_json::to_string(&chat_response.content).unwrap();
+            assert!(content_text.to_lowercase().contains("tokyo"));
+        }
+        _ => panic!("Expected chat response for basic inference test"),
+    }
+
+    // Sleep to allow ClickHouse writes
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    // Verify ClickHouse logging
+    let clickhouse = tensorzero_internal::clickhouse::test_helpers::get_clickhouse().await;
+    let result = tensorzero_internal::clickhouse::test_helpers::select_model_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    // Verify the request was logged with Responses API format
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request_val: serde_json::Value = serde_json::from_str(raw_request).unwrap();
+    
+    // This variant uses responses type, so should use Responses API format
+    assert!(raw_request_val.get("input").is_some()); // Responses API format
+    assert!(raw_request_val.get("messages").is_none()); // Not Chat Completions format
+}
+
+#[tokio::test]
+async fn test_responses_api_structured_output() {
+    // Test responses variant with regular model for JSON output (uses Responses API)
+    use std::collections::HashMap;
+    use tensorzero::{
+        ClientBuilder, ClientBuilderMode, ClientInferenceParams, ClientInput, ClientInputMessage,
+        ClientInputMessageContent, InferenceOutput, InferenceResponse, Role,
+    };
+    use tensorzero_internal::inference::types::TextKind;
+    use uuid::Uuid;
+
+    let client = ClientBuilder::new(ClientBuilderMode::HTTPGateway {
+        url: crate::common::get_gateway_endpoint("/"),
+    })
+    .build()
+    .await
+    .unwrap();
+
+    let episode_id = Uuid::now_v7();
+
+    let input = ClientInput {
+        system: Some(serde_json::json!({"assistant_name": "ResponsesBot"})),
+        messages: vec![ClientInputMessage {
+            role: Role::User,
+            content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                text: "The capital of France is Paris. It has a population of about 2.1 million people.".to_string(),
+            })],
+        }],
+    };
+
+    let params = ClientInferenceParams {
+        function_name: Some("json_success".to_string()),
+        variant_name: Some("openai-responses".to_string()),
+        episode_id: Some(episode_id),
+        input,
+        stream: Some(false),
+        tags: HashMap::from([
+            ("output_type".to_string(), "structured".to_string())
+        ]),
+        ..Default::default()
+    };
+
+    let response = client.inference(params).await.unwrap();
+
+    println!("Structured output response: {response:#?}");
+
+    // Extract response from InferenceOutput
+    let inference_response = match response {
+        InferenceOutput::NonStreaming(resp) => resp,
+        _ => panic!("Expected non-streaming response"),
+    };
+
+    let inference_id = inference_response.inference_id();
+
+    // Should have JSON output
+    match inference_response {
+        InferenceResponse::Json(json_response) => {
+            // Should have parsed JSON structure
+            println!("Parsed structured output: {:#?}", json_response.output.parsed);
+            assert!(json_response.output.parsed.expect("Should have parsed JSON").is_object());
+        }
+        _ => panic!("Expected JSON response for structured output test"),
+    }
+
+    // Sleep for ClickHouse writes
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    let clickhouse = tensorzero_internal::clickhouse::test_helpers::get_clickhouse().await;
+    let result = tensorzero_internal::clickhouse::test_helpers::select_model_inference_clickhouse(&clickhouse, inference_id)
+        .await.unwrap();
+
+    // Verify structured output was requested with Chat Completions API format
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request_val: serde_json::Value = serde_json::from_str(raw_request).unwrap();
+    
+    // This variant uses responses type, so should use Responses API format
+    assert!(raw_request_val.get("input").is_some()); // Responses API format
+    assert!(raw_request_val.get("messages").is_none()); // Not Chat Completions format
+    
+    if let Some(text) = raw_request_val.get("text") {
+        if let Some(format) = text.get("format") {
+            assert_eq!(format.get("type").unwrap().as_str().unwrap(), "json_object");
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_responses_api_backward_compatibility() {
+    // Test that existing Chat Completions requests still work
+    use std::collections::HashMap;
+    use tensorzero::{
+        ClientBuilder, ClientBuilderMode, ClientInferenceParams, ClientInput, ClientInputMessage,
+        ClientInputMessageContent, InferenceOutput, InferenceResponse, Role,
+    };
+    use tensorzero_internal::inference::types::TextKind;
+    use uuid::Uuid;
+
+    let client = ClientBuilder::new(ClientBuilderMode::HTTPGateway {
+        url: crate::common::get_gateway_endpoint("/"),
+    })
+    .build()
+    .await
+    .unwrap();
+
+    let episode_id = Uuid::now_v7();
+
+    let input = ClientInput {
+        system: Some(serde_json::json!({"assistant_name": "ChatBot"})),
+        messages: vec![ClientInputMessage {
+            role: Role::User,
+            content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                text: "Hello from Chat Completions API".to_string(),
+            })],
+        }],
+    };
+
+    let params = ClientInferenceParams {
+        function_name: Some("basic_test".to_string()),
+        variant_name: Some("openai".to_string()), // Use regular OpenAI provider (Chat Completions)
+        episode_id: Some(episode_id),
+        input,
+        stream: Some(false),
+        tags: HashMap::from([
+            ("api_type".to_string(), "chat_completions".to_string())
+        ]),
+        ..Default::default()
+    };
+
+    let response = client.inference(params).await.unwrap();
+
+    // Extract response from InferenceOutput
+    let inference_response = match response {
+        InferenceOutput::NonStreaming(resp) => resp,
+        _ => panic!("Expected non-streaming response"),
+    };
+
+    let inference_id = inference_response.inference_id();
+
+    // Should still work with existing format
+    match inference_response {
+        InferenceResponse::Chat(chat_response) => {
+            assert!(!chat_response.content.is_empty());
+        }
+        _ => panic!("Expected chat response"),
+    }
+
+    // Sleep for ClickHouse writes
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    let clickhouse = tensorzero_internal::clickhouse::test_helpers::get_clickhouse().await;
+    let result = tensorzero_internal::clickhouse::test_helpers::select_model_inference_clickhouse(&clickhouse, inference_id)
+        .await.unwrap();
+
+    // Should use Chat Completions format (has 'messages' field)
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request_val: serde_json::Value = serde_json::from_str(raw_request).unwrap();
+    
+    assert!(raw_request_val.get("messages").is_some()); // Chat Completions format
+    assert!(raw_request_val.get("input").is_none()); // Not Responses API format
+    assert!(raw_request_val.get("store").is_none()); // No stateful conversation
+}

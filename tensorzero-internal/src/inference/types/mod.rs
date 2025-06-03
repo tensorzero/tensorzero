@@ -376,11 +376,18 @@ impl RequestMessage {
     }
 }
 
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Copy, Default, Debug, Deserialize, PartialEq, Serialize)]
 pub enum FunctionType {
     #[default]
     Chat,
     Json,
+}
+
+#[derive(Clone, Copy, Default, Debug, Deserialize, PartialEq, Serialize)]
+pub enum ApiType {
+    #[default]
+    ChatCompletions,
+    Responses,
 }
 
 #[derive(Clone, Copy, Default, Debug, Deserialize, PartialEq, Serialize)]
@@ -414,12 +421,11 @@ pub struct ModelInferenceRequest<'a> {
     pub stream: bool,
     pub json_mode: ModelInferenceRequestJsonMode,
     pub function_type: FunctionType,
+    pub api_type: ApiType,
     pub output_schema: Option<&'a Value>,
     pub extra_body: FullExtraBodyConfig,
     pub extra_headers: FullExtraHeadersConfig,
     /// Optional arbitrary data, only used when constructing the cache key.
-    /// This is used by best_of_n/mixture_of_n to force different sub-variants
-    /// to have different cache keys.
     pub extra_cache_key: Option<String>,
 }
 
