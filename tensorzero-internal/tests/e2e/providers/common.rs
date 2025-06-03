@@ -207,6 +207,7 @@ macro_rules! generate_provider_tests {
         use $crate::providers::common::test_streaming_invalid_request_with_provider;
         use $crate::providers::common::test_json_mode_off_inference_request_with_provider;
         use $crate::providers::common::test_multiple_text_blocks_in_message_with_provider;
+        use $crate::providers::common::test_streaming_include_original_response_with_provider;
         use $crate::providers::common::test_pdf_inference_with_provider_filesystem;
 
         async fn test_simple_inference_request(client: tensorzero::Client) {
@@ -250,6 +251,14 @@ macro_rules! generate_provider_tests {
             }
         }
         $crate::make_gateway_test_functions!(test_shorthand_inference_request);
+
+        async fn test_streaming_include_original_response(client: tensorzero::Client) {
+            let providers = $func().await.simple_inference;
+            for provider in providers {
+                test_streaming_include_original_response_with_provider(provider, &client).await;
+            }
+        }
+        $crate::make_gateway_test_functions!(test_streaming_include_original_response);
 
         async fn test_simple_streaming_inference_request(client: tensorzero::Client) {
             let providers = $func().await.simple_inference;
@@ -2686,12 +2695,37 @@ pub async fn test_simple_streaming_inference_request_with_provider(
     let seed = rand::rng().random_range(0..u32::MAX);
 
     let original_content = test_simple_streaming_inference_request_with_provider_cache(
-        &provider, episode_id, seed, &tag_value, false, client,
+        &provider, episode_id, seed, &tag_value, false, false, client,
     )
     .await;
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     let cached_content = test_simple_streaming_inference_request_with_provider_cache(
-        &provider, episode_id, seed, &tag_value, true, client,
+        &provider, episode_id, seed, &tag_value, true, false, client,
+    )
+    .await;
+    assert_eq!(original_content, cached_content);
+}
+
+pub async fn test_streaming_include_original_response_with_provider(
+    provider: E2ETestProvider,
+    client: &tensorzero::Client,
+) {
+    // We use a serverless Sagemaker endpoint, which doesn't support streaming
+    if provider.variant_name == "aws-sagemaker-tgi" {
+        return;
+    }
+    let episode_id = Uuid::now_v7();
+    let tag_value = Uuid::now_v7().to_string();
+    // Generate random u32
+    let seed = rand::rng().random_range(0..u32::MAX);
+
+    let original_content = test_simple_streaming_inference_request_with_provider_cache(
+        &provider, episode_id, seed, &tag_value, false, true, client,
+    )
+    .await;
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    let cached_content = test_simple_streaming_inference_request_with_provider_cache(
+        &provider, episode_id, seed, &tag_value, true, true, client,
     )
     .await;
     assert_eq!(original_content, cached_content);
@@ -2703,6 +2737,7 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     seed: u32,
     tag_value: &str,
     check_cache: bool,
+    include_original_response: bool,
     client: &tensorzero::Client,
 ) -> String {
     let response = client
@@ -2732,8 +2767,7 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
         })
         .await
         .unwrap();
-
-    let tensorzero::InferenceOutput::Streaming(mut streaming_response) = response else {
+    let InferenceOutput::Streaming(mut streaming_response) = response else {
         panic!("Expected streaming response");
     };
 
@@ -2756,6 +2790,13 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
         let chunk_json: Value = serde_json::from_str(&chunk_str).unwrap();
 
         println!("API response chunk: {chunk_json:#?}");
+
+        // The `original_chunk` field should only be set if we enable the `include_original_response` flag
+        if include_original_response {
+            assert!(chunk_json.get("original_chunk").is_some());
+        } else {
+            assert_eq!(chunk_json.get("original_chunk"), None);
+        }
 
         let chunk_inference_id = chunk_json.get("inference_id").unwrap().as_str().unwrap();
         let chunk_inference_id = Uuid::parse_str(chunk_inference_id).unwrap();
