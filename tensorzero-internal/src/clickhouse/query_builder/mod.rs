@@ -1,6 +1,6 @@
 use itertools::Itertools;
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeSet, HashMap},
     fmt::{self, Display},
 };
 
@@ -37,6 +37,102 @@ impl FloatComparisonOperator {
             FloatComparisonOperator::GreaterThanOrEqual => ">=",
             FloatComparisonOperator::NotEqual => "!=",
         }
+    }
+}
+
+#[derive(Hash, Eq, PartialEq, Debug)]
+enum FeedbackTable {
+    Float,
+    Boolean,
+}
+
+impl FeedbackTable {
+    fn to_clickhouse_table_name(&self) -> &str {
+        match self {
+            FeedbackTable::Float => "FloatMetricFeedback",
+            FeedbackTable::Boolean => "BooleanMetricFeedback",
+        }
+    }
+}
+
+#[derive(Hash, Eq, PartialEq, Debug)]
+struct JoinKey {
+    table: FeedbackTable,
+    metric_name: String,
+    inference_column_name: &'static str,
+}
+
+struct JoinRegistry {
+    // map key to join alias
+    aliases: HashMap<JoinKey, String>,
+    // The actual JOIN clauses that have been registered
+    clauses: Vec<String>,
+}
+
+impl JoinRegistry {
+    fn new() -> Self {
+        Self {
+            aliases: HashMap::new(),
+            clauses: Vec::new(),
+        }
+    }
+
+    fn get_clauses(&self) -> &[String] {
+        &self.clauses
+    }
+
+    fn get_or_insert(
+        &mut self,
+        key: JoinKey,
+        params_map: &mut Vec<QueryParameter>,
+        param_idx_counter: &mut usize,
+    ) -> String {
+        if let Some(alias) = self.aliases.get(&key) {
+            return alias.clone(); // we already have a join for this key
+        }
+        let alias = format!("j{}", self.aliases.len());
+        self.clauses
+            .push(self.build_clause(&alias, &key, params_map, param_idx_counter));
+        self.aliases.insert(key, alias.clone());
+        alias
+    }
+
+    /// Inserts a join clause that is not part of the filter tree.
+    fn insert_unchecked(&mut self, clause: String) {
+        self.clauses.push(clause);
+    }
+
+    fn build_clause(
+        &self,
+        alias: &str,
+        key: &JoinKey,
+        params_map: &mut Vec<QueryParameter>,
+        param_idx_counter: &mut usize,
+    ) -> String {
+        let inference_table_column_name = key.inference_column_name;
+        let table_name_placeholder = add_parameter(
+            key.table.to_clickhouse_table_name(),
+            ClickhouseType::Identifier,
+            params_map,
+            param_idx_counter,
+        );
+        let metric_name_placeholder = add_parameter(
+            &key.metric_name,
+            ClickhouseType::String,
+            params_map,
+            param_idx_counter,
+        );
+        format!(
+            r#"
+LEFT JOIN (
+    SELECT
+        target_id,
+        argMax(value, timestamp) as value
+    FROM {table_name_placeholder}
+    WHERE metric_name = {metric_name_placeholder}
+    GROUP BY target_id
+) AS {alias} ON i.{inference_table_column_name} = {alias}.target_id"#
+        )
     }
 }
 
@@ -81,9 +177,8 @@ impl InferenceFilterTreeNode {
         config: &Config,
         params_map: &mut Vec<QueryParameter>,
         _select_clauses: &mut BTreeSet<String>,
-        join_clauses: &mut Vec<String>,
+        joins: &mut JoinRegistry,
         param_idx_counter: &mut usize,
-        join_idx_counter: &mut usize,
     ) -> Result<String, Error> {
         match self {
             InferenceFilterTreeNode::FloatMetric(fm_node) => {
@@ -95,17 +190,16 @@ impl InferenceFilterTreeNode {
                             metric_name: fm_node.metric_name.clone(),
                         })
                     })?;
-                let inference_table_column_name = metric_config.level.inference_column_name();
+                let inference_column_name = metric_config.level.inference_column_name();
 
-                // 1. Create an alias for the join condition we'll need
-                let join_alias = get_join_alias(join_idx_counter);
-                // 2. Set up query parameters
-                let metric_name_placeholder = add_parameter(
-                    &fm_node.metric_name,
-                    ClickhouseType::String,
-                    params_map,
-                    param_idx_counter,
-                );
+                // 1. Create an alias and register the join clause for the join condition we'll need
+                let key = JoinKey {
+                    table: FeedbackTable::Float,
+                    metric_name: fm_node.metric_name.clone(),
+                    inference_column_name,
+                };
+                let join_alias = joins.get_or_insert(key, params_map, param_idx_counter);
+                // 2. Set up query parameters for the filter condition
                 let value_placeholder = add_parameter(
                     fm_node.value,
                     ClickhouseType::Float64,
@@ -113,45 +207,29 @@ impl InferenceFilterTreeNode {
                     param_idx_counter,
                 );
 
-                // 3. register the LEFT JOIN clause
-                let comparison_operator = fm_node.comparison_operator.to_clickhouse_operator();
-                join_clauses.push(format!(
-                    r#"
-LEFT JOIN (
-    SELECT
-        target_id,
-        argMax(value, timestamp) as value
-    FROM FloatMetricFeedback
-    WHERE metric_name = {metric_name_placeholder}
-    GROUP BY target_id
-) AS {join_alias} ON i.{inference_table_column_name} = {join_alias}.target_id"#
-                ));
-                // 4. return the filter condition
+                // 3. return the filter condition
                 // NOTE: if the join_alias is NULL, the filter condition will be NULL also
                 // We handle this farther up the recursive tree
+                let comparison_operator = fm_node.comparison_operator.to_clickhouse_operator();
                 Ok(format!(
                     "{join_alias}.value {comparison_operator} {value_placeholder}"
                 ))
             }
             InferenceFilterTreeNode::BooleanMetric(bm_node) => {
-                let metric_config = config
-                    .metrics
-                    .get(bm_node.metric_name.as_str())
-                    .ok_or_else(|| {
-                        Error::new(ErrorDetails::InvalidMetricName {
-                            metric_name: bm_node.metric_name.clone(),
-                        })
-                    })?;
-                let inference_table_column_name = metric_config.level.inference_column_name();
-                // 1. Create an alias for the join condition we'll need
-                let join_alias = get_join_alias(join_idx_counter);
-                // 2. Set up query parameters
-                let metric_name_placeholder = add_parameter(
-                    &bm_node.metric_name,
-                    ClickhouseType::String,
-                    params_map,
-                    param_idx_counter,
-                );
+                let metric_config = config.metrics.get(&bm_node.metric_name).ok_or_else(|| {
+                    Error::new(ErrorDetails::InvalidMetricName {
+                        metric_name: bm_node.metric_name.clone(),
+                    })
+                })?;
+                let inference_column_name = metric_config.level.inference_column_name();
+                // 1. Create an alias and register the join clause for the join condition we'll need
+                let key = JoinKey {
+                    table: FeedbackTable::Boolean,
+                    metric_name: bm_node.metric_name.clone(),
+                    inference_column_name,
+                };
+                let join_alias = joins.get_or_insert(key, params_map, param_idx_counter);
+                // 2. Set up query parameters for the filter condition
                 let bool_value_str = if bm_node.value { "1" } else { "0" };
                 let value_placeholder = add_parameter(
                     bool_value_str,
@@ -159,18 +237,6 @@ LEFT JOIN (
                     params_map,
                     param_idx_counter,
                 );
-                // 3. register the JOIN clause
-                join_clauses.push(format!(
-                    r#"
-LEFT JOIN (
-    SELECT
-        target_id,
-        argMax(value, timestamp) as value
-    FROM BooleanMetricFeedback
-    WHERE metric_name = {metric_name_placeholder}
-    GROUP BY target_id
-) AS {join_alias} ON i.{inference_table_column_name} = {join_alias}.target_id"#
-                ));
                 // 4. return the filter condition
                 // NOTE: if the join_alias is NULL, the filter condition will be NULL also
                 // We handle this farther up the recursive tree
@@ -184,9 +250,8 @@ LEFT JOIN (
                             config,
                             params_map,
                             _select_clauses,
-                            join_clauses,
+                            joins,
                             param_idx_counter,
-                            join_idx_counter,
                         )
                     })
                     .collect::<Result<Vec<String>, Error>>()?
@@ -206,9 +271,8 @@ LEFT JOIN (
                             config,
                             params_map,
                             _select_clauses,
-                            join_clauses,
+                            joins,
                             param_idx_counter,
-                            join_idx_counter,
                         )
                     })
                     .collect::<Result<Vec<String>, Error>>()?
@@ -225,9 +289,8 @@ LEFT JOIN (
                     config,
                     params_map,
                     _select_clauses,
-                    join_clauses,
+                    joins,
                     param_idx_counter,
-                    join_idx_counter,
                 )?;
                 // We need to coalesce the filter condition to 1 if the join_alias is NULL
                 // For a NOT filter we want to still be false if the join_alias is NULL
@@ -278,7 +341,6 @@ pub fn generate_list_inferences_sql(
 ) -> Result<(String, Vec<QueryParameter>), Error> {
     let mut params_map: Vec<QueryParameter> = Vec::new();
     let mut param_idx_counter = 0; // Counter for unique parameter names
-    let mut join_idx_counter = 0; // Counter for unique join aliases
 
     let function_config = config.get_function(opts.function_name)?;
     let function_name_param_placeholder = add_parameter(
@@ -288,7 +350,7 @@ pub fn generate_list_inferences_sql(
         &mut param_idx_counter,
     );
     let mut select_clauses = get_select_clauses(&function_config, &function_name_param_placeholder);
-    let mut join_clauses: Vec<String> = Vec::new();
+    let mut joins = JoinRegistry::new();
     let mut where_clauses: Vec<String> = Vec::new();
 
     let inference_table_name = function_config.table_name();
@@ -317,7 +379,7 @@ pub fn generate_list_inferences_sql(
             select_clauses.insert("demo_f.value AS output".to_string());
 
             // NOTE: we may want to pre-filter this via subqueries or CTEs prior to the join for performance reasons
-            join_clauses.push(
+            joins.insert_unchecked(
                 "\nJOIN \
                  (SELECT \
                     inference_id, \
@@ -338,9 +400,8 @@ pub fn generate_list_inferences_sql(
             config,
             &mut params_map,
             &mut select_clauses,
-            &mut join_clauses,
+            &mut joins,
             &mut param_idx_counter,
-            &mut join_idx_counter,
         )?;
         where_clauses.push(filter_condition_sql);
     }
@@ -355,8 +416,8 @@ FROM
         inference_table_name = inference_table_name,
     );
 
-    if !join_clauses.is_empty() {
-        sql.push_str(&join_clauses.join("\n"));
+    if !joins.get_clauses().is_empty() {
+        sql.push_str(&joins.get_clauses().join("\n"));
     }
 
     if !where_clauses.is_empty() {
@@ -394,6 +455,7 @@ FROM
 
 #[derive(Debug, Clone, PartialEq)]
 enum ClickhouseType {
+    Identifier,
     String,
     Float64,
     Bool,
@@ -403,6 +465,7 @@ enum ClickhouseType {
 impl Display for ClickhouseType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            ClickhouseType::Identifier => write!(f, "Identifier"),
             ClickhouseType::String => write!(f, "String"),
             ClickhouseType::Float64 => write!(f, "Float64"),
             ClickhouseType::Bool => write!(f, "Bool"),
