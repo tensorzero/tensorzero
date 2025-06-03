@@ -1409,7 +1409,7 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
     // NOTE: We will eventually need this to be per-inference-response-type and sensitive to the type of variant and function being called.
     // We preserve the order of chunks in the stream when combining them into `ContentBlockOutput`, except when
     // the same id is used by non-adjacent blocks.
-    // For example, the follow chunks:
+    // For example, the following chunks:
     // `[TextChunk(id=0, content="Hello ""), ThoughtChunk(id=0, content=Something), TextChunk(id=0, content=World)]``
     // will be collected into the content block list: `[Text("Hello World"), Thought("Something"))]`
     //
