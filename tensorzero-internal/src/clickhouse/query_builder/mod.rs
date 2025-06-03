@@ -971,6 +971,11 @@ FORMAT JSONEachRow"#;
                 metric_name: "exact_match".to_string(),
                 value: true,
             }),
+            InferenceFilterTreeNode::BooleanMetric(BooleanMetricNode {
+                // Episode-level metric
+                metric_name: "goal_achieved".to_string(),
+                value: true,
+            }),
         ]);
         let opts = ListInferencesParams {
             function_name: "extract_entities",
@@ -1012,8 +1017,17 @@ LEFT JOIN (
     WHERE metric_name = {p3:String}
     GROUP BY target_id
 ) AS j1 ON i.id = j1.target_id
+
+LEFT JOIN (
+    SELECT
+        target_id,
+        argMax(value, timestamp) as value
+    FROM BooleanMetricFeedback
+    WHERE metric_name = {p5:String}
+    GROUP BY target_id
+) AS j2 ON i.episode_id = j2.target_id
 WHERE
-    i.function_name = {p0:String} AND (COALESCE(j0.value >= {p2:Float64}, 0) OR COALESCE(j1.value = {p4:Bool}, 0))
+    i.function_name = {p0:String} AND (COALESCE(j0.value >= {p2:Float64}, 0) OR COALESCE(j1.value = {p4:Bool}, 0) OR COALESCE(j2.value = {p6:Bool}, 0))
 FORMAT JSONEachRow"#;
         assert_eq!(sql, expected_sql);
         let expected_params = vec![
@@ -1035,6 +1049,14 @@ FORMAT JSONEachRow"#;
             },
             QueryParameter {
                 name: "p4".to_string(),
+                value: "1".to_string(),
+            },
+            QueryParameter {
+                name: "p5".to_string(),
+                value: "goal_achieved".to_string(),
+            },
+            QueryParameter {
+                name: "p6".to_string(),
                 value: "1".to_string(),
             },
         ];

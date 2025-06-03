@@ -753,6 +753,7 @@ impl Client {
         &self,
         params: ListInferencesParams<'_>,
     ) -> Result<Vec<StoredInference>, TensorZeroError> {
+        // TODO: consider adding a flag that returns the generated sql query
         let ClientMode::EmbeddedGateway { gateway, .. } = &self.mode else {
             return Err(TensorZeroError::Other {
                 source: tensorzero_internal::error::Error::new(ErrorDetails::InvalidClientMode {

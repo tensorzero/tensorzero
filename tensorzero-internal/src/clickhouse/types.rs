@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use crate::{
     inference::types::{ContentBlockChatOutput, JsonInferenceOutput, ResolvedInput},
-    serde_util::deserialize_string_or_parsed_json,
+    serde_util::{deserialize_defaulted_string_or_parsed_json, deserialize_string_or_parsed_json},
     tool::ToolCallConfigDatabaseInsert,
 };
 
@@ -31,7 +31,7 @@ pub struct StoredChatInference {
     pub output: Vec<ContentBlockChatOutput>,
     pub episode_id: Uuid,
     pub inference_id: Uuid,
-    #[serde(deserialize_with = "deserialize_string_or_parsed_json")]
+    #[serde(deserialize_with = "deserialize_defaulted_string_or_parsed_json")]
     pub tool_params: ToolCallConfigDatabaseInsert,
 }
 
