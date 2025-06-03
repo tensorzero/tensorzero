@@ -418,9 +418,6 @@ impl ClickHouseConnectionInfo {
             .map(|p| (p.name.as_str(), p.value.as_str()))
             .collect();
         let response = self.run_query_synchronous(sql, &params_map).await?;
-        let parsed: serde_json::Value = serde_json::from_str(&response).unwrap();
-        let pretty_json = serde_json::to_string_pretty(&parsed).unwrap();
-        println!("response: {pretty_json}");
         let inferences = response
             .trim()
             .lines()

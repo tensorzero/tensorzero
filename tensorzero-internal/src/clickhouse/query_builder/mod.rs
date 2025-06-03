@@ -444,7 +444,7 @@ fn get_select_clauses(
         "i.input as input".to_string(),
         "i.variant_name as variant_name".to_string(),
         "i.episode_id as episode_id".to_string(),
-        "i.id as id".to_string(),
+        "i.id as inference_id".to_string(),
         "i.timestamp as timestamp".to_string(),
         // We don't select output here because it's handled separately based on the output_source
     ]);
@@ -495,7 +495,7 @@ mod tests {
 SELECT
     'json' as type,
     i.episode_id as episode_id,
-    i.id as id,
+    i.id as inference_id,
     i.input as input,
     i.output as output,
     i.output_schema as output_schema,
@@ -505,19 +505,13 @@ SELECT
 FROM
     JsonInference AS i
 WHERE
-    i.function_name = {p1:String}
+    i.function_name = {p0:String}
 FORMAT JSONEachRow"#;
         assert_eq!(sql, expected_sql);
-        let expected_params = vec![
-            QueryParameter {
-                name: "p0".to_string(),
-                value: "extract_entities".to_string(),
-            },
-            QueryParameter {
-                name: "p1".to_string(),
-                value: "extract_entities".to_string(),
-            },
-        ];
+        let expected_params = vec![QueryParameter {
+            name: "p0".to_string(),
+            value: "extract_entities".to_string(),
+        }];
         assert_eq!(params, expected_params);
     }
 
@@ -538,7 +532,7 @@ FORMAT JSONEachRow"#;
 SELECT
     'chat' as type,
     i.episode_id as episode_id,
-    i.id as id,
+    i.id as inference_id,
     i.input as input,
     i.output as output,
     i.timestamp as timestamp,
@@ -548,19 +542,13 @@ SELECT
 FROM
     ChatInference AS i
 WHERE
-    i.function_name = {p1:String}
+    i.function_name = {p0:String}
 FORMAT JSONEachRow"#;
         assert_eq!(sql, expected_sql);
-        let expected_params = vec![
-            QueryParameter {
-                name: "p0".to_string(),
-                value: "write_haiku".to_string(),
-            },
-            QueryParameter {
-                name: "p1".to_string(),
-                value: "write_haiku".to_string(),
-            },
-        ];
+        let expected_params = vec![QueryParameter {
+            name: "p0".to_string(),
+            value: "write_haiku".to_string(),
+        }];
         assert_eq!(params, expected_params);
     }
 
@@ -586,7 +574,7 @@ FORMAT JSONEachRow"#;
 SELECT
     'json' as type,
     i.episode_id as episode_id,
-    i.id as id,
+    i.id as inference_id,
     i.input as input,
     i.output as output,
     i.output_schema as output_schema,
@@ -600,11 +588,11 @@ LEFT JOIN (
         target_id,
         argMax(value, timestamp) as value
     FROM FloatMetricFeedback
-    WHERE metric_name = {p2:String}
+    WHERE metric_name = {p1:String}
     GROUP BY target_id
 ) AS j0 ON i.id = j0.target_id
 WHERE
-    i.function_name = {p1:String} AND j0.value > {p3:Float64}
+    i.function_name = {p0:String} AND j0.value > {p2:Float64}
 FORMAT JSONEachRow"#;
         assert_eq!(sql, expected_sql);
         let expected_params = vec![
@@ -614,14 +602,10 @@ FORMAT JSONEachRow"#;
             },
             QueryParameter {
                 name: "p1".to_string(),
-                value: "extract_entities".to_string(),
-            },
-            QueryParameter {
-                name: "p2".to_string(),
                 value: "jaccard_similarity".to_string(),
             },
             QueryParameter {
-                name: "p3".to_string(),
+                name: "p2".to_string(),
                 value: "0.5".to_string(),
             },
         ];
@@ -691,11 +675,12 @@ SELECT
     'json' as type,
     demo_f.value AS output,
     i.episode_id as episode_id,
-    i.id as id,
+    i.id as inference_id,
     i.input as input,
     i.output_schema as output_schema,
     i.timestamp as timestamp,
-    i.variant_name as variant_name
+    i.variant_name as variant_name,
+    {p0:String} as function_name
 FROM
     JsonInference AS i
 JOIN (SELECT inference_id, argMax(value, timestamp) as value FROM DemonstrationFeedback GROUP BY inference_id ) AS demo_f ON i.id = demo_f.inference_id
@@ -731,13 +716,13 @@ FORMAT JSONEachRow"#;
 SELECT
     'json' as type,
     i.episode_id as episode_id,
-    {p0:String} as function_name,
-    i.id as id,
+    i.id as inference_id,
     i.input as input,
     i.output as output,
     i.output_schema as output_schema,
     i.timestamp as timestamp,
-    i.variant_name as variant_name
+    i.variant_name as variant_name,
+    {p0:String} as function_name
 FROM
     JsonInference AS i
 LEFT JOIN (
@@ -745,11 +730,11 @@ LEFT JOIN (
         target_id,
         argMax(value, timestamp) as value
     FROM BooleanMetricFeedback
-    WHERE metric_name = {p2:String}
+    WHERE metric_name = {p1:String}
     GROUP BY target_id
 ) AS j0 ON i.id = j0.target_id
 WHERE
-    i.function_name = {p1:String} AND j0.value = {p3:Bool}
+    i.function_name = {p0:String} AND j0.value = {p2:Bool}
 FORMAT JSONEachRow"#;
         assert_eq!(sql, expected_sql);
         let expected_params = vec![
@@ -759,14 +744,10 @@ FORMAT JSONEachRow"#;
             },
             QueryParameter {
                 name: "p1".to_string(),
-                value: "extract_entities".to_string(),
-            },
-            QueryParameter {
-                name: "p2".to_string(),
                 value: "task_success".to_string(),
             },
             QueryParameter {
-                name: "p3".to_string(),
+                name: "p2".to_string(),
                 value: "1".to_string(),
             },
         ];
@@ -794,13 +775,13 @@ FORMAT JSONEachRow"#;
 SELECT
     'json' as type,
     i.episode_id as episode_id,
-    {p0:String} as function_name,
-    i.id as id,
+    i.id as inference_id,
     i.input as input,
     i.output as output,
     i.output_schema as output_schema,
     i.timestamp as timestamp,
-    i.variant_name as variant_name
+    i.variant_name as variant_name,
+    {p0:String} as function_name
 FROM
     JsonInference AS i
 LEFT JOIN (
@@ -808,11 +789,11 @@ LEFT JOIN (
         target_id,
         argMax(value, timestamp) as value
     FROM BooleanMetricFeedback
-    WHERE metric_name = {p2:String}
+    WHERE metric_name = {p1:String}
     GROUP BY target_id
 ) AS j0 ON i.id = j0.target_id
 WHERE
-    i.function_name = {p1:String} AND j0.value = {p3:Bool}
+    i.function_name = {p0:String} AND j0.value = {p2:Bool}
 FORMAT JSONEachRow"#;
         assert_eq!(sql, expected_sql);
         let expected_params = vec![
@@ -822,14 +803,10 @@ FORMAT JSONEachRow"#;
             },
             QueryParameter {
                 name: "p1".to_string(),
-                value: "extract_entities".to_string(),
-            },
-            QueryParameter {
-                name: "p2".to_string(),
                 value: "task_success".to_string(),
             },
             QueryParameter {
-                name: "p3".to_string(),
+                name: "p2".to_string(),
                 value: "0".to_string(),
             },
         ];
@@ -865,13 +842,13 @@ FORMAT JSONEachRow"#;
 SELECT
     'json' as type,
     i.episode_id as episode_id,
-    {p0:String} as function_name,
-    i.id as id,
+    i.id as inference_id,
     i.input as input,
     i.output as output,
     i.output_schema as output_schema,
     i.timestamp as timestamp,
-    i.variant_name as variant_name
+    i.variant_name as variant_name,
+    {p0:String} as function_name
 FROM
     JsonInference AS i
 LEFT JOIN (
@@ -879,7 +856,7 @@ LEFT JOIN (
         target_id,
         argMax(value, timestamp) as value
     FROM FloatMetricFeedback
-    WHERE metric_name = {p2:String}
+    WHERE metric_name = {p1:String}
     GROUP BY target_id
 ) AS j0 ON i.id = j0.target_id
 
@@ -888,11 +865,11 @@ LEFT JOIN (
         target_id,
         argMax(value, timestamp) as value
     FROM FloatMetricFeedback
-    WHERE metric_name = {p4:String}
+    WHERE metric_name = {p3:String}
     GROUP BY target_id
 ) AS j1 ON i.id = j1.target_id
 WHERE
-    i.function_name = {p1:String} AND (COALESCE(j0.value > {p3:Float64}, 0) AND COALESCE(j1.value < {p5:Float64}, 0))
+    i.function_name = {p0:String} AND (COALESCE(j0.value > {p2:Float64}, 0) AND COALESCE(j1.value < {p4:Float64}, 0))
 FORMAT JSONEachRow"#;
         assert_eq!(sql, expected_sql);
         let expected_params = vec![
@@ -902,22 +879,18 @@ FORMAT JSONEachRow"#;
             },
             QueryParameter {
                 name: "p1".to_string(),
-                value: "extract_entities".to_string(),
-            },
-            QueryParameter {
-                name: "p2".to_string(),
                 value: "jaccard_similarity".to_string(),
             },
             QueryParameter {
-                name: "p3".to_string(),
+                name: "p2".to_string(),
                 value: "0.5".to_string(),
             },
             QueryParameter {
-                name: "p4".to_string(),
+                name: "p3".to_string(),
                 value: "brevity_score".to_string(),
             },
             QueryParameter {
-                name: "p5".to_string(),
+                name: "p4".to_string(),
                 value: "10".to_string(),
             },
         ];
@@ -952,7 +925,7 @@ FORMAT JSONEachRow"#;
 SELECT
     'json' as type,
     i.episode_id as episode_id,
-    i.id as id,
+    i.id as inference_id,
     i.input as input,
     i.output as output,
     i.output_schema as output_schema,
@@ -966,7 +939,7 @@ LEFT JOIN (
         target_id,
         argMax(value, timestamp) as value
     FROM FloatMetricFeedback
-    WHERE metric_name = {p2:String}
+    WHERE metric_name = {p1:String}
     GROUP BY target_id
 ) AS j0 ON i.id = j0.target_id
 
@@ -975,11 +948,11 @@ LEFT JOIN (
         target_id,
         argMax(value, timestamp) as value
     FROM BooleanMetricFeedback
-    WHERE metric_name = {p4:String}
+    WHERE metric_name = {p3:String}
     GROUP BY target_id
 ) AS j1 ON i.id = j1.target_id
 WHERE
-    i.function_name = {p1:String} AND (COALESCE(j0.value >= {p3:Float64}, 0) OR COALESCE(j1.value = {p5:Bool}, 0))
+    i.function_name = {p0:String} AND (COALESCE(j0.value >= {p2:Float64}, 0) OR COALESCE(j1.value = {p4:Bool}, 0))
 FORMAT JSONEachRow"#;
         assert_eq!(sql, expected_sql);
         let expected_params = vec![
@@ -989,10 +962,6 @@ FORMAT JSONEachRow"#;
             },
             QueryParameter {
                 name: "p1".to_string(),
-                value: "extract_entities".to_string(),
-            },
-            QueryParameter {
-                name: "p2".to_string(),
                 value: "jaccard_similarity".to_string(),
             },
             QueryParameter {
@@ -1034,12 +1003,13 @@ FORMAT JSONEachRow"#;
 SELECT
     'json' as type,
     i.episode_id as episode_id,
-    i.id as id,
+    i.id as inference_id,
     i.input as input,
     i.output as output,
     i.output_schema as output_schema,
     i.timestamp as timestamp,
-    i.variant_name as variant_name
+    i.variant_name as variant_name,
+    {p0:String} as function_name
 FROM
     JsonInference AS i
 LEFT JOIN (
@@ -1108,12 +1078,13 @@ FORMAT JSONEachRow"#;
 SELECT
     'json' as type,
     i.episode_id as episode_id,
-    i.id as id,
+    i.id as inference_id,
     i.input as input,
     i.output as output,
     i.output_schema as output_schema,
     i.timestamp as timestamp,
-    i.variant_name as variant_name
+    i.variant_name as variant_name,
+    {p0:String} as function_name
 FROM
     JsonInference AS i
 LEFT JOIN (
@@ -1166,7 +1137,7 @@ FORMAT JSONEachRow"#;
 SELECT
     'json' as type,
     i.episode_id as episode_id,
-    i.id as id,
+    i.id as inference_id,
     i.input as input,
     i.output as output,
     i.output_schema as output_schema,
@@ -1176,7 +1147,7 @@ SELECT
 FROM
     JsonInference AS i
 WHERE
-    i.function_name = {p1:String} AND i.variant_name = {p2:String}
+    i.function_name = {p0:String} AND i.variant_name = {p1:String}
 FORMAT JSONEachRow"#;
         assert_eq!(sql, expected_sql);
         let expected_params = vec![
@@ -1186,10 +1157,6 @@ FORMAT JSONEachRow"#;
             },
             QueryParameter {
                 name: "p1".to_string(),
-                value: "extract_entities".to_string(),
-            },
-            QueryParameter {
-                name: "p2".to_string(),
                 value: "v1".to_string(),
             },
         ];
@@ -1213,12 +1180,13 @@ FORMAT JSONEachRow"#;
 SELECT
     'json' as type,
     i.episode_id as episode_id,
-    i.id as id,
+    i.id as inference_id,
     i.input as input,
     i.output as output,
     i.output_schema as output_schema,
     i.timestamp as timestamp,
-    i.variant_name as variant_name
+    i.variant_name as variant_name,
+    {p0:String} as function_name
 FROM
     JsonInference AS i
 WHERE
@@ -1277,12 +1245,13 @@ FORMAT JSONEachRow"#;
 SELECT
     'json' as type,
     i.episode_id as episode_id,
-    i.id as id,
+    i.id as inference_id,
     i.input as input,
     i.output as output,
     i.output_schema as output_schema,
     i.timestamp as timestamp,
-    i.variant_name as variant_name
+    i.variant_name as variant_name,
+    {{p0:String}} as function_name
 FROM
     JsonInference AS i
 LEFT JOIN (
@@ -1345,11 +1314,12 @@ SELECT
     'json' as type,
     demo_f.value AS output,
     i.episode_id as episode_id,
-    i.id as id,
+    i.id as inference_id,
     i.input as input,
     i.output_schema as output_schema,
     i.timestamp as timestamp,
-    i.variant_name as variant_name
+    i.variant_name as variant_name,
+    {p0:String} as function_name
 FROM
     JsonInference AS i
 JOIN (SELECT inference_id, argMax(value, timestamp) as value FROM DemonstrationFeedback GROUP BY inference_id ) AS demo_f ON i.id = demo_f.inference_id
