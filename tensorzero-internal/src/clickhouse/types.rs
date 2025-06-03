@@ -4,6 +4,7 @@ use uuid::Uuid;
 
 use crate::{
     inference::types::{ContentBlockChatOutput, JsonInferenceOutput, ResolvedInput},
+    serde_util::deserialize_string_or_parsed_json,
     tool::ToolCallConfigDatabaseInsert,
 };
 
@@ -19,14 +20,18 @@ pub enum StoredInference {
     Json(StoredJsonInference),
 }
 
+// TODO: test deserialization of these two types from strings and from parsed json
 #[derive(Debug, Deserialize, PartialEq)]
 pub struct StoredChatInference {
     pub function_name: String,
     pub variant_name: String,
+    #[serde(deserialize_with = "deserialize_string_or_parsed_json")]
     pub input: ResolvedInput,
+    #[serde(deserialize_with = "deserialize_string_or_parsed_json")]
     pub output: Vec<ContentBlockChatOutput>,
     pub episode_id: Uuid,
     pub inference_id: Uuid,
+    #[serde(deserialize_with = "deserialize_string_or_parsed_json")]
     pub tool_params: ToolCallConfigDatabaseInsert,
 }
 
@@ -34,10 +39,13 @@ pub struct StoredChatInference {
 pub struct StoredJsonInference {
     pub function_name: String,
     pub variant_name: String,
+    #[serde(deserialize_with = "deserialize_string_or_parsed_json")]
     pub input: ResolvedInput,
+    #[serde(deserialize_with = "deserialize_string_or_parsed_json")]
     pub output: JsonInferenceOutput,
     pub episode_id: Uuid,
     pub inference_id: Uuid,
+    #[serde(deserialize_with = "deserialize_string_or_parsed_json")]
     pub output_schema: Value,
 }
 

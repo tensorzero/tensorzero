@@ -5,6 +5,7 @@ use std::{
 };
 
 use crate::{
+    clickhouse::ClickhouseFormat,
     config_parser::Config,
     error::{Error, ErrorDetails},
     function::FunctionConfig,
@@ -122,7 +123,6 @@ LEFT JOIN (
         argMax(value, timestamp) as value
     FROM FloatMetricFeedback
     WHERE metric_name = {metric_name_placeholder}
-    AND value {comparison_operator} {value_placeholder}
     GROUP BY target_id
 ) AS {join_alias} ON i.{inference_table_column_name} = {join_alias}.target_id"#
                 ));
@@ -168,7 +168,6 @@ LEFT JOIN (
         argMax(value, timestamp) as value
     FROM BooleanMetricFeedback
     WHERE metric_name = {metric_name_placeholder}
-    AND value = {value_placeholder}
     GROUP BY target_id
 ) AS {join_alias} ON i.{inference_table_column_name} = {join_alias}.target_id"#
                 ));
@@ -247,6 +246,7 @@ pub struct ListInferencesParams<'a> {
     pub output_source: InferenceOutputSource,
     pub limit: Option<u64>,
     pub offset: Option<u64>,
+    pub format: ClickhouseFormat,
 }
 
 /// Represents a parameter to be set for the ClickHouse query.
@@ -271,6 +271,7 @@ pub struct QueryParameter {
 ///
 /// TODOs:
 /// - handle selecting the feedback values
+/// - deduplicate the joins
 pub fn generate_list_inferences_sql(
     config: &Config,
     opts: &ListInferencesParams<'_>,
@@ -280,7 +281,12 @@ pub fn generate_list_inferences_sql(
     let mut join_idx_counter = 0; // Counter for unique join aliases
 
     let function_config = config.get_function(opts.function_name)?;
-    let mut select_clauses = get_select_clauses(&function_config);
+    let mut select_clauses = get_select_clauses(
+        &function_config,
+        &opts.function_name,
+        &mut params_map,
+        &mut param_idx_counter,
+    );
     let mut join_clauses: Vec<String> = Vec::new();
     let mut where_clauses: Vec<String> = Vec::new();
 
@@ -382,6 +388,11 @@ FROM
         );
         sql.push_str(&format!("\nOFFSET {offset_param_placeholder}"));
     }
+    match opts.format {
+        ClickhouseFormat::JsonEachRow => {
+            sql.push_str("\nFORMAT JSONEachRow");
+        }
+    }
 
     Ok((sql, params_map))
 }
@@ -429,8 +440,20 @@ fn get_join_alias(counter: &mut usize) -> String {
     internal_name
 }
 
-fn get_select_clauses(function_config: &FunctionConfig) -> BTreeSet<String> {
+fn get_select_clauses(
+    function_config: &FunctionConfig,
+    function_name: &str,
+    params_map: &mut Vec<QueryParameter>,
+    param_idx_counter: &mut usize,
+) -> BTreeSet<String> {
+    let function_name_param_placeholder = add_parameter(
+        function_name,
+        ClickhouseType::String,
+        params_map,
+        param_idx_counter,
+    );
     let mut select_clauses = BTreeSet::from([
+        format!("{function_name_param_placeholder} as function_name"),
         "i.input as input".to_string(),
         "i.variant_name as variant_name".to_string(),
         "i.episode_id as episode_id".to_string(),
@@ -478,6 +501,7 @@ mod tests {
             output_source: InferenceOutputSource::Inference,
             limit: None,
             offset: None,
+            format: ClickhouseFormat::JsonEachRow,
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r#"
@@ -493,7 +517,8 @@ SELECT
 FROM
     JsonInference AS i
 WHERE
-    i.function_name = {p0:String}"#;
+    i.function_name = {p0:String}
+FORMAT JSONEachRow"#;
         assert_eq!(sql, expected_sql);
         let expected_params = vec![QueryParameter {
             name: "p0".to_string(),
@@ -512,6 +537,7 @@ WHERE
             output_source: InferenceOutputSource::Inference,
             limit: None,
             offset: None,
+            format: ClickhouseFormat::JsonEachRow,
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r#"
@@ -527,7 +553,8 @@ SELECT
 FROM
     ChatInference AS i
 WHERE
-    i.function_name = {p0:String}"#;
+    i.function_name = {p0:String}
+FORMAT JSONEachRow"#;
         assert_eq!(sql, expected_sql);
         let expected_params = vec![QueryParameter {
             name: "p0".to_string(),
@@ -551,6 +578,7 @@ WHERE
             output_source: InferenceOutputSource::Inference,
             limit: None,
             offset: None,
+            format: ClickhouseFormat::JsonEachRow,
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r#"
@@ -571,11 +599,11 @@ LEFT JOIN (
         argMax(value, timestamp) as value
     FROM FloatMetricFeedback
     WHERE metric_name = {p1:String}
-    AND value > {p2:Float64}
     GROUP BY target_id
 ) AS j0 ON i.id = j0.target_id
 WHERE
-    i.function_name = {p0:String} AND j0.value > {p2:Float64}"#;
+    i.function_name = {p0:String} AND j0.value > {p2:Float64}
+FORMAT JSONEachRow"#;
         assert_eq!(sql, expected_sql);
         let expected_params = vec![
             QueryParameter {
@@ -604,6 +632,7 @@ WHERE
             output_source: InferenceOutputSource::Inference,
             limit: None,
             offset: None,
+            format: ClickhouseFormat::JsonEachRow,
         };
         let result = generate_list_inferences_sql(&config, &opts);
         assert!(result.is_err());
@@ -628,6 +657,7 @@ WHERE
             output_source: InferenceOutputSource::Inference,
             limit: None,
             offset: None,
+            format: ClickhouseFormat::JsonEachRow,
         };
         let result = generate_list_inferences_sql(&config, &opts);
         assert!(result.is_err());
@@ -647,6 +677,7 @@ WHERE
             output_source: InferenceOutputSource::Demonstration,
             limit: None,
             offset: None,
+            format: ClickhouseFormat::JsonEachRow,
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r#"
@@ -663,7 +694,8 @@ FROM
     JsonInference AS i
 JOIN (SELECT inference_id, argMax(value, timestamp) as value FROM DemonstrationFeedback GROUP BY inference_id ) AS demo_f ON i.id = demo_f.inference_id
 WHERE
-    i.function_name = {p0:String}"#;
+    i.function_name = {p0:String}
+FORMAT JSONEachRow"#;
         assert_eq!(sql, expected_sql);
         let expected_params = vec![QueryParameter {
             name: "p0".to_string(),
@@ -686,6 +718,7 @@ WHERE
             output_source: InferenceOutputSource::Inference,
             limit: None,
             offset: None,
+            format: ClickhouseFormat::JsonEachRow,
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r#"
@@ -706,11 +739,11 @@ LEFT JOIN (
         argMax(value, timestamp) as value
     FROM BooleanMetricFeedback
     WHERE metric_name = {p1:String}
-    AND value = {p2:Bool}
     GROUP BY target_id
 ) AS j0 ON i.id = j0.target_id
 WHERE
-    i.function_name = {p0:String} AND j0.value = {p2:Bool}"#;
+    i.function_name = {p0:String} AND j0.value = {p2:Bool}
+FORMAT JSONEachRow"#;
         assert_eq!(sql, expected_sql);
         let expected_params = vec![
             QueryParameter {
@@ -743,6 +776,7 @@ WHERE
             output_source: InferenceOutputSource::Inference,
             limit: None,
             offset: None,
+            format: ClickhouseFormat::JsonEachRow,
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r#"
@@ -763,11 +797,11 @@ LEFT JOIN (
         argMax(value, timestamp) as value
     FROM BooleanMetricFeedback
     WHERE metric_name = {p1:String}
-    AND value = {p2:Bool}
     GROUP BY target_id
 ) AS j0 ON i.id = j0.target_id
 WHERE
-    i.function_name = {p0:String} AND j0.value = {p2:Bool}"#;
+    i.function_name = {p0:String} AND j0.value = {p2:Bool}
+FORMAT JSONEachRow"#;
         assert_eq!(sql, expected_sql);
         let expected_params = vec![
             QueryParameter {
@@ -808,6 +842,7 @@ WHERE
             output_source: InferenceOutputSource::Inference,
             limit: None,
             offset: None,
+            format: ClickhouseFormat::JsonEachRow,
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r#"
@@ -828,7 +863,6 @@ LEFT JOIN (
         argMax(value, timestamp) as value
     FROM FloatMetricFeedback
     WHERE metric_name = {p1:String}
-    AND value > {p2:Float64}
     GROUP BY target_id
 ) AS j0 ON i.id = j0.target_id
 
@@ -838,11 +872,11 @@ LEFT JOIN (
         argMax(value, timestamp) as value
     FROM FloatMetricFeedback
     WHERE metric_name = {p3:String}
-    AND value < {p4:Float64}
     GROUP BY target_id
 ) AS j1 ON i.id = j1.target_id
 WHERE
-    i.function_name = {p0:String} AND (COALESCE(j0.value > {p2:Float64}, 0) AND COALESCE(j1.value < {p4:Float64}, 0))"#;
+    i.function_name = {p0:String} AND (COALESCE(j0.value > {p2:Float64}, 0) AND COALESCE(j1.value < {p4:Float64}, 0))
+FORMAT JSONEachRow"#;
         assert_eq!(sql, expected_sql);
         let expected_params = vec![
             QueryParameter {
@@ -890,6 +924,7 @@ WHERE
             output_source: InferenceOutputSource::Inference,
             limit: None,
             offset: None,
+            format: ClickhouseFormat::JsonEachRow,
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r#"
@@ -910,7 +945,6 @@ LEFT JOIN (
         argMax(value, timestamp) as value
     FROM FloatMetricFeedback
     WHERE metric_name = {p1:String}
-    AND value >= {p2:Float64}
     GROUP BY target_id
 ) AS j0 ON i.id = j0.target_id
 
@@ -920,11 +954,11 @@ LEFT JOIN (
         argMax(value, timestamp) as value
     FROM BooleanMetricFeedback
     WHERE metric_name = {p3:String}
-    AND value = {p4:Bool}
     GROUP BY target_id
 ) AS j1 ON i.id = j1.target_id
 WHERE
-    i.function_name = {p0:String} AND (COALESCE(j0.value >= {p2:Float64}, 0) OR COALESCE(j1.value = {p4:Bool}, 0))"#;
+    i.function_name = {p0:String} AND (COALESCE(j0.value >= {p2:Float64}, 0) OR COALESCE(j1.value = {p4:Bool}, 0))
+FORMAT JSONEachRow"#;
         assert_eq!(sql, expected_sql);
         let expected_params = vec![
             QueryParameter {
@@ -967,6 +1001,7 @@ WHERE
             output_source: InferenceOutputSource::Inference,
             limit: None,
             offset: None,
+            format: ClickhouseFormat::JsonEachRow,
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r#"
@@ -987,11 +1022,11 @@ LEFT JOIN (
         argMax(value, timestamp) as value
     FROM BooleanMetricFeedback
     WHERE metric_name = {p1:String}
-    AND value = {p2:Bool}
     GROUP BY target_id
 ) AS j0 ON i.id = j0.target_id
 WHERE
-    i.function_name = {p0:String} AND NOT (COALESCE(j0.value = {p2:Bool}, 1))"#;
+    i.function_name = {p0:String} AND NOT (COALESCE(j0.value = {p2:Bool}, 1))
+FORMAT JSONEachRow"#;
         assert_eq!(sql, expected_sql);
         let expected_params = vec![
             QueryParameter {
@@ -1040,6 +1075,7 @@ WHERE
             output_source: InferenceOutputSource::Inference,
             limit: None,
             offset: None,
+            format: ClickhouseFormat::JsonEachRow,
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r#"
@@ -1060,7 +1096,6 @@ LEFT JOIN (
         argMax(value, timestamp) as value
     FROM FloatMetricFeedback
     WHERE metric_name = {p1:String}
-    AND value > {p2:Float64}
     GROUP BY target_id
 ) AS j0 ON i.id = j0.target_id
 
@@ -1070,7 +1105,6 @@ LEFT JOIN (
         argMax(value, timestamp) as value
     FROM FloatMetricFeedback
     WHERE metric_name = {p3:String}
-    AND value <= {p4:Float64}
     GROUP BY target_id
 ) AS j1 ON i.id = j1.target_id
 
@@ -1080,11 +1114,11 @@ LEFT JOIN (
         argMax(value, timestamp) as value
     FROM BooleanMetricFeedback
     WHERE metric_name = {p5:String}
-    AND value = {p6:Bool}
     GROUP BY target_id
 ) AS j2 ON i.id = j2.target_id
 WHERE
-    i.function_name = {p0:String} AND (COALESCE((COALESCE(j0.value > {p2:Float64}, 0) OR COALESCE(j1.value <= {p4:Float64}, 0)), 0) AND COALESCE(NOT (COALESCE(j2.value = {p6:Bool}, 1)), 0))"#;
+    i.function_name = {p0:String} AND (COALESCE((COALESCE(j0.value > {p2:Float64}, 0) OR COALESCE(j1.value <= {p4:Float64}, 0)), 0) AND COALESCE(NOT (COALESCE(j2.value = {p6:Bool}, 1)), 0))
+FORMAT JSONEachRow"#;
         assert_eq!(sql, expected_sql);
         assert_eq!(params.len(), 7); // p0 (function) + 6 metric-related params
     }
@@ -1099,6 +1133,7 @@ WHERE
             output_source: InferenceOutputSource::Inference,
             limit: None,
             offset: None,
+            format: ClickhouseFormat::JsonEachRow,
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r#"
@@ -1114,7 +1149,8 @@ SELECT
 FROM
     JsonInference AS i
 WHERE
-    i.function_name = {p0:String} AND i.variant_name = {p1:String}"#;
+    i.function_name = {p0:String} AND i.variant_name = {p1:String}
+FORMAT JSONEachRow"#;
         assert_eq!(sql, expected_sql);
         let expected_params = vec![
             QueryParameter {
@@ -1139,6 +1175,7 @@ WHERE
             output_source: InferenceOutputSource::Inference,
             limit: Some(50),
             offset: Some(100),
+            format: ClickhouseFormat::JsonEachRow,
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r#"
@@ -1156,7 +1193,8 @@ FROM
 WHERE
     i.function_name = {p0:String}
 LIMIT {p1:UInt64}
-OFFSET {p2:UInt64}"#;
+OFFSET {p2:UInt64}
+FORMAT JSONEachRow"#;
         assert_eq!(sql, expected_sql);
         let expected_params = vec![
             QueryParameter {
@@ -1200,6 +1238,7 @@ OFFSET {p2:UInt64}"#;
                 output_source: InferenceOutputSource::Inference,
                 limit: None,
                 offset: None,
+                format: ClickhouseFormat::JsonEachRow,
             };
             let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
             let expected_sql = format!(
@@ -1221,11 +1260,11 @@ LEFT JOIN (
         argMax(value, timestamp) as value
     FROM FloatMetricFeedback
     WHERE metric_name = {{p1:String}}
-    AND value {expected_op_str} {{p2:Float64}}
     GROUP BY target_id
 ) AS j0 ON i.id = j0.target_id
 WHERE
-    i.function_name = {{p0:String}} AND j0.value {expected_op_str} {{p2:Float64}}"#,
+    i.function_name = {{p0:String}} AND j0.value {expected_op_str} {{p2:Float64}}
+FORMAT JSONEachRow"#,
             );
             assert_eq!(sql, expected_sql);
             let expected_params = vec![
@@ -1267,6 +1306,7 @@ WHERE
             output_source: InferenceOutputSource::Demonstration,
             limit: Some(25),
             offset: Some(50),
+            format: ClickhouseFormat::JsonEachRow,
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r#"
@@ -1289,7 +1329,6 @@ LEFT JOIN (
         argMax(value, timestamp) as value
     FROM FloatMetricFeedback
     WHERE metric_name = {p2:String}
-    AND value > {p3:Float64}
     GROUP BY target_id
 ) AS j0 ON i.id = j0.target_id
 
@@ -1299,13 +1338,13 @@ LEFT JOIN (
         argMax(value, timestamp) as value
     FROM BooleanMetricFeedback
     WHERE metric_name = {p4:String}
-    AND value = {p5:Bool}
     GROUP BY target_id
 ) AS j1 ON i.id = j1.target_id
 WHERE
     i.function_name = {p0:String} AND i.variant_name = {p1:String} AND (COALESCE(j0.value > {p3:Float64}, 0) AND COALESCE(j1.value = {p5:Bool}, 0))
 LIMIT {p6:UInt64}
-OFFSET {p7:UInt64}"#;
+OFFSET {p7:UInt64}
+FORMAT JSONEachRow"#;
         assert_eq!(sql, expected_sql);
 
         let expected_params = vec![

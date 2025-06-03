@@ -418,11 +418,20 @@ impl ClickHouseConnectionInfo {
             .map(|p| (p.name.as_str(), p.value.as_str()))
             .collect();
         let response = self.run_query_synchronous(sql, &params_map).await?;
-        let inferences: Vec<StoredInference> = serde_json::from_str(&response).map_err(|e| {
-            Error::new(ErrorDetails::ClickHouseQuery {
-                message: format!("Failed to deserialize response: {e:?}"),
+        let parsed: serde_json::Value = serde_json::from_str(&response).unwrap();
+        let pretty_json = serde_json::to_string_pretty(&parsed).unwrap();
+        println!("response: {pretty_json}");
+        let inferences = response
+            .trim()
+            .lines()
+            .map(|line| {
+                serde_json::from_str::<StoredInference>(line).map_err(|e| {
+                    Error::new(ErrorDetails::ClickHouseQuery {
+                        message: format!("Failed to deserialize response: {e:?}"),
+                    })
+                })
             })
-        })?;
+            .collect::<Result<Vec<StoredInference>, Error>>()?;
         Ok(inferences)
     }
 }
@@ -630,6 +639,14 @@ where
 {
     let s = String::deserialize(deserializer)?;
     s.parse::<u64>().map_err(serde::de::Error::custom)
+}
+
+/// The format of the data that will be returned from / sent to ClickHouse.
+/// Currently only used in the query builder.
+/// TODO: use across the codebase.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ClickhouseFormat {
+    JsonEachRow,
 }
 
 #[cfg(test)]

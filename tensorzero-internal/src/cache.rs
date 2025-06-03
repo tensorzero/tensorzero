@@ -4,12 +4,12 @@ use std::sync::Arc;
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::embeddings::{EmbeddingRequest, EmbeddingResponse};
 use crate::error::{Error, ErrorDetails};
-use crate::inference::types::batch::deserialize_json_string;
 use crate::inference::types::{
     ContentBlockChunk, ContentBlockOutput, FinishReason, ModelInferenceRequest,
     ModelInferenceResponse, ProviderInferenceResponseChunk, Usage,
 };
 use crate::model::StreamResponse;
+use crate::serde_util::deserialize_json_string;
 use blake3::Hash;
 use clap::ValueEnum;
 use serde::de::DeserializeOwned;

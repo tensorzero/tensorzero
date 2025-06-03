@@ -5,7 +5,7 @@ use pyo3::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use tensorzero_internal::inference::types::batch::deserialize_json_string;
+use tensorzero_internal::serde_util::deserialize_json_string;
 use tensorzero_internal::{
     clickhouse::ClickHouseConnectionInfo,
     config_parser::{

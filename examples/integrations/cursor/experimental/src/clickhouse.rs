@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use anyhow::Result;
 use chrono::Utc;
 use serde::Deserialize;
-use tensorzero_internal::inference::types::batch::deserialize_json_string;
+use tensorzero_internal::serde_util::deserialize_json_string;
 use tensorzero_internal::{
     clickhouse::ClickHouseConnectionInfo,
     inference::types::{ContentBlockChatOutput, ResolvedInput},

@@ -17,11 +17,11 @@ use crate::config_parser::{Config, MetricConfigLevel, MetricConfigType};
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
-use crate::inference::types::batch::deserialize_optional_json_string;
 use crate::inference::types::{
     parse_chat_output, ContentBlockChatOutput, ContentBlockOutput, Text,
 };
 use crate::jsonschema_util::StaticJSONSchema;
+use crate::serde_util::deserialize_optional_json_string;
 use crate::tool::{ToolCall, ToolCallConfig, ToolCallConfigDatabaseInsert};
 use crate::uuid_util::uuid_elapsed;
 

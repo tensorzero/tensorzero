@@ -5,7 +5,7 @@ use serde::Deserialize;
 use serde_json::Value;
 use tensorzero::{CacheParamsOptions, DynamicToolParams, InferenceResponse};
 use tensorzero_internal::clickhouse::escape_string_for_clickhouse_literal;
-use tensorzero_internal::inference::types::batch::deserialize_json_string;
+use tensorzero_internal::serde_util::deserialize_json_string;
 use tensorzero_internal::{
     cache::CacheEnabledMode, clickhouse::ClickHouseConnectionInfo, function::FunctionConfig,
     tool::ToolCallConfigDatabaseInsert,
