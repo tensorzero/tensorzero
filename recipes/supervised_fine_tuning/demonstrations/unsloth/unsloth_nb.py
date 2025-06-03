@@ -236,10 +236,19 @@ tensorzero_client = TensorZeroGateway.build_embedded(
     timeout=15,
 )
 
+
 # %%
+def double_parse_arguments(example_input):
+    for message in example_input["messages"]:
+        for block in message["content"]:
+            if block["type"] == "tool_call":
+                block["arguments"] = json.loads(block["arguments"])
+
+
 stored_inferences = []
 for _, row in df.iterrows():
     input_data = json.loads(row["input"])
+    double_parse_arguments(input_data)
     output_data = json.loads(row["value"])
     if function_type == "chat":
         stored_inferences.append(
