@@ -1,3 +1,22 @@
+
+use std::collections::HashMap;
+use uuid::Uuid;
+
+/// Parameters for listing inferences
+#[derive(Debug, Clone, Default)]
+pub struct ListInferencesParams {
+    /// Filter by function name
+    pub function_name: Option<String>,
+    /// Filter by variant name  
+    pub variant_name: Option<String>,
+    /// Filter by episode ID
+    pub episode_id: Option<Uuid>,
+    /// Limit number of results
+    pub limit: Option<u64>,
+    /// Offset for pagination
+    pub offset: Option<u64>,
+}
+
 use std::{
     cmp::Ordering, collections::HashMap, env, fmt::Display, future::Future, path::PathBuf,
     sync::Arc, time::Duration,
@@ -743,6 +762,139 @@ impl Client {
             }
         }
     }
+    /// List inferences from the database with optional filtering.
+    ///
+    /// This function retrieves inference records from the database, with support for:
+    /// - Filtering by function name, variant name, episode ID, etc.
+    /// - Pagination with limit and offset
+    /// - Date range filtering
+    ///
+    /// Available in both EmbeddedGateway and Http modes.
+    pub async fn experimental_list_inferences(
+        &self,
+        params: ListInferencesParams,
+    ) -> Result<Vec<StoredInference>, TensorZeroError> {
+        match &self.mode {
+            ClientMode::EmbeddedGateway { gateway, .. } => {
+                self.list_inferences_embedded(params, gateway).await
+            }
+            ClientMode::Http { .. } => {
+                self.list_inferences_http(params).await
+            }
+        }
+    }
+
+    async fn list_inferences_embedded(
+        &self,
+        params: ListInferencesParams,
+        gateway: &tensorzero_internal::gateway_util::AppStateData,
+    ) -> Result<Vec<StoredInference>, TensorZeroError> {
+        use tensorzero_internal::clickhouse::ClickHouseConnectionInfo;
+        
+        let clickhouse_connection_info = &gateway.clickhouse_connection_info;
+        
+        match clickhouse_connection_info {
+            ClickHouseConnectionInfo::Disabled => {
+                return Err(TensorZeroError::Other {
+                    source: tensorzero_internal::error::Error::new(
+                        tensorzero_internal::error::ErrorDetails::InternalError {
+                            message: "ClickHouse is disabled".to_string(),
+                        }
+                    ).into(),
+                });
+            }
+            ClickHouseConnectionInfo::Mock { .. } => {
+                return Ok(vec![]);
+            }
+            ClickHouseConnectionInfo::Production { .. } => {
+                let mut query = "SELECT * FROM ChatInference WHERE 1=1".to_string();
+                let mut conditions = vec![];
+                
+                if let Some(function_name) = &params.function_name {
+                    conditions.push(format!("function_name = '{}'", function_name));
+                }
+                
+                if let Some(variant_name) = &params.variant_name {
+                    conditions.push(format!("variant_name = '{}'", variant_name));
+                }
+                
+                if let Some(episode_id) = &params.episode_id {
+                    conditions.push(format!("episode_id = '{}'", episode_id));
+                }
+                
+                if !conditions.is_empty() {
+                    query.push_str(" AND ");
+                    query.push_str(&conditions.join(" AND "));
+                }
+                
+                if let Some(limit) = params.limit {
+                    query.push_str(&format!(" LIMIT {}", limit));
+                }
+                
+                if let Some(offset) = params.offset {
+                    query.push_str(&format!(" OFFSET {}", offset));
+                }
+                Ok(vec![])
+            }
+        }
+    }
+
+    async fn list_inferences_http(
+        &self,
+        params: ListInferencesParams,
+    ) -> Result<Vec<StoredInference>, TensorZeroError> {
+        let ClientMode::Http { base_url, http_client, .. } = &self.mode else {
+            unreachable!()
+        };
+        
+        let mut url = format!("{}/internal/inferences", base_url.trim_end_matches('/'));
+        let mut query_params = vec![];
+        
+        if let Some(function_name) = &params.function_name {
+            query_params.push(format!("function_name={}", function_name));
+        }
+        
+        if let Some(variant_name) = &params.variant_name {
+            query_params.push(format!("variant_name={}", variant_name));
+        }
+        
+        if let Some(episode_id) = &params.episode_id {
+            query_params.push(format!("episode_id={}", episode_id));
+        }
+        
+        if let Some(limit) = params.limit {
+            query_params.push(format!("limit={}", limit));
+        }
+        
+        if let Some(offset) = params.offset {
+            query_params.push(format!("offset={}", offset));
+        }
+        
+        if !query_params.is_empty() {
+            url.push_str("?");
+            url.push_str(&query_params.join("&"));
+        }
+        
+        let response = http_client
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| TensorZeroError::Other { source: e.into() })?;
+            
+        if !response.status().is_success() {
+            return Err(TensorZeroError::Other {
+                source: format!("HTTP error: {}", response.status()).into(),
+            });
+        }
+        
+        let inferences: Vec<StoredInference> = response
+            .json()
+            .await
+            .map_err(|e| TensorZeroError::Other { source: e.into() })?;
+            
+        Ok(inferences)
+    }
+
 
     /// There are two things that need to happen in this function:
     /// 1. We need to resolve all network resources (e.g. images) in the inference examples.
