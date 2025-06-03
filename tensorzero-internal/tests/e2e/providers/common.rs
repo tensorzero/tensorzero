@@ -3901,6 +3901,9 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
                     // (e.g. "Sure, here's the weather in Tokyo:" + tool call)
                     // We mostly care about the tool call, so we'll ignore the text.
                 }
+                "thought" => {
+                    // Gemini models can return thoughts - ignore them
+                }
                 _ => {
                     panic!("Unexpected block type: {block_type}");
                 }
@@ -4383,7 +4386,10 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    let mut output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    // We don't care about thoughts in this test
+    output.retain(|block| !matches!(block, ContentBlock::Thought(_)));
+
     let first = output.first().unwrap();
     match first {
         ContentBlock::Text(_text) => {}
@@ -4481,6 +4487,9 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
                 "text" => {
                     full_text.push_str(block.get("text").unwrap().as_str().unwrap());
                 }
+                "thought" => {
+                    // Gemini models can return thoughts - ignore them
+                }
                 _ => {
                     panic!("Unexpected block type: {block_type}");
                 }
@@ -4548,8 +4557,11 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
     );
     assert_eq!(input, correct_input);
 
-    let output_clickhouse: Vec<Value> =
+    let mut output_clickhouse: Vec<Value> =
         serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
+
+    // We don't care about thoughts in this test
+    output_clickhouse.retain(|block| block["type"] != "thought");
 
     assert!(!output_clickhouse
         .iter()
@@ -4676,7 +4688,10 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    let mut output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    // We don't care about thoughts in this test
+    output.retain(|block| !matches!(block, ContentBlock::Thought(_)));
+
     let first = output.first().unwrap();
     match first {
         ContentBlock::Text(_text) => {}
@@ -5078,6 +5093,9 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
                     // (e.g. "Sure, here's the weather in Tokyo:" + tool call)
                     // We mostly care about the tool call, so we'll ignore the text.
                 }
+                "thought" => {
+                    // Gemini models can return thoughts - ignore them
+                }
                 _ => {
                     panic!("Unexpected block type: {block_type}");
                 }
@@ -5312,6 +5330,12 @@ pub async fn test_tool_use_tool_choice_none_inference_request_with_provider(
     // https://gist.github.com/virajmehta/2911580b09713fc58aabfeb9ad62cf3b
     // We have disabled this test for that provider for now.
     if provider.model_provider_name == "xai" {
+        return;
+    }
+
+    // NOTE - Gemini 2.5 produces 'UNEXPECTED_TOOL_CALL' here
+    // See https://github.com/tensorzero/tensorzero/issues/2329
+    if provider.model_name == "gemini-2.5-pro-preview-05-06" {
         return;
     }
 
@@ -5651,6 +5675,9 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
                 }
                 "text" => {
                     full_text.push_str(block.get("text").unwrap().as_str().unwrap());
+                }
+                "thought" => {
+                    // Gemini models can return thoughts - ignore them
                 }
                 _ => {
                     panic!("Unexpected block type: {block_type}");
@@ -6324,6 +6351,9 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
                     // (e.g. "Sure, here's the weather in Tokyo:" + tool call)
                     // We mostly care about the tool call, so we'll ignore the text.
                 }
+                "thought" => {
+                    // Gemini models can return thoughts - ignore them
+                }
                 _ => {
                     panic!("Unexpected block type: {block_type}");
                 }
@@ -6955,6 +6985,9 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
                     // Sometimes the model will also return some text
                     // (e.g. "Sure, here's the weather in Tokyo:" + tool call)
                     // We mostly care about the tool call, so we'll ignore the text.
+                }
+                "thought" => {
+                    // Gemini models can return thoughts - ignore them
                 }
                 _ => {
                     panic!("Unexpected block type: {block_type}");
@@ -8207,6 +8240,9 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
                     // (e.g. "Sure, here's the weather in Tokyo:" + tool call)
                     // We mostly care about the tool call, so we'll ignore the text.
                 }
+                "thought" => {
+                    // Gemini models can return thoughts - ignore them
+                }
                 _ => {
                     panic!("Unexpected block type: {block_type}");
                 }
@@ -9425,7 +9461,9 @@ pub async fn check_json_mode_inference_response(
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    let mut output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    // We don't care about thoughts in this test
+    output.retain(|block| !matches!(block, ContentBlock::Thought(_)));
 
     let is_openrouter = provider.model_provider_name == "openrouter";
     if is_openrouter {
@@ -9708,7 +9746,9 @@ pub async fn check_dynamic_json_mode_inference_response(
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    let mut output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    // We don't care about thoughts in this test
+    output.retain(|block| !matches!(block, ContentBlock::Thought(_)));
 
     let is_openrouter = provider.model_provider_name == "openrouter";
     if is_openrouter {
