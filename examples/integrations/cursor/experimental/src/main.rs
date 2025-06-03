@@ -62,33 +62,30 @@ async fn main() -> Result<()> {
     let commit = get_last_commit_from_repo(&repo)?;
     let commit_interval = get_commit_timestamp_and_parent_timestamp(&commit)?;
     let diffs = get_diff_by_file(&repo, &commit)?;
-    let mut diff_trees: HashMap<PathBuf, Vec<TreeInfo>> = HashMap::new();
     let client = ClientBuilder::new(ClientBuilderMode::HTTPGateway {
         url: args.gateway_url,
     })
     .build()
     .await?;
-    let diff_results: Vec<_> = diffs
+    let diff_trees: HashMap<PathBuf, Vec<TreeInfo>> = diffs
         .into_par_iter()
-        .flat_map(|(file, diffs)| {
-            diffs.into_par_iter().filter_map(move |diff| {
-                let ext = file.extension().and_then(|ext| ext.to_str())?;
-                let tree = parse_hunk(&diff.content, ext).ok()?;
-                Some((
-                    file.clone(),
-                    TreeInfo {
+        .map(|(file, diffs)| {
+            let tree_infos = diffs
+                .into_par_iter()
+                .filter_map(|diff| {
+                    let ext = file.extension().and_then(|ext| ext.to_str())?;
+                    let tree = parse_hunk(&diff.content, ext).ok()?;
+                    Some(TreeInfo {
                         path: file.clone(),
                         tree,
                         src: diff.content.into(),
-                    },
-                ))
-            })
+                    })
+                })
+                .collect::<Vec<_>>();
+            (file, tree_infos)
         })
         .collect();
 
-    for (file, tree_info) in diff_results {
-        diff_trees.entry(file).or_default().push(tree_info);
-    }
     let clickhouse_url = std::env::var("CURSORZERO_CLICKHOUSE_URL")?;
     let clickhouse = ClickHouseConnectionInfo::new(&clickhouse_url).await?;
     let inferences = get_inferences_in_time_range(&clickhouse, commit_interval).await?;
