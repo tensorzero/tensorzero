@@ -1,6 +1,11 @@
 #!/bin/bash
 set -euxo pipefail
 
+if [ -f /load_complete.marker ]; then
+  echo "Fixtures already loaded; this script will now exit with status 0"
+  exit 0
+fi
+
 clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword "SELECT * FROM system.disks;"
 
 clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database tensorzero_ui_fixtures --query "INSERT INTO JsonInference FORMAT JSONEachRow" < json_inference_examples.jsonl
@@ -50,5 +55,5 @@ sleep 2
 # Create the marker file to signal completion for the healthcheck
 # Write it to an ephemeral location to make sure that we don't see a marker file
 # from a previous container run.
-touch /tmp/load_complete.marker
+touch /load_complete.marker
 echo "Fixtures loaded; this script will now exit with status 0"
