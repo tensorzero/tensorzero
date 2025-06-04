@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import FeedbackTable from "./FeedbackTable";
 import type { FeedbackRow } from "~/utils/clickhouse/feedback";
 import { ConfigProvider } from "~/context/config";

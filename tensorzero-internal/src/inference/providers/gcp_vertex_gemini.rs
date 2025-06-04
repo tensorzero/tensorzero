@@ -74,7 +74,9 @@ pub struct GCPVertexGeminiProvider {
     streaming_request_url: String,
     audience: String,
     credentials: GCPVertexCredentials,
-    model_id: String,
+    model_id: Option<String>,
+    endpoint_id: Option<String>,
+    model_or_endpoint_id: String,
     batch_config: Option<BatchConfig>,
 }
 
@@ -361,14 +363,23 @@ impl GCPVertexGeminiProvider {
             )?
         };
 
-        // We only support model urls with the publisher 'google' (which includes all of the Gemini models)
         let shorthand_url = parse_shorthand_url(&project_url_path, "google")?;
-        let (location, model_id) = match shorthand_url {
-            ShorthandUrl::Publisher { location, model_id } => (location, model_id.to_string()),
+        let (location, model_id, endpoint_id, model_or_endpoint_id) = match shorthand_url {
+            ShorthandUrl::Publisher { location, model_id } => (
+                location,
+                Some(model_id.to_string()),
+                None,
+                model_id.to_string(),
+            ),
             ShorthandUrl::Endpoint {
                 location,
                 endpoint_id,
-            } => (location, format!("endpoints/{endpoint_id}")),
+            } => (
+                location,
+                None,
+                Some(endpoint_id.to_string()),
+                endpoint_id.to_string(),
+            ),
         };
 
         let request_url = format!(
@@ -393,11 +404,14 @@ impl GCPVertexGeminiProvider {
             audience,
             credentials,
             model_id,
+            endpoint_id,
+            model_or_endpoint_id,
         })
     }
 
     pub async fn new(
-        model_id: String,
+        model_id: Option<String>,
+        endpoint_id: Option<String>,
         location: String,
         project_id: String,
         api_key_location: Option<CredentialLocation>,
@@ -418,9 +432,6 @@ impl GCPVertexGeminiProvider {
             )?
         };
 
-        let request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model_id}:generateContent");
-        let streaming_request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model_id}:streamGenerateContent?alt=sse");
-        let audience = format!("https://{location}-aiplatform.googleapis.com/");
         let api_v1_base_url = Url::parse(&format!(
             "https://{location}-aiplatform.googleapis.com/v1/"
         ))
@@ -429,6 +440,15 @@ impl GCPVertexGeminiProvider {
                 message: format!("Failed to parse base URL - this should never happen: {e}"),
             })
         })?;
+        let (model_or_endpoint_id, request_url, streaming_request_url) = match (&model_id, &endpoint_id) {
+            (Some(model_id), None) => (model_id.clone(), format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model_id}:generateContent"),
+                                               format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model_id}:streamGenerateContent?alt=sse")),
+            (None, Some(endpoint_id)) => (endpoint_id.clone(), format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/endpoints/{endpoint_id}:generateContent"),
+                                                  format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/endpoints/{endpoint_id}:streamGenerateContent?alt=sse")),
+            _ => return Err(ErrorDetails::InvalidProviderConfig { message: "Exactly one of model_id or endpoint_id must be provided".to_string() }.into())
+        };
+
+        let audience = format!("https://{location}-aiplatform.googleapis.com/");
 
         let batch_config = match &provider_types.gcp_vertex_gemini {
             Some(GCPProviderTypeConfig { batch: Some(GCPBatchConfigType::CloudStorage(GCPBatchConfigCloudStorage {
@@ -451,11 +471,21 @@ impl GCPVertexGeminiProvider {
             audience,
             credentials,
             model_id,
+            endpoint_id,
+            model_or_endpoint_id,
         })
     }
 
-    pub fn model_id(&self) -> &str {
-        &self.model_id
+    pub fn model_id(&self) -> Option<&str> {
+        self.model_id.as_deref()
+    }
+
+    pub fn endpoint_id(&self) -> Option<&str> {
+        self.endpoint_id.as_deref()
+    }
+
+    pub fn model_or_endpoint_id(&self) -> &str {
+        &self.model_or_endpoint_id
     }
 
     async fn collect_finished_batch(
@@ -864,7 +894,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
     ) -> Result<ProviderInferenceResponse, Error> {
         let mut request_body = serde_json::to_value(GCPVertexGeminiRequest::new(
             provider_request.request,
-            &self.model_id,
+            self.model_or_endpoint_id(),
         )?)
         .map_err(|e| {
             Error::new(ErrorDetails::Serialization {
@@ -938,6 +968,14 @@ impl InferenceProvider for GCPVertexGeminiProvider {
             Ok(response_with_latency.try_into()?)
         } else {
             let response_code = res.status();
+            if response_code == StatusCode::NOT_FOUND {
+                return Err(Error::new(ErrorDetails::InferenceServer {
+                    message: "Model or endpoint not found. You may be specifying the wrong one of these. Standard GCP models should use a `model_id` and not an `endpoint_id`, while fine-tuned models should use an `endpoint_id`.".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: None,
+                }));
+            };
             let error_body = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!(
@@ -969,17 +1007,18 @@ impl InferenceProvider for GCPVertexGeminiProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let mut request_body =
-            serde_json::to_value(GCPVertexGeminiRequest::new(request, &self.model_id)?).map_err(
-                |e| {
-                    Error::new(ErrorDetails::Serialization {
-                        message: format!(
-                            "Error serializing GCP Vertex Gemini request: {}",
-                            DisplayOrDebugGateway::new(e)
-                        ),
-                    })
-                },
-            )?;
+        let mut request_body = serde_json::to_value(GCPVertexGeminiRequest::new(
+            request,
+            self.model_or_endpoint_id(),
+        )?)
+        .map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!(
+                    "Error serializing GCP Vertex Gemini request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
+            })
+        })?;
         let headers = inject_extra_request_data(
             &request.extra_body,
             &request.extra_headers,
@@ -1029,6 +1068,13 @@ impl InferenceProvider for GCPVertexGeminiProvider {
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<StartBatchProviderInferenceResponse, Error> {
+        let Some(model_id) = self.model_id.as_ref() else {
+            return Err(ErrorDetails::InvalidProviderConfig {
+                message: "Model ID is required for batch inference (not endpoint ID)".to_string(),
+            }
+            .into());
+        };
+
         let Some(batch_config) = &self.batch_config else {
             return Err(ErrorDetails::Config {
                 message: "Missing config section: `[provider_types.gcp_vertex_gemini.batch]`"
@@ -1045,7 +1091,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
         let mut raw_requests = Vec::with_capacity(requests.len());
         let mut jsonl_data = Vec::new();
         for request in requests {
-            let body = GCPVertexGeminiRequest::new(request, &self.model_id)?;
+            let body = GCPVertexGeminiRequest::new(request, self.model_or_endpoint_id())?;
             let line =
                 serde_json::to_string(&GCPVertexBatchLine { request: body }).map_err(|e| {
                     Error::new(ErrorDetails::Serialization {
@@ -1095,7 +1141,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
 
         let request_body = GCPVertexGeminiBatchRequest {
             display_name: format!("tensorzero-batch-{batch_id}"),
-            model: format!("publishers/google/models/{}", self.model_id.clone()),
+            model: format!("publishers/google/models/{model_id}"),
             input_config: GCPVertexGeminiBatchRequestInputConfig::Jsonl {
                 gcs_source: GCPVertexGeminiGCSSource {
                     uris: input_source_url,

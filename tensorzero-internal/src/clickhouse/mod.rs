@@ -6,6 +6,7 @@ use serde::Deserialize;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::RwLock;
 use tokio::sync::RwLockWriteGuard;
 use url::Url;
@@ -167,13 +168,7 @@ impl ClickHouseConnectionInfo {
                 ping_url.set_path("/ping");
                 ping_url.set_query(None);
 
-                let timeout = if cfg!(feature = "e2e_tests") {
-                    // Set a long timeout to try to debug batch tests
-                    std::time::Duration::from_secs(60)
-                } else {
-                    // If ClickHouse is healthy, it should respond within 1000ms
-                    std::time::Duration::from_millis(1000)
-                };
+                let timeout = Duration::from_secs(180);
 
                 match client.get(ping_url).timeout(timeout).send().await {
                     Ok(response) if response.status().is_success() => Ok(()),

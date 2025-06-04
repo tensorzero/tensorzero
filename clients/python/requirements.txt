@@ -188,7 +188,9 @@ openai==1.76.0 \
 packaging==25.0 \
     --hash=sha256:29572ef2b1f17581046b3a2227d5c611fb25ec70ca1ba8554b24b0e69331a484 \
     --hash=sha256:d443872c98d677bf60f6a1f2f8c1cb748e8fe762d2bf9d3148b5599295b0fc4f
-    # via pytest
+    # via
+    #   pytest
+    #   pytest-rerunfailures
 pluggy==1.5.0 \
     --hash=sha256:2cffa88e94fdc978c4c574f15f9e59b7f4201d439195c3715ca9e2486f1d0cf1 \
     --hash=sha256:44e1ad92c8ca002de6377e165f3e0f1be63266ab4d554740532335b9d75ea669
@@ -306,10 +308,14 @@ pytest==8.3.5 \
     --hash=sha256:f4efe70cc14e511565ac476b57c279e12a855b11f48f212af1080ef2263d3845
     # via
     #   pytest-asyncio
+    #   pytest-rerunfailures
     #   pytest-xdist
 pytest-asyncio==0.26.0 \
     --hash=sha256:7b51ed894f4fbea1340262bdae5135797ebbe21d8638978e35d31c6d19f72fb0 \
     --hash=sha256:c4df2a697648241ff39e7f0e4a73050b03f123f760673956cf0d72a4990e312f
+pytest-rerunfailures==15.1 \
+    --hash=sha256:c6040368abd7b8138c5b67288be17d6e5611b7368755ce0465dda0362c8ece80 \
+    --hash=sha256:f674c3594845aba8b23c78e99b1ff8068556cc6a8b277f728071fdc4f4b0b355
 pytest-xdist==3.6.1 \
     --hash=sha256:9ed4adfb68a016610848639bb7e02c9352d5d9f03d04809919e2dafc3be4cca7 \
     --hash=sha256:ead156a4db231eec769737f57668ef58a2084a34b2e55c4a8fa20d861107300d

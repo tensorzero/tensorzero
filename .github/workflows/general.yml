@@ -14,6 +14,13 @@ jobs:
   clickhouse-tests-cloud:
     if: github.event_name == 'merge_group'
     runs-on: ubuntu-latest
+    # Note - a concurrency group only allows at most one job to be pending at a time - additional
+    # pending jobs will cause existing pending jobs to be cancelled.
+    # This setting required a merge group concurrency limit of at most 2 - if it's any higher,
+    # jobs will get cancelled, causing spurious failures in the merge queue.
+    concurrency:
+      group: clickhouse-tests-cloud-${{ matrix.cloud_instance.release_channel }}
+      cancel-in-progress: false
     strategy:
       matrix:
         cloud_instance:
@@ -27,7 +34,8 @@ jobs:
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
         with:
           cache-provider: "buildjet"
-          save-if: ${{ github.event_name == 'merge_group' }}
+          shared-key: "build-gateway-cache"
+          save-if: false
       - name: Install cargo-nextest
         uses: taiki-e/install-action@37bdc826eaedac215f638a96472df572feab0f9b
         with:
@@ -372,7 +380,8 @@ jobs:
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
         with:
           cache-provider: "buildjet"
-          save-if: ${{ github.event_name == 'merge_group' }}
+          shared-key: "build-gateway-cache"
+          save-if: false
       - run: df -h
       # ClickHouse intermittently runs out of disk space on the `ubuntu-latest` runner
       # I'm using the commands from https://carlosbecker.com/posts/github-actions-disk-space/ to try to get more disk space

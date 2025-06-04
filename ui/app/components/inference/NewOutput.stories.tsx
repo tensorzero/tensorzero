@@ -1,5 +1,5 @@
 import NewOutput from "./NewOutput";
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import { withRouter } from "storybook-addon-remix-react-router";
 
 const meta = {
