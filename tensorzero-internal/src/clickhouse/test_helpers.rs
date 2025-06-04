@@ -9,6 +9,7 @@ use super::escape_string_for_clickhouse_literal;
 use super::ClickHouseConnectionInfo;
 use serde::Deserialize;
 use serde_json::Value;
+#[cfg(feature = "e2e_tests")]
 use std::collections::HashMap;
 use uuid::Uuid;
 
