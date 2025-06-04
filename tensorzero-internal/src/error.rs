@@ -194,6 +194,9 @@ pub enum ErrorDetails {
         mode: String,
         message: String,
     },
+    InvalidInferenceOutputSource {
+        source: String,
+    },
     ObjectStoreWrite {
         message: String,
         path: StoragePath,
@@ -429,6 +432,7 @@ impl ErrorDetails {
             ErrorDetails::InvalidDiclConfig { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidDatasetName { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidDynamicEvaluationRun { .. } => tracing::Level::ERROR,
+            ErrorDetails::InvalidInferenceOutputSource { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidTensorzeroUuid { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidFunctionVariants { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidVariantForOptimization { .. } => tracing::Level::WARN,
@@ -524,6 +528,7 @@ impl ErrorDetails {
             ErrorDetails::InvalidDatasetName { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidDynamicEvaluationRun { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidFunctionVariants { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::InvalidInferenceOutputSource { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidMessage { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidMetricName { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidModel { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -792,6 +797,9 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::InvalidFunctionVariants { message } => write!(f, "{message}"),
             ErrorDetails::InvalidTensorzeroUuid { message, kind } => {
                 write!(f, "Invalid {kind} ID: {message}")
+            }
+            ErrorDetails::InvalidInferenceOutputSource { source } => {
+                write!(f, "Invalid inference output source: {source}. Should be on of: \"inference\" or \"episode\".")
             }
             ErrorDetails::InvalidMetricName { metric_name } => {
                 write!(f, "Invalid metric name: {metric_name}")

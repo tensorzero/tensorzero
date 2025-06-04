@@ -25,8 +25,12 @@ use python_helpers::{
     parse_dynamic_evaluation_run_response, parse_feedback_response, parse_inference_chunk,
     parse_inference_response, parse_tool, python_uuid_to_uuid,
 };
-use tensorzero_internal::inference::types::pyo3_helpers::{
-    deserialize_from_pyobj, serialize_to_dict, tensorzero_internal_error, JSON_DUMPS, JSON_LOADS,
+use tensorzero_internal::{
+    clickhouse::ClickhouseFormat,
+    inference::types::pyo3_helpers::{
+        deserialize_from_pyobj, serialize_to_dict, tensorzero_internal_error, JSON_DUMPS,
+        JSON_LOADS,
+    },
 };
 use tensorzero_internal::{
     endpoints::{
@@ -42,7 +46,8 @@ use tensorzero_rust::{
     err_to_http, observability::LogFormat, CacheParamsOptions, Client, ClientBuilder,
     ClientBuilderMode, ClientInferenceParams, ClientInput, ClientSecretString,
     DynamicEvaluationRunParams, DynamicToolParams, FeedbackParams, InferenceOutput,
-    InferenceParams, InferenceStream, RenderedStoredInference, TensorZeroError, Tool,
+    InferenceParams, InferenceStream, ListInferencesParams, RenderedStoredInference,
+    TensorZeroError, Tool,
 };
 use tokio::sync::Mutex;
 use url::Url;
@@ -887,6 +892,36 @@ impl TensorZeroGateway {
             }
             Err(e) => Err(convert_error(this.py(), e)),
         }
+    }
+
+    #[pyo3(signature = (*, function_name, variant_name=None, filters=None, output_source="inference".to_string(), limit=None, offset=None))]
+    fn experimental_list_inferences(
+        this: PyRef<'_, Self>,
+        function_name: String,
+        variant_name: Option<String>,
+        filters: Option<Bound<'_, PyAny>>, // TODO: make this a Pyclass
+        output_source: String,
+        limit: Option<u64>,
+        offset: Option<u64>,
+    ) -> PyResult<Bound<'_, PyList>> {
+        let client = this.as_super().client.clone();
+        let filters = filters
+            .as_ref()
+            .map(|x| deserialize_from_pyobj(this.py(), x))
+            .transpose()?;
+        let params = ListInferencesParams {
+            function_name: &function_name,
+            variant_name: variant_name.as_deref(),
+            filters: filters.as_ref(),
+            output_source: serde_json::from_str(&output_source)
+                .map_err(|e| PyValueError::new_err(format!("Invalid output source: {e}")))?,
+            limit,
+            offset,
+            format: ClickhouseFormat::JsonEachRow,
+        };
+        let fut = client.experimental_list_inferences(params);
+        tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
+        todo!()
     }
 
     /// Render a list of stored inferences into a list of rendered stored inferences.
