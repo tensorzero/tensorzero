@@ -309,6 +309,25 @@ export const StatusResponseSchema = z.object({
 });
 export type StatusResponse = z.infer<typeof StatusResponseSchema>;
 
+export class HttpError extends Error {
+  readonly name: string = "HttpError";
+  readonly message: string;
+  readonly response: Response;
+
+  constructor({
+    message,
+    response,
+  }: {
+    message: string;
+    readonly response: Response;
+  }) {
+    message = message || "The request could not be completed";
+    super(message);
+    this.message = message;
+    this.response = response;
+  }
+}
+
 /**
  * A client for calling the TensorZero Gateway inference and feedback endpoints.
  */
@@ -335,22 +354,21 @@ export class TensorZeroClient {
   ): Promise<
     InferenceResponse | AsyncGenerator<InferenceResponse, void, unknown>
   > {
-    const url = `${this.baseUrl}/inference`;
     if (request.stream) {
       // Return an async generator that yields each SSE event as an InferenceResponse.
       return this.inferenceStream(request);
     } else {
-      const response = await fetch(url, {
+      const response = await this.fetch("/inference", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(request),
       });
       if (!response.ok) {
         const errorText = await response.text();
         const errorContents = JSON.parse(errorText).error;
-        throw new Error(
-          `Inference request failed with status ${response.status}: ${errorContents}`,
-        );
+        this.handleHttpError({
+          message: `Inference request failed with status ${response.status}: ${errorContents}`,
+          response,
+        });
       }
       return (await response.json()) as InferenceResponse;
     }
@@ -365,16 +383,21 @@ export class TensorZeroClient {
   private async *inferenceStream(
     request: InferenceRequest,
   ): AsyncGenerator<InferenceResponse, void, unknown> {
-    const url = `${this.baseUrl}/inference`;
-    const response = await fetch(url, {
+    const response = await this.fetch("/inference", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(request),
     });
-    if (!response.ok || !response.body) {
-      throw new Error(
-        `Streaming inference failed with status ${response.status}`,
-      );
+    if (!response.ok) {
+      this.handleHttpError({
+        message: `Streaming inference failed with status ${response.status}`,
+        response,
+      });
+    }
+    if (!response.body) {
+      this.handleHttpError({
+        message: `Streaming inference failed; response body is not readable`,
+        response,
+      });
     }
     const reader = response.body.getReader();
     const decoder = new TextDecoder("utf-8");
@@ -414,18 +437,17 @@ export class TensorZeroClient {
    * @returns A promise that resolves with the feedback response.
    */
   async feedback(request: FeedbackRequest): Promise<FeedbackResponse> {
-    const url = `${this.baseUrl}/feedback`;
-    const response = await fetch(url, {
+    const response = await this.fetch("/feedback", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(request),
     });
     if (!response.ok) {
       const errorText = await response.text();
       const errorContents = JSON.parse(errorText).error;
-      throw new Error(
-        `Feedback request failed with status ${response.status}: ${errorContents}`,
-      );
+      this.handleHttpError({
+        message: `Feedback request failed with status ${response.status}: ${errorContents}`,
+        response,
+      });
     }
     return (await response.json()) as FeedbackResponse;
   }
@@ -451,23 +473,23 @@ export class TensorZeroClient {
       throw new Error("Inference ID must be a non-empty string");
     }
 
-    const url = `${this.baseUrl}/internal/datasets/${encodeURIComponent(datasetName)}/datapoints`;
+    const endpoint = `/internal/datasets/${encodeURIComponent(datasetName)}/datapoints`;
 
     const request = {
       inference_id: inferenceId,
       output: outputKind,
     };
 
-    const response = await fetch(url, {
+    const response = await this.fetch(endpoint, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(request),
     });
 
     if (!response.ok) {
-      throw new Error(
-        `Create datapoint request failed with status ${response.status}`,
-      );
+      this.handleHttpError({
+        message: `Create datapoint request failed with status ${response.status}`,
+        response,
+      });
     }
 
     const body = await response.json();
@@ -508,39 +530,79 @@ export class TensorZeroClient {
       throw new Error(`Invalid datapoint: ${validationResult.error.message}`);
     }
 
-    const url = `${this.baseUrl}/internal/datasets/${encodeURIComponent(datasetName)}/datapoints/${encodeURIComponent(datapointId)}`;
+    const endpoint = `/internal/datasets/${encodeURIComponent(datasetName)}/datapoints/${encodeURIComponent(datapointId)}`;
 
-    const response = await fetch(url, {
+    const response = await this.fetch(endpoint, {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(datapoint),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(
-        `Update datapoint request failed with status ${response.status}: ${errorText}`,
-      );
+      this.handleHttpError({
+        message: `Update datapoint request failed with status ${response.status}: ${errorText}`,
+        response,
+      });
     }
 
     const body = await response.json();
     return DatapointResponseSchema.parse(body);
   }
   async getObject(storagePath: StoragePath): Promise<string> {
-    const url = `${this.baseUrl}/internal/object_storage?storage_path=${encodeURIComponent(JSON.stringify(storagePath))}`;
-    const response = await fetch(url);
+    const endpoint = `/internal/object_storage?storage_path=${encodeURIComponent(JSON.stringify(storagePath))}`;
+    const response = await this.fetch(endpoint, { method: "GET" });
     if (!response.ok) {
-      throw new Error(`Failed to get object: ${response.statusText}`);
+      this.handleHttpError({
+        message: `Failed to get object: ${response.statusText}`,
+        response,
+      });
     }
     return response.text();
   }
 
   async status(): Promise<StatusResponse> {
-    const url = `${this.baseUrl}/status`;
-    const response = await fetch(url);
+    const response = await this.fetch("/status", { method: "GET" });
     if (!response.ok) {
-      throw new Error(`Failed to get status: ${response.statusText}`);
+      this.handleHttpError({
+        message: `Failed to get status: ${response.statusText}`,
+        response,
+      });
     }
     return StatusResponseSchema.parse(await response.json());
+  }
+
+  private async fetch(
+    path: string,
+    init: {
+      method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+      body?: BodyInit;
+      headers?: HeadersInit;
+    },
+  ) {
+    const { method } = init;
+    const url = `${this.baseUrl}${path}`;
+
+    // For methods which expect payloads, always pass a body value even when it
+    // is empty to deal with consistency issues in various runtimes.
+    const expectsPayload =
+      method === "POST" || method === "PUT" || method === "PATCH";
+    const body = init.body || (expectsPayload ? "" : undefined);
+    const headers = new Headers(init.headers);
+    if (!headers.has("content-type")) {
+      headers.set("content-type", "application/json");
+    }
+    return await fetch(url, { method, headers, body });
+  }
+
+  private handleHttpError({
+    message,
+    response,
+  }: {
+    message: string;
+    response: Response;
+  }): never {
+    // TODO: Switch on HTTP status code to handle known errors with more
+    // specificity
+    throw new HttpError({ message, response });
   }
 }
