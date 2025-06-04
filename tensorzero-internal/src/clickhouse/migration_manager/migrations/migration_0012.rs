@@ -63,10 +63,7 @@ impl Migration for Migration0012<'_> {
             ) ENGINE = ReplacingMergeTree(created_at, is_deleted)
             ORDER BY (dataset_name, function_name, id)
         "#;
-        let _ = self
-            .clickhouse
-            .run_query_synchronous(query.to_string(), None)
-            .await?;
+        let _ = self.clickhouse.run_query_synchronous(query.to_string(), None).await?;
 
         // Create the `JsonInferenceDataset` table
         let query = r#"
@@ -86,10 +83,7 @@ impl Migration for Migration0012<'_> {
             ) ENGINE = ReplacingMergeTree(created_at, is_deleted)
             ORDER BY (dataset_name, function_name, id)
         "#;
-        let _ = self
-            .clickhouse
-            .run_query_synchronous(query.to_string(), None)
-            .await?;
+        let _ = self.clickhouse.run_query_synchronous(query.to_string(), None).await?;
 
         Ok(())
     }

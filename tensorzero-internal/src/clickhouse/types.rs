@@ -70,3 +70,35 @@ impl StoredInference {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_stored_inference_deserialization() {
+        let json = r#"
+            {
+                "type": "chat",
+                "function_name": "test_function",
+                "variant_name": "test_variant",
+                "input": "{\"system\": \"you are a helpful assistant\", \"messages\": []}",
+                "output": "[{\"type\": \"text\", \"text\": \"Hello! How can I help you today?\"}]",
+                "episode_id": "123e4567-e89b-12d3-a456-426614174000",
+                "inference_id": "123e4567-e89b-12d3-a456-426614174000",
+                "tool_params": ""
+            }
+        "#;
+        let inference: StoredInference = serde_json::from_str(json).unwrap();
+        let StoredInference::Chat(chat_inference) = inference else {
+            panic!("Expected a chat inference");
+        };
+        assert_eq!(chat_inference.function_name, "test_function");
+        assert_eq!(chat_inference.variant_name, "test_variant");
+        assert_eq!(
+            chat_inference.input,
+            "{\"system\": \"you are a helpful assistant\", \"messages\": []}"
+        );
+        assert_eq!(inference.output, "{\"messages\": [{\"role\": \"assistant\", \"content\": \"Hello! How can I help you today?\"}]}");
+    }
+}
