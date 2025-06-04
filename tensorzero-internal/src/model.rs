@@ -534,7 +534,7 @@ impl ModelProvider {
             ProviderConfig::Azure(provider) => Some(provider.deployment_id()),
             ProviderConfig::Fireworks(provider) => Some(provider.model_name()),
             ProviderConfig::GCPVertexAnthropic(provider) => Some(provider.model_id()),
-            ProviderConfig::GCPVertexGemini(provider) => Some(provider.model_id()),
+            ProviderConfig::GCPVertexGemini(provider) => Some(provider.model_or_endpoint_id()),
             ProviderConfig::GoogleAIStudioGemini(provider) => Some(provider.model_name()),
             ProviderConfig::Hyperbolic(provider) => Some(provider.model_name()),
             ProviderConfig::Mistral(provider) => Some(provider.model_name()),
@@ -648,7 +648,8 @@ pub(super) enum UninitializedProviderConfig {
     #[strum(serialize = "gcp_vertex_gemini")]
     #[serde(rename = "gcp_vertex_gemini")]
     GCPVertexGemini {
-        model_id: String,
+        model_id: Option<String>,
+        endpoint_id: Option<String>,
         location: String,
         project_id: String,
         credential_location: Option<CredentialLocation>,
@@ -821,6 +822,7 @@ impl UninitializedProviderConfig {
             })?),
             UninitializedProviderConfig::GCPVertexGemini {
                 model_id,
+                endpoint_id,
                 location,
                 project_id,
                 credential_location: api_key_location,
@@ -828,6 +830,7 @@ impl UninitializedProviderConfig {
                 tokio::runtime::Handle::current().block_on(async {
                     GCPVertexGeminiProvider::new(
                         model_id,
+                        endpoint_id,
                         location,
                         project_id,
                         api_key_location,
