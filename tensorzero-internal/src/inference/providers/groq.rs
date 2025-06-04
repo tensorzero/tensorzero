@@ -15,7 +15,7 @@ use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::providers::provider_trait::{InferenceProvider, TensorZeroEventError};
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
-use crate::inference::types::resolved_input::ImageWithPath;
+use crate::inference::types::resolved_input::FileWithPath;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk,
     ContentBlockOutput, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
@@ -695,15 +695,15 @@ fn tensorzero_to_groq_user_messages(
                     tool_call_id: &tool_result.id,
                 }));
             }
-            ContentBlock::Image(ImageWithPath {
-                image,
+            ContentBlock::File(FileWithPath {
+                file,
                 storage_path: _,
             }) => {
                 user_content_blocks.push(GroqContentBlock::ImageUrl {
                     image_url: GroqImageUrl {
                         // This will only produce an error if we pass in a bad
                         // `Base64Image` (with missing image data)
-                        url: format!("data:{};base64,{}", image.mime_type, image.data()?),
+                        url: format!("data:{};base64,{}", file.mime_type, file.data()?),
                     },
                 });
             }
@@ -770,15 +770,15 @@ fn tensorzero_to_groq_assistant_messages(
                     message: "Tool results are not supported in assistant messages".to_string(),
                 }));
             }
-            ContentBlock::Image(ImageWithPath {
-                image,
+            ContentBlock::File(FileWithPath {
+                file,
                 storage_path: _,
             }) => {
                 assistant_content_blocks.push(GroqContentBlock::ImageUrl {
                     image_url: GroqImageUrl {
                         // This will only produce an error if we pass in a bad
                         // `Base64Image` (with missing image data)
-                        url: format!("data:{};base64,{}", image.mime_type, image.data()?),
+                        url: format!("data:{};base64,{}", file.mime_type, file.data()?),
                     },
                 });
             }
