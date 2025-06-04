@@ -3976,7 +3976,11 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
     let output_clickhouse: Vec<Value> =
         serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
     assert!(!output_clickhouse.is_empty()); // could be > 1 if the model returns text as well
-    let content_block = output_clickhouse.first().unwrap();
+                                            // Ignore other content blocks
+    let content_block = output_clickhouse
+        .iter()
+        .find(|b| b["type"] == "tool_call")
+        .unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "tool_call");
     assert_eq!(content_block.get("id").unwrap().as_str().unwrap(), tool_id);
@@ -5166,7 +5170,11 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
     let output_clickhouse: Vec<Value> =
         serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
     assert!(!output_clickhouse.is_empty()); // could be > 1 if the model returns text as well
-    let content_block = output_clickhouse.first().unwrap();
+                                            // Ignore other content blocks
+    let content_block = output_clickhouse
+        .iter()
+        .find(|b| b["type"] == "tool_call")
+        .unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "tool_call");
     assert_eq!(content_block.get("id").unwrap().as_str().unwrap(), tool_id);
@@ -7061,7 +7069,12 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
     let output_clickhouse: Vec<Value> =
         serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
     assert!(!output_clickhouse.is_empty()); // could be > 1 if the model returns text as well
-    let content_block = output_clickhouse.first().unwrap();
+
+    // Ignore other content blocks
+    let content_block = output_clickhouse
+        .iter()
+        .find(|b| b["type"] == "tool_call")
+        .unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "tool_call");
     assert_eq!(content_block.get("id").unwrap().as_str().unwrap(), tool_id);
@@ -8315,7 +8328,12 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     let output_clickhouse: Vec<Value> =
         serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
     assert!(!output_clickhouse.is_empty()); // could be > 1 if the model returns text as well
-    let content_block = output_clickhouse.first().unwrap();
+
+    // Ignore other content blocks
+    let content_block = output_clickhouse
+        .iter()
+        .find(|b| b["type"] == "tool_call")
+        .unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "tool_call");
     assert_eq!(content_block.get("id").unwrap().as_str().unwrap(), tool_id);
