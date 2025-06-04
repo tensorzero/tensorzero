@@ -580,29 +580,29 @@ class FloatMetricNode(InferenceFilterTreeNode):
     metric_name: str
     value: float
     comparison_operator: Literal["<", "<=", "=", ">", ">=", "!="]
-    type: Literal["float_metric"] = "float_metric"
+    type: str = "float_metric"
 
 
 @dataclass
 class BooleanMetricNode(InferenceFilterTreeNode):
     metric_name: str
     value: bool
-    type: Literal["boolean_metric"] = "boolean_metric"
+    type: str = "boolean_metric"
 
 
 @dataclass
 class AndNode(InferenceFilterTreeNode):
     children: List[InferenceFilterTreeNode]
-    type: Literal["and"] = "and"
+    type: str = "and"
 
 
 @dataclass
 class OrNode(InferenceFilterTreeNode):
     children: List[InferenceFilterTreeNode]
-    type: Literal["or"] = "or"
+    type: str = "or"
 
 
 @dataclass
 class NotNode(InferenceFilterTreeNode):
     child: InferenceFilterTreeNode
-    type: Literal["not"] = "not"
+    type: str = "not"
