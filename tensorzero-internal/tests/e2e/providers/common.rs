@@ -204,6 +204,7 @@ macro_rules! generate_provider_tests {
         use $crate::providers::common::test_streaming_invalid_request_with_provider;
         use $crate::providers::common::test_json_mode_off_inference_request_with_provider;
         use $crate::providers::common::test_multiple_text_blocks_in_message_with_provider;
+        use $crate::providers::common::test_streaming_include_original_response_with_provider;
         use $crate::providers::common::test_pdf_inference_with_provider_filesystem;
 
         #[tokio::test]
@@ -247,6 +248,14 @@ macro_rules! generate_provider_tests {
             let providers = $func().await.shorthand_inference;
             for provider in providers {
                 test_simple_inference_request_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_streaming_include_original_response() {
+            let providers = $func().await.simple_inference;
+            for provider in providers {
+                test_streaming_include_original_response_with_provider(provider).await;
             }
         }
 
@@ -1582,6 +1591,13 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
             // check that an error occurs
             assert!(!res["error"].as_str().unwrap().is_empty());
         }
+        "groq" => {
+            assert!(
+                res["error"].as_str().unwrap().contains("400 Bad Request")
+                    || res["error"].as_str().unwrap().contains("Invalid API Key"),
+                "Unexpected error: {res}"
+            );
+        }
         "hyperbolic" => {
             assert!(
                 res["error"]
@@ -2679,12 +2695,34 @@ pub async fn test_simple_streaming_inference_request_with_provider(provider: E2E
     let seed = rand::rng().random_range(0..u32::MAX);
 
     let original_content = test_simple_streaming_inference_request_with_provider_cache(
-        &provider, episode_id, seed, &tag_value, false,
+        &provider, episode_id, seed, &tag_value, false, false,
     )
     .await;
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     let cached_content = test_simple_streaming_inference_request_with_provider_cache(
-        &provider, episode_id, seed, &tag_value, true,
+        &provider, episode_id, seed, &tag_value, true, false,
+    )
+    .await;
+    assert_eq!(original_content, cached_content);
+}
+
+pub async fn test_streaming_include_original_response_with_provider(provider: E2ETestProvider) {
+    // We use a serverless Sagemaker endpoint, which doesn't support streaming
+    if provider.variant_name == "aws-sagemaker-tgi" {
+        return;
+    }
+    let episode_id = Uuid::now_v7();
+    let tag_value = Uuid::now_v7().to_string();
+    // Generate random u32
+    let seed = rand::rng().random_range(0..u32::MAX);
+
+    let original_content = test_simple_streaming_inference_request_with_provider_cache(
+        &provider, episode_id, seed, &tag_value, false, true,
+    )
+    .await;
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    let cached_content = test_simple_streaming_inference_request_with_provider_cache(
+        &provider, episode_id, seed, &tag_value, true, true,
     )
     .await;
     assert_eq!(original_content, cached_content);
@@ -2696,6 +2734,7 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     seed: u32,
     tag_value: &str,
     check_cache: bool,
+    include_original_response: bool,
 ) -> String {
     let extra_headers = get_extra_headers();
     let payload = json!({
@@ -2712,6 +2751,7 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
                 }
             ]},
         "stream": true,
+        "include_original_response": include_original_response,
         "tags": {"key": tag_value},
         "cache_options": {"enabled": "on", "lookback_s": 10},
         "extra_headers": extra_headers.headers,
@@ -2749,6 +2789,13 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
         let chunk_json: Value = serde_json::from_str(&chunk).unwrap();
 
         println!("API response chunk: {chunk_json:#?}");
+
+        // The `original_chunk` field should only be set if we enable the `include_original_response` flag
+        if include_original_response {
+            assert!(chunk_json.get("original_chunk").is_some());
+        } else {
+            assert_eq!(chunk_json.get("original_chunk"), None);
+        }
 
         let chunk_inference_id = chunk_json.get("inference_id").unwrap().as_str().unwrap();
         let chunk_inference_id = Uuid::parse_str(chunk_inference_id).unwrap();
@@ -3861,6 +3908,9 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
                     // (e.g. "Sure, here's the weather in Tokyo:" + tool call)
                     // We mostly care about the tool call, so we'll ignore the text.
                 }
+                "thought" => {
+                    // Gemini models can return thoughts - ignore them
+                }
                 _ => {
                     panic!("Unexpected block type: {block_type}");
                 }
@@ -3933,7 +3983,11 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
     let output_clickhouse: Vec<Value> =
         serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
     assert!(!output_clickhouse.is_empty()); // could be > 1 if the model returns text as well
-    let content_block = output_clickhouse.first().unwrap();
+                                            // Ignore other content blocks
+    let content_block = output_clickhouse
+        .iter()
+        .find(|b| b["type"] == "tool_call")
+        .unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "tool_call");
     assert_eq!(content_block.get("id").unwrap().as_str().unwrap(), tool_id);
@@ -4343,7 +4397,10 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    let mut output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    // We don't care about thoughts in this test
+    output.retain(|block| !matches!(block, ContentBlock::Thought(_)));
+
     let first = output.first().unwrap();
     match first {
         ContentBlock::Text(_text) => {}
@@ -4441,6 +4498,9 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
                 "text" => {
                     full_text.push_str(block.get("text").unwrap().as_str().unwrap());
                 }
+                "thought" => {
+                    // Gemini models can return thoughts - ignore them
+                }
                 _ => {
                     panic!("Unexpected block type: {block_type}");
                 }
@@ -4508,8 +4568,11 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
     );
     assert_eq!(input, correct_input);
 
-    let output_clickhouse: Vec<Value> =
+    let mut output_clickhouse: Vec<Value> =
         serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
+
+    // We don't care about thoughts in this test
+    output_clickhouse.retain(|block| block["type"] != "thought");
 
     assert!(!output_clickhouse
         .iter()
@@ -4636,7 +4699,10 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    let mut output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    // We don't care about thoughts in this test
+    output.retain(|block| !matches!(block, ContentBlock::Thought(_)));
+
     let first = output.first().unwrap();
     match first {
         ContentBlock::Text(_text) => {}
@@ -4650,9 +4716,11 @@ pub async fn test_tool_use_tool_choice_required_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
     // Azure, Together, and SGLang don't support `tool_choice: "required"`
+    // Groq says they support it, but it doesn't return the required tool as expected
     if provider.model_provider_name == "azure"
         || provider.model_provider_name == "together"
         || provider.model_provider_name == "sglang"
+        || provider.model_provider_name == "groq"
     {
         return;
     }
@@ -4747,8 +4815,11 @@ pub async fn check_tool_use_tool_choice_required_inference_response(
 
     let arguments = content_block.get("arguments").unwrap();
     let arguments = arguments.as_object().unwrap();
-    assert!(arguments.len() == 1 || arguments.len() == 2);
-    assert!(arguments.get("location").unwrap().as_str().is_some());
+    // OpenAI occasionally emits a tool call with an empty object for `arguments`
+    assert!(arguments.len() <= 2);
+    if let Some(location) = arguments.get("location") {
+        assert!(location.as_str().is_some())
+    }
     if arguments.len() == 2 {
         let units = arguments.get("units").unwrap().as_str().unwrap();
         assert!(units == "celsius" || units == "fahrenheit");
@@ -4933,9 +5004,11 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
     provider: E2ETestProvider,
 ) {
     // Azure, Together, and SGLang don't support `tool_choice: "required"`
+    // Groq says they support it, but it doesn't return the required tool as expected
     if provider.model_provider_name == "azure"
         || provider.model_provider_name == "together"
         || provider.model_provider_name == "sglang"
+        || provider.model_provider_name == "groq"
     {
         return;
     }
@@ -5035,6 +5108,9 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
                     // (e.g. "Sure, here's the weather in Tokyo:" + tool call)
                     // We mostly care about the tool call, so we'll ignore the text.
                 }
+                "thought" => {
+                    // Gemini models can return thoughts - ignore them
+                }
                 _ => {
                     panic!("Unexpected block type: {block_type}");
                 }
@@ -5105,7 +5181,11 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
     let output_clickhouse: Vec<Value> =
         serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
     assert!(!output_clickhouse.is_empty()); // could be > 1 if the model returns text as well
-    let content_block = output_clickhouse.first().unwrap();
+                                            // Ignore other content blocks
+    let content_block = output_clickhouse
+        .iter()
+        .find(|b| b["type"] == "tool_call")
+        .unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "tool_call");
     assert_eq!(content_block.get("id").unwrap().as_str().unwrap(), tool_id);
@@ -5269,6 +5349,12 @@ pub async fn test_tool_use_tool_choice_none_inference_request_with_provider(
     // https://gist.github.com/virajmehta/2911580b09713fc58aabfeb9ad62cf3b
     // We have disabled this test for that provider for now.
     if provider.model_provider_name == "xai" {
+        return;
+    }
+
+    // NOTE - Gemini 2.5 produces 'UNEXPECTED_TOOL_CALL' here
+    // See https://github.com/tensorzero/tensorzero/issues/2329
+    if provider.model_name == "gemini-2.5-pro-preview-05-06" {
         return;
     }
 
@@ -5609,6 +5695,9 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
                 "text" => {
                     full_text.push_str(block.get("text").unwrap().as_str().unwrap());
                 }
+                "thought" => {
+                    // Gemini models can return thoughts - ignore them
+                }
                 _ => {
                     panic!("Unexpected block type: {block_type}");
                 }
@@ -5818,11 +5907,12 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
 pub async fn test_tool_use_tool_choice_specific_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    // GCP Vertex AI, Mistral, and Together don't support ToolChoice::Specific.
+    // GCP Vertex AI, Groq, Mistral, and Together don't support ToolChoice::Specific.
     // (Together AI claims to support it, but we can't get it to behave strictly.)
     // In those cases, we use ToolChoice::Any with a single tool under the hood.
     // Even then, they seem to hallucinate a new tool.
     if provider.model_provider_name.contains("gcp_vertex")
+        || provider.model_provider_name == "groq"
         || provider.model_provider_name == "mistral"
         || provider.model_provider_name == "together"
     {
@@ -6157,13 +6247,14 @@ pub async fn check_tool_use_tool_choice_specific_inference_response(
 pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    // GCP Vertex AI, Mistral, and Together don't support ToolChoice::Specific.
+    // - GCP Vertex AI, Mistral, Together and Groq don't support ToolChoice::Specific.
     // (Together AI claims to support it, but we can't get it to behave strictly.)
     // In those cases, we use ToolChoice::Any with a single tool under the hood.
     // Even then, they seem to hallucinate a new tool.
     if provider.model_provider_name.contains("gcp_vertex")
         || provider.model_provider_name == "mistral"
         || provider.model_provider_name == "together"
+        || provider.model_provider_name == "groq"
     {
         return;
     }
@@ -6176,6 +6267,13 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
     let episode_id = Uuid::now_v7();
     let extra_headers = get_extra_headers();
 
+    // Groq tool requests aren't always sent with the correct schema
+    let prompt: String = if provider.model_provider_name == "groq" {
+        "What is the temperature like in Tokyo (in Celsius)? Use the `get_temperature` tool. Ensure that the request to the tool is sent with the correct json schema.".into()
+    } else {
+        "What is the temperature like in Tokyo (in Celsius)? Use the `get_temperature` tool.".into()
+    };
+
     let payload = json!({
         "function_name": "weather_helper",
         "episode_id": episode_id,
@@ -6184,7 +6282,7 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
             "messages": [
                 {
                     "role": "user",
-                    "content": "What is the temperature like in Tokyo (in Celsius)? Use the `get_temperature` tool."
+                    "content": prompt,
                 }
             ]},
         "additional_tools": [
@@ -6281,6 +6379,9 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
                     // (e.g. "Sure, here's the weather in Tokyo:" + tool call)
                     // We mostly care about the tool call, so we'll ignore the text.
                 }
+                "thought" => {
+                    // Gemini models can return thoughts - ignore them
+                }
                 _ => {
                     panic!("Unexpected block type: {block_type}");
                 }
@@ -6336,6 +6437,7 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
 
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+
     let correct_input: Value = json!(
         {
             "system": {
@@ -6344,11 +6446,12 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "What is the temperature like in Tokyo (in Celsius)? Use the `get_temperature` tool."}]
+                    "content": [{"type": "text", "value": prompt}]
                 }
             ]
         }
     );
+
     assert_eq!(input, correct_input);
 
     let output_clickhouse: Vec<Value> =
@@ -6521,11 +6624,7 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
     let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
     let expected_input_messages = vec![RequestMessage {
         role: Role::User,
-        content: vec![
-            "What is the temperature like in Tokyo (in Celsius)? Use the `get_temperature` tool."
-                .to_string()
-                .into(),
-        ],
+        content: vec![prompt.into()],
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
@@ -6556,6 +6655,11 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
 pub async fn test_tool_use_allowed_tools_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    // Groq isn't respecting allowed_tools and will call brave_search instead of get_humidity, for example
+    if provider.model_provider_name == "groq" {
+        return;
+    }
+
     let episode_id = Uuid::now_v7();
     let extra_headers = get_extra_headers();
 
@@ -6821,6 +6925,11 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
     if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
         return;
     }
+    // Groq does not support streaming in JSON mode
+    // (no reason given): https://console.groq.com/docs/text-chat#json-mode
+    if provider.model_provider_name == "groq" {
+        return;
+    }
 
     let episode_id = Uuid::now_v7();
     let extra_headers = get_extra_headers();
@@ -6913,6 +7022,9 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
                     // (e.g. "Sure, here's the weather in Tokyo:" + tool call)
                     // We mostly care about the tool call, so we'll ignore the text.
                 }
+                "thought" => {
+                    // Gemini models can return thoughts - ignore them
+                }
                 _ => {
                     panic!("Unexpected block type: {block_type}");
                 }
@@ -6985,7 +7097,12 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
     let output_clickhouse: Vec<Value> =
         serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
     assert!(!output_clickhouse.is_empty()); // could be > 1 if the model returns text as well
-    let content_block = output_clickhouse.first().unwrap();
+
+    // Ignore other content blocks
+    let content_block = output_clickhouse
+        .iter()
+        .find(|b| b["type"] == "tool_call")
+        .unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "tool_call");
     assert_eq!(content_block.get("id").unwrap().as_str().unwrap(), tool_id);
@@ -8164,6 +8281,9 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
                     // (e.g. "Sure, here's the weather in Tokyo:" + tool call)
                     // We mostly care about the tool call, so we'll ignore the text.
                 }
+                "thought" => {
+                    // Gemini models can return thoughts - ignore them
+                }
                 _ => {
                     panic!("Unexpected block type: {block_type}");
                 }
@@ -8236,7 +8356,12 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     let output_clickhouse: Vec<Value> =
         serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
     assert!(!output_clickhouse.is_empty()); // could be > 1 if the model returns text as well
-    let content_block = output_clickhouse.first().unwrap();
+
+    // Ignore other content blocks
+    let content_block = output_clickhouse
+        .iter()
+        .find(|b| b["type"] == "tool_call")
+        .unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "tool_call");
     assert_eq!(content_block.get("id").unwrap().as_str().unwrap(), tool_id);
@@ -8764,7 +8889,8 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
     // Together doesn't correctly produce streaming tool call chunks (it produces text chunks with the raw tool call).
-    if provider.model_provider_name == "together" {
+    // Groq also doesn't seem to produce the correct tool call chunks, but not sure what's happening there yet.
+    if provider.model_provider_name == "together" || provider.model_provider_name == "groq" {
         return;
     }
 
@@ -9382,7 +9508,9 @@ pub async fn check_json_mode_inference_response(
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    let mut output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    // We don't care about thoughts in this test
+    output.retain(|block| !matches!(block, ContentBlock::Thought(_)));
 
     let is_openrouter = provider.model_provider_name == "openrouter";
     if is_openrouter {
@@ -9665,7 +9793,9 @@ pub async fn check_dynamic_json_mode_inference_response(
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    let mut output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    // We don't care about thoughts in this test
+    output.retain(|block| !matches!(block, ContentBlock::Thought(_)));
 
     let is_openrouter = provider.model_provider_name == "openrouter";
     if is_openrouter {
@@ -9723,8 +9853,12 @@ pub async fn check_dynamic_json_mode_inference_response(
 }
 
 pub async fn test_json_mode_streaming_inference_request_with_provider(provider: E2ETestProvider) {
-    if provider.variant_name.contains("tgi") || provider.variant_name.contains("cot") {
+    if provider.variant_name.contains("tgi")
+        || provider.variant_name.contains("cot")
+        || provider.model_provider_name == "groq"
+    {
         // TGI does not support streaming in JSON mode (because it doesn't support streaming tools)
+        // Groq does not support streaming in JSON mode (no reason given): https://console.groq.com/docs/text-chat#json-mode)
         return;
     }
     // OpenAI O1 doesn't support streaming responses

@@ -17,6 +17,7 @@ import uuid_utils
 import tensorzero.internal_optimization_server_types as iost
 from tensorzero import (
     ChatDatapointInsert,
+    ContentBlock,
     Datapoint,
     DynamicEvaluationRunEpisodeResponse,
     DynamicEvaluationRunResponse,
@@ -26,7 +27,20 @@ from tensorzero import (
     InferenceInput,
     InferenceResponse,
     JsonDatapointInsert,
+    StoredInference,
 )
+from tensorzero.internal import ModelInput, ToolCallConfigDatabaseInsert
+
+@final
+class RenderedStoredInference:
+    function_name: str
+    variant_name: str
+    input: ModelInput
+    output: List[ContentBlock]
+    episode_id: UUID
+    inference_id: UUID
+    tool_params: Optional[ToolCallConfigDatabaseInsert]
+    output_schema: Optional[Dict[str, Any]]
 
 class BaseTensorZeroGateway:
     pass
@@ -250,6 +264,29 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         :param dataset_name: The name of the dataset to get the datapoint from.
         :param datapoint_id: The ID of the datapoint to get.
         :return: A `Datapoint` instance.
+        """
+
+    def experimental_render_inferences(
+        self,
+        *,
+        stored_inferences: List[StoredInference],
+        variants: Dict[str, str],
+    ) -> List[RenderedStoredInference]:
+        """
+        Render a list of stored inferences into a list of rendered stored inferences.
+
+        This function performs two main tasks:
+        1. Resolves all network resources (e.g., images) in the stored inference.
+        2. Prepares all messages into "simple" messages that have been templated for a particular variant.
+           To do this, the function needs to know which variant to use for each function that might appear in the data.
+
+        IMPORTANT: For now, this function drops datapoints that are invalid, such as those where templating fails,
+        the function has no variant specified, or the process of downloading resources fails.
+        In the future, this behavior may be made configurable by the caller.
+
+        :param stored_inferences: A list of stored inferences to render.
+        :param variants: A mapping from function name to variant name.
+        :return: A list of rendered stored inferences.
         """
 
     def close(self) -> None:
@@ -490,6 +527,29 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         :return: A `Datapoint` instance.
         """
 
+    async def experimental_render_inferences(
+        self,
+        *,
+        stored_inferences: List[StoredInference],
+        variants: Dict[str, str],
+    ) -> List[RenderedStoredInference]:
+        """
+        Render a list of stored inferences into a list of rendered stored inferences.
+
+        This function performs two main tasks:
+        1. Resolves all network resources (e.g., images) in the stored inferences.
+        2. Prepares all messages into "simple" messages that have been templated for a particular variant.
+           To do this, the function needs to know which variant to use for each function that might appear in the data.
+
+        IMPORTANT: For now, this function drops datapoints that are invalid, such as those where templating fails,
+        the function has no variant specified, or the process of downloading resources fails.
+        In the future, this behavior may be made configurable by the caller.
+
+        :param stored_inferences: A list of stored inferences to render.
+        :param variants: A mapping from function name to variant name.
+        :return: A list of rendered stored inferences.
+        """
+
     async def close(self) -> None:
         """
         Close the connection to the TensorZero gateway.
@@ -533,4 +593,5 @@ __all__ = [
     "TensorZeroGateway",
     "LocalHttpGateway",
     "_start_http_gateway",
+    "RenderedStoredInference",
 ]

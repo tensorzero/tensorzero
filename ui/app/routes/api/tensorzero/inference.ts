@@ -1,5 +1,8 @@
 import { ZodError } from "zod";
-import { InferenceRequestSchema } from "~/utils/tensorzero";
+import {
+  InferenceRequestSchema,
+  HttpError as TensorZeroHttpError,
+} from "~/utils/tensorzero";
 import { tensorZeroClient } from "~/utils/tensorzero.server";
 import type {
   ResolvedFileContent,
@@ -31,6 +34,12 @@ export async function action({ request }: Route.ActionArgs): Promise<Response> {
     }
     if (error instanceof ZodError) {
       return Response.json({ error: error.issues }, { status: 400 });
+    }
+    if (error instanceof TensorZeroHttpError) {
+      return Response.json(
+        { error: error.message },
+        { status: error.response.status },
+      );
     }
     return Response.json({ error: "Server error" }, { status: 500 });
   }

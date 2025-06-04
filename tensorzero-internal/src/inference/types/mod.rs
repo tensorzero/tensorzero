@@ -7,7 +7,14 @@ use file::sanitize_raw_request;
 pub use file::{Base64File, File, FileKind};
 use futures::stream::Peekable;
 use futures::Stream;
+use indexmap::IndexMap;
 use itertools::Itertools;
+#[cfg(feature = "pyo3")]
+use pyo3::prelude::*;
+#[cfg(feature = "pyo3")]
+use pyo3::types::{PyAny, PyList};
+#[cfg(feature = "pyo3")]
+use pyo3_helpers::content_block_to_python;
 use resolved_input::FileWithPath;
 pub use resolved_input::{ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent};
 use serde::{Deserialize, Deserializer, Serialize};
@@ -42,6 +49,8 @@ pub mod batch;
 pub mod extra_body;
 pub mod extra_headers;
 pub mod file;
+#[cfg(feature = "pyo3")]
+pub mod pyo3_helpers;
 pub mod resolved_input;
 pub mod storage;
 
@@ -238,6 +247,7 @@ impl<'de> Deserialize<'de> for TextKind {
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "pyo3", pyclass)]
 pub enum Role {
     User,
     Assistant,
@@ -253,12 +263,14 @@ pub enum Role {
 /// inference that is called for.
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(feature = "pyo3", pyclass(get_all))]
 pub struct Text {
     pub text: String,
 }
 
 /// Struct that represents Chain of Thought reasoning
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(feature = "pyo3", pyclass(get_all))]
 pub struct Thought {
     pub text: String,
     /// An optional signature - currently, this is only used with Anthropic,
@@ -312,6 +324,14 @@ pub enum FlattenUnknown<'a, T> {
     Unknown(Cow<'a, Value>),
 }
 
+/// Holds the variants types of `ContentBlockOutput` without any data
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+enum ContentBlockOutputType {
+    Text,
+    ToolCall,
+    Thought,
+}
+
 /// Defines the types of content block that can come out of a model provider
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -340,9 +360,29 @@ pub enum ContentBlockChatOutput {
 
 /// A RequestMessage is a message sent to a model
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(feature = "pyo3", pyclass)]
 pub struct RequestMessage {
     pub role: Role,
     pub content: Vec<ContentBlock>,
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl RequestMessage {
+    #[getter]
+    fn get_content<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let content = self
+            .content
+            .iter()
+            .map(|c| content_block_to_python(py, c))
+            .collect::<PyResult<Vec<_>>>()?;
+        PyList::new(py, content).map(|list| list.into_any())
+    }
+
+    #[getter]
+    fn get_role(&self) -> String {
+        self.role.to_string()
+    }
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
@@ -390,6 +430,14 @@ pub struct ModelInferenceRequest<'a> {
     /// This is used by best_of_n/mixture_of_n to force different sub-variants
     /// to have different cache keys.
     pub extra_cache_key: Option<String>,
+}
+
+/// For use in rendering for optimization purposes
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "pyo3", pyclass(get_all))]
+pub struct ModelInput {
+    pub system: Option<String>,
+    pub messages: Vec<RequestMessage>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -1262,6 +1310,25 @@ impl From<ContentBlockChatOutput> for ContentBlock {
     }
 }
 
+impl From<ContentBlockChatOutput> for ContentBlockOutput {
+    fn from(output: ContentBlockChatOutput) -> Self {
+        match output {
+            ContentBlockChatOutput::Text(text) => ContentBlockOutput::Text(text),
+            ContentBlockChatOutput::ToolCall(tool_call) => {
+                ContentBlockOutput::ToolCall(tool_call.into())
+            }
+            ContentBlockChatOutput::Thought(thought) => ContentBlockOutput::Thought(thought),
+            ContentBlockChatOutput::Unknown {
+                data,
+                model_provider_name,
+            } => ContentBlockOutput::Unknown {
+                data,
+                model_provider_name,
+            },
+        }
+    }
+}
+
 /// We use best-effort to reconstruct the raw response for JSON functions
 /// They might either return a ToolCallChunk or a TextChunk
 /// We take the string from either of these (from the last block if there are multiple)
@@ -1340,9 +1407,18 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
     } = args;
 
     // NOTE: We will eventually need this to be per-inference-response-type and sensitive to the type of variant and function being called.
-    let mut tool_call_blocks: HashMap<String, ContentBlockOutput> = HashMap::new();
-    let mut text_blocks: HashMap<String, ContentBlockOutput> = HashMap::new();
-    let mut thought_blocks: HashMap<String, ContentBlockOutput> = HashMap::new();
+    // We preserve the order of chunks in the stream when combining them into `ContentBlockOutput`, except when
+    // the same id is used by non-adjacent blocks.
+    // For example, the following chunks:
+    // `[TextChunk(id=0, content="Hello ""), ThoughtChunk(id=0, content=Something), TextChunk(id=0, content=World)]``
+    // will be collected into the content block list: `[Text("Hello World"), Thought("Something"))]`
+    //
+    // All chunks with the same type and id (in this case, TextChunk id=0) are combined into a single content
+    // block at the first occurrence of that type and id.
+    // We use an 'IndexMap' to preserve the insertion order, so that newly-seen type/id combinations
+    // are not reordered.
+    let mut blocks: IndexMap<(ContentBlockOutputType, String), ContentBlockOutput> =
+        IndexMap::new();
     let raw_response: String = value
         .iter()
         .map(|chunk| chunk.raw_response())
@@ -1378,8 +1454,8 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
                     match content {
                         ContentBlockChunk::Text(text) => {
                             handle_textual_content_block(
-                                &mut text_blocks,
-                                text.id,
+                                &mut blocks,
+                                (ContentBlockOutputType::Text, text.id),
                                 text.text,
                                 &mut ttft,
                                 chunk.latency,
@@ -1402,8 +1478,8 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
                             // to a thought.
                             if let Some(text) = thought.text {
                                 handle_textual_content_block(
-                                    &mut thought_blocks,
-                                    thought.id.clone(),
+                                    &mut blocks,
+                                    (ContentBlockOutputType::Thought, thought.id.clone()),
                                     text,
                                     &mut ttft,
                                     chunk.latency,
@@ -1422,8 +1498,8 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
                             }
                             if let Some(signature) = thought.signature {
                                 handle_textual_content_block(
-                                    &mut thought_blocks,
-                                    thought.id,
+                                    &mut blocks,
+                                    (ContentBlockOutputType::Thought, thought.id),
                                     signature,
                                     &mut ttft,
                                     chunk.latency,
@@ -1447,7 +1523,9 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
                             }
                         }
                         ContentBlockChunk::ToolCall(tool_call) => {
-                            match tool_call_blocks.get_mut(&tool_call.id) {
+                            match blocks
+                                .get_mut(&(ContentBlockOutputType::ToolCall, tool_call.id.clone()))
+                            {
                                 // If there is already a tool call block with this id, append to it
                                 Some(ContentBlockOutput::ToolCall(existing_tool_call)) => {
                                     // We assume that the name and ID are present and complete in the first chunk
@@ -1460,8 +1538,8 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
                                     if ttft.is_none() {
                                         ttft = Some(chunk.latency);
                                     }
-                                    tool_call_blocks.insert(
-                                        tool_call.id.clone(),
+                                    blocks.insert(
+                                        (ContentBlockOutputType::ToolCall, tool_call.id.clone()),
                                         ContentBlockOutput::ToolCall(tool_call.into()),
                                     );
                                 }
@@ -1474,7 +1552,7 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
                 if let Some(chunk_finish_reason) = chunk.finish_reason {
                     finish_reason = Some(chunk_finish_reason);
                 }
-                match text_blocks.get_mut("") {
+                match blocks.get_mut(&(ContentBlockOutputType::Text, "".to_string())) {
                     // If there is already a text block, append to it
                     Some(ContentBlockOutput::Text(Text {
                         text: existing_text,
@@ -1491,20 +1569,21 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
                             ttft = Some(chunk.latency);
                         }
                         if let Some(raw) = chunk.raw {
-                            text_blocks.insert(String::new(), raw.into());
+                            blocks
+                                .insert((ContentBlockOutputType::Text, "".to_string()), raw.into());
                         }
                     }
                 }
                 if let Some(thought) = chunk.thought {
-                    match thought_blocks.get_mut("") {
+                    match blocks.get_mut(&(ContentBlockOutputType::Thought, "".to_string())) {
                         // If there is already a thought block, append to it
                         Some(ContentBlockOutput::Thought(existing_thought)) => {
                             existing_thought.text.push_str(&thought);
                         }
                         // If there is no thought block, create one
                         _ => {
-                            thought_blocks.insert(
-                                String::new(),
+                            blocks.insert(
+                                (ContentBlockOutputType::Thought, "".to_string()),
                                 ContentBlockOutput::Thought(Thought {
                                     text: thought,
                                     signature: None,
@@ -1525,9 +1604,7 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
         ttft,
         response_time,
     };
-    let mut content_blocks: Vec<ContentBlockOutput> = tool_call_blocks.into_values().collect();
-    content_blocks.extend(thought_blocks.into_values());
-    content_blocks.extend(text_blocks.into_values());
+    let content_blocks: Vec<_> = blocks.into_values().collect();
     let model_response = ProviderInferenceResponse::new(ProviderInferenceResponseArgs {
         output: content_blocks.clone(),
         system,
@@ -1664,8 +1741,8 @@ pub fn serialize_or_log<T: Serialize>(value: &T) -> String {
 /// Otherwise, it creates a new block and inserts it into the map.
 /// It also updates the TTFT if it hasn't been set
 fn handle_textual_content_block<F, A>(
-    blocks: &mut HashMap<String, ContentBlockOutput>,
-    id: String,
+    blocks: &mut IndexMap<(ContentBlockOutputType, String), ContentBlockOutput>,
+    key: (ContentBlockOutputType, String),
     text: String,
     ttft: &mut Option<Duration>,
     chunk_latency: Duration,
@@ -1675,7 +1752,7 @@ fn handle_textual_content_block<F, A>(
     F: FnOnce(String) -> ContentBlockOutput,
     A: FnOnce(&mut ContentBlockOutput, &str),
 {
-    match blocks.get_mut(&id) {
+    match blocks.get_mut(&key) {
         // If there is already a block, append to it
         Some(existing_block) => append_text(existing_block, &text),
         // If there is no block, create one
@@ -1685,7 +1762,7 @@ fn handle_textual_content_block<F, A>(
                 *ttft = Some(chunk_latency);
             }
             if !text.is_empty() {
-                blocks.insert(id, create_block(text));
+                blocks.insert(key, create_block(text));
             }
         }
     }
@@ -2691,12 +2768,12 @@ mod tests {
             assert_eq!(
                 chat_response.content,
                 vec![
+                    ContentBlockChatOutput::Text(Text {
+                        text: "{\"name\":\"John\",\"age\":30}".to_string()
+                    }),
                     ContentBlockChatOutput::Thought(Thought {
                         text: "Thought 2".to_string(),
                         signature: None,
-                    }),
-                    ContentBlockChatOutput::Text(Text {
-                        text: "{\"name\":\"John\",\"age\":30}".to_string()
                     }),
                 ]
             );
@@ -2930,6 +3007,150 @@ mod tests {
             }
             _ => panic!("Expected Json inference response"),
         }
+    }
+
+    #[tokio::test]
+    async fn test_collect_interleaved_chunks() {
+        let templates = TemplateConfig::default();
+        let function_config = Arc::new(FunctionConfig::Chat(FunctionConfigChat::default()));
+        let model_name = "test_model";
+        let model_provider_name = "test_provider";
+        let raw_request = "raw request".to_string();
+        let inference_id = Uuid::now_v7();
+        let episode_id = Uuid::now_v7();
+        let created = current_timestamp();
+        let latency = Duration::from_millis(150);
+        let chunks = vec![
+            InferenceResultChunk::Chat(ChatInferenceResultChunk {
+                content: vec![
+                    ContentBlockChunk::Text(TextChunk {
+                        text: "Hello ".to_string(),
+                        id: "0".to_string(),
+                    }),
+                    ContentBlockChunk::ToolCall(ToolCallChunk {
+                        id: "0".to_string(),
+                        raw_name: "my_tool_call".to_string(),
+                        raw_arguments: "true".to_string(),
+                    }),
+                ],
+                created,
+                usage: None,
+                raw_response: "{\"message\": \"Hello}".to_string(),
+                latency,
+                finish_reason: None,
+            }),
+            InferenceResultChunk::Chat(ChatInferenceResultChunk {
+                content: vec![
+                    ContentBlockChunk::Thought(ThoughtChunk {
+                        text: Some("Some thou".to_string()),
+                        id: "0".to_string(),
+                        signature: None,
+                    }),
+                    ContentBlockChunk::Thought(ThoughtChunk {
+                        text: Some("My other interleaved thought".to_string()),
+                        id: "1".to_string(),
+                        signature: None,
+                    }),
+                ],
+                created,
+                usage: None,
+                raw_response: "my raw thought".to_string(),
+                latency,
+                finish_reason: None,
+            }),
+            InferenceResultChunk::Chat(ChatInferenceResultChunk {
+                content: vec![ContentBlockChunk::Text(TextChunk {
+                    text: "world!".to_string(),
+                    id: "0".to_string(),
+                })],
+                created,
+                usage: Some(Usage {
+                    input_tokens: 2,
+                    output_tokens: 4,
+                }),
+                raw_response: ", world!\"}".to_string(),
+                latency: Duration::from_millis(250),
+                finish_reason: Some(FinishReason::Stop),
+            }),
+            InferenceResultChunk::Chat(ChatInferenceResultChunk {
+                content: vec![ContentBlockChunk::Thought(ThoughtChunk {
+                    text: Some("ght".to_string()),
+                    id: "0".to_string(),
+                    signature: None,
+                })],
+                created,
+                usage: None,
+                raw_response: "my other raw thought".to_string(),
+                latency,
+                finish_reason: None,
+            }),
+        ];
+        let collect_chunks_args = CollectChunksArgs {
+            inference_id,
+            episode_id,
+            value: chunks,
+            system: None,
+            input_messages: vec![],
+            function: function_config.clone(),
+            model_name: model_name.into(),
+            model_provider_name: model_provider_name.into(),
+            raw_request: raw_request.clone(),
+            inference_params: InferenceParams::default(),
+            function_name: "",
+            variant_name: "",
+            dynamic_output_schema: None,
+            templates: &templates,
+            tool_config: None,
+            cached: false,
+            extra_body: Default::default(),
+            extra_headers: Default::default(),
+        };
+        let result = collect_chunks(collect_chunks_args).await.unwrap();
+        let chat_result = match result {
+            InferenceResult::Chat(chat_result) => chat_result,
+            _ => panic!("Expected Chat inference response"),
+        };
+        assert_eq!(chat_result.inference_id, inference_id);
+        assert_eq!(chat_result.created, created);
+        assert_eq!(chat_result.finish_reason, Some(FinishReason::Stop));
+        assert_eq!(
+            chat_result.usage,
+            Usage {
+                input_tokens: 2,
+                output_tokens: 4,
+            }
+        );
+
+        let expected_content = vec![
+            ContentBlockChatOutput::Text(Text {
+                text: "Hello world!".to_string(),
+            }),
+            ContentBlockChatOutput::ToolCall(ToolCallOutput {
+                name: None,
+                raw_name: "my_tool_call".to_string(),
+                raw_arguments: "true".to_string(),
+                arguments: None,
+                id: "0".to_string(),
+            }),
+            ContentBlockChatOutput::Thought(Thought {
+                text: "Some thought".to_string(),
+                signature: None,
+            }),
+            ContentBlockChatOutput::Thought(Thought {
+                text: "My other interleaved thought".to_string(),
+                signature: None,
+            }),
+        ];
+        assert_eq!(chat_result.content, expected_content);
+
+        assert_eq!(chat_result.model_inference_results.len(), 1);
+        let model_inference_result = chat_result.model_inference_results.first().unwrap();
+        assert_eq!(&*model_inference_result.model_name, model_name);
+        assert_eq!(
+            &*model_inference_result.model_provider_name,
+            model_provider_name
+        );
+        assert_eq!(model_inference_result.raw_request, raw_request);
     }
 
     #[test]
@@ -3171,14 +3392,15 @@ mod tests {
 
     #[test]
     fn test_handle_textual_content_block() {
-        let mut blocks: HashMap<String, ContentBlockOutput> = HashMap::new();
+        let mut blocks: IndexMap<(ContentBlockOutputType, String), ContentBlockOutput> =
+            IndexMap::new();
         let mut ttft: Option<Duration> = None;
         let chunk_latency = Duration::from_millis(100);
 
         // Test case 1: Create new text block
         handle_textual_content_block(
             &mut blocks,
-            "1".to_string(),
+            (ContentBlockOutputType::Text, "1".to_string()),
             "Hello".to_string(),
             &mut ttft,
             chunk_latency,
@@ -3195,7 +3417,10 @@ mod tests {
 
         assert_eq!(blocks.len(), 1);
         assert_eq!(ttft, Some(chunk_latency));
-        match blocks.get("1").unwrap() {
+        match blocks
+            .get(&(ContentBlockOutputType::Text, "1".to_string()))
+            .unwrap()
+        {
             ContentBlockOutput::Text(Text { text }) => assert_eq!(text, "Hello"),
             _ => panic!("Expected text block"),
         }
@@ -3203,7 +3428,7 @@ mod tests {
         // Test case 2: Append to existing text block
         handle_textual_content_block(
             &mut blocks,
-            "1".to_string(),
+            (ContentBlockOutputType::Text, "1".to_string()),
             " World".to_string(),
             &mut ttft,
             chunk_latency,
@@ -3219,7 +3444,10 @@ mod tests {
         );
 
         assert_eq!(blocks.len(), 1);
-        match blocks.get("1").unwrap() {
+        match blocks
+            .get(&(ContentBlockOutputType::Text, "1".to_string()))
+            .unwrap()
+        {
             ContentBlockOutput::Text(Text { text }) => assert_eq!(text, "Hello World"),
             _ => panic!("Expected text block"),
         }
@@ -3227,7 +3455,7 @@ mod tests {
         // Test case 3: Empty text should not create block
         handle_textual_content_block(
             &mut blocks,
-            "2".to_string(),
+            (ContentBlockOutputType::Text, "2".to_string()),
             "".to_string(),
             &mut ttft,
             chunk_latency,
@@ -3247,7 +3475,7 @@ mod tests {
         // Test case 4: Create thought block
         handle_textual_content_block(
             &mut blocks,
-            "3".to_string(),
+            (ContentBlockOutputType::Thought, "3".to_string()),
             "Thinking...".to_string(),
             &mut ttft,
             chunk_latency,
@@ -3265,7 +3493,10 @@ mod tests {
         );
 
         assert_eq!(blocks.len(), 2);
-        match blocks.get("3").unwrap() {
+        match blocks
+            .get(&(ContentBlockOutputType::Thought, "3".to_string()))
+            .unwrap()
+        {
             ContentBlockOutput::Thought(Thought { text, signature: _ }) => {
                 assert_eq!(text, "Thinking...")
             }

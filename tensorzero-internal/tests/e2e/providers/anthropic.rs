@@ -829,23 +829,22 @@ async fn test_streaming_thinking() {
         serde_json::from_str(clickhouse_content_blocks).unwrap();
     println!("Got content blocks: {clickhouse_content_blocks:?}");
     // We should reconstruct thee blocks - a thought block, tool call, and text block
-    // Note that we currently always store the tool call first in ClickHouse
     assert_eq!(clickhouse_content_blocks.len(), 3);
-    assert_eq!(clickhouse_content_blocks[0]["type"], "tool_call");
-    assert_eq!(clickhouse_content_blocks[1]["type"], "thought");
-    assert_eq!(clickhouse_content_blocks[2]["type"], "text");
+    assert_eq!(clickhouse_content_blocks[0]["type"], "thought");
+    assert_eq!(clickhouse_content_blocks[1]["type"], "text");
+    assert_eq!(clickhouse_content_blocks[2]["type"], "tool_call");
 
-    assert_eq!(clickhouse_content_blocks[1]["text"], content_blocks["0"]);
+    assert_eq!(clickhouse_content_blocks[0]["text"], content_blocks["0"]);
     assert_eq!(
-        clickhouse_content_blocks[1]["signature"],
+        clickhouse_content_blocks[0]["signature"],
         content_block_signatures["0"]
     );
-    assert_eq!(clickhouse_content_blocks[2]["text"], content_blocks["1"]);
+    assert_eq!(clickhouse_content_blocks[1]["text"], content_blocks["1"]);
 
-    let tool_call_id = clickhouse_content_blocks[0]["id"].as_str().unwrap();
+    let tool_call_id = clickhouse_content_blocks[2]["id"].as_str().unwrap();
 
     assert_eq!(
-        clickhouse_content_blocks[0]["raw_arguments"],
+        clickhouse_content_blocks[2]["raw_arguments"],
         content_blocks[tool_call_id]
     );
 

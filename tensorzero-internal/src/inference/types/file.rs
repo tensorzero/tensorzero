@@ -5,10 +5,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use url::Url;
 
+use super::{resolved_input::FileWithPath, ContentBlock, RequestMessage};
 use crate::error::{Error, ErrorDetails};
 use aws_smithy_types::base64;
-
-use super::{resolved_input::FileWithPath, ContentBlock, RequestMessage};
+#[cfg(feature = "pyo3")]
+use pyo3::prelude::*;
 
 scoped_thread_local!(static SERIALIZE_FILE_DATA: ());
 
@@ -89,6 +90,7 @@ fn skip_serialize_file_data(_: &Option<String>) -> bool {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[cfg_attr(feature = "pyo3", pyclass)]
 pub struct Base64File {
     // The original url we used to download the file
     pub url: Option<Url>,
@@ -105,9 +107,22 @@ impl Base64File {
     pub fn data(&self) -> Result<&String, Error> {
         self.data.as_ref().ok_or_else(|| {
             Error::new(ErrorDetails::InternalError {
-                message: "Tried to get image data from deserialized Base64Image".to_string(),
+                message: "Tried to get image data from deserialized Base64File".to_string(),
             })
         })
+    }
+}
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl Base64File {
+    #[getter(url)]
+    pub fn url_string(&self) -> Option<String> {
+        self.url.as_ref().map(|u| u.to_string())
+    }
+
+    #[getter(mime_type)]
+    pub fn mime_type_string(&self) -> String {
+        self.mime_type.to_string()
     }
 }
 
