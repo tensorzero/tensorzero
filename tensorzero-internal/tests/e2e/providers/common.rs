@@ -252,6 +252,7 @@ macro_rules! generate_provider_tests {
         }
         $crate::make_gateway_test_functions!(test_shorthand_inference_request);
 
+
         async fn test_streaming_include_original_response(client: tensorzero::Client) {
             let providers = $func().await.simple_inference;
             for provider in providers {
@@ -2761,6 +2762,7 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
                 enabled: CacheEnabledMode::On,
                 max_age_s: Some(10),
             },
+            include_original_response,
             extra_headers: get_extra_headers(),
             stream: Some(true),
             ..Default::default()
