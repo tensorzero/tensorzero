@@ -309,7 +309,7 @@ export const StatusResponseSchema = z.object({
 });
 export type StatusResponse = z.infer<typeof StatusResponseSchema>;
 
-class HttpError extends Error {
+export class HttpError extends Error {
   readonly name: string = "HttpError";
   readonly message: string;
   readonly response: Response;
