@@ -89,7 +89,8 @@ class ClientType(Enum):
 async def async_client(request: FixtureRequest):
     if request.param == ClientType.HttpGateway:
         client_fut = AsyncTensorZeroGateway.build_http(
-            gateway_url="http://localhost:3000"
+            gateway_url="http://localhost:3000",
+            verbose_errors=True,
         )
         assert inspect.isawaitable(client_fut)
         async with await client_fut as client:
@@ -1019,7 +1020,8 @@ async def test_async_error():
 def sync_client(request: FixtureRequest):
     if request.param == ClientType.HttpGateway:
         with TensorZeroGateway.build_http(
-            gateway_url="http://localhost:3000"
+            gateway_url="http://localhost:3000",
+            verbose_errors=True,
         ) as client:
             yield client
     else:

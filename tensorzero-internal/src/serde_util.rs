@@ -50,6 +50,8 @@ where
 {
     let value: Value = Deserialize::deserialize(deserializer)?;
     match value {
+        Value::Null => Ok(None),
+        // If the value is a string, parse it as JSON then deserialize it into the target type
         Value::String(s) => {
             if s.is_empty() {
                 return Ok(None);
@@ -58,7 +60,8 @@ where
                 serde_json::from_str(&s).map_err(serde::de::Error::custom)?,
             ))
         }
-        _ => Ok(Some(
+        // If the value is a JSON object, deserialize it into the target type
+        value => Ok(Some(
             serde_json::from_value(value).map_err(serde::de::Error::custom)?,
         )),
     }
