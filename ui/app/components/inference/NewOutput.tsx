@@ -112,7 +112,12 @@ function renderChatInferenceOutput(output: ChatInferenceOutputRenderingData) {
                   <ToolCallMessage
                     key={index}
                     toolName={block.name ?? ""}
-                    toolArguments={JSON.stringify(block.arguments, null, 2)}
+                    toolArguments={JSON.stringify(
+                      JSON.parse(block.arguments),
+                      null,
+                      2,
+                    )}
+                    // TODO: if arguments is null, display raw arguments without parsing
                     toolCallId={block.id}
                   />
                 );

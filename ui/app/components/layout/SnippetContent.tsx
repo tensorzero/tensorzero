@@ -107,7 +107,7 @@ export function TextMessage({
   }
 
   return (
-    <div className="relative flex min-w-80 max-w-240 flex-col gap-2">
+    <div className="relative flex max-w-240 min-w-80 flex-col gap-2">
       <Label
         text={label}
         icon={<AlignLeft className="text-fg-muted h-3 w-3" />}
@@ -129,7 +129,7 @@ interface InputTextMessageProps {
 
 export function InputTextMessage({ content }: InputTextMessageProps) {
   return (
-    <div className="flex min-w-80 max-w-240 flex-col gap-1">
+    <div className="flex max-w-240 min-w-80 flex-col gap-1">
       <Label
         text="Text"
         icon={<AlignLeft className="text-fg-muted h-3 w-3" />}
@@ -149,7 +149,7 @@ export function TextMessageWithArguments({
   content,
 }: TextMessageWithArgumentsProps) {
   return (
-    <div className="flex min-w-80 max-w-240 flex-col gap-1.5">
+    <div className="flex max-w-240 min-w-80 flex-col gap-1.5">
       <Label
         text="Text (Arguments)"
         icon={<AlignLeft className="text-fg-muted h-3 w-3" />}
@@ -160,7 +160,6 @@ export function TextMessageWithArguments({
     </div>
   );
 }
-
 
 // Tool Call Message component
 interface ToolCallMessageProps {
@@ -180,14 +179,16 @@ export function ToolCallMessage({
         text="Tool Call"
         icon={<Terminal className="text-fg-muted h-3 w-3" />}
       />
-      <div className="border-border bg-bg-tertiary flex flex-col gap-1 rounded-md text-sm border px-3 py-2">
+      <div className="border-border bg-bg-tertiary flex flex-col gap-1 rounded-md border px-3 py-2 text-sm">
         <div className="flex flex-row items-start gap-1 whitespace-nowrap">
           <span className="text-fg-secondary w-16 min-w-16">Name:</span>
-          <span className="text-ellipsis overflow-hidden">{toolName}</span>
+          <span className="overflow-hidden text-ellipsis">{toolName}</span>
         </div>
         <div className="flex flex-row items-start gap-1 whitespace-nowrap">
           <span className="text-fg-secondary w-16 min-w-16">ID:</span>
-          <span className="font-mono text-ellipsis overflow-hidden">{toolCallId}</span>
+          <span className="overflow-hidden font-mono text-ellipsis">
+            {toolCallId}
+          </span>
         </div>
         <div className="flex flex-row items-start gap-1">
           <span className="text-fg-secondary w-16 min-w-16">Args:</span>
@@ -218,19 +219,21 @@ export function ToolResultMessage({
         text="Tool Result"
         icon={<ArrowRight className="text-fg-muted h-3 w-3" />}
       />
-      <div className="w-full border-border bg-bg-tertiary flex flex-col gap-1 rounded-md text-sm border px-3 py-2">
+      <div className="border-border bg-bg-tertiary flex w-full flex-col gap-1 rounded-md border px-3 py-2 text-sm">
         <div className="flex flex-row items-start gap-1 whitespace-nowrap">
           <span className="text-fg-secondary w-16 min-w-16">Name:</span>
-          <span className="text-ellipsis overflow-hidden">{toolName}</span>
+          <span className="overflow-hidden text-ellipsis">{toolName}</span>
         </div>
         <div className="flex flex-row items-start gap-1 whitespace-nowrap">
-          <span className="text-fg-secondary w-16 min-w-16 ">ID:</span>
-          <span className="font-mono text-ellipsis overflow-hidden">{toolResultId}</span>
+          <span className="text-fg-secondary w-16 min-w-16">ID:</span>
+          <span className="overflow-hidden font-mono text-ellipsis">
+            {toolResultId}
+          </span>
         </div>
         <div className="flex flex-row items-start gap-1">
-          <span className="text-fg-secondary w-16 min-w-16 ">Result:</span>
+          <span className="text-fg-secondary w-16 min-w-16">Result:</span>
           <div className="flex w-full max-w-full overflow-x-auto">
-            <pre className="max-w-full font-mono  break-words whitespace-pre-wrap">
+            <pre className="max-w-full font-mono break-words whitespace-pre-wrap">
               {toolResult}
             </pre>
           </div>
@@ -299,7 +302,7 @@ interface RawTextMessageProps {
 
 export function RawTextMessage({ content }: RawTextMessageProps) {
   return (
-    <div className="flex max-w-200 min-w-80 flex-col gap-1.5">
+    <div className="flex max-w-240 min-w-80 flex-col gap-1.5">
       <Label
         text="Text (Raw)"
         icon={<AlignLeft className="text-fg-muted h-3 w-3" />}
