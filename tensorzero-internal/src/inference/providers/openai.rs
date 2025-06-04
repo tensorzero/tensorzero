@@ -26,6 +26,7 @@ use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse
 use crate::inference::types::batch::{
     ProviderBatchInferenceOutput, ProviderBatchInferenceResponse,
 };
+use crate::inference::types::file::{mime_type_to_ext, require_image};
 use crate::inference::types::resolved_input::FileWithPath;
 use crate::inference::types::{
     batch::{BatchStatus, StartBatchProviderInferenceResponse},
@@ -35,7 +36,7 @@ use crate::inference::types::{
     TextChunk, Usage,
 };
 use crate::inference::types::{
-    FileKind, FinishReason, ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner,
+    FinishReason, ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner,
 };
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
@@ -1275,30 +1276,36 @@ fn tensorzero_to_openai_user_messages(
                     tool_call_id: &tool_result.id,
                 }));
             }
-            ContentBlock::File(FileWithPath {
-                file,
-                storage_path: _,
-            }) => {
+            ContentBlock::File(file) => {
+                let FileWithPath {
+                    file,
+                    storage_path: _,
+                } = &**file;
                 let data = format!("data:{};base64,{}", file.mime_type, file.data()?);
-                match file.mime_type {
-                    FileKind::Jpeg | FileKind::Png | FileKind::WebP => {
-                        user_content_blocks.push(OpenAIContentBlock::ImageUrl {
-                            image_url: OpenAIImageUrl {
-                                // This will only produce an error if we pass in a bad
-                                // `Base64File` (with missing file data)
-                                url: data,
-                            },
-                        });
-                    }
-                    FileKind::Pdf => {
-                        user_content_blocks.push(OpenAIContentBlock::File {
-                            file: OpenAIFile {
-                                file_data: Cow::Owned(data),
-                                // TODO - should we allow the user to specify the file name?
-                                filename: Cow::Borrowed("input.pdf"),
-                            },
-                        });
-                    }
+                if file.mime_type.type_() == mime::IMAGE {
+                    user_content_blocks.push(OpenAIContentBlock::ImageUrl {
+                        image_url: OpenAIImageUrl {
+                            // This will only produce an error if we pass in a bad
+                            // `Base64File` (with missing file data)
+                            url: data,
+                        },
+                    });
+                } else {
+                    // OpenAI doesn't document how they determine the content type of the base64 blob
+                    // - let's try to pick a good suffix for the filename, in case they don't sniff
+                    // the mime type from the actual file content.
+                    let suffix = mime_type_to_ext(&file.mime_type)?.ok_or_else(|| {
+                        Error::new(ErrorDetails::InvalidMessage {
+                            message: format!("Mime type {} has no filetype suffix", file.mime_type),
+                        })
+                    })?;
+                    user_content_blocks.push(OpenAIContentBlock::File {
+                        file: OpenAIFile {
+                            file_data: Cow::Owned(data),
+                            // TODO - should we allow the user to specify the file name?
+                            filename: Cow::Owned(format!("input.{suffix}")),
+                        },
+                    });
                 }
             }
             ContentBlock::Thought(_) => {
@@ -1364,11 +1371,12 @@ fn tensorzero_to_openai_assistant_messages(
                     message: "Tool results are not supported in assistant messages".to_string(),
                 }));
             }
-            ContentBlock::File(FileWithPath {
-                file,
-                storage_path: _,
-            }) => {
-                file.mime_type.require_image(PROVIDER_TYPE)?;
+            ContentBlock::File(file) => {
+                let FileWithPath {
+                    file,
+                    storage_path: _,
+                } = &**file;
+                require_image(&file.mime_type, PROVIDER_TYPE)?;
                 assistant_content_blocks.push(OpenAIContentBlock::ImageUrl {
                     image_url: OpenAIImageUrl {
                         // This will only produce an error if we pass in a bad

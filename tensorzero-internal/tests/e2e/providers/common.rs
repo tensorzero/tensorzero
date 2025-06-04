@@ -7,7 +7,9 @@ use aws_sdk_bedrockruntime::error::SdkError;
 
 use aws_sdk_s3::operation::get_object::GetObjectError;
 
+use axum::body::Body;
 use axum::extract::{Query, State};
+use axum::response::{IntoResponse, Response};
 use axum::{routing::get, Router};
 use base64::prelude::*;
 use futures::StreamExt;
@@ -34,8 +36,7 @@ use tensorzero_internal::{
     inference::types::{
         resolved_input::FileWithPath,
         storage::{StorageKind, StoragePath},
-        Base64File, ContentBlock, ContentBlockChatOutput, File, FileKind, RequestMessage, Role,
-        Text,
+        Base64File, ContentBlock, ContentBlockChatOutput, File, RequestMessage, Role, Text,
     },
     tool::{ToolCall, ToolResult},
 };
@@ -931,7 +932,14 @@ async fn make_temp_image_server() -> (SocketAddr, tokio::sync::oneshot::Sender<(
         .unwrap_or_else(|e| panic!("Failed to bind to {addr}: {e}"));
     let real_addr = listener.local_addr().unwrap();
 
-    let app = Router::new().route("/ferris.png", get(|| async { FERRIS_PNG.to_vec() }));
+    async fn get_ferris_png() -> impl IntoResponse {
+        Response::builder()
+            .header(http::header::CONTENT_TYPE, "image/png")
+            .body(Body::from(FERRIS_PNG.to_vec()))
+            .unwrap()
+    }
+
+    let app = Router::new().route("/ferris.png", get(get_ferris_png));
 
     let (send, recv) = tokio::sync::oneshot::channel::<()>();
     let shutdown_fut = async move {
@@ -975,6 +983,7 @@ pub async fn test_url_image_inference_with_provider_and_store(
                             }),
                             ClientInputMessageContent::File(File::Url {
                                 url: image_url.clone(),
+                                mime_type: None,
                             }),
                         ],
                     }],
@@ -1034,7 +1043,7 @@ pub async fn test_base64_pdf_inference_with_provider_and_store(
                                 text: "Describe the contents of the PDF".to_string(),
                             }),
                             ClientInputMessageContent::File(File::Base64 {
-                                mime_type: FileKind::Pdf,
+                                mime_type: mime::APPLICATION_PDF,
                                 data: pdf_data.clone(),
                             }),
                         ],
@@ -1096,7 +1105,7 @@ pub async fn test_base64_image_inference_with_provider_and_store(
                                 text: "Describe the contents of the image".to_string(),
                             }),
                             ClientInputMessageContent::File(File::Base64 {
-                                mime_type: FileKind::Png,
+                                mime_type: mime::IMAGE_PNG,
                                 data: image_data.clone(),
                             }),
                         ],
@@ -1856,14 +1865,14 @@ pub async fn check_base64_pdf_response(
                 ContentBlock::Text(Text {
                     text: "Describe the contents of the PDF".to_string(),
                 }),
-                ContentBlock::File(FileWithPath {
+                ContentBlock::File(Box::new(FileWithPath {
                     file: Base64File {
                         url: None,
                         data: None,
-                        mime_type: FileKind::Pdf,
+                        mime_type: mime::APPLICATION_PDF,
                     },
                     storage_path: expected_storage_path.clone(),
-                })
+                }))
             ]
         },]
     );
@@ -2012,14 +2021,14 @@ pub async fn check_base64_image_response(
                 ContentBlock::Text(Text {
                     text: "Describe the contents of the image".to_string(),
                 }),
-                ContentBlock::File(FileWithPath {
+                ContentBlock::File(Box::new(FileWithPath {
                     file: Base64File {
                         url: None,
                         data: None,
-                        mime_type: FileKind::Png,
+                        mime_type: mime::IMAGE_PNG,
                     },
                     storage_path: expected_storage_path.clone(),
-                })
+                }))
             ]
         },]
     );
@@ -2162,17 +2171,17 @@ pub async fn check_url_image_response(
                 role: Role::User,
                 content: vec![ContentBlock::Text(Text {
                     text: "Describe the contents of the image".to_string(),
-                }), ContentBlock::File(FileWithPath {
+                }), ContentBlock::File(Box::new(FileWithPath {
                     file: Base64File {
                         url: Some(image_url.clone()),
                         data: None,
-                        mime_type: FileKind::Png,
+                        mime_type: mime::IMAGE_PNG,
                     },
                     storage_path: StoragePath {
                         kind: kind.clone(),
                         path: Path::parse("observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png").unwrap(),
                     }
-                })]
+                }))]
             },
         ]
     );

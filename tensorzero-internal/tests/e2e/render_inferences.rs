@@ -7,7 +7,7 @@ use tensorzero::{
 use tensorzero_internal::{
     inference::types::{
         resolved_input::FileWithPath, Base64File, ContentBlock, ContentBlockChatOutput,
-        ContentBlockOutput, FileKind, JsonInferenceOutput, ResolvedInput, ResolvedInputMessage,
+        ContentBlockOutput, JsonInferenceOutput, ResolvedInput, ResolvedInputMessage,
         ResolvedInputMessageContent,
     },
     tool::{ToolCallConfigDatabaseInsert, ToolCallOutput, ToolChoice},
@@ -228,10 +228,10 @@ pub async fn test_render_inferences_normal() {
                         ResolvedInputMessageContent::Text {
                             value: json!("What is this a picture of?"),
                         },
-                        ResolvedInputMessageContent::File(FileWithPath {
+                        ResolvedInputMessageContent::File(Box::new(FileWithPath {
                             file: Base64File {
                                 url: None,
-                                mime_type: FileKind::Png,
+                                mime_type: mime::IMAGE_PNG,
                                 data: None,
                             },
                             storage_path: StoragePath {
@@ -244,7 +244,7 @@ pub async fn test_render_inferences_normal() {
                                 },
                                 path: Path::from("observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"),
                             },
-                        }),
+                        })),
                     ],
                 }],
             },
