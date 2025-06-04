@@ -30,6 +30,9 @@ from tensorzero import (
     StoredInference,
 )
 from tensorzero.internal import ModelInput, ToolCallConfigDatabaseInsert
+from tensorzero.types import (
+    InferenceFilterTreeNode,
+)
 
 @final
 class RenderedStoredInference:
@@ -264,6 +267,20 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         :param dataset_name: The name of the dataset to get the datapoint from.
         :param datapoint_id: The ID of the datapoint to get.
         :return: A `Datapoint` instance.
+        """
+
+    def experimental_list_inferences(
+        self,
+        *,
+        function_name: str,
+        variant_name: Optional[str] = None,
+        filters: Optional[InferenceFilterTreeNode] = None,
+        output_source: str = "inference",
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+    ) -> List[StoredInference]:
+        """
+        TODO: document this well
         """
 
     def experimental_render_inferences(
@@ -525,6 +542,20 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         :param dataset_name: The name of the dataset to get the datapoint from.
         :param datapoint_id: The ID of the datapoint to get.
         :return: A `Datapoint` instance.
+        """
+
+    async def experimental_list_inferences(
+        self,
+        *,
+        function_name: str,
+        variant_name: Optional[str] = None,
+        filters: Optional[InferenceFilterTreeNode] = None,
+        output_source: str = "inference",
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+    ) -> List[StoredInference]:
+        """
+        TODO: document this well
         """
 
     async def experimental_render_inferences(

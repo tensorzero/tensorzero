@@ -564,3 +564,45 @@ StoredInference = Union[StoredChatInference, StoredJsonInference]
 
 
 ToolChoice = Union[Literal["auto", "required", "off"], Dict[Literal["specific"], str]]
+
+
+# Types for the experimental list inferences API
+# These are serialized across the PyO3 boundary
+
+
+@dataclass
+class InferenceFilterTreeNode(ABC, HasTypeField):
+    pass
+
+
+@dataclass
+class FloatMetricNode(InferenceFilterTreeNode):
+    metric_name: str
+    value: float
+    comparison_operator: Literal["<", "<=", "=", ">", ">=", "!="]
+    type: Literal["float_metric"] = "float_metric"
+
+
+@dataclass
+class BooleanMetricNode(InferenceFilterTreeNode):
+    metric_name: str
+    value: bool
+    type: Literal["boolean_metric"] = "boolean_metric"
+
+
+@dataclass
+class AndNode(InferenceFilterTreeNode):
+    children: List[InferenceFilterTreeNode]
+    type: Literal["and"] = "and"
+
+
+@dataclass
+class OrNode(InferenceFilterTreeNode):
+    children: List[InferenceFilterTreeNode]
+    type: Literal["or"] = "or"
+
+
+@dataclass
+class NotNode(InferenceFilterTreeNode):
+    child: InferenceFilterTreeNode
+    type: Literal["not"] = "not"

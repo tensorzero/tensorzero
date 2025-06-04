@@ -20,13 +20,18 @@ pub enum InferenceOutputSource {
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq)]
-#[serde(rename_all = "snake_case")]
 pub enum FloatComparisonOperator {
+    #[serde(rename = "<")]
     LessThan,
+    #[serde(rename = "<=")]
     LessThanOrEqual,
+    #[serde(rename = "=")]
     Equal,
+    #[serde(rename = ">")]
     GreaterThan,
+    #[serde(rename = ">=")]
     GreaterThanOrEqual,
+    #[serde(rename = "!=")]
     NotEqual,
 }
 
@@ -151,7 +156,7 @@ pub struct BooleanMetricNode {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-#[serde(tag = "type")]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum InferenceFilterTreeNode {
     FloatMetric(FloatMetricNode),
     BooleanMetric(BooleanMetricNode),
