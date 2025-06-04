@@ -1,3 +1,5 @@
+#[cfg(feature = "pyo3")]
+use pyo3::prelude::*;
 use serde::Deserialize;
 use serde_json::Value;
 use uuid::Uuid;
@@ -13,14 +15,16 @@ use crate::{
 /// NOTE / TODO: As an incremental step we are deserializing this enum from Python.
 /// in the final version we should instead make this a native PyO3 class and
 /// avoid deserialization entirely unless given a dict.
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(feature = "pyo3", pyclass)]
 pub enum StoredInference {
     Chat(StoredChatInference),
     Json(StoredJsonInference),
 }
 
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[cfg_attr(feature = "pyo3", pyclass)]
 pub struct StoredChatInference {
     pub function_name: String,
     pub variant_name: String,
@@ -34,7 +38,8 @@ pub struct StoredChatInference {
     pub tool_params: ToolCallConfigDatabaseInsert,
 }
 
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[cfg_attr(feature = "pyo3", pyclass)]
 pub struct StoredJsonInference {
     pub function_name: String,
     pub variant_name: String,

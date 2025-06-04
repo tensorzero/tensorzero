@@ -47,7 +47,7 @@ use tensorzero_rust::{
     ClientBuilderMode, ClientInferenceParams, ClientInput, ClientSecretString,
     DynamicEvaluationRunParams, DynamicToolParams, FeedbackParams, InferenceOutput,
     InferenceParams, InferenceStream, ListInferencesParams, RenderedStoredInference,
-    TensorZeroError, Tool,
+    StoredInference, TensorZeroError, Tool,
 };
 use tokio::sync::Mutex;
 use url::Url;
@@ -903,7 +903,7 @@ impl TensorZeroGateway {
         output_source: String,
         limit: Option<u64>,
         offset: Option<u64>,
-    ) -> PyResult<Bound<'_, PyList>> {
+    ) -> PyResult<Vec<StoredInference>> {
         let client = this.as_super().client.clone();
         let filters = filters
             .as_ref()
@@ -920,8 +920,7 @@ impl TensorZeroGateway {
             format: ClickhouseFormat::JsonEachRow,
         };
         let fut = client.experimental_list_inferences(params);
-        tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
-        todo!()
+        tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))
     }
 
     /// Render a list of stored inferences into a list of rendered stored inferences.
@@ -1453,6 +1452,40 @@ impl AsyncTensorZeroGateway {
                         .collect::<Result<Vec<_>, _>>()?;
                     Ok(PyList::new(py, datapoints)?.unbind())
                 }
+                Err(e) => Err(convert_error(py, e)),
+            })
+        })
+    }
+
+    #[pyo3(signature = (*, function_name, variant_name=None, filters=None, output_source="inference".to_string(), limit=None, offset=None))]
+    fn experimental_list_inferences<'a>(
+        this: PyRef<'a, Self>,
+        function_name: String,
+        variant_name: Option<String>,
+        filters: Option<Bound<'a, PyAny>>, // TODO: make this a Pyclass
+        output_source: String,
+        limit: Option<u64>,
+        offset: Option<u64>,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        let client = this.as_super().client.clone();
+        let filters = filters
+            .as_ref()
+            .map(|x| deserialize_from_pyobj(this.py(), x))
+            .transpose()?;
+        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
+            let params = ListInferencesParams {
+                function_name: &function_name,
+                variant_name: variant_name.as_deref(),
+                filters: filters.as_ref(),
+                output_source: serde_json::from_str(&output_source)
+                    .map_err(|e| PyValueError::new_err(format!("Invalid output source: {e}")))?,
+                limit,
+                offset,
+                format: ClickhouseFormat::JsonEachRow,
+            };
+            let res = client.experimental_list_inferences(params).await;
+            Python::with_gil(|py| match res {
+                Ok(stored_inferences) => Ok(PyList::new(py, stored_inferences)?.unbind()),
                 Err(e) => Err(convert_error(py, e)),
             })
         })
