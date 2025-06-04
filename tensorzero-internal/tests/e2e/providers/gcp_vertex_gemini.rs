@@ -40,6 +40,23 @@ async fn get_providers() -> E2ETestProviders {
         },
     ];
 
+    let tool_providers = vec![
+        E2ETestProvider {
+            supports_batch_inference: true,
+            variant_name: "gcp-vertex-gemini-flash".to_string(),
+            model_name: "gemini-2.0-flash-001".into(),
+            model_provider_name: "gcp_vertex_gemini".into(),
+            credentials: HashMap::new(),
+        },
+        E2ETestProvider {
+            supports_batch_inference: false,
+            variant_name: "gcp-vertex-gemini-pro".to_string(),
+            model_name: "gemini-2.5-pro-preview-05-06".into(),
+            model_provider_name: "gcp_vertex_gemini".into(),
+            credentials: HashMap::new(),
+        },
+    ];
+
     let image_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "gcp_vertex".to_string(),
@@ -139,9 +156,9 @@ async fn get_providers() -> E2ETestProviders {
         reasoning_inference: vec![],
         inference_params_inference: standard_providers.clone(),
         inference_params_dynamic_credentials: vec![],
-        tool_use_inference: standard_providers.clone(),
-        tool_multi_turn_inference: standard_providers.clone(),
-        dynamic_tool_use_inference: standard_providers.clone(),
+        tool_use_inference: tool_providers.clone(),
+        tool_multi_turn_inference: tool_providers.clone(),
+        dynamic_tool_use_inference: tool_providers.clone(),
         parallel_tool_use_inference: vec![],
         json_mode_inference: json_providers.clone(),
         json_mode_off_inference: json_mode_off_providers.clone(),
