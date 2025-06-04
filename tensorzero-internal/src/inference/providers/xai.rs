@@ -145,7 +145,6 @@ impl InferenceProvider for XAIProvider {
         let start_time = Instant::now();
         let request_builder = http_client
             .post(request_url)
-            .header("Content-Type", "application/json")
             .bearer_auth(api_key.expose_secret());
 
         let (res, raw_request) = inject_extra_request_data_and_send(

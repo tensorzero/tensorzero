@@ -559,9 +559,7 @@ impl InferenceProvider for OpenAIProvider {
             .push(&batch_params.batch_id);
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let raw_request = request_url.to_string();
-        let mut request_builder = http_client
-            .get(request_url)
-            .header("Content-Type", "application/json");
+        let mut request_builder = http_client.get(request_url);
         if let Some(api_key) = api_key {
             request_builder = request_builder.bearer_auth(api_key.expose_secret());
         }
@@ -645,9 +643,7 @@ impl EmbeddingProvider for OpenAIProvider {
         let request_url =
             get_embedding_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
         let start_time = Instant::now();
-        let mut request_builder = client
-            .post(request_url)
-            .header("Content-Type", "application/json");
+        let mut request_builder = client.post(request_url);
         if let Some(api_key) = api_key {
             request_builder = request_builder.bearer_auth(api_key.expose_secret());
         }

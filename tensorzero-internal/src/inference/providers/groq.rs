@@ -232,9 +232,7 @@ impl InferenceProvider for GroqProvider {
         let request_url = "https://api.groq.com/openai/v1/chat/completions".to_string();
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
-        let mut request_builder = http_client
-            .post(request_url)
-            .header("Content-Type", "application/json");
+        let mut request_builder = http_client.post(request_url);
         if let Some(api_key) = api_key {
             request_builder = request_builder.bearer_auth(api_key.expose_secret());
         }

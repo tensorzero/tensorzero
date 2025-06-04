@@ -263,7 +263,6 @@ impl InferenceProvider for AnthropicProvider {
         let builder = http_client
             .post(ANTHROPIC_BASE_URL.as_ref())
             .header("anthropic-version", ANTHROPIC_API_VERSION)
-            .header("content-type", "application/json")
             .header("x-api-key", api_key.expose_secret());
 
         let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(

@@ -262,7 +262,6 @@ impl InferenceProvider for OpenRouterProvider {
         let start_time = Instant::now();
         let mut request_builder = http_client
             .post(request_url)
-            .header("Content-Type", "application/json")
             .header("X-Title", "TensorZero")
             .header("HTTP-Referer", "https://www.tensorzero.com/");
         if let Some(api_key) = api_key {

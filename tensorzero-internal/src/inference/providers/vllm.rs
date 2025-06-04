@@ -144,9 +144,7 @@ impl InferenceProvider for VLLMProvider {
         let request_url = get_chat_url(&self.api_base)?;
         let start_time = Instant::now();
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
-        let mut request_builder = http_client
-            .post(request_url)
-            .header("Content-Type", "application/json");
+        let mut request_builder = http_client.post(request_url);
         if let Some(key) = api_key {
             request_builder = request_builder.bearer_auth(key.expose_secret());
         }
@@ -235,9 +233,7 @@ impl InferenceProvider for VLLMProvider {
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let request_url = get_chat_url(&self.api_base)?;
         let start_time = Instant::now();
-        let mut request_builder = http_client
-            .post(request_url)
-            .header("Content-Type", "application/json");
+        let mut request_builder = http_client.post(request_url);
         if let Some(key) = api_key {
             request_builder = request_builder.bearer_auth(key.expose_secret());
         }
