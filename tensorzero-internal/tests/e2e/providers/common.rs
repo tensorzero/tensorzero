@@ -7,7 +7,9 @@ use aws_sdk_bedrockruntime::error::SdkError;
 
 use aws_sdk_s3::operation::get_object::GetObjectError;
 
+use axum::body::Body;
 use axum::extract::{Query, State};
+use axum::response::{IntoResponse, Response};
 use axum::{routing::get, Router};
 use base64::prelude::*;
 use futures::StreamExt;
@@ -921,7 +923,14 @@ async fn make_temp_image_server() -> (SocketAddr, tokio::sync::oneshot::Sender<(
         .unwrap_or_else(|e| panic!("Failed to bind to {addr}: {e}"));
     let real_addr = listener.local_addr().unwrap();
 
-    let app = Router::new().route("/ferris.png", get(|| async { FERRIS_PNG.to_vec() }));
+    async fn get_ferris_png() -> impl IntoResponse {
+        Response::builder()
+            .header(http::header::CONTENT_TYPE, "image/png")
+            .body(Body::from(FERRIS_PNG.to_vec()))
+            .unwrap()
+    }
+
+    let app = Router::new().route("/ferris.png", get(get_ferris_png));
 
     let (send, recv) = tokio::sync::oneshot::channel::<()>();
     let shutdown_fut = async move {
