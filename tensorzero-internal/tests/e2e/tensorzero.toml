@@ -2107,6 +2107,13 @@ user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_templa
 json_mode = "implicit_tool"
 max_tokens = 500
 
+[functions.dynamic_json.variants.gcp-vertex-gemini-flash-lite-tuned]
+type = "chat_completion"
+model = "gemini-2.0-flash-lite-tuned"
+system_template = "../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
+max_tokens = 100
+
 [functions.dynamic_json.variants.google-ai-studio-gemini-flash-8b]
 type = "chat_completion"
 model = "gemini-2.0-flash-lite"
@@ -2543,6 +2550,12 @@ max_tokens = 500
 [functions.weather_helper.variants.google-ai-studio-gemini-flash-8b]
 type = "chat_completion"
 model = "gemini-2.0-flash-lite"
+system_template = "../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.weather_helper.variants.gcp-vertex-gemini-flash-lite-tuned]
+type = "chat_completion"
+model = "gemini-2.0-flash-lite-tuned"
 system_template = "../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
 max_tokens = 100
 
