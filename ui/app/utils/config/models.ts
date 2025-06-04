@@ -88,6 +88,12 @@ export type GoogleAIStudioGeminiProviderConfig = z.infer<
   typeof GoogleAIStudioGeminiProviderConfigSchema
 >;
 
+export const GroqProviderConfigSchema = z.object({
+  type: z.literal("groq"),
+  model_name: z.string(),
+});
+export type GroqProviderConfig = z.infer<typeof GroqProviderConfigSchema>;
+
 export const HyperbolicProviderConfigSchema = z.object({
   type: z.literal("hyperbolic"),
   model_name: z.string(),
@@ -164,6 +170,7 @@ export const ProviderConfigSchema = z.discriminatedUnion("type", [
   GCPVertexAnthropicProviderConfigSchema,
   GCPVertexGeminiProviderConfigSchema,
   GoogleAIStudioGeminiProviderConfigSchema,
+  GroqProviderConfigSchema,
   HyperbolicProviderConfigSchema,
   MistralProviderConfigSchema,
   OpenAIProviderConfigSchema,
