@@ -2,6 +2,10 @@
 set -euxo pipefail
 
 DATABASE_NAME="${1:-tensorzero_ui_fixtures}"
+if [ -f /load_complete.marker ]; then
+  echo "Fixtures already loaded; this script will now exit with status 0"
+  exit 0
+fi
 
 clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword "SELECT * FROM system.disks;"
 
@@ -17,6 +21,13 @@ clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --
 clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database "$DATABASE_NAME" --query "INSERT INTO ModelInferenceCache FORMAT JSONEachRow" < model_inference_cache_examples.jsonl
 clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database "$DATABASE_NAME" --query "INSERT INTO DynamicEvaluationRun FORMAT JSONEachRow" < dynamic_evaluation_run_examples.jsonl
 clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database "$DATABASE_NAME" --query "INSERT INTO DynamicEvaluationRunEpisode FORMAT JSONEachRow" < dynamic_evaluation_run_episode_examples.jsonl
+
+# If TENSORZERO_SKIP_LARGE_FIXTURES equals 1, exit
+if [ "${TENSORZERO_SKIP_LARGE_FIXTURES:-}" = "1" ]; then
+    echo "TENSORZERO_SKIP_LARGE_FIXTURES is set to 1 - exiting without loading large fixtures"
+    touch /tmp/load_complete.marker
+    exit 0
+fi
 
 uv run ./download-fixtures.py
 df -h
@@ -45,5 +56,5 @@ sleep 2
 # Create the marker file to signal completion for the healthcheck
 # Write it to an ephemeral location to make sure that we don't see a marker file
 # from a previous container run.
-touch /tmp/load_complete.marker
+touch /load_complete.marker
 echo "Fixtures loaded; this script will now exit with status 0"

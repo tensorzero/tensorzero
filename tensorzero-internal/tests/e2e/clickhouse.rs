@@ -4,6 +4,7 @@ use std::cell::Cell;
 use std::collections::HashMap;
 use std::future::Future;
 use std::sync::Arc;
+use std::time::Duration;
 
 use paste::paste;
 use reqwest::Client;
@@ -84,9 +85,15 @@ fn get_clean_clickhouse(allow_db_missing: bool) -> (ClickHouseConnectionInfo, De
     let clickhouse = ClickHouseConnectionInfo::Production {
         database_url: SecretString::from(clickhouse_url.to_string()),
         database: database.clone(),
-        // This works around an issue with ClickHouse Cloud where long-lived connections
+        // This is a hack to work around an issue with ClickHouse Cloud where long-lived connections
         // are abruptly closed by the server.
-        client: Client::builder().pool_max_idle_per_host(0).build().unwrap(),
+        // If it occurs again, re-enable this line.
+        // client: Client::builder().pool_max_idle_per_host(0).build().unwrap(),
+        // See https://github.com/ClickHouse/clickhouse-rs/blob/abf7448e54261c586be849c48291b9321f506b2f/src/http_client.rs#L45
+        client: Client::builder()
+            .pool_idle_timeout(Duration::from_secs(3))
+            .build()
+            .unwrap(),
     };
     (
         clickhouse.clone(),
@@ -164,7 +171,8 @@ async fn count_table_rows(clickhouse: &ClickHouseConnectionInfo, table: &str) ->
 
 async fn insert_large_fixtures(clickhouse: &ClickHouseConnectionInfo) {
     // Insert data so that we test the migration re-creates the tables properly.
-    let s3_fixtures_path: String = format!("{MANIFEST_PATH}/../ui/fixtures/s3-fixtures");
+    let s3_fixtures_path = format!("{MANIFEST_PATH}/../ui/fixtures/s3-fixtures");
+    let s3_fixtures_path = &s3_fixtures_path;
 
     let ClickHouseConnectionInfo::Production {
         database_url,
@@ -184,7 +192,7 @@ async fn insert_large_fixtures(clickhouse: &ClickHouseConnectionInfo) {
     let password = url.password().unwrap_or("");
 
     // We use our latest fixtures - new columns will get ignored when inserting.
-    for (file, table) in [
+    let insert_futures = [
         ("large_chat_inference_v2.parquet", "ChatInference"),
         ("large_json_inference_v2.parquet", "JsonInference"),
         (
@@ -207,7 +215,9 @@ async fn insert_large_fixtures(clickhouse: &ClickHouseConnectionInfo) {
         ),
         ("large_chat_float_feedback.parquet", "FloatMetricFeedback"),
         ("large_json_float_feedback.parquet", "FloatMetricFeedback"),
-    ] {
+    ]
+    .into_iter()
+    .map(|(file, table)| async move {
         let mut command = tokio::process::Command::new("docker");
         command.args([
             "run",
@@ -235,7 +245,9 @@ async fn insert_large_fixtures(clickhouse: &ClickHouseConnectionInfo) {
             command.spawn().unwrap().wait().await.unwrap().success(),
             "Failed to insert {table}"
         );
-    }
+    });
+
+    futures::future::join_all(insert_futures).await;
 }
 
 async fn run_migration_0009_with_data<R: Future<Output = bool>, F: FnOnce() -> R>(
