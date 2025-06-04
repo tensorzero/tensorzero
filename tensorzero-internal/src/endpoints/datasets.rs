@@ -1105,19 +1105,24 @@ pub struct ChatInferenceDatapoint {
     #[serde(deserialize_with = "deserialize_string_or_parsed_json")]
     pub input: ResolvedInput,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
     pub output: Option<Vec<ContentBlockChatOutput>>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub tags: Option<HashMap<String, String>>,
     #[serde(skip_serializing, default)] // this will become an object
     pub auxiliary: String,
     pub is_deleted: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub source_inference_id: Option<Uuid>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub staled_at: Option<String>,
 }
 
@@ -1130,18 +1135,22 @@ pub struct JsonInferenceDatapoint {
     #[serde(deserialize_with = "deserialize_string_or_parsed_json")]
     pub input: ResolvedInput,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
     pub output: Option<JsonInferenceOutput>,
     #[serde(deserialize_with = "deserialize_string_or_parsed_json")]
     pub output_schema: serde_json::Value,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub tags: Option<HashMap<String, String>>,
     #[serde(skip_serializing, default)] // this will become an object
     pub auxiliary: String,
     pub is_deleted: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub source_inference_id: Option<Uuid>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub staled_at: Option<String>,
 }
 
