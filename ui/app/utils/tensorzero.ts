@@ -365,7 +365,7 @@ export class TensorZeroClient {
       if (!response.ok) {
         const errorText = await response.text();
         const errorContents = JSON.parse(errorText).error;
-        return this.handleHttpError({
+        this.handleHttpError({
           message: `Inference request failed with status ${response.status}: ${errorContents}`,
           response,
         });
@@ -388,13 +388,13 @@ export class TensorZeroClient {
       body: JSON.stringify(request),
     });
     if (!response.ok) {
-      return this.handleHttpError({
+      this.handleHttpError({
         message: `Streaming inference failed with status ${response.status}`,
         response,
       });
     }
     if (!response.body) {
-      return this.handleHttpError({
+      this.handleHttpError({
         message: `Streaming inference failed; response body is not readable`,
         response,
       });
@@ -444,7 +444,7 @@ export class TensorZeroClient {
     if (!response.ok) {
       const errorText = await response.text();
       const errorContents = JSON.parse(errorText).error;
-      return this.handleHttpError({
+      this.handleHttpError({
         message: `Feedback request failed with status ${response.status}: ${errorContents}`,
         response,
       });
@@ -486,7 +486,7 @@ export class TensorZeroClient {
     });
 
     if (!response.ok) {
-      return this.handleHttpError({
+      this.handleHttpError({
         message: `Create datapoint request failed with status ${response.status}`,
         response,
       });
@@ -539,7 +539,7 @@ export class TensorZeroClient {
 
     if (!response.ok) {
       const errorText = await response.text();
-      return this.handleHttpError({
+      this.handleHttpError({
         message: `Update datapoint request failed with status ${response.status}: ${errorText}`,
         response,
       });
@@ -552,7 +552,7 @@ export class TensorZeroClient {
     const endpoint = `/internal/object_storage?storage_path=${encodeURIComponent(JSON.stringify(storagePath))}`;
     const response = await this.fetch(endpoint, { method: "GET" });
     if (!response.ok) {
-      return this.handleHttpError({
+      this.handleHttpError({
         message: `Failed to get object: ${response.statusText}`,
         response,
       });
@@ -563,7 +563,7 @@ export class TensorZeroClient {
   async status(): Promise<StatusResponse> {
     const response = await this.fetch("/status", { method: "GET" });
     if (!response.ok) {
-      return this.handleHttpError({
+      this.handleHttpError({
         message: `Failed to get status: ${response.statusText}`,
         response,
       });
