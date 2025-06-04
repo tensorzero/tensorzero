@@ -14,13 +14,6 @@ updates:
     labels: []
     open-pull-requests-limit: 0 # only send security updates
 
-  - package-ecosystem: "pip"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-    labels: []
-    open-pull-requests-limit: 0 # only send security updates
-
   - package-ecosystem: "uv"
     directory: "/"
     schedule:

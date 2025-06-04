@@ -154,7 +154,7 @@ export const UninitializedLLMJudgeDiclVariantConfigSchema = z.object({
   extra_headers: z.record(z.string(), z.string()).optional(),
 });
 
-export const UnintializedLLMJudgeVariantConfigSchema = z.discriminatedUnion(
+export const UninitializedLLMJudgeVariantConfigSchema = z.discriminatedUnion(
   "type",
   [
     z.object({
@@ -185,7 +185,7 @@ export const UninitializedLLMJudgeConfigSchema = z.object({
   input_format: LLMJudgeInputFormatSchema.default(
     LLMJudgeInputFormat.Serialized,
   ),
-  variants: z.record(z.string(), UnintializedLLMJudgeVariantConfigSchema),
+  variants: z.record(z.string(), UninitializedLLMJudgeVariantConfigSchema),
   output_type: z.enum(["float", "boolean"]),
   optimize: z.enum(["min", "max"]),
   include: LLMJudgeIncludeConfigSchema,
@@ -269,7 +269,7 @@ function getEvaluatorMetricName(
 
 // Transform an uninitialized LLM judge variant config into a variant config
 async function loadLLMJudgeVariant(
-  variantConfig: z.infer<typeof UnintializedLLMJudgeVariantConfigSchema>,
+  variantConfig: z.infer<typeof UninitializedLLMJudgeVariantConfigSchema>,
   basePath: string,
   evaluationName: string,
   evaluatorName: string,

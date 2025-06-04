@@ -193,14 +193,10 @@ impl Migration for Migration0000<'_> {
         let database = self.clickhouse.database();
 
         format!(
-            "\
-            **CAREFUL: THIS WILL DELETE ALL DATA**\n\
-            \n\
-            -- Drop the database\n\
-            DROP DATABASE IF EXISTS {database};\n\
-            \n\
-            **CAREFUL: THIS WILL DELETE ALL DATA**\n\
-            "
+            "/* **CAREFUL: THIS WILL DELETE ALL DATA** */\
+            /* Drop the database */\
+            DROP DATABASE IF EXISTS {database};\
+            /* **CAREFUL: THIS WILL DELETE ALL DATA** */"
         )
     }
 

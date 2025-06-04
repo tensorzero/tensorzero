@@ -196,6 +196,7 @@ export function createProviderConfig(
     case "together":
     case "google_ai_studio_gemini":
     case "openai":
+    case "openrouter":
       return { type, model_name };
     case "aws_bedrock":
       return { type, model_id: model_name };

@@ -264,13 +264,15 @@ impl FunctionConfig {
         }
     }
 
+    // This needs to be `async` because we end up validating GCP model providers,
+    // which may call an async GCP SDK function to fetch credentials from the environment.
     #[instrument(skip_all, fields(function_name = %function_name))]
-    pub fn validate(
+    pub async fn validate(
         &self,
         static_tools: &HashMap<String, Arc<StaticToolConfig>>,
         models: &mut ModelTable,
         embedding_models: &EmbeddingModelTable,
-        templates: &TemplateConfig,
+        templates: &TemplateConfig<'_>,
         function_name: &str,
     ) -> Result<(), Error> {
         // Validate each variant
@@ -283,14 +285,16 @@ impl FunctionConfig {
                 }
                 .into());
             }
-            variant.validate(
-                self,
-                models,
-                embedding_models,
-                templates,
-                function_name,
-                variant_name,
-            )?;
+            variant
+                .validate(
+                    self,
+                    models,
+                    embedding_models,
+                    templates,
+                    function_name,
+                    variant_name,
+                )
+                .await?;
         }
         match self {
             FunctionConfig::Chat(params) => {

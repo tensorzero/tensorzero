@@ -1,5 +1,5 @@
 import InputSnippet from "./InputSnippet";
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import { withRouter } from "storybook-addon-remix-react-router";
 
 const meta = {
@@ -366,8 +366,8 @@ export const ImageInput: Story = {
               value: "Do the images share any common features?",
             },
             {
-              type: "image",
-              image: {
+              type: "file",
+              file: {
                 url: await getBase64Image(
                   "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
                 ),
@@ -381,12 +381,12 @@ export const ImageInput: Story = {
                   endpoint: null,
                   allow_http: null,
                 },
-                path: "observability/images/e46e28c76498f7a7e935a502d3cd6f41052a76a6c6b0d8cda44e03fad8cc70f1.png",
+                path: "observability/files/e46e28c76498f7a7e935a502d3cd6f41052a76a6c6b0d8cda44e03fad8cc70f1.png",
               },
             },
             {
-              type: "image",
-              image: {
+              type: "file",
+              file: {
                 // This is a one pixel by one pixel orange image
                 url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAAXNSR0IArs4c6QAAAA1JREFUGFdj+O/P8B8ABe0CTsv8mHgAAAAASUVORK5CYII=",
                 mime_type: "image/png",
@@ -396,7 +396,7 @@ export const ImageInput: Story = {
                   type: "filesystem",
                   path: "my_object_storage",
                 },
-                path: "observability/images/7f3a9b2e8d4c6f5a1e0b9d8c7a4b2e5f3d1c8b9a6e4f2d5c8b3a7e1f9d4c6b2.png",
+                path: "observability/files/7f3a9b2e8d4c6f5a1e0b9d8c7a4b2e5f3d1c8b9a6e4f2d5c8b3a7e1f9d4c6b2.png",
               },
             },
           ],
@@ -418,11 +418,11 @@ export const ImageInputError: Story = {
               value: "Do the images share any common features?",
             },
             {
-              type: "image_error",
+              type: "file_error",
               error: "Failed to get object: Internal Server Error",
             },
             {
-              type: "image_error",
+              type: "file_error",
               error: "Failed to get object: Timeout",
             },
           ],
