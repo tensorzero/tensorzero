@@ -232,8 +232,7 @@ impl InferenceProvider for AzureProvider {
         let start_time = Instant::now();
         let builder = http_client
             .post(request_url)
-            .header("api-key", api_key.expose_secret())
-            .json(&request_body);
+            .header("api-key", api_key.expose_secret());
         let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
             PROVIDER_TYPE,
             &request.extra_body,
