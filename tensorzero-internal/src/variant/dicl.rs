@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
@@ -365,7 +364,7 @@ impl DiclConfig {
         // Run the query on the ClickHouse database to find nearest neighbors
         let result = clients
             .clickhouse_connection_info
-            .run_query_synchronous(query, &HashMap::default())
+            .run_query_synchronous_no_params(query)
             .await?;
 
         // Parse each line into RawExample (since we will have some serialized JSON strings inside it)

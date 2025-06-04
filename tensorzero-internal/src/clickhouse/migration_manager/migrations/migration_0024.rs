@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use crate::clickhouse::migration_manager::migration_trait::Migration;
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::error::{Error, ErrorDetails};
@@ -46,10 +44,9 @@ impl Migration for Migration0024<'_> {
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         self.clickhouse
-            .run_query_synchronous(
+            .run_query_synchronous_no_params(
                 "ALTER TABLE JsonInference ADD COLUMN IF NOT EXISTS auxiliary_content String"
                     .to_string(),
-                &HashMap::default(),
             )
             .await?;
 

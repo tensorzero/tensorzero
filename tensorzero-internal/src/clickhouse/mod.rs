@@ -259,6 +259,10 @@ impl ClickHouseConnectionInfo {
         }
     }
 
+    pub async fn run_query_synchronous_no_params(&self, query: String) -> Result<String, Error> {
+        self.run_query_synchronous(query, &HashMap::default()).await
+    }
+
     /// Sometimes you might want to treat the data you're sending as a table if you're going
     /// to do some analysis or filtering prior to inserting it into ClickHouse.
     /// This function allows you to do this with ClickHouse's external data feature.

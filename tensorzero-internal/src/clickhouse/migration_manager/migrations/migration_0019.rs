@@ -2,7 +2,6 @@ use crate::clickhouse::migration_manager::migration_trait::Migration;
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::error::Error;
 use async_trait::async_trait;
-use std::collections::HashMap;
 
 use super::check_column_exists;
 
@@ -28,18 +27,16 @@ impl Migration for Migration0019<'_> {
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         self.clickhouse
-            .run_query_synchronous(
+            .run_query_synchronous_no_params(
                 "ALTER TABLE ChatInference ADD COLUMN IF NOT EXISTS extra_body Nullable(String)"
                     .to_string(),
-                &HashMap::default(),
             )
             .await?;
 
         self.clickhouse
-            .run_query_synchronous(
+            .run_query_synchronous_no_params(
                 "ALTER TABLE JsonInference ADD COLUMN IF NOT EXISTS extra_body Nullable(String)"
                     .to_string(),
-                &HashMap::default(),
             )
             .await?;
 

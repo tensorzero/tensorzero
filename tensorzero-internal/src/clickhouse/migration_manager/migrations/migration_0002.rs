@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use async_trait::async_trait;
 
 use crate::clickhouse::migration_manager::migration_trait::Migration;
@@ -50,7 +48,7 @@ impl Migration for Migration0002<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), &HashMap::default())
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
         Ok(())
     }

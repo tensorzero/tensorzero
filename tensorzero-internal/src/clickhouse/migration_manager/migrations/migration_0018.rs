@@ -2,7 +2,6 @@ use crate::clickhouse::migration_manager::migration_trait::Migration;
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::error::{Error, ErrorDetails};
 use async_trait::async_trait;
-use std::collections::HashMap;
 
 use super::{check_column_exists, check_table_exists};
 
@@ -54,16 +53,14 @@ impl Migration for Migration0018<'_> {
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         self.clickhouse
-            .run_query_synchronous(
+            .run_query_synchronous_no_params(
                 "ALTER TABLE ModelInference ADD COLUMN IF NOT EXISTS finish_reason Nullable(Enum8('stop', 'length', 'tool_call', 'content_filter', 'unknown'))".to_string(),
-                &HashMap::default(),
             )
             .await?;
 
         self.clickhouse
-            .run_query_synchronous(
+            .run_query_synchronous_no_params(
                 "ALTER TABLE ModelInferenceCache ADD COLUMN IF NOT EXISTS finish_reason Nullable(Enum8('stop', 'length', 'tool_call', 'content_filter', 'unknown'))".to_string(),
-                &HashMap::default(),
             )
             .await?;
 

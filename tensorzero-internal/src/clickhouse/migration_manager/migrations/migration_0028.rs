@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::time::Duration;
 
 use crate::clickhouse::migration_manager::migration_trait::Migration;
@@ -101,7 +100,7 @@ impl Migration for Migration0028<'_> {
             String::new()
         };
         self.clickhouse
-            .run_query_synchronous(
+            .run_query_synchronous_no_params(
                 r#"CREATE TABLE IF NOT EXISTS StaticEvaluationHumanFeedback (
                     metric_name LowCardinality(String),
                     datapoint_id UUID,
@@ -114,7 +113,6 @@ impl Migration for Migration0028<'_> {
                 ORDER BY (metric_name, datapoint_id, output)
                 SETTINGS index_granularity = 256 -- We use a small index granularity to improve lookup performance
             "#.to_string(),
-                &HashMap::default(),
             )
             .await?;
 
@@ -191,7 +189,7 @@ impl Migration for Migration0028<'_> {
         "#
         );
         self.clickhouse
-            .run_query_synchronous(query.to_string(), &HashMap::default())
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Create the materialized view for BooleanMetricFeedback
@@ -265,7 +263,7 @@ impl Migration for Migration0028<'_> {
         );
 
         self.clickhouse
-            .run_query_synchronous(query.to_string(), &HashMap::default())
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         if !clean_start {
@@ -369,7 +367,7 @@ impl Migration for Migration0028<'_> {
         "#
             );
             self.clickhouse
-                .run_query_synchronous(query.to_string(), &HashMap::default())
+                .run_query_synchronous_no_params(query.to_string())
                 .await?;
         }
 

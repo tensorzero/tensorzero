@@ -546,7 +546,7 @@ async fn get_latest_batch_inference(
         "#
     );
     let response = clickhouse
-        .run_query_synchronous(query, &HashMap::default())
+        .run_query_synchronous_no_params(query)
         .await
         .unwrap();
     if response.is_empty() {
@@ -564,7 +564,7 @@ async fn get_all_batch_inferences(
         "SELECT * FROM BatchModelInference WHERE batch_id = '{batch_id}' FORMAT JSONEachRow",
     );
     let response = clickhouse
-        .run_query_synchronous(query, &HashMap::default())
+        .run_query_synchronous_no_params(query)
         .await
         .unwrap();
     let rows = response

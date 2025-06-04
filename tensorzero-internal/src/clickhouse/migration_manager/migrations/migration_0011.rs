@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use crate::clickhouse::migration_manager::migration_trait::Migration;
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::error::Error;
@@ -56,7 +54,7 @@ impl Migration for Migration0011<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), &HashMap::default())
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Add the `cached` column to ModelInference
@@ -65,7 +63,7 @@ impl Migration for Migration0011<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), &HashMap::default())
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         Ok(())

@@ -1,5 +1,4 @@
 use rand::prelude::*;
-use std::collections::HashMap;
 use std::time::Duration;
 
 use crate::clickhouse::migration_manager::migration_trait::Migration;
@@ -104,7 +103,7 @@ impl Migration for Migration0020<'_> {
         let query = "SHOW CREATE TABLE InferenceById".to_string();
         let result = self
             .clickhouse
-            .run_query_synchronous(query, &HashMap::default())
+            .run_query_synchronous_no_params(query)
             .await?;
         if !result.contains("UInt128") {
             // Table was created by an older migration. We should drop and recreate
@@ -113,7 +112,7 @@ impl Migration for Migration0020<'_> {
         let query = "SHOW CREATE TABLE InferenceByEpisodeId".to_string();
         let result = self
             .clickhouse
-            .run_query_synchronous(query, &HashMap::default())
+            .run_query_synchronous_no_params(query)
             .await?;
         if !result.contains("UInt128") {
             // Table was created by an older migration. We should drop and recreate
@@ -122,7 +121,7 @@ impl Migration for Migration0020<'_> {
         let query = "SELECT 1 FROM system.functions WHERE name = 'uint_to_uuid'".to_string();
         let result = self
             .clickhouse
-            .run_query_synchronous(query, &HashMap::default())
+            .run_query_synchronous_no_params(query)
             .await?;
         if !result.contains("1") {
             return Ok(true);
@@ -162,19 +161,19 @@ impl Migration for Migration0020<'_> {
         );
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), &HashMap::default())
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
         // If the InferenceById table exists then we need to swap this table in and drop old one.
         if inference_by_id_exists {
             let query = format!("EXCHANGE TABLES InferenceById AND {create_table_name}");
             let _ = self
                 .clickhouse
-                .run_query_synchronous(query.to_string(), &HashMap::default())
+                .run_query_synchronous_no_params(query.to_string())
                 .await?;
             let query = format!("DROP TABLE IF EXISTS {create_table_name}");
             let _ = self
                 .clickhouse
-                .run_query_synchronous(query.to_string(), &HashMap::default())
+                .run_query_synchronous_no_params(query.to_string())
                 .await?;
         }
         // Check if the InferenceByEpisodeId table exists
@@ -206,19 +205,19 @@ impl Migration for Migration0020<'_> {
         );
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), &HashMap::default())
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
         // If the InferenceByEpisodeId table exists then we need to swap this table in and drop old one.
         if inference_by_episode_id_exists {
             let query = format!("EXCHANGE TABLES InferenceByEpisodeId AND {create_table_name}");
             let _ = self
                 .clickhouse
-                .run_query_synchronous(query.to_string(), &HashMap::default())
+                .run_query_synchronous_no_params(query.to_string())
                 .await?;
             let query = format!("DROP TABLE IF EXISTS {create_table_name}");
             let _ = self
                 .clickhouse
-                .run_query_synchronous(query.to_string(), &HashMap::default())
+                .run_query_synchronous_no_params(query.to_string())
                 .await?;
         }
         // Create the `uint_to_uuid` function
@@ -230,7 +229,7 @@ impl Migration for Migration0020<'_> {
         );"#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), &HashMap::default())
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
         let view_timestamp = (std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -268,7 +267,7 @@ impl Migration for Migration0020<'_> {
         );
         let _ = self
             .clickhouse
-            .run_query_synchronous(query, &HashMap::default())
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // IMPORTANT: The function_type column is now correctly set to 'json'
@@ -289,7 +288,7 @@ impl Migration for Migration0020<'_> {
         );
         let _ = self
             .clickhouse
-            .run_query_synchronous(query, &HashMap::default())
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Create the materialized view for the `InferenceByEpisodeId` table from ChatInference
@@ -311,7 +310,7 @@ impl Migration for Migration0020<'_> {
         );
         let _ = self
             .clickhouse
-            .run_query_synchronous(query, &HashMap::default())
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Create the materialized view for the `InferenceByEpisodeId` table from JsonInference
@@ -333,7 +332,7 @@ impl Migration for Migration0020<'_> {
         );
         let _ = self
             .clickhouse
-            .run_query_synchronous(query, &HashMap::default())
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         if !clean_start {
@@ -356,7 +355,7 @@ impl Migration for Migration0020<'_> {
             "#
             );
             self.clickhouse
-                .run_query_synchronous(query, &HashMap::default())
+                .run_query_synchronous_no_params(query.to_string())
                 .await?;
 
             // Then, insert data into InferenceById from JsonInference
@@ -374,7 +373,7 @@ impl Migration for Migration0020<'_> {
             "#
             );
             self.clickhouse
-                .run_query_synchronous(query, &HashMap::default())
+                .run_query_synchronous_no_params(query.to_string())
                 .await?;
 
             // Next, insert data into InferenceByEpisodeId from ChatInference
@@ -392,7 +391,7 @@ impl Migration for Migration0020<'_> {
             "#
             );
             self.clickhouse
-                .run_query_synchronous(query, &HashMap::default())
+                .run_query_synchronous_no_params(query.to_string())
                 .await?;
 
             // Finally, insert data into InferenceByEpisodeId from JsonInference
@@ -410,7 +409,7 @@ impl Migration for Migration0020<'_> {
             "#
             );
             self.clickhouse
-                .run_query_synchronous(query, &HashMap::default())
+                .run_query_synchronous_no_params(query.to_string())
                 .await?;
         }
         Ok(())

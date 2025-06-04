@@ -4,7 +4,7 @@ use futures::StreamExt;
 use reqwest::{Client, StatusCode};
 use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{json, Value};
-use std::{collections::HashMap, time::Duration};
+use std::time::Duration;
 use tensorzero_internal::{
     clickhouse::{test_helpers::select_json_inference_clickhouse, ClickHouseConnectionInfo},
     config_parser::ProviderTypesConfig,
@@ -396,7 +396,7 @@ async fn embed_insert_example(
     );
 
     clickhouse
-        .run_query_synchronous(query, &HashMap::default())
+        .run_query_synchronous_no_params(query)
         .await
         .unwrap();
 }
@@ -414,7 +414,7 @@ pub async fn test_dicl_inference_request_simple() {
         "ALTER TABLE DynamicInContextLearningExample DELETE WHERE function_name = '{function_name}' AND variant_name = '{variant_name}'"
         );
     clickhouse
-        .run_query_synchronous(delete_query, &HashMap::default())
+        .run_query_synchronous_no_params(delete_query)
         .await
         .unwrap();
 
@@ -994,7 +994,7 @@ async fn test_dicl_json_request() {
         "ALTER TABLE DynamicInContextLearningExample DELETE WHERE function_name = '{function_name}' AND variant_name = '{variant_name}'"
         );
     clickhouse
-        .run_query_synchronous(delete_query, &HashMap::default())
+        .run_query_synchronous_no_params(delete_query)
         .await
         .unwrap();
 

@@ -30,10 +30,7 @@ pub async fn get_clickhouse() -> ClickHouseConnectionInfo {
 #[cfg(feature = "e2e_tests")]
 pub async fn clickhouse_flush_async_insert(clickhouse: &ClickHouseConnectionInfo) {
     if let Err(e) = clickhouse
-        .run_query_synchronous(
-            "SYSTEM FLUSH ASYNC INSERT QUEUE".to_string(),
-            &HashMap::default(),
-        )
+        .run_query_synchronous_no_params("SYSTEM FLUSH ASYNC INSERT QUEUE".to_string())
         .await
     {
         tracing::warn!("Failed to run `SYSTEM FLUSH ASYNC INSERT QUEUE`: {}", e);
@@ -52,7 +49,7 @@ pub async fn select_chat_datapoint_clickhouse(
     );
 
     let text = clickhouse_connection_info
-        .run_query_synchronous(query, &HashMap::default())
+        .run_query_synchronous_no_params(query)
         .await
         .unwrap();
     let json: Value = serde_json::from_str(&text).ok()?;
@@ -71,7 +68,7 @@ pub async fn select_json_datapoint_clickhouse(
     );
 
     let text = clickhouse_connection_info
-        .run_query_synchronous(query, &HashMap::default())
+        .run_query_synchronous_no_params(query)
         .await
         .unwrap();
     let json: Value = serde_json::from_str(&text).ok()?;
@@ -90,7 +87,7 @@ pub async fn select_chat_dataset_clickhouse(
     );
 
     let text = clickhouse_connection_info
-        .run_query_synchronous(query, &HashMap::default())
+        .run_query_synchronous_no_params(query)
         .await
         .unwrap();
     let lines = text.lines();
@@ -114,7 +111,7 @@ pub async fn select_json_dataset_clickhouse(
     );
 
     let text = clickhouse_connection_info
-        .run_query_synchronous(query, &HashMap::default())
+        .run_query_synchronous_no_params(query)
         .await
         .unwrap();
     let lines = text.lines();
@@ -139,7 +136,7 @@ pub async fn select_chat_inference_clickhouse(
     );
 
     let text = clickhouse_connection_info
-        .run_query_synchronous(query, &HashMap::default())
+        .run_query_synchronous_no_params(query)
         .await
         .unwrap();
     let json: Value = serde_json::from_str(&text).ok()?;
@@ -159,7 +156,7 @@ pub async fn select_json_inference_clickhouse(
     );
 
     let text = clickhouse_connection_info
-        .run_query_synchronous(query, &HashMap::default())
+        .run_query_synchronous_no_params(query)
         .await
         .unwrap();
     let json: Value = serde_json::from_str(&text).ok()?;
@@ -179,7 +176,7 @@ pub async fn select_model_inference_clickhouse(
     );
 
     let text = clickhouse_connection_info
-        .run_query_synchronous(query, &HashMap::default())
+        .run_query_synchronous_no_params(query)
         .await
         .unwrap();
     let json: Value = serde_json::from_str(&text).ok()?;
@@ -199,7 +196,7 @@ pub async fn select_model_inferences_clickhouse(
     );
 
     let text = clickhouse_connection_info
-        .run_query_synchronous(query, &HashMap::default())
+        .run_query_synchronous_no_params(query)
         .await
         .unwrap();
     let json_rows: Vec<Value> = text
@@ -229,7 +226,7 @@ pub async fn select_inference_tags_clickhouse(
     );
 
     let text = clickhouse_connection_info
-        .run_query_synchronous(query, &HashMap::default())
+        .run_query_synchronous_no_params(query)
         .await
         .unwrap();
     let json: Value = serde_json::from_str(&text).ok()?;
@@ -250,7 +247,7 @@ pub async fn select_batch_model_inference_clickhouse(
     );
 
     let text = clickhouse_connection_info
-        .run_query_synchronous(query, &HashMap::default())
+        .run_query_synchronous_no_params(query)
         .await
         .unwrap();
     Some(serde_json::from_str(&text).unwrap())
@@ -269,7 +266,7 @@ pub async fn select_batch_model_inferences_clickhouse(
     );
 
     let text = clickhouse_connection_info
-        .run_query_synchronous(query, &HashMap::default())
+        .run_query_synchronous_no_params(query)
         .await
         .unwrap();
     let json_rows: Vec<Value> = text
@@ -289,7 +286,7 @@ pub async fn select_latest_batch_request_clickhouse(
     );
 
     let text = clickhouse_connection_info
-        .run_query_synchronous(query, &HashMap::default())
+        .run_query_synchronous_no_params(query)
         .await
         .unwrap();
     let json: Value = serde_json::from_str(&text).ok()?;
@@ -307,7 +304,7 @@ pub async fn select_feedback_clickhouse(
     let query = format!("SELECT * FROM {table_name} WHERE id = '{feedback_id}' FORMAT JSONEachRow");
 
     let text = clickhouse_connection_info
-        .run_query_synchronous(query, &HashMap::default())
+        .run_query_synchronous_no_params(query)
         .await
         .unwrap();
     let json: Value = serde_json::from_str(&text).ok()?;
@@ -333,7 +330,7 @@ pub async fn select_feedback_by_target_id_clickhouse(
     };
 
     let text = clickhouse_connection_info
-        .run_query_synchronous(query, &HashMap::default())
+        .run_query_synchronous_no_params(query)
         .await
         .unwrap();
     let json: Value = serde_json::from_str(&text).ok()?;
@@ -382,7 +379,7 @@ pub async fn stale_datapoint_clickhouse(
 
     // Execute the query and ignore errors (in case the datapoint doesn't exist in this table)
     let _ = clickhouse_connection_info
-        .run_query_synchronous(query, &HashMap::default())
+        .run_query_synchronous_no_params(query)
         .await;
 
     let query = format!(
@@ -423,7 +420,7 @@ pub async fn stale_datapoint_clickhouse(
     clickhouse_flush_async_insert(clickhouse_connection_info).await;
 
     let _ = clickhouse_connection_info
-        .run_query_synchronous(query, &HashMap::default())
+        .run_query_synchronous_no_params(query)
         .await;
 }
 
@@ -444,7 +441,7 @@ pub async fn select_dynamic_evaluation_run_clickhouse(
     );
 
     let text = clickhouse_connection_info
-        .run_query_synchronous(query, &HashMap::default())
+        .run_query_synchronous_no_params(query)
         .await
         .unwrap();
 
@@ -461,7 +458,7 @@ pub async fn select_dynamic_evaluation_run_episode_clickhouse(
     );
 
     let text = clickhouse_connection_info
-        .run_query_synchronous(query, &HashMap::default())
+        .run_query_synchronous_no_params(query)
         .await
         .unwrap();
     Some(serde_json::from_str(&text).unwrap())
@@ -481,7 +478,7 @@ pub async fn select_feedback_tags_clickhouse(
         );
 
     let text = clickhouse_connection_info
-        .run_query_synchronous(query, &HashMap::default())
+        .run_query_synchronous_no_params(query)
         .await
         .unwrap();
     let json: Value = serde_json::from_str(&text).ok()?;

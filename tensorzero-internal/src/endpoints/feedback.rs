@@ -459,7 +459,7 @@ async fn get_function_name(
         "SELECT function_name FROM {table_name} FINAL WHERE {identifier_key} = toUInt128(toUUID('{target_id}'))"
     );
     let function_name = connection_info
-        .run_query_synchronous(query, &HashMap::default())
+        .run_query_synchronous_no_params(query)
         .await?
         .trim()
         .to_string();
