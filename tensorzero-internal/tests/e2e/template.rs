@@ -1,3 +1,5 @@
+#![allow(clippy::print_stdout)]
+
 use http::StatusCode;
 use reqwest::Client;
 use serde_json::{json, Value};
@@ -44,7 +46,7 @@ async fn e2e_test_template_no_schema() {
     assert_eq!(response.status(), StatusCode::OK);
     let response_json = response.json::<Value>().await.unwrap();
     let content = &response_json["content"][0]["text"].as_str().unwrap();
-    let echoed_content = serde_json::from_str::<Value>(&content).unwrap();
+    let echoed_content = serde_json::from_str::<Value>(content).unwrap();
     let expected_content = json!({
         "system": "The system text was `My system message`",
         "messages": [
@@ -115,8 +117,8 @@ async fn e2e_test_mixture_of_n_template_no_schema() {
     assert_eq!(response.status(), StatusCode::OK);
     let response_json = response.json::<Value>().await.unwrap();
     let content = &response_json["content"][0]["text"].as_str().unwrap();
-    let echoed_content = serde_json::from_str::<Value>(&content).unwrap();
-    println!("echoed_content: {}", echoed_content);
+    let echoed_content = serde_json::from_str::<Value>(content).unwrap();
+    println!("echoed_content: {echoed_content}");
     let expected_content = json!({
       "system": "You have been provided with a set of responses from various models to the following problem:\n------\nouter template system text: `My system message`\n------\nYour task is to synthesize these responses into a single, high-quality response. It is crucial to critically evaluate the information provided in these responses, recognizing that some of it may be biased or incorrect. Your response should not simply replicate the given answers but should offer a refined, accurate, and comprehensive reply to the instruction and take the best from all the responses. Ensure your response is well-structured, coherent, and adheres to the highest standards of accuracy and reliability.  Below will be: first, any messages leading up to this point, and then, a final message containing the set of candidate responses.",
       "messages": [
@@ -200,7 +202,7 @@ async fn e2e_test_best_of_n_template_no_schema() {
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
     let content = &response_json["content"][0]["text"].as_str().unwrap();
-    let echoed_content = serde_json::from_str::<Value>(&content).unwrap();
+    let echoed_content = serde_json::from_str::<Value>(content).unwrap();
     let expected_content = json!({
         "system": "The system text was `My system message`",
         "messages": [
