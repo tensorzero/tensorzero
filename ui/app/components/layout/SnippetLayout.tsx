@@ -105,14 +105,14 @@ export function SnippetMessage({
   // Handle input variant
   if (variant === "input") {
     return (
-      <div className="relative w-full">
-        <div className="bg-bg-primary flex w-full flex-col gap-1 overflow-hidden rounded-lg px-5 py-2">
+      <div className="w-full">
+        <div className="bg-bg-primary flex w-full flex-col gap-2 overflow-hidden rounded-lg px-5 py-2">
           <div className="text-sm font-medium text-purple-600 capitalize">
             {role}
           </div>
-          <div className="my-1 flex">
+          <div className="w-full">
             <div className="border-border mr-4 self-stretch border-l"></div>
-            <div className="flex flex-1 flex-col gap-4">{children}</div>
+            <div className="w-full flex flex-col gap-4">{children}</div>
           </div>
         </div>
       </div>
@@ -121,7 +121,7 @@ export function SnippetMessage({
 
   // Default variant - simple wrapper with padding
   return (
-    <div className="relative w-full">
+    <div className="w-full">
       <div className="bg-bg-primary flex w-full flex-col gap-4 overflow-hidden rounded-lg p-5">
         {children}
       </div>

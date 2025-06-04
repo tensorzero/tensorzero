@@ -59,7 +59,7 @@ function renderContentBlock(block: ResolvedInputMessageContent, index: number) {
         <ToolCallMessage
           key={index}
           toolName={block.name}
-          toolArguments={block.arguments}
+          toolArguments={JSON.stringify(block.arguments, null, 2)}
           toolCallId={block.id}
         />
       );
