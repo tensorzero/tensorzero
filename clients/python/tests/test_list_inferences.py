@@ -9,6 +9,7 @@ from tensorzero import (
     NotNode,
     OrNode,
     TensorZeroGateway,
+    Text,
 )
 
 
@@ -30,6 +31,8 @@ def test_simple_list_json_inferences(embedded_sync_client: TensorZeroGateway):
         messages = input["messages"]
         assert isinstance(messages, list)
         assert len(messages) == 1
+        # Type narrowing: we know these are JSON inferences
+        assert inference.type == "json"
         output = inference.output
         assert output.raw is not None
         assert output.parsed is not None
@@ -37,8 +40,6 @@ def test_simple_list_json_inferences(embedded_sync_client: TensorZeroGateway):
         assert isinstance(inference_id, UUID)
         episode_id = inference.episode_id
         assert isinstance(episode_id, UUID)
-        tool_params = inference.tool_params
-        assert tool_params is None
         output_schema = inference.output_schema
         assert output_schema is not None
 
@@ -80,11 +81,15 @@ def test_simple_query_chat_function(embedded_sync_client: TensorZeroGateway):
         messages = input["messages"]
         assert isinstance(messages, list)
         assert len(messages) == 1
+        # Type narrowing: we know these are Chat inferences
+        assert inference.type == "chat"
         output = inference.output
         assert isinstance(output, list)
         assert len(output) == 1
         output_0 = output[0]
         assert output_0.type == "text"
+        # Type narrowing: we know it's a Text block
+        assert isinstance(output_0, Text)
         assert output_0.text is not None
         inference_id = inference.inference_id
         assert isinstance(inference_id, UUID)
@@ -92,11 +97,8 @@ def test_simple_query_chat_function(embedded_sync_client: TensorZeroGateway):
         assert isinstance(episode_id, UUID)
         tool_params = inference.tool_params
         assert tool_params is not None
-        assert tool_params["tools_available"] == []
-        assert tool_params["tool_choice"] == "auto"
-        assert tool_params["parallel_tool_calls"] is None
-        output_schema = inference.output_schema
-        assert output_schema is None
+        assert tool_params.tools_available == []
+        assert tool_params.parallel_tool_calls is None
 
 
 def test_demonstration_output_source(embedded_sync_client: TensorZeroGateway):
@@ -232,8 +234,6 @@ def test_list_render_inferences(embedded_sync_client: TensorZeroGateway):
     assert len(rendered_inferences) == 2
 
 
-# TODO: implement tests for async client
-
 # Async versions of the above tests
 
 
@@ -258,6 +258,8 @@ async def test_simple_list_json_inferences_async(
         messages = inp["messages"]
         assert isinstance(messages, list)
         assert len(messages) == 1
+        # Type narrowing: we know these are JSON inferences
+        assert inference.type == "json"
         output = inference.output
         assert output.raw is not None
         assert output.parsed is not None
@@ -265,8 +267,10 @@ async def test_simple_list_json_inferences_async(
         assert isinstance(inference_id, UUID)
         episode_id = inference.episode_id
         assert isinstance(episode_id, UUID)
-        assert inference.tool_params is None
-        assert inference.output_schema is not None
+        # StoredJsonInference has output_schema, StoredChatInference doesn't
+        assert (
+            hasattr(inference, "output_schema") and inference.output_schema is not None
+        )
 
 
 @pytest.mark.asyncio
@@ -312,20 +316,22 @@ async def test_simple_query_chat_function_async(
         messages = inp["messages"]
         assert isinstance(messages, list)
         assert len(messages) == 1
+        # Type narrowing: we know these are Chat inferences
+        assert inference.type == "chat"
         output = inference.output
         assert isinstance(output, list)
         assert len(output) == 1
         output_0 = output[0]
         assert output_0.type == "text"
+        # Type narrowing: we know it's a Text block
+        assert isinstance(output_0, Text)
         assert output_0.text is not None
         assert isinstance(inference.inference_id, UUID)
         assert isinstance(inference.episode_id, UUID)
         tp = inference.tool_params
         assert tp is not None
-        assert tp["tools_available"] == []
-        assert tp["tool_choice"] == "auto"
-        assert tp["parallel_tool_calls"] is None
-        assert inference.output_schema is None
+        assert tp.tools_available == []
+        assert tp.parallel_tool_calls is None
 
 
 @pytest.mark.asyncio

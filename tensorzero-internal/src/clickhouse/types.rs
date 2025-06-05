@@ -108,7 +108,7 @@ impl StoredInference {
     pub fn get_tool_params<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         Ok(match self {
             StoredInference::Chat(example) => {
-                serialize_to_dict(py, example.tool_params.clone())?.into_bound(py)
+                example.tool_params.clone().into_py_any(py)?.into_bound(py)
             }
             // Json inferences don't have tool params
             StoredInference::Json(_) => py.None().into_bound(py),
@@ -123,6 +123,14 @@ impl StoredInference {
                 serialize_to_dict(py, example.output_schema.clone())?.into_bound(py)
             }
         })
+    }
+
+    #[getter]
+    pub fn get_type(&self) -> String {
+        match self {
+            StoredInference::Chat(_) => "chat".to_string(),
+            StoredInference::Json(_) => "json".to_string(),
+        }
     }
 }
 
