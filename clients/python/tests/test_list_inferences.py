@@ -100,42 +100,65 @@ def test_simple_query_chat_function(embedded_sync_client: TensorZeroGateway):
         assert tool_params.tools_available == []
         assert tool_params.parallel_tool_calls is None
 
+
 def test_simple_query_chat_function_with_tools(embedded_sync_client: TensorZeroGateway):
     inferences = embedded_sync_client.experimental_list_inferences(
-        function_name="weather_helper",
+        function_name="multi_hop_rag_agent",
         variant_name=None,
         filters=None,
         output_source="inference",
-        limit=3,
-        offset=3,
+        limit=20,
+        offset=0,
     )
-    assert len(inferences) == 3
+    assert len(inferences) == 20
     for inference in inferences:
-        assert inference.function_name == "write_haiku"
-        assert inference.variant_name == "better_prompt_haiku_3_5"
+        assert inference.function_name == "multi_hop_rag_agent"
+        assert inference.variant_name == "baseline"
         input = inference.input
         assert "messages" in input
         messages = input["messages"]
         assert isinstance(messages, list)
-        assert len(messages) == 1
+        assert len(messages) >= 1
+        for message in messages:
+            assert "role" in message
+            assert message["role"] in ["user", "assistant"]
+            print()
         # Type narrowing: we know these are Chat inferences
         assert inference.type == "chat"
         output = inference.output
         assert isinstance(output, list)
-        assert len(output) == 1
-        output_0 = output[0]
-        assert output_0.type == "text"
-        # Type narrowing: we know it's a Text block
-        assert isinstance(output_0, Text)
-        assert output_0.text is not None
+        assert len(output) >= 1
+        for output_item in output:
+            if output_item.type == "text":
+                assert output_item.text is not None
+            elif output_item.type == "tool_call":
+                assert output_item.id is not None
+                assert output_item.name is not None
+                assert output_item.arguments is not None
+                assert output_item.raw_name is not None
+                assert output_item.raw_arguments is not None
+            elif output_item.type == "tool_result":
+                assert output_item.id is not None
+                assert output_item.tool_call_name is not None
+                assert output_item.tool_call_result is not None
         inference_id = inference.inference_id
         assert isinstance(inference_id, UUID)
         episode_id = inference.episode_id
         assert isinstance(episode_id, UUID)
         tool_params = inference.tool_params
         assert tool_params is not None
-        assert tool_params.tools_available == []
-        assert tool_params.parallel_tool_calls is None
+        assert len(tool_params.tools_available) == 4
+        for tool in tool_params.tools_available:
+            assert tool.name in [
+                "think",
+                "search_wikipedia",
+                "load_wikipedia_page",
+                "answer_question",
+            ]
+            assert tool.description is not None
+            assert tool.parameters is not None
+            assert tool.strict is True
+        assert tool_params.parallel_tool_calls
 
 
 def test_demonstration_output_source(embedded_sync_client: TensorZeroGateway):
