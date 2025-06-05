@@ -36,9 +36,9 @@ Take a look at the server running on `http://localhost:14000` to see what your r
 > This section is mostly for reference.
 > You do not need to do this to run the Cursor integration today.
 
-1. Install mitmproxy, and install the root cert system-wide
-2. Turn off HTTP2 in VS Code settings [[reference]](https://forum.cursor.com/t/add-authorized-certificates-to-cursor/21765)
-3. Start cursor with the env vars `http_proxy=http://localhost:8080` and `https_proxy=http://localhost:8080`
+1. Install `mitmproxy`, and install the root certificate system-wide.
+2. Turn off HTTP2 in VS Code settings. [[reference]](https://forum.cursor.com/t/add-authorized-certificates-to-cursor/21765)
+3. Start Cursor with the environment variables `http_proxy=http://localhost:8080` and `https_proxy=http://localhost:8080`.
 
 </details>
 
