@@ -7,7 +7,7 @@ if [ -f /load_complete.marker ]; then
   exit 0
 fi
 
-clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword "SELECT * FROM system.disks;"
+clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword  "SELECT * FROM system.disks;"
 
 clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database "$DATABASE_NAME" --query "INSERT INTO JsonInference FORMAT JSONEachRow" < json_inference_examples.jsonl
 clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database "$DATABASE_NAME" --query "INSERT INTO BooleanMetricFeedback FORMAT JSONEachRow" < boolean_metric_feedback_examples.jsonl

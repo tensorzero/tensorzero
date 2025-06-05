@@ -108,6 +108,16 @@ impl StoredInference {
             StoredInference::Json(_) => py.None().into_bound(py),
         })
     }
+
+    #[getter]
+    pub fn get_output_schema<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        Ok(match self {
+            StoredInference::Chat(_) => py.None().into_bound(py),
+            StoredInference::Json(example) => {
+                serialize_to_dict(py, example.output_schema.clone())?.into_bound(py)
+            }
+        })
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
