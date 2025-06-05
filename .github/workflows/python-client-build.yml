@@ -186,7 +186,7 @@ jobs:
       - uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e
       - name: Count wheels
         run: |
-          ls -lh ./wheels-*/* | grep -c 'tensorzero-.*\.whl'
+          ls -lh ./wheels-*/*
           # Count the number of files named 'tensorzero-*.whl', and verify that it equals 7
           # If we add new platforms / python versions, update this number
           ls -lh ./wheels-*/* | grep -c 'tensorzero-.*\.whl' | grep -q 7
