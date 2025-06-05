@@ -6,6 +6,7 @@ use serde::Deserialize;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::RwLock;
 use tokio::sync::RwLockWriteGuard;
 use url::Url;
@@ -167,13 +168,7 @@ impl ClickHouseConnectionInfo {
                 ping_url.set_path("/ping");
                 ping_url.set_query(None);
 
-                let timeout = if cfg!(feature = "e2e_tests") {
-                    // Set a long timeout to try to debug batch tests
-                    std::time::Duration::from_secs(60)
-                } else {
-                    // If ClickHouse is healthy, it should respond within 1000ms
-                    std::time::Duration::from_millis(1000)
-                };
+                let timeout = Duration::from_secs(180);
 
                 match client.get(ping_url).timeout(timeout).send().await {
                     Ok(response) if response.status().is_success() => Ok(()),
@@ -546,14 +541,6 @@ fn validate_clickhouse_url_get_db_name(url: &Url) -> Result<Option<String>, Erro
         .into());
     }
 
-    // Validate the port
-    if url.port().is_none() {
-        return Err(ErrorDetails::Config {
-            message: "Missing port in ClickHouse URL".to_string(),
-        }
-        .into());
-    }
-
     // Validate that none of the query strings have key "database"
     if url.query_pairs().any(|(key, _)| key == "database") {
         return Err(ErrorDetails::Config {
@@ -660,15 +647,15 @@ mod tests {
         let result = validate_clickhouse_url_get_db_name(&database_url).unwrap();
         assert_eq!(result, Some("database".to_string()));
 
-        let database_url = Url::parse("http://localhost/").unwrap();
-        let err = validate_clickhouse_url_get_db_name(&database_url).unwrap_err();
-        assert_eq!(
-            err,
-            ErrorDetails::Config {
-                message: "Missing port in ClickHouse URL".to_string(),
-            }
-            .into()
-        );
+        let database_url = Url::parse("https://localhost:443/").unwrap();
+        assert!(validate_clickhouse_url_get_db_name(&database_url)
+            .unwrap()
+            .is_none());
+
+        let database_url = Url::parse("http://default:password@clickhouse.cloud.io:443").unwrap();
+        assert!(validate_clickhouse_url_get_db_name(&database_url)
+            .unwrap()
+            .is_none());
 
         let database_url = Url::parse("http://localhost:8123").unwrap();
         assert!(validate_clickhouse_url_get_db_name(&database_url).is_ok());

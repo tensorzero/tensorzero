@@ -36,7 +36,7 @@ pub trait ShorthandModelConfig: Sized {
     const SHORTHAND_MODEL_PREFIXES: &[&str];
     /// Used in error messages (e.g. 'Model' or 'Embedding model')
     const MODEL_TYPE: &str;
-    fn from_shorthand(provider_type: &str, model_name: &str) -> Result<Self, Error>;
+    async fn from_shorthand(provider_type: &str, model_name: &str) -> Result<Self, Error>;
     fn validate(&self, key: &str) -> Result<(), Error>;
 }
 
@@ -106,15 +106,14 @@ fn check_shorthand<'a>(prefixes: &[&'a str], key: &'a str) -> Option<Shorthand<'
 }
 
 impl<T: ShorthandModelConfig> BaseModelTable<T> {
-    pub fn get(&self, key: &str) -> Result<Option<CowNoClone<'_, T>>, Error> {
+    pub async fn get(&self, key: &str) -> Result<Option<CowNoClone<'_, T>>, Error> {
         if let Some(model_config) = self.0.get(key) {
             return Ok(Some(CowNoClone::Borrowed(model_config)));
         }
         if let Some(shorthand) = check_shorthand(T::SHORTHAND_MODEL_PREFIXES, key) {
-            return Ok(Some(CowNoClone::Owned(T::from_shorthand(
-                shorthand.provider_type,
-                shorthand.model_name,
-            )?)));
+            return Ok(Some(CowNoClone::Owned(
+                T::from_shorthand(shorthand.provider_type, shorthand.model_name).await?,
+            )));
         }
         Ok(None)
     }

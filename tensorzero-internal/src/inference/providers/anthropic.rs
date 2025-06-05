@@ -1,5 +1,6 @@
 use futures::StreamExt;
 use lazy_static::lazy_static;
+use mime::MediaType;
 use reqwest::StatusCode;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use secrecy::{ExposeSecret, SecretString};
@@ -17,13 +18,13 @@ use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
-use crate::inference::types::resolved_input::ImageWithPath;
+use crate::inference::types::resolved_input::FileWithPath;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk, FinishReason,
     FunctionType, Latency, ModelInferenceRequestJsonMode, Role, Text,
 };
 use crate::inference::types::{
-    ContentBlockOutput, FlattenUnknown, ImageKind, ModelInferenceRequest,
+    ContentBlockOutput, FlattenUnknown, ModelInferenceRequest,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
     ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStreamInner, RequestMessage, TextChunk, Thought, ThoughtChunk, Usage,
@@ -373,6 +374,7 @@ fn stream_anthropic(
 
                         let response = data.and_then(|data| {
                             anthropic_to_tensorzero_stream_message(
+                                message.data,
                                 data,
                                 start_time.elapsed(),
                                 &mut current_tool_id,
@@ -484,7 +486,10 @@ enum AnthropicMessageContent<'a> {
         text: &'a str,
     },
     Image {
-        source: AnthropicImageSource,
+        source: AnthropicDocumentSource,
+    },
+    Document {
+        source: AnthropicDocumentSource,
     },
     ToolResult {
         tool_use_id: &'a str,
@@ -501,17 +506,19 @@ enum AnthropicMessageContent<'a> {
     },
 }
 
+/// This is used by Anthropic for both images and documents -
+/// the only different is the outer `AnthropicMessageContent`
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub struct AnthropicImageSource {
-    pub r#type: AnthropicImageType,
-    pub media_type: ImageKind,
+pub struct AnthropicDocumentSource {
+    pub r#type: AnthropicDocumentType,
+    pub media_type: MediaType,
     pub data: String,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub enum AnthropicImageType {
+pub enum AnthropicDocumentType {
     Base64,
 }
 
@@ -564,18 +571,26 @@ impl<'a> TryFrom<&'a ContentBlock> for Option<FlattenUnknown<'a, AnthropicMessag
                     }],
                 },
             ))),
-            ContentBlock::Image(ImageWithPath {
-                image,
-                storage_path: _,
-            }) => Ok(Some(FlattenUnknown::Normal(
-                AnthropicMessageContent::Image {
-                    source: AnthropicImageSource {
-                        r#type: AnthropicImageType::Base64,
-                        media_type: image.mime_type,
-                        data: image.data()?.clone(),
-                    },
-                },
-            ))),
+            ContentBlock::File(file) => {
+                let FileWithPath {
+                    file,
+                    storage_path: _,
+                } = &**file;
+                let document = AnthropicDocumentSource {
+                    r#type: AnthropicDocumentType::Base64,
+                    media_type: file.mime_type.clone(),
+                    data: file.data()?.clone(),
+                };
+                if file.mime_type.type_() == mime::IMAGE {
+                    Ok(Some(FlattenUnknown::Normal(
+                        AnthropicMessageContent::Image { source: document },
+                    )))
+                } else {
+                    Ok(Some(FlattenUnknown::Normal(
+                        AnthropicMessageContent::Document { source: document },
+                    )))
+                }
+            }
             ContentBlock::Thought(thought) => Ok(Some(FlattenUnknown::Normal(
                 AnthropicMessageContent::Thinking {
                     thinking: &thought.text,
@@ -1090,19 +1105,12 @@ enum AnthropicStreamMessage {
 /// There is no need to do the same bookkeeping for TextDelta chunks since they come with an index (which we use as an ID for a text chunk).
 /// See the Anthropic [docs](https://docs.anthropic.com/en/api/messages-streaming) on streaming messages for details on the types of events and their semantics.
 fn anthropic_to_tensorzero_stream_message(
+    raw_message: String,
     message: AnthropicStreamMessage,
     message_latency: Duration,
     current_tool_id: &mut Option<String>,
     current_tool_name: &mut Option<String>,
 ) -> Result<Option<ProviderInferenceResponseChunk>, Error> {
-    let raw_message = serde_json::to_string(&message).map_err(|e| {
-        Error::new(ErrorDetails::Serialization {
-            message: format!(
-                "Error serializing stream message from Anthropic: {}",
-                DisplayOrDebugGateway::new(e)
-            ),
-        })
-    })?;
     match message {
         AnthropicStreamMessage::ContentBlockDelta { delta, index } => match delta {
             AnthropicMessageBlock::TextDelta { text } => {
@@ -2217,6 +2225,7 @@ mod tests {
         };
         let latency = Duration::from_millis(100);
         let result = anthropic_to_tensorzero_stream_message(
+            "my_raw_chunk".to_string(),
             content_block_delta,
             latency,
             &mut current_tool_id,
@@ -2245,6 +2254,7 @@ mod tests {
         };
         let latency = Duration::from_millis(100);
         let result = anthropic_to_tensorzero_stream_message(
+            "my_raw_chunk".to_string(),
             content_block_delta,
             latency,
             &mut current_tool_id,
@@ -2272,6 +2282,7 @@ mod tests {
         };
         let latency = Duration::from_millis(100);
         let result = anthropic_to_tensorzero_stream_message(
+            "my_raw_chunk".to_string(),
             content_block_delta,
             latency,
             &mut current_tool_id,
@@ -2302,6 +2313,7 @@ mod tests {
         };
         let latency = Duration::from_millis(110);
         let result = anthropic_to_tensorzero_stream_message(
+            "my_raw_chunk".to_string(),
             content_block_start,
             latency,
             &mut current_tool_id,
@@ -2332,6 +2344,7 @@ mod tests {
         };
         let latency = Duration::from_millis(120);
         let result = anthropic_to_tensorzero_stream_message(
+            "my_raw_chunk".to_string(),
             content_block_start,
             latency,
             &mut current_tool_id,
@@ -2359,6 +2372,7 @@ mod tests {
         };
         let latency = Duration::from_millis(130);
         let result = anthropic_to_tensorzero_stream_message(
+            "my_raw_chunk".to_string(),
             content_block_start,
             latency,
             &mut current_tool_id,
@@ -2381,6 +2395,7 @@ mod tests {
         let content_block_stop = AnthropicStreamMessage::ContentBlockStop { index: 2 };
         let latency = Duration::from_millis(120);
         let result = anthropic_to_tensorzero_stream_message(
+            "my_raw_chunk".to_string(),
             content_block_stop,
             latency,
             &mut current_tool_id,
@@ -2395,6 +2410,7 @@ mod tests {
         };
         let latency = Duration::from_millis(130);
         let result = anthropic_to_tensorzero_stream_message(
+            "my_raw_chunk".to_string(),
             error_message,
             latency,
             &mut current_tool_id,
@@ -2421,6 +2437,7 @@ mod tests {
         };
         let latency = Duration::from_millis(140);
         let result = anthropic_to_tensorzero_stream_message(
+            "my_raw_chunk".to_string(),
             message_delta,
             latency,
             &mut current_tool_id,
@@ -2442,6 +2459,7 @@ mod tests {
         };
         let latency = Duration::from_millis(150);
         let result = anthropic_to_tensorzero_stream_message(
+            "my_raw_chunk".to_string(),
             message_start,
             latency,
             &mut current_tool_id,
@@ -2460,6 +2478,7 @@ mod tests {
         let message_stop = AnthropicStreamMessage::MessageStop;
         let latency = Duration::from_millis(160);
         let result = anthropic_to_tensorzero_stream_message(
+            "my_raw_chunk".to_string(),
             message_stop,
             latency,
             &mut current_tool_id,
@@ -2472,6 +2491,7 @@ mod tests {
         let ping = AnthropicStreamMessage::Ping {};
         let latency = Duration::from_millis(170);
         let result = anthropic_to_tensorzero_stream_message(
+            "my_raw_chunk".to_string(),
             ping,
             latency,
             &mut current_tool_id,

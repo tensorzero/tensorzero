@@ -138,10 +138,9 @@ impl Migration for Migration0016<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        "\
-            -- Drop the tables\n\
-            DROP TABLE IF EXISTS ChatInferenceDatapoint;\n\
-            DROP TABLE IF EXISTS JsonInferenceDatapoint;\n\
+        "/* Drop the tables */\
+            DROP TABLE IF EXISTS ChatInferenceDatapoint;
+            DROP TABLE IF EXISTS JsonInferenceDatapoint;
             "
         .to_string()
     }

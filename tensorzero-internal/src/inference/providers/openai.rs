@@ -26,7 +26,8 @@ use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse
 use crate::inference::types::batch::{
     ProviderBatchInferenceOutput, ProviderBatchInferenceResponse,
 };
-use crate::inference::types::resolved_input::ImageWithPath;
+use crate::inference::types::file::{mime_type_to_ext, require_image};
+use crate::inference::types::resolved_input::FileWithPath;
 use crate::inference::types::{
     batch::{BatchStatus, StartBatchProviderInferenceResponse},
     ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
@@ -825,7 +826,7 @@ pub fn stream_openai(
 
                         let latency = start_time.elapsed();
                         let stream_message = data.and_then(|d| {
-                            openai_to_tensorzero_chunk(d, latency, &mut tool_call_ids, &mut tool_call_names)
+                            openai_to_tensorzero_chunk(message.data, d, latency, &mut tool_call_ids, &mut tool_call_names)
                         });
                         yield stream_message;
                     }
@@ -1020,10 +1021,17 @@ where
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct OpenAIFile<'a> {
+    file_data: Cow<'a, str>,
+    filename: Cow<'a, str>,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum OpenAIContentBlock<'a> {
     Text { text: Cow<'a, str> },
     ImageUrl { image_url: OpenAIImageUrl },
+    File { file: OpenAIFile<'a> },
     Unknown { data: Cow<'a, Value> },
 }
 
@@ -1037,12 +1045,14 @@ impl Serialize for OpenAIContentBlock<'_> {
         enum Helper<'a> {
             Text { text: &'a str },
             ImageUrl { image_url: &'a OpenAIImageUrl },
+            File { file: &'a OpenAIFile<'a> },
         }
         match self {
             OpenAIContentBlock::Text { text } => Helper::Text { text }.serialize(serializer),
             OpenAIContentBlock::ImageUrl { image_url } => {
                 Helper::ImageUrl { image_url }.serialize(serializer)
             }
+            OpenAIContentBlock::File { file } => Helper::File { file }.serialize(serializer),
             OpenAIContentBlock::Unknown { data } => data.serialize(serializer),
         }
     }
@@ -1113,7 +1123,7 @@ impl OpenAIRequestMessage<'_> {
             OpenAIRequestMessage::System(msg) => msg.content.to_lowercase().contains(value),
             OpenAIRequestMessage::User(msg) => msg.content.iter().any(|c| match c {
                 OpenAIContentBlock::Text { text } => text.to_lowercase().contains(value),
-                OpenAIContentBlock::ImageUrl { .. } => false,
+                OpenAIContentBlock::ImageUrl { .. } | OpenAIContentBlock::File { .. } => false,
                 // Don't inspect the contents of 'unknown' blocks
                 OpenAIContentBlock::Unknown { data: _ } => false,
             }),
@@ -1121,7 +1131,9 @@ impl OpenAIRequestMessage<'_> {
                 if let Some(content) = &msg.content {
                     content.iter().any(|c| match c {
                         OpenAIContentBlock::Text { text } => text.to_lowercase().contains(value),
-                        OpenAIContentBlock::ImageUrl { .. } => false,
+                        OpenAIContentBlock::ImageUrl { .. } | OpenAIContentBlock::File { .. } => {
+                            false
+                        }
                         // Don't inspect the contents of 'unknown' blocks
                         OpenAIContentBlock::Unknown { data: _ } => false,
                     })
@@ -1264,17 +1276,37 @@ fn tensorzero_to_openai_user_messages(
                     tool_call_id: &tool_result.id,
                 }));
             }
-            ContentBlock::Image(ImageWithPath {
-                image,
-                storage_path: _,
-            }) => {
-                user_content_blocks.push(OpenAIContentBlock::ImageUrl {
-                    image_url: OpenAIImageUrl {
-                        // This will only produce an error if we pass in a bad
-                        // `Base64Image` (with missing image data)
-                        url: format!("data:{};base64,{}", image.mime_type, image.data()?),
-                    },
-                });
+            ContentBlock::File(file) => {
+                let FileWithPath {
+                    file,
+                    storage_path: _,
+                } = &**file;
+                let data = format!("data:{};base64,{}", file.mime_type, file.data()?);
+                if file.mime_type.type_() == mime::IMAGE {
+                    user_content_blocks.push(OpenAIContentBlock::ImageUrl {
+                        image_url: OpenAIImageUrl {
+                            // This will only produce an error if we pass in a bad
+                            // `Base64File` (with missing file data)
+                            url: data,
+                        },
+                    });
+                } else {
+                    // OpenAI doesn't document how they determine the content type of the base64 blob
+                    // - let's try to pick a good suffix for the filename, in case they don't sniff
+                    // the mime type from the actual file content.
+                    let suffix = mime_type_to_ext(&file.mime_type)?.ok_or_else(|| {
+                        Error::new(ErrorDetails::InvalidMessage {
+                            message: format!("Mime type {} has no filetype suffix", file.mime_type),
+                        })
+                    })?;
+                    user_content_blocks.push(OpenAIContentBlock::File {
+                        file: OpenAIFile {
+                            file_data: Cow::Owned(data),
+                            // TODO - should we allow the user to specify the file name?
+                            filename: Cow::Owned(format!("input.{suffix}")),
+                        },
+                    });
+                }
             }
             ContentBlock::Thought(_) => {
                 // OpenAI doesn't support thought blocks.
@@ -1339,15 +1371,17 @@ fn tensorzero_to_openai_assistant_messages(
                     message: "Tool results are not supported in assistant messages".to_string(),
                 }));
             }
-            ContentBlock::Image(ImageWithPath {
-                image,
-                storage_path: _,
-            }) => {
+            ContentBlock::File(file) => {
+                let FileWithPath {
+                    file,
+                    storage_path: _,
+                } = &**file;
+                require_image(&file.mime_type, PROVIDER_TYPE)?;
                 assistant_content_blocks.push(OpenAIContentBlock::ImageUrl {
                     image_url: OpenAIImageUrl {
                         // This will only produce an error if we pass in a bad
-                        // `Base64Image` (with missing image data)
-                        url: format!("data:{};base64,{}", image.mime_type, image.data()?),
+                        // `Base64File` (with missing file data)
+                        url: format!("data:{};base64,{}", file.mime_type, file.data()?),
                     },
                 });
             }
@@ -1909,22 +1943,12 @@ struct OpenAIChatChunk {
 
 /// Maps an OpenAI chunk to a TensorZero chunk for streaming inferences
 fn openai_to_tensorzero_chunk(
+    raw_message: String,
     mut chunk: OpenAIChatChunk,
     latency: Duration,
     tool_call_ids: &mut Vec<String>,
     tool_names: &mut Vec<String>,
 ) -> Result<ProviderInferenceResponseChunk, Error> {
-    let raw_message = serde_json::to_string(&chunk).map_err(|e| {
-        Error::new(ErrorDetails::InferenceServer {
-            message: format!(
-                "Error parsing response from OpenAI: {}",
-                DisplayOrDebugGateway::new(e)
-            ),
-            raw_request: None,
-            raw_response: Some(serde_json::to_string(&chunk).unwrap_or_default()),
-            provider_type: PROVIDER_TYPE.to_string(),
-        })
-    })?;
     if chunk.choices.len() > 1 {
         return Err(ErrorDetails::InferenceServer {
             message: "Response has invalid number of choices: {}. Expected 1.".to_string(),
@@ -3098,6 +3122,7 @@ mod tests {
         let mut tool_call_ids = vec!["id1".to_string()];
         let mut tool_call_names = vec!["name1".to_string()];
         let message = openai_to_tensorzero_chunk(
+            "my_raw_chunk".to_string(),
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
@@ -3131,6 +3156,7 @@ mod tests {
             usage: None,
         };
         let message = openai_to_tensorzero_chunk(
+            "my_raw_chunk".to_string(),
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
@@ -3165,6 +3191,7 @@ mod tests {
             usage: None,
         };
         let error = openai_to_tensorzero_chunk(
+            "my_raw_chunk".to_string(),
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
@@ -3200,6 +3227,7 @@ mod tests {
             usage: None,
         };
         let message = openai_to_tensorzero_chunk(
+            "my_raw_chunk".to_string(),
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
@@ -3233,6 +3261,7 @@ mod tests {
             }),
         };
         let message = openai_to_tensorzero_chunk(
+            "my_raw_chunk".to_string(),
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,

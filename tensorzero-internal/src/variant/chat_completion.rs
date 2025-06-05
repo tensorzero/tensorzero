@@ -15,7 +15,7 @@ use crate::inference::types::{
     ModelInferenceRequest, RequestMessage, Role,
 };
 use crate::inference::types::{
-    InferenceResult, ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent,
+    InferenceResult, ModelInput, ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent,
 };
 use crate::jsonschema_util::StaticJSONSchema;
 use crate::minijinja_util::TemplateConfig;
@@ -195,6 +195,31 @@ impl ChatCompletionConfig {
     }
 }
 
+/// Prepare a ModelInput using the same machinery as is used by core TensorZero to prepare
+/// chat completions requests.
+pub fn prepare_model_input(
+    system: Option<&Value>,
+    messages: &[ResolvedInputMessage],
+    templates: &TemplateConfig,
+    system_template_name: Option<&str>,
+    user_template_name: Option<&str>,
+    assistant_template_name: Option<&str>,
+) -> Result<ModelInput, Error> {
+    let system = prepare_system_message(system, templates, system_template_name)?;
+    let mut templated_messages = Vec::with_capacity(messages.len());
+    for message in messages.iter() {
+        let template_name = match message.role {
+            Role::Assistant => assistant_template_name,
+            Role::User => user_template_name,
+        };
+        templated_messages.push(prepare_request_message(message, templates, template_name)?);
+    }
+    Ok(ModelInput {
+        system,
+        messages: templated_messages,
+    })
+}
+
 fn prepare_system_message(
     system: Option<&Value>,
     templates: &TemplateConfig,
@@ -250,8 +275,8 @@ fn prepare_request_message(
             ResolvedInputMessageContent::ToolResult(tool_result) => {
                 content.push(ContentBlock::ToolResult(tool_result.clone()));
             }
-            ResolvedInputMessageContent::Image(image) => {
-                content.push(ContentBlock::Image(image.clone()));
+            ResolvedInputMessageContent::File(image) => {
+                content.push(ContentBlock::File(image.clone()));
             }
             ResolvedInputMessageContent::Thought(thought) => {
                 content.push(ContentBlock::Thought(thought.clone()));
@@ -292,7 +317,7 @@ impl Variant for ChatCompletionConfig {
             false,
             &mut inference_params,
         )?;
-        let model_config = models.models.get(&self.model)?.ok_or_else(|| {
+        let model_config = models.models.get(&self.model).await?.ok_or_else(|| {
             Error::new(ErrorDetails::UnknownModel {
                 name: self.model.to_string(),
             })
@@ -327,7 +352,7 @@ impl Variant for ChatCompletionConfig {
             true,
             &mut inference_params,
         )?;
-        let model_config = models.models.get(&self.model)?.ok_or_else(|| {
+        let model_config = models.models.get(&self.model).await?.ok_or_else(|| {
             Error::new(ErrorDetails::UnknownModel {
                 name: self.model.to_string(),
             })
@@ -351,12 +376,12 @@ impl Variant for ChatCompletionConfig {
     ///    - If the template requires variables, the schema is provided.
     ///  - That the model name is a valid model
     ///  - That the weight is non-negative
-    fn validate(
+    async fn validate(
         &self,
         function: &FunctionConfig,
         models: &mut ModelTable,
         _embedding_models: &EmbeddingModelTable,
-        templates: &TemplateConfig,
+        templates: &TemplateConfig<'_>,
         function_name: &str,
         variant_name: &str,
     ) -> Result<(), Error> {
@@ -451,7 +476,7 @@ impl Variant for ChatCompletionConfig {
                 self.prepare_request(input, function, inference_config, false, inference_param)?;
             inference_requests.push(request);
         }
-        let model_config = models.models.get(&self.model)?.ok_or_else(|| {
+        let model_config = models.models.get(&self.model).await?.ok_or_else(|| {
             Error::new(ErrorDetails::UnknownModel {
                 name: self.model.to_string(),
             })

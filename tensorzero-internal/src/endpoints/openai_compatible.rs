@@ -18,6 +18,7 @@ use axum::response::sse::{Event, Sse};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use futures::Stream;
+use mime::MediaType;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use tokio_stream::StreamExt;
@@ -32,9 +33,10 @@ use crate::error::{Error, ErrorDetails};
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
+use crate::inference::types::file::filename_to_mime_type;
 use crate::inference::types::{
-    current_timestamp, ContentBlockChatOutput, ContentBlockChunk, FinishReason, Image, ImageKind,
-    Input, InputMessage, InputMessageContent, Role, TextKind, Usage,
+    current_timestamp, ContentBlockChatOutput, ContentBlockChunk, File, FinishReason, Input,
+    InputMessage, InputMessageContent, Role, TextKind, Usage,
 };
 use crate::tool::{
     DynamicToolParams, Tool, ToolCall, ToolCallChunk, ToolCallOutput, ToolChoice, ToolResult,
@@ -639,12 +641,21 @@ impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
 enum OpenAICompatibleContentBlock {
     Text(TextContent),
     ImageUrl { image_url: OpenAICompatibleImageUrl },
+    File { file: OpenAICompatibleFile },
 }
 
 #[derive(Deserialize, Debug)]
 #[serde(tag = "type", deny_unknown_fields, rename_all = "snake_case")]
 struct OpenAICompatibleImageUrl {
     url: Url,
+}
+
+#[derive(Deserialize, Debug)]
+struct OpenAICompatibleFile {
+    file_data: String,
+    filename: String,
+    // OpenAI supports file_id with their files API
+    // We do not so we require these two fields
 }
 
 #[derive(Deserialize, Debug)]
@@ -660,7 +671,7 @@ pub enum TextContent {
     },
 }
 
-fn parse_base64_image_data_url(url: &str) -> Result<(ImageKind, &str), Error> {
+fn parse_base64_image_data_url(url: &str) -> Result<(MediaType, &str), Error> {
     let Some(url) = url.strip_prefix("data:") else {
         return Err(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
             message: "Image data URL must start with `data:`".to_string(),
@@ -671,16 +682,11 @@ fn parse_base64_image_data_url(url: &str) -> Result<(ImageKind, &str), Error> {
             message: "Image data URL must contain a base64-encoded data part".to_string(),
         }));
     };
-    let image_type = match mime_type {
-        "image/jpeg" => ImageKind::Jpeg,
-        "image/png" => ImageKind::Png,
-        "image/webp" => ImageKind::WebP,
-        _ => {
-            return Err(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
-                message: format!("Unsupported content type `{mime_type}`: - only `image/jpeg`, `image/png``, and `image/webp` image data URLs are supported"),
-            }))
-        }
-    };
+    let image_type: MediaType = mime_type.parse().map_err(|_| {
+        Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
+            message: format!("Unknown content type `{mime_type}`"),
+        })
+    })?;
     Ok((image_type, data))
 }
 
@@ -698,10 +704,13 @@ fn convert_openai_message_content(content: Value) -> Result<Vec<InputMessageCont
                         if image_url.url.scheme() == "data" {
                             let url_str = image_url.url.to_string();
                             let (mime_type, data) = parse_base64_image_data_url(&url_str)?;
-                            InputMessageContent::Image(Image::Base64 { mime_type, data: data.to_string() })
+                            InputMessageContent::File(File::Base64 { mime_type, data: data.to_string() })
                         } else {
-                            InputMessageContent::Image(Image::Url { url: image_url.url })
+                            InputMessageContent::File(File::Url { url: image_url.url, mime_type: None })
                         }
+                    }
+                    Ok(OpenAICompatibleContentBlock::File { file }) => {
+                        InputMessageContent::File(File::Base64 { mime_type: filename_to_mime_type(&file.filename)?, data: file.file_data })
                     }
                     Err(e) => {
                         tracing::warn!(r#"Content block `{val}` was not a valid OpenAI content block. This is deprecated - please use `{{"type": "text", "tensorzero::arguments": {{"custom": "data"}}` to pass arbitrary JSON values to TensorZero: {e}"#);
@@ -1585,23 +1594,20 @@ mod tests {
     #[test]
     fn test_parse_base64() {
         assert_eq!(
-            (ImageKind::Jpeg, "YWJjCg=="),
+            (mime::IMAGE_JPEG, "YWJjCg=="),
             parse_base64_image_data_url("data:image/jpeg;base64,YWJjCg==").unwrap()
         );
         assert_eq!(
-            (ImageKind::Png, "YWJjCg=="),
+            (mime::IMAGE_PNG, "YWJjCg=="),
             parse_base64_image_data_url("data:image/png;base64,YWJjCg==").unwrap()
         );
         assert_eq!(
-            (ImageKind::WebP, "YWJjCg=="),
+            ("image/webp".parse().unwrap(), "YWJjCg=="),
             parse_base64_image_data_url("data:image/webp;base64,YWJjCg==").unwrap()
         );
-        let err = parse_base64_image_data_url("data:image/svg;base64,YWJjCg==")
-            .unwrap_err()
-            .to_string();
-        assert!(
-            err.contains("Unsupported content type `image/svg`"),
-            "Unexpected error message: {err}"
+        assert_eq!(
+            ("image/svg".parse().unwrap(), "YWJjCg=="),
+            parse_base64_image_data_url("data:image/svg;base64,YWJjCg==").unwrap()
         );
     }
 

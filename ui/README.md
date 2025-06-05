@@ -22,8 +22,14 @@ The instructions below assume you're using the provided setup with fixture data.
 3. Set the environment variables for the gateway. Create a `.env` file in `fixtures/` with credentials. See `fixtures/.env.example` for reference.
 4. Launch the TensorZero Gateway and ClickHouse with `docker compose -f fixtures/docker-compose.yml up`.
 5. Set the UI environment variables in the shell (not `.env`). See `./.env.example` for reference.
-6. Run `pnpm install` to install the dependencies.
-7. Run `pnpm dev` to start the development server. Optionally, enable the feature flags to try out new features:
-   - `TENSORZERO_UI_FF_ENABLE_PYTHON=1` for delegating to Python-based optimization server
+6. Run `pnpm` scripts from the root of the repository to start the app:
 
-You can also run tests with `pnpm test` and Storybook with `pnpm storybook`.
+   - Run `pnpm install` to install the dependencies.
+   - Run `pnpm ui:dev` to start the development server. Optionally, enable the feature flags to try out new features:
+
+     ```sh
+     # for delegating to Python-based optimization server
+     TENSORZERO_UI_FF_ENABLE_PYTHON=1
+     ```
+
+   - You can also run tests with `pnpm ui:test` and Storybook with `pnpm ui:storybook`.

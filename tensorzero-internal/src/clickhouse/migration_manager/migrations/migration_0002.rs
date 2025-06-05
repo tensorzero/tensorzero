@@ -54,12 +54,9 @@ impl Migration for Migration0002<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        "\
-            -- Drop the table\n\
-            DROP TABLE IF EXISTS DynamicInContextLearningExample;\n\
-            \n\
-            "
-        .to_string()
+        "/* Drop the table */\
+            DROP TABLE IF EXISTS DynamicInContextLearningExample;"
+            .to_string()
     }
 
     /// Check if the migration has succeeded (i.e. it should not be applied again)

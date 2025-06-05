@@ -1,13 +1,16 @@
 [package]
 name = "tensorzero-internal"
 version.workspace = true
+rust-version.workspace = true
 edition = "2021"
+license.workspace = true
 
 
 [features]
 # Forward this feature to the Rust client, so that the embedded gateway
 # has the `e2e_tests` feature enabled when we run our e2e tests
 e2e_tests = ["tensorzero/e2e_tests"]
+pyo3 = ["dep:pyo3"]
 
 [[test]]
 name = "e2e"
@@ -98,9 +101,16 @@ opentelemetry-otlp = { version = "0.29.0", features = ["grpc-tonic"] }
 opentelemetry-semantic-conventions = "0.29.0"
 init-tracing-opentelemetry = "0.28.1"
 tracing-futures = { version = "0.2.5", features = ["futures-03"] }
-tracing-opentelemetry-instrumentation-sdk = { workspace = true, features = ["http"] }
+tracing-opentelemetry-instrumentation-sdk = { workspace = true, features = [
+    "http",
+] }
 tower-http = { workspace = true }
 tower-layer = "0.3.3"
+pyo3 = { workspace = true, optional = true }
+google-cloud-auth = "0.20.0"
+mime = { workspace = true }
+mime_guess = "2.0.5"
+indexmap = "2.9.0"
 
 
 [dev-dependencies]

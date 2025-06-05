@@ -71,7 +71,8 @@ export type GCPVertexAnthropicProviderConfig = z.infer<
 
 export const GCPVertexGeminiProviderConfigSchema = z.object({
   type: z.literal("gcp_vertex_gemini"),
-  model_id: z.string(),
+  model_id: z.string().optional(), // Exactly one of model_id or endpoint_id must be provided
+  endpoint_id: z.string().optional(),
   location: z.string(),
   project_id: z.string(),
 });
@@ -86,6 +87,12 @@ export const GoogleAIStudioGeminiProviderConfigSchema = z.object({
 export type GoogleAIStudioGeminiProviderConfig = z.infer<
   typeof GoogleAIStudioGeminiProviderConfigSchema
 >;
+
+export const GroqProviderConfigSchema = z.object({
+  type: z.literal("groq"),
+  model_name: z.string(),
+});
+export type GroqProviderConfig = z.infer<typeof GroqProviderConfigSchema>;
 
 export const HyperbolicProviderConfigSchema = z.object({
   type: z.literal("hyperbolic"),
@@ -107,6 +114,15 @@ export const OpenAIProviderConfigSchema = z.object({
   api_base: z.string().url().optional(),
 });
 export type OpenAIProviderConfig = z.infer<typeof OpenAIProviderConfigSchema>;
+
+export const OpenRouterProviderConfigSchema = z.object({
+  type: z.literal("openrouter"),
+  model_name: z.string(),
+  api_base: z.string().url().optional(),
+});
+export type OpenRouterProviderConfig = z.infer<
+  typeof OpenRouterProviderConfigSchema
+>;
 
 export const TGIProviderConfigSchema = z.object({
   type: z.literal("tgi"),
@@ -154,9 +170,11 @@ export const ProviderConfigSchema = z.discriminatedUnion("type", [
   GCPVertexAnthropicProviderConfigSchema,
   GCPVertexGeminiProviderConfigSchema,
   GoogleAIStudioGeminiProviderConfigSchema,
+  GroqProviderConfigSchema,
   HyperbolicProviderConfigSchema,
   MistralProviderConfigSchema,
   OpenAIProviderConfigSchema,
+  OpenRouterProviderConfigSchema,
   SGLangProviderConfigSchema,
   TGIProviderConfigSchema,
   TogetherProviderConfigSchema,
@@ -179,6 +197,7 @@ export function createProviderConfig(
     case "together":
     case "google_ai_studio_gemini":
     case "openai":
+    case "openrouter":
       return { type, model_name };
     case "aws_bedrock":
       return { type, model_id: model_name };

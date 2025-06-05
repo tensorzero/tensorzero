@@ -6,6 +6,8 @@ use std::time::Duration;
 
 use axum::http;
 use futures::StreamExt;
+use google_cloud_auth::credentials::Credentials;
+use http::{HeaderMap, HeaderValue};
 use itertools::Itertools;
 use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 use object_store::gcp::{GcpCredential, GoogleCloudStorageBuilder};
@@ -31,7 +33,6 @@ use crate::inference::types::batch::{
     BatchRequestRow, BatchStatus, PollBatchInferenceResponse, ProviderBatchInferenceOutput,
     ProviderBatchInferenceResponse,
 };
-use crate::inference::types::resolved_input::ImageWithPath;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, serialize_or_log, ModelInferenceRequest,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
@@ -40,7 +41,7 @@ use crate::inference::types::{
 use crate::inference::types::{
     ContentBlock, ContentBlockChunk, ContentBlockOutput, FinishReason, FlattenUnknown, Latency,
     ModelInferenceRequestJsonMode, ProviderInferenceResponseArgs,
-    ProviderInferenceResponseStreamInner, Role, Text, TextChunk,
+    ProviderInferenceResponseStreamInner, Role, Text, TextChunk, Thought, ThoughtChunk,
 };
 use crate::model::{
     build_creds_caching_default_with_fn, fully_qualified_name, Credential, CredentialLocation,
@@ -48,6 +49,7 @@ use crate::model::{
 };
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
+use super::gcp_vertex_anthropic::make_gcp_sdk_credentials;
 use super::helpers::{inject_extra_request_data, parse_jsonl_batch_file, JsonlBatchFileInfo};
 use super::openai::convert_stream_error;
 
@@ -58,6 +60,13 @@ const INFERENCE_ID_LABEL: &str = "tensorzero::inference_id";
 
 /// Implements a subset of the GCP Vertex Gemini API as documented [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/generateContent) for non-streaming
 /// and [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/streamGenerateContent) for streaming
+///
+/// Our current behavior around content blocks is:
+/// * In both streaming and non-streaming, we handle 'thought: true' parts with no extra content, or with text content. These become normal 'Thought' blocks (with a signature)
+/// * In non-streaming mode, 'thought: true' parts with non-text content (e.g. an image) are treated as 'unknown' blocks.
+/// * In streaming mode, 'thought: true' parts with non-text content produce an error (since we don't have "unknown" blocks in streaming mode)
+///
+/// In the future, we'll support 'unknown' blocks in streaming mode, and adjust this provider to emit them.
 #[derive(Debug)]
 pub struct GCPVertexGeminiProvider {
     api_v1_base_url: Url,
@@ -65,7 +74,9 @@ pub struct GCPVertexGeminiProvider {
     streaming_request_url: String,
     audience: String,
     credentials: GCPVertexCredentials,
-    model_id: String,
+    model_id: Option<String>,
+    endpoint_id: Option<String>,
+    model_or_endpoint_id: String,
     batch_config: Option<BatchConfig>,
 }
 
@@ -130,7 +141,7 @@ fn join_cloud_paths(dir: &str, file: &str) -> String {
 /// Constructs a new `ObjectStore` instance for the bucket specified by `gs_url`
 /// with the provided credentials.
 /// We call this on each batch start/poll request, as we might be using dynamic credentials.
-fn make_gcp_object_store(
+async fn make_gcp_object_store(
     gs_url: &str,
     credentials: &GCPVertexCredentials,
     dynamic_api_keys: &InferenceCredentials,
@@ -168,6 +179,55 @@ fn make_gcp_object_store(
                     bearer: key.expose_secret().to_string(),
                 })));
         }
+        GCPVertexCredentials::Sdk(creds) => {
+            let headers = creds
+                .headers(http::Extensions::default())
+                .await
+                .map_err(|e| {
+                    Error::new(ErrorDetails::GCPCredentials {
+                        message: format!("Failed to get GCP access token: {e}"),
+                    })
+                })?;
+
+            // The 'object_store' crate requires us to use a bearer auth token, so try to extract that from the produced headers
+            // In the future, we may want to use the GCP object store sdk crate directly, so that we can support all of the
+            // auth methods
+            if headers.len() != 1 {
+                return Err(Error::new(ErrorDetails::GCPCredentials {
+                    message: format!(
+                        "Expected GCP SDK to produce exactly one auth headers, found: {:?}",
+                        headers.keys()
+                    ),
+                }));
+            }
+
+            let header_value = headers.get("Authorization").ok_or_else(|| {
+                Error::new(ErrorDetails::GCPCredentials {
+                    message: format!(
+                        "Expected GCP SDK to produce an Authorization header, found: {:?}",
+                        headers.keys()
+                    ),
+                })
+            })?;
+
+            if let Some(bearer_token) = header_value
+                .to_str()
+                .ok()
+                .and_then(|s| s.strip_prefix("Bearer "))
+            {
+                builder = builder.with_credentials(Arc::new(StaticCredentialProvider::new(
+                    GcpCredential {
+                        bearer: bearer_token.to_string(),
+                    },
+                )));
+            } else {
+                return Err(Error::new(ErrorDetails::GCPCredentials {
+                    message:
+                        "Expected GCP SDK to produce a Bearer token in the Authorization header"
+                            .to_string(),
+                }));
+            }
+        }
         GCPVertexCredentials::None => {
             return Err(Error::new(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
@@ -187,21 +247,146 @@ fn make_gcp_object_store(
     })
 }
 
+#[derive(Debug, Eq, PartialEq)]
+pub enum ShorthandUrl<'a> {
+    // We enforce that the publisher is 'google' or 'anthropic' when parsing the url,
+    // depending on which model provider is parsing the shorthand url.
+    Publisher {
+        location: &'a str,
+        model_id: &'a str,
+    },
+    Endpoint {
+        location: &'a str,
+        endpoint_id: &'a str,
+    },
+}
+
+// Parses strings of the form:
+// * 'projects/<project_id>/locations/<location>/publishers/<publisher>/models/<model_id>'
+// * 'projects/<project_id>/locations/<location>/endpoints/<endpoint_id>'
+pub fn parse_shorthand_url<'a>(
+    shorthand_url: &'a str,
+    expected_publisher: &str,
+) -> Result<ShorthandUrl<'a>, Error> {
+    let components: Vec<&str> = shorthand_url.split('/').collect_vec();
+    let [projects, _project_id, locations, location, publishers_or_endpoint, ..] = &components[..]
+    else {
+        return Err(Error::new(ErrorDetails::Config {
+            message: format!("GCP shorthand url is not in the expected format (should start with `projects/<project_id>/locations/<location>'): `{shorthand_url}`"),
+        }));
+    };
+
+    if projects != &"projects" {
+        return Err(Error::new(ErrorDetails::Config {
+            message: format!("GCP shorthand url does not start with 'projects': `{shorthand_url}`"),
+        }));
+    }
+    if locations != &"locations" {
+        return Err(Error::new(ErrorDetails::Config {
+            message: format!("GCP shorthand url does contain '/locations/': `{shorthand_url}`"),
+        }));
+    }
+
+    if publishers_or_endpoint == &"publishers" {
+        let publisher = components.get(5).ok_or_else(|| {
+            Error::new(ErrorDetails::Config {
+                message: format!(
+                    "GCP shorthand url does not contain a publisher: `{shorthand_url}`"
+                ),
+            })
+        })?;
+        if *publisher != expected_publisher {
+            return Err(Error::new(ErrorDetails::Config {
+                message: format!(
+                    "GCP shorthand url has publisher `{publisher}`, expected `{expected_publisher}` : `{shorthand_url}`"
+                ),
+            }));
+        }
+        let models = components.get(6).ok_or_else(|| {
+            Error::new(ErrorDetails::Config {
+                message: format!(
+                    "GCP shorthand url does not contain a model or endpoint: `{shorthand_url}`"
+                ),
+            })
+        })?;
+        if models != &"models" {
+            return Err(Error::new(ErrorDetails::Config {
+                message: format!("GCP shorthand url does not contain a model: `{shorthand_url}`"),
+            }));
+        }
+        let model_id = components.get(7).ok_or_else(|| {
+            Error::new(ErrorDetails::Config {
+                message: format!(
+                    "GCP shorthand url does not contain a model id: `{shorthand_url}`"
+                ),
+            })
+        })?;
+        Ok(ShorthandUrl::Publisher { location, model_id })
+    } else if publishers_or_endpoint == &"endpoints" {
+        let endpoint = components.get(5).ok_or_else(|| {
+            Error::new(ErrorDetails::Config {
+                message: format!(
+                    "GCP shorthand url does not contain an endpoint: `{shorthand_url}`"
+                ),
+            })
+        })?;
+        Ok(ShorthandUrl::Endpoint {
+            endpoint_id: endpoint,
+            location,
+        })
+    } else {
+        Err(Error::new(ErrorDetails::Config {
+            message: format!(
+                "GCP shorthand url does not contain a publisher or endpoint: `{shorthand_url}`"
+            ),
+        }))
+    }
+}
+
 impl GCPVertexGeminiProvider {
-    pub fn new(
-        model_id: String,
-        location: String,
-        project_id: String,
-        api_key_location: Option<CredentialLocation>,
-        provider_types: &ProviderTypesConfig,
-    ) -> Result<Self, Error> {
-        let credentials = build_creds_caching_default_with_fn(
-            api_key_location,
-            default_api_key_location(),
-            PROVIDER_TYPE,
-            &DEFAULT_CREDENTIALS,
-            |creds| GCPVertexCredentials::try_from((creds, PROVIDER_TYPE)),
-        )?;
+    // Constructs a provider from a shorthand string of the form:
+    // * 'projects/<project_id>/locations/<location>/publishers/google/models/XXX'
+    // * 'projects/<project_id>/locations/<location>/endpoints/XXX'
+    //
+    // This is *not* a full url - we append ':generateContent' or ':streamGenerateContent' to the end of the path as needed.
+    pub async fn new_shorthand(project_url_path: String) -> Result<Self, Error> {
+        let cred_location = default_api_key_location();
+        let credentials = if matches!(cred_location, CredentialLocation::Sdk) {
+            make_gcp_sdk_credentials(PROVIDER_TYPE).await?
+        } else {
+            build_creds_caching_default_with_fn(
+                None,
+                cred_location,
+                PROVIDER_TYPE,
+                &DEFAULT_CREDENTIALS,
+                |creds| GCPVertexCredentials::try_from((creds, PROVIDER_TYPE)),
+            )?
+        };
+
+        let shorthand_url = parse_shorthand_url(&project_url_path, "google")?;
+        let (location, model_id, endpoint_id, model_or_endpoint_id) = match shorthand_url {
+            ShorthandUrl::Publisher { location, model_id } => (
+                location,
+                Some(model_id.to_string()),
+                None,
+                model_id.to_string(),
+            ),
+            ShorthandUrl::Endpoint {
+                location,
+                endpoint_id,
+            } => (
+                location,
+                None,
+                Some(endpoint_id.to_string()),
+                endpoint_id.to_string(),
+            ),
+        };
+
+        let request_url = format!(
+            "https://{location}-aiplatform.googleapis.com/v1/{project_url_path}:generateContent"
+        );
+        let streaming_request_url = format!("https://{location}-aiplatform.googleapis.com/v1/{project_url_path}:streamGenerateContent?alt=sse");
+        let audience = format!("https://{location}-aiplatform.googleapis.com/");
         let api_v1_base_url = Url::parse(&format!(
             "https://{location}-aiplatform.googleapis.com/v1/"
         ))
@@ -210,8 +395,59 @@ impl GCPVertexGeminiProvider {
                 message: format!("Failed to parse base URL - this should never happen: {e}"),
             })
         })?;
-        let request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model_id}:generateContent");
-        let streaming_request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model_id}:streamGenerateContent?alt=sse");
+
+        Ok(GCPVertexGeminiProvider {
+            api_v1_base_url,
+            request_url,
+            streaming_request_url,
+            batch_config: None,
+            audience,
+            credentials,
+            model_id,
+            endpoint_id,
+            model_or_endpoint_id,
+        })
+    }
+
+    pub async fn new(
+        model_id: Option<String>,
+        endpoint_id: Option<String>,
+        location: String,
+        project_id: String,
+        api_key_location: Option<CredentialLocation>,
+        provider_types: &ProviderTypesConfig,
+    ) -> Result<Self, Error> {
+        let default_location = default_api_key_location();
+        let cred_location = api_key_location.as_ref().unwrap_or(&default_location);
+
+        let credentials = if matches!(cred_location, CredentialLocation::Sdk) {
+            make_gcp_sdk_credentials(PROVIDER_TYPE).await?
+        } else {
+            build_creds_caching_default_with_fn(
+                api_key_location,
+                default_api_key_location(),
+                PROVIDER_TYPE,
+                &DEFAULT_CREDENTIALS,
+                |creds| GCPVertexCredentials::try_from((creds, PROVIDER_TYPE)),
+            )?
+        };
+
+        let api_v1_base_url = Url::parse(&format!(
+            "https://{location}-aiplatform.googleapis.com/v1/"
+        ))
+        .map_err(|e| {
+            Error::new(ErrorDetails::InternalError {
+                message: format!("Failed to parse base URL - this should never happen: {e}"),
+            })
+        })?;
+        let (model_or_endpoint_id, request_url, streaming_request_url) = match (&model_id, &endpoint_id) {
+            (Some(model_id), None) => (model_id.clone(), format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model_id}:generateContent"),
+                                               format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model_id}:streamGenerateContent?alt=sse")),
+            (None, Some(endpoint_id)) => (endpoint_id.clone(), format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/endpoints/{endpoint_id}:generateContent"),
+                                                  format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/endpoints/{endpoint_id}:streamGenerateContent?alt=sse")),
+            _ => return Err(ErrorDetails::InvalidProviderConfig { message: "Exactly one of model_id or endpoint_id must be provided".to_string() }.into())
+        };
+
         let audience = format!("https://{location}-aiplatform.googleapis.com/");
 
         let batch_config = match &provider_types.gcp_vertex_gemini {
@@ -235,11 +471,21 @@ impl GCPVertexGeminiProvider {
             audience,
             credentials,
             model_id,
+            endpoint_id,
+            model_or_endpoint_id,
         })
     }
 
-    pub fn model_id(&self) -> &str {
-        &self.model_id
+    pub fn model_id(&self) -> Option<&str> {
+        self.model_id.as_deref()
+    }
+
+    pub fn endpoint_id(&self) -> Option<&str> {
+        self.endpoint_id.as_deref()
+    }
+
+    pub fn model_or_endpoint_id(&self) -> &str {
+        &self.model_or_endpoint_id
     }
 
     async fn collect_finished_batch(
@@ -264,7 +510,8 @@ impl GCPVertexGeminiProvider {
                     &join_cloud_paths(&gcs_output_directory, "predictions.jsonl"),
                     api_key,
                     dynamic_api_keys,
-                )?;
+                )
+                .await?;
                 let data = store_and_path
                     .store
                     .get(&store_and_path.path)
@@ -310,6 +557,7 @@ pub enum GCPVertexCredentials {
         raw: SecretString,
     },
     Dynamic(String),
+    Sdk(Credentials),
     None,
 }
 
@@ -458,26 +706,53 @@ enum GCPVertexJobState {
 }
 
 impl GCPVertexCredentials {
-    pub fn get_api_key<'a>(
+    pub async fn get_auth_headers<'a>(
         &'a self,
         audience: &'a str,
         dynamic_api_keys: &'a InferenceCredentials,
-    ) -> Result<Cow<'a, SecretString>, Error> {
-        match self {
+    ) -> Result<HeaderMap, Error> {
+        let bearer_token = match self {
             GCPVertexCredentials::Static { parsed, raw: _ } => {
-                Ok(Cow::Owned(parsed.get_jwt_token(audience)?.into()))
+                Cow::Owned(parsed.get_jwt_token(audience)?)
             }
-            GCPVertexCredentials::Dynamic(key_name) => Ok(Cow::Borrowed(
-                dynamic_api_keys.get(key_name).ok_or_else(|| {
-                    Error::new(ErrorDetails::ApiKeyMissing {
-                        provider_name: PROVIDER_NAME.to_string(),
+            GCPVertexCredentials::Dynamic(key_name) => Cow::Borrowed(
+                dynamic_api_keys
+                    .get(key_name)
+                    .ok_or_else(|| {
+                        Error::new(ErrorDetails::ApiKeyMissing {
+                            provider_name: PROVIDER_NAME.to_string(),
+                        })
+                    })?
+                    .expose_secret(),
+            ),
+            GCPVertexCredentials::Sdk(creds) => {
+                return creds
+                    .headers(http::Extensions::default())
+                    .await
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::GCPCredentials {
+                            message: format!("Failed to get GCP access token: {e}"),
+                        })
                     })
-                })?,
-            )),
-            GCPVertexCredentials::None => Err(Error::new(ErrorDetails::ApiKeyMissing {
-                provider_name: PROVIDER_NAME.to_string(),
-            })),
-        }
+            }
+            GCPVertexCredentials::None => {
+                return Err(Error::new(ErrorDetails::ApiKeyMissing {
+                    provider_name: PROVIDER_NAME.to_string(),
+                }))
+            }
+        };
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "Authorization",
+            HeaderValue::from_str(&format!("Bearer {bearer_token}",)).map_err(|e| {
+                Error::new(ErrorDetails::GCPCredentials {
+                    message: format!(
+                        "Failed to create GCP Vertex Gemini credentials from SDK: {e}",
+                    ),
+                })
+            })?,
+        );
+        Ok(headers)
     }
 }
 
@@ -619,7 +894,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
     ) -> Result<ProviderInferenceResponse, Error> {
         let mut request_body = serde_json::to_value(GCPVertexGeminiRequest::new(
             provider_request.request,
-            &self.model_id,
+            self.model_or_endpoint_id(),
         )?)
         .map_err(|e| {
             Error::new(ErrorDetails::Serialization {
@@ -636,14 +911,15 @@ impl InferenceProvider for GCPVertexGeminiProvider {
             provider_request.model_name,
             &mut request_body,
         )?;
-        let api_key = self
+        let auth_headers = self
             .credentials
-            .get_api_key(&self.audience, dynamic_api_keys)?;
+            .get_auth_headers(&self.audience, dynamic_api_keys)
+            .await?;
         let start_time = Instant::now();
         let res = http_client
             .post(&self.request_url)
-            .bearer_auth(api_key.expose_secret())
             .json(&request_body)
+            .headers(auth_headers)
             .headers(headers)
             .send()
             .await
@@ -692,6 +968,14 @@ impl InferenceProvider for GCPVertexGeminiProvider {
             Ok(response_with_latency.try_into()?)
         } else {
             let response_code = res.status();
+            if response_code == StatusCode::NOT_FOUND {
+                return Err(Error::new(ErrorDetails::InferenceServer {
+                    message: "Model or endpoint not found. You may be specifying the wrong one of these. Standard GCP models should use a `model_id` and not an `endpoint_id`, while fine-tuned models should use an `endpoint_id`.".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: None,
+                }));
+            };
             let error_body = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!(
@@ -723,17 +1007,18 @@ impl InferenceProvider for GCPVertexGeminiProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let mut request_body =
-            serde_json::to_value(GCPVertexGeminiRequest::new(request, &self.model_id)?).map_err(
-                |e| {
-                    Error::new(ErrorDetails::Serialization {
-                        message: format!(
-                            "Error serializing GCP Vertex Gemini request: {}",
-                            DisplayOrDebugGateway::new(e)
-                        ),
-                    })
-                },
-            )?;
+        let mut request_body = serde_json::to_value(GCPVertexGeminiRequest::new(
+            request,
+            self.model_or_endpoint_id(),
+        )?)
+        .map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!(
+                    "Error serializing GCP Vertex Gemini request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
+            })
+        })?;
         let headers = inject_extra_request_data(
             &request.extra_body,
             &request.extra_headers,
@@ -750,14 +1035,15 @@ impl InferenceProvider for GCPVertexGeminiProvider {
             })
         })?;
 
-        let api_key = self
+        let auth_headers = self
             .credentials
-            .get_api_key(&self.audience, dynamic_api_keys)?;
+            .get_auth_headers(&self.audience, dynamic_api_keys)
+            .await?;
         let start_time = Instant::now();
         let event_source = http_client
             .post(&self.streaming_request_url)
-            .bearer_auth(api_key.expose_secret())
             .json(&request_body)
+            .headers(auth_headers)
             .headers(headers)
             .eventsource()
             .map_err(|e| {
@@ -782,6 +1068,13 @@ impl InferenceProvider for GCPVertexGeminiProvider {
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<StartBatchProviderInferenceResponse, Error> {
+        let Some(model_id) = self.model_id.as_ref() else {
+            return Err(ErrorDetails::InvalidProviderConfig {
+                message: "Model ID is required for batch inference (not endpoint ID)".to_string(),
+            }
+            .into());
+        };
+
         let Some(batch_config) = &self.batch_config else {
             return Err(ErrorDetails::Config {
                 message: "Missing config section: `[provider_types.gcp_vertex_gemini.batch]`"
@@ -790,14 +1083,15 @@ impl InferenceProvider for GCPVertexGeminiProvider {
             .into());
         };
 
-        let api_key = self
+        let auth_headers = self
             .credentials
-            .get_api_key(&self.audience, dynamic_api_keys)?;
+            .get_auth_headers(&self.audience, dynamic_api_keys)
+            .await?;
 
         let mut raw_requests = Vec::with_capacity(requests.len());
         let mut jsonl_data = Vec::new();
         for request in requests {
-            let body = GCPVertexGeminiRequest::new(request, &self.model_id)?;
+            let body = GCPVertexGeminiRequest::new(request, self.model_or_endpoint_id())?;
             let line =
                 serde_json::to_string(&GCPVertexBatchLine { request: body }).map_err(|e| {
                     Error::new(ErrorDetails::Serialization {
@@ -830,7 +1124,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
         // For now, we use the same set of credentials for writing to Google Cloud Storage as we do for invoking
         // the Vertex API. In the future, we may want to allow configuring a separate set of credentials.
         let store_and_path =
-            make_gcp_object_store(&input_source_url, &self.credentials, dynamic_api_keys)?;
+            make_gcp_object_store(&input_source_url, &self.credentials, dynamic_api_keys).await?;
 
         store_and_path
             .store
@@ -847,7 +1141,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
 
         let request_body = GCPVertexGeminiBatchRequest {
             display_name: format!("tensorzero-batch-{batch_id}"),
-            model: format!("publishers/google/models/{}", self.model_id.clone()),
+            model: format!("publishers/google/models/{model_id}"),
             input_config: GCPVertexGeminiBatchRequestInputConfig::Jsonl {
                 gcs_source: GCPVertexGeminiGCSSource {
                     uris: input_source_url,
@@ -874,7 +1168,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
 
         let res = http_client
             .post(batch_config.batch_request_url.clone())
-            .bearer_auth(api_key.expose_secret())
+            .headers(auth_headers)
             .body(raw_request.clone())
             .header(http::header::CONTENT_TYPE, "application/json")
             .send()
@@ -959,9 +1253,10 @@ impl InferenceProvider for GCPVertexGeminiProvider {
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<PollBatchInferenceResponse, Error> {
-        let api_key = self
+        let auth_headers = self
             .credentials
-            .get_api_key(&self.audience, dynamic_api_keys)?;
+            .get_auth_headers(&self.audience, dynamic_api_keys)
+            .await?;
 
         let batch_params: GCPVertexBatchParams = serde_json::from_value(
             batch_request.batch_params.clone().into_owned(),
@@ -990,7 +1285,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
 
         let res = http_client
             .get(job_poll_url)
-            .bearer_auth(api_key.expose_secret())
+            .headers(auth_headers)
             .header(http::header::CONTENT_TYPE, "application/json")
             .send()
             .await
@@ -1121,6 +1416,7 @@ fn stream_gcp_vertex_gemini(
                             }
                         };
                         let response = GCPVertexGeminiStreamResponseWithMetadata {
+                            raw_response: message.data,
                             response: data,
                             latency: start_time.elapsed(),
 
@@ -1246,14 +1542,11 @@ impl<'a> TryFrom<&'a ContentBlock> for Option<FlattenUnknown<'a, GCPVertexGemini
                     },
                 )))
             }
-            ContentBlock::Image(ImageWithPath {
-                image,
-                storage_path: _,
-            }) => Ok(Some(FlattenUnknown::Normal(
+            ContentBlock::File(file) => Ok(Some(FlattenUnknown::Normal(
                 GCPVertexGeminiContentPart::InlineData {
                     inline_data: GCPVertexInlineData {
-                        mime_type: image.mime_type.to_string(),
-                        data: image.data()?.as_str(),
+                        mime_type: file.file.mime_type.to_string(),
+                        data: file.file.data()?.as_str(),
                     },
                 },
             ))),
@@ -1573,7 +1866,18 @@ struct GCPVertexGeminiResponseFunctionCall {
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-enum GCPVertexGeminiResponseContentPart {
+struct GCPVertexGeminiResponseContentPart {
+    #[serde(default)]
+    thought: bool,
+    #[serde(default)]
+    thought_signature: Option<String>,
+    #[serde(flatten)]
+    data: FlattenUnknown<'static, GCPVertexGeminiResponseContentPartData>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+enum GCPVertexGeminiResponseContentPartData {
     Text(String),
     // TODO (if needed): InlineData { inline_data: Blob },
     // TODO (if needed): FileData { file_data: FileData },
@@ -1589,12 +1893,44 @@ impl TryFrom<GCPVertexGeminiResponseContentPart> for ContentBlockChunk {
     /// So there is no issue with bookkeeping IDs for content blocks.
     /// We should revisit this if they begin to support it.
     fn try_from(part: GCPVertexGeminiResponseContentPart) -> Result<Self, Self::Error> {
-        match part {
-            GCPVertexGeminiResponseContentPart::Text(text) => Ok(ContentBlockChunk::Text(TextChunk {
-                text,
-                id: "0".to_string(),
-            })),
-            GCPVertexGeminiResponseContentPart::FunctionCall(function_call) => {
+        if part.thought {
+            match part.data {
+                FlattenUnknown::Normal(GCPVertexGeminiResponseContentPartData::Text(text)) => {
+                    return Ok(ContentBlockChunk::Thought(ThoughtChunk {
+                        id: "0".to_string(),
+                        text: Some(text),
+                        signature: part.thought_signature,
+                    }));
+                }
+                // Handle 'thought/thoughtSignature' with no other fields
+                FlattenUnknown::Unknown(obj) if obj.as_object().is_some_and(|m| m.is_empty()) => {
+                    return Ok(ContentBlockChunk::Thought(ThoughtChunk {
+                        id: "0".to_string(),
+                        text: None,
+                        signature: part.thought_signature,
+                    }));
+                }
+                _ => {
+                    return Err(Error::new(ErrorDetails::InferenceServer {
+                        message: "Thought part in GCP Vertex Gemini response must be a text block"
+                            .to_string(),
+                        provider_type: PROVIDER_TYPE.to_string(),
+                        raw_request: None,
+                        raw_response: Some(serde_json::to_string(&part).unwrap_or_default()),
+                    }));
+                }
+            }
+        }
+        match part.data {
+            FlattenUnknown::Normal(GCPVertexGeminiResponseContentPartData::Text(text)) => {
+                Ok(ContentBlockChunk::Text(TextChunk {
+                    text,
+                    id: "0".to_string(),
+                }))
+            }
+            FlattenUnknown::Normal(GCPVertexGeminiResponseContentPartData::FunctionCall(
+                function_call,
+            )) => {
                 let arguments = serialize_or_log(&function_call.args);
                 Ok(ContentBlockChunk::ToolCall(ToolCallChunk {
                     raw_name: function_call.name,
@@ -1602,14 +1938,22 @@ impl TryFrom<GCPVertexGeminiResponseContentPart> for ContentBlockChunk {
                     id: "0".to_string(),
                 }))
             }
-            GCPVertexGeminiResponseContentPart::ExecutableCode(_) => {
-                Err(Error::new(ErrorDetails::InferenceServer {
-                    message: "executableCode is not supported in streaming response for GCP Vertex Gemini".to_string(),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: None,
-                    raw_response: Some(serde_json::to_string(&part).unwrap_or_default()),
-                }))
-            }
+            FlattenUnknown::Normal(
+                GCPVertexGeminiResponseContentPartData::ExecutableCode(_),
+            ) => Err(Error::new(ErrorDetails::InferenceServer {
+                message:
+                    "executableCode is not supported in streaming response for GCP Vertex Gemini"
+                        .to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
+                raw_request: None,
+                raw_response: Some(serde_json::to_string(&part).unwrap_or_default()),
+            })),
+            FlattenUnknown::Unknown(part) => Err(Error::new(ErrorDetails::InferenceServer {
+                message: "Unknown content part in GCP Vertex Gemini response".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
+                raw_request: None,
+                raw_response: Some(part.to_string()),
+            })),
         }
     }
 }
@@ -1619,9 +1963,44 @@ fn convert_to_output(
     provider_name: &str,
     part: GCPVertexGeminiResponseContentPart,
 ) -> Result<ContentBlockOutput, Error> {
-    match part {
-        GCPVertexGeminiResponseContentPart::Text(text) => Ok(text.into()),
-        GCPVertexGeminiResponseContentPart::FunctionCall(function_call) => {
+    // We currently only support text thoughts - if we get anything else, turn it into
+    // an `unknown` block
+    if part.thought {
+        match part.data {
+            FlattenUnknown::Normal(GCPVertexGeminiResponseContentPartData::Text(text)) => {
+                return Ok(ContentBlockOutput::Thought(Thought {
+                    signature: part.thought_signature,
+                    text,
+                }));
+            }
+            // Handle 'thought/thoughtSignature' with no other fields
+            FlattenUnknown::Unknown(obj) if obj.as_object().is_some_and(|m| m.is_empty()) => {
+                return Ok(ContentBlockOutput::Thought(Thought {
+                    signature: part.thought_signature,
+                    text: "".to_string(),
+                }));
+            }
+            _ => {
+                return Ok(ContentBlockOutput::Unknown {
+                    data: serde_json::to_value(part).map_err(|e| {
+                        Error::new(ErrorDetails::Serialization {
+                            message: format!(
+                                "Error serializing thought part returned from GCP: {e}"
+                            ),
+                        })
+                    })?,
+                    model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
+                });
+            }
+        }
+    }
+    match part.data {
+        FlattenUnknown::Normal(GCPVertexGeminiResponseContentPartData::Text(text)) => {
+            Ok(text.into())
+        }
+        FlattenUnknown::Normal(GCPVertexGeminiResponseContentPartData::FunctionCall(
+            function_call,
+        )) => {
             Ok(ContentBlockOutput::ToolCall(ToolCall {
                 name: function_call.name,
                 arguments: serde_json::to_string(&function_call.args).map_err(|e| {
@@ -1635,7 +2014,7 @@ fn convert_to_output(
                 id: Uuid::now_v7().to_string(),
             }))
         }
-        GCPVertexGeminiResponseContentPart::ExecutableCode(data) => {
+        FlattenUnknown::Normal(GCPVertexGeminiResponseContentPartData::ExecutableCode(data)) => {
             Ok(ContentBlockOutput::Unknown {
                 data: serde_json::json!({
                     "executableCode": data,
@@ -1643,6 +2022,10 @@ fn convert_to_output(
                 model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
             })
         }
+        FlattenUnknown::Unknown(data) => Ok(ContentBlockOutput::Unknown {
+            data: data.into_owned(),
+            model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
+        }),
     }
 }
 
@@ -1827,6 +2210,7 @@ impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceR
 }
 
 struct GCPVertexGeminiStreamResponseWithMetadata {
+    raw_response: String,
     response: GCPVertexGeminiResponse,
     latency: Duration,
 }
@@ -1834,21 +2218,17 @@ struct GCPVertexGeminiStreamResponseWithMetadata {
 impl TryFrom<GCPVertexGeminiStreamResponseWithMetadata> for ProviderInferenceResponseChunk {
     type Error = Error;
     fn try_from(response: GCPVertexGeminiStreamResponseWithMetadata) -> Result<Self, Self::Error> {
-        let GCPVertexGeminiStreamResponseWithMetadata { response, latency } = response;
-
-        let raw = serde_json::to_string(&response).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!(
-                    "Error serializing streaming response from GCP Vertex Gemini: {e}"
-                ),
-            })
-        })?;
+        let GCPVertexGeminiStreamResponseWithMetadata {
+            response,
+            latency,
+            raw_response,
+        } = response;
 
         let first_candidate = response.candidates.into_iter().next().ok_or_else(|| {
             Error::new(ErrorDetails::InferenceServer {
                 message: "GCP Vertex Gemini response has no candidates".to_string(),
                 raw_request: None,
-                raw_response: Some(raw.clone()),
+                raw_response: Some(raw_response.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
@@ -1873,7 +2253,7 @@ impl TryFrom<GCPVertexGeminiStreamResponseWithMetadata> for ProviderInferenceRes
             response
                 .usage_metadata
                 .map(|usage_metadata| usage_metadata.into()),
-            raw,
+            raw_response,
             latency,
             first_candidate
                 .finish_reason
@@ -2328,8 +2708,14 @@ mod tests {
 
     #[test]
     fn test_gcp_to_t0_response() {
-        let part = GCPVertexGeminiResponseContentPart::Text("test_assistant".to_string());
-        let content = GCPVertexGeminiResponseContent { parts: vec![part] };
+        let part = GCPVertexGeminiResponseContentPartData::Text("test_assistant".to_string());
+        let content = GCPVertexGeminiResponseContent {
+            parts: vec![GCPVertexGeminiResponseContentPart {
+                thought: false,
+                thought_signature: None,
+                data: FlattenUnknown::Normal(part),
+            }],
+        };
         let candidate = GCPVertexGeminiResponseCandidate {
             content: Some(content),
             finish_reason: Some(GCPVertexGeminiFinishReason::Stop),
@@ -2406,15 +2792,28 @@ mod tests {
             Some("test_system".to_string())
         );
         assert_eq!(model_inference_response.input_messages, vec![]);
-        let text_part =
-            GCPVertexGeminiResponseContentPart::Text("Here's the weather information:".to_string());
-        let function_call_part =
-            GCPVertexGeminiResponseContentPart::FunctionCall(GCPVertexGeminiResponseFunctionCall {
+        let text_part = GCPVertexGeminiResponseContentPartData::Text(
+            "Here's the weather information:".to_string(),
+        );
+        let function_call_part = GCPVertexGeminiResponseContentPartData::FunctionCall(
+            GCPVertexGeminiResponseFunctionCall {
                 name: "get_temperature".to_string(),
                 args: json!({"location": "New York", "unit": "celsius"}),
-            });
+            },
+        );
         let content = GCPVertexGeminiResponseContent {
-            parts: vec![text_part, function_call_part],
+            parts: vec![
+                GCPVertexGeminiResponseContentPart {
+                    thought: false,
+                    thought_signature: None,
+                    data: FlattenUnknown::Normal(text_part),
+                },
+                GCPVertexGeminiResponseContentPart {
+                    thought: false,
+                    thought_signature: None,
+                    data: FlattenUnknown::Normal(function_call_part),
+                },
+            ],
         };
         let candidate = GCPVertexGeminiResponseCandidate {
             content: Some(content),
@@ -2508,27 +2907,46 @@ mod tests {
             }]
         );
 
-        let text_part1 =
-            GCPVertexGeminiResponseContentPart::Text("Here's the weather information:".to_string());
-        let function_call_part =
-            GCPVertexGeminiResponseContentPart::FunctionCall(GCPVertexGeminiResponseFunctionCall {
+        let text_part1 = GCPVertexGeminiResponseContentPartData::Text(
+            "Here's the weather information:".to_string(),
+        );
+        let function_call_part = GCPVertexGeminiResponseContentPartData::FunctionCall(
+            GCPVertexGeminiResponseFunctionCall {
                 name: "get_temperature".to_string(),
                 args: json!({"location": "New York", "unit": "celsius"}),
-            });
-        let text_part2 = GCPVertexGeminiResponseContentPart::Text(
+            },
+        );
+        let text_part2 = GCPVertexGeminiResponseContentPartData::Text(
             "And here's a restaurant recommendation:".to_string(),
         );
-        let function_call_part2 =
-            GCPVertexGeminiResponseContentPart::FunctionCall(GCPVertexGeminiResponseFunctionCall {
+        let function_call_part2 = GCPVertexGeminiResponseContentPartData::FunctionCall(
+            GCPVertexGeminiResponseFunctionCall {
                 name: "get_restaurant".to_string(),
                 args: json!({"cuisine": "Italian", "price_range": "moderate"}),
-            });
+            },
+        );
         let content = GCPVertexGeminiResponseContent {
             parts: vec![
-                text_part1,
-                function_call_part,
-                text_part2,
-                function_call_part2,
+                GCPVertexGeminiResponseContentPart {
+                    thought: false,
+                    thought_signature: None,
+                    data: FlattenUnknown::Normal(text_part1),
+                },
+                GCPVertexGeminiResponseContentPart {
+                    thought: false,
+                    thought_signature: None,
+                    data: FlattenUnknown::Normal(function_call_part),
+                },
+                GCPVertexGeminiResponseContentPart {
+                    thought: false,
+                    thought_signature: None,
+                    data: FlattenUnknown::Normal(text_part2),
+                },
+                GCPVertexGeminiResponseContentPart {
+                    thought: false,
+                    thought_signature: None,
+                    data: FlattenUnknown::Normal(function_call_part2),
+                },
             ],
         };
         let candidate = GCPVertexGeminiResponseCandidate {
@@ -2887,6 +3305,49 @@ mod tests {
         let err = result.unwrap_err().get_owned_details();
         assert!(
             matches!(err, ErrorDetails::GCPCredentials { message } if message.contains("Invalid credential_location"))
+        );
+    }
+
+    #[test]
+    fn test_shorthand_url_parse() {
+        use super::parse_shorthand_url;
+
+        let err1 = parse_shorthand_url("bad-shorthand-url", "google")
+            .unwrap_err()
+            .to_string();
+        assert_eq!(err1, "GCP shorthand url is not in the expected format (should start with `projects/<project_id>/locations/<location>'): `bad-shorthand-url`");
+
+        let missing_components = parse_shorthand_url(
+            "projects/tensorzero-public/locations/us-central1/",
+            "google",
+        )
+        .unwrap_err()
+        .to_string();
+        assert_eq!(missing_components, "GCP shorthand url does not contain a publisher or endpoint: `projects/tensorzero-public/locations/us-central1/`");
+
+        let non_google_publisher = parse_shorthand_url("projects/tensorzero-public/locations/us-central1/publishers/not-google/models/gemini-2.0-flash-001", "google").unwrap_err().to_string();
+        assert_eq!(non_google_publisher, "GCP shorthand url has publisher `not-google`, expected `google` : `projects/tensorzero-public/locations/us-central1/publishers/not-google/models/gemini-2.0-flash-001`");
+
+        let valid_model_url = parse_shorthand_url("projects/tensorzero-public/locations/us-central1/publishers/google/models/gemini-2.0-flash-001", "google").unwrap();
+        assert_eq!(
+            valid_model_url,
+            ShorthandUrl::Publisher {
+                location: "us-central1",
+                model_id: "gemini-2.0-flash-001"
+            }
+        );
+
+        let valid_endpoint_url = parse_shorthand_url(
+            "projects/tensorzero-public/locations/us-central1/endpoints/945488740422254592",
+            "google",
+        )
+        .unwrap();
+        assert_eq!(
+            valid_endpoint_url,
+            ShorthandUrl::Endpoint {
+                location: "us-central1",
+                endpoint_id: "945488740422254592"
+            }
         );
     }
 }

@@ -1,7 +1,9 @@
 [package]
 name = "provider-proxy"
 version = "0.1.0"
+rust-version.workspace = true
 edition = "2021"
+license.workspace = true
 
 [[test]]
 name = "e2e"

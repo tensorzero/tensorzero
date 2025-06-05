@@ -331,7 +331,7 @@ impl InferenceProvider for DummyProvider {
                     .iter()
                     .flat_map(|m| {
                         m.content.iter().flat_map(|block| {
-                            if let ContentBlock::Image(image) = block {
+                            if let ContentBlock::File(image) = block {
                                 Some(image.clone())
                             } else {
                                 None
@@ -346,6 +346,45 @@ impl InferenceProvider for DummyProvider {
                         }
                     })?,
                 })]
+            }
+            "require_pdf" => {
+                let files: Vec<_> = request
+                    .messages
+                    .iter()
+                    .flat_map(|m| {
+                        m.content.iter().flat_map(|block| {
+                            if let ContentBlock::File(file) = block {
+                                Some(file.clone())
+                            } else {
+                                None
+                            }
+                        })
+                    })
+                    .collect();
+                let mut found_pdf = false;
+                for file in &files {
+                    if file.file.mime_type == mime::APPLICATION_PDF {
+                        found_pdf = true;
+                    }
+                }
+                if found_pdf {
+                    vec![ContentBlockOutput::Text(Text {
+                        text: serde_json::to_string(&files).map_err(|e| {
+                            ErrorDetails::Serialization {
+                                message: format!("Failed to serialize collected files: {e:?}"),
+                            }
+                        })?,
+                    })]
+                } else {
+                    return Err(ErrorDetails::InferenceClient {
+                        message: "PDF must be provided for require_pdf model".to_string(),
+                        raw_request: Some("raw request".to_string()),
+                        raw_response: None,
+                        status_code: None,
+                        provider_type: PROVIDER_TYPE.to_string(),
+                    }
+                    .into());
+                }
             }
             "llm_judge::true" => vec![r#"{"score": true}"#.to_string().into()],
             "llm_judge::false" => vec![r#"{"score": false}"#.to_string().into()],

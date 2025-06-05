@@ -7,7 +7,7 @@ if [[ "$dir_path" == */cursor ]]; then
 fi
 
 # We already use this in CI, so no need to test it twice
-if [[ "$1" == *ui/fixture/docker-compose.yml ]]; then
+if [[ "$1" == *ui/fixtures/docker-compose.yml || "$1" == *ui/fixtures/docker-compose.e2e.yml ]]; then
   exit 0
 fi
 

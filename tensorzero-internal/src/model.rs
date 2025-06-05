@@ -16,7 +16,7 @@ use crate::cache::{
     cache_lookup, cache_lookup_streaming, start_cache_write, start_cache_write_streaming,
     CacheData, ModelProviderRequest, NonStreamingCacheData, StreamingCacheData,
 };
-use crate::config_parser::{ProviderTypesConfig, SKIP_CREDENTIAL_VALIDATION};
+use crate::config_parser::{skip_credential_validation, ProviderTypesConfig};
 use crate::endpoints::inference::InferenceClients;
 use crate::inference::providers::aws_sagemaker::AWSSagemakerProvider;
 #[cfg(any(test, feature = "e2e_tests"))]
@@ -47,9 +47,10 @@ use crate::{
             anthropic::AnthropicProvider, aws_bedrock::AWSBedrockProvider, azure::AzureProvider,
             deepseek::DeepSeekProvider, fireworks::FireworksProvider,
             gcp_vertex_anthropic::GCPVertexAnthropicProvider,
-            gcp_vertex_gemini::GCPVertexGeminiProvider, mistral::MistralProvider,
-            openai::OpenAIProvider, provider_trait::InferenceProvider, together::TogetherProvider,
-            vllm::VLLMProvider, xai::XAIProvider,
+            gcp_vertex_gemini::GCPVertexGeminiProvider, groq::GroqProvider,
+            mistral::MistralProvider, openai::OpenAIProvider, openrouter::OpenRouterProvider,
+            provider_trait::InferenceProvider, together::TogetherProvider, vllm::VLLMProvider,
+            xai::XAIProvider,
         },
         types::{ModelInferenceRequest, ModelInferenceResponse, ProviderInferenceResponse},
     },
@@ -508,9 +509,11 @@ impl ModelProvider {
             ProviderConfig::GCPVertexAnthropic(_) => "gcp_vertex_anthropic",
             ProviderConfig::GCPVertexGemini(_) => "gcp_vertex_gemini",
             ProviderConfig::GoogleAIStudioGemini(_) => "google_ai_studio_gemini",
+            ProviderConfig::Groq(_) => "groq",
             ProviderConfig::Hyperbolic(_) => "hyperbolic",
             ProviderConfig::Mistral(_) => "mistral",
             ProviderConfig::OpenAI(_) => "openai",
+            ProviderConfig::OpenRouter(_) => "openrouter",
             ProviderConfig::Together(_) => "together",
             ProviderConfig::VLLM(_) => "vllm",
             ProviderConfig::XAI(_) => "xai",
@@ -532,11 +535,13 @@ impl ModelProvider {
             ProviderConfig::Azure(provider) => Some(provider.deployment_id()),
             ProviderConfig::Fireworks(provider) => Some(provider.model_name()),
             ProviderConfig::GCPVertexAnthropic(provider) => Some(provider.model_id()),
-            ProviderConfig::GCPVertexGemini(provider) => Some(provider.model_id()),
+            ProviderConfig::GCPVertexGemini(provider) => Some(provider.model_or_endpoint_id()),
             ProviderConfig::GoogleAIStudioGemini(provider) => Some(provider.model_name()),
+            ProviderConfig::Groq(provider) => Some(provider.model_name()),
             ProviderConfig::Hyperbolic(provider) => Some(provider.model_name()),
             ProviderConfig::Mistral(provider) => Some(provider.model_name()),
             ProviderConfig::OpenAI(provider) => Some(provider.model_name()),
+            ProviderConfig::OpenRouter(provider) => Some(provider.model_name()),
             ProviderConfig::Together(provider) => Some(provider.model_name()),
             ProviderConfig::VLLM(provider) => Some(provider.model_name()),
             ProviderConfig::XAI(provider) => Some(provider.model_name()),
@@ -578,9 +583,11 @@ pub enum ProviderConfig {
     GCPVertexAnthropic(GCPVertexAnthropicProvider),
     GCPVertexGemini(GCPVertexGeminiProvider),
     GoogleAIStudioGemini(GoogleAIStudioGeminiProvider),
+    Groq(GroqProvider),
     Hyperbolic(HyperbolicProvider),
     Mistral(MistralProvider),
     OpenAI(OpenAIProvider),
+    OpenRouter(OpenRouterProvider),
     SGLang(SGLangProvider),
     TGI(TGIProvider),
     Together(TogetherProvider),
@@ -644,7 +651,8 @@ pub(super) enum UninitializedProviderConfig {
     #[strum(serialize = "gcp_vertex_gemini")]
     #[serde(rename = "gcp_vertex_gemini")]
     GCPVertexGemini {
-        model_id: String,
+        model_id: Option<String>,
+        endpoint_id: Option<String>,
         location: String,
         project_id: String,
         credential_location: Option<CredentialLocation>,
@@ -652,6 +660,12 @@ pub(super) enum UninitializedProviderConfig {
     #[strum(serialize = "google_ai_studio_gemini")]
     #[serde(rename = "google_ai_studio_gemini")]
     GoogleAIStudioGemini {
+        model_name: String,
+        api_key_location: Option<CredentialLocation>,
+    },
+    #[strum(serialize = "groq")]
+    #[serde(rename = "groq")]
+    Groq {
         model_name: String,
         api_key_location: Option<CredentialLocation>,
     },
@@ -672,6 +686,11 @@ pub(super) enum UninitializedProviderConfig {
         api_key_location: Option<CredentialLocation>,
     },
     OpenAI {
+        model_name: String,
+        api_base: Option<Url>,
+        api_key_location: Option<CredentialLocation>,
+    },
+    OpenRouter {
         model_name: String,
         api_base: Option<Url>,
         api_key_location: Option<CredentialLocation>,
@@ -799,24 +818,36 @@ impl UninitializedProviderConfig {
                 location,
                 project_id,
                 credential_location: api_key_location,
-            } => ProviderConfig::GCPVertexAnthropic(GCPVertexAnthropicProvider::new(
-                model_id,
-                location,
-                project_id,
-                api_key_location,
-            )?),
+            } => ProviderConfig::GCPVertexAnthropic(tokio::task::block_in_place(move || {
+                tokio::runtime::Handle::current().block_on(async {
+                    GCPVertexAnthropicProvider::new(
+                        model_id,
+                        location,
+                        project_id,
+                        api_key_location,
+                    )
+                    .await
+                })
+            })?),
             UninitializedProviderConfig::GCPVertexGemini {
                 model_id,
+                endpoint_id,
                 location,
                 project_id,
                 credential_location: api_key_location,
-            } => ProviderConfig::GCPVertexGemini(GCPVertexGeminiProvider::new(
-                model_id,
-                location,
-                project_id,
-                api_key_location,
-                provider_types,
-            )?),
+            } => ProviderConfig::GCPVertexGemini(tokio::task::block_in_place(move || {
+                tokio::runtime::Handle::current().block_on(async {
+                    GCPVertexGeminiProvider::new(
+                        model_id,
+                        endpoint_id,
+                        location,
+                        project_id,
+                        api_key_location,
+                        provider_types,
+                    )
+                    .await
+                })
+            })?),
             UninitializedProviderConfig::GoogleAIStudioGemini {
                 model_name,
                 api_key_location,
@@ -824,6 +855,10 @@ impl UninitializedProviderConfig {
                 model_name,
                 api_key_location,
             )?),
+            UninitializedProviderConfig::Groq {
+                model_name,
+                api_key_location,
+            } => ProviderConfig::Groq(GroqProvider::new(model_name, api_key_location)?),
             UninitializedProviderConfig::Hyperbolic {
                 model_name,
                 api_key_location,
@@ -839,6 +874,15 @@ impl UninitializedProviderConfig {
             } => {
                 ProviderConfig::OpenAI(OpenAIProvider::new(model_name, api_base, api_key_location)?)
             }
+            UninitializedProviderConfig::OpenRouter {
+                model_name,
+                api_base,
+                api_key_location,
+            } => ProviderConfig::OpenRouter(OpenRouterProvider::new(
+                model_name,
+                api_base,
+                api_key_location,
+            )?),
             UninitializedProviderConfig::Together {
                 model_name,
                 api_key_location,
@@ -915,6 +959,7 @@ impl ModelProvider {
             ProviderConfig::GCPVertexGemini(provider) => {
                 provider.infer(request, client, api_keys, self).await
             }
+            ProviderConfig::Groq(provider) => provider.infer(request, client, api_keys, self).await,
             ProviderConfig::GoogleAIStudioGemini(provider) => {
                 provider.infer(request, client, api_keys, self).await
             }
@@ -925,6 +970,9 @@ impl ModelProvider {
                 provider.infer(request, client, api_keys, self).await
             }
             ProviderConfig::OpenAI(provider) => {
+                provider.infer(request, client, api_keys, self).await
+            }
+            ProviderConfig::OpenRouter(provider) => {
                 provider.infer(request, client, api_keys, self).await
             }
             ProviderConfig::Together(provider) => {
@@ -988,6 +1036,9 @@ impl ModelProvider {
             ProviderConfig::GoogleAIStudioGemini(provider) => {
                 provider.infer_stream(request, client, api_keys, self).await
             }
+            ProviderConfig::Groq(provider) => {
+                provider.infer_stream(request, client, api_keys, self).await
+            }
             ProviderConfig::Hyperbolic(provider) => {
                 provider.infer_stream(request, client, api_keys, self).await
             }
@@ -995,6 +1046,9 @@ impl ModelProvider {
                 provider.infer_stream(request, client, api_keys, self).await
             }
             ProviderConfig::OpenAI(provider) => {
+                provider.infer_stream(request, client, api_keys, self).await
+            }
+            ProviderConfig::OpenRouter(provider) => {
                 provider.infer_stream(request, client, api_keys, self).await
             }
             ProviderConfig::Together(provider) => {
@@ -1075,6 +1129,11 @@ impl ModelProvider {
                     .start_batch_inference(requests, client, api_keys)
                     .await
             }
+            ProviderConfig::Groq(provider) => {
+                provider
+                    .start_batch_inference(requests, client, api_keys)
+                    .await
+            }
             ProviderConfig::Hyperbolic(provider) => {
                 provider
                     .start_batch_inference(requests, client, api_keys)
@@ -1086,6 +1145,11 @@ impl ModelProvider {
                     .await
             }
             ProviderConfig::OpenAI(provider) => {
+                provider
+                    .start_batch_inference(requests, client, api_keys)
+                    .await
+            }
+            ProviderConfig::OpenRouter(provider) => {
                 provider
                     .start_batch_inference(requests, client, api_keys)
                     .await
@@ -1176,6 +1240,11 @@ impl ModelProvider {
                     .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
                     .await
             }
+            ProviderConfig::Groq(provider) => {
+                provider
+                    .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
+                    .await
+            }
             ProviderConfig::Hyperbolic(provider) => {
                 provider
                     .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
@@ -1187,6 +1256,11 @@ impl ModelProvider {
                     .await
             }
             ProviderConfig::OpenAI(provider) => {
+                provider
+                    .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
+                    .await
+            }
+            ProviderConfig::OpenRouter(provider) => {
                 provider
                     .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
                     .await
@@ -1241,6 +1315,8 @@ pub enum CredentialLocation {
     Dynamic(String),
     /// Direct path to a credential file
     Path(String),
+    /// Use a provider-specific SDK to determine credentials
+    Sdk,
     None,
 }
 
@@ -1258,6 +1334,8 @@ impl<'de> Deserialize<'de> for CredentialLocation {
             Ok(CredentialLocation::Dynamic(inner.to_string()))
         } else if let Some(inner) = s.strip_prefix("path::") {
             Ok(CredentialLocation::Path(inner.to_string()))
+        } else if s == "sdk" {
+            Ok(CredentialLocation::Sdk)
         } else if s == "none" {
             Ok(CredentialLocation::None)
         } else {
@@ -1273,6 +1351,7 @@ pub enum Credential {
     Static(SecretString),
     FileContents(SecretString),
     Dynamic(String),
+    Sdk,
     None,
     Missing,
 }
@@ -1347,7 +1426,7 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
             CredentialLocation::Env(key_name) => match env::var(key_name) {
                 Ok(value) => Ok(Credential::Static(SecretString::from(value))),
                 Err(_) => {
-                    if SKIP_CREDENTIAL_VALIDATION.is_set() {
+                    if skip_credential_validation() {
                         #[cfg(any(test, feature = "e2e_tests"))]
                         {
                             tracing::warn!(
@@ -1368,7 +1447,7 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
                 let path = match env::var(&env_key) {
                     Ok(path) => path,
                     Err(_) => {
-                        if SKIP_CREDENTIAL_VALIDATION.is_set() {
+                        if skip_credential_validation() {
                             #[cfg(any(test, feature = "e2e_tests"))]
                             {
                                 tracing::warn!(
@@ -1391,7 +1470,7 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
                 match fs::read_to_string(path) {
                     Ok(contents) => Ok(Credential::FileContents(SecretString::from(contents))),
                     Err(e) => {
-                        if SKIP_CREDENTIAL_VALIDATION.is_set() {
+                        if skip_credential_validation() {
                             #[cfg(any(test, feature = "e2e_tests"))]
                             {
                                 tracing::warn!(
@@ -1413,7 +1492,7 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
             CredentialLocation::Path(path) => match fs::read_to_string(path) {
                 Ok(contents) => Ok(Credential::FileContents(SecretString::from(contents))),
                 Err(e) => {
-                    if SKIP_CREDENTIAL_VALIDATION.is_set() {
+                    if skip_credential_validation() {
                         #[cfg(any(test, feature = "e2e_tests"))]
                         {
                             tracing::warn!(
@@ -1432,6 +1511,7 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
                 }
             },
             CredentialLocation::Dynamic(key_name) => Ok(Credential::Dynamic(key_name.clone())),
+            CredentialLocation::Sdk => Ok(Credential::Sdk),
             CredentialLocation::None => Ok(Credential::None),
         }
     }
@@ -1442,9 +1522,13 @@ const SHORTHAND_MODEL_PREFIXES: &[&str] = &[
     "deepseek::",
     "fireworks::",
     "google_ai_studio_gemini::",
+    "gcp_vertex_gemini::",
+    "gcp_vertex_anthropic::",
     "hyperbolic::",
+    "groq::",
     "mistral::",
     "openai::",
+    "openrouter::",
     "together::",
     "xai::",
     "dummy::",
@@ -1455,7 +1539,7 @@ pub type ModelTable = BaseModelTable<ModelConfig>;
 impl ShorthandModelConfig for ModelConfig {
     const SHORTHAND_MODEL_PREFIXES: &[&str] = SHORTHAND_MODEL_PREFIXES;
     const MODEL_TYPE: &str = "Model";
-    fn from_shorthand(provider_type: &str, model_name: &str) -> Result<Self, Error> {
+    async fn from_shorthand(provider_type: &str, model_name: &str) -> Result<Self, Error> {
         let model_name = model_name.to_string();
         let provider_config = match provider_type {
             "anthropic" => ProviderConfig::Anthropic(AnthropicProvider::new(model_name, None)?),
@@ -1467,6 +1551,12 @@ impl ShorthandModelConfig for ModelConfig {
             )?),
             "google_ai_studio_gemini" => ProviderConfig::GoogleAIStudioGemini(
                 GoogleAIStudioGeminiProvider::new(model_name, None)?,
+            ),
+            "gcp_vertex_gemini" => ProviderConfig::GCPVertexGemini(
+                GCPVertexGeminiProvider::new_shorthand(model_name).await?,
+            ),
+            "gcp_vertex_anthropic" => ProviderConfig::GCPVertexAnthropic(
+                GCPVertexAnthropicProvider::new_shorthand(model_name).await?,
             ),
             "hyperbolic" => ProviderConfig::Hyperbolic(HyperbolicProvider::new(model_name, None)?),
             "mistral" => ProviderConfig::Mistral(MistralProvider::new(model_name, None)?),
@@ -1555,6 +1645,7 @@ mod tests {
     use std::{borrow::Cow, cell::Cell};
 
     use crate::cache::CacheEnabledMode;
+    use crate::config_parser::SKIP_CREDENTIAL_VALIDATION;
     use crate::tool::{ToolCallConfig, ToolChoice};
     use crate::{
         cache::CacheOptions,
@@ -2249,8 +2340,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_validate_or_create_model_config() {
+    #[tokio::test]
+    async fn test_validate_or_create_model_config() {
         let model_table = ModelTable::default();
         // Test that we can get or create a model config
         model_table.validate("dummy::gpt-4o").unwrap();
@@ -2258,6 +2349,7 @@ mod tests {
         assert_eq!(model_table.static_model_len(), 0);
         let model_config = model_table
             .get("dummy::gpt-4o")
+            .await
             .unwrap()
             .expect("Missing dummy model");
         assert_eq!(model_config.routing, vec!["dummy".into()]);
@@ -2278,7 +2370,7 @@ mod tests {
             .into()
         );
         // Test that it works with an initialized model
-        let anthropic_provider_config = SKIP_CREDENTIAL_VALIDATION.set(&(), || {
+        let anthropic_provider_config = SKIP_CREDENTIAL_VALIDATION.sync_scope((), || {
             ProviderConfig::Anthropic(AnthropicProvider::new("claude".to_string(), None).unwrap())
         });
         let anthropic_model_config = ModelConfig {

@@ -25,7 +25,7 @@ use tensorzero_internal::{
             DUMMY_STREAMING_TOOL_RESPONSE, DUMMY_TOOL_RESPONSE,
         },
         types::{
-            ContentBlock, ContentBlockOutput, Image, ImageKind, RequestMessage, ResolvedInput,
+            ContentBlock, ContentBlockOutput, File, RequestMessage, ResolvedInput,
             ResolvedInputMessageContent, Role, Text, TextKind,
         },
     },
@@ -1709,48 +1709,6 @@ async fn e2e_test_inference_original_response_non_stream() {
 }
 
 #[tokio::test]
-async fn e2e_test_inference_original_response_stream() {
-    let payload = json!({
-        "function_name": "basic_test",
-        "episode_id": Uuid::now_v7(),
-        "input": {
-            "system": {"assistant_name": "AskJeeves"},
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "Hello, world!"
-                }
-            ]
-        },
-        "stream": true,
-        "include_original_response": true,
-    });
-
-    let response = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .send()
-        .await
-        .unwrap();
-
-    let status = response.status();
-    let response_json = response.json::<Value>().await.unwrap();
-    assert_eq!(
-        status,
-        StatusCode::BAD_REQUEST,
-        "Expected bad request: {response_json}"
-    );
-
-    assert_eq!(
-        response_json,
-        serde_json::json!({
-            "error": "Cannot set both `include_original_response` and `stream` to `true`",
-        })
-    );
-    // Don't both checking ClickHouse, as we do that in lots of other tests.
-}
-
-#[tokio::test]
 async fn test_gateway_template_no_fs_access() {
     // We use an embedded client so that we can control the number of
     // requests to the flaky judge.
@@ -2851,8 +2809,8 @@ async fn test_image_inference_without_object_store() {
                         ClientInputMessageContent::Text(TextKind::Text {
                             text: "Describe the contents of the image".to_string(),
                         }),
-                        ClientInputMessageContent::Image(Image::Base64 {
-                            mime_type: ImageKind::Png,
+                        ClientInputMessageContent::File(File::Base64 {
+                            mime_type: mime::IMAGE_PNG,
                             data: BASE64_STANDARD.encode(FERRIS_PNG),
                         }),
                     ],

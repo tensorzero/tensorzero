@@ -4,7 +4,7 @@ use anyhow::{bail, Result};
 use serde_json::{json, Value};
 use tensorzero::{
     ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
-    DynamicToolParams, Image, InferenceOutput, InferenceParams, InferenceResponse, Role,
+    DynamicToolParams, File, InferenceOutput, InferenceParams, InferenceResponse, Role,
 };
 use tensorzero_internal::cache::CacheEnabledMode;
 use tensorzero_internal::endpoints::datasets::Datapoint;
@@ -251,7 +251,7 @@ fn prepare_serialized_input(input: &ClientInput) -> Result<String> {
     for message in &input.messages {
         for content in &message.content {
             match content {
-                ClientInputMessageContent::Image(..) => {
+                ClientInputMessageContent::File(..) => {
                     bail!("Image content not supported for LLM judge evaluations with `serialized` input format. If you want image evaluations, try the `messages` input format.")
                 }
                 ClientInputMessageContent::Unknown { .. } => {
@@ -310,12 +310,12 @@ fn serialize_content_for_messages_input(
     let mut serialized_content = Vec::new();
     for content_block in content {
         match content_block {
-            ClientInputMessageContent::Image(image) => {
+            ClientInputMessageContent::File(image) => {
                 // The image was already converted from a ResolvedImage to a Base64Image before this.
-                if let Image::Url { .. } = image {
+                if let File::Url { .. } = image {
                     bail!("URL images not supported for LLM judge evaluations. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.")
                 }
-                serialized_content.push(ClientInputMessageContent::Image(image.clone()));
+                serialized_content.push(ClientInputMessageContent::File(image.clone()));
             }
             ClientInputMessageContent::Unknown { .. } => {
                 bail!("Unknown content not supported for LLM judge evaluations")
@@ -415,7 +415,7 @@ mod tests {
     use super::*;
 
     use serde_json::json;
-    use tensorzero::Image;
+    use tensorzero::File;
     use tensorzero::Role;
     use tensorzero_internal::endpoints::datasets::ChatInferenceDatapoint;
     use tensorzero_internal::endpoints::datasets::JsonInferenceDatapoint;
@@ -478,8 +478,9 @@ mod tests {
             system: None,
             messages: vec![ClientInputMessage {
                 role: Role::User,
-                content: vec![ClientInputMessageContent::Image(Image::Url {
+                content: vec![ClientInputMessageContent::File(File::Url {
                     url: Url::parse("https://example.com/image.png").unwrap(),
+                    mime_type: None,
                 })],
             }],
         };

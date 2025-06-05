@@ -70,10 +70,9 @@ impl Migration for Migration0011<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        "\
-            -- Drop the table\n\
-            DROP TABLE IF EXISTS ModelInferenceCache;\n\
-            -- Drop the `cached` column from ModelInference
+        "/* Drop the table */\
+            DROP TABLE IF EXISTS ModelInferenceCache;
+            /* Drop the `cached` column from ModelInference */\
             ALTER TABLE ModelInference DROP COLUMN cached;
             "
         .to_string()

@@ -3,7 +3,10 @@ use serde_json::Value;
 
 use crate::tool::{ToolCall, ToolResult};
 
-use super::{storage::StoragePath, Base64Image, Role, Thought};
+use super::{storage::StoragePath, Base64File, Role, Thought};
+
+#[cfg(feature = "pyo3")]
+use pyo3::prelude::*;
 
 /// Like `Input`, but with all network resources resolved.
 /// Currently, this is just used to fetch image URLs in the image input,
@@ -37,7 +40,8 @@ pub enum ResolvedInputMessageContent {
         value: String,
     },
     Thought(Thought),
-    Image(ImageWithPath),
+    #[serde(alias = "image")]
+    File(Box<FileWithPath>),
     Unknown {
         data: Value,
         model_provider_name: Option<String>,
@@ -46,7 +50,9 @@ pub enum ResolvedInputMessageContent {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
-pub struct ImageWithPath {
-    pub image: Base64Image,
+#[cfg_attr(feature = "pyo3", pyclass(get_all))]
+pub struct FileWithPath {
+    #[serde(alias = "image")]
+    pub file: Base64File,
     pub storage_path: StoragePath,
 }

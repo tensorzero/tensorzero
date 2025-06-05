@@ -7,7 +7,9 @@ use aws_sdk_bedrockruntime::error::SdkError;
 
 use aws_sdk_s3::operation::get_object::GetObjectError;
 
+use axum::body::Body;
 use axum::extract::{Query, State};
+use axum::response::{IntoResponse, Response};
 use axum::{routing::get, Router};
 use base64::prelude::*;
 use futures::StreamExt;
@@ -32,10 +34,9 @@ use tensorzero_internal::inference::types::TextKind;
 use tensorzero_internal::{
     cache::CacheEnabledMode,
     inference::types::{
-        resolved_input::ImageWithPath,
+        resolved_input::FileWithPath,
         storage::{StorageKind, StoragePath},
-        Base64Image, ContentBlock, ContentBlockChatOutput, Image, ImageKind, RequestMessage, Role,
-        Text,
+        Base64File, ContentBlock, ContentBlockChatOutput, File, RequestMessage, Role, Text,
     },
     tool::{ToolCall, ToolResult},
 };
@@ -87,6 +88,7 @@ pub struct E2ETestProviders {
     pub json_mode_off_inference: Vec<E2ETestProvider>,
 
     pub image_inference: Vec<E2ETestProvider>,
+    pub pdf_inference: Vec<E2ETestProvider>,
 
     pub shorthand_inference: Vec<E2ETestProvider>,
 }
@@ -203,6 +205,8 @@ macro_rules! generate_provider_tests {
         use $crate::providers::common::test_streaming_invalid_request_with_provider;
         use $crate::providers::common::test_json_mode_off_inference_request_with_provider;
         use $crate::providers::common::test_multiple_text_blocks_in_message_with_provider;
+        use $crate::providers::common::test_streaming_include_original_response_with_provider;
+        use $crate::providers::common::test_pdf_inference_with_provider_filesystem;
 
         #[tokio::test]
         async fn test_simple_inference_request() {
@@ -245,6 +249,14 @@ macro_rules! generate_provider_tests {
             let providers = $func().await.shorthand_inference;
             for provider in providers {
                 test_simple_inference_request_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_streaming_include_original_response() {
+            let providers = $func().await.simple_inference;
+            for provider in providers {
+                test_streaming_include_original_response_with_provider(provider).await;
             }
         }
 
@@ -486,8 +498,16 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[tokio::test(flavor = "multi_thread")]
+        async fn test_pdf_inference_store_filesystem() {
+            let providers = $func().await.pdf_inference;
+            for provider in providers {
+                test_pdf_inference_with_provider_filesystem(provider).await;
+            }
+        }
 
-        #[tokio::test]
+
+        #[tokio::test(flavor = "multi_thread")]
         async fn test_image_inference_store_filesystem() {
             let providers = $func().await.image_inference;
             for provider in providers {
@@ -496,7 +516,7 @@ macro_rules! generate_provider_tests {
         }
 
 
-        #[tokio::test]
+        #[tokio::test(flavor = "multi_thread")]
         async fn test_image_url_inference_store_filesystem() {
             let providers = $func().await.image_inference;
             for provider in providers {
@@ -505,7 +525,7 @@ macro_rules! generate_provider_tests {
         }
 
 
-        #[tokio::test]
+        #[tokio::test(flavor = "multi_thread")]
         async fn test_image_inference_store_amazon_s3() {
             let providers = $func().await.image_inference;
             for provider in providers {
@@ -577,7 +597,25 @@ macro_rules! generate_provider_tests {
     };
 }
 
+pub const PDF_FUNCTION_CONFIG: &str = r#"
+[functions.pdf_test]
+type = "chat"
+
+[functions.pdf_test.variants.openai]
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"
+
+[functions.pdf_test.variants.gcp_vertex_gemini]
+type = "chat_completion"
+model = "gcp_vertex_gemini::projects/tensorzero-public/locations/us-central1/publishers/google/models/gemini-2.0-flash-lite"
+
+[functions.pdf_test.variants.anthropic]
+type = "chat_completion"
+model = "anthropic::claude-3-5-sonnet-20241022"
+"#;
+
 pub static FERRIS_PNG: &[u8] = include_bytes!("./ferris.png");
+pub static DEEPSEEK_PAPER_PDF: &[u8] = include_bytes!("./deepseek_paper.pdf");
 
 pub const IMAGE_FUNCTION_CONFIG: &str = r#"
 [functions.image_test]
@@ -645,18 +683,22 @@ pub async fn test_image_url_inference_with_provider_filesystem(provider: E2ETest
 
     // Check that image was stored in filesystem
     let result = std::fs::read(temp_dir.path().join(
-        "observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png",
+        "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png",
     ))
     .unwrap();
     assert_eq!(result, FERRIS_PNG);
 }
 
-async fn check_object_fetch(data: AppStateData, storage_path: &StoragePath) {
-    check_object_fetch_via_embedded(data.clone(), storage_path).await;
-    check_object_fetch_via_gateway(storage_path).await;
+async fn check_object_fetch(data: AppStateData, storage_path: &StoragePath, expected_data: &[u8]) {
+    check_object_fetch_via_embedded(data.clone(), storage_path, expected_data).await;
+    check_object_fetch_via_gateway(storage_path, expected_data).await;
 }
 
-async fn check_object_fetch_via_embedded(data: AppStateData, storage_path: &StoragePath) {
+async fn check_object_fetch_via_embedded(
+    data: AppStateData,
+    storage_path: &StoragePath,
+    expected_data: &[u8],
+) {
     let res = get_object_handler(
         State(data),
         Query(PathParams {
@@ -668,13 +710,13 @@ async fn check_object_fetch_via_embedded(data: AppStateData, storage_path: &Stor
     assert_eq!(
         res.0,
         ObjectResponse {
-            data: BASE64_STANDARD.encode(FERRIS_PNG),
+            data: BASE64_STANDARD.encode(expected_data),
             reused_object_store: true,
         }
     );
 }
 
-async fn check_object_fetch_via_gateway(storage_path: &StoragePath) {
+async fn check_object_fetch_via_gateway(storage_path: &StoragePath, expected_data: &[u8]) {
     // Try using the running HTTP gateway (which is *not* configured with an object store)
     // to fetch the `StoragePath`
     let client = reqwest::Client::new();
@@ -691,10 +733,53 @@ async fn check_object_fetch_via_gateway(storage_path: &StoragePath) {
     assert_eq!(
         response_json,
         serde_json::json!({
-            "data": BASE64_STANDARD.encode(FERRIS_PNG),
+            "data": BASE64_STANDARD.encode(expected_data),
             "reused_object_store": false,
         })
     );
+}
+
+/// We already test all of our object store providers with image inputs,
+/// so there's no need to re-test them with PDF inputs.
+/// All of our PDF-capable providers are tested against the filesystem object store.
+pub async fn test_pdf_inference_with_provider_filesystem(provider: E2ETestProvider) {
+    let temp_dir = tempfile::tempdir().unwrap();
+    println!("Temporary pdf dir: {}", temp_dir.path().to_string_lossy());
+    let (client, storage_path) = test_base64_pdf_inference_with_provider_and_store(
+        provider,
+        &StorageKind::Filesystem {
+            path: temp_dir.path().to_string_lossy().to_string(),
+        },
+        &format!(
+            r#"
+        [object_storage]
+        type = "filesystem"
+        path = "{}"
+
+        {PDF_FUNCTION_CONFIG}
+        "#,
+            temp_dir.path().to_string_lossy()
+        ),
+        "",
+    )
+    .await;
+
+    // Check that PDF was stored in filesystem
+    let result = std::fs::read(temp_dir.path().join(
+        "observability/files/3e127d9a726f6be0fd81d73ccea97d96ec99419f59650e01d49183cd3be999ef.pdf",
+    ))
+    .unwrap();
+    // Don't use assert_eq! because we don't want to print the entire PDF if the check fails
+    assert!(
+        result == DEEPSEEK_PAPER_PDF,
+        "PDF in object store does not match expect pdf"
+    );
+    check_object_fetch(
+        client.get_app_state_data().unwrap().clone(),
+        &storage_path,
+        DEEPSEEK_PAPER_PDF,
+    )
+    .await;
 }
 
 pub async fn test_image_inference_with_provider_filesystem(provider: E2ETestProvider) {
@@ -721,11 +806,16 @@ pub async fn test_image_inference_with_provider_filesystem(provider: E2ETestProv
 
     // Check that image was stored in filesystem
     let result = std::fs::read(temp_dir.path().join(
-        "observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png",
+        "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png",
     ))
     .unwrap();
     assert_eq!(result, FERRIS_PNG);
-    check_object_fetch(client.get_app_state_data().unwrap().clone(), &storage_path).await;
+    check_object_fetch(
+        client.get_app_state_data().unwrap().clone(),
+        &storage_path,
+        FERRIS_PNG,
+    )
+    .await;
 }
 
 pub async fn test_image_inference_with_provider_amazon_s3(provider: E2ETestProvider) {
@@ -775,6 +865,7 @@ pub async fn test_image_inference_with_provider_amazon_s3(provider: E2ETestProvi
     check_object_fetch(
         tensorzero_client.get_app_state_data().unwrap().clone(),
         &storage_path,
+        FERRIS_PNG,
     )
     .await;
 
@@ -796,7 +887,7 @@ pub async fn test_image_inference_with_provider_s3_compatible(
     prefix: &str,
 ) -> (tensorzero::Client, String, StoragePath) {
     let expected_key =
-        format!("{prefix}observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png");
+        format!("{prefix}observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png");
 
     // Check that object is deleted
     let err = client
@@ -841,7 +932,14 @@ async fn make_temp_image_server() -> (SocketAddr, tokio::sync::oneshot::Sender<(
         .unwrap_or_else(|e| panic!("Failed to bind to {addr}: {e}"));
     let real_addr = listener.local_addr().unwrap();
 
-    let app = Router::new().route("/ferris.png", get(|| async { FERRIS_PNG.to_vec() }));
+    async fn get_ferris_png() -> impl IntoResponse {
+        Response::builder()
+            .header(http::header::CONTENT_TYPE, "image/png")
+            .body(Body::from(FERRIS_PNG.to_vec()))
+            .unwrap()
+    }
+
+    let app = Router::new().route("/ferris.png", get(get_ferris_png));
 
     let (send, recv) = tokio::sync::oneshot::channel::<()>();
     let shutdown_fut = async move {
@@ -883,8 +981,9 @@ pub async fn test_url_image_inference_with_provider_and_store(
                             ClientInputMessageContent::Text(TextKind::Text {
                                 text: "Describe the contents of the image".to_string(),
                             }),
-                            ClientInputMessageContent::Image(Image::Url {
+                            ClientInputMessageContent::File(File::Url {
                                 url: image_url.clone(),
+                                mime_type: None,
                             }),
                         ],
                     }],
@@ -916,6 +1015,68 @@ pub async fn test_url_image_inference_with_provider_and_store(
     }
 }
 
+pub async fn test_base64_pdf_inference_with_provider_and_store(
+    provider: E2ETestProvider,
+    kind: &StorageKind,
+    config_toml: &str,
+    prefix: &str,
+) -> (tensorzero::Client, StoragePath) {
+    let episode_id = Uuid::now_v7();
+
+    let pdf_data = BASE64_STANDARD.encode(DEEPSEEK_PAPER_PDF);
+
+    let client = make_embedded_gateway_with_config(config_toml).await;
+    let mut storage_path = None;
+
+    for should_be_cached in [false, true] {
+        let response = client
+            .inference(ClientInferenceParams {
+                function_name: Some("pdf_test".to_string()),
+                variant_name: Some(provider.variant_name.clone()),
+                episode_id: Some(episode_id),
+                input: ClientInput {
+                    system: None,
+                    messages: vec![ClientInputMessage {
+                        role: Role::User,
+                        content: vec![
+                            ClientInputMessageContent::Text(TextKind::Text {
+                                text: "Describe the contents of the PDF".to_string(),
+                            }),
+                            ClientInputMessageContent::File(File::Base64 {
+                                mime_type: mime::APPLICATION_PDF,
+                                data: pdf_data.clone(),
+                            }),
+                        ],
+                    }],
+                },
+                cache_options: CacheParamsOptions {
+                    enabled: CacheEnabledMode::On,
+                    max_age_s: Some(10),
+                },
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+
+        let InferenceOutput::NonStreaming(response) = response else {
+            panic!("Expected non-streaming inference response");
+        };
+
+        let latest_storage_path = check_base64_pdf_response(
+            response,
+            Some(episode_id),
+            &provider,
+            should_be_cached,
+            kind,
+            prefix,
+        )
+        .await;
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        storage_path = Some(latest_storage_path);
+    }
+    (client, storage_path.unwrap())
+}
+
 pub async fn test_base64_image_inference_with_provider_and_store(
     provider: E2ETestProvider,
     kind: &StorageKind,
@@ -943,8 +1104,8 @@ pub async fn test_base64_image_inference_with_provider_and_store(
                             ClientInputMessageContent::Text(TextKind::Text {
                                 text: "Describe the contents of the image".to_string(),
                             }),
-                            ClientInputMessageContent::Image(Image::Base64 {
-                                mime_type: ImageKind::Png,
+                            ClientInputMessageContent::File(File::Base64 {
+                                mime_type: mime::IMAGE_PNG,
                                 data: image_data.clone(),
                             }),
                         ],
@@ -1439,6 +1600,13 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
             // check that an error occurs
             assert!(!res["error"].as_str().unwrap().is_empty());
         }
+        "groq" => {
+            assert!(
+                res["error"].as_str().unwrap().contains("400 Bad Request")
+                    || res["error"].as_str().unwrap().contains("Invalid API Key"),
+                "Unexpected error: {res}"
+            );
+        }
         "hyperbolic" => {
             assert!(
                 res["error"]
@@ -1452,6 +1620,17 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
         "mistral" => {
             assert!(
                 res["error"].as_str().unwrap().contains("Bearer token"),
+                "Unexpected error: {res}"
+            );
+        }
+        "openrouter" => {
+            assert!(
+                res["error"].as_str().unwrap().contains("400 Bad Request")
+                    || res["error"].as_str().unwrap().contains("Invalid API Key")
+                    || res["error"]
+                        .as_str()
+                        .unwrap()
+                        .contains("No auth credentials found"),
                 "Unexpected error: {res}"
             );
         }
@@ -1567,6 +1746,162 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
     check_simple_inference_response(response_json, Some(episode_id), &provider, false, true).await;
 }
 
+pub async fn check_base64_pdf_response(
+    response: InferenceResponse,
+    episode_id: Option<Uuid>,
+    provider: &E2ETestProvider,
+    should_be_cached: bool,
+    kind: &StorageKind,
+    prefix: &str,
+) -> StoragePath {
+    let inference_id = response.inference_id();
+
+    let episode_id_response = response.episode_id();
+    if let Some(episode_id) = episode_id {
+        assert_eq!(episode_id_response, episode_id);
+    }
+
+    let InferenceResponse::Chat(response) = response else {
+        panic!("Expected chat inference response");
+    };
+
+    let content = response.content;
+    assert_eq!(content.len(), 1);
+    let content_block = content.first().unwrap();
+    let ContentBlockChatOutput::Text(text) = content_block else {
+        panic!("Expected text content block: {content_block:?}");
+    };
+    let content = &text.text;
+    assert!(
+        content.to_lowercase().contains("deepseek"),
+        "Content should contain 'deepseek': {content}"
+    );
+
+    let usage = response.usage;
+    let input_tokens = usage.input_tokens;
+    let output_tokens = usage.output_tokens;
+    if should_be_cached {
+        assert_eq!(input_tokens, 0);
+        assert_eq!(output_tokens, 0);
+    } else {
+        assert!(input_tokens > 0);
+        assert!(output_tokens > 0);
+    }
+
+    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Check if ClickHouse is ok - ChatInference Table
+    let clickhouse = get_clickhouse().await;
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    println!("ClickHouse - ChatInference: {result:#?}");
+
+    let id = result.get("id").unwrap().as_str().unwrap();
+    let id = Uuid::parse_str(id).unwrap();
+    assert_eq!(id, inference_id);
+
+    let function_name = result.get("function_name").unwrap().as_str().unwrap();
+    assert_eq!(function_name, "pdf_test");
+
+    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
+    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
+    if let Some(episode_id) = episode_id {
+        assert_eq!(retrieved_episode_id, episode_id);
+    }
+
+    let input: Value =
+        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+
+    let kind_json = serde_json::to_value(kind).unwrap();
+
+    let correct_input = json!({
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "value": "Describe the contents of the PDF"},
+                    {
+                        "type": "file",
+                        "file": {
+                            "url": null,
+                            "mime_type": "application/pdf",
+                        },
+                        "storage_path": {
+                            "kind": kind_json,
+                            "path": format!("{prefix}observability/files/3e127d9a726f6be0fd81d73ccea97d96ec99419f59650e01d49183cd3be999ef.pdf"),
+                        },
+                    }
+                ]
+            }
+        ]
+    });
+    assert_eq!(input, correct_input);
+
+    // Check the ModelInference Table
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    println!("ClickHouse - ModelInference: {result:#?}");
+
+    let model_inference_id = result.get("id").unwrap().as_str().unwrap();
+    assert!(Uuid::parse_str(model_inference_id).is_ok());
+
+    let expected_storage_path = StoragePath {
+        kind: kind.clone(),
+        path: Path::parse(format!("{prefix}observability/files/3e127d9a726f6be0fd81d73ccea97d96ec99419f59650e01d49183cd3be999ef.pdf")).unwrap(),
+    };
+
+    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
+    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    assert_eq!(
+        input_messages,
+        vec![RequestMessage {
+            role: Role::User,
+            content: vec![
+                ContentBlock::Text(Text {
+                    text: "Describe the contents of the PDF".to_string(),
+                }),
+                ContentBlock::File(Box::new(FileWithPath {
+                    file: Base64File {
+                        url: None,
+                        data: None,
+                        mime_type: mime::APPLICATION_PDF,
+                    },
+                    storage_path: expected_storage_path.clone(),
+                }))
+            ]
+        },]
+    );
+
+    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
+    assert_eq!(inference_id_result, inference_id);
+
+    let model_name = result.get("model_name").unwrap().as_str().unwrap();
+    assert_eq!(model_name, provider.model_name);
+    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
+    assert_eq!(model_provider_name, provider.model_provider_name);
+
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(
+        raw_request.contains("<TENSORZERO_FILE_0>"),
+        "Unexpected raw_request: {raw_request}"
+    );
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
+    assert_eq!(
+        result.get("cached").unwrap().as_bool().unwrap(),
+        should_be_cached
+    );
+    expected_storage_path
+}
+
 pub async fn check_base64_image_response(
     response: InferenceResponse,
     episode_id: Option<Uuid>,
@@ -1645,14 +1980,14 @@ pub async fn check_base64_image_response(
                 "content": [
                     {"type": "text", "value": "Describe the contents of the image"},
                     {
-                        "type": "image",
-                        "image": {
+                        "type": "file",
+                        "file": {
                             "url": null,
                             "mime_type": "image/png",
                         },
                         "storage_path": {
                             "kind": kind_json,
-                            "path": format!("{prefix}observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"),
+                            "path": format!("{prefix}observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"),
                         },
                     }
                 ]
@@ -1673,7 +2008,7 @@ pub async fn check_base64_image_response(
 
     let expected_storage_path = StoragePath {
         kind: kind.clone(),
-        path: Path::parse(format!("{prefix}observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png")).unwrap(),
+        path: Path::parse(format!("{prefix}observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png")).unwrap(),
     };
 
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
@@ -1686,14 +2021,14 @@ pub async fn check_base64_image_response(
                 ContentBlock::Text(Text {
                     text: "Describe the contents of the image".to_string(),
                 }),
-                ContentBlock::Image(ImageWithPath {
-                    image: Base64Image {
+                ContentBlock::File(Box::new(FileWithPath {
+                    file: Base64File {
                         url: None,
                         data: None,
-                        mime_type: ImageKind::Png,
+                        mime_type: mime::IMAGE_PNG,
                     },
                     storage_path: expected_storage_path.clone(),
-                })
+                }))
             ]
         },]
     );
@@ -1709,7 +2044,7 @@ pub async fn check_base64_image_response(
 
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(
-        raw_request.contains("<TENSORZERO_IMAGE_0>"),
+        raw_request.contains("<TENSORZERO_FILE_0>"),
         "Unexpected raw_request: {raw_request}"
     );
     assert!(
@@ -1801,14 +2136,14 @@ pub async fn check_url_image_response(
                 "content": [
                     {"type": "text", "value": "Describe the contents of the image"},
                     {
-                        "type": "image",
-                        "image": {
+                        "type": "file",
+                        "file": {
                             "url": image_url.to_string(),
                             "mime_type": "image/png",
                         },
                         "storage_path": {
                             "kind": kind_json,
-                            "path": "observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"
+                            "path": "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"
                         },
                     }
                 ]
@@ -1836,17 +2171,17 @@ pub async fn check_url_image_response(
                 role: Role::User,
                 content: vec![ContentBlock::Text(Text {
                     text: "Describe the contents of the image".to_string(),
-                }), ContentBlock::Image(ImageWithPath {
-                    image: Base64Image {
+                }), ContentBlock::File(Box::new(FileWithPath {
+                    file: Base64File {
                         url: Some(image_url.clone()),
                         data: None,
-                        mime_type: ImageKind::Png,
+                        mime_type: mime::IMAGE_PNG,
                     },
                     storage_path: StoragePath {
                         kind: kind.clone(),
-                        path: Path::parse("observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png").unwrap(),
+                        path: Path::parse("observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png").unwrap(),
                     }
-                })]
+                }))]
             },
         ]
     );
@@ -1862,7 +2197,7 @@ pub async fn check_url_image_response(
 
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(
-        raw_request.contains("<TENSORZERO_IMAGE_0>"),
+        raw_request.contains("<TENSORZERO_FILE_0>"),
         "Unexpected raw_request: {raw_request}"
     );
     assert!(
@@ -2173,14 +2508,14 @@ pub async fn check_simple_image_inference_response(
                 "content": [
                     {"type": "text", "value": "What kind of animal is in this image?"},
                     {
-                        "type": "image",
-                        "image": {
+                        "type": "file",
+                        "file": {
                             "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
                             "mime_type": "image/png",
                         },
                         "storage_path": {
                             "kind": {"type": "disabled"},
-                            "path": "observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"
+                            "path": "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"
                         }
                     }
                 ]
@@ -2369,12 +2704,34 @@ pub async fn test_simple_streaming_inference_request_with_provider(provider: E2E
     let seed = rand::rng().random_range(0..u32::MAX);
 
     let original_content = test_simple_streaming_inference_request_with_provider_cache(
-        &provider, episode_id, seed, &tag_value, false,
+        &provider, episode_id, seed, &tag_value, false, false,
     )
     .await;
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     let cached_content = test_simple_streaming_inference_request_with_provider_cache(
-        &provider, episode_id, seed, &tag_value, true,
+        &provider, episode_id, seed, &tag_value, true, false,
+    )
+    .await;
+    assert_eq!(original_content, cached_content);
+}
+
+pub async fn test_streaming_include_original_response_with_provider(provider: E2ETestProvider) {
+    // We use a serverless Sagemaker endpoint, which doesn't support streaming
+    if provider.variant_name == "aws-sagemaker-tgi" {
+        return;
+    }
+    let episode_id = Uuid::now_v7();
+    let tag_value = Uuid::now_v7().to_string();
+    // Generate random u32
+    let seed = rand::rng().random_range(0..u32::MAX);
+
+    let original_content = test_simple_streaming_inference_request_with_provider_cache(
+        &provider, episode_id, seed, &tag_value, false, true,
+    )
+    .await;
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    let cached_content = test_simple_streaming_inference_request_with_provider_cache(
+        &provider, episode_id, seed, &tag_value, true, true,
     )
     .await;
     assert_eq!(original_content, cached_content);
@@ -2386,6 +2743,7 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     seed: u32,
     tag_value: &str,
     check_cache: bool,
+    include_original_response: bool,
 ) -> String {
     let extra_headers = get_extra_headers();
     let payload = json!({
@@ -2402,6 +2760,7 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
                 }
             ]},
         "stream": true,
+        "include_original_response": include_original_response,
         "tags": {"key": tag_value},
         "cache_options": {"enabled": "on", "lookback_s": 10},
         "extra_headers": extra_headers.headers,
@@ -2439,6 +2798,13 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
         let chunk_json: Value = serde_json::from_str(&chunk).unwrap();
 
         println!("API response chunk: {chunk_json:#?}");
+
+        // The `original_chunk` field should only be set if we enable the `include_original_response` flag
+        if include_original_response {
+            assert!(chunk_json.get("original_chunk").is_some());
+        } else {
+            assert_eq!(chunk_json.get("original_chunk"), None);
+        }
 
         let chunk_inference_id = chunk_json.get("inference_id").unwrap().as_str().unwrap();
         let chunk_inference_id = Uuid::parse_str(chunk_inference_id).unwrap();
@@ -3551,6 +3917,9 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
                     // (e.g. "Sure, here's the weather in Tokyo:" + tool call)
                     // We mostly care about the tool call, so we'll ignore the text.
                 }
+                "thought" => {
+                    // Gemini models can return thoughts - ignore them
+                }
                 _ => {
                     panic!("Unexpected block type: {block_type}");
                 }
@@ -3623,7 +3992,11 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
     let output_clickhouse: Vec<Value> =
         serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
     assert!(!output_clickhouse.is_empty()); // could be > 1 if the model returns text as well
-    let content_block = output_clickhouse.first().unwrap();
+                                            // Ignore other content blocks
+    let content_block = output_clickhouse
+        .iter()
+        .find(|b| b["type"] == "tool_call")
+        .unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "tool_call");
     assert_eq!(content_block.get("id").unwrap().as_str().unwrap(), tool_id);
@@ -4033,7 +4406,10 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    let mut output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    // We don't care about thoughts in this test
+    output.retain(|block| !matches!(block, ContentBlock::Thought(_)));
+
     let first = output.first().unwrap();
     match first {
         ContentBlock::Text(_text) => {}
@@ -4131,6 +4507,9 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
                 "text" => {
                     full_text.push_str(block.get("text").unwrap().as_str().unwrap());
                 }
+                "thought" => {
+                    // Gemini models can return thoughts - ignore them
+                }
                 _ => {
                     panic!("Unexpected block type: {block_type}");
                 }
@@ -4198,8 +4577,11 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
     );
     assert_eq!(input, correct_input);
 
-    let output_clickhouse: Vec<Value> =
+    let mut output_clickhouse: Vec<Value> =
         serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
+
+    // We don't care about thoughts in this test
+    output_clickhouse.retain(|block| block["type"] != "thought");
 
     assert!(!output_clickhouse
         .iter()
@@ -4326,7 +4708,10 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    let mut output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    // We don't care about thoughts in this test
+    output.retain(|block| !matches!(block, ContentBlock::Thought(_)));
+
     let first = output.first().unwrap();
     match first {
         ContentBlock::Text(_text) => {}
@@ -4340,9 +4725,11 @@ pub async fn test_tool_use_tool_choice_required_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
     // Azure, Together, and SGLang don't support `tool_choice: "required"`
+    // Groq says they support it, but it doesn't return the required tool as expected
     if provider.model_provider_name == "azure"
         || provider.model_provider_name == "together"
         || provider.model_provider_name == "sglang"
+        || provider.model_provider_name == "groq"
     {
         return;
     }
@@ -4437,8 +4824,11 @@ pub async fn check_tool_use_tool_choice_required_inference_response(
 
     let arguments = content_block.get("arguments").unwrap();
     let arguments = arguments.as_object().unwrap();
-    assert!(arguments.len() == 1 || arguments.len() == 2);
-    assert!(arguments.get("location").unwrap().as_str().is_some());
+    // OpenAI occasionally emits a tool call with an empty object for `arguments`
+    assert!(arguments.len() <= 2);
+    if let Some(location) = arguments.get("location") {
+        assert!(location.as_str().is_some())
+    }
     if arguments.len() == 2 {
         let units = arguments.get("units").unwrap().as_str().unwrap();
         assert!(units == "celsius" || units == "fahrenheit");
@@ -4623,9 +5013,11 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
     provider: E2ETestProvider,
 ) {
     // Azure, Together, and SGLang don't support `tool_choice: "required"`
+    // Groq says they support it, but it doesn't return the required tool as expected
     if provider.model_provider_name == "azure"
         || provider.model_provider_name == "together"
         || provider.model_provider_name == "sglang"
+        || provider.model_provider_name == "groq"
     {
         return;
     }
@@ -4725,6 +5117,9 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
                     // (e.g. "Sure, here's the weather in Tokyo:" + tool call)
                     // We mostly care about the tool call, so we'll ignore the text.
                 }
+                "thought" => {
+                    // Gemini models can return thoughts - ignore them
+                }
                 _ => {
                     panic!("Unexpected block type: {block_type}");
                 }
@@ -4795,7 +5190,11 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
     let output_clickhouse: Vec<Value> =
         serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
     assert!(!output_clickhouse.is_empty()); // could be > 1 if the model returns text as well
-    let content_block = output_clickhouse.first().unwrap();
+                                            // Ignore other content blocks
+    let content_block = output_clickhouse
+        .iter()
+        .find(|b| b["type"] == "tool_call")
+        .unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "tool_call");
     assert_eq!(content_block.get("id").unwrap().as_str().unwrap(), tool_id);
@@ -4959,6 +5358,12 @@ pub async fn test_tool_use_tool_choice_none_inference_request_with_provider(
     // https://gist.github.com/virajmehta/2911580b09713fc58aabfeb9ad62cf3b
     // We have disabled this test for that provider for now.
     if provider.model_provider_name == "xai" {
+        return;
+    }
+
+    // NOTE - Gemini 2.5 produces 'UNEXPECTED_TOOL_CALL' here
+    // See https://github.com/tensorzero/tensorzero/issues/2329
+    if provider.model_name == "gemini-2.5-pro-preview-05-06" {
         return;
     }
 
@@ -5299,6 +5704,9 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
                 "text" => {
                     full_text.push_str(block.get("text").unwrap().as_str().unwrap());
                 }
+                "thought" => {
+                    // Gemini models can return thoughts - ignore them
+                }
                 _ => {
                     panic!("Unexpected block type: {block_type}");
                 }
@@ -5508,11 +5916,12 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
 pub async fn test_tool_use_tool_choice_specific_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    // GCP Vertex AI, Mistral, and Together don't support ToolChoice::Specific.
+    // GCP Vertex AI, Groq, Mistral, and Together don't support ToolChoice::Specific.
     // (Together AI claims to support it, but we can't get it to behave strictly.)
     // In those cases, we use ToolChoice::Any with a single tool under the hood.
     // Even then, they seem to hallucinate a new tool.
     if provider.model_provider_name.contains("gcp_vertex")
+        || provider.model_provider_name == "groq"
         || provider.model_provider_name == "mistral"
         || provider.model_provider_name == "together"
     {
@@ -5847,13 +6256,14 @@ pub async fn check_tool_use_tool_choice_specific_inference_response(
 pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    // GCP Vertex AI, Mistral, and Together don't support ToolChoice::Specific.
+    // - GCP Vertex AI, Mistral, Together and Groq don't support ToolChoice::Specific.
     // (Together AI claims to support it, but we can't get it to behave strictly.)
     // In those cases, we use ToolChoice::Any with a single tool under the hood.
     // Even then, they seem to hallucinate a new tool.
     if provider.model_provider_name.contains("gcp_vertex")
         || provider.model_provider_name == "mistral"
         || provider.model_provider_name == "together"
+        || provider.model_provider_name == "groq"
     {
         return;
     }
@@ -5866,6 +6276,13 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
     let episode_id = Uuid::now_v7();
     let extra_headers = get_extra_headers();
 
+    // Groq tool requests aren't always sent with the correct schema
+    let prompt: String = if provider.model_provider_name == "groq" {
+        "What is the temperature like in Tokyo (in Celsius)? Use the `get_temperature` tool. Ensure that the request to the tool is sent with the correct json schema.".into()
+    } else {
+        "What is the temperature like in Tokyo (in Celsius)? Use the `get_temperature` tool.".into()
+    };
+
     let payload = json!({
         "function_name": "weather_helper",
         "episode_id": episode_id,
@@ -5874,7 +6291,7 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
             "messages": [
                 {
                     "role": "user",
-                    "content": "What is the temperature like in Tokyo (in Celsius)? Use the `get_temperature` tool."
+                    "content": prompt,
                 }
             ]},
         "additional_tools": [
@@ -5971,6 +6388,9 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
                     // (e.g. "Sure, here's the weather in Tokyo:" + tool call)
                     // We mostly care about the tool call, so we'll ignore the text.
                 }
+                "thought" => {
+                    // Gemini models can return thoughts - ignore them
+                }
                 _ => {
                     panic!("Unexpected block type: {block_type}");
                 }
@@ -6026,6 +6446,7 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
 
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+
     let correct_input: Value = json!(
         {
             "system": {
@@ -6034,11 +6455,12 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "What is the temperature like in Tokyo (in Celsius)? Use the `get_temperature` tool."}]
+                    "content": [{"type": "text", "value": prompt}]
                 }
             ]
         }
     );
+
     assert_eq!(input, correct_input);
 
     let output_clickhouse: Vec<Value> =
@@ -6211,11 +6633,7 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
     let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
     let expected_input_messages = vec![RequestMessage {
         role: Role::User,
-        content: vec![
-            "What is the temperature like in Tokyo (in Celsius)? Use the `get_temperature` tool."
-                .to_string()
-                .into(),
-        ],
+        content: vec![prompt.into()],
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
@@ -6246,6 +6664,11 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
 pub async fn test_tool_use_allowed_tools_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    // Groq isn't respecting allowed_tools and will call brave_search instead of get_humidity, for example
+    if provider.model_provider_name == "groq" {
+        return;
+    }
+
     let episode_id = Uuid::now_v7();
     let extra_headers = get_extra_headers();
 
@@ -6511,6 +6934,11 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
     if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
         return;
     }
+    // Groq does not support streaming in JSON mode
+    // (no reason given): https://console.groq.com/docs/text-chat#json-mode
+    if provider.model_provider_name == "groq" {
+        return;
+    }
 
     let episode_id = Uuid::now_v7();
     let extra_headers = get_extra_headers();
@@ -6603,6 +7031,9 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
                     // (e.g. "Sure, here's the weather in Tokyo:" + tool call)
                     // We mostly care about the tool call, so we'll ignore the text.
                 }
+                "thought" => {
+                    // Gemini models can return thoughts - ignore them
+                }
                 _ => {
                     panic!("Unexpected block type: {block_type}");
                 }
@@ -6675,7 +7106,12 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
     let output_clickhouse: Vec<Value> =
         serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
     assert!(!output_clickhouse.is_empty()); // could be > 1 if the model returns text as well
-    let content_block = output_clickhouse.first().unwrap();
+
+    // Ignore other content blocks
+    let content_block = output_clickhouse
+        .iter()
+        .find(|b| b["type"] == "tool_call")
+        .unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "tool_call");
     assert_eq!(content_block.get("id").unwrap().as_str().unwrap(), tool_id);
@@ -7854,6 +8290,9 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
                     // (e.g. "Sure, here's the weather in Tokyo:" + tool call)
                     // We mostly care about the tool call, so we'll ignore the text.
                 }
+                "thought" => {
+                    // Gemini models can return thoughts - ignore them
+                }
                 _ => {
                     panic!("Unexpected block type: {block_type}");
                 }
@@ -7926,7 +8365,12 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     let output_clickhouse: Vec<Value> =
         serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
     assert!(!output_clickhouse.is_empty()); // could be > 1 if the model returns text as well
-    let content_block = output_clickhouse.first().unwrap();
+
+    // Ignore other content blocks
+    let content_block = output_clickhouse
+        .iter()
+        .find(|b| b["type"] == "tool_call")
+        .unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "tool_call");
     assert_eq!(content_block.get("id").unwrap().as_str().unwrap(), tool_id);
@@ -8407,7 +8851,29 @@ pub async fn check_parallel_tool_use_inference_response(
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
-    assert_eq!(output.len(), 2);
+
+    let is_openrouter = provider.model_provider_name == "openrouter";
+    if is_openrouter {
+        // For OpenRouter, check that there are at least 2 tool calls
+        // (OpenRouter may include an empty text block)
+        let tool_calls = output
+            .iter()
+            .filter(|block| matches!(block, ContentBlock::ToolCall(_)))
+            .count();
+        assert_eq!(
+            tool_calls, 2,
+            "Expected 2 tool calls for OpenRouter, got {tool_calls}"
+        );
+    } else {
+        // For other providers, expect exactly 2 blocks total
+        assert_eq!(
+            output.len(),
+            2,
+            "Expected exactly 2 output blocks, got {}",
+            output.len()
+        );
+    }
+
     let mut tool_call_names = vec![];
     for block in output {
         match block {
@@ -8415,8 +8881,12 @@ pub async fn check_parallel_tool_use_inference_response(
                 tool_call_names.push(tool_call.name);
                 serde_json::from_str::<Value>(&tool_call.arguments).unwrap();
             }
+            ContentBlock::Text(text) if text.text.is_empty() && is_openrouter => {
+                // Skip empty text blocks for OpenRouter
+                continue;
+            }
             _ => {
-                panic!("Expected a tool call, got {block:?}");
+                panic!("Expected a tool call or empty text (for OpenRouter), got {block:?}");
             }
         }
     }
@@ -8428,7 +8898,8 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
     // Together doesn't correctly produce streaming tool call chunks (it produces text chunks with the raw tool call).
-    if provider.model_provider_name == "together" {
+    // Groq also doesn't seem to produce the correct tool call chunks, but not sure what's happening there yet.
+    if provider.model_provider_name == "together" || provider.model_provider_name == "groq" {
         return;
     }
 
@@ -9046,23 +9517,61 @@ pub async fn check_json_mode_inference_response(
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
-    assert_eq!(output.len(), 1);
-    match &output[0] {
-        ContentBlock::Text(text) => {
-            let _: Value = serde_json::from_str(&text.text).unwrap();
-            assert!(text.text.to_lowercase().contains("tokyo"));
+    let mut output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    // We don't care about thoughts in this test
+    output.retain(|block| !matches!(block, ContentBlock::Thought(_)));
+
+    let is_openrouter = provider.model_provider_name == "openrouter";
+    if is_openrouter {
+        // OpenRouter may return both an empty text block and a tool_call block
+        assert!(
+            output.len() <= 2,
+            "Expected at most 2 output blocks for OpenRouter, got {}",
+            output.len()
+        );
+    } else {
+        // For other providers, expect exactly one block
+        assert_eq!(
+            output.len(),
+            1,
+            "Expected exactly 1 output block, got {}",
+            output.len()
+        );
+    }
+
+    // Check for valid content in the output
+    let mut found_valid_content = false;
+    for output_block in &output {
+        match output_block {
+            ContentBlock::Text(text) if text.text.is_empty() && is_openrouter => {
+                // Skip empty text blocks from OpenRouter
+                continue;
+            }
+            ContentBlock::Text(text) => {
+                let _: Value = serde_json::from_str(&text.text).unwrap();
+                assert!(text.text.to_lowercase().contains("tokyo"));
+                found_valid_content = true;
+            }
+            ContentBlock::ToolCall(tool_call) => {
+                // OpenRouter may use tool_call format
+                assert_eq!(tool_call.name, "respond");
+                let arguments: Value = serde_json::from_str(&tool_call.arguments).unwrap();
+                let answer = arguments.get("answer").unwrap().as_str().unwrap();
+                assert!(answer.to_lowercase().contains("tokyo"));
+                found_valid_content = true;
+            }
+            _ => {
+                panic!("Expected a text block or tool_call (for OpenRouter), got {output_block:?}");
+            }
         }
-        ContentBlock::ToolCall(tool_call) => {
-            // Handles implicit tool calls
-            assert_eq!(tool_call.name, "respond");
-            let arguments: Value = serde_json::from_str(&tool_call.arguments).unwrap();
-            let answer = arguments.get("answer").unwrap().as_str().unwrap();
-            assert!(answer.to_lowercase().contains("tokyo"));
-        }
-        _ => {
-            panic!("Expected a text block, got {:?}", output[0]);
-        }
+    }
+
+    // OpenRouter must have at least one valid content block
+    if is_openrouter {
+        assert!(
+            found_valid_content,
+            "No valid JSON content found in OpenRouter response"
+        );
     }
 }
 
@@ -9293,29 +9802,72 @@ pub async fn check_dynamic_json_mode_inference_response(
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
-    assert_eq!(output.len(), 1);
-    match &output[0] {
-        ContentBlock::Text(text) => {
-            let _: Value = serde_json::from_str(&text.text).unwrap();
-            assert!(&text.text.to_lowercase().contains("tokyo"));
+    let mut output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    // We don't care about thoughts in this test
+    output.retain(|block| !matches!(block, ContentBlock::Thought(_)));
+
+    let is_openrouter = provider.model_provider_name == "openrouter";
+    if is_openrouter {
+        // OpenRouter may return both an empty text block and a tool_call block
+        assert!(
+            output.len() <= 2,
+            "Expected at most 2 output blocks for OpenRouter, got {}",
+            output.len()
+        );
+    } else {
+        // For other providers, expect exactly one block
+        assert_eq!(
+            output.len(),
+            1,
+            "Expected exactly 1 output block, got {}",
+            output.len()
+        );
+    }
+
+    // Check for valid content in the output
+    let mut found_valid_content = false;
+    for output_block in &output {
+        match output_block {
+            ContentBlock::Text(text) if text.text.is_empty() && is_openrouter => {
+                // Skip empty text blocks from OpenRouter
+                continue;
+            }
+            ContentBlock::Text(text) => {
+                let _: Value = serde_json::from_str(&text.text).unwrap();
+                assert!(&text.text.to_lowercase().contains("tokyo"));
+                found_valid_content = true;
+            }
+            ContentBlock::ToolCall(tool_call) => {
+                // OpenRouter may use tool_call format
+                assert_eq!(tool_call.name, "respond");
+                let arguments: Value = serde_json::from_str(&tool_call.arguments).unwrap();
+                let response = arguments.get("response").unwrap().as_str().unwrap();
+                assert!(response.to_lowercase().contains("tokyo"));
+                found_valid_content = true;
+            }
+            _ => {
+                panic!("Expected a text block or tool_call (for OpenRouter), got {output_block:?}");
+            }
         }
-        ContentBlock::ToolCall(tool_call) => {
-            // Handles implicit tool calls
-            assert_eq!(tool_call.name, "respond");
-            let arguments: Value = serde_json::from_str(&tool_call.arguments).unwrap();
-            let answer = arguments.get("response").unwrap().as_str().unwrap();
-            assert!(answer.to_lowercase().contains("tokyo"));
-        }
-        _ => {
-            panic!("Expected a text block, got {:?}", output[0]);
-        }
+    }
+
+    // OpenRouter must have at least one valid content block
+    // We do this check because OpenRouter sometimes responds with empty content blocks
+    if is_openrouter {
+        assert!(
+            found_valid_content,
+            "No valid JSON content found in OpenRouter response"
+        );
     }
 }
 
 pub async fn test_json_mode_streaming_inference_request_with_provider(provider: E2ETestProvider) {
-    if provider.variant_name.contains("tgi") || provider.variant_name.contains("cot") {
+    if provider.variant_name.contains("tgi")
+        || provider.variant_name.contains("cot")
+        || provider.model_provider_name == "groq"
+    {
         // TGI does not support streaming in JSON mode (because it doesn't support streaming tools)
+        // Groq does not support streaming in JSON mode (no reason given): https://console.groq.com/docs/text-chat#json-mode)
         return;
     }
     // OpenAI O1 doesn't support streaming responses
@@ -9928,7 +10480,23 @@ pub async fn test_multi_turn_parallel_tool_use_inference_request_with_provider(
 
     for content_block in response_json.get("content").unwrap().as_array().unwrap() {
         let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-        assert_eq!(content_block_type, "tool_call");
+
+        // Special handling for OpenRouter empty text blocks
+        let is_openrouter = provider.model_provider_name == "openrouter";
+        if content_block_type == "text" && is_openrouter {
+            // For OpenRouter, skip empty text blocks
+            let text = content_block.get("text").unwrap().as_str().unwrap();
+            if text.is_empty() {
+                continue;
+            } else {
+                panic!("Unexpected text block with non-empty content: {text}");
+            }
+        }
+
+        assert_eq!(
+            content_block_type, "tool_call",
+            "Expected tool_call, got {content_block_type}"
+        );
 
         if content_block.get("name").unwrap().as_str().unwrap() == "get_temperature" {
             tool_results.push(json!(
@@ -10203,7 +10771,23 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
 
     for content_block in response_json.get("content").unwrap().as_array().unwrap() {
         let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-        assert_eq!(content_block_type, "tool_call");
+
+        // Special handling for OpenRouter empty text blocks
+        let is_openrouter = provider.model_provider_name == "openrouter";
+        if content_block_type == "text" && is_openrouter {
+            // For OpenRouter, skip empty text blocks
+            let text = content_block.get("text").unwrap().as_str().unwrap();
+            if text.is_empty() {
+                continue;
+            } else {
+                panic!("Unexpected text block with non-empty content: {text}");
+            }
+        }
+
+        assert_eq!(
+            content_block_type, "tool_call",
+            "Expected tool_call, got {content_block_type}"
+        );
 
         if content_block.get("name").unwrap().as_str().unwrap() == "get_temperature" {
             tool_results.push(json!(
