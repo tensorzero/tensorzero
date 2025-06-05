@@ -188,6 +188,15 @@ pub fn serialize_to_dict<T: serde::ser::Serialize>(py: Python<'_>, val: T) -> Py
         .call1(py, (json_str.into_pyobject(py)?,))
 }
 
+/// In the `render_inferences` function, we need to be able to accept both
+/// StoredInference objects passed in from the output of the `list_inferences` function
+/// and arbitrary Python objects that match the serialization pattern of the `StoredInference`
+/// type.
+/// This is necessary since developers might construct data for rendering by hand.
+/// In order to support this, we first check if the object is a `StoredInference` object.
+/// If it is, we return it directly.
+/// If it is not, we assume it is a Python object that matches the serialization pattern of the
+/// `StoredInference` type and deserialize it (and throw an error if it doesn't match).
 pub fn deserialize_from_stored_inference<'a>(
     py: Python<'a>,
     obj: &Bound<'a, PyAny>,
@@ -199,7 +208,7 @@ pub fn deserialize_from_stored_inference<'a>(
     }
 }
 
-// Converts a Python dictionary/list to json with `json.dumps`,
+/// Converts a Python dictionary/list to json with `json.dumps`,
 /// then deserializes to a Rust type via serde
 pub fn deserialize_from_pyobj<'a, T: serde::de::DeserializeOwned>(
     py: Python<'a>,
