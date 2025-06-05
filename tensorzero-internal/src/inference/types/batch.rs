@@ -1,3 +1,4 @@
+use crate::serde_util::{deserialize_json_string, deserialize_optional_json_string};
 use crate::{
     endpoints::{
         batch_inference::{BatchEpisodeIdInput, BatchOutputSchemas},
@@ -156,34 +157,6 @@ pub struct BatchRequestRow<'a> {
     pub function_name: Cow<'a, str>,
     pub variant_name: Cow<'a, str>,
     pub errors: Vec<Value>,
-}
-
-pub fn deserialize_json_string<'de, D, T>(deserializer: D) -> Result<T, D::Error>
-where
-    D: serde::Deserializer<'de>,
-    T: serde::de::DeserializeOwned,
-{
-    let json_str = String::deserialize(deserializer)?;
-    serde_json::from_str(&json_str).map_err(serde::de::Error::custom)
-}
-
-pub fn deserialize_optional_json_string<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-    T: serde::de::DeserializeOwned,
-{
-    let opt_json_str: Option<String> = Option::deserialize(deserializer)?;
-    match opt_json_str {
-        Some(json_str) => {
-            if json_str.is_empty() {
-                return Ok(None);
-            }
-            serde_json::from_str(&json_str)
-                .map(Some)
-                .map_err(serde::de::Error::custom)
-        }
-        None => Ok(None),
-    }
 }
 
 #[derive(Debug)]

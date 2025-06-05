@@ -15,10 +15,10 @@ use crate::{
     function::FunctionConfig,
     gateway_util::{AppState, StructuredJson},
     inference::types::{
-        batch::{deserialize_json_string, deserialize_optional_json_string},
         ChatInferenceDatabaseInsert, ContentBlockChatOutput, FetchContext, Input,
         JsonInferenceDatabaseInsert, JsonInferenceOutput, ResolvedInput,
     },
+    serde_util::{deserialize_optional_string_or_parsed_json, deserialize_string_or_parsed_json},
     tool::{DynamicToolParams, ToolCallConfigDatabaseInsert},
     uuid_util::validate_tensorzero_uuid,
 };
@@ -69,10 +69,10 @@ async fn query_demonstration(
         LIMIT {page_size:UInt32}
         FORMAT JSONEachRow;"#
                 .to_string(),
-            Some(&HashMap::from([
+            &HashMap::from([
                 ("inference_id", inference_id.to_string().as_str()),
                 ("page_size", page_size.to_string().as_str()),
-            ])),
+            ]),
         )
         .await?;
     if result.is_empty() {
@@ -143,7 +143,7 @@ LEFT JOIN JsonInference j
 WHERE uint_to_uuid(i.id_uint) = {id:String}
 FORMAT JSONEachRow;"#
                 .to_string(),
-            Some(&HashMap::from([("id", inference_id.to_string().as_str())])),
+            &HashMap::from([("id", inference_id.to_string().as_str())]),
         )
         .await?;
 
@@ -724,11 +724,9 @@ pub async fn delete_datapoint(
         ("dataset_name", dataset_name.as_str()),
     ]);
 
-    let json_future =
-        clickhouse.run_query_synchronous(json_delete_query.to_string(), Some(&json_params));
+    let json_future = clickhouse.run_query_synchronous(json_delete_query.to_string(), &json_params);
 
-    let chat_future =
-        clickhouse.run_query_synchronous(chat_delete_query.to_string(), Some(&chat_params));
+    let chat_future = clickhouse.run_query_synchronous(chat_delete_query.to_string(), &chat_params);
 
     let (json_result, chat_result) = tokio::join!(json_future, chat_future);
 
@@ -830,14 +828,14 @@ pub async fn list_datapoints(
     ]);
 
     let result = clickhouse
-        .run_query_synchronous(query.to_string(), Some(&params))
+        .run_query_synchronous(query.to_string(), &params)
         .await?;
     if result.is_empty() {
         return Ok(vec![]);
     }
     let result_lines = result.trim().split("\n").collect::<Vec<&str>>();
 
-    let datapoints: Result<Vec<ClickHouseDatapoint>, _> = result_lines
+    let datapoints: Result<Vec<Datapoint>, _> = result_lines
         .iter()
         .map(|line| serde_json::from_str(line))
         .collect();
@@ -849,8 +847,6 @@ pub async fn list_datapoints(
             }));
         }
     };
-
-    let datapoints: Vec<Datapoint> = datapoints.into_iter().map(Datapoint::from).collect();
 
     Ok(datapoints)
 }
@@ -964,7 +960,7 @@ pub async fn get_datapoint(
     ]);
 
     let result = clickhouse
-        .run_query_synchronous(query.to_string(), Some(&params))
+        .run_query_synchronous(query.to_string(), &params)
         .await?;
     if result.is_empty() {
         return Err(Error::new(ErrorDetails::DatapointNotFound {
@@ -972,13 +968,13 @@ pub async fn get_datapoint(
             datapoint_id,
         }));
     }
-    let datapoint: ClickHouseDatapoint = serde_json::from_str(&result).map_err(|e| {
+    let datapoint: Datapoint = serde_json::from_str(&result).map_err(|e| {
         Error::new(ErrorDetails::ClickHouseDeserialization {
             message: format!("Failed to deserialize datapoint: {e}"),
         })
     })?;
 
-    Ok(Datapoint::from(datapoint))
+    Ok(datapoint)
 }
 
 #[derive(Debug, Deserialize)]
@@ -1106,19 +1102,27 @@ pub struct ChatInferenceDatapoint {
     pub function_name: String,
     pub id: Uuid,
     pub episode_id: Option<Uuid>,
+    #[serde(deserialize_with = "deserialize_string_or_parsed_json")]
     pub input: ResolvedInput,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
     pub output: Option<Vec<ContentBlockChatOutput>>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub tags: Option<HashMap<String, String>>,
     #[serde(skip_serializing, default)] // this will become an object
     pub auxiliary: String,
     pub is_deleted: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub source_inference_id: Option<Uuid>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub staled_at: Option<String>,
 }
 
@@ -1128,117 +1132,26 @@ pub struct JsonInferenceDatapoint {
     pub function_name: String,
     pub id: Uuid,
     pub episode_id: Option<Uuid>,
+    #[serde(deserialize_with = "deserialize_string_or_parsed_json")]
     pub input: ResolvedInput,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
     pub output: Option<JsonInferenceOutput>,
+    #[serde(deserialize_with = "deserialize_string_or_parsed_json")]
     pub output_schema: serde_json::Value,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub tags: Option<HashMap<String, String>>,
     #[serde(skip_serializing, default)] // this will become an object
     pub auxiliary: String,
     pub is_deleted: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub source_inference_id: Option<Uuid>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub staled_at: Option<String>,
-}
-
-/// We need to be able to deserialize Datapoints from both ClickHouse and
-/// from strings. Since the strings will be properly serialized and we want
-/// to be able to handle them naturally, we duplicated the types so that we
-/// can effectively deserialize from ClickHouse as well.
-#[derive(Debug, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum ClickHouseDatapoint {
-    Chat(ClickHouseChatInferenceDatapoint),
-    Json(ClickHouseJsonInferenceDatapoint),
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct ClickHouseChatInferenceDatapoint {
-    pub dataset_name: String,
-    function_name: String,
-    pub id: Uuid,
-    episode_id: Option<Uuid>,
-    #[serde(deserialize_with = "deserialize_json_string")]
-    input: ResolvedInput,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(deserialize_with = "deserialize_optional_json_string")]
-    output: Option<Vec<ContentBlockChatOutput>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(deserialize_with = "deserialize_optional_json_string")]
-    tool_params: Option<ToolCallConfigDatabaseInsert>,
-    tags: Option<HashMap<String, String>>,
-    auxiliary: String,
-    is_deleted: bool,
-    source_inference_id: Option<Uuid>,
-    staled_at: Option<String>,
-}
-
-impl From<ClickHouseChatInferenceDatapoint> for ChatInferenceDatapoint {
-    fn from(value: ClickHouseChatInferenceDatapoint) -> Self {
-        ChatInferenceDatapoint {
-            dataset_name: value.dataset_name,
-            function_name: value.function_name,
-            id: value.id,
-            episode_id: value.episode_id,
-            input: value.input,
-            output: value.output,
-            tool_params: value.tool_params,
-            tags: value.tags,
-            auxiliary: value.auxiliary,
-            is_deleted: value.is_deleted,
-            source_inference_id: value.source_inference_id,
-            staled_at: value.staled_at,
-        }
-    }
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct ClickHouseJsonInferenceDatapoint {
-    pub dataset_name: String,
-    function_name: String,
-    pub id: Uuid,
-    episode_id: Option<Uuid>,
-    #[serde(deserialize_with = "deserialize_json_string")]
-    input: ResolvedInput,
-    #[serde(deserialize_with = "deserialize_optional_json_string")]
-    output: Option<JsonInferenceOutput>,
-    #[serde(deserialize_with = "deserialize_json_string")]
-    output_schema: serde_json::Value,
-    tags: Option<HashMap<String, String>>,
-    auxiliary: String,
-    is_deleted: bool,
-    source_inference_id: Option<Uuid>,
-    staled_at: Option<String>,
-}
-
-impl From<ClickHouseJsonInferenceDatapoint> for JsonInferenceDatapoint {
-    fn from(value: ClickHouseJsonInferenceDatapoint) -> Self {
-        JsonInferenceDatapoint {
-            dataset_name: value.dataset_name,
-            function_name: value.function_name,
-            id: value.id,
-            episode_id: value.episode_id,
-            input: value.input,
-            output: value.output,
-            output_schema: value.output_schema,
-            tags: value.tags,
-            auxiliary: value.auxiliary,
-            is_deleted: value.is_deleted,
-            source_inference_id: value.source_inference_id,
-            staled_at: value.staled_at,
-        }
-    }
-}
-
-impl From<ClickHouseDatapoint> for Datapoint {
-    fn from(value: ClickHouseDatapoint) -> Self {
-        match value {
-            ClickHouseDatapoint::Chat(datapoint) => Datapoint::Chat(datapoint.into()),
-            ClickHouseDatapoint::Json(datapoint) => Datapoint::Json(datapoint.into()),
-        }
-    }
 }
 
 /// If the input is None then we should return None

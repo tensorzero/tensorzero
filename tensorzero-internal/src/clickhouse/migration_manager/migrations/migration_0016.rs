@@ -72,13 +72,13 @@ impl Migration for Migration0016<'_> {
         let query = "DROP TABLE IF EXISTS ChatInferenceDataset";
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         let query = "DROP TABLE IF EXISTS JsonInferenceDataset";
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Create the `ChatInferenceDatapoint` table
@@ -108,7 +108,7 @@ impl Migration for Migration0016<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Create the `JsonInferenceDatapoint` table
@@ -131,7 +131,7 @@ impl Migration for Migration0016<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         Ok(())

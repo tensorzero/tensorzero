@@ -78,7 +78,7 @@ impl Migration for Migration0027<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(create_index_query.to_string(), None)
+            .run_query_synchronous_no_params(create_index_query.to_string())
             .await?;
 
         let materialize_index_query = r#"
@@ -86,7 +86,7 @@ impl Migration for Migration0027<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(materialize_index_query.to_string(), None)
+            .run_query_synchronous_no_params(materialize_index_query.to_string())
             .await?;
 
         let create_index_query = r#"
@@ -94,7 +94,7 @@ impl Migration for Migration0027<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(create_index_query.to_string(), None)
+            .run_query_synchronous_no_params(create_index_query.to_string())
             .await?;
 
         let materialize_index_query = r#"
@@ -102,7 +102,7 @@ impl Migration for Migration0027<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(materialize_index_query.to_string(), None)
+            .run_query_synchronous_no_params(materialize_index_query.to_string())
             .await?;
 
         let create_index_query = r#"
@@ -110,7 +110,7 @@ impl Migration for Migration0027<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(create_index_query.to_string(), None)
+            .run_query_synchronous_no_params(create_index_query.to_string())
             .await?;
 
         let materialize_index_query = r#"
@@ -118,7 +118,7 @@ impl Migration for Migration0027<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(materialize_index_query.to_string(), None)
+            .run_query_synchronous_no_params(materialize_index_query.to_string())
             .await?;
 
         let create_index_query = r#"
@@ -126,7 +126,7 @@ impl Migration for Migration0027<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(create_index_query.to_string(), None)
+            .run_query_synchronous_no_params(create_index_query.to_string())
             .await?;
 
         let materialize_index_query = r#"
@@ -134,7 +134,7 @@ impl Migration for Migration0027<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(materialize_index_query.to_string(), None)
+            .run_query_synchronous_no_params(materialize_index_query.to_string())
             .await?;
 
         let create_index_query = r#"
@@ -142,7 +142,7 @@ impl Migration for Migration0027<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(create_index_query.to_string(), None)
+            .run_query_synchronous_no_params(create_index_query.to_string())
             .await?;
 
         let materialize_index_query = r#"
@@ -150,7 +150,7 @@ impl Migration for Migration0027<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(materialize_index_query.to_string(), None)
+            .run_query_synchronous_no_params(materialize_index_query.to_string())
             .await?;
 
         Ok(())

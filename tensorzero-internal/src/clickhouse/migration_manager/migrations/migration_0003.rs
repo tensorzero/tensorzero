@@ -72,7 +72,7 @@ impl Migration for Migration0003<'_> {
                       AND name = 'tags'
                 )"#
             );
-            match self.clickhouse.run_query_synchronous(query, None).await {
+            match self.clickhouse.run_query_synchronous_no_params(query).await {
                 Err(e) => {
                     return Err(ErrorDetails::ClickHouseMigration {
                         id: "0003".to_string(),
@@ -119,7 +119,7 @@ impl Migration for Migration0003<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Add a column `tags` to the `BooleanMetricFeedback` table
@@ -128,7 +128,7 @@ impl Migration for Migration0003<'_> {
             ADD COLUMN IF NOT EXISTS tags Map(String, String) DEFAULT map();"#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Add a column `tags` to the `CommentFeedback` table
@@ -137,7 +137,7 @@ impl Migration for Migration0003<'_> {
             ADD COLUMN IF NOT EXISTS tags Map(String, String) DEFAULT map();"#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Add a column `tags` to the `DemonstrationFeedback` table
@@ -146,7 +146,7 @@ impl Migration for Migration0003<'_> {
             ADD COLUMN IF NOT EXISTS tags Map(String, String) DEFAULT map();"#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Add a column `tags` to the `FloatMetricFeedback` table
@@ -155,7 +155,7 @@ impl Migration for Migration0003<'_> {
             ADD COLUMN IF NOT EXISTS tags Map(String, String) DEFAULT map();"#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // In the following few queries we create the materialized views that map the tags from the original tables to the new `FeedbackTag` table
@@ -176,7 +176,7 @@ impl Migration for Migration0003<'_> {
             "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Create the materialized view for the `FeedbackTag` table from CommentFeedback
@@ -194,7 +194,7 @@ impl Migration for Migration0003<'_> {
             "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Create the materialized view for the `FeedbackTag` table from DemonstrationFeedback
@@ -212,7 +212,7 @@ impl Migration for Migration0003<'_> {
             "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Create the materialized view for the `FeedbackTag` table from FloatMetricFeedback
@@ -230,7 +230,7 @@ impl Migration for Migration0003<'_> {
             "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         Ok(())

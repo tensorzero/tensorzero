@@ -3084,6 +3084,16 @@ type = "float"
 optimize = "max"
 level = "inference"
 
+[metrics.jaccard_similarity]
+type = "float"
+optimize = "max"
+level = "inference"
+
+[metrics.exact_match]
+type = "boolean"
+optimize = "max"
+level = "inference"
+
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                  TOOLS                                     │
 # └────────────────────────────────────────────────────────────────────────────┘

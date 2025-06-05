@@ -113,7 +113,7 @@ impl Migration for Migration0008<'_> {
         // so this is safe to do.
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Alter the `response_time_ms` column of `ModelInference` to be a nullable column
@@ -123,7 +123,7 @@ impl Migration for Migration0008<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Alter the `processing_time_ms` column of `ChatInference` to be a nullable column
@@ -133,7 +133,7 @@ impl Migration for Migration0008<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Alter the `processing_time_ms` column of `JsonInference` to be a nullable column
@@ -143,7 +143,7 @@ impl Migration for Migration0008<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         Ok(())
