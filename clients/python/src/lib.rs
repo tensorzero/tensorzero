@@ -894,8 +894,6 @@ impl TensorZeroGateway {
         }
     }
 
-    // The text_signature is a workaround to weird behavior in pyo3 where the default for an option
-    // is written as an ellipsis object.
     #[pyo3(signature = (*,
                         function_name,
                         variant_name=None,
@@ -906,6 +904,8 @@ impl TensorZeroGateway {
     ),
     text_signature = "(self, *, function_name, variant_name=None, filters=None, output_source='inference', limit=None, offset=None)"
     )]
+    // The text_signature is a workaround to weird behavior in pyo3 where the default for an option
+    // is written as an ellipsis object.
     fn experimental_list_inferences(
         this: PyRef<'_, Self>,
         function_name: String,

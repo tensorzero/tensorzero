@@ -218,7 +218,7 @@ def test_not_filter(embedded_sync_client: TensorZeroGateway):
     assert len(inferences) == 0
 
 
-def test_list_render_inferences(embedded_sync_client: TensorZeroGateway):
+def test_list_render_json_inferences(embedded_sync_client: TensorZeroGateway):
     stored_inferences = embedded_sync_client.experimental_list_inferences(
         function_name="extract_entities",
         variant_name=None,
@@ -230,6 +230,22 @@ def test_list_render_inferences(embedded_sync_client: TensorZeroGateway):
     rendered_inferences = embedded_sync_client.experimental_render_inferences(
         stored_inferences=stored_inferences,
         variants={"extract_entities": "gpt_4o_mini"},
+    )
+    assert len(rendered_inferences) == 2
+
+
+def test_list_render_chat_inferences(embedded_sync_client: TensorZeroGateway):
+    stored_inferences = embedded_sync_client.experimental_list_inferences(
+        function_name="write_haiku",
+        variant_name=None,
+        filters=None,
+        output_source="demonstration",
+        limit=2,
+        offset=None,
+    )
+    rendered_inferences = embedded_sync_client.experimental_render_inferences(
+        stored_inferences=stored_inferences,
+        variants={"write_haiku": "gpt_4o_mini"},
     )
     assert len(rendered_inferences) == 2
 
@@ -465,7 +481,7 @@ async def test_not_filter_async(embedded_async_client: AsyncTensorZeroGateway):
 
 
 @pytest.mark.asyncio
-async def test_list_render_inferences_async(
+async def test_list_render_json_inferences_async(
     embedded_async_client: AsyncTensorZeroGateway,
 ):
     stored_inferences = await embedded_async_client.experimental_list_inferences(
@@ -479,5 +495,24 @@ async def test_list_render_inferences_async(
     rendered_inferences = await embedded_async_client.experimental_render_inferences(
         stored_inferences=stored_inferences,
         variants={"extract_entities": "gpt_4o_mini"},
+    )
+    assert len(rendered_inferences) == 2
+
+
+@pytest.mark.asyncio
+async def test_list_render_chat_inferences_async(
+    embedded_async_client: AsyncTensorZeroGateway,
+):
+    stored_inferences = await embedded_async_client.experimental_list_inferences(
+        function_name="write_haiku",
+        variant_name=None,
+        filters=None,
+        output_source="demonstration",
+        limit=2,
+        offset=None,
+    )
+    rendered_inferences = await embedded_async_client.experimental_render_inferences(
+        stored_inferences=stored_inferences,
+        variants={"write_haiku": "gpt_4o_mini"},
     )
     assert len(rendered_inferences) == 2
