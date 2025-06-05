@@ -100,6 +100,43 @@ def test_simple_query_chat_function(embedded_sync_client: TensorZeroGateway):
         assert tool_params.tools_available == []
         assert tool_params.parallel_tool_calls is None
 
+def test_simple_query_chat_function_with_tools(embedded_sync_client: TensorZeroGateway):
+    inferences = embedded_sync_client.experimental_list_inferences(
+        function_name="weather_helper",
+        variant_name=None,
+        filters=None,
+        output_source="inference",
+        limit=3,
+        offset=3,
+    )
+    assert len(inferences) == 3
+    for inference in inferences:
+        assert inference.function_name == "write_haiku"
+        assert inference.variant_name == "better_prompt_haiku_3_5"
+        input = inference.input
+        assert "messages" in input
+        messages = input["messages"]
+        assert isinstance(messages, list)
+        assert len(messages) == 1
+        # Type narrowing: we know these are Chat inferences
+        assert inference.type == "chat"
+        output = inference.output
+        assert isinstance(output, list)
+        assert len(output) == 1
+        output_0 = output[0]
+        assert output_0.type == "text"
+        # Type narrowing: we know it's a Text block
+        assert isinstance(output_0, Text)
+        assert output_0.text is not None
+        inference_id = inference.inference_id
+        assert isinstance(inference_id, UUID)
+        episode_id = inference.episode_id
+        assert isinstance(episode_id, UUID)
+        tool_params = inference.tool_params
+        assert tool_params is not None
+        assert tool_params.tools_available == []
+        assert tool_params.parallel_tool_calls is None
+
 
 def test_demonstration_output_source(embedded_sync_client: TensorZeroGateway):
     inferences = embedded_sync_client.experimental_list_inferences(

@@ -69,7 +69,7 @@ impl StoredInference {
         })
     }
 
-    /// Returns the output of the inference as a Python dictionary.
+    /// Returns the output of the inference as PyO3 classes.
     /// This is actually a List of ContentBlockChatOutputs for StoredChatInference
     /// and a JsonInferenceOutput for StoredJsonInference.
     #[getter]
