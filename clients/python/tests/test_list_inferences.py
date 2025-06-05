@@ -1,7 +1,15 @@
 from uuid import UUID
 
 import pytest
-from tensorzero import AsyncTensorZeroGateway, TensorZeroGateway
+from tensorzero import (
+    AndNode,
+    AsyncTensorZeroGateway,
+    BooleanMetricNode,
+    FloatMetricNode,
+    NotNode,
+    OrNode,
+    TensorZeroGateway,
+)
 
 
 def test_simple_list_json_inferences(embedded_sync_client: TensorZeroGateway):
@@ -36,12 +44,11 @@ def test_simple_list_json_inferences(embedded_sync_client: TensorZeroGateway):
 
 
 def test_simple_query_with_float_filter(embedded_sync_client: TensorZeroGateway):
-    filters = {
-        "type": "float_metric",
-        "metric_name": "jaccard_similarity",
-        "value": 0.5,
-        "comparison_operator": ">",
-    }
+    filters = FloatMetricNode(
+        metric_name="jaccard_similarity",
+        value=0.5,
+        comparison_operator=">",
+    )
     inferences = embedded_sync_client.experimental_list_inferences(
         function_name="extract_entities",
         variant_name=None,
@@ -107,11 +114,10 @@ def test_demonstration_output_source(embedded_sync_client: TensorZeroGateway):
 
 
 def test_boolean_metric_filter(embedded_sync_client: TensorZeroGateway):
-    filters = {
-        "type": "boolean_metric",
-        "metric_name": "exact_match",
-        "value": True,
-    }
+    filters = BooleanMetricNode(
+        metric_name="exact_match",
+        value=True,
+    )
     inferences = embedded_sync_client.experimental_list_inferences(
         function_name="extract_entities",
         variant_name=None,
@@ -126,23 +132,20 @@ def test_boolean_metric_filter(embedded_sync_client: TensorZeroGateway):
 
 
 def test_and_filter_multiple_float_metrics(embedded_sync_client: TensorZeroGateway):
-    filters = {
-        "type": "and",
-        "children": [
-            {
-                "type": "float_metric",
-                "metric_name": "jaccard_similarity",
-                "value": 0.5,
-                "comparison_operator": ">",
-            },
-            {
-                "type": "float_metric",
-                "metric_name": "jaccard_similarity",
-                "value": 0.8,
-                "comparison_operator": "<",
-            },
-        ],
-    }
+    filters = AndNode(
+        children=[
+            FloatMetricNode(
+                metric_name="jaccard_similarity",
+                value=0.5,
+                comparison_operator=">",
+            ),
+            FloatMetricNode(
+                metric_name="jaccard_similarity",
+                value=0.8,
+                comparison_operator="<",
+            ),
+        ]
+    )
     inferences = embedded_sync_client.experimental_list_inferences(
         function_name="extract_entities",
         variant_name=None,
@@ -157,27 +160,23 @@ def test_and_filter_multiple_float_metrics(embedded_sync_client: TensorZeroGatew
 
 
 def test_or_filter_mixed_metrics(embedded_sync_client: TensorZeroGateway):
-    filters = {
-        "type": "or",
-        "children": [
-            {
-                "type": "float_metric",
-                "metric_name": "jaccard_similarity",
-                "value": 0.8,
-                "comparison_operator": ">=",
-            },
-            {
-                "type": "boolean_metric",
-                "metric_name": "exact_match",
-                "value": True,
-            },
-            {
-                "type": "boolean_metric",
-                "metric_name": "goal_achieved",
-                "value": True,
-            },
-        ],
-    }
+    filters = OrNode(
+        children=[
+            FloatMetricNode(
+                metric_name="jaccard_similarity",
+                value=0.8,
+                comparison_operator=">=",
+            ),
+            BooleanMetricNode(
+                metric_name="exact_match",
+                value=True,
+            ),
+            BooleanMetricNode(
+                metric_name="goal_achieved",
+                value=True,
+            ),
+        ]
+    )
     inferences = embedded_sync_client.experimental_list_inferences(
         function_name="extract_entities",
         variant_name=None,
@@ -192,24 +191,20 @@ def test_or_filter_mixed_metrics(embedded_sync_client: TensorZeroGateway):
 
 
 def test_not_filter(embedded_sync_client: TensorZeroGateway):
-    filters = {
-        "type": "not",
-        "child": {
-            "type": "or",
-            "children": [
-                {
-                    "type": "boolean_metric",
-                    "metric_name": "exact_match",
-                    "value": True,
-                },
-                {
-                    "type": "boolean_metric",
-                    "metric_name": "exact_match",
-                    "value": False,
-                },
-            ],
-        },
-    }
+    filters = NotNode(
+        child=OrNode(
+            children=[
+                BooleanMetricNode(
+                    metric_name="exact_match",
+                    value=True,
+                ),
+                BooleanMetricNode(
+                    metric_name="exact_match",
+                    value=False,
+                ),
+            ]
+        )
+    )
     inferences = embedded_sync_client.experimental_list_inferences(
         function_name="extract_entities",
         variant_name=None,
@@ -278,12 +273,11 @@ async def test_simple_list_json_inferences_async(
 async def test_simple_query_with_float_filter_async(
     embedded_async_client: AsyncTensorZeroGateway,
 ):
-    filters = {
-        "type": "float_metric",
-        "metric_name": "jaccard_similarity",
-        "value": 0.5,
-        "comparison_operator": ">",
-    }
+    filters = FloatMetricNode(
+        metric_name="jaccard_similarity",
+        value=0.5,
+        comparison_operator=">",
+    )
     inferences = await embedded_async_client.experimental_list_inferences(
         function_name="extract_entities",
         variant_name=None,
@@ -355,11 +349,10 @@ async def test_demonstration_output_source_async(
 async def test_boolean_metric_filter_async(
     embedded_async_client: AsyncTensorZeroGateway,
 ):
-    filters = {
-        "type": "boolean_metric",
-        "metric_name": "exact_match",
-        "value": True,
-    }
+    filters = BooleanMetricNode(
+        metric_name="exact_match",
+        value=True,
+    )
     inferences = await embedded_async_client.experimental_list_inferences(
         function_name="extract_entities",
         variant_name=None,
@@ -377,23 +370,20 @@ async def test_boolean_metric_filter_async(
 async def test_and_filter_multiple_float_metrics_async(
     embedded_async_client: AsyncTensorZeroGateway,
 ):
-    filters = {
-        "type": "and",
-        "children": [
-            {
-                "type": "float_metric",
-                "metric_name": "jaccard_similarity",
-                "value": 0.5,
-                "comparison_operator": ">",
-            },
-            {
-                "type": "float_metric",
-                "metric_name": "jaccard_similarity",
-                "value": 0.8,
-                "comparison_operator": "<",
-            },
-        ],
-    }
+    filters = AndNode(
+        children=[
+            FloatMetricNode(
+                metric_name="jaccard_similarity",
+                value=0.5,
+                comparison_operator=">",
+            ),
+            FloatMetricNode(
+                metric_name="jaccard_similarity",
+                value=0.8,
+                comparison_operator="<",
+            ),
+        ]
+    )
     inferences = await embedded_async_client.experimental_list_inferences(
         function_name="extract_entities",
         variant_name=None,
@@ -411,27 +401,23 @@ async def test_and_filter_multiple_float_metrics_async(
 async def test_or_filter_mixed_metrics_async(
     embedded_async_client: AsyncTensorZeroGateway,
 ):
-    filters = {
-        "type": "or",
-        "children": [
-            {
-                "type": "float_metric",
-                "metric_name": "jaccard_similarity",
-                "value": 0.8,
-                "comparison_operator": ">=",
-            },
-            {
-                "type": "boolean_metric",
-                "metric_name": "exact_match",
-                "value": True,
-            },
-            {
-                "type": "boolean_metric",
-                "metric_name": "goal_achieved",
-                "value": True,
-            },
-        ],
-    }
+    filters = OrNode(
+        children=[
+            FloatMetricNode(
+                metric_name="jaccard_similarity",
+                value=0.8,
+                comparison_operator=">=",
+            ),
+            BooleanMetricNode(
+                metric_name="exact_match",
+                value=True,
+            ),
+            BooleanMetricNode(
+                metric_name="goal_achieved",
+                value=True,
+            ),
+        ]
+    )
     inferences = await embedded_async_client.experimental_list_inferences(
         function_name="extract_entities",
         variant_name=None,
@@ -447,24 +433,20 @@ async def test_or_filter_mixed_metrics_async(
 
 @pytest.mark.asyncio
 async def test_not_filter_async(embedded_async_client: AsyncTensorZeroGateway):
-    filters = {
-        "type": "not",
-        "child": {
-            "type": "or",
-            "children": [
-                {
-                    "type": "boolean_metric",
-                    "metric_name": "exact_match",
-                    "value": True,
-                },
-                {
-                    "type": "boolean_metric",
-                    "metric_name": "exact_match",
-                    "value": False,
-                },
-            ],
-        },
-    }
+    filters = NotNode(
+        child=OrNode(
+            children=[
+                BooleanMetricNode(
+                    metric_name="exact_match",
+                    value=True,
+                ),
+                BooleanMetricNode(
+                    metric_name="exact_match",
+                    value=False,
+                ),
+            ]
+        )
+    )
     inferences = await embedded_async_client.experimental_list_inferences(
         function_name="extract_entities",
         variant_name=None,
