@@ -103,6 +103,13 @@ pub struct Base64File {
     pub data: Option<String>,
 }
 
+impl std::fmt::Display for Base64File {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
+}
+
 impl Base64File {
     pub fn data(&self) -> Result<&String, Error> {
         self.data.as_ref().ok_or_else(|| {
@@ -123,6 +130,10 @@ impl Base64File {
     #[getter(mime_type)]
     pub fn mime_type_string(&self) -> String {
         self.mime_type.to_string()
+    }
+
+    pub fn __repr__(&self) -> String {
+        self.to_string()
     }
 }
 

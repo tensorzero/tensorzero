@@ -1,6 +1,8 @@
 #[cfg(feature = "pyo3")]
+use crate::inference::types::pyo3_helpers::{serialize_to_dict, uuid_to_python};
+#[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
 
@@ -15,16 +17,101 @@ use crate::{
 /// NOTE / TODO: As an incremental step we are deserializing this enum from Python.
 /// in the final version we should instead make this a native PyO3 class and
 /// avoid deserialization entirely unless given a dict.
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-#[cfg_attr(feature = "pyo3", pyclass)]
+#[cfg_attr(feature = "pyo3", pyclass(str))]
 pub enum StoredInference {
     Chat(StoredChatInference),
     Json(StoredJsonInference),
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-#[cfg_attr(feature = "pyo3", pyclass)]
+impl std::fmt::Display for StoredInference {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl StoredInference {
+    pub fn __repr__(&self) -> String {
+        self.to_string()
+    }
+
+    #[getter]
+    pub fn get_function_name(&self) -> String {
+        match self {
+            StoredInference::Chat(example) => example.function_name.clone(),
+            StoredInference::Json(example) => example.function_name.clone(),
+        }
+    }
+
+    #[getter]
+    pub fn get_variant_name(&self) -> String {
+        match self {
+            StoredInference::Chat(example) => example.variant_name.clone(),
+            StoredInference::Json(example) => example.variant_name.clone(),
+        }
+    }
+
+    #[getter]
+    pub fn get_input<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        Ok(match self {
+            StoredInference::Chat(example) => {
+                serialize_to_dict(py, example.input.clone())?.into_bound(py)
+            }
+            StoredInference::Json(example) => {
+                serialize_to_dict(py, example.input.clone())?.into_bound(py)
+            }
+        })
+    }
+
+    /// Returns the output of the inference as a Python dictionary.
+    /// This is actually a List of ContentBlockChatOutputs for StoredChatInference
+    /// and a JsonInferenceOutput for StoredJsonInference.
+    #[getter]
+    pub fn get_output<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        Ok(match self {
+            StoredInference::Chat(example) => {
+                serialize_to_dict(py, example.output.clone())?.into_bound(py)
+            }
+            StoredInference::Json(example) => {
+                serialize_to_dict(py, example.output.clone())?.into_bound(py)
+            }
+        })
+    }
+
+    #[getter]
+    pub fn get_episode_id<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        match self {
+            StoredInference::Chat(example) => uuid_to_python(py, example.episode_id),
+            StoredInference::Json(example) => uuid_to_python(py, example.episode_id),
+        }
+    }
+
+    #[getter]
+    pub fn get_inference_id<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        match self {
+            StoredInference::Chat(example) => uuid_to_python(py, example.inference_id),
+            StoredInference::Json(example) => uuid_to_python(py, example.inference_id),
+        }
+    }
+
+    #[getter]
+    pub fn get_tool_params<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        Ok(match self {
+            StoredInference::Chat(example) => {
+                serialize_to_dict(py, example.tool_params.clone())?.into_bound(py)
+            }
+            // Json inferences don't have tool params
+            StoredInference::Json(_) => py.None().into_bound(py),
+        })
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct StoredChatInference {
     pub function_name: String,
     pub variant_name: String,
@@ -38,8 +125,23 @@ pub struct StoredChatInference {
     pub tool_params: ToolCallConfigDatabaseInsert,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-#[cfg_attr(feature = "pyo3", pyclass)]
+impl std::fmt::Display for StoredChatInference {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl StoredChatInference {
+    pub fn __repr__(&self) -> String {
+        self.to_string()
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct StoredJsonInference {
     pub function_name: String,
     pub variant_name: String,
@@ -51,6 +153,21 @@ pub struct StoredJsonInference {
     pub inference_id: Uuid,
     #[serde(deserialize_with = "deserialize_string_or_parsed_json")]
     pub output_schema: Value,
+}
+
+impl std::fmt::Display for StoredJsonInference {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl StoredJsonInference {
+    pub fn __repr__(&self) -> String {
+        self.to_string()
+    }
 }
 
 impl StoredInference {

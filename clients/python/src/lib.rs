@@ -910,7 +910,7 @@ impl TensorZeroGateway {
         this: PyRef<'_, Self>,
         function_name: String,
         variant_name: Option<String>,
-        filters: Option<Bound<'_, PyAny>>, // TODO: make this a Pyclass
+        filters: Option<Bound<'_, PyAny>>,
         output_source: String,
         limit: Option<u64>,
         offset: Option<u64>,
@@ -920,12 +920,18 @@ impl TensorZeroGateway {
             .as_ref()
             .map(|x| deserialize_from_pyobj(this.py(), x))
             .transpose()?;
+        let output_source =
+            output_source
+                .as_str()
+                .try_into()
+                .map_err(|e: tensorzero_internal::error::Error| {
+                    convert_error(this.py(), TensorZeroError::Other { source: e.into() })
+                })?;
         let params = ListInferencesParams {
             function_name: &function_name,
             variant_name: variant_name.as_deref(),
             filters: filters.as_ref(),
-            output_source: serde_json::from_str(&output_source)
-                .map_err(|e| PyValueError::new_err(format!("Invalid output source: {e}")))?,
+            output_source,
             limit,
             offset,
             format: ClickhouseFormat::JsonEachRow,
@@ -1484,7 +1490,7 @@ impl AsyncTensorZeroGateway {
         this: PyRef<'a, Self>,
         function_name: String,
         variant_name: Option<String>,
-        filters: Option<Bound<'a, PyAny>>, // TODO: make this a Pyclass
+        filters: Option<Bound<'a, PyAny>>,
         output_source: String,
         limit: Option<u64>,
         offset: Option<u64>,
@@ -1494,13 +1500,19 @@ impl AsyncTensorZeroGateway {
             .as_ref()
             .map(|x| deserialize_from_pyobj(this.py(), x))
             .transpose()?;
+        let output_source =
+            output_source
+                .as_str()
+                .try_into()
+                .map_err(|e: tensorzero_internal::error::Error| {
+                    convert_error(this.py(), TensorZeroError::Other { source: e.into() })
+                })?;
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             let params = ListInferencesParams {
                 function_name: &function_name,
                 variant_name: variant_name.as_deref(),
                 filters: filters.as_ref(),
-                output_source: serde_json::from_str(&output_source)
-                    .map_err(|e| PyValueError::new_err(format!("Invalid output source: {e}")))?,
+                output_source,
                 limit,
                 offset,
                 format: ClickhouseFormat::JsonEachRow,

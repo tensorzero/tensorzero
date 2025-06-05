@@ -12,11 +12,24 @@ use crate::{
     function::FunctionConfig,
 };
 
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq)]
-#[serde(rename_all = "snake_case")]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum InferenceOutputSource {
     Inference,
     Demonstration,
+}
+
+impl TryFrom<&str> for InferenceOutputSource {
+    type Error = Error;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "inference" => Ok(InferenceOutputSource::Inference),
+            "demonstration" => Ok(InferenceOutputSource::Demonstration),
+            _ => Err(Error::new(ErrorDetails::InvalidInferenceOutputSource {
+                source: value.to_string(),
+            })),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq)]

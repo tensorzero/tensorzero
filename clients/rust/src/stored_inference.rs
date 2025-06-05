@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use pyo3::prelude::*;
 #[cfg(feature = "pyo3")]
 use pyo3::types::{PyAny, PyList};
+use serde::Serialize;
 use serde_json::Value;
 #[cfg(feature = "pyo3")]
 use tensorzero_internal::inference::types::pyo3_helpers::{
@@ -22,8 +23,8 @@ use uuid::Uuid;
 /// Represents an inference that has been prepared for fine-tuning.
 /// This is constructed by rendering a StoredInference with a variant for messages
 /// and by resolving all network resources (e.g. images).
-#[cfg_attr(feature = "pyo3", pyclass)]
-#[derive(Debug, PartialEq)]
+#[cfg_attr(feature = "pyo3", pyclass(str))]
+#[derive(Debug, PartialEq, Serialize)]
 pub struct RenderedStoredInference {
     pub function_name: String,
     pub variant_name: String,
@@ -81,6 +82,18 @@ impl RenderedStoredInference {
     #[getter]
     pub fn get_output_schema<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         serialize_to_dict(py, self.output_schema.clone()).map(|x| x.into_bound(py))
+    }
+
+    pub fn __repr__(&self) -> String {
+        self.to_string()
+    }
+}
+
+impl std::fmt::Display for RenderedStoredInference {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Serialize the rendered inference to pretty-printed JSON
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
     }
 }
 

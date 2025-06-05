@@ -50,9 +50,24 @@ pub enum ResolvedInputMessageContent {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
-#[cfg_attr(feature = "pyo3", pyclass(get_all))]
+#[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
 pub struct FileWithPath {
     #[serde(alias = "image")]
     pub file: Base64File,
     pub storage_path: StoragePath,
+}
+
+impl std::fmt::Display for FileWithPath {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl FileWithPath {
+    pub fn __repr__(&self) -> String {
+        self.to_string()
+    }
 }
