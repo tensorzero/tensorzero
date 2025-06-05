@@ -1547,7 +1547,7 @@ impl AsyncTensorZeroGateway {
         let client = this.as_super().client.clone();
         let stored_inferences = stored_inferences
             .iter()
-            .map(|x| deserialize_from_pyobj(this.py(), x))
+            .map(|x| deserialize_from_stored_inference(this.py(), x))
             .collect::<Result<Vec<_>, _>>()?;
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             let res = client
