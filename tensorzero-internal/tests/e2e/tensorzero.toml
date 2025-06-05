@@ -465,6 +465,30 @@ routing = ["dummy"]
 type = "dummy"
 model_name = "null"
 
+[models.slow_with_timeout]
+routing = ["slow"]
+
+[models.slow_with_timeout.providers.slow]
+type = "dummy"
+model_name = "slow"
+
+[models.slow_with_timeout.providers.slow.timeouts]
+non_streaming = { total_ms = 400 }
+streaming = { ttft_ms = 500 }
+
+[models.slow_second_chunk]
+routing = ["slow"]
+
+[models.slow_second_chunk.providers.slow]
+type = "dummy"
+model_name = "slow_second_chunk"
+
+[models.slow_second_chunk.providers.slow.timeouts]
+# The model takes 2 seconds to produce the second chunk,
+# but produces the first chunk with no delay.
+# As a result, this timeout should never be hit.
+streaming = { ttft_ms = 500 }
+
 [models.slow]
 routing = ["slow"]
 
@@ -607,6 +631,39 @@ model_name = "text-embedding-3-small"
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                 FUNCTIONS                                  │
 # └────────────────────────────────────────────────────────────────────────────┘
+
+[functions.basic_test_timeout]
+type = "chat"
+
+[functions.basic_test_timeout.variants.slow_second_chunk]
+type = "chat_completion"
+model = "slow_second_chunk"
+
+[functions.basic_test_timeout.variants.good]
+type = "chat_completion"
+model = "dummy::good"
+
+[functions.basic_test_timeout.variants.reasoner]
+type = "chat_completion"
+model = "dummy::reasoner"
+
+[functions.basic_test_timeout.variants.timeout]
+type = "chat_completion"
+model = "slow_with_timeout"
+
+[functions.basic_test_timeout.variants.best_of_n]
+type = "experimental_best_of_n_sampling"
+candidates = ["good", "timeout", "reasoner"]
+
+[functions.basic_test_timeout.variants.best_of_n.evaluator]
+model = "dummy::best_of_n_0"
+
+[functions.basic_test_timeout.variants.best_of_n_judge_timeout]
+type = "experimental_best_of_n_sampling"
+candidates = ["good", "reasoner"]
+
+[functions.basic_test_timeout.variants.best_of_n_judge_timeout.evaluator]
+model = "slow_with_timeout"
 
 [functions.basic_test_no_system_schema]
 type = "chat"
