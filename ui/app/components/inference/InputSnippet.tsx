@@ -144,13 +144,11 @@ export default function InputSnippet({ input }: InputSnippetProps) {
           <>
             <SnippetHeading heading="Messages" />
             <SnippetContent>
-              <div className="pb-4">
-                {input.messages.map((message, messageIndex) => (
-                  <div key={messageIndex}>
-                    {renderMessage(message, messageIndex)}
-                  </div>
-                ))}
-              </div>
+              {input.messages.map((message, messageIndex) => (
+                <div key={messageIndex}>
+                  {renderMessage(message, messageIndex)}
+                </div>
+              ))}
             </SnippetContent>
           </>
         )}

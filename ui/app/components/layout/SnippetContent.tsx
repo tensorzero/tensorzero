@@ -64,11 +64,11 @@ export function CodeMessage({
     <div className="relative w-full">
       <Label text={label} />
 
-      <div className="bg-bg-primary w-full overflow-hidden rounded-lg">
+      <div className="w-full overflow-hidden">
         <div className="w-full">
           <div className="flex w-full">
             {showLineNumbers && (
-              <div className="bg-bg-primary text-fg-muted pointer-events-none sticky left-0 min-w-[2rem] shrink-0 pr-3 text-right font-mono select-none">
+              <div className="text-fg-muted pointer-events-none sticky left-0 min-w-[2rem] shrink-0 pr-3 text-right font-mono select-none">
                 {Array.from({ length: lineCount }, (_, i) => (
                   <div key={i} className="text-sm leading-6">
                     {i + 1}
@@ -107,17 +107,12 @@ export function TextMessage({
   }
 
   return (
-    <div className="relative flex max-w-240 min-w-80 flex-col gap-2">
+    <div className="flex max-w-240 min-w-80 flex-col gap-1">
       <Label
         text={label}
         icon={<AlignLeft className="text-fg-muted h-3 w-3" />}
       />
-
-      <div className="bg-bg-primary w-full overflow-hidden rounded-lg">
-        <div className="text-fg-primary text-sm break-words whitespace-pre-wrap">
-          {content || ""}
-        </div>
-      </div>
+      <div className="w-full text-fg-primary text-sm break-words whitespace-pre-wrap">{content || ""}</div>
     </div>
   );
 }
@@ -149,7 +144,7 @@ export function TextMessageWithArguments({
   content,
 }: TextMessageWithArgumentsProps) {
   return (
-    <div className="flex max-w-240 min-w-80 flex-col gap-1.5">
+    <div className="flex max-w-240 min-w-80 flex-col gap-1">
       <Label
         text="Text (Arguments)"
         icon={<AlignLeft className="text-fg-muted h-3 w-3" />}
@@ -219,7 +214,7 @@ export function ToolResultMessage({
         text="Tool Result"
         icon={<ArrowRight className="text-fg-muted h-3 w-3" />}
       />
-      <div className="border-border bg-bg-tertiary flex w-full flex-col gap-1 rounded-md border px-3 py-2 text-sm">
+      <div className="border-border bg-bg-tertiary flex flex-col gap-1 rounded-md border px-3 py-2 text-sm">
         <div className="flex flex-row items-start gap-1 whitespace-nowrap">
           <span className="text-fg-secondary w-16 min-w-16">Name:</span>
           <span className="overflow-hidden text-ellipsis">{toolName}</span>
@@ -232,7 +227,7 @@ export function ToolResultMessage({
         </div>
         <div className="flex flex-row items-start gap-1">
           <span className="text-fg-secondary w-16 min-w-16">Result:</span>
-          <div className="flex w-full max-w-full overflow-x-auto">
+          <div className="w-full overflow-x-auto">
             <pre className="max-w-full font-mono break-words whitespace-pre-wrap">
               {toolResult}
             </pre>
