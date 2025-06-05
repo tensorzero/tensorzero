@@ -1,0 +1,22 @@
+[project]
+name = "tensorzero-recipe-sft-axolotl-metrics"
+version = "0.0.0"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "awscli",
+    "clickhouse-connect",
+    "ipykernel",
+    "ipywidgets",
+    "minijinja",
+    "notebook",
+    "numpy",
+    "packaging",
+    "pandas",
+    "pydantic",
+    "setuptools",
+    "tensorzero>=2025.5.9",
+    "toml",
+    "torch==2.6.0",
+    "wheel",
+]
