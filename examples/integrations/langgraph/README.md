@@ -2,7 +2,7 @@
 
 ## Overview
 
-This example demonstrates how to integrate LangGraph with TensorZero to create a simple chatbot that can call external APIs.
+This example demonstrates how to integrate TensorZero with LangGraph to create a simple chatbot that can call external APIs.
 
 ## Getting Started
 
