@@ -15,6 +15,5 @@ dependencies = [
     "toml",
     "torchao",
     "torch",
-    "torchtune",
     "torchvision",
 ]

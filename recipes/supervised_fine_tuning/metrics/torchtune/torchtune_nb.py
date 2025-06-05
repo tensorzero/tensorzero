@@ -107,7 +107,7 @@ except subprocess.CalledProcessError as e:
 # %%
 if USE_LORA:
     MODEL_CONFIG = {
-        "_component_": MODELS[MODEL_NAME]["module_lora"],
+        "_component_": MODELS[MODEL_NAME]["modules"]["lora"],
         "lora_attn_modules": [
             "q_proj",
             "k_proj",
@@ -122,21 +122,28 @@ if USE_LORA:
     }
 else:
     MODEL_CONFIG = {
-        "_component_": MODELS[MODEL_NAME]["module"],
+        "_component_": MODELS[MODEL_NAME]["modules"]["full"],
     }
 
 # %% [markdown]
 # Set the training parameters
 
 # %%
+TOKENIZER_CONFIG = MODELS[MODEL_NAME]["tokenizer"]
+if TOKENIZER_CONFIG.get("path"):
+    TOKENIZER_CONFIG["path"] = str(checkpoint_dir / TOKENIZER_CONFIG["path"])
+if TOKENIZER_CONFIG.get("merges_file"):
+    TOKENIZER_CONFIG["merges_file"] = str(
+        checkpoint_dir / TOKENIZER_CONFIG["merges_file"]
+    )
+TOKENIZER_CONFIG["max_seq_len"] = (
+    None  # Can set to an integer value to reduce your memory footprint
+)
+
 TUNING_CONFIG = {
     "output_dir": OUTPUT_DIR,
     # Tokenizer
-    "tokenizer": {
-        "_component_": MODELS[MODEL_NAME]["tokenizer_module"],
-        "path": str(checkpoint_dir / MODELS[MODEL_NAME]["tokenizer_path"]),
-        "max_seq_len": None,  # Can set to an integer value to reduce your memory footprint
-    },
+    "tokenizer": TOKENIZER_CONFIG,
     # Model Arguments
     "model": MODEL_CONFIG,
     "checkpointer": {
@@ -145,7 +152,7 @@ TUNING_CONFIG = {
         "checkpoint_files": list_checkpoints(checkpoint_dir),
         "recipe_checkpoint": None,
         "output_dir": OUTPUT_DIR,
-        "model_type": MODELS[MODEL_NAME]["model_type"],
+        "model_type": MODELS[MODEL_NAME]["checkpointer"]["model_type"],
     },
     "resume_from_checkpoint": False,
     "save_adapter_weights_only": USE_LORA,
@@ -161,7 +168,7 @@ TUNING_CONFIG = {
         "num_warmup_steps": 100,
     },
     "loss": {
-        "_component_": "torchtune.modules.loss.CEWithChunkedOutputLoss",
+        "_component_": "torchtune.modules.loss.LinearCrossEntropyLoss",
     },
     # Training
     "epochs": 1,
@@ -467,6 +474,8 @@ def message_to_chatml(message: OutputMessage) -> Optional[List[Dict[str, Any]]]:
             chatml_message["content"] = "\n".join(content)
         if tool_calls:
             chatml_message["tool_calls"] = tool_calls
+            if len(content) == 0:
+                chatml_message["content"] = ""
         chatml_messages.append(chatml_message)
 
     return chatml_messages
@@ -506,6 +515,8 @@ def output_to_chatml(output: List[ContentBlock]) -> Dict[str, Any]:
         output_message["content"] = "\n".join(content)
     if tool_calls:
         output_message["tool_calls"] = tool_calls
+        if len(content) == 0:
+            output_message["content"] = ""
 
     return output_message
 
@@ -540,7 +551,7 @@ conversations = pd.DataFrame(conversations)
 unique_episode_ids = conversations["episode_id"].unique()
 
 # Shuffle the unique episode_ids
-np.random.seed(42)
+np.random.seed(SEED)
 np.random.shuffle(unique_episode_ids)
 
 # Calculate the split index for episode_ids
