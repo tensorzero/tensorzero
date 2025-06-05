@@ -6,6 +6,7 @@ use pyo3::{intern, prelude::*};
 use pyo3::{sync::GILOnceCell, types::PyModule, Bound, Py, PyAny, PyErr, PyResult, Python};
 use uuid::Uuid;
 
+use crate::clickhouse::types::StoredInference;
 use crate::inference::types::ContentBlockChatOutput;
 
 use super::ContentBlock;
@@ -185,6 +186,17 @@ pub fn serialize_to_dict<T: serde::ser::Serialize>(py: Python<'_>, val: T) -> Py
             )
         })?
         .call1(py, (json_str.into_pyobject(py)?,))
+}
+
+pub fn deserialize_from_stored_inference<'a>(
+    py: Python<'a>,
+    obj: &Bound<'a, PyAny>,
+) -> PyResult<StoredInference> {
+    if obj.is_instance_of::<StoredInference>() {
+        obj.extract()
+    } else {
+        deserialize_from_pyobj(py, obj)
+    }
 }
 
 // Converts a Python dictionary/list to json with `json.dumps`,

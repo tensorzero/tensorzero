@@ -28,8 +28,8 @@ use python_helpers::{
 use tensorzero_internal::{
     clickhouse::ClickhouseFormat,
     inference::types::pyo3_helpers::{
-        deserialize_from_pyobj, serialize_to_dict, tensorzero_internal_error, JSON_DUMPS,
-        JSON_LOADS,
+        deserialize_from_pyobj, deserialize_from_stored_inference, serialize_to_dict,
+        tensorzero_internal_error, JSON_DUMPS, JSON_LOADS,
     },
 };
 use tensorzero_internal::{
@@ -962,7 +962,7 @@ impl TensorZeroGateway {
         let client = this.as_super().client.clone();
         let stored_inferences = stored_inferences
             .iter()
-            .map(|x| deserialize_from_pyobj(this.py(), x))
+            .map(|x| deserialize_from_stored_inference(this.py(), x))
             .collect::<Result<Vec<_>, _>>()?;
         let fut = client.experimental_render_inferences(stored_inferences, variants);
         tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))

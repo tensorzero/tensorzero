@@ -76,8 +76,8 @@ def test_simple_query_chat_function(embedded_sync_client: TensorZeroGateway):
         assert isinstance(output, list)
         assert len(output) == 1
         output_0 = output[0]
-        assert output_0["type"] == "text"
-        assert output_0["text"] is not None
+        assert output_0.type == "text"
+        assert output_0.text is not None
         inference_id = inference.inference_id
         assert isinstance(inference_id, UUID)
         episode_id = inference.episode_id
@@ -218,3 +218,22 @@ def test_not_filter(embedded_sync_client: TensorZeroGateway):
         offset=None,
     )
     assert len(inferences) == 0
+
+
+def test_list_render_inferences(embedded_sync_client: TensorZeroGateway):
+    stored_inferences = embedded_sync_client.experimental_list_inferences(
+        function_name="extract_entities",
+        variant_name=None,
+        filters=None,
+        output_source="inference",
+        limit=2,
+        offset=None,
+    )
+    rendered_inferences = embedded_sync_client.experimental_render_inferences(
+        stored_inferences=stored_inferences,
+        variants={"extract_entities": "gpt_4o_mini"},
+    )
+    assert len(rendered_inferences) == 2
+
+
+# TODO: implement tests for async client
