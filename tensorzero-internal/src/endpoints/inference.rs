@@ -240,7 +240,11 @@ pub async fn inference(
     .await?;
     tracing::Span::current().record("episode_id", episode_id.to_string());
 
-    let (function, function_name) = find_function(&params, &config)?;
+    let models = config.models.read().await;
+    let (function, function_name) = find_function(&params, &config, &models)?;
+    // Release the read lock on the models table before potentially spawning
+    drop(models);
+
     // Collect the function variant names as a Vec<&str>
     let mut candidate_variant_names: Vec<&str> =
         function.variants().keys().map(AsRef::as_ref).collect();
@@ -331,8 +335,9 @@ pub async fn inference(
         cache_options: &(params.cache_options, dryrun).into(),
     };
 
+    let models = config.models.read().await;
     let inference_models = InferenceModels {
-        models: &config.models,
+        models: &*models,
         embedding_models: &config.embedding_models,
     };
     let resolved_input = params
@@ -465,6 +470,7 @@ pub async fn inference(
                 // not be cancelled partway through execution if the outer '/inference' request
                 // is cancelled. This reduces the chances that we only write to some tables and not others
                 // (but this is inherently best-effort due to ClickHouse's lack of transactions).
+                let config = config.clone();
                 let write_future = tokio::spawn(async move {
                     write_inference(
                         &clickhouse_connection_info,
@@ -505,7 +511,7 @@ pub async fn inference(
 /// invalid combination of parameters is provided.
 /// If `model_name` is specified, then we use the special 'default' function
 /// Returns the function config and the function name
-fn find_function(params: &Params, config: &Config) -> Result<(Arc<FunctionConfig>, String), Error> {
+fn find_function(params: &Params, config: &Config, models: &ModelTable) -> Result<(Arc<FunctionConfig>, String), Error> {
     match (&params.function_name, &params.model_name) {
         // Get the function config or return an error if it doesn't exist
         (Some(function_name), None) => Ok((
@@ -520,7 +526,7 @@ fn find_function(params: &Params, config: &Config) -> Result<(Arc<FunctionConfig
                 }
                 .into());
             }
-            if let Err(e) = config.models.validate(model_name) {
+            if let Err(e) = models.validate(model_name) {
                 return Err(ErrorDetails::InvalidInferenceTarget {
                     message: format!("Invalid model name: {e}"),
                 }
@@ -1252,6 +1258,7 @@ mod tests {
                 ..Default::default()
             },
             &Config::default(),
+            &ModelTable::default(),
         )
         .expect_err("find_function should fail without either arg");
         assert!(
@@ -1270,6 +1277,7 @@ mod tests {
                 ..Default::default()
             },
             &Config::default(),
+            &ModelTable::default(),
         )
         .expect_err("find_function should fail with both args provided");
         assert!(
@@ -1289,6 +1297,7 @@ mod tests {
                 ..Default::default()
             },
             &Config::default(),
+            &ModelTable::default(),
         )
         .expect_err("find_function should fail without model_name");
         assert!(
@@ -1307,6 +1316,7 @@ mod tests {
                 ..Default::default()
             },
             &Config::default(),
+            &ModelTable::default(),
         )
         .expect("Failed to find shorthand function");
         assert_eq!(function_name, "tensorzero::default");
@@ -1325,6 +1335,7 @@ mod tests {
                 ..Default::default()
             },
             &Config::default(),
+            &ModelTable::default(),
         )
         .expect_err("find_function should fail with invalid provider");
         assert!(

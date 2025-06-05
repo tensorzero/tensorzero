@@ -211,9 +211,9 @@ pub async fn start_batch_inference_handler(
         credentials: &params.credentials,
         cache_options: &cache_options,
     };
-
+    let models = config.models.read().await;
     let inference_models = InferenceModels {
-        models: &config.models,
+        models: &*models,
         embedding_models: &config.embedding_models,
     };
     let inference_params: Vec<InferenceParams> =
@@ -347,8 +347,9 @@ pub async fn poll_batch_inference_handler(
         BatchStatus::Pending => {
             // For now, we don't support dynamic API keys for batch inference
             let credentials = InferenceCredentials::default();
+            let models = config.models.read().await;
             let response =
-                poll_batch_inference(&batch_request, http_client, &config.models, &credentials)
+                poll_batch_inference(&batch_request, http_client, &*models, &credentials)
                     .await?;
             let response = write_poll_batch_inference(
                 &clickhouse_connection_info,

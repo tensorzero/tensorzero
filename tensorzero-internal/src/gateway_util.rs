@@ -14,8 +14,10 @@ use tracing::instrument;
 use crate::clickhouse::migration_manager;
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::config_parser::Config;
+use crate::model::ModelTable;
 use crate::endpoints;
 use crate::error::{Error, ErrorDetails};
+use crate::redis_client::RedisClient;
 
 /// State for the API
 #[derive(Clone)]
@@ -35,7 +37,9 @@ impl AppStateData {
                     tracing::warn!("Deprecation Warning: The environment variable \"CLICKHOUSE_URL\" has been renamed to \"TENSORZERO_CLICKHOUSE_URL\" and will be removed in a future version. Please update your environment to use \"TENSORZERO_CLICKHOUSE_URL\" instead.");
                 })
             });
-        Self::new_with_clickhouse(config, clickhouse_url).await
+        let state = Self::new_with_clickhouse(config, clickhouse_url).await?;
+        state.setup_redis_client().await?;
+        Ok(state)
     }
 
     async fn new_with_clickhouse(
@@ -50,6 +54,32 @@ impl AppStateData {
             http_client,
             clickhouse_connection_info,
         })
+    }
+    pub async fn update_model_table(&self, new_models: ModelTable) {
+        let mut models = self.config.models.write().await;
+        *models = new_models;
+    }
+
+    async fn setup_redis_client(&self) -> Result<Option<RedisClient>, Error> {
+        let redis_url = match std::env::var("TENSORZERO_REDIS_URL") {
+            Ok(url) => url,
+            Err(_) => {
+                tracing::warn!("TENSORZERO_REDIS_URL is not set, redis client will not be used");
+                return Ok(None);
+            }
+        };
+        if redis_url.is_empty() {
+            tracing::warn!("TENSORZERO_REDIS_URL is set to an empty string, redis client will not be used");
+            return Ok(None);
+        }
+        
+        let updater = RedisClient::new(&redis_url, self.clone());
+        updater.start().await.map_err(|e| {
+            tracing::error!("Failed to start redis model updater: {e}");
+            e
+        })?;
+
+        Ok(None)
     }
 }
 
