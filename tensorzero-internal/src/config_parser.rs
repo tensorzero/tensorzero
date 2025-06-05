@@ -57,6 +57,30 @@ pub struct Config<'c> {
 }
 
 #[derive(Debug, Default, Deserialize)]
+pub struct NonStreamingTimeouts {
+    #[serde(default)]
+    /// The total time allowed for the non-streaming request to complete.
+    pub total_ms: Option<u64>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+pub struct StreamingTimeouts {
+    #[serde(default)]
+    /// The time allowed for the first token to be produced.
+    pub ttft_ms: Option<u64>,
+}
+
+/// Configures the timeouts for both streaming and non-streaming requests.
+/// This can be attached to various other configs (e.g. variants, models, model providers)
+#[derive(Debug, Default, Deserialize)]
+pub struct TimeoutsConfig {
+    #[serde(default)]
+    pub non_streaming: NonStreamingTimeouts,
+    #[serde(default)]
+    pub streaming: StreamingTimeouts,
+}
+
+#[derive(Debug, Default, Deserialize)]
 pub struct GatewayConfig {
     pub bind_address: Option<std::net::SocketAddr>,
     #[serde(default)]

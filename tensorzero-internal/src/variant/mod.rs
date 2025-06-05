@@ -31,6 +31,7 @@ use crate::jsonschema_util::DynamicJSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
 use crate::model::StreamResponse;
+use crate::model::StreamResponseAndMessages;
 use crate::tool::{create_dynamic_implicit_tool_config, ToolCallConfig};
 use crate::{inference::types::InferenceResult, model::ModelConfig};
 
@@ -598,15 +599,16 @@ async fn infer_model_request_stream<'request>(
     inference_params: InferenceParams,
     retry_config: RetryConfig,
 ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
-    let (
-        StreamResponse {
-            stream,
-            raw_request,
-            model_provider_name,
-            cached,
-        },
-        input_messages,
-    ) = (|| async {
+    let StreamResponseAndMessages {
+        response:
+            StreamResponse {
+                stream,
+                raw_request,
+                model_provider_name,
+                cached,
+            },
+        messages: input_messages,
+    } = (|| async {
         model_config
             .infer_stream(&request, clients, &model_name)
             .await
@@ -1011,6 +1013,7 @@ mod tests {
                     config: dummy_provider_config,
                     extra_body: Default::default(),
                     extra_headers: Default::default(),
+                    timeouts: Default::default(),
                 },
             )]),
         };
@@ -1118,6 +1121,7 @@ mod tests {
                     config: dummy_provider_config_json,
                     extra_body: Default::default(),
                     extra_headers: Default::default(),
+                    timeouts: Default::default(),
                 },
             )]),
         };
@@ -1175,6 +1179,7 @@ mod tests {
                     config: error_provider_config,
                     extra_body: Default::default(),
                     extra_headers: Default::default(),
+                    timeouts: Default::default(),
                 },
             )]),
         };
@@ -1296,6 +1301,7 @@ mod tests {
                         config: error_provider_config,
                         extra_body: Default::default(),
                         extra_headers: Default::default(),
+                        timeouts: Default::default(),
                     },
                 ),
                 (
@@ -1305,6 +1311,7 @@ mod tests {
                         config: dummy_provider_config,
                         extra_body: Default::default(),
                         extra_headers: Default::default(),
+                        timeouts: Default::default(),
                     },
                 ),
             ]),
@@ -1402,6 +1409,7 @@ mod tests {
                     config: dummy_provider_config,
                     extra_body: Default::default(),
                     extra_headers: Default::default(),
+                    timeouts: Default::default(),
                 },
             )]),
         }));
@@ -1573,6 +1581,7 @@ mod tests {
                         config: error_provider_config,
                         extra_body: Default::default(),
                         extra_headers: Default::default(),
+                        timeouts: Default::default(),
                     },
                 ),
                 (
@@ -1582,6 +1591,7 @@ mod tests {
                         config: dummy_provider_config,
                         extra_body: Default::default(),
                         extra_headers: Default::default(),
+                        timeouts: Default::default(),
                     },
                 ),
             ]),
