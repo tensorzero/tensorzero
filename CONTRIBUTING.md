@@ -86,7 +86,7 @@ Did you have something else in mind? Reach out on Slack or Discord and let us kn
 - Install `uv` [→](https://docs.astral.sh/uv/)
 - Install Python (3.9+) (e.g. `uv python install 3.9` + )
 - Install Node.js (we use v22) and `npm` [→](https://nodejs.org/en)
-- Install pnpm `npm install -g pnpm` [→](https://pnpm.io/installation)
+- Install pnpm `npm install -g pnpm@10` [→](https://pnpm.io/installation)
 
 ### Optimization Recipes
 
@@ -181,13 +181,11 @@ We include some fixture data as well in order to exercise some functionality.
 
 It also requires a one-time build of a WebAssembly module from Rust source code that is used to ensure consistent templating of messages across the gateway and UI.
 
-The steps below assume you are in the `ui/` directory.
-
 Here are the steps in order to run or test the UI assuming you have the prerequisites installed and this repository checked out:
 
 1. Install dependencies: `pnpm install`
 2. Build the WebAssembly module following instructions in `ui/app/utils/minijinja/README.md`.
-3. Create a `.env` file and set the following environment variables for the server:
+3. Create a `ui/.env` file and set the following environment variables for the server:
 
 ```bash
 OPENAI_API_KEY=<your-key>
@@ -197,11 +195,11 @@ TENSORZERO_CLICKHOUSE_URL=<your-clickhouse-url> # For testing, set to http://chu
 TENSORZERO_UI_CONFIG_PATH=<path-to-config-file> # For testing, set to ./fixtures/config/tensorzero.toml
 ```
 
-4. Run the dependencies: `docker compose -f fixtures/docker-compose.yml up --build --force-recreate`
+4. Run the dependencies: `docker compose -f ui/fixtures/docker-compose.yml up --build --force-recreate`
    (you can omit these last 2 flags to skip the build step, but they ensure you're using the latest gateway)
 
-With the dependencies running, you can run the tests with `pnpm run test` and the Playwright tests with `pnpm run test-e2e`.
-Similarly, you can start a development server with `pnpm run dev`.
+With the dependencies running, you can run the tests with `pnpm ui:test` and the Playwright tests with `pnpm ui:test:e2e`. Similarly, you can start a development server with `pnpm ui:dev`.
+
 There may be some Playwright tests in `main` that require feature flags to be on, so be aware of that if they fail for nonobvious reasons.
 
 ---

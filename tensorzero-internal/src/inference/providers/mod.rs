@@ -11,6 +11,7 @@ pub mod fireworks;
 pub mod gcp_vertex_anthropic;
 pub mod gcp_vertex_gemini;
 pub mod google_ai_studio_gemini;
+pub mod groq;
 pub mod helpers;
 pub mod helpers_thinking_block;
 pub mod hyperbolic;

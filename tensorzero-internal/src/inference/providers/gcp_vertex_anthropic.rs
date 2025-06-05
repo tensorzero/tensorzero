@@ -16,6 +16,7 @@ use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
+use crate::inference::types::file::require_image;
 use crate::inference::types::resolved_input::FileWithPath;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk, FunctionType,
@@ -27,8 +28,8 @@ use crate::inference::types::{
     ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStreamInner, RequestMessage, Usage,
 };
-use crate::model::ModelProvider;
 use crate::model::{build_creds_caching_default_with_fn, CredentialLocation};
+use crate::model::{fully_qualified_name, ModelProvider};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use super::anthropic::{
@@ -185,7 +186,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
         &'a self,
         ModelProviderRequest {
             request,
-            provider_name: _,
+            provider_name,
             model_name,
         }: ModelProviderRequest<'a>,
         http_client: &'a reqwest::Client,
@@ -262,6 +263,8 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
                 function_type: &request.function_type,
                 json_mode: &request.json_mode,
                 generic_request: request,
+                model_name,
+                provider_name,
             };
             Ok(response_with_latency.try_into()?)
         } else {
@@ -568,16 +571,17 @@ impl<'a> TryFrom<&'a ContentBlock>
                     }],
                 },
             ))),
-            ContentBlock::File(FileWithPath {
-                file,
-                storage_path: _,
-            }) => {
-                file.mime_type.require_image(PROVIDER_TYPE)?;
+            ContentBlock::File(file) => {
+                let FileWithPath {
+                    file,
+                    storage_path: _,
+                } = &**file;
+                require_image(&file.mime_type, PROVIDER_TYPE)?;
                 Ok(Some(FlattenUnknown::Normal(
                     GCPVertexAnthropicMessageContent::Image {
                         source: AnthropicDocumentSource {
                             r#type: AnthropicDocumentType::Base64,
-                            media_type: file.mime_type,
+                            media_type: file.mime_type.clone(),
                             data: file.data()?.clone(),
                         },
                     },
@@ -812,26 +816,31 @@ pub enum GCPVertexAnthropicContentBlock {
     },
 }
 
-impl TryFrom<GCPVertexAnthropicContentBlock> for ContentBlockOutput {
-    type Error = Error;
-    fn try_from(block: GCPVertexAnthropicContentBlock) -> Result<Self, Self::Error> {
-        match block {
-            GCPVertexAnthropicContentBlock::Text { text } => Ok(text.into()),
-            GCPVertexAnthropicContentBlock::ToolUse { id, name, input } => {
-                Ok(ContentBlockOutput::ToolCall(ToolCall {
-                    id,
-                    name,
-                    arguments: serde_json::to_string(&input).map_err(|e| {
-                        Error::new(ErrorDetails::Serialization {
-                            message: format!(
-                                "Error parsing input for tool call: {}",
-                                DisplayOrDebugGateway::new(e)
-                            ),
-                        })
-                    })?,
-                }))
-            }
+fn convert_to_output(
+    model_name: &str,
+    provider_name: &str,
+    block: FlattenUnknown<'static, GCPVertexAnthropicContentBlock>,
+) -> Result<ContentBlockOutput, Error> {
+    match block {
+        FlattenUnknown::Normal(GCPVertexAnthropicContentBlock::Text { text }) => Ok(text.into()),
+        FlattenUnknown::Normal(GCPVertexAnthropicContentBlock::ToolUse { id, name, input }) => {
+            Ok(ContentBlockOutput::ToolCall(ToolCall {
+                id,
+                name,
+                arguments: serde_json::to_string(&input).map_err(|e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!(
+                            "Error parsing input for tool call: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
+                    })
+                })?,
+            }))
         }
+        FlattenUnknown::Unknown(obj) => Ok(ContentBlockOutput::Unknown {
+            data: obj.into_owned(),
+            model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
+        }),
     }
 }
 
@@ -855,7 +864,7 @@ struct GCPVertexAnthropicResponse {
     id: String,
     r#type: String, // this is always "message"
     role: String,   // this is always "assistant"
-    content: Vec<GCPVertexAnthropicContentBlock>,
+    content: Vec<FlattenUnknown<'static, GCPVertexAnthropicContentBlock>>,
     model: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     stop_reason: Option<AnthropicStopReason>,
@@ -873,6 +882,8 @@ struct GCPVertexAnthropicResponseWithMetadata<'a> {
     function_type: &'a FunctionType,
     json_mode: &'a ModelInferenceRequestJsonMode,
     generic_request: &'a ModelInferenceRequest<'a>,
+    model_name: &'a str,
+    provider_name: &'a str,
 }
 
 impl<'a> TryFrom<GCPVertexAnthropicResponseWithMetadata<'a>> for ProviderInferenceResponse {
@@ -886,12 +897,14 @@ impl<'a> TryFrom<GCPVertexAnthropicResponseWithMetadata<'a>> for ProviderInferen
             function_type,
             json_mode,
             generic_request,
+            model_name,
+            provider_name,
         } = value;
 
         let content: Vec<ContentBlockOutput> = response
             .content
             .into_iter()
-            .map(|block| block.try_into())
+            .map(|block| convert_to_output(model_name, provider_name, block))
             .collect::<Result<Vec<_>, _>>()?;
         let raw_request = serde_json::to_string(&request).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
@@ -1903,14 +1916,17 @@ mod tests {
 
     #[test]
     fn test_anthropic_response_conversion() {
-        // Test case 1: Text response
+        // Test case 1: Text response and unknown content
         let anthropic_response_body = GCPVertexAnthropicResponse {
             id: "1".to_string(),
             r#type: "message".to_string(),
             role: "assistant".to_string(),
-            content: vec![GCPVertexAnthropicContentBlock::Text {
-                text: "Response text".to_string(),
-            }],
+            content: vec![
+                FlattenUnknown::Normal(GCPVertexAnthropicContentBlock::Text {
+                    text: "Response text".to_string(),
+                }),
+                FlattenUnknown::Unknown(Cow::Owned(json!({"my_custom": "content"}))),
+            ],
             model: "model-name".into(),
             stop_reason: Some(AnthropicStopReason::EndTurn),
             stop_sequence: Some("stop sequence".to_string()),
@@ -1964,12 +1980,22 @@ mod tests {
             function_type: &FunctionType::Chat,
             json_mode: &ModelInferenceRequestJsonMode::Off,
             generic_request: &generic_request,
+            model_name: "my-model",
+            provider_name: "my-provider",
         };
 
         let inference_response = ProviderInferenceResponse::try_from(body_with_latency).unwrap();
         assert_eq!(
             inference_response.output,
-            vec!["Response text".to_string().into()]
+            vec![
+                "Response text".to_string().into(),
+                ContentBlockOutput::Unknown {
+                    data: serde_json::json!({"my_custom": "content"}),
+                    model_provider_name: Some(
+                        "tensorzero::model_name::my-model::provider_name::my-provider".to_string()
+                    )
+                }
+            ]
         );
 
         assert_eq!(raw_response, inference_response.raw_response);
@@ -1982,7 +2008,7 @@ mod tests {
             inference_response.input_messages,
             vec![RequestMessage {
                 role: Role::User,
-                content: vec!["Hello".to_string().into()],
+                content: vec!["Hello".to_string().into(),],
             }]
         );
         // Test case 2: Tool call response
@@ -1990,11 +2016,13 @@ mod tests {
             id: "2".to_string(),
             r#type: "message".to_string(),
             role: "assistant".to_string(),
-            content: vec![GCPVertexAnthropicContentBlock::ToolUse {
-                id: "tool_call_1".to_string(),
-                name: "get_temperature".to_string(),
-                input: json!({"location": "New York"}),
-            }],
+            content: vec![FlattenUnknown::Normal(
+                GCPVertexAnthropicContentBlock::ToolUse {
+                    id: "tool_call_1".to_string(),
+                    name: "get_temperature".to_string(),
+                    input: json!({"location": "New York"}),
+                },
+            )],
             model: "model-name".into(),
             stop_reason: Some(AnthropicStopReason::ToolUse),
             stop_sequence: None,
@@ -2044,6 +2072,8 @@ mod tests {
             function_type: &FunctionType::Chat,
             json_mode: &ModelInferenceRequestJsonMode::Off,
             generic_request: &generic_request,
+            model_name: "model-name",
+            provider_name: "provider-name",
         };
 
         let inference_response: ProviderInferenceResponse = body_with_latency.try_into().unwrap();
@@ -2076,14 +2106,14 @@ mod tests {
             r#type: "message".to_string(),
             role: "assistant".to_string(),
             content: vec![
-                GCPVertexAnthropicContentBlock::Text {
+                FlattenUnknown::Normal(GCPVertexAnthropicContentBlock::Text {
                     text: "Here's the weather:".to_string(),
-                },
-                GCPVertexAnthropicContentBlock::ToolUse {
+                }),
+                FlattenUnknown::Normal(GCPVertexAnthropicContentBlock::ToolUse {
                     id: "tool_call_2".to_string(),
                     name: "get_temperature".to_string(),
                     input: json!({"location": "London"}),
-                },
+                }),
             ],
             model: "model-name".into(),
             stop_reason: None,
@@ -2134,6 +2164,8 @@ mod tests {
             function_type: &FunctionType::Chat,
             json_mode: &ModelInferenceRequestJsonMode::Off,
             generic_request: &generic_request,
+            model_name: "model-name",
+            provider_name: "provider-name",
         };
         let inference_response = ProviderInferenceResponse::try_from(body_with_latency).unwrap();
         assert_eq!(

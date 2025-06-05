@@ -2842,4 +2842,37 @@ thinking = { type = "enabled", budget_tokens = 1024 }
             .await
             .expect("Failed to load config");
     }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_gcp_no_endpoint_and_model() {
+        let config_str = r#"
+        [gateway]
+        bind_address = "0.0.0.0:3000"
+
+
+        [models."my-model"]
+        routing = ["gcp-vertex-gemini"]
+
+        [models.my-model.providers.gcp-vertex-gemini]
+        type = "gcp_vertex_gemini"
+        location = "us-central1"
+        project_id = "test-project"
+        model_id = "gemini-2.0-flash-001"
+        endpoint_id = "4094940393049"
+        "#;
+        let config = toml::from_str(config_str).expect("Failed to parse sample config");
+
+        let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let err = SKIP_CREDENTIAL_VALIDATION
+            .scope((), Config::load_from_toml(config, base_path.clone()))
+            .await
+            .unwrap_err();
+
+        let err_msg = err.to_string();
+        assert!(
+            err_msg
+                .contains("models.my-model.providers.gcp-vertex-gemini: Exactly one of model_id or endpoint_id must be provided"),
+            "Unexpected error message: {err_msg}"
+        );
+    }
 }
