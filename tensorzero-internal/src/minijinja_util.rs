@@ -94,10 +94,7 @@ impl TemplateConfig<'_> {
         }
     }
 
-    pub fn template_undeclared_variables(
-        &self,
-        template_name: &str,
-    ) -> Result<HashSet<String>, Error> {
+    pub fn get_undeclared_variables(&self, template_name: &str) -> Result<HashSet<String>, Error> {
         let template = self.env.get_template(template_name).map_err(|_| {
             Error::new(ErrorDetails::MiniJinjaTemplateMissing {
                 template_name: template_name.to_string(),
@@ -108,9 +105,7 @@ impl TemplateConfig<'_> {
 
     // Checks if a template needs any variables (i.e. needs a schema)
     pub fn template_needs_variables(&self, template_name: &str) -> Result<bool, Error> {
-        Ok(!self
-            .template_undeclared_variables(template_name)?
-            .is_empty())
+        Ok(!self.get_undeclared_variables(template_name)?.is_empty())
     }
 
     pub fn add_hardcoded_templates(&mut self) -> Result<(), Error> {

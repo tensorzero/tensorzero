@@ -285,6 +285,10 @@ fn prepare_request_message(
     template_schema_info: TemplateSchemaInfo,
 ) -> Result<RequestMessage, Error> {
     let mut content = Vec::new();
+    // If a schema is provided, then we'll just use the `ResolvedInputMessageContent::Text`
+    // json value as-is when applying the template.
+    // If a schema is not provided, then we create a single variable (based on the template kind),
+    // and set it to the string contents of the 'ResolvedInputMessageContent::Text
     let template_var = match message.role {
         Role::User => {
             if template_schema_info.has_user_schema {
@@ -598,7 +602,7 @@ pub fn validate_template_and_schema(
             let template_name = template
                 .to_str()
                 .ok_or_else(|| Error::new(ErrorDetails::InvalidTemplatePath))?;
-            let undeclared_vars = templates.template_undeclared_variables(template_name)?;
+            let undeclared_vars = templates.get_undeclared_variables(template_name)?;
             let allowed_var = match kind {
                 TemplateKind::System => SYSTEM_TEXT_TEMPLATE_VAR,
                 TemplateKind::User => USER_TEXT_TEMPLATE_VAR,
@@ -610,6 +614,7 @@ pub fn validate_template_and_schema(
                 // based on the template kind
                 let mut undeclared_vars = undeclared_vars.into_iter().collect::<Vec<_>>();
                 if undeclared_vars != [allowed_var.to_string()] {
+                    // Ensure that the error message is deterministic
                     undeclared_vars.sort();
                     let undeclared_vars_str = format!("[{}]", undeclared_vars.join(", "));
                     return Err(Error::new(ErrorDetails::Config {
