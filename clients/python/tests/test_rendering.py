@@ -17,10 +17,6 @@ from tensorzero import (
     UnknownContentBlock,
 )
 from tensorzero.util import uuid7
-from fixtures import (
-    embedded_sync_client,
-    embedded_async_client,
-)
 
 
 def test_sync_render_inferences_success(embedded_sync_client: TensorZeroGateway):
@@ -273,7 +269,9 @@ def test_sync_render_inferences_nonexistent_function(
     assert len(rendered_inferences) == 0
 
 
-def test_sync_render_inferences_unspecified_function(embedded_sync_client: TensorZeroGateway):
+def test_sync_render_inferences_unspecified_function(
+    embedded_sync_client: TensorZeroGateway,
+):
     """Test that render_inferences drops if the function is not specified in the variants map."""
     rendered_inferences = embedded_sync_client.experimental_render_inferences(
         stored_inferences=[
@@ -374,7 +372,9 @@ def test_sync_render_inferences_missing_variable(
 
 
 @pytest.mark.asyncio
-async def test_async_render_inferences_success(embedded_async_client: AsyncTensorZeroGateway):
+async def test_async_render_inferences_success(
+    embedded_async_client: AsyncTensorZeroGateway,
+):
     rendered_inferences = await embedded_async_client.experimental_render_inferences(
         stored_inferences=[
             StoredChatInference(

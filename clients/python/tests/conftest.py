@@ -1,13 +1,12 @@
-import os
 import inspect
+import os
 
 import pytest
 import pytest_asyncio
 from tensorzero import (
-    TensorZeroGateway,
     AsyncTensorZeroGateway,
+    TensorZeroGateway,
 )
-
 
 TEST_CONFIG_FILE = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
