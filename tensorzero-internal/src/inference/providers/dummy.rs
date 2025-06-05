@@ -21,9 +21,7 @@ use crate::inference::types::{
     ContentBlockOutput, Latency, ModelInferenceRequest, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponse, ProviderInferenceResponseChunk, Usage,
 };
-use crate::inference::types::{
-    ContentBlock, FileKind, FinishReason, ProviderInferenceResponseStreamInner,
-};
+use crate::inference::types::{ContentBlock, FinishReason, ProviderInferenceResponseStreamInner};
 use crate::inference::types::{Text, TextChunk, Thought, ThoughtChunk};
 use crate::model::{CredentialLocation, ModelProvider};
 use crate::tool::{ToolCall, ToolCallChunk};
@@ -365,7 +363,7 @@ impl InferenceProvider for DummyProvider {
                     .collect();
                 let mut found_pdf = false;
                 for file in &files {
-                    if file.file.mime_type == FileKind::Pdf {
+                    if file.file.mime_type == mime::APPLICATION_PDF {
                         found_pdf = true;
                     }
                 }

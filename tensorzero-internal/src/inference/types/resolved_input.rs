@@ -41,7 +41,7 @@ pub enum ResolvedInputMessageContent {
     },
     Thought(Thought),
     #[serde(alias = "image")]
-    File(FileWithPath),
+    File(Box<FileWithPath>),
     Unknown {
         data: Value,
         model_provider_name: Option<String>,

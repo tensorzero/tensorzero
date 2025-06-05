@@ -3,7 +3,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::error::{Error, ErrorDetails};
 
-use super::{Base64File, FileKind};
+use super::{file::mime_type_to_ext, Base64File};
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
 
@@ -61,14 +61,15 @@ impl StorageKind {
                 })?
                 .as_bytes(),
         );
-        let suffix = match image.mime_type {
-            FileKind::Jpeg => "jpg",
-            FileKind::Png => "png",
-            FileKind::WebP => "webp",
-            FileKind::Pdf => "pdf",
-        };
+        // This is a best-effort attempt to get a suffix in the object-store path, to make things
+        // nicer for people browsing the object store.
+        // None of our code depends on this file extension being correct, as we store the original
+        // mime-type in our database, and use it in the ui when rendering a preview of the file.
+        let suffix = mime_type_to_ext(&image.mime_type)?
+            .map(|s| format!(".{s}"))
+            .unwrap_or_default();
         let path = Path::parse(format!(
-            "{}observability/files/{hash}.{suffix}",
+            "{}observability/files/{hash}{suffix}",
             self.prefix()
         ))
         .map_err(|e| {

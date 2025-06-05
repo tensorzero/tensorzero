@@ -2,7 +2,6 @@
 
 set -euo pipefail
 
-
 DATABASE_NAME="${1:-tensorzero_ui_fixtures}"
 
 echo "Verifying fixture counts for tables..."

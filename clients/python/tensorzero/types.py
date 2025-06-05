@@ -85,6 +85,7 @@ class FileBase64(ContentBlock):
 @dataclass
 class ImageUrl(ContentBlock):
     url: str
+    mime_type: Optional[str] = None
     type: str = "image"
 
 

@@ -24,3 +24,4 @@ mod proxy;
 mod render_inferences;
 mod retries;
 mod streaming_errors;
+mod template;

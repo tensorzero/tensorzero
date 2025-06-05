@@ -782,11 +782,12 @@ async fn write_inference(
     if config.gateway.observability.enabled.unwrap_or(true) {
         for message in &input.messages {
             for content_block in &message.content {
-                if let ResolvedInputMessageContent::File(FileWithPath {
-                    file: raw,
-                    storage_path,
-                }) = content_block
-                {
+                if let ResolvedInputMessageContent::File(file) = content_block {
+                    let FileWithPath {
+                        file: raw,
+                        storage_path,
+                    } = &**file;
+
                     futures.push(Box::pin(async {
                         if let Err(e) =
                             write_file(&config.object_store_info, raw, storage_path).await
@@ -1133,7 +1134,7 @@ mod tests {
     use uuid::Uuid;
 
     use crate::inference::types::{
-        ChatInferenceResultChunk, ContentBlockChunk, File, FileKind, InputMessageContent,
+        ChatInferenceResultChunk, ContentBlockChunk, File, InputMessageContent,
         JsonInferenceResultChunk, Role, TextChunk,
     };
 
@@ -1363,6 +1364,7 @@ mod tests {
             input_with_url.messages[0].content[0],
             InputMessageContent::File(File::Url {
                 url: "https://example.com/file.txt".parse().unwrap(),
+                mime_type: None,
             })
         );
 
@@ -1388,7 +1390,7 @@ mod tests {
         assert_eq!(
             input_with_base64.messages[0].content[0],
             InputMessageContent::File(File::Base64 {
-                mime_type: FileKind::Png,
+                mime_type: mime::IMAGE_PNG,
                 data: "fake_base64_data".to_string(),
             })
         );

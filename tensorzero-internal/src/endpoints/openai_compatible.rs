@@ -18,6 +18,7 @@ use axum::response::sse::{Event, Sse};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use futures::Stream;
+use mime::MediaType;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use tokio_stream::StreamExt;
@@ -32,9 +33,10 @@ use crate::error::{Error, ErrorDetails};
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
+use crate::inference::types::file::filename_to_mime_type;
 use crate::inference::types::{
-    current_timestamp, ContentBlockChatOutput, ContentBlockChunk, File, FileKind, FinishReason,
-    Input, InputMessage, InputMessageContent, Role, TextKind, Usage,
+    current_timestamp, ContentBlockChatOutput, ContentBlockChunk, File, FinishReason, Input,
+    InputMessage, InputMessageContent, Role, TextKind, Usage,
 };
 use crate::tool::{
     DynamicToolParams, Tool, ToolCall, ToolCallChunk, ToolCallOutput, ToolChoice, ToolResult,
@@ -669,7 +671,7 @@ pub enum TextContent {
     },
 }
 
-fn parse_base64_image_data_url(url: &str) -> Result<(FileKind, &str), Error> {
+fn parse_base64_image_data_url(url: &str) -> Result<(MediaType, &str), Error> {
     let Some(url) = url.strip_prefix("data:") else {
         return Err(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
             message: "Image data URL must start with `data:`".to_string(),
@@ -680,16 +682,11 @@ fn parse_base64_image_data_url(url: &str) -> Result<(FileKind, &str), Error> {
             message: "Image data URL must contain a base64-encoded data part".to_string(),
         }));
     };
-    let image_type = match mime_type {
-        "image/jpeg" => FileKind::Jpeg,
-        "image/png" => FileKind::Png,
-        "image/webp" => FileKind::WebP,
-        _ => {
-            return Err(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
-                message: format!("Unsupported content type `{mime_type}`: - only `image/jpeg`, `image/png``, and `image/webp` image data URLs are supported"),
-            }))
-        }
-    };
+    let image_type: MediaType = mime_type.parse().map_err(|_| {
+        Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
+            message: format!("Unknown content type `{mime_type}`"),
+        })
+    })?;
     Ok((image_type, data))
 }
 
@@ -709,11 +706,11 @@ fn convert_openai_message_content(content: Value) -> Result<Vec<InputMessageCont
                             let (mime_type, data) = parse_base64_image_data_url(&url_str)?;
                             InputMessageContent::File(File::Base64 { mime_type, data: data.to_string() })
                         } else {
-                            InputMessageContent::File(File::Url { url: image_url.url })
+                            InputMessageContent::File(File::Url { url: image_url.url, mime_type: None })
                         }
                     }
                     Ok(OpenAICompatibleContentBlock::File { file }) => {
-                        InputMessageContent::File(File::Base64 { mime_type: file.filename.as_str().try_into()?, data: file.file_data })
+                        InputMessageContent::File(File::Base64 { mime_type: filename_to_mime_type(&file.filename)?, data: file.file_data })
                     }
                     Err(e) => {
                         tracing::warn!(r#"Content block `{val}` was not a valid OpenAI content block. This is deprecated - please use `{{"type": "text", "tensorzero::arguments": {{"custom": "data"}}` to pass arbitrary JSON values to TensorZero: {e}"#);
@@ -1597,23 +1594,20 @@ mod tests {
     #[test]
     fn test_parse_base64() {
         assert_eq!(
-            (FileKind::Jpeg, "YWJjCg=="),
+            (mime::IMAGE_JPEG, "YWJjCg=="),
             parse_base64_image_data_url("data:image/jpeg;base64,YWJjCg==").unwrap()
         );
         assert_eq!(
-            (FileKind::Png, "YWJjCg=="),
+            (mime::IMAGE_PNG, "YWJjCg=="),
             parse_base64_image_data_url("data:image/png;base64,YWJjCg==").unwrap()
         );
         assert_eq!(
-            (FileKind::WebP, "YWJjCg=="),
+            ("image/webp".parse().unwrap(), "YWJjCg=="),
             parse_base64_image_data_url("data:image/webp;base64,YWJjCg==").unwrap()
         );
-        let err = parse_base64_image_data_url("data:image/svg;base64,YWJjCg==")
-            .unwrap_err()
-            .to_string();
-        assert!(
-            err.contains("Unsupported content type `image/svg`"),
-            "Unexpected error message: {err}"
+        assert_eq!(
+            ("image/svg".parse().unwrap(), "YWJjCg=="),
+            parse_base64_image_data_url("data:image/svg;base64,YWJjCg==").unwrap()
         );
     }
 

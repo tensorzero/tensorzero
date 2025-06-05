@@ -17,6 +17,7 @@ use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
+use crate::inference::types::file::require_image;
 use crate::inference::types::resolved_input::FileWithPath;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, serialize_or_log, ModelInferenceRequest,
@@ -485,11 +486,12 @@ impl<'a> TryFrom<&'a ContentBlock> for Option<FlattenUnknown<'a, GeminiPart<'a>>
                     },
                 })))
             }
-            ContentBlock::File(FileWithPath {
-                file,
-                storage_path: _,
-            }) => {
-                file.mime_type.require_image(PROVIDER_TYPE)?;
+            ContentBlock::File(file) => {
+                let FileWithPath {
+                    file,
+                    storage_path: _,
+                } = &**file;
+                require_image(&file.mime_type, PROVIDER_TYPE)?;
                 Ok(Some(FlattenUnknown::Normal(GeminiPart::InlineData {
                     inline_data: GeminiInlineData {
                         mime_type: file.mime_type.to_string(),
