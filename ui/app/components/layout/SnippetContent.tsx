@@ -94,12 +94,14 @@ export function CodeMessage({
 interface TextMessageProps {
   label?: string;
   content?: string;
+  type?: "default" | "structured";
   emptyMessage?: string;
 }
 
 export function TextMessage({
   label,
   content,
+  type = "default",
   emptyMessage,
 }: TextMessageProps) {
   if (!content) {
@@ -112,46 +114,11 @@ export function TextMessage({
         text={label}
         icon={<AlignLeft className="text-fg-muted h-3 w-3" />}
       />
-      <div className="w-full text-fg-primary text-sm break-words whitespace-pre-wrap">{content || ""}</div>
-    </div>
-  );
-}
-
-// Input Text Message component
-interface InputTextMessageProps {
-  content: string;
-}
-
-export function InputTextMessage({ content }: InputTextMessageProps) {
-  return (
-    <div className="flex max-w-240 min-w-80 flex-col gap-1">
-      <Label
-        text="Text"
-        icon={<AlignLeft className="text-fg-muted h-3 w-3" />}
-      />
-      <pre className="whitespace-pre-wrap">
-        <span className="font-sans text-sm">{content}</span>
-      </pre>
-    </div>
-  );
-}
-
-interface TextMessageWithArgumentsProps {
-  content: object;
-}
-
-export function TextMessageWithArguments({
-  content,
-}: TextMessageWithArgumentsProps) {
-  return (
-    <div className="flex max-w-240 min-w-80 flex-col gap-1">
-      <Label
-        text="Text (Arguments)"
-        icon={<AlignLeft className="text-fg-muted h-3 w-3" />}
-      />
-      <pre className="max-w-full font-mono text-sm break-words whitespace-pre-wrap">
-        {JSON.stringify(content, null, 2)}
-      </pre>
+      {type === "structured" ? (
+        <pre className="w-full whitespace-pre-wrap break-words font-mono text-sm">{content}</pre>
+      ) : (
+        <span className="w-full text-fg-primary text-sm">{content}</span>
+      )}
     </div>
   );
 }
@@ -286,25 +253,6 @@ export function ImageErrorMessage({ error }: ImageErrorMessageProps) {
           </span>
         </div>
       </div>
-    </div>
-  );
-}
-
-// Raw Text Message component
-interface RawTextMessageProps {
-  content: string;
-}
-
-export function RawTextMessage({ content }: RawTextMessageProps) {
-  return (
-    <div className="flex max-w-240 min-w-80 flex-col gap-1.5">
-      <Label
-        text="Text (Raw)"
-        icon={<AlignLeft className="text-fg-muted h-3 w-3" />}
-      />
-      <pre className="whitespace-pre-wrap">
-        <span className="font-mono text-sm">{content}</span>
-      </pre>
     </div>
   );
 }
