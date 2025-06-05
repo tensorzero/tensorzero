@@ -12,7 +12,7 @@ use pyo3::prelude::*;
 #[cfg(feature = "pyo3")]
 use pyo3::types::{PyAny, PyList};
 #[cfg(feature = "pyo3")]
-use pyo3_helpers::content_block_to_python;
+use pyo3_helpers::{content_block_to_python, serialize_to_dict};
 use resolved_input::FileWithPath;
 pub use resolved_input::{ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent};
 use serde::{Deserialize, Deserializer, Serialize};
@@ -644,9 +644,34 @@ pub struct JsonInferenceResult {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct JsonInferenceOutput {
     pub raw: Option<String>,
     pub parsed: Option<Value>,
+}
+
+impl std::fmt::Display for JsonInferenceOutput {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl JsonInferenceOutput {
+    #[getter]
+    fn get_raw(&self) -> Option<String> {
+        self.raw.clone()
+    }
+
+    #[getter]
+    fn get_parsed<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        Ok(match &self.parsed {
+            Some(value) => serialize_to_dict(py, value)?.into_bound(py),
+            None => py.None().into_bound(py),
+        })
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]

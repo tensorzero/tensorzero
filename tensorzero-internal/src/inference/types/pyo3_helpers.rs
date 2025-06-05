@@ -6,7 +6,9 @@ use pyo3::{intern, prelude::*};
 use pyo3::{sync::GILOnceCell, types::PyModule, Bound, Py, PyAny, PyErr, PyResult, Python};
 use uuid::Uuid;
 
-use super::{ContentBlock, ContentBlockOutput};
+use crate::inference::types::ContentBlockChatOutput;
+
+use super::ContentBlock;
 
 pub static JSON_LOADS: GILOnceCell<Py<PyAny>> = GILOnceCell::new();
 pub static JSON_DUMPS: GILOnceCell<Py<PyAny>> = GILOnceCell::new();
@@ -133,33 +135,33 @@ pub fn content_block_to_python(
     }
 }
 
-pub fn content_block_output_to_python(
+pub fn content_block_chat_output_to_python(
     py: Python<'_>,
-    content_block_output: &ContentBlockOutput,
+    content_block_chat_output: ContentBlockChatOutput,
 ) -> PyResult<Py<PyAny>> {
-    match content_block_output {
-        ContentBlockOutput::Text(text) => {
+    match content_block_chat_output {
+        ContentBlockChatOutput::Text(text) => {
             let text_content_block = import_text_content_block(py)?;
-            text_content_block.call1(py, (text.text.clone(),))
+            text_content_block.call1(py, (text.text,))
         }
-        ContentBlockOutput::ToolCall(tool_call) => {
+        ContentBlockChatOutput::ToolCall(tool_call) => {
             let tool_call_content_block = import_tool_call_content_block(py)?;
             tool_call_content_block.call1(
                 py,
                 (
-                    tool_call.id.clone(),
-                    tool_call.arguments.clone(),
-                    tool_call.name.clone(),
-                    tool_call.arguments.clone(),
-                    tool_call.name.clone(),
+                    tool_call.id,
+                    tool_call.raw_arguments,
+                    tool_call.raw_name,
+                    serialize_to_dict(py, tool_call.arguments)?,
+                    tool_call.name,
                 ),
             )
         }
-        ContentBlockOutput::Thought(thought) => {
+        ContentBlockChatOutput::Thought(thought) => {
             let thought_content_block = import_thought_content_block(py)?;
-            thought_content_block.call1(py, (thought.text.clone(),))
+            thought_content_block.call1(py, (thought.text,))
         }
-        ContentBlockOutput::Unknown {
+        ContentBlockChatOutput::Unknown {
             data,
             model_provider_name,
         } => {

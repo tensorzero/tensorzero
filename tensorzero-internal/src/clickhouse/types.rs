@@ -1,7 +1,9 @@
 #[cfg(feature = "pyo3")]
-use crate::inference::types::pyo3_helpers::{serialize_to_dict, uuid_to_python};
+use crate::inference::types::pyo3_helpers::{
+    content_block_chat_output_to_python, serialize_to_dict, uuid_to_python,
+};
 #[cfg(feature = "pyo3")]
-use pyo3::prelude::*;
+use pyo3::{prelude::*, IntoPyObjectExt};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
@@ -73,11 +75,15 @@ impl StoredInference {
     #[getter]
     pub fn get_output<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         Ok(match self {
-            StoredInference::Chat(example) => {
-                serialize_to_dict(py, example.output.clone())?.into_bound(py)
-            }
+            StoredInference::Chat(example) => example
+                .output
+                .iter()
+                .map(|x| content_block_chat_output_to_python(py, x.clone()))
+                .collect::<PyResult<Vec<_>>>()?
+                .into_py_any(py)?
+                .into_bound(py),
             StoredInference::Json(example) => {
-                serialize_to_dict(py, example.output.clone())?.into_bound(py)
+                example.output.clone().into_py_any(py)?.into_bound(py)
             }
         })
     }

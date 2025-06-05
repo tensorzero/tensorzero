@@ -6,9 +6,8 @@ use tensorzero::{
 };
 use tensorzero_internal::{
     inference::types::{
-        resolved_input::FileWithPath, Base64File, ContentBlock, ContentBlockChatOutput,
-        ContentBlockOutput, FileKind, JsonInferenceOutput, ResolvedInput, ResolvedInputMessage,
-        ResolvedInputMessageContent,
+        resolved_input::FileWithPath, Base64File, ContentBlock, ContentBlockChatOutput, FileKind,
+        JsonInferenceOutput, ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent,
     },
     tool::{ToolCallConfigDatabaseInsert, ToolCallOutput, ToolChoice},
 };
@@ -314,7 +313,7 @@ pub async fn test_render_inferences_normal() {
 
     // Check the output
     assert_eq!(second_inference.output.len(), 1);
-    let ContentBlockOutput::Text(output_text) = &second_inference.output[0] else {
+    let ContentBlockChatOutput::Text(output_text) = &second_inference.output[0] else {
         panic!("Expected text output");
     };
     assert_eq!(output_text.text, "{}");
@@ -346,11 +345,13 @@ pub async fn test_render_inferences_normal() {
 
     // Check the output
     assert_eq!(third_inference.output.len(), 1);
-    let ContentBlockOutput::ToolCall(tool_call) = &third_inference.output[0] else {
+    let ContentBlockChatOutput::ToolCall(tool_call) = &third_inference.output[0] else {
         panic!("Expected tool call output");
     };
-    assert_eq!(tool_call.name, "get_temperature");
-    assert_eq!(tool_call.arguments, "{\"location\":\"Tokyo\"}");
+    assert_eq!(tool_call.raw_name, "get_temperature");
+    assert_eq!(tool_call.raw_arguments, "{\"location\":\"Tokyo\"}");
+    assert_eq!(tool_call.name, Some("get_temperature".to_string()));
+    assert_eq!(tool_call.arguments, Some(json!({"location": "Tokyo"})));
 
     // Check other fields
     assert!(third_inference.tool_params.is_some());

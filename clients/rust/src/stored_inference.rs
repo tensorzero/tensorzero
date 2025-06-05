@@ -8,13 +8,14 @@ use serde::Serialize;
 use serde_json::Value;
 #[cfg(feature = "pyo3")]
 use tensorzero_internal::inference::types::pyo3_helpers::{
-    content_block_output_to_python, serialize_to_dict, uuid_to_python,
+    content_block_chat_output_to_python, serialize_to_dict, uuid_to_python,
 };
+use tensorzero_internal::inference::types::Text;
 use tensorzero_internal::{
     clickhouse::types::StoredInference,
     config_parser::Config,
     error::{Error, ErrorDetails},
-    inference::types::{ContentBlockOutput, ModelInput},
+    inference::types::{ContentBlockChatOutput, ModelInput},
     tool::ToolCallConfigDatabaseInsert,
     variant::{chat_completion::prepare_model_input, VariantConfig},
 };
@@ -29,7 +30,7 @@ pub struct RenderedStoredInference {
     pub function_name: String,
     pub variant_name: String,
     pub input: ModelInput,
-    pub output: Vec<ContentBlockOutput>,
+    pub output: Vec<ContentBlockChatOutput>,
     pub episode_id: Uuid,
     pub inference_id: Uuid,
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
@@ -59,7 +60,7 @@ impl RenderedStoredInference {
         let output = self
             .output
             .iter()
-            .map(|x| content_block_output_to_python(py, x))
+            .map(|x| content_block_chat_output_to_python(py, x.clone()))
             .collect::<PyResult<Vec<_>>>()?;
         PyList::new(py, output).map(|list| list.into_any())
     }
@@ -181,15 +182,15 @@ pub fn render_stored_inference(
             function_name: example.function_name,
             variant_name: example.variant_name,
             input: model_input,
-            output: example.output.into_iter().map(|x| x.into()).collect(),
+            output: example.output,
             episode_id: example.episode_id,
             inference_id: example.inference_id,
             tool_params: Some(example.tool_params),
             output_schema: None,
         }),
         StoredInference::Json(example) => {
-            let output: Vec<ContentBlockOutput> = match example.output.raw {
-                Some(raw) => vec![raw.into()],
+            let output: Vec<ContentBlockChatOutput> = match example.output.raw {
+                Some(raw) => vec![ContentBlockChatOutput::Text(Text { text: raw })],
                 None => vec![],
             };
             Ok(RenderedStoredInference {
