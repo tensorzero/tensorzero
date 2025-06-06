@@ -74,8 +74,8 @@ impl ResolvedInputMessage {
     }
 
     #[getter]
-    pub fn get_role(&self) -> Role {
-        self.role.clone()
+    pub fn get_role(&self) -> String {
+        self.role.to_string()
     }
 
     #[getter]

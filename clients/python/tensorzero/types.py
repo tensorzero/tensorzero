@@ -538,10 +538,21 @@ class TensorZeroTypeEncoder(JSONEncoder):
 
 
 @dataclass
+class StoredInferenceInputMessage:
+    role: Literal["user", "assistant"]
+    content: Any
+
+
+@dataclass
+class StoredInferenceInput:
+    messages: List[StoredInferenceInputMessage]
+    system: Optional[System]
+
+@dataclass
 class StoredChatInference:
     function_name: str
     variant_name: str
-    input: InferenceInput
+    input: StoredInferenceInput
     output: List[ContentBlock]
     episode_id: UUID
     inference_id: UUID
@@ -553,7 +564,7 @@ class StoredChatInference:
 class StoredJsonInference:
     function_name: str
     variant_name: str
-    input: InferenceInput
+    input: StoredInferenceInput
     output: JsonInferenceOutput
     episode_id: UUID
     inference_id: UUID

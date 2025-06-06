@@ -123,7 +123,7 @@ def test_simple_query_chat_function_with_tools(embedded_sync_client: TensorZeroG
         assert isinstance(messages, list)
         assert len(messages) >= 1
         for message in messages:
-            assert str(message.role) in ["user", "assistant"]
+            assert message.role in ["user", "assistant"]
             for content in message.content:
                 assert content.type in ["text", "tool_call", "tool_result"]
                 if content.type == "tool_call":
