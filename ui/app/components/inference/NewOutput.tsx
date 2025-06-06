@@ -117,6 +117,8 @@ function renderChatInferenceOutput(output: ChatInferenceOutputRenderingData) {
                     toolCallId={block.id}
                   />
                 );
+              default:
+                return null;
             }
           })
         )}

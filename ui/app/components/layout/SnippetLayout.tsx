@@ -105,7 +105,7 @@ export function SnippetMessage({
   // Input variant - contains role and children
   if (variant === "input") {
     return (
-      <div className="flex w-full flex-col gap-3 px-5 py-2">
+      <div className="flex w-full flex-col gap-2 px-5 py-2">
         <div className="text-sm font-medium text-purple-600 capitalize">
           {role}
         </div>
