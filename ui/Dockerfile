@@ -143,5 +143,6 @@ EXPOSE 4000
 
 ENV HOST=0.0.0.0
 ENV TENSORZERO_UI_CONFIG_PATH=/app/config/tensorzero.toml
+ENV RUST_LOG=warn
 
 ENTRYPOINT ["./entrypoint.sh"]
