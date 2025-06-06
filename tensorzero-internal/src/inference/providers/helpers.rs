@@ -381,6 +381,27 @@ pub async fn peek_first_chunk<
     }
 }
 
+/// TODO: test & document
+pub(crate) fn check_new_tool_call_name(
+    new_name: String,
+    last_tool_name: &mut Option<String>,
+) -> Option<String> {
+    match last_tool_name {
+        None => {
+            *last_tool_name = Some(new_name.to_string());
+            return Some(new_name);
+        }
+        Some(last_tool_name) => {
+            if last_tool_name == &new_name {
+                // If the previous tool name was the same as the old name, we can just return None as it will have already been sent
+                return None;
+            }
+            *last_tool_name = new_name.clone();
+            return Some(new_name);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::time::Duration;

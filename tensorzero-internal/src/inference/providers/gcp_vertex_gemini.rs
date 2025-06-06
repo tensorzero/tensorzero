@@ -28,6 +28,7 @@ use crate::config_parser::{
 };
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
+use crate::inference::providers::helpers::check_new_tool_call_name;
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::{
     BatchRequestRow, BatchStatus, PollBatchInferenceResponse, ProviderBatchInferenceOutput,
@@ -1389,6 +1390,7 @@ fn stream_gcp_vertex_gemini(
     start_time: Instant,
 ) -> ProviderInferenceResponseStreamInner {
     Box::pin(async_stream::stream! {
+        let mut last_tool_name = None;
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
@@ -1415,13 +1417,18 @@ fn stream_gcp_vertex_gemini(
                                 continue;
                             }
                         };
-                        let response = GCPVertexGeminiStreamResponseWithMetadata {
-                            raw_response: message.data,
-                            response: data,
-                            latency: start_time.elapsed(),
+                        // let response = GCPVertexGeminiStreamResponseWithMetadata {
+                        //     raw_response: message.data,
+                        //     response: data,
+                        //     latency: start_time.elapsed(),
 
-                        }.try_into();
-                        yield response
+                        // }.try_into();
+                        yield convert_stream_response_with_metadata_to_chunk(
+                            message.data,
+                            data,
+                            start_time.elapsed(),
+                            &mut last_tool_name,
+                        )
                     }
                 }
             }
@@ -1887,74 +1894,72 @@ enum GCPVertexGeminiResponseContentPartData {
     // TODO (if needed): VideoMetadata { video_metadata: VideoMetadata },
 }
 
-impl TryFrom<GCPVertexGeminiResponseContentPart> for ContentBlockChunk {
-    type Error = Error;
-    /// GCP Vertex Gemini does not support parallel tool calling or multiple content blocks as far as I can tell.
-    /// So there is no issue with bookkeeping IDs for content blocks.
-    /// We should revisit this if they begin to support it.
-    fn try_from(part: GCPVertexGeminiResponseContentPart) -> Result<Self, Self::Error> {
-        if part.thought {
-            match part.data {
-                FlattenUnknown::Normal(GCPVertexGeminiResponseContentPartData::Text(text)) => {
-                    return Ok(ContentBlockChunk::Thought(ThoughtChunk {
-                        id: "0".to_string(),
-                        text: Some(text),
-                        signature: part.thought_signature,
-                    }));
-                }
-                // Handle 'thought/thoughtSignature' with no other fields
-                FlattenUnknown::Unknown(obj) if obj.as_object().is_some_and(|m| m.is_empty()) => {
-                    return Ok(ContentBlockChunk::Thought(ThoughtChunk {
-                        id: "0".to_string(),
-                        text: None,
-                        signature: part.thought_signature,
-                    }));
-                }
-                _ => {
-                    return Err(Error::new(ErrorDetails::InferenceServer {
-                        message: "Thought part in GCP Vertex Gemini response must be a text block"
-                            .to_string(),
-                        provider_type: PROVIDER_TYPE.to_string(),
-                        raw_request: None,
-                        raw_response: Some(serde_json::to_string(&part).unwrap_or_default()),
-                    }));
-                }
-            }
-        }
+fn content_part_to_tensorzero_chunk(
+    part: GCPVertexGeminiResponseContentPart,
+    last_tool_name: &mut Option<String>,
+) -> Result<ContentBlockChunk, Error> {
+    if part.thought {
         match part.data {
             FlattenUnknown::Normal(GCPVertexGeminiResponseContentPartData::Text(text)) => {
-                Ok(ContentBlockChunk::Text(TextChunk {
-                    text,
+                return Ok(ContentBlockChunk::Thought(ThoughtChunk {
                     id: "0".to_string(),
-                }))
+                    text: Some(text),
+                    signature: part.thought_signature,
+                }));
             }
-            FlattenUnknown::Normal(GCPVertexGeminiResponseContentPartData::FunctionCall(
-                function_call,
-            )) => {
-                let arguments = serialize_or_log(&function_call.args);
-                Ok(ContentBlockChunk::ToolCall(ToolCallChunk {
-                    raw_name: function_call.name,
-                    raw_arguments: arguments,
+            // Handle 'thought/thoughtSignature' with no other fields
+            FlattenUnknown::Unknown(obj) if obj.as_object().is_some_and(|m| m.is_empty()) => {
+                return Ok(ContentBlockChunk::Thought(ThoughtChunk {
                     id: "0".to_string(),
-                }))
+                    text: None,
+                    signature: part.thought_signature,
+                }));
             }
-            FlattenUnknown::Normal(
-                GCPVertexGeminiResponseContentPartData::ExecutableCode(_),
-            ) => Err(Error::new(ErrorDetails::InferenceServer {
+            _ => {
+                return Err(Error::new(ErrorDetails::InferenceServer {
+                    message: "Thought part in GCP Vertex Gemini response must be a text block"
+                        .to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: None,
+                    raw_response: Some(serde_json::to_string(&part).unwrap_or_default()),
+                }));
+            }
+        }
+    }
+    match part.data {
+        FlattenUnknown::Normal(GCPVertexGeminiResponseContentPartData::Text(text)) => {
+            Ok(ContentBlockChunk::Text(TextChunk {
+                text,
+                id: "0".to_string(),
+            }))
+        }
+        FlattenUnknown::Normal(GCPVertexGeminiResponseContentPartData::FunctionCall(
+            function_call,
+        )) => {
+            let arguments = serialize_or_log(&function_call.args);
+            let name = check_new_tool_call_name(function_call.name, last_tool_name);
+            Ok(ContentBlockChunk::ToolCall(ToolCallChunk {
+                raw_name: name,
+                raw_arguments: arguments,
+                id: "0".to_string(),
+            }))
+        }
+        FlattenUnknown::Normal(GCPVertexGeminiResponseContentPartData::ExecutableCode(_)) => {
+            Err(Error::new(ErrorDetails::InferenceServer {
                 message:
                     "executableCode is not supported in streaming response for GCP Vertex Gemini"
                         .to_string(),
                 provider_type: PROVIDER_TYPE.to_string(),
                 raw_request: None,
                 raw_response: Some(serde_json::to_string(&part).unwrap_or_default()),
-            })),
-            FlattenUnknown::Unknown(part) => Err(Error::new(ErrorDetails::InferenceServer {
-                message: "Unknown content part in GCP Vertex Gemini response".to_string(),
-                provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: None,
-                raw_response: Some(part.to_string()),
-            })),
+            }))
         }
+        FlattenUnknown::Unknown(part) => Err(Error::new(ErrorDetails::InferenceServer {
+            message: "Unknown content part in GCP Vertex Gemini response".to_string(),
+            provider_type: PROVIDER_TYPE.to_string(),
+            raw_request: None,
+            raw_response: Some(part.to_string()),
+        })),
     }
 }
 
@@ -2209,57 +2214,47 @@ impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceR
     }
 }
 
-struct GCPVertexGeminiStreamResponseWithMetadata {
+fn convert_stream_response_with_metadata_to_chunk(
     raw_response: String,
     response: GCPVertexGeminiResponse,
     latency: Duration,
-}
+    last_tool_name: &mut Option<String>,
+) -> Result<ProviderInferenceResponseChunk, Error> {
+    let first_candidate = response.candidates.into_iter().next().ok_or_else(|| {
+        Error::new(ErrorDetails::InferenceServer {
+            message: "GCP Vertex Gemini response has no candidates".to_string(),
+            raw_request: None,
+            raw_response: Some(raw_response.clone()),
+            provider_type: PROVIDER_TYPE.to_string(),
+        })
+    })?;
 
-impl TryFrom<GCPVertexGeminiStreamResponseWithMetadata> for ProviderInferenceResponseChunk {
-    type Error = Error;
-    fn try_from(response: GCPVertexGeminiStreamResponseWithMetadata) -> Result<Self, Self::Error> {
-        let GCPVertexGeminiStreamResponseWithMetadata {
-            response,
-            latency,
-            raw_response,
-        } = response;
+    // GCP sometimes returns chunks without content (e.g. they might have usage only).
+    let mut content: Vec<ContentBlockChunk> = match first_candidate.content {
+        Some(content) => content
+            .parts
+            .into_iter()
+            .map(|part| content_part_to_tensorzero_chunk(part, last_tool_name))
+            .collect::<Result<Vec<ContentBlockChunk>, Error>>()?,
+        None => vec![],
+    };
 
-        let first_candidate = response.candidates.into_iter().next().ok_or_else(|| {
-            Error::new(ErrorDetails::InferenceServer {
-                message: "GCP Vertex Gemini response has no candidates".to_string(),
-                raw_request: None,
-                raw_response: Some(raw_response.clone()),
-                provider_type: PROVIDER_TYPE.to_string(),
-            })
-        })?;
-
-        // GCP sometimes returns chunks without content (e.g. they might have usage only).
-        let mut content: Vec<ContentBlockChunk> = match first_candidate.content {
-            Some(content) => content
-                .parts
-                .into_iter()
-                .map(|part| part.try_into())
-                .collect::<Result<Vec<ContentBlockChunk>, Error>>()?,
-            None => vec![],
-        };
-
-        // GCP occasionally spuriously returns empty text chunks. We filter these out.
-        content.retain(|chunk| match chunk {
-            ContentBlockChunk::Text(text) => !text.text.is_empty(),
-            _ => true,
-        });
-        Ok(ProviderInferenceResponseChunk::new(
-            content,
-            response
-                .usage_metadata
-                .map(|usage_metadata| usage_metadata.into()),
-            raw_response,
-            latency,
-            first_candidate
-                .finish_reason
-                .map(|finish_reason| finish_reason.into()),
-        ))
-    }
+    // GCP occasionally spuriously returns empty text chunks. We filter these out.
+    content.retain(|chunk| match chunk {
+        ContentBlockChunk::Text(text) => !text.text.is_empty(),
+        _ => true,
+    });
+    Ok(ProviderInferenceResponseChunk::new(
+        content,
+        response
+            .usage_metadata
+            .map(|usage_metadata| usage_metadata.into()),
+        raw_response,
+        latency,
+        first_candidate
+            .finish_reason
+            .map(|finish_reason| finish_reason.into()),
+    ))
 }
 
 fn handle_gcp_vertex_gemini_error(

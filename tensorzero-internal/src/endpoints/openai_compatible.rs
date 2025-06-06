@@ -38,9 +38,7 @@ use crate::inference::types::{
     current_timestamp, ContentBlockChatOutput, ContentBlockChunk, File, FinishReason, Input,
     InputMessage, InputMessageContent, Role, TextKind, Usage,
 };
-use crate::tool::{
-    DynamicToolParams, Tool, ToolCall, ToolCallChunk, ToolCallOutput, ToolChoice, ToolResult,
-};
+use crate::tool::{DynamicToolParams, Tool, ToolCall, ToolCallOutput, ToolChoice, ToolResult};
 use crate::variant::JsonMode;
 
 use super::inference::{
@@ -116,6 +114,13 @@ pub struct OpenAICompatibleFunctionCall {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct OpenAICompatibleFunctionCallDelta {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    pub arguments: String,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct OpenAICompatibleToolCall {
     /// The ID of the tool call.
     pub id: String,
@@ -134,7 +139,7 @@ pub struct OpenAICompatibleToolCallChunk {
     /// The type of the tool. Currently, only `function` is supported.
     pub r#type: String,
     /// The function that the model called.
-    pub function: OpenAICompatibleFunctionCall,
+    pub function: OpenAICompatibleFunctionCallDelta,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -994,7 +999,7 @@ fn process_chat_content_chunk(
                     id: if is_new { Some(tool_call.id) } else { None },
                     index: *index,
                     r#type: "function".to_string(),
-                    function: OpenAICompatibleFunctionCall {
+                    function: OpenAICompatibleFunctionCallDelta {
                         name: tool_call.raw_name,
                         arguments: tool_call.raw_arguments,
                     },
@@ -1115,19 +1120,6 @@ fn prepare_serialized_openai_compatible_events(
     }
 }
 
-impl From<ToolCallChunk> for OpenAICompatibleToolCall {
-    fn from(tool_call: ToolCallChunk) -> Self {
-        OpenAICompatibleToolCall {
-            id: tool_call.id,
-            r#type: "function".to_string(),
-            function: OpenAICompatibleFunctionCall {
-                name: tool_call.raw_name,
-                arguments: tool_call.raw_arguments,
-            },
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
 
@@ -1138,6 +1130,7 @@ mod tests {
 
     use crate::cache::CacheEnabledMode;
     use crate::inference::types::{Text, TextChunk};
+    use crate::tool::ToolCallChunk;
 
     #[test]
     fn test_try_from_openai_compatible_params() {
@@ -1524,7 +1517,7 @@ mod tests {
             }),
             ContentBlockChunk::ToolCall(ToolCallChunk {
                 id: "1".to_string(),
-                raw_name: "test_tool".to_string(),
+                raw_name: Some("test_tool".to_string()),
                 raw_arguments: "{}".to_string(),
             }),
             ContentBlockChunk::Text(TextChunk {
@@ -1538,7 +1531,7 @@ mod tests {
         assert_eq!(tool_calls.len(), 1);
         assert_eq!(tool_calls[0].id, Some("1".to_string()));
         assert_eq!(tool_calls[0].index, 0);
-        assert_eq!(tool_calls[0].function.name, "test_tool");
+        assert_eq!(tool_calls[0].function.name, Some("test_tool".to_string()));
         assert_eq!(tool_calls[0].function.arguments, "{}");
 
         let content: Vec<ContentBlockChunk> = vec![];
@@ -1557,7 +1550,7 @@ mod tests {
             }),
             ContentBlockChunk::ToolCall(ToolCallChunk {
                 id: "123".to_string(),
-                raw_name: "middle_tool".to_string(),
+                raw_name: Some("middle_tool".to_string()),
                 raw_arguments: "{\"key\": \"value\"}".to_string(),
             }),
             ContentBlockChunk::Text(TextChunk {
@@ -1570,7 +1563,7 @@ mod tests {
             }),
             ContentBlockChunk::ToolCall(ToolCallChunk {
                 id: "5".to_string(),
-                raw_name: "last_tool".to_string(),
+                raw_name: Some("last_tool".to_string()),
                 raw_arguments: "{\"key\": \"value\"}".to_string(),
             }),
         ];
@@ -1583,11 +1576,11 @@ mod tests {
         assert_eq!(tool_calls.len(), 2);
         assert_eq!(tool_calls[0].id, Some("123".to_string()));
         assert_eq!(tool_calls[0].index, 0);
-        assert_eq!(tool_calls[0].function.name, "middle_tool");
+        assert_eq!(tool_calls[0].function.name, Some("middle_tool".to_string()));
         assert_eq!(tool_calls[0].function.arguments, "{\"key\": \"value\"}");
         assert_eq!(tool_calls[1].id, Some("5".to_string()));
         assert_eq!(tool_calls[1].index, 1);
-        assert_eq!(tool_calls[1].function.name, "last_tool");
+        assert_eq!(tool_calls[1].function.name, Some("last_tool".to_string()));
         assert_eq!(tool_calls[1].function.arguments, "{\"key\": \"value\"}");
     }
 

@@ -1527,7 +1527,11 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
                             {
                                 // If there is already a tool call block with this id, append to it
                                 Some(ContentBlockOutput::ToolCall(existing_tool_call)) => {
-                                    // We assume that the name and ID are present and complete in the first chunk
+                                    // We assume that the ID is present and complete in the first chunk
+                                    // and that the name and arguments are accumulated with more chunks.
+                                    if let Some(raw_name) = tool_call.raw_name {
+                                        existing_tool_call.name.push_str(&raw_name);
+                                    }
                                     existing_tool_call
                                         .arguments
                                         .push_str(&tool_call.raw_arguments);
@@ -1539,7 +1543,9 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
                                     }
                                     blocks.insert(
                                         (ContentBlockOutputType::ToolCall, tool_call.id.clone()),
-                                        ContentBlockOutput::ToolCall(tool_call.into()),
+                                        ContentBlockOutput::ToolCall(tool_call_chunk_to_tool_call(
+                                            tool_call,
+                                        )),
                                     );
                                 }
                             }
@@ -1646,13 +1652,11 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
         .await
 }
 
-impl From<ToolCallChunk> for ToolCall {
-    fn from(tool_call: ToolCallChunk) -> Self {
-        Self {
-            id: tool_call.id,
-            name: tool_call.raw_name,
-            arguments: tool_call.raw_arguments,
-        }
+fn tool_call_chunk_to_tool_call(tool_call: ToolCallChunk) -> ToolCall {
+    ToolCall {
+        id: tool_call.id,
+        name: tool_call.raw_name.unwrap_or_default(), // Since we are accumulating tool call names, we can start with "" if missing and hopefully accumulate with more chunks.
+        arguments: tool_call.raw_arguments,
     }
 }
 
@@ -3028,7 +3032,7 @@ mod tests {
                     }),
                     ContentBlockChunk::ToolCall(ToolCallChunk {
                         id: "0".to_string(),
-                        raw_name: "my_tool_call".to_string(),
+                        raw_name: Some("my_tool_call".to_string()),
                         raw_arguments: "true".to_string(),
                     }),
                 ],
@@ -3283,7 +3287,7 @@ mod tests {
             content: vec![ContentBlockChunk::ToolCall(ToolCallChunk {
                 id: "123".to_string(),
                 raw_arguments: "{\"key\": \"value\"}".to_string(),
-                raw_name: "test_tool".to_string(),
+                raw_name: Some("test_tool".to_string()),
             })],
             created: 1234567890,
             usage: Some(Usage {
@@ -3354,7 +3358,7 @@ mod tests {
                 ContentBlockChunk::ToolCall(ToolCallChunk {
                     id: "456".to_string(),
                     raw_arguments: "final content".to_string(),
-                    raw_name: "test_tool".to_string(),
+                    raw_name: Some("test_tool".to_string()),
                 }),
                 ContentBlockChunk::Thought(ThoughtChunk {
                     id: "789".to_string(),

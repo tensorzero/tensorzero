@@ -418,7 +418,7 @@ pub enum ToolChoice {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct ToolCallChunk {
     pub id: String,
-    pub raw_name: String,
+    pub raw_name: Option<String>,
     pub raw_arguments: String,
 }
 
