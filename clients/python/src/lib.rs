@@ -894,6 +894,19 @@ impl TensorZeroGateway {
         }
     }
 
+    /// Query the Clickhouse database for inferences.
+    ///
+    /// This function is only available in EmbeddedGateway mode.
+    ///
+    /// # Arguments
+    ///
+    /// * `function_name` - The name of the function to query.
+    /// * `variant_name` - The name of the variant to query. Optional
+    /// * `filters` - A filter tree to apply to the query. Optional
+    /// * `output_source` - The source of the output to query. "inference" or "demonstration"
+    /// * `limit` - The maximum number of inferences to return. Optional
+    /// * `offset` - The offset to start from. Optional
+    /// * `format` - The format to return the inferences in. For now, only "JSONEachRow" is supported.
     #[pyo3(signature = (*,
                         function_name,
                         variant_name=None,
@@ -1474,8 +1487,19 @@ impl AsyncTensorZeroGateway {
         })
     }
 
-    // The text_signature is a workaround to weird behavior in pyo3 where the default for an option
-    // is written as an ellipsis object.
+    /// Query the Clickhouse database for inferences.
+    ///
+    /// This function is only available in EmbeddedGateway mode.
+    ///
+    /// # Arguments
+    ///
+    /// * `function_name` - The name of the function to query.
+    /// * `variant_name` - The name of the variant to query. Optional
+    /// * `filters` - A filter tree to apply to the query. Optional
+    /// * `output_source` - The source of the output to query. "inference" or "demonstration"
+    /// * `limit` - The maximum number of inferences to return. Optional
+    /// * `offset` - The offset to start from. Optional
+    /// * `format` - The format to return the inferences in. For now, only "JSONEachRow" is supported.
     #[pyo3(signature = (*,
         function_name,
         variant_name=None,
@@ -1486,6 +1510,8 @@ impl AsyncTensorZeroGateway {
     ),
     text_signature = "(self, *, function_name, variant_name=None, filters=None, output_source='inference', limit=None, offset=None)"
     )]
+    // The text_signature is a workaround to weird behavior in pyo3 where the default for an option
+    // is written as an ellipsis object.
     fn experimental_list_inferences<'a>(
         this: PyRef<'a, Self>,
         function_name: String,

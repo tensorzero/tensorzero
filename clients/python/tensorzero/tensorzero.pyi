@@ -280,7 +280,16 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         offset: Optional[int] = None,
     ) -> List[StoredInference]:
         """
-        TODO: document this well
+        Query the Clickhouse database for inferences.
+        This function is only available in EmbeddedGateway mode.
+
+        :param function_name: The name of the function to query.
+        :param variant_name: The name of the variant to query. Optional
+        :param filters: A filter tree to apply to the query. Optional
+        :param output_source: The source of the output to query. "inference" or "demonstration"
+        :param limit: The maximum number of inferences to return. Optional
+        :param offset: The offset to start from. Optional
+        :return: A list of `StoredInference` instances.
         """
 
     def experimental_render_inferences(
@@ -555,7 +564,16 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         offset: Optional[int] = None,
     ) -> List[StoredInference]:
         """
-        TODO: document this well
+        Query the Clickhouse database for inferences.
+        This function is only available in EmbeddedGateway mode.
+
+        :param function_name: The name of the function to query.
+        :param variant_name: The name of the variant to query. Optional
+        :param filters: A filter tree to apply to the query. Optional
+        :param output_source: The source of the output to query. "inference" or "demonstration"
+        :param limit: The maximum number of inferences to return. Optional
+        :param offset: The offset to start from. Optional
+        :return: A list of `StoredInference` instances.
         """
 
     async def experimental_render_inferences(
