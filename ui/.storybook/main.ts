@@ -12,7 +12,7 @@ const config: StorybookConfig = {
     "@storybook/addon-onboarding",
     "@chromatic-com/storybook",
     "@storybook/addon-vitest",
-    "@storybook/addon-docs"
+    "@storybook/addon-docs",
   ],
   framework: {
     name: "@storybook/react-vite",
