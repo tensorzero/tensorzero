@@ -1,6 +1,6 @@
 use futures::{Stream, StreamExt, TryStreamExt};
 use reqwest::StatusCode;
-use reqwest_eventsource::{Event, RequestBuilderExt};
+use reqwest_eventsource::Event;
 use secrecy::{ExposeSecret, SecretString};
 use serde::de::IntoDeserializer;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -28,7 +28,9 @@ use crate::inference::types::{
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
-use crate::inference::providers::helpers::inject_extra_request_data;
+use crate::inference::providers::helpers::{
+    inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
+};
 
 fn default_api_key_location() -> CredentialLocation {
     CredentialLocation::Env("GROQ_API_KEY".to_string())
@@ -123,7 +125,7 @@ impl InferenceProvider for GroqProvider {
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
 
-        let mut request_body =
+        let request_body =
             serde_json::to_value(GroqRequest::new(&self.model_name, request.request)?).map_err(
                 |e| {
                     Error::new(ErrorDetails::Serialization {
@@ -135,47 +137,22 @@ impl InferenceProvider for GroqProvider {
                 },
             )?;
 
-        let headers = inject_extra_request_data(
-            &request.request.extra_body,
-            &request.request.extra_headers,
-            model_provider,
-            request.model_name,
-            &mut request_body,
-        )?;
-
         let mut request_builder = http_client.post(request_url);
 
         if let Some(api_key) = api_key {
             request_builder = request_builder.bearer_auth(api_key.expose_secret());
         }
 
-        let raw_request = serde_json::to_string(&request_body).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!(
-                    "Error serializing request: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-            })
-        })?;
-
-        let res = request_builder
-            .body(raw_request.clone())
-            .header(reqwest::header::CONTENT_TYPE, "application/json")
-            .headers(headers)
-            .send()
-            .await
-            .map_err(|e| {
-                Error::new(ErrorDetails::InferenceClient {
-                    status_code: e.status(),
-                    message: format!(
-                        "Error sending request to Groq: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: Some(raw_request.clone()),
-                    raw_response: None,
-                })
-            })?;
+        let (res, raw_request) = inject_extra_request_data_and_send(
+            PROVIDER_TYPE,
+            &request.request.extra_body,
+            &request.request.extra_headers,
+            model_provider,
+            request.model_name,
+            request_body,
+            request_builder,
+        )
+        .await?;
 
         if res.status().is_success() {
             let raw_response = res.text().await.map_err(|e| {
@@ -243,57 +220,32 @@ impl InferenceProvider for GroqProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let mut request_body = serde_json::to_value(GroqRequest::new(&self.model_name, request)?)
+        let request_body = serde_json::to_value(GroqRequest::new(&self.model_name, request)?)
             .map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!(
-                    "Error serializing Groq request: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-            })
-        })?;
-        let headers = inject_extra_request_data(
+                Error::new(ErrorDetails::Serialization {
+                    message: format!(
+                        "Error serializing Groq request: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
+                })
+            })?;
+        let request_url = "https://api.groq.com/openai/v1/chat/completions".to_string();
+        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let start_time = Instant::now();
+        let mut request_builder = http_client.post(request_url);
+        if let Some(api_key) = api_key {
+            request_builder = request_builder.bearer_auth(api_key.expose_secret());
+        }
+        let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
+            PROVIDER_TYPE,
             &request.extra_body,
             &request.extra_headers,
             model_provider,
             model_name,
-            &mut request_body,
-        )?;
-        let raw_request = serde_json::to_string(&request_body).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!(
-                    "Error serializing request: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-            })
-        })?;
-        let request_url = "https://api.groq.com/openai/v1/chat/completions".to_string();
-        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
-        let start_time = Instant::now();
-        let mut request_builder = http_client
-            .post(request_url)
-            .header("Content-Type", "application/json");
-        if let Some(api_key) = api_key {
-            request_builder = request_builder.bearer_auth(api_key.expose_secret());
-        }
-        let event_source = request_builder
-            .json(&request_body)
-            // Important - the 'headers' call should come just before we sent the request with '.eventsource()',
-            // so that users can override any of the headers that we set.
-            .headers(headers)
-            .eventsource()
-            .map_err(|e| {
-                Error::new(ErrorDetails::InferenceClient {
-                    message: format!(
-                        "Error sending request to Groq: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                    status_code: None,
-                    provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
-                    raw_response: None,
-                })
-            })?;
+            request_body,
+            request_builder,
+        )
+        .await?;
 
         let stream = stream_groq(
             PROVIDER_TYPE.to_string(),

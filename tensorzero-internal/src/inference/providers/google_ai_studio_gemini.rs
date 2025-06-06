@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use futures::StreamExt;
 use reqwest::StatusCode;
-use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
+use reqwest_eventsource::{Event, EventSource};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -15,6 +15,7 @@ use uuid::Uuid;
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
+use crate::inference::providers::helpers::inject_extra_request_data_and_send_eventsource;
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::file::require_image;
@@ -37,7 +38,7 @@ use crate::model::{
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use super::gcp_vertex_gemini::process_output_schema;
-use super::helpers::inject_extra_request_data;
+use super::helpers::inject_extra_request_data_and_send;
 use super::openai::convert_stream_error;
 
 const PROVIDER_NAME: &str = "Google AI Studio Gemini";
@@ -158,7 +159,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let mut request_body = serde_json::to_value(GeminiRequest::new(request)?).map_err(|e| {
+        let request_body = serde_json::to_value(GeminiRequest::new(request)?).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!(
                     "Error serializing Gemini request: {}",
@@ -166,33 +167,22 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
                 ),
             })
         })?;
-        let headers = inject_extra_request_data(
-            &request.extra_body,
-            &request.extra_headers,
-            model_provider,
-            model_name,
-            &mut request_body,
-        )?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let mut url = self.request_url.clone();
         url.query_pairs_mut()
             .append_pair("key", api_key.expose_secret());
-        let res = http_client
-            .post(url)
-            .json(&request_body)
-            .headers(headers)
-            .send()
-            .await
-            .map_err(|e| {
-                Error::new(ErrorDetails::InferenceClient {
-                    status_code: e.status(),
-                    message: format!("Error sending request: {}", DisplayOrDebugGateway::new(e)),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
-                    raw_response: None,
-                })
-            })?;
+        let builder = http_client.post(url);
+        let (res, raw_request) = inject_extra_request_data_and_send(
+            PROVIDER_TYPE,
+            &request.extra_body,
+            &request.extra_headers,
+            model_provider,
+            model_name,
+            request_body,
+            builder,
+        )
+        .await?;
         let latency = Latency::NonStreaming {
             response_time: start_time.elapsed(),
         };
@@ -204,7 +194,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 })
             })?;
@@ -216,7 +206,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_request: Some(raw_request.clone()),
                     raw_response: Some(raw_response.clone()),
                 })
             })?;
@@ -224,7 +214,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
                 response,
                 latency,
                 raw_response,
-                request: request_body,
+                raw_request,
                 generic_request: request,
                 model_name,
                 provider_name,
@@ -239,7 +229,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 })
             })?;
@@ -259,25 +249,10 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let mut request_body = serde_json::to_value(GeminiRequest::new(request)?).map_err(|e| {
+        let request_body = serde_json::to_value(GeminiRequest::new(request)?).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!(
                     "Error serializing Gemini request: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-            })
-        })?;
-        let headers = inject_extra_request_data(
-            &request.extra_body,
-            &request.extra_headers,
-            model_provider,
-            model_name,
-            &mut request_body,
-        )?;
-        let raw_request = serde_json::to_string(&request_body).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!(
-                    "Error serializing request: {}",
                     DisplayOrDebugGateway::new(e)
                 ),
             })
@@ -287,23 +262,17 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
         let mut url = self.streaming_request_url.clone();
         url.query_pairs_mut()
             .append_pair("key", api_key.expose_secret());
-        let event_source = http_client
-            .post(url)
-            .json(&request_body)
-            .headers(headers)
-            .eventsource()
-            .map_err(|e| {
-                Error::new(ErrorDetails::InferenceClient {
-                    message: format!(
-                        "Error sending request to Google AI Studio Gemini: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                    status_code: None,
-                    provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
-                    raw_response: None,
-                })
-            })?;
+        let builder = http_client.post(url);
+        let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
+            PROVIDER_TYPE,
+            &request.extra_body,
+            &request.extra_headers,
+            model_provider,
+            model_name,
+            request_body,
+            builder,
+        )
+        .await?;
         let stream = stream_google_ai_studio_gemini(event_source, start_time).peekable();
         Ok((stream, raw_request))
     }
@@ -971,7 +940,7 @@ struct GeminiResponseWithMetadata<'a> {
     response: GeminiResponse,
     raw_response: String,
     latency: Latency,
-    request: serde_json::Value,
+    raw_request: String,
     generic_request: &'a ModelInferenceRequest<'a>,
 }
 
@@ -982,7 +951,7 @@ impl<'a> TryFrom<GeminiResponseWithMetadata<'a>> for ProviderInferenceResponse {
             response,
             raw_response,
             latency,
-            request: request_body,
+            raw_request,
             generic_request,
             model_name,
             provider_name,
@@ -993,7 +962,7 @@ impl<'a> TryFrom<GeminiResponseWithMetadata<'a>> for ProviderInferenceResponse {
         let first_candidate = response.candidates.into_iter().next().ok_or_else(|| {
             Error::new(ErrorDetails::InferenceServer {
                 message: "Google AI Studio Gemini response has no candidates".to_string(),
-                raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                raw_request: Some(raw_request.clone()),
                 raw_response: Some(raw_response.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
             })
@@ -1015,20 +984,12 @@ impl<'a> TryFrom<GeminiResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 Error::new(ErrorDetails::InferenceServer {
                     message: "Google AI Studio Gemini non-streaming response has no usage metadata"
                         .to_string(),
-                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_request: Some(raw_request.clone()),
                     raw_response: Some(raw_response.clone()),
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?
             .into();
-        let raw_request = serde_json::to_string(&request_body).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!(
-                    "Error serializing request: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-            })
-        })?;
         let system = generic_request.system.clone();
         let messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
@@ -1543,7 +1504,7 @@ mod tests {
             provider_name: "test_provider",
             response,
             latency: latency.clone(),
-            request: serde_json::to_value(&request_body).unwrap(),
+            raw_request: raw_request.clone(),
             generic_request: &generic_request,
             raw_response: raw_response.clone(),
         };
@@ -1644,7 +1605,7 @@ mod tests {
             provider_name: "test_provider",
             response,
             latency: latency.clone(),
-            request: serde_json::to_value(&request_body).unwrap(),
+            raw_request: raw_request.clone(),
             generic_request: &generic_request,
             raw_response: raw_response.clone(),
         };
@@ -1755,7 +1716,7 @@ mod tests {
             provider_name: "test_provider",
             response,
             latency: latency.clone(),
-            request: serde_json::to_value(&request_body).unwrap(),
+            raw_request: raw_request.clone(),
             generic_request: &generic_request,
             raw_response: raw_response.clone(),
         };
