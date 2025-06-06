@@ -1,3 +1,4 @@
+from typing import cast
 from uuid import UUID
 
 import pytest
@@ -10,6 +11,8 @@ from tensorzero import (
     OrNode,
     TensorZeroGateway,
     Text,
+    ToolCall,
+    ToolResult,
 )
 
 
@@ -122,7 +125,27 @@ def test_simple_query_chat_function_with_tools(embedded_sync_client: TensorZeroG
         for message in messages:
             assert "role" in message
             assert message["role"] in ["user", "assistant"]
-            print()
+            for content in message["content"]:
+                assert content["type"] in ["text", "tool_call", "tool_result"]
+                if content["type"] == "tool_call":
+                    cast(ToolCall, content)
+                    assert content.id is not None
+                    assert content.name is not None
+                    assert content.arguments is not None
+                    assert content.raw_name is not None
+                    assert content.raw_arguments is not None
+                elif content["type"] == "tool_result":
+                    cast(ToolResult, content)
+                    assert content.id is not None
+                    assert content.name is not None
+                    assert content.result is not None
+                elif content["type"] == "text":
+                    cast(Text, content)
+                    assert content.text is not None
+                    assert content.arguments is not None
+                else:
+                    assert False
+
         # Type narrowing: we know these are Chat inferences
         assert inference.type == "chat"
         output = inference.output
@@ -130,17 +153,22 @@ def test_simple_query_chat_function_with_tools(embedded_sync_client: TensorZeroG
         assert len(output) >= 1
         for output_item in output:
             if output_item.type == "text":
+                assert isinstance(output_item, Text)
                 assert output_item.text is not None
             elif output_item.type == "tool_call":
+                assert isinstance(output_item, ToolCall)
                 assert output_item.id is not None
                 assert output_item.name is not None
                 assert output_item.arguments is not None
                 assert output_item.raw_name is not None
                 assert output_item.raw_arguments is not None
             elif output_item.type == "tool_result":
+                assert isinstance(output_item, ToolResult)
                 assert output_item.id is not None
-                assert output_item.tool_call_name is not None
-                assert output_item.tool_call_result is not None
+                assert output_item.name is not None
+                assert output_item.result is not None
+                print(output_item)
+                assert False
         inference_id = inference.inference_id
         assert isinstance(inference_id, UUID)
         episode_id = inference.episode_id
