@@ -29,6 +29,7 @@ if [ "${TENSORZERO_SKIP_LARGE_FIXTURES:-}" = "1" ]; then
     exit 0
 fi
 
+uv run python --version
 uv run ./download-fixtures.py
 df -h
 clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database "$DATABASE_NAME" --query "INSERT INTO ChatInference FROM INFILE './s3-fixtures/large_chat_inference_v2.parquet' FORMAT Parquet"
