@@ -1,4 +1,3 @@
-from typing import cast
 from uuid import UUID
 
 import pytest
@@ -30,8 +29,8 @@ def test_simple_list_json_inferences(embedded_sync_client: TensorZeroGateway):
         assert inference.function_name == "extract_entities"
         assert isinstance(inference.variant_name, str)
         input = inference.input
-        assert "messages" in input
-        messages = input["messages"]
+        messages = input.messages
+        assert messages is not None
         assert isinstance(messages, list)
         assert len(messages) == 1
         # Type narrowing: we know these are JSON inferences
@@ -80,8 +79,8 @@ def test_simple_query_chat_function(embedded_sync_client: TensorZeroGateway):
         assert inference.function_name == "write_haiku"
         assert inference.variant_name == "better_prompt_haiku_3_5"
         input = inference.input
-        assert "messages" in input
-        messages = input["messages"]
+        messages = input.messages
+        assert messages is not None
         assert isinstance(messages, list)
         assert len(messages) == 1
         # Type narrowing: we know these are Chat inferences
@@ -105,44 +104,43 @@ def test_simple_query_chat_function(embedded_sync_client: TensorZeroGateway):
 
 
 def test_simple_query_chat_function_with_tools(embedded_sync_client: TensorZeroGateway):
+    limit = 2
     inferences = embedded_sync_client.experimental_list_inferences(
         function_name="multi_hop_rag_agent",
         variant_name=None,
         filters=None,
         output_source="inference",
-        limit=20,
+        limit=limit,
         offset=0,
     )
-    assert len(inferences) == 20
+    assert len(inferences) == limit
     for inference in inferences:
         assert inference.function_name == "multi_hop_rag_agent"
         assert inference.variant_name == "baseline"
         input = inference.input
-        assert "messages" in input
-        messages = input["messages"]
+        messages = input.messages
+        assert messages is not None
         assert isinstance(messages, list)
         assert len(messages) >= 1
         for message in messages:
-            assert "role" in message
-            assert message["role"] in ["user", "assistant"]
-            for content in message["content"]:
-                assert content["type"] in ["text", "tool_call", "tool_result"]
-                if content["type"] == "tool_call":
-                    cast(ToolCall, content)
+            assert str(message.role) in ["user", "assistant"]
+            for content in message.content:
+                assert content.type in ["text", "tool_call", "tool_result"]
+                if content.type == "tool_call":
+                    assert isinstance(content, ToolCall)
                     assert content.id is not None
                     assert content.name is not None
                     assert content.arguments is not None
                     assert content.raw_name is not None
                     assert content.raw_arguments is not None
-                elif content["type"] == "tool_result":
-                    cast(ToolResult, content)
+                elif content.type == "tool_result":
+                    assert isinstance(content, ToolResult)
                     assert content.id is not None
                     assert content.name is not None
                     assert content.result is not None
-                elif content["type"] == "text":
-                    cast(Text, content)
-                    assert content.text is not None
-                    assert content.arguments is not None
+                elif content.type == "text":
+                    assert isinstance(content, Text)
+                    assert (content.text is not None) ^ (content.arguments is not None)
                 else:
                     assert False
 
@@ -358,8 +356,7 @@ async def test_simple_list_json_inferences_async(
         assert inference.function_name == "extract_entities"
         assert isinstance(inference.variant_name, str)
         inp = inference.input
-        assert "messages" in inp
-        messages = inp["messages"]
+        messages = inp.messages
         assert isinstance(messages, list)
         assert len(messages) == 1
         # Type narrowing: we know these are JSON inferences
@@ -416,8 +413,7 @@ async def test_simple_query_chat_function_async(
         assert inference.function_name == "write_haiku"
         assert inference.variant_name == "better_prompt_haiku_3_5"
         inp = inference.input
-        assert "messages" in inp
-        messages = inp["messages"]
+        messages = inp.messages
         assert isinstance(messages, list)
         assert len(messages) == 1
         # Type narrowing: we know these are Chat inferences

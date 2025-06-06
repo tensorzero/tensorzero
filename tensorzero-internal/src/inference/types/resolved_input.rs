@@ -6,7 +6,9 @@ use crate::tool::{ToolCall, ToolResult};
 use super::{storage::StoragePath, Base64File, Role, Thought};
 
 #[cfg(feature = "pyo3")]
-use crate::inference::types::pyo3_helpers::serialize_to_dict;
+use crate::inference::types::pyo3_helpers::{
+    resolved_input_message_content_to_python, serialize_to_dict,
+};
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
 
@@ -77,8 +79,14 @@ impl ResolvedInputMessage {
     }
 
     #[getter]
-    pub fn get_content(&self) -> Vec<ResolvedInputMessageContent> {
-        self.content.clone()
+    pub fn get_content<'py>(&self, py: Python<'py>) -> PyResult<Vec<Bound<'py, PyAny>>> {
+        self.content
+            .iter()
+            .map(|content| {
+                resolved_input_message_content_to_python(py, content.clone())
+                    .map(|pyobj| pyobj.into_bound(py))
+            })
+            .collect()
     }
 }
 

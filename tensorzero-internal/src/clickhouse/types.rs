@@ -58,15 +58,11 @@ impl StoredInference {
     }
 
     #[getter]
-    pub fn get_input<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        Ok(match self {
-            StoredInference::Chat(example) => {
-                serialize_to_dict(py, example.input.clone())?.into_bound(py)
-            }
-            StoredInference::Json(example) => {
-                serialize_to_dict(py, example.input.clone())?.into_bound(py)
-            }
-        })
+    pub fn get_input(&self) -> ResolvedInput {
+        match self {
+            StoredInference::Chat(example) => example.input.clone(),
+            StoredInference::Json(example) => example.input.clone(),
+        }
     }
 
     /// Returns the output of the inference as PyO3 classes.
