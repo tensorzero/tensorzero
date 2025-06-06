@@ -2,6 +2,8 @@
 
 set -euo pipefail
 
+DATABASE_NAME="${1:-tensorzero_ui_fixtures}"
+
 echo "Verifying fixture counts for tables..."
 echo "==============================================="
 
@@ -29,7 +31,7 @@ mismatch=0
 for table in "${!all_tables[@]}"; do
     # Get total count from database
     db_count=$(clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword \
-              --database tensorzero_ui_fixtures --query "SELECT count() FROM $table" 2>/dev/null || echo "ERROR")
+              --database "$DATABASE_NAME" --query "SELECT count() FROM $table" 2>/dev/null || echo "ERROR")
 
     if [[ "$db_count" == "ERROR" ]]; then
         echo "  $table: ERROR accessing ClickHouse"
@@ -47,8 +49,8 @@ for table in "${!all_tables[@]}"; do
         if [ -f "$file" ]; then
             if [[ "$file" == *.parquet ]]; then
                 # For parquet files, use parquet-tools to count rows
-                if command -v parquet-tools &> /dev/null; then
-                    file_count=$(parquet-tools inspect "$file" | grep "num_rows:" | awk '{print $2}')
+                if command -v uv run parquet-tools &> /dev/null; then
+                    file_count=$(uv run parquet-tools inspect "$file" | grep "num_rows:" | awk '{print $2}')
                     echo "  - $file: $file_count rows (parquet)"
                 else
                     echo "  - WARNING: parquet-tools not installed, cannot count rows in $file"
@@ -88,7 +90,7 @@ if [ $mismatch -eq 0 ]; then
     for table in "${tables_to_check_duplicates[@]}"; do
         echo "Checking for duplicate ids in $table..."
         duplicates=$(clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword \
-                      --database tensorzero_ui_fixtures --query "SELECT
+                      --database "$DATABASE_NAME" --query "SELECT
         id,
         count() AS duplicate_count
     FROM $table

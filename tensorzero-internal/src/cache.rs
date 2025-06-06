@@ -4,12 +4,12 @@ use std::sync::Arc;
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::embeddings::{EmbeddingRequest, EmbeddingResponse};
 use crate::error::{Error, ErrorDetails};
-use crate::inference::types::batch::deserialize_json_string;
 use crate::inference::types::{
     ContentBlockChunk, ContentBlockOutput, FinishReason, ModelInferenceRequest,
     ModelInferenceResponse, ProviderInferenceResponseChunk, Usage,
 };
 use crate::model::StreamResponse;
+use crate::serde_util::deserialize_json_string;
 use blake3::Hash;
 use clap::ValueEnum;
 use serde::de::DeserializeOwned;
@@ -437,7 +437,7 @@ pub async fn cache_lookup_inner<T: CacheOutput + DeserializeOwned>(
         query_params.insert("lookback_s", lookback_str.as_str());
     }
     let result = clickhouse_connection_info
-        .run_query_synchronous(query.to_string(), Some(&query_params))
+        .run_query_synchronous(query.to_string(), &query_params)
         .await?;
     if result.is_empty() {
         return Ok(None);

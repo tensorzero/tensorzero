@@ -1,5 +1,4 @@
-use crate::inference::types::batch::deserialize_json_string;
-use crate::inference::types::batch::deserialize_optional_json_string;
+use crate::serde_util::{deserialize_json_string, deserialize_optional_json_string};
 use derive_builder::Builder;
 use extra_body::{FullExtraBodyConfig, UnfilteredInferenceExtraBody};
 use extra_headers::{FullExtraHeadersConfig, UnfilteredInferenceExtraHeaders};
