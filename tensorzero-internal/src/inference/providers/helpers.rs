@@ -389,7 +389,7 @@ pub(crate) fn check_new_tool_call_name(
     match last_tool_name {
         None => {
             *last_tool_name = Some(new_name.to_string());
-            return Some(new_name);
+            Some(new_name)
         }
         Some(last_tool_name) => {
             if last_tool_name == &new_name {
@@ -397,7 +397,7 @@ pub(crate) fn check_new_tool_call_name(
                 return None;
             }
             *last_tool_name = new_name.clone();
-            return Some(new_name);
+            Some(new_name)
         }
     }
 }

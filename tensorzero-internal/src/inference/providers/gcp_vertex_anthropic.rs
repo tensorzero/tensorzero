@@ -2266,7 +2266,7 @@ mod tests {
         match &chunk.content[0] {
             ContentBlockChunk::ToolCall(tool_call) => {
                 assert_eq!(tool_call.id, "tool_id".to_string());
-                assert_eq!(tool_call.raw_name, Some("tool_name".to_string()));
+                assert_eq!(tool_call.raw_name, None);
                 assert_eq!(tool_call.raw_arguments, "aaaa: bbbbb".to_string());
             }
             _ => panic!("Expected a tool call content block"),

@@ -269,7 +269,7 @@ class ToolCallChunk(ContentBlockChunk):
     id: str
     # `raw_arguments` will come as partial JSON
     raw_arguments: str
-    raw_name: str
+    raw_name: Optional[str] = None
     type: str = "tool_call"
 
 

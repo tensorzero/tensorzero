@@ -2358,7 +2358,7 @@ mod tests {
             message.content,
             vec![ContentBlockChunk::ToolCall(ToolCallChunk {
                 id: "id1".to_string(),
-                raw_name: Some("name1".to_string()),
+                raw_name: None,
                 raw_arguments: "{\"hello\":\"world\"}".to_string(),
             })]
         );

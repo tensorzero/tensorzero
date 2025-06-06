@@ -1712,7 +1712,10 @@ def test_sync_tool_call_streaming(sync_client: TensorZeroGateway):
             assert len(chunk.content) == 1
             assert isinstance(chunk.content[0], ToolCallChunk)
             assert chunk.content[0].type == "tool_call"
-            assert chunk.content[0].raw_name == "get_temperature"
+            if i == 0:
+                assert chunk.content[0].raw_name == "get_temperature"
+            else:
+                assert chunk.content[0].raw_name is None
             assert chunk.content[0].id == "0"
             assert chunk.content[0].raw_arguments == expected_text[i]
         else:
