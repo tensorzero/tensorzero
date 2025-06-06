@@ -1,0 +1,13 @@
+{
+    "type": "object",
+    "properties": {
+      "custom_notes": {
+        "type": "array",
+        "description": "Optional list of additional analysis factors to append to the bullet list.",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "additionalProperties": false
+  }
