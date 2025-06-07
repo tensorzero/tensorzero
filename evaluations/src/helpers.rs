@@ -10,6 +10,7 @@ use tensorzero_internal::{
     cache::CacheEnabledMode, clickhouse::ClickHouseConnectionInfo, function::FunctionConfig,
     tool::ToolCallConfigDatabaseInsert,
 };
+use tracing_subscriber::EnvFilter;
 use uuid::Uuid;
 
 use crate::{Args, OutputFormat};
@@ -55,12 +56,16 @@ pub fn setup_logging(args: &Args) -> Result<()> {
             let subscriber = tracing_subscriber::FmtSubscriber::builder()
                 .with_writer(std::io::stderr)
                 .json()
+                .with_env_filter(EnvFilter::from_default_env())
                 .finish();
             tracing::subscriber::set_global_default(subscriber)
                 .map_err(|e| anyhow!("Failed to initialize tracing: {}", e))
         }
         OutputFormat::Pretty => {
-            let subscriber = tracing_subscriber::FmtSubscriber::new();
+            let subscriber = tracing_subscriber::FmtSubscriber::builder()
+                .with_writer(std::io::stderr)
+                .with_env_filter(EnvFilter::from_default_env())
+                .finish();
             tracing::subscriber::set_global_default(subscriber)
                 .map_err(|e| anyhow!("Failed to initialize tracing: {}", e))
         }
