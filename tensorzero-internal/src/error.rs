@@ -799,7 +799,7 @@ impl std::fmt::Display for ErrorDetails {
                 write!(f, "Invalid {kind} ID: {message}")
             }
             ErrorDetails::InvalidInferenceOutputSource { source } => {
-                write!(f, "Invalid inference output source: {source}. Should be one of: \"inference\" or \"episode\".")
+                write!(f, "Invalid inference output source: {source}. Should be one of: \"inference\" or \"demonstration\".")
             }
             ErrorDetails::InvalidMetricName { metric_name } => {
                 write!(f, "Invalid metric name: {metric_name}")

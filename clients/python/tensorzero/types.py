@@ -548,6 +548,7 @@ class StoredInferenceInput:
     messages: List[StoredInferenceInputMessage]
     system: Optional[System]
 
+
 @dataclass
 class StoredChatInference:
     function_name: str
