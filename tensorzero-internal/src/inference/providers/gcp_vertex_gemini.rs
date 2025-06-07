@@ -1391,6 +1391,7 @@ fn stream_gcp_vertex_gemini(
 ) -> ProviderInferenceResponseStreamInner {
     Box::pin(async_stream::stream! {
         let mut last_tool_name = None;
+        let mut last_tool_idx = None;
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
@@ -1422,6 +1423,7 @@ fn stream_gcp_vertex_gemini(
                             data,
                             start_time.elapsed(),
                             &mut last_tool_name,
+                            &mut last_tool_idx,
                         )
                     }
                 }
@@ -1891,6 +1893,7 @@ enum GCPVertexGeminiResponseContentPartData {
 fn content_part_to_tensorzero_chunk(
     part: GCPVertexGeminiResponseContentPart,
     last_tool_name: &mut Option<String>,
+    last_tool_idx: &mut Option<u32>,
 ) -> Result<ContentBlockChunk, Error> {
     if part.thought {
         match part.data {
@@ -1932,10 +1935,26 @@ fn content_part_to_tensorzero_chunk(
         )) => {
             let arguments = serialize_or_log(&function_call.args);
             let name = check_new_tool_call_name(function_call.name, last_tool_name);
+            if name.is_some() {
+                // If a name comes from check_new_tool_call_name, we need to increment the tool call index
+                // because this is a new tool call.
+                // This will be used as a new ID so we can differentiate between tool calls.
+                let new_tool_idx = match last_tool_idx {
+                    Some(idx) => *idx + 1,
+                    None => 0,
+                };
+                *last_tool_idx = Some(new_tool_idx);
+            }
+            let id = match last_tool_idx {
+                Some(idx) => idx.to_string(),
+                None => return Err(Error::new(ErrorDetails::Inference {
+                    message: "Tool call index is not set in GCP Vertex Gemini. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/discussions/categories/bug-reports".to_string(),
+                })),
+            };
             Ok(ContentBlockChunk::ToolCall(ToolCallChunk {
                 raw_name: name,
                 raw_arguments: arguments,
-                id: "0".to_string(),
+                id,
             }))
         }
         FlattenUnknown::Normal(GCPVertexGeminiResponseContentPartData::ExecutableCode(_)) => {
@@ -2213,6 +2232,7 @@ fn convert_stream_response_with_metadata_to_chunk(
     response: GCPVertexGeminiResponse,
     latency: Duration,
     last_tool_name: &mut Option<String>,
+    last_tool_idx: &mut Option<u32>,
 ) -> Result<ProviderInferenceResponseChunk, Error> {
     let first_candidate = response.candidates.into_iter().next().ok_or_else(|| {
         Error::new(ErrorDetails::InferenceServer {
@@ -2228,7 +2248,7 @@ fn convert_stream_response_with_metadata_to_chunk(
         Some(content) => content
             .parts
             .into_iter()
-            .map(|part| content_part_to_tensorzero_chunk(part, last_tool_name))
+            .map(|part| content_part_to_tensorzero_chunk(part, last_tool_name, last_tool_idx))
             .collect::<Result<Vec<ContentBlockChunk>, Error>>()?,
         None => vec![],
     };
@@ -3369,11 +3389,13 @@ mod tests {
         let latency = Duration::from_millis(100);
         let mut last_tool_name = None;
 
+        let mut last_tool_idx = None;
         let result = convert_stream_response_with_metadata_to_chunk(
             "raw_response".to_string(),
             response,
             latency,
             &mut last_tool_name,
+            &mut last_tool_idx,
         );
 
         assert!(result.is_ok());
@@ -3388,6 +3410,8 @@ mod tests {
         }
         assert_eq!(chunk.latency, latency);
         assert_eq!(chunk.raw_response, "raw_response");
+        // Verify tool call tracking state - should remain None for text chunks
+        assert_eq!(last_tool_idx, None);
 
         // Test with function call content
         let function_call_part = GCPVertexGeminiResponseContentPart {
@@ -3412,12 +3436,14 @@ mod tests {
             usage_metadata: None,
         };
         let mut last_tool_name = None;
+        let mut last_tool_idx = None;
 
         let result = convert_stream_response_with_metadata_to_chunk(
             "raw_response".to_string(),
             response,
             latency,
             &mut last_tool_name,
+            &mut last_tool_idx,
         );
 
         assert!(result.is_ok());
@@ -3432,6 +3458,8 @@ mod tests {
             _ => panic!("Expected tool call chunk"),
         }
         assert_eq!(last_tool_name, Some("get_weather".to_string()));
+        // Verify tool call tracking state - should be Some(0) for first tool call
+        assert_eq!(last_tool_idx, Some(0));
 
         // Test with thought content
         let thought_part = GCPVertexGeminiResponseContentPart {
@@ -3453,12 +3481,14 @@ mod tests {
             usage_metadata: None,
         };
         let mut last_tool_name = None;
+        let mut last_tool_idx = None;
 
         let result = convert_stream_response_with_metadata_to_chunk(
             "raw_response".to_string(),
             response,
             latency,
             &mut last_tool_name,
+            &mut last_tool_idx,
         );
 
         assert!(result.is_ok());
@@ -3472,6 +3502,8 @@ mod tests {
             }
             _ => panic!("Expected thought chunk"),
         }
+        // Verify tool call tracking state - should remain None for thought chunks
+        assert_eq!(last_tool_idx, None);
 
         // Test with mixed content
         let text_part = GCPVertexGeminiResponseContentPart {
@@ -3507,11 +3539,13 @@ mod tests {
         };
         let mut last_tool_name = None;
 
+        let mut last_tool_idx = None;
         let result = convert_stream_response_with_metadata_to_chunk(
             "raw_response".to_string(),
             response,
             latency,
             &mut last_tool_name,
+            &mut last_tool_idx,
         );
 
         assert!(result.is_ok());
@@ -3534,6 +3568,8 @@ mod tests {
             }
             _ => panic!("Expected second chunk to be tool call"),
         }
+        // Verify tool call tracking state - should be Some(0) for first tool call in this test
+        assert_eq!(last_tool_idx, Some(0));
 
         // Test with empty text filtering
         let empty_text_part = GCPVertexGeminiResponseContentPart {
@@ -3563,11 +3599,13 @@ mod tests {
         };
         let mut last_tool_name = None;
 
+        let mut last_tool_idx = None;
         let result = convert_stream_response_with_metadata_to_chunk(
             "raw_response".to_string(),
             response,
             latency,
             &mut last_tool_name,
+            &mut last_tool_idx,
         );
 
         assert!(result.is_ok());
@@ -3580,6 +3618,8 @@ mod tests {
             }
             _ => panic!("Expected text chunk"),
         }
+        // Verify tool call tracking state - should remain None for text chunks only
+        assert_eq!(last_tool_idx, None);
 
         // Test with no candidates - should return error
         let response = GCPVertexGeminiResponse {
@@ -3588,11 +3628,13 @@ mod tests {
         };
         let mut last_tool_name = None;
 
+        let mut last_tool_idx = None;
         let result = convert_stream_response_with_metadata_to_chunk(
             "raw_response".to_string(),
             response,
             latency,
             &mut last_tool_name,
+            &mut last_tool_idx,
         );
 
         assert!(result.is_err());
@@ -3604,6 +3646,8 @@ mod tests {
             }
             _ => panic!("Expected InferenceServer error"),
         }
+        // Verify tool call tracking state should remain None for error cases
+        assert_eq!(last_tool_idx, None);
 
         // Test with no content
         let candidate = GCPVertexGeminiResponseCandidate {
@@ -3616,16 +3660,20 @@ mod tests {
         };
         let mut last_tool_name = None;
 
+        let mut last_tool_idx = None;
         let result = convert_stream_response_with_metadata_to_chunk(
             "raw_response".to_string(),
             response,
             latency,
             &mut last_tool_name,
+            &mut last_tool_idx,
         );
 
         assert!(result.is_ok());
         let chunk = result.unwrap();
         assert_eq!(chunk.content.len(), 0);
+        // Verify tool call tracking state should remain None for no content
+        assert_eq!(last_tool_idx, None);
     }
 
     #[test]
@@ -3639,8 +3687,10 @@ mod tests {
             )),
         };
         let mut last_tool_name = None;
+        let mut last_tool_idx = None;
 
-        let result = content_part_to_tensorzero_chunk(text_part, &mut last_tool_name);
+        let result =
+            content_part_to_tensorzero_chunk(text_part, &mut last_tool_name, &mut last_tool_idx);
         assert!(result.is_ok());
         let chunk = result.unwrap();
         match chunk {
@@ -3650,6 +3700,8 @@ mod tests {
             }
             _ => panic!("Expected text chunk"),
         }
+        // Verify tool call tracking state - should remain None for text chunks
+        assert_eq!(last_tool_idx, None);
 
         // Test function call content part
         let function_call_part = GCPVertexGeminiResponseContentPart {
@@ -3663,8 +3715,13 @@ mod tests {
             )),
         };
         let mut last_tool_name = None;
+        let mut last_tool_idx = None;
 
-        let result = content_part_to_tensorzero_chunk(function_call_part, &mut last_tool_name);
+        let result = content_part_to_tensorzero_chunk(
+            function_call_part,
+            &mut last_tool_name,
+            &mut last_tool_idx,
+        );
         assert!(result.is_ok());
         let chunk = result.unwrap();
         match chunk {
@@ -3679,6 +3736,8 @@ mod tests {
             _ => panic!("Expected tool call chunk"),
         }
         assert_eq!(last_tool_name, Some("get_weather".to_string()));
+        // Verify tool call tracking state - should be Some(0) for first tool call
+        assert_eq!(last_tool_idx, Some(0));
 
         // Test function call with same name (should not repeat name)
         let function_call_part2 = GCPVertexGeminiResponseContentPart {
@@ -3692,8 +3751,13 @@ mod tests {
             )),
         };
 
-        let result = content_part_to_tensorzero_chunk(function_call_part2, &mut last_tool_name);
+        let result = content_part_to_tensorzero_chunk(
+            function_call_part2,
+            &mut last_tool_name,
+            &mut last_tool_idx,
+        );
         assert!(result.is_ok());
+        assert_eq!(last_tool_idx, Some(0));
         let chunk = result.unwrap();
         match chunk {
             ContentBlockChunk::ToolCall(tool_call) => {
@@ -3716,18 +3780,24 @@ mod tests {
             )),
         };
 
-        let result = content_part_to_tensorzero_chunk(function_call_part3, &mut last_tool_name);
+        let result = content_part_to_tensorzero_chunk(
+            function_call_part3,
+            &mut last_tool_name,
+            &mut last_tool_idx,
+        );
         assert!(result.is_ok());
         let chunk = result.unwrap();
         match chunk {
             ContentBlockChunk::ToolCall(tool_call) => {
                 assert_eq!(tool_call.raw_name, Some("calculate".to_string()));
                 assert_eq!(tool_call.raw_arguments, r#"{"expression":"2+2"}"#);
-                assert_eq!(tool_call.id, "0");
+                assert_eq!(tool_call.id, "1");
             }
             _ => panic!("Expected tool call chunk"),
         }
         assert_eq!(last_tool_name, Some("calculate".to_string()));
+        // Verify tool call tracking state - should be Some(1) for second different tool call
+        assert_eq!(last_tool_idx, Some(1));
 
         // Test thought content part with text
         let thought_part = GCPVertexGeminiResponseContentPart {
@@ -3738,8 +3808,10 @@ mod tests {
             )),
         };
         let mut last_tool_name = None;
+        let mut last_tool_idx = None;
 
-        let result = content_part_to_tensorzero_chunk(thought_part, &mut last_tool_name);
+        let result =
+            content_part_to_tensorzero_chunk(thought_part, &mut last_tool_name, &mut last_tool_idx);
         assert!(result.is_ok());
         let chunk = result.unwrap();
         match chunk {
@@ -3753,6 +3825,8 @@ mod tests {
             }
             _ => panic!("Expected thought chunk"),
         }
+        // Verify tool call tracking state - should remain None for thought chunks
+        assert_eq!(last_tool_idx, None);
 
         // Test thought content part without text (empty object)
         let thought_part_empty = GCPVertexGeminiResponseContentPart {
@@ -3761,8 +3835,13 @@ mod tests {
             data: FlattenUnknown::Unknown(Cow::Owned(json!({}))),
         };
         let mut last_tool_name = None;
+        let mut last_tool_idx = None;
 
-        let result = content_part_to_tensorzero_chunk(thought_part_empty, &mut last_tool_name);
+        let result = content_part_to_tensorzero_chunk(
+            thought_part_empty,
+            &mut last_tool_name,
+            &mut last_tool_idx,
+        );
         assert!(result.is_ok());
         let chunk = result.unwrap();
         match chunk {
@@ -3773,6 +3852,8 @@ mod tests {
             }
             _ => panic!("Expected thought chunk"),
         }
+        // Verify tool call tracking state - should remain None for thought chunks
+        assert_eq!(last_tool_idx, None);
 
         // Test executable code content part (should return error)
         let executable_code_part = GCPVertexGeminiResponseContentPart {
@@ -3783,8 +3864,13 @@ mod tests {
             )),
         };
         let mut last_tool_name = None;
+        let mut last_tool_idx = None;
 
-        let result = content_part_to_tensorzero_chunk(executable_code_part, &mut last_tool_name);
+        let result = content_part_to_tensorzero_chunk(
+            executable_code_part,
+            &mut last_tool_name,
+            &mut last_tool_idx,
+        );
         assert!(result.is_err());
         let error = result.unwrap_err();
         let details = error.get_owned_details();
@@ -3794,6 +3880,8 @@ mod tests {
             }
             _ => panic!("Expected InferenceServer error"),
         }
+        // Verify tool call tracking state - should remain None for error cases
+        assert_eq!(last_tool_idx, None);
 
         // Test thought with non-text content (should return error)
         let thought_with_function_call = GCPVertexGeminiResponseContentPart {
@@ -3808,8 +3896,11 @@ mod tests {
         };
         let mut last_tool_name = None;
 
-        let result =
-            content_part_to_tensorzero_chunk(thought_with_function_call, &mut last_tool_name);
+        let result = content_part_to_tensorzero_chunk(
+            thought_with_function_call,
+            &mut last_tool_name,
+            &mut None,
+        );
         assert!(result.is_err());
         let error = result.unwrap_err();
         let details = error.get_owned_details();
@@ -3830,8 +3921,10 @@ mod tests {
             data: FlattenUnknown::Unknown(Cow::Owned(json!({"unknown_field": "unknown_value"}))),
         };
         let mut last_tool_name = None;
+        let mut last_tool_idx = None;
 
-        let result = content_part_to_tensorzero_chunk(unknown_part, &mut last_tool_name);
+        let result =
+            content_part_to_tensorzero_chunk(unknown_part, &mut last_tool_name, &mut last_tool_idx);
         assert!(result.is_err());
         let error = result.unwrap_err();
         let details = error.get_owned_details();
@@ -3844,5 +3937,7 @@ mod tests {
             }
             _ => panic!("Expected InferenceServer error"),
         }
+        // Verify tool call tracking state - should remain None for error cases
+        assert_eq!(last_tool_idx, None);
     }
 }

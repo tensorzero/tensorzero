@@ -340,6 +340,7 @@ fn stream_google_ai_studio_gemini(
 ) -> ProviderInferenceResponseStreamInner {
     Box::pin(async_stream::stream! {
         let mut last_tool_name = None;
+        let mut last_tool_idx = None;
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
@@ -371,6 +372,7 @@ fn stream_google_ai_studio_gemini(
                             data,
                             start_time.elapsed(),
                             &mut last_tool_name,
+                            &mut last_tool_idx,
                         )
                     }
                 }
@@ -776,6 +778,7 @@ enum GeminiResponseContentPartData {
 fn content_part_to_tensorzero_chunk(
     part: GeminiResponseContentPart,
     last_tool_name: &mut Option<String>,
+    last_tool_idx: &mut Option<u32>,
 ) -> Result<ContentBlockChunk, Error> {
     if part.thought {
         match part.data {
@@ -817,10 +820,26 @@ fn content_part_to_tensorzero_chunk(
         FlattenUnknown::Normal(GeminiResponseContentPartData::FunctionCall(function_call)) => {
             let arguments = serialize_or_log(&function_call.args);
             let name = check_new_tool_call_name(function_call.name, last_tool_name);
+            if name.is_some() {
+                // If a name comes from check_new_tool_call_name, we need to increment the tool call index
+                // because this is a new tool call.
+                // This will be used as a new ID so we can differentiate between tool calls.
+                let new_tool_idx = match last_tool_idx {
+                    Some(idx) => *idx + 1,
+                    None => 0,
+                };
+                *last_tool_idx = Some(new_tool_idx);
+            }
+            let id = match last_tool_idx {
+                Some(idx) => idx.to_string(),
+                None => return Err(Error::new(ErrorDetails::Inference {
+                    message: "Tool call index is not set in Google AI Studio Gemini. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/discussions/categories/bug-reports".to_string(),
+                })),
+            };
             Ok(ContentBlockChunk::ToolCall(ToolCallChunk {
                 raw_name: name,
                 raw_arguments: arguments,
-                id: "0".to_string(),
+                id,
             }))
         }
         FlattenUnknown::Unknown(part) => Err(Error::new(ErrorDetails::InferenceServer {
@@ -1054,6 +1073,7 @@ fn convert_stream_response_with_metadata_to_chunk(
     response: GeminiResponse,
     latency: Duration,
     last_tool_name: &mut Option<String>,
+    last_tool_idx: &mut Option<u32>,
 ) -> Result<ProviderInferenceResponseChunk, Error> {
     let first_candidate = response.candidates.into_iter().next().ok_or_else(|| {
         Error::new(ErrorDetails::InferenceServer {
@@ -1069,7 +1089,7 @@ fn convert_stream_response_with_metadata_to_chunk(
         Some(content) => content
             .parts
             .into_iter()
-            .map(|part| content_part_to_tensorzero_chunk(part, last_tool_name))
+            .map(|part| content_part_to_tensorzero_chunk(part, last_tool_name, last_tool_idx))
             .collect::<Result<Vec<ContentBlockChunk>, Error>>()?,
         None => vec![],
     };
@@ -2035,13 +2055,19 @@ mod tests {
         };
 
         // Convert to ProviderInferenceResponseChunk
+        let mut last_tool_name = None;
+        let mut last_tool_idx = None;
         let chunk: ProviderInferenceResponseChunk = convert_stream_response_with_metadata_to_chunk(
             "my_raw_chunk".to_string(),
             response,
             Duration::from_millis(100),
-            &mut None,
+            &mut last_tool_name,
+            &mut last_tool_idx,
         )
         .unwrap();
+
+        // Verify tool call tracking state - should remain None for text chunks
+        assert_eq!(last_tool_idx, None);
 
         // Verify content
         assert_eq!(chunk.content.len(), 1);
@@ -2086,13 +2112,19 @@ mod tests {
         };
 
         // Convert to ProviderInferenceResponseChunk
+        let mut last_tool_name = None;
+        let mut last_tool_idx = None;
         let chunk: ProviderInferenceResponseChunk = convert_stream_response_with_metadata_to_chunk(
             "my_raw_chunk".to_string(),
             response,
             Duration::from_millis(50),
-            &mut None,
+            &mut last_tool_name,
+            &mut last_tool_idx,
         )
         .unwrap();
+
+        // Verify tool call tracking state - should remain None for text chunks
+        assert_eq!(last_tool_idx, None);
 
         // Verify content
         assert_eq!(chunk.content.len(), 1);
@@ -2141,13 +2173,19 @@ mod tests {
         };
 
         // Convert to ProviderInferenceResponseChunk
+        let mut last_tool_name = None;
+        let mut last_tool_idx = None;
         let chunk: ProviderInferenceResponseChunk = convert_stream_response_with_metadata_to_chunk(
             "my_raw_chunk".to_string(),
             response,
             Duration::from_millis(75),
-            &mut None,
+            &mut last_tool_name,
+            &mut last_tool_idx,
         )
         .unwrap();
+
+        // Verify tool call tracking state - should remain None for text chunks
+        assert_eq!(last_tool_idx, None);
 
         // Verify empty text chunks are filtered out
         assert_eq!(chunk.content.len(), 1);
@@ -2186,13 +2224,20 @@ mod tests {
         };
 
         // Convert to ProviderInferenceResponseChunk
+        let mut last_tool_name = None;
+        let mut last_tool_idx = None;
         let chunk: ProviderInferenceResponseChunk = convert_stream_response_with_metadata_to_chunk(
             "my_raw_chunk".to_string(),
             response,
             Duration::from_millis(120),
-            &mut None,
+            &mut last_tool_name,
+            &mut last_tool_idx,
         )
         .unwrap();
+
+        // Verify tool call tracking state - should be Some(0) for first tool call
+        assert_eq!(last_tool_idx, Some(0));
+        assert_eq!(last_tool_name, Some("get_weather".to_string()));
 
         // Verify function call content
         assert_eq!(chunk.content.len(), 1);
@@ -2227,13 +2272,19 @@ mod tests {
         };
 
         // Convert to ProviderInferenceResponseChunk
+        let mut last_tool_name = None;
+        let mut last_tool_idx = None;
         let chunk: ProviderInferenceResponseChunk = convert_stream_response_with_metadata_to_chunk(
             "my_raw_chunk".to_string(),
             response,
             Duration::from_millis(60),
-            &mut None,
+            &mut last_tool_name,
+            &mut last_tool_idx,
         )
         .unwrap();
+
+        // Verify tool call tracking state - should remain None for responses without content
+        assert_eq!(last_tool_idx, None);
 
         // Verify empty content
         assert_eq!(chunk.content.len(), 0);
@@ -2260,12 +2311,18 @@ mod tests {
         };
 
         // Convert to ProviderInferenceResponseChunk
+        let mut last_tool_name = None;
+        let mut last_tool_idx = None;
         let result = convert_stream_response_with_metadata_to_chunk(
             "my_raw_chunk".to_string(),
             response,
             Duration::from_millis(30),
-            &mut None,
+            &mut last_tool_name,
+            &mut last_tool_idx,
         );
+
+        // Should remain None when there's an error
+        assert_eq!(last_tool_idx, None);
 
         // Verify error is returned
         assert!(result.is_err());
@@ -2325,14 +2382,21 @@ mod tests {
                 }),
             };
 
-            let chunk: ProviderInferenceResponseChunk =
-                convert_stream_response_with_metadata_to_chunk(
+            let chunk: ProviderInferenceResponseChunk = {
+                let mut last_tool_name = None;
+                let mut last_tool_idx = None;
+                let result = convert_stream_response_with_metadata_to_chunk(
                     "my_raw_chunk".to_string(),
                     response,
                     Duration::from_millis(10),
-                    &mut None,
-                )
-                .unwrap();
+                    &mut last_tool_name,
+                    &mut last_tool_idx,
+                );
+                // Verify tool call tracking state
+                assert_eq!(last_tool_idx, None);
+                result
+            }
+            .unwrap();
             assert_eq!(chunk.finish_reason, Some(expected_reason));
         }
     }
