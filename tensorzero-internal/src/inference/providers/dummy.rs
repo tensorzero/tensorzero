@@ -549,6 +549,7 @@ impl InferenceProvider for DummyProvider {
                             provider_type: PROVIDER_TYPE.to_string(),
                         }));
                     }
+                    // We want to simulate the tool name being in the first chunk, but not in the subsequent chunks.
                     let tool_name = if i == 0 {
                         Some("get_temperature".to_string())
                     } else {
