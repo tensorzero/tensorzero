@@ -14,6 +14,7 @@ use std::sync::Arc;
 use tokio::signal;
 use tower_http::trace::{DefaultOnFailure, TraceLayer};
 use tracing::Level;
+use std::collections::HashMap;
 
 use tensorzero_internal::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_internal::config_parser::Config;
@@ -22,6 +23,8 @@ use tensorzero_internal::endpoints::status::TENSORZERO_VERSION;
 use tensorzero_internal::error;
 use tensorzero_internal::gateway_util;
 use tensorzero_internal::observability::{self, LogFormat, RouterExt};
+use tensorzero_internal::auth::{require_api_key, Auth};
+use tensorzero_internal::redis_client::RedisClient;
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
@@ -170,6 +173,20 @@ async fn main() {
         .await
         .expect_pretty("Failed to initialize AppState");
 
+    // Initialize Auth
+    let auth = Auth::new(HashMap::new());
+
+    // Setup Redis client with both app_state and auth
+    if let Ok(redis_url) = std::env::var("TENSORZERO_REDIS_URL") {
+        if !redis_url.is_empty() {
+            let redis_client = RedisClient::new(&redis_url, app_state.clone())
+                .with_auth(auth.clone());
+            redis_client.start().await.expect_pretty("Failed to start Redis client");
+        } else {
+            tracing::warn!("TENSORZERO_REDIS_URL is empty, so Redis client will not be started");
+        }
+    }
+
     // Create a new observability_enabled_pretty string for the log message below
     let observability_enabled_pretty = match &app_state.clickhouse_connection_info {
         ClickHouseConnectionInfo::Disabled => "disabled".to_string(),
@@ -253,6 +270,7 @@ async fn main() {
         .fallback(endpoints::fallback::handle_404)
         .layer(axum::middleware::from_fn(add_version_header))
         .layer(DefaultBodyLimit::max(100 * 1024 * 1024)) // increase the default body limit from 2MB to 100MB
+        .layer(axum::middleware::from_fn_with_state(auth.clone(), require_api_key))
         // Note - this is intentionally *not* used by our OTEL exporter (it creates a span without any `http.` or `otel.` fields)
         // This is only used to output request/response information to our logs
         // OTEL exporting is done by the `OtelAxumLayer` above, which is only enabled for certain routes (and includes much more information)

@@ -22,6 +22,7 @@ pub mod tool; // types and methods for working with TensorZero tools
 mod uuid_util; // utilities for working with UUIDs
 pub mod variant; // types and methods for working with TensorZero variants
 pub mod redis_client; // redis client
+pub mod auth; // authentication
 
 pub mod built_info {
     #![expect(clippy::allow_attributes)]
