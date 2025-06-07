@@ -1,10 +1,9 @@
-use crate::inference::types::batch::deserialize_json_string;
-use crate::inference::types::batch::deserialize_optional_json_string;
+use crate::serde_util::{deserialize_json_string, deserialize_optional_json_string};
 use derive_builder::Builder;
 use extra_body::{FullExtraBodyConfig, UnfilteredInferenceExtraBody};
 use extra_headers::{FullExtraHeadersConfig, UnfilteredInferenceExtraHeaders};
 use file::sanitize_raw_request;
-pub use file::{Base64File, File, FileKind};
+pub use file::{Base64File, File};
 use futures::stream::Peekable;
 use futures::Stream;
 use indexmap::IndexMap;
@@ -153,10 +152,10 @@ impl InputMessageContent {
                     .clone();
                 let file = file.take_or_fetch(context.client).await?;
                 let path = storage_kind.file_path(&file)?;
-                ResolvedInputMessageContent::File(FileWithPath {
+                ResolvedInputMessageContent::File(Box::new(FileWithPath {
                     file,
                     storage_path: path,
-                })
+                }))
             }
             InputMessageContent::Unknown {
                 data,
@@ -287,7 +286,7 @@ pub enum ContentBlock {
     ToolCall(ToolCall),
     ToolResult(ToolResult),
     #[serde(alias = "image")]
-    File(FileWithPath),
+    File(Box<FileWithPath>),
     Thought(Thought),
     /// Represents an unknown provider-specific content block.
     /// We pass this along as-is without any validation or transformation.

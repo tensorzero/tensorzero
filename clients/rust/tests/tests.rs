@@ -7,7 +7,7 @@ use tensorzero::{
 };
 
 use reqwest::Url;
-use tensorzero_internal::inference::types::{FileKind, ResolvedInput};
+use tensorzero_internal::inference::types::ResolvedInput;
 
 lazy_static::lazy_static! {
     static ref GATEWAY_URL: String = std::env::var("GATEWAY_URL").unwrap_or("http://localhost:3000".to_string());
@@ -82,6 +82,6 @@ async fn test_conversion() {
     else {
         panic!("Expected file");
     };
-    assert_eq!(mime_type, &FileKind::Png);
+    assert_eq!(mime_type, &mime::IMAGE_PNG);
     assert!(!data.is_empty());
 }

@@ -1,6 +1,9 @@
 use minijinja::{Environment, UndefinedBehavior};
 use serde_json::Value;
-use std::{collections::HashMap, path::PathBuf};
+use std::{
+    collections::{HashMap, HashSet},
+    path::PathBuf,
+};
 
 use crate::error::{Error, ErrorDetails};
 
@@ -91,17 +94,18 @@ impl TemplateConfig<'_> {
         }
     }
 
-    // Checks if a template needs any variables (i.e. needs a schema)
-    pub fn template_needs_variables(&self, template_name: &str) -> Result<bool, Error> {
+    pub fn get_undeclared_variables(&self, template_name: &str) -> Result<HashSet<String>, Error> {
         let template = self.env.get_template(template_name).map_err(|_| {
             Error::new(ErrorDetails::MiniJinjaTemplateMissing {
                 template_name: template_name.to_string(),
             })
         })?;
+        Ok(template.undeclared_variables(true))
+    }
 
-        let template_needs_variables = !template.undeclared_variables(true).is_empty();
-
-        Ok(template_needs_variables)
+    // Checks if a template needs any variables (i.e. needs a schema)
+    pub fn template_needs_variables(&self, template_name: &str) -> Result<bool, Error> {
+        Ok(!self.get_undeclared_variables(template_name)?.is_empty())
     }
 
     pub fn add_hardcoded_templates(&mut self) -> Result<(), Error> {

@@ -217,7 +217,7 @@ async fn write_dynamic_evaluation_run(
         run_display_name.as_deref().unwrap_or("\\N"),
     ); // Use \\N to indicate NULL
     clickhouse
-        .run_query_synchronous(query.to_string(), Some(&params))
+        .run_query_synchronous(query.to_string(), &params)
         .await?;
     Ok(())
 }
@@ -265,7 +265,7 @@ async fn write_dynamic_evaluation_run_episode(
     let tags_str = to_map_literal(&tags);
     query_params.insert("tags", tags_str.as_str());
     clickhouse
-        .run_query_synchronous(query.to_string(), Some(&query_params))
+        .run_query_synchronous(query.to_string(), &query_params)
         .await?;
     Ok(())
 }
@@ -336,7 +336,7 @@ async fn lookup_dynamic_evaluation_run(
     let episode_id_str = episode_id.to_string();
     let params = HashMap::from([("episode_id", episode_id_str.as_str())]);
     let result = clickhouse
-        .run_query_synchronous(query.to_string(), Some(&params))
+        .run_query_synchronous(query.to_string(), &params)
         .await?;
     if result.is_empty() {
         return Ok(None);

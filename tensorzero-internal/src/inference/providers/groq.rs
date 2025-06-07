@@ -699,10 +699,11 @@ fn tensorzero_to_groq_user_messages(
                     tool_call_id: &tool_result.id,
                 }));
             }
-            ContentBlock::File(FileWithPath {
-                file,
-                storage_path: _,
-            }) => {
+            ContentBlock::File(file) => {
+                let FileWithPath {
+                    file,
+                    storage_path: _,
+                } = &**file;
                 user_content_blocks.push(GroqContentBlock::ImageUrl {
                     image_url: GroqImageUrl {
                         // This will only produce an error if we pass in a bad
@@ -774,10 +775,11 @@ fn tensorzero_to_groq_assistant_messages(
                     message: "Tool results are not supported in assistant messages".to_string(),
                 }));
             }
-            ContentBlock::File(FileWithPath {
-                file,
-                storage_path: _,
-            }) => {
+            ContentBlock::File(file) => {
+                let FileWithPath {
+                    file,
+                    storage_path: _,
+                } = &**file;
                 assistant_content_blocks.push(GroqContentBlock::ImageUrl {
                     image_url: GroqImageUrl {
                         // This will only produce an error if we pass in a bad

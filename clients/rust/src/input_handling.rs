@@ -176,7 +176,7 @@ mod tests {
     use object_store::path::Path;
 
     use tensorzero_internal::inference::types::{
-        resolved_input::FileWithPath, storage::StorageKind, Base64File, FileKind,
+        resolved_input::FileWithPath, storage::StorageKind, Base64File,
     };
     use url::Url;
 
@@ -234,14 +234,14 @@ mod tests {
         };
 
         // Create the resolved input message content with an image
-        let resolved_content = ResolvedInputMessageContent::File(FileWithPath {
+        let resolved_content = ResolvedInputMessageContent::File(Box::new(FileWithPath {
             file: Base64File {
                 url: Some(Url::parse("http://notaurl.com").unwrap()),
-                mime_type: FileKind::Jpeg,
+                mime_type: mime::IMAGE_JPEG,
                 data: Some(image_data.to_string()),
             },
             storage_path: storage_path.clone(),
-        });
+        }));
 
         // Call the function under test
         let result = resolved_input_message_content_to_client_input_message_content(
@@ -257,7 +257,7 @@ mod tests {
                 mime_type: result_mime_type,
                 data: result_data,
             }) => {
-                assert_eq!(result_mime_type, FileKind::Jpeg);
+                assert_eq!(result_mime_type, mime::IMAGE_JPEG);
                 assert_eq!(result_data, image_data);
             }
             _ => panic!("Expected ClientInputMessageContent::Image, got something else"),

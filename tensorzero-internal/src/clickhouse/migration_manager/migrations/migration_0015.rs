@@ -43,7 +43,7 @@ impl Migration for Migration0015<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Alter the `output_tokens` column of `ModelInference` to be a nullable column
@@ -53,7 +53,7 @@ impl Migration for Migration0015<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         Ok(())
