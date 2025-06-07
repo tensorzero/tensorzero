@@ -381,7 +381,12 @@ pub async fn peek_first_chunk<
     }
 }
 
-/// TODO: test & document
+/// For providers that return the tool call name in every chunk, we only want to send the name when it changes.
+/// Gemini & Mistral do this.
+/// If the tool call name changes, we return the new name.
+/// We also update the last_tool_name to the new name.
+/// If the tool call name does not change, we return None.
+/// We do not update the last_tool_name in this case.
 pub(crate) fn check_new_tool_call_name(
     new_name: String,
     last_tool_name: &mut Option<String>,
@@ -944,6 +949,27 @@ mod tests {
         assert!(
             err.contains("TensorZero doesn't support pointing an index (0) if its container doesn't exist. We'd love to hear about your use case (& help)! Please open a GitHub Discussion: https://github.com/tensorzero/tensorzero/discussions/new` with pointer: `/new-key/0`"),
             "Unexpected error message: {err:?}"
+        );
+    }
+
+    #[test]
+    fn test_check_new_tool_call_name() {
+        let mut last_tool_name = None;
+        assert_eq!(
+            check_new_tool_call_name("get_temperature".to_string(), &mut last_tool_name),
+            Some("get_temperature".to_string())
+        );
+        assert_eq!(
+            check_new_tool_call_name("get_temperature".to_string(), &mut last_tool_name),
+            None
+        );
+        assert_eq!(
+            check_new_tool_call_name("get_humidity".to_string(), &mut last_tool_name),
+            Some("get_humidity".to_string())
+        );
+        assert_eq!(
+            check_new_tool_call_name("get_temperature".to_string(), &mut last_tool_name),
+            Some("get_temperature".to_string())
         );
     }
 }
