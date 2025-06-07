@@ -4,16 +4,18 @@ use std::collections::HashMap;
 use pyo3::prelude::*;
 #[cfg(feature = "pyo3")]
 use pyo3::types::{PyAny, PyList};
+use serde::Serialize;
 use serde_json::Value;
 #[cfg(feature = "pyo3")]
 use tensorzero_internal::inference::types::pyo3_helpers::{
-    content_block_output_to_python, serialize_to_dict, uuid_to_python,
+    content_block_chat_output_to_python, serialize_to_dict, uuid_to_python,
 };
+use tensorzero_internal::inference::types::Text;
 use tensorzero_internal::{
     clickhouse::types::StoredInference,
     config_parser::Config,
     error::{Error, ErrorDetails},
-    inference::types::{ContentBlockOutput, ModelInput},
+    inference::types::{ContentBlockChatOutput, ModelInput},
     tool::ToolCallConfigDatabaseInsert,
     variant::{chat_completion::prepare_model_input, VariantConfig},
 };
@@ -22,13 +24,13 @@ use uuid::Uuid;
 /// Represents an inference that has been prepared for fine-tuning.
 /// This is constructed by rendering a StoredInference with a variant for messages
 /// and by resolving all network resources (e.g. images).
-#[cfg_attr(feature = "pyo3", pyclass)]
-#[derive(Debug, PartialEq)]
+#[cfg_attr(feature = "pyo3", pyclass(str))]
+#[derive(Debug, PartialEq, Serialize)]
 pub struct RenderedStoredInference {
     pub function_name: String,
     pub variant_name: String,
     pub input: ModelInput,
-    pub output: Vec<ContentBlockOutput>,
+    pub output: Vec<ContentBlockChatOutput>,
     pub episode_id: Uuid,
     pub inference_id: Uuid,
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
@@ -58,7 +60,7 @@ impl RenderedStoredInference {
         let output = self
             .output
             .iter()
-            .map(|x| content_block_output_to_python(py, x))
+            .map(|x| content_block_chat_output_to_python(py, x.clone()))
             .collect::<PyResult<Vec<_>>>()?;
         PyList::new(py, output).map(|list| list.into_any())
     }
@@ -81,6 +83,18 @@ impl RenderedStoredInference {
     #[getter]
     pub fn get_output_schema<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         serialize_to_dict(py, self.output_schema.clone()).map(|x| x.into_bound(py))
+    }
+
+    pub fn __repr__(&self) -> String {
+        self.to_string()
+    }
+}
+
+impl std::fmt::Display for RenderedStoredInference {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Serialize the rendered inference to pretty-printed JSON
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
     }
 }
 
@@ -169,15 +183,15 @@ pub fn render_stored_inference(
             function_name: example.function_name,
             variant_name: example.variant_name,
             input: model_input,
-            output: example.output.into_iter().map(|x| x.into()).collect(),
+            output: example.output,
             episode_id: example.episode_id,
             inference_id: example.inference_id,
             tool_params: Some(example.tool_params),
             output_schema: None,
         }),
         StoredInference::Json(example) => {
-            let output: Vec<ContentBlockOutput> = match example.output.raw {
-                Some(raw) => vec![raw.into()],
+            let output: Vec<ContentBlockChatOutput> = match example.output.raw {
+                Some(raw) => vec![ContentBlockChatOutput::Text(Text { text: raw })],
                 None => vec![],
             };
             Ok(RenderedStoredInference {

@@ -13,7 +13,7 @@ use pyo3::prelude::*;
 #[cfg(feature = "pyo3")]
 use pyo3::types::{PyAny, PyList};
 #[cfg(feature = "pyo3")]
-use pyo3_helpers::content_block_to_python;
+use pyo3_helpers::{content_block_to_python, serialize_to_dict};
 use resolved_input::FileWithPath;
 pub use resolved_input::{ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent};
 use serde::{Deserialize, Deserializer, Serialize};
@@ -22,7 +22,6 @@ use serde_untagged::UntaggedEnumVisitor;
 use std::{
     borrow::Cow,
     collections::HashMap,
-    fmt::{self},
     pin::Pin,
     sync::Arc,
     time::{Duration, SystemTime, UNIX_EPOCH},
@@ -252,6 +251,23 @@ pub enum Role {
     Assistant,
 }
 
+impl std::fmt::Display for Role {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Role::User => write!(f, "user"),
+            Role::Assistant => write!(f, "assistant"),
+        }
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl Role {
+    pub fn __repr__(&self) -> String {
+        self.to_string()
+    }
+}
+
 /// InputMessages are validated against the input schema of the Function
 /// and then templated and transformed into RequestMessages for a particular Variant.
 /// They might contain tool calls or tool results along with text.
@@ -262,20 +278,48 @@ pub enum Role {
 /// inference that is called for.
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[cfg_attr(feature = "pyo3", pyclass(get_all))]
+#[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
 pub struct Text {
     pub text: String,
 }
 
+impl std::fmt::Display for Text {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.text)
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl Text {
+    pub fn __repr__(&self) -> String {
+        self.to_string()
+    }
+}
+
 /// Struct that represents Chain of Thought reasoning
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[cfg_attr(feature = "pyo3", pyclass(get_all))]
+#[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
 pub struct Thought {
     pub text: String,
     /// An optional signature - currently, this is only used with Anthropic,
     /// and is ignored by other providers.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub signature: Option<String>,
+}
+
+impl std::fmt::Display for Thought {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.text)
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl Thought {
+    pub fn __repr__(&self) -> String {
+        self.to_string()
+    }
 }
 
 /// Core representation of the types of content that could go into a model provider
@@ -359,10 +403,17 @@ pub enum ContentBlockChatOutput {
 
 /// A RequestMessage is a message sent to a model
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[cfg_attr(feature = "pyo3", pyclass)]
+#[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct RequestMessage {
     pub role: Role,
     pub content: Vec<ContentBlock>,
+}
+
+impl std::fmt::Display for RequestMessage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
 }
 
 #[cfg(feature = "pyo3")]
@@ -381,6 +432,10 @@ impl RequestMessage {
     #[getter]
     fn get_role(&self) -> String {
         self.role.to_string()
+    }
+
+    pub fn __repr__(&self) -> String {
+        self.to_string()
     }
 }
 
@@ -432,11 +487,26 @@ pub struct ModelInferenceRequest<'a> {
 }
 
 /// For use in rendering for optimization purposes
-#[derive(Clone, Debug, PartialEq)]
-#[cfg_attr(feature = "pyo3", pyclass(get_all))]
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
 pub struct ModelInput {
     pub system: Option<String>,
     pub messages: Vec<RequestMessage>,
+}
+
+impl std::fmt::Display for ModelInput {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl ModelInput {
+    pub fn __repr__(&self) -> String {
+        self.to_string()
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -583,9 +653,34 @@ pub struct JsonInferenceResult {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct JsonInferenceOutput {
     pub raw: Option<String>,
     pub parsed: Option<Value>,
+}
+
+impl std::fmt::Display for JsonInferenceOutput {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl JsonInferenceOutput {
+    #[getter]
+    fn get_raw(&self) -> Option<String> {
+        self.raw.clone()
+    }
+
+    #[getter]
+    fn get_parsed<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        Ok(match &self.parsed {
+            Some(value) => serialize_to_dict(py, value)?.into_bound(py),
+            None => py.None().into_bound(py),
+        })
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -781,15 +876,6 @@ fn deserialize_content<'de, D: Deserializer<'de>>(
         })
         .seq(|seq| seq.deserialize())
         .deserialize(deserializer)
-}
-
-impl fmt::Display for Role {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Role::User => write!(f, "user"),
-            Role::Assistant => write!(f, "assistant"),
-        }
-    }
 }
 
 impl From<String> for ContentBlock {

@@ -1,0 +1,13 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "description": "Load a Wikipedia page. Returns the page content, or an error if the page does not exist.",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "The title of the Wikipedia page to load (e.g. \"Machine learning\")."
+    }
+  },
+  "required": ["title"],
+  "additionalProperties": false
+}

@@ -11,7 +11,9 @@ from .tensorzero import (
     _start_http_gateway as _start_http_gateway,
 )
 from .types import (
+    AndNode,
     BaseTensorZeroError,
+    BooleanMetricNode,
     ChatDatapointInsert,
     ChatInferenceDatapointInput,  # DEPRECATED
     ChatInferenceResponse,
@@ -24,6 +26,7 @@ from .types import (
     FileBase64,
     FileUrl,
     FinishReason,
+    FloatMetricNode,
     ImageBase64,
     ImageUrl,
     InferenceChunk,
@@ -34,9 +37,13 @@ from .types import (
     JsonInferenceOutput,
     JsonInferenceResponse,
     Message,
+    NotNode,
+    OrNode,
     RawText,
     StoredChatInference,
     StoredInference,
+    StoredInferenceInput,
+    StoredInferenceInputMessage,
     StoredJsonInference,
     System,
     TensorZeroError,
@@ -56,9 +63,11 @@ from .types import (
 )
 
 __all__ = [
+    "AndNode",
     "AsyncTensorZeroGateway",
     "BaseTensorZeroError",
     "BaseTensorZeroGateway",
+    "BooleanMetricNode",
     "ChatDatapointInsert",
     "ChatInferenceDatapointInput",  # DEPRECATED
     "StoredChatInference",
@@ -72,10 +81,13 @@ __all__ = [
     "FileBase64",
     "FileUrl",
     "FinishReason",
+    "FloatMetricNode",
     "ImageBase64",
     "ImageUrl",
     "InferenceChunk",
     "StoredInference",
+    "StoredInferenceInput",
+    "StoredInferenceInputMessage",
     "InferenceInput",
     "InferenceResponse",
     "JsonDatapointInsert",
@@ -84,6 +96,8 @@ __all__ = [
     "StoredJsonInference",
     "JsonInferenceResponse",
     "Message",
+    "NotNode",
+    "OrNode",
     "patch_openai_client",
     "RawText",
     "RenderedStoredInference",
