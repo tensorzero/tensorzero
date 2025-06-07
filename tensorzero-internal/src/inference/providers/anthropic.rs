@@ -1131,12 +1131,7 @@ fn anthropic_to_tensorzero_stream_message(
                     // This is necessary because the ToolCallChunk must always contain the tool name and ID
                     // even though Anthropic only sends the tool ID and name in the ToolUse chunk and not InputJSONDelta
                     vec![ContentBlockChunk::ToolCall(ToolCallChunk {
-                        raw_name: current_tool_name.clone().ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
-                            message: "Got InputJsonDelta chunk from Anthropic without current tool name being set by a ToolUse".to_string(),
-                            provider_type: PROVIDER_TYPE.to_string(),
-                            raw_request: None,
-                            raw_response: None,
-                        }))?,
+                        raw_name: None,
                         id: current_tool_id.clone().ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                             message: "Got InputJsonDelta chunk from Anthropic without current tool id being set by a ToolUse".to_string(),
                             provider_type: PROVIDER_TYPE.to_string(),
@@ -1209,7 +1204,7 @@ fn anthropic_to_tensorzero_stream_message(
                 Ok(Some(ProviderInferenceResponseChunk::new(
                     vec![ContentBlockChunk::ToolCall(ToolCallChunk {
                         id,
-                        raw_name: name,
+                        raw_name: Some(name),
                         // As far as I can tell this is always {} so we ignore
                         raw_arguments: "".to_string(),
                     })],
@@ -2264,7 +2259,7 @@ mod tests {
         assert_eq!(
             details,
             ErrorDetails::InferenceServer {
-                message: "Got InputJsonDelta chunk from Anthropic without current tool name being set by a ToolUse".to_string(),
+                message: "Got InputJsonDelta chunk from Anthropic without current tool id being set by a ToolUse".to_string(),
                 raw_request: None,
                 raw_response: None,
                 provider_type: PROVIDER_TYPE.to_string(),
@@ -2293,7 +2288,7 @@ mod tests {
         match &chunk.content[0] {
             ContentBlockChunk::ToolCall(tool_call) => {
                 assert_eq!(tool_call.id, "tool_id".to_string());
-                assert_eq!(tool_call.raw_name, "tool_name".to_string());
+                assert_eq!(tool_call.raw_name, None); // We don't add the tool name if it isn't in the contentBlockDelta
                 assert_eq!(tool_call.raw_arguments, "aaaa: bbbbb".to_string());
             }
             _ => panic!("Expected a tool call content block"),
@@ -2324,7 +2319,7 @@ mod tests {
         match &chunk.content[0] {
             ContentBlockChunk::ToolCall(tool_call) => {
                 assert_eq!(tool_call.id, "tool1".to_string());
-                assert_eq!(tool_call.raw_name, "calculator".to_string());
+                assert_eq!(tool_call.raw_name, Some("calculator".to_string()));
                 assert_eq!(tool_call.raw_arguments, "".to_string());
             }
             _ => panic!("Expected a tool call content block"),
@@ -2694,7 +2689,7 @@ mod tests {
             finish_reason: None,
             content: vec![ContentBlockChunk::ToolCall(ToolCallChunk {
                 id: "1".to_string(),
-                raw_name: "test_tool".to_string(),
+                raw_name: Some("test_tool".to_string()),
                 raw_arguments: "{}".to_string(),
             })],
         };

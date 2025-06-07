@@ -3874,6 +3874,7 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
     let mut arguments = String::new();
     let mut input_tokens = 0;
     let mut output_tokens = 0;
+    let mut tool_name = None;
 
     for chunk in chunks {
         let chunk_json: Value = serde_json::from_str(&chunk).unwrap();
@@ -3891,17 +3892,20 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
         let chunk_episode_id = Uuid::parse_str(chunk_episode_id).unwrap();
         assert_eq!(chunk_episode_id, episode_id);
 
-        for block in chunk_json.get("content").unwrap().as_array().unwrap() {
+        let blocks = chunk_json.get("content").unwrap().as_array().unwrap();
+        for block in blocks.iter() {
             assert!(block.get("id").is_some());
 
             let block_type = block.get("type").unwrap().as_str().unwrap();
 
             match block_type {
                 "tool_call" => {
-                    assert_eq!(
-                        block.get("raw_name").unwrap().as_str().unwrap(),
-                        "get_temperature"
-                    );
+                    if let Some(block_raw_name) = block.get("raw_name") {
+                        if tool_name.is_some() {
+                            panic!("Raw name already seen, got {block:#?}");
+                        }
+                        tool_name = Some(block_raw_name.as_str().unwrap().to_string());
+                    }
 
                     let block_tool_id = block.get("id").unwrap().as_str().unwrap();
                     match &tool_id {
@@ -3931,6 +3935,9 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
             output_tokens += usage.get("output_tokens").unwrap().as_u64().unwrap();
         }
     }
+
+    assert!(tool_name.is_some());
+    assert_eq!(tool_name.as_ref().unwrap(), "get_temperature");
 
     // NB: Azure doesn't return usage during streaming
     if provider.variant_name.contains("azure") {
@@ -5074,6 +5081,7 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
     let mut arguments = String::new();
     let mut input_tokens = 0;
     let mut output_tokens = 0;
+    let mut tool_name = None;
 
     for chunk in chunks {
         let chunk_json: Value = serde_json::from_str(&chunk).unwrap();
@@ -5098,10 +5106,12 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
 
             match block_type {
                 "tool_call" => {
-                    assert_eq!(
-                        block.get("raw_name").unwrap().as_str().unwrap(),
-                        "get_temperature"
-                    );
+                    if let Some(block_raw_name) = block.get("raw_name") {
+                        if tool_name.is_some() {
+                            panic!("Raw name already seen, got {block:#?}");
+                        }
+                        tool_name = Some(block_raw_name.as_str().unwrap().to_string());
+                    }
 
                     let block_tool_id = block.get("id").unwrap().as_str().unwrap();
                     match &tool_id {
@@ -5131,6 +5141,9 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
             output_tokens += usage.get("output_tokens").unwrap().as_u64().unwrap();
         }
     }
+
+    assert!(tool_name.is_some());
+    assert_eq!(tool_name.as_ref().unwrap(), "get_temperature");
 
     // NB: Azure doesn't return usage during streaming
     if provider.variant_name.contains("azure") {
@@ -6466,9 +6479,11 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
     let output_clickhouse: Vec<Value> =
         serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
     assert!(!output_clickhouse.is_empty()); // could be > 1 if the model returns text as well
-    let content_block = output_clickhouse.first().unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "tool_call");
+    let content_block = output_clickhouse
+        .iter()
+        .find(|block| (block.get("type").and_then(Value::as_str) == Some("tool_call")))
+        .expect("No tool_call content block found in ClickHouse output");
+    // The type check is implicitly handled by the find operation above.
     assert_eq!(content_block.get("id").unwrap().as_str().unwrap(), tool_id);
     // We explicitly do not check the tool name, as xAI decides to call 'get_temperature'
     // instead of 'self_destruct'
@@ -6988,6 +7003,7 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
     let mut arguments = String::new();
     let mut input_tokens = 0;
     let mut output_tokens = 0;
+    let mut tool_name = None;
 
     for chunk in chunks {
         let chunk_json: Value = serde_json::from_str(&chunk).unwrap();
@@ -7012,10 +7028,15 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
 
             match block_type {
                 "tool_call" => {
-                    assert_eq!(
-                        block.get("raw_name").unwrap().as_str().unwrap(),
-                        "get_humidity"
-                    );
+                    // We support incremental streaming of raw names but currently don't believe any providers do this.
+                    // If they start, we'd want to know.
+                    // So we check that the raw name shows up once.
+                    if let Some(block_raw_name) = block.get("raw_name") {
+                        if tool_name.is_some() {
+                            panic!("Raw name already seen, got {block:#?}");
+                        }
+                        tool_name = Some(block_raw_name.as_str().unwrap().to_string());
+                    }
 
                     let block_tool_id = block.get("id").unwrap().as_str().unwrap();
                     match &tool_id {
@@ -7045,6 +7066,8 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
             output_tokens += usage.get("output_tokens").unwrap().as_u64().unwrap();
         }
     }
+    assert!(tool_name.is_some());
+    assert_eq!(tool_name.as_ref().unwrap(), "get_humidity");
 
     // NB: Azure doesn't return usage during streaming
     if provider.variant_name.contains("azure") {
@@ -8249,6 +8272,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     let mut arguments = String::new();
     let mut input_tokens = 0;
     let mut output_tokens = 0;
+    let mut tool_name = None;
 
     for chunk_json in chunks {
         println!("API response chunk: {chunk_json:#?}");
@@ -8264,17 +8288,20 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
         let chunk_episode_id = Uuid::parse_str(chunk_episode_id).unwrap();
         assert_eq!(chunk_episode_id, episode_id);
 
-        for block in chunk_json.get("content").unwrap().as_array().unwrap() {
+        let blocks = chunk_json.get("content").unwrap().as_array().unwrap();
+        for block in blocks.iter() {
             assert!(block.get("id").is_some());
 
             let block_type = block.get("type").unwrap().as_str().unwrap();
 
             match block_type {
                 "tool_call" => {
-                    assert_eq!(
-                        block.get("raw_name").unwrap().as_str().unwrap(),
-                        "get_temperature"
-                    );
+                    if let Some(block_raw_name) = block.get("raw_name") {
+                        if tool_name.is_some() {
+                            panic!("Raw name already seen, got {block:#?}");
+                        }
+                        tool_name = Some(block_raw_name.as_str().unwrap().to_string());
+                    }
 
                     let block_tool_id = block.get("id").unwrap().as_str().unwrap();
                     match &tool_id {
@@ -8304,6 +8331,9 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
             output_tokens += usage.get("output_tokens").unwrap().as_u64().unwrap();
         }
     }
+
+    assert!(tool_name.is_some());
+    assert_eq!(tool_name.as_ref().unwrap(), "get_temperature");
 
     // NB: Azure doesn't return usage during streaming
     if provider.variant_name.contains("azure") {
@@ -8976,27 +9006,38 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
             match block_type {
                 "tool_call" => {
                     let block_tool_id = block.get("id").unwrap().as_str().unwrap();
-                    let tool_name = block.get("raw_name").unwrap().as_str().unwrap();
+                    // We support incremental streaming of raw names but currently don't believe any providers do this.
+                    // If they start, we'd want to know.
+                    // So we check that the raw name shows up once for each tool.
+                    if let Some(block_raw_name) = block.get("raw_name") {
+                        match block_raw_name.as_str().unwrap() {
+                            "get_temperature" => {
+                                assert!(get_temperature_tool_id.is_none());
+                                get_temperature_tool_id = Some(block_tool_id.to_string());
+                            }
+                            "get_humidity" => {
+                                assert!(get_humidity_tool_id.is_none());
+                                get_humidity_tool_id = Some(block_tool_id.to_string());
+                            }
+                            _ => {
+                                panic!("Unexpected tool name: {block_raw_name}");
+                            }
+                        }
+                    } else {
+                        assert!(
+                            block.get("raw_name").is_none(),
+                            "Expected no raw_name in non-first block"
+                        );
+                    }
+
                     let chunk_arguments = block.get("raw_arguments").unwrap().as_str().unwrap();
 
-                    match tool_name {
-                        "get_temperature" => {
-                            match &get_temperature_tool_id {
-                                None => get_temperature_tool_id = Some(block_tool_id.to_string()),
-                                Some(tool_id) => assert_eq!(tool_id, block_tool_id),
-                            };
-                            get_temperature_arguments.push_str(chunk_arguments);
-                        }
-                        "get_humidity" => {
-                            match &get_humidity_tool_id {
-                                None => get_humidity_tool_id = Some(block_tool_id.to_string()),
-                                Some(tool_id) => assert_eq!(tool_id, block_tool_id),
-                            };
-                            get_humidity_arguments.push_str(chunk_arguments);
-                        }
-                        _ => {
-                            panic!("Unexpected tool name: {tool_name}");
-                        }
+                    if block_tool_id == get_temperature_tool_id.as_ref().unwrap() {
+                        get_temperature_arguments.push_str(chunk_arguments);
+                    } else if block_tool_id == get_humidity_tool_id.as_ref().unwrap() {
+                        get_humidity_arguments.push_str(chunk_arguments);
+                    } else {
+                        panic!("Unexpected tool id: {block_tool_id}");
                     }
                 }
                 "text" => {
@@ -9015,6 +9056,8 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
             output_tokens += usage.get("output_tokens").unwrap().as_u64().unwrap();
         }
     }
+    assert!(get_temperature_tool_id.is_some());
+    assert!(get_humidity_tool_id.is_some());
 
     // NB: Azure doesn't return usage during streaming
     if provider.variant_name.contains("azure") {

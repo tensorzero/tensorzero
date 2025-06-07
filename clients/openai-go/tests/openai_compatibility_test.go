@@ -1219,6 +1219,7 @@ func TestToolCallingInference(t *testing.T) {
 		assert.Equal(t, int64(15), completionChunk.Usage.TotalTokens)
 
 		var previousInferenceID, previousEpisodeID string
+		nameSeen := false
 		//Test for intermediate chunks
 		for i := range len(allChunks) - 2 {
 			chunk := allChunks[i]
@@ -1253,9 +1254,14 @@ func TestToolCallingInference(t *testing.T) {
 			toolCall := chunk.Choices[0].Delta.ToolCalls[0]
 			//BUG : other toolcall.type arr of `constant.Function("function")`
 			assert.Equal(t, "function", toolCall.Type, "Tool call type should be 'function'")
-			assert.Equal(t, "get_temperature", toolCall.Function.Name, "Function name should be 'get_temperature'")
+			if toolCall.Function.Name != "" {
+				assert.False(t, nameSeen, "Function name should only appear once")
+				assert.Equal(t, "get_temperature", toolCall.Function.Name, "Function name should be 'get_temperature'")
+				nameSeen = true
+			}
 			assert.Equal(t, expectedText[i], toolCall.Function.Arguments, "Function arguments do not match expected text")
 		}
+		assert.True(t, nameSeen, "Function name should have been seen in at least one chunk")
 	})
 
 	t.Run("it should handle dynamic tool use inference with OpenAI", func(t *testing.T) {

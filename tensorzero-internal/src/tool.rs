@@ -418,7 +418,8 @@ pub enum ToolChoice {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct ToolCallChunk {
     pub id: String,
-    pub raw_name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub raw_name: Option<String>,
     pub raw_arguments: String,
 }
 

@@ -2068,7 +2068,6 @@ async fn e2e_test_tool_call_streaming() {
     }
     let mut inference_id = None;
     let mut id: Option<String> = None;
-    let mut name: Option<String> = None;
 
     for (i, chunk) in chunks.iter().enumerate() {
         let chunk_json: Value = serde_json::from_str(chunk).unwrap();
@@ -2090,11 +2089,13 @@ async fn e2e_test_tool_call_streaming() {
             } else {
                 assert_eq!(id, Some(new_id.to_string()));
             }
-            let new_name = content_block.get("raw_name").unwrap().as_str().unwrap();
             if i == 0 {
-                name = Some(new_name.to_string());
+                assert!(content_block.get("raw_name").is_some());
             } else {
-                assert_eq!(name, Some(new_name.to_string()));
+                assert!(
+                    content_block.get("raw_name").is_none(),
+                    "Expected no raw_name in non-first block, got {content_block:#?}",
+                );
             }
         } else {
             assert!(chunk_json
