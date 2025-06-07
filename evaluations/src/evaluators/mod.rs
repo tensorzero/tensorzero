@@ -15,6 +15,7 @@ use exact_match::run_exact_match_evaluator;
 pub mod llm_judge;
 use futures::stream::{FuturesUnordered, StreamExt};
 use llm_judge::{run_llm_judge_evaluator, LLMJudgeEvaluationResult, RunLLMJudgeEvaluatorParams};
+use tracing::{debug, error, info, instrument};
 use uuid::Uuid;
 
 use crate::Clients;
@@ -38,6 +39,7 @@ pub struct EvaluateInferenceParams {
 /// - Ok(Some(value)): The evaluator was run successfully and the result was a valid value.
 /// - Ok(None): The evaluator was run successfully but the result was None (if for example the evaluator requires a reference output but none is present).
 /// - Err(e): The evaluator failed to run due to some error (like the LLM Judge failed to infer).
+#[instrument(skip(params), fields(datapoint_id = %params.datapoint.id(), evaluation_name = %params.evaluation_name))]
 pub(crate) async fn evaluate_inference(
     params: EvaluateInferenceParams,
 ) -> Result<EvaluationResult> {
@@ -52,12 +54,18 @@ pub(crate) async fn evaluate_inference(
         inference_cache,
     } = params;
     let EvaluationConfig::Static(static_evaluation_config) = &*evaluation_config;
+    info!(
+        evaluators = ?static_evaluation_config.evaluators.keys().collect::<Vec<_>>(),
+        "Starting evaluation with evaluators"
+    );
+
     let results: EvaluationResult =
         FuturesUnordered::from_iter(static_evaluation_config.evaluators.keys().map(
             |evaluator_name| async {
                 let inference_response = inference_response.clone();
                 let evaluation_config = evaluation_config.clone();
                 let evaluator_name = evaluator_name.clone();
+                debug!(evaluator_name = %evaluator_name, "Starting evaluator");
                 let datapoint = datapoint.clone();
                 let input = input.clone();
                 let evaluation_name = evaluation_name.clone();
@@ -77,9 +85,16 @@ pub(crate) async fn evaluate_inference(
                 })
                 .await;
 
+                debug!(
+                    evaluator_name = %evaluator_name,
+                    success = result.is_ok(),
+                    "Evaluator completed"
+                );
+
                 let evaluation_result = match result {
                     Ok(result) => {
                         if let Some(value) = result.value() {
+                            debug!(evaluator_name = %evaluator_name, value = ?value, "Evaluator produced value, sending feedback");
                             // If there is a valid result, send feedback to TensorZero
                             let mut tags = HashMap::from([
                                 (
@@ -122,13 +137,23 @@ pub(crate) async fn evaluate_inference(
                                 })
                                 .await
                             {
-                                Ok(_) => (),
-                                Err(e) => return (evaluator_name, Err(e)),
+                                Ok(_) => {
+                                    debug!(evaluator_name = %evaluator_name, "Feedback sent successfully");
+                                },
+                                Err(e) => {
+                                    error!(evaluator_name = %evaluator_name, error = %e, "Failed to send feedback");
+                                    return (evaluator_name, Err(e));
+                                }
                             }
+                        } else {
+                            debug!(evaluator_name = %evaluator_name, "Evaluator produced no value");
                         }
                         Ok(result.value_owned())
                     }
-                    Err(e) => Err(e),
+                    Err(e) => {
+                        tracing::warn!(evaluator_name = %evaluator_name, error = %e, "Evaluator failed");
+                        Err(e)
+                    }
                 };
 
                 (evaluator_name, evaluation_result)
@@ -160,6 +185,7 @@ struct RunEvaluatorParams<'a> {
 /// - Err(e): The evaluator failed to run due to some error (like the LLM Judge failed to infer).
 ///
 /// NOTE: Each evaluator we implement in the match statement below should follow this contract.
+#[instrument(skip(params), fields(evaluator_name = %params.evaluator_name, datapoint_id = %params.datapoint.id()))]
 async fn run_evaluator(params: RunEvaluatorParams<'_>) -> Result<EvaluatorResult> {
     let RunEvaluatorParams {
         evaluation_config,
@@ -174,17 +200,25 @@ async fn run_evaluator(params: RunEvaluatorParams<'_>) -> Result<EvaluatorResult
     } = params;
     let EvaluationConfig::Static(static_evaluation_config) = evaluation_config;
     let evaluator_config = match static_evaluation_config.evaluators.get(&evaluator_name) {
-        Some(evaluator_config) => evaluator_config,
+        Some(evaluator_config) => {
+            debug!("Evaluator config found");
+            evaluator_config
+        }
         None => {
+            error!("Evaluator config not found");
             return Err(anyhow::anyhow!("Evaluator config not found for {}. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/categories/bug-reports.", evaluator_name));
         }
     };
     Ok(match evaluator_config {
         EvaluatorConfig::ExactMatch(_exact_match_config) => {
-            EvaluatorResult::ExactMatch(run_exact_match_evaluator(inference_response, datapoint)?)
+            debug!("Running exact match evaluator");
+            let result = run_exact_match_evaluator(inference_response, datapoint)?;
+            debug!(result = ?result, "Exact match evaluator completed");
+            EvaluatorResult::ExactMatch(result)
         }
-        EvaluatorConfig::LLMJudge(llm_judge_config) => EvaluatorResult::LLMJudge(
-            run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
+        EvaluatorConfig::LLMJudge(llm_judge_config) => {
+            debug!("Running LLM judge evaluator");
+            let result = run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
                 inference_response,
                 datapoint,
                 clients,
@@ -195,8 +229,10 @@ async fn run_evaluator(params: RunEvaluatorParams<'_>) -> Result<EvaluatorResult
                 input,
                 inference_cache,
             })
-            .await?,
-        ),
+            .await?;
+            debug!(result = ?result, "LLM judge evaluator completed");
+            EvaluatorResult::LLMJudge(result)
+        }
     })
 }
 
