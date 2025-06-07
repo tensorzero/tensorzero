@@ -1417,12 +1417,6 @@ fn stream_gcp_vertex_gemini(
                                 continue;
                             }
                         };
-                        // let response = GCPVertexGeminiStreamResponseWithMetadata {
-                        //     raw_response: message.data,
-                        //     response: data,
-                        //     latency: start_time.elapsed(),
-
-                        // }.try_into();
                         yield convert_stream_response_with_metadata_to_chunk(
                             message.data,
                             data,
