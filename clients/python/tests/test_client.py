@@ -726,8 +726,11 @@ async def test_async_tool_call_streaming(async_client: AsyncTensorZeroGateway):
         if i + 1 < len(chunks):
             assert len(chunk.content) == 1
             assert isinstance(chunk.content[0], ToolCallChunk)
+            if i == 0:
+                assert chunk.content[0].raw_name == "get_temperature"
+            else:
+                assert chunk.content[0].raw_name is None
             assert chunk.content[0].type == "tool_call"
-            assert chunk.content[0].raw_name == "get_temperature"
             assert chunk.content[0].id == "0"
             assert chunk.content[0].raw_arguments == expected_text[i]
         else:

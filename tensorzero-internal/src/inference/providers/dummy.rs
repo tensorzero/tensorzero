@@ -549,12 +549,17 @@ impl InferenceProvider for DummyProvider {
                             provider_type: PROVIDER_TYPE.to_string(),
                         }));
                     }
+                    let tool_name = if i == 0 {
+                        Some("get_temperature".to_string())
+                    } else {
+                        None
+                    };
                     Ok(ProviderInferenceResponseChunk {
                         created,
                         content: vec![if is_tool_call {
                             ContentBlockChunk::ToolCall(ToolCallChunk {
                                 id: "0".to_string(),
-                                raw_name: Some("get_temperature".to_string()),
+                                raw_name: tool_name,
                                 raw_arguments: chunk.to_string(),
                             })
                         } else {
