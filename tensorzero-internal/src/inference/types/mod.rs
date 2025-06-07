@@ -3540,6 +3540,138 @@ mod tests {
             }
             _ => panic!("Expected tool call block"),
         }
+
+        // Test case 6: Complex multi-tool name accumulation across multiple chunks
+        let chunks_case6 = vec![
+            InferenceResultChunk::Chat(ChatInferenceResultChunk {
+                content: vec![
+                    ContentBlockChunk::ToolCall(ToolCallChunk {
+                        id: "tool_1".to_string(),
+                        raw_name: Some("get_".to_string()),
+                        raw_arguments: "{\"lo".to_string(),
+                    }),
+                    ContentBlockChunk::ToolCall(ToolCallChunk {
+                        id: "tool_2".to_string(),
+                        raw_name: Some("cal".to_string()),
+                        raw_arguments: "{\"op".to_string(),
+                    }),
+                    ContentBlockChunk::ToolCall(ToolCallChunk {
+                        id: "tool_3".to_string(),
+                        raw_name: Some("send_".to_string()),
+                        raw_arguments: "{\"me".to_string(),
+                    }),
+                ],
+                created,
+                usage: None,
+                raw_response: "chunk1".to_string(),
+                latency,
+                finish_reason: None,
+            }),
+            InferenceResultChunk::Chat(ChatInferenceResultChunk {
+                content: vec![
+                    ContentBlockChunk::ToolCall(ToolCallChunk {
+                        id: "tool_1".to_string(),
+                        raw_name: Some("wea".to_string()),
+                        raw_arguments: "cation\": ".to_string(),
+                    }),
+                    ContentBlockChunk::ToolCall(ToolCallChunk {
+                        id: "tool_2".to_string(),
+                        raw_name: Some("cul".to_string()),
+                        raw_arguments: "eration\": ".to_string(),
+                    }),
+                    ContentBlockChunk::ToolCall(ToolCallChunk {
+                        id: "tool_3".to_string(),
+                        raw_name: Some("email".to_string()),
+                        raw_arguments: "ssage\": ".to_string(),
+                    }),
+                ],
+                created,
+                usage: None,
+                raw_response: "chunk2".to_string(),
+                latency,
+                finish_reason: None,
+            }),
+            InferenceResultChunk::Chat(ChatInferenceResultChunk {
+                content: vec![
+                    ContentBlockChunk::ToolCall(ToolCallChunk {
+                        id: "tool_1".to_string(),
+                        raw_name: Some("ther".to_string()),
+                        raw_arguments: "\"Paris\"}".to_string(),
+                    }),
+                    ContentBlockChunk::ToolCall(ToolCallChunk {
+                        id: "tool_2".to_string(),
+                        raw_name: Some("ate".to_string()),
+                        raw_arguments: "\"5*5\"}".to_string(),
+                    }),
+                    ContentBlockChunk::ToolCall(ToolCallChunk {
+                        id: "tool_3".to_string(),
+                        raw_name: None, // No more name parts
+                        raw_arguments: "\"Hello world\"}".to_string(),
+                    }),
+                ],
+                created,
+                usage: Some(Usage {
+                    input_tokens: 20,
+                    output_tokens: 30,
+                }),
+                raw_response: "chunk3".to_string(),
+                latency: Duration::from_millis(250),
+                finish_reason: Some(FinishReason::ToolCall),
+            }),
+        ];
+
+        let collect_chunks_args = CollectChunksArgs {
+            inference_id,
+            episode_id,
+            value: chunks_case6,
+            system: None,
+            input_messages: vec![],
+            function: function_config.clone(),
+            model_name: model_name.into(),
+            model_provider_name: model_provider_name.into(),
+            raw_request: raw_request.clone(),
+            inference_params: InferenceParams::default(),
+            function_name: "",
+            variant_name: "",
+            dynamic_output_schema: None,
+            templates: &templates,
+            tool_config: None,
+            cached: false,
+            extra_body: Default::default(),
+            extra_headers: Default::default(),
+        };
+
+        let result = collect_chunks(collect_chunks_args).await.unwrap();
+        let chat_result = match result {
+            InferenceResult::Chat(chat_result) => chat_result,
+            _ => panic!("Expected Chat inference response"),
+        };
+
+        assert_eq!(chat_result.content.len(), 3);
+        match &chat_result.content[0] {
+            ContentBlockChatOutput::ToolCall(tool_call) => {
+                assert_eq!(tool_call.raw_name, "get_weather"); // "get_" + "wea" + "ther"
+                assert_eq!(tool_call.raw_arguments, r#"{"location": "Paris"}"#);
+                assert_eq!(tool_call.id, "tool_1");
+            }
+            _ => panic!("Expected first tool call block"),
+        }
+        match &chat_result.content[1] {
+            ContentBlockChatOutput::ToolCall(tool_call) => {
+                assert_eq!(tool_call.raw_name, "calculate"); // "cal" + "cul" + "ate"
+                assert_eq!(tool_call.raw_arguments, r#"{"operation": "5*5"}"#);
+                assert_eq!(tool_call.id, "tool_2");
+            }
+            _ => panic!("Expected second tool call block"),
+        }
+        match &chat_result.content[2] {
+            ContentBlockChatOutput::ToolCall(tool_call) => {
+                assert_eq!(tool_call.raw_name, "send_email"); // "send_" + "email"
+                assert_eq!(tool_call.raw_arguments, r#"{"message": "Hello world"}"#);
+                assert_eq!(tool_call.id, "tool_3");
+            }
+            _ => panic!("Expected third tool call block"),
+        }
     }
 
     #[test]
