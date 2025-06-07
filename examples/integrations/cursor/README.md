@@ -45,5 +45,7 @@ Take a look at the server running on `http://localhost:14000` to see what your r
 ## A Haiku about This Integration
 
 _Cursor calls go through_
+
 _TensorZero watches them_
+
 _See the requests flow_
