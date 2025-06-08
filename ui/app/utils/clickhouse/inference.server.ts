@@ -500,8 +500,8 @@ async function parseInferenceRow(
         row.tool_params === ""
           ? {}
           : z
-              .record(z.string(), z.unknown())
-              .parse(JSON.parse(row.tool_params)),
+            .record(z.string(), z.unknown())
+            .parse(JSON.parse(row.tool_params)),
       extra_body,
     };
   } else {
@@ -664,11 +664,7 @@ export async function countInferencesByFunction(): Promise<
 }
 
 export async function countEpisodes(): Promise<number> {
-  const query = `SELECT toUInt32(COUNT(DISTINCT episode_id)) as count FROM (
-    SELECT episode_id FROM ChatInference
-    UNION ALL
-    SELECT episode_id FROM JsonInference
-  )`;
+  const query = `SELECT toUInt32(uniqExact(episode_id_uint)) AS count FROM InferenceByEpisodeId`;
   const resultSet = await clickhouseClient.query({
     query,
     format: "JSONEachRow",
