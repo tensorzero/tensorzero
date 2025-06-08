@@ -478,9 +478,9 @@ while True:
         job_state = response.state
         print(job_state)
         if job_state in (
-            JobState.JOB_STATE_SUCCEEDED,
-            JobState.JOB_STATE_FAILED,
-            JobState.JOB_STATE_CANCELLED,
+            JobState.JOB_STATE_SUCCEEDED.value,
+            JobState.JOB_STATE_FAILED.value,
+            JobState.JOB_STATE_CANCELLED.value,
         ):
             break
     except Exception as e:
@@ -501,7 +501,7 @@ model_config = {
             "providers": {
                 "gcp_vertex_gemini": {
                     "type": "gcp_vertex_gemini",
-                    "model_name": fine_tuned_model,
+                    "endpoint_id": fine_tuned_model,
                     "location": LOCATION,
                     "project_id": PROJECT_ID,
                 }
