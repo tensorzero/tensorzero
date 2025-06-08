@@ -85,6 +85,9 @@ describe("OpenAI Compatibility", () => {
       temperature: 0.4,
       // @ts-expect-error - custom TensorZero property
       "tensorzero::episode_id": episodeId,
+      "tensorzero::tags": {
+        foo: "bar",
+      },
     });
 
     // @ts-expect-error - custom TensorZero property

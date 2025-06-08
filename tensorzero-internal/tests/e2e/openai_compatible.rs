@@ -46,6 +46,9 @@ async fn test_openai_compatible_route_with_function_name_asmodel(model: &str) {
             }
         ],
         "stream": false,
+        "tensorzero::tags": {
+            "foo": "bar"
+        }
     });
 
     let response = client
@@ -111,6 +114,9 @@ async fn test_openai_compatible_route_with_function_name_asmodel(model: &str) {
         ]
     });
     assert_eq!(input, correct_input);
+    let tags = result.get("tags").unwrap().as_object().unwrap();
+    assert_eq!(tags.get("foo").unwrap().as_str().unwrap(), "bar");
+    assert_eq!(tags.len(), 1);
     let content_blocks = result.get("output").unwrap().as_str().unwrap();
     // Check that content_blocks is a list of blocks length 1
     let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
