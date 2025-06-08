@@ -8,7 +8,8 @@ Set `TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzer
 ### Prerequisites
 
 - [gcloud CLI](https://cloud.google.com/sdk/docs/install)
-- [ADC Authentication](https://cloud.google.com/docs/authentication/set-up-adc-local-dev-environment)
+- [Google Cloud Local authentication credentials](https://cloud.google.com/docs/authentication/set-up-adc-local-dev-environment)
+- [A Google Cloud Storage Bucket](https://cloud.google.com/storage/docs/creating-buckets).
 
 ### Using [`uv`](https://github.com/astral-sh/uv) (Recommended)
 

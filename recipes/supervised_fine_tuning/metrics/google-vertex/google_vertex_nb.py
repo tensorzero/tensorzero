@@ -12,6 +12,8 @@
 # To get started:
 #
 # - Set the `TENSORZERO_CLICKHOUSE_URL` environment variable. For example: `TENSORZERO_CLICKHOUSE_URL="http://chuser:chpassword@localhost:8123/tensorzero"`
+# - Create local authentication credentials `gcloud auth application-default login`
+# - You may need to [Create a Bucket](https://cloud.google.com/storage/docs/creating-buckets) on GCP, if you do not already have one.
 # - Update the following parameters:
 #
 
@@ -38,9 +40,9 @@ MAX_SAMPLES = 100_000
 MODEL_NAME = "gemini-2.0-flash-lite-001"
 
 # Google Cloud Variables
-PROJECT_ID = "<your-project-id>"
-LOCATION = "us-central1"
-BUCKET_NAME = "tensorzero-supervised-fine-tuning"
+PROJECT_ID = "<gcp-project-id>"
+LOCATION = "<gcp-region>"  # For example, "us-central1"
+BUCKET_NAME = "<gcp-bucket-name>"
 
 # %%
 import json
