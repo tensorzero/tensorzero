@@ -68,6 +68,12 @@ impl<T: ShorthandModelConfig> std::ops::Deref for BaseModelTable<T> {
     }
 }
 
+impl<T: ShorthandModelConfig> std::ops::DerefMut for BaseModelTable<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
 /// This is `Cow` without the `T: Clone` bound.
 /// Useful when we want a `Cow`, but don't want to (or can't) implement `Clone`
 #[derive(Debug)]

@@ -179,8 +179,8 @@ async fn main() {
     // Setup Redis client with both app_state and auth
     if let Ok(redis_url) = std::env::var("TENSORZERO_REDIS_URL") {
         if !redis_url.is_empty() {
-            let redis_client = RedisClient::new(&redis_url, app_state.clone())
-                .with_auth(auth.clone());
+            let redis_client = RedisClient::new(&redis_url, app_state.clone(), auth.clone())
+                .await;
             redis_client.start().await.expect_pretty("Failed to start Redis client");
         } else {
             tracing::warn!("TENSORZERO_REDIS_URL is empty, so Redis client will not be started");
@@ -201,7 +201,8 @@ async fn main() {
     // Set debug mode
     error::set_debug(config.gateway.debug).expect_pretty("Failed to set debug mode");
 
-    let router = Router::new()
+    // Routes that require authentication
+    let authenticated_routes = Router::new()
         .route("/inference", post(endpoints::inference::inference_handler))
         .route(
             "/batch_inference",
@@ -225,8 +226,6 @@ async fn main() {
         // (the only response header is `traceresponse` for a completed trace)
         .apply_otel_http_trace_layer()
         // Everything below the Otel layers does not have OpenTelemetry tracing enabled
-        .route("/status", get(endpoints::status::status_handler))
-        .route("/health", get(endpoints::status::health_handler))
         .route(
             "/datasets/{dataset_name}/datapoints/bulk",
             post(endpoints::datasets::bulk_insert_datapoints_handler),
@@ -263,14 +262,23 @@ async fn main() {
             "/dynamic_evaluation_run/{run_id}/episode",
             post(endpoints::dynamic_evaluation_run::dynamic_evaluation_run_episode_handler),
         )
+        .layer(axum::middleware::from_fn_with_state(auth.clone(), require_api_key));
+
+    // Routes that don't require authentication
+    let public_routes = Router::new()
+        .route("/status", get(endpoints::status::status_handler))
+        .route("/health", get(endpoints::status::health_handler))
         .route(
             "/metrics",
             get(move || std::future::ready(metrics_handle.render())),
-        )
+        );
+
+    let router = Router::new()
+        .merge(authenticated_routes)
+        .merge(public_routes)
         .fallback(endpoints::fallback::handle_404)
         .layer(axum::middleware::from_fn(add_version_header))
         .layer(DefaultBodyLimit::max(100 * 1024 * 1024)) // increase the default body limit from 2MB to 100MB
-        .layer(axum::middleware::from_fn_with_state(auth.clone(), require_api_key))
         // Note - this is intentionally *not* used by our OTEL exporter (it creates a span without any `http.` or `otel.` fields)
         // This is only used to output request/response information to our logs
         // OTEL exporting is done by the `OtelAxumLayer` above, which is only enabled for certain routes (and includes much more information)

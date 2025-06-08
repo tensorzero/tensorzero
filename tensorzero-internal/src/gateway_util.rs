@@ -52,9 +52,17 @@ impl AppStateData {
             clickhouse_connection_info,
         })
     }
-    pub async fn update_model_table(&self, new_models: ModelTable) {
+    pub async fn update_model_table(&self, mut new_models: ModelTable) {
         let mut models = self.config.models.write().await;
-        *models = new_models;
+        
+        for (name, config) in std::mem::take(&mut *new_models).into_iter() {
+            models.insert(name, config);
+        }
+    }
+
+    pub async fn remove_model_table(&self, model_name: &str) {
+        let mut models = self.config.models.write().await;
+        models.remove(model_name);
     }
 }
 
