@@ -5,7 +5,7 @@ use serde::Deserialize;
 use serde_json::Value;
 use tensorzero::{CacheParamsOptions, DynamicToolParams, InferenceResponse};
 use tensorzero_internal::clickhouse::escape_string_for_clickhouse_literal;
-use tensorzero_internal::inference::types::batch::deserialize_json_string;
+use tensorzero_internal::serde_util::deserialize_json_string;
 use tensorzero_internal::{
     cache::CacheEnabledMode, clickhouse::ClickHouseConnectionInfo, function::FunctionConfig,
     tool::ToolCallConfigDatabaseInsert,
@@ -102,11 +102,11 @@ pub async fn check_static_eval_human_feedback(
     let result = clickhouse
         .run_query_synchronous(
             query.to_string(),
-            Some(&HashMap::from([
+            &HashMap::from([
                 ("metric_name", metric_name),
                 ("datapoint_id", &datapoint_id.to_string()),
                 ("output", &escaped_serialized_output),
-            ])),
+            ]),
         )
         .await?;
     if result.is_empty() {

@@ -28,12 +28,12 @@ pub async fn delete_datapoint(
 ) {
     let datapoint = clickhouse.run_query_synchronous(
         "SELECT * FROM {table_name:Identifier} WHERE dataset_name={dataset_name:String} AND function_name={function_name:String} AND id = {id:String} ORDER BY updated_at DESC LIMIT 1 FORMAT JSONEachRow;".to_string(),
-        Some(&HashMap::from([
+        &HashMap::from([
             ("table_name", datapoint_kind.table_name()),
             ("function_name", function_name),
             ("dataset_name", dataset_name),
             ("id", datapoint_id.to_string().as_str())
-        ]))).await.unwrap();
+        ])).await.unwrap();
 
     if datapoint.is_empty() {
         panic!("Datapoint not found with params {datapoint_kind:?}, {function_name}, {dataset_name}, {datapoint_id}");

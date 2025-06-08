@@ -1,4 +1,3 @@
-gateway.debug = true
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                 FUNCTIONS                                  │
 # └────────────────────────────────────────────────────────────────────────────┘
@@ -27,7 +26,6 @@ type = "chat_completion"
 model = "openai::o4-mini-2025-04-16"
 extra_body = [{ pointer = "/temperature", value = 1.0 }]
 
-
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                  METRICS                                   │
 # └────────────────────────────────────────────────────────────────────────────┘
@@ -40,8 +38,3 @@ optimize = "min"
 type = "float"
 level = "inference"
 optimize = "max"
-
-# [metrics.valid_output]
-# type = "boolean"
-# level = "inference"
-# optimize = "max"

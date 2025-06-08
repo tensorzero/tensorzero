@@ -56,16 +56,14 @@ impl Migration for Migration0022<'_> {
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         self.clickhouse
-            .run_query_synchronous(
+            .run_query_synchronous_no_params(
                 "ALTER TABLE ChatInferenceDatapoint ADD COLUMN IF NOT EXISTS source_inference_id Nullable(UUID)".to_string(),
-                None,
             )
             .await?;
 
         self.clickhouse
-            .run_query_synchronous(
+            .run_query_synchronous_no_params(
                 "ALTER TABLE JsonInferenceDatapoint ADD COLUMN IF NOT EXISTS source_inference_id Nullable(UUID)".to_string(),
-                None,
             )
             .await?;
 
