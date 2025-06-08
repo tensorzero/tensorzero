@@ -274,6 +274,8 @@ pub struct OpenAICompatibleParams {
     tensorzero_extra_body: UnfilteredInferenceExtraBody,
     #[serde(default, rename = "tensorzero::extra_headers")]
     tensorzero_extra_headers: UnfilteredInferenceExtraHeaders,
+    #[serde(default, rename = "tensorzero::tags")]
+    tensorzero_tags: HashMap<String, String>,
     #[serde(flatten)]
     unknown_fields: HashMap<String, Value>,
 }
@@ -514,7 +516,7 @@ impl Params {
                 .unwrap_or_default(),
             // For now, we don't support internal inference for OpenAI compatible endpoint
             internal: false,
-            tags: HashMap::new(),
+            tags: openai_compatible_params.tensorzero_tags,
             // OpenAI compatible endpoint does not support 'include_original_response'
             include_original_response: false,
             extra_body: openai_compatible_params.tensorzero_extra_body,
@@ -1155,6 +1157,7 @@ mod tests {
         let messages = vec![OpenAICompatibleMessage::User(OpenAICompatibleUserMessage {
             content: Value::String("Hello, world!".to_string()),
         })];
+        let tensorzero_tags = HashMap::from([("test".to_string(), "test".to_string())]);
         let params = Params::try_from_openai(
             headers,
             OpenAICompatibleParams {
@@ -1178,6 +1181,7 @@ mod tests {
                 tensorzero_cache_options: None,
                 tensorzero_extra_body: UnfilteredInferenceExtraBody::default(),
                 tensorzero_extra_headers: UnfilteredInferenceExtraHeaders::default(),
+                tensorzero_tags: tensorzero_tags.clone(),
                 unknown_fields: Default::default(),
                 stream_options: None,
             },
@@ -1200,6 +1204,7 @@ mod tests {
         assert_eq!(params.params.chat_completion.top_p, Some(0.5));
         assert_eq!(params.params.chat_completion.presence_penalty, Some(0.5));
         assert_eq!(params.params.chat_completion.frequency_penalty, Some(0.5));
+        assert_eq!(params.tags, tensorzero_tags);
     }
 
     #[test]
@@ -1641,6 +1646,7 @@ mod tests {
                 tensorzero_cache_options: None,
                 tensorzero_extra_body: UnfilteredInferenceExtraBody::default(),
                 tensorzero_extra_headers: UnfilteredInferenceExtraHeaders::default(),
+                tensorzero_tags: HashMap::new(),
                 unknown_fields: Default::default(),
                 stream_options: None,
             },
@@ -1677,6 +1683,7 @@ mod tests {
                 }),
                 tensorzero_extra_body: UnfilteredInferenceExtraBody::default(),
                 tensorzero_extra_headers: UnfilteredInferenceExtraHeaders::default(),
+                tensorzero_tags: HashMap::new(),
                 unknown_fields: Default::default(),
                 stream_options: None,
             },
@@ -1719,6 +1726,7 @@ mod tests {
                 }),
                 tensorzero_extra_body: UnfilteredInferenceExtraBody::default(),
                 tensorzero_extra_headers: UnfilteredInferenceExtraHeaders::default(),
+                tensorzero_tags: HashMap::new(),
                 unknown_fields: Default::default(),
                 stream_options: None,
             },
@@ -1761,6 +1769,7 @@ mod tests {
                 }),
                 tensorzero_extra_body: UnfilteredInferenceExtraBody::default(),
                 tensorzero_extra_headers: UnfilteredInferenceExtraHeaders::default(),
+                tensorzero_tags: HashMap::new(),
                 unknown_fields: Default::default(),
                 stream_options: None,
             },
