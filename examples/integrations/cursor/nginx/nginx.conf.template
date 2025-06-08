@@ -15,8 +15,11 @@ http {
         listen 80;
 
         # --- CORS helper macro ---
-        set $CORS_ALLOW_ORIGIN  "$http_origin";   # reflect the caller’s origin
+        set $CORS_ALLOW_ORIGIN  "$http_origin";   # reflect the caller's origin
         set $CORS_ALLOW_HEADERS "Authorization,Content-Type";
+
+        # Set USER environment variable as Nginx variable
+        set $user_env "${USER}";
 
         location / {
             # --- pre‑flight ---
@@ -33,6 +36,9 @@ http {
             if ($is_authorized = 0) {
                 return 401;
             }
+
+            # Modify POST request bodies to add tensorzero::tags
+            access_by_lua_file /etc/nginx/modify_body.lua;
 
             # Proxy configuration
             proxy_pass       http://gateway:3000;

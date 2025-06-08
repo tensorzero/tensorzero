@@ -64,13 +64,14 @@ services:
         condition: service_healthy
 
   nginx:
-    image: nginx:alpine
+    image: openresty/openresty:alpine
     volumes:
       - ./nginx/nginx.conf.template:/etc/nginx/nginx.conf.template
       - ./nginx/entrypoint.sh:/entrypoint.sh
+      - ./nginx/modify_body.lua:/modify_body.lua
     env_file:
       - ${ENV_FILE:-.env}
-    command: /bin/sh -c "/entrypoint.sh nginx -g 'daemon off;'"
+    command: /bin/sh -c "/entrypoint.sh openresty -g 'daemon off;'"
     depends_on:
       gateway:
         condition: service_healthy
