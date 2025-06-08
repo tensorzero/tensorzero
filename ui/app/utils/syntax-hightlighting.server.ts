@@ -19,20 +19,18 @@ export async function highlightCode(
   });
 }
 
-type HTMLType = string & { internal_do_not_use: unknown };
-
 export async function processJson(object: object, objectRef: string) {
   let raw: string | null = null;
-  let html: HTMLType | null = null;
+  let html: string | null = null;
   try {
     raw = JSON.stringify(object, null, 2);
-    html = (await highlightCode(raw).catch((error) => {
+    html = await highlightCode(raw).catch((error) => {
       console.error(
         `Syntax error highlighting error for ${objectRef}. Using raw JSON instead.`,
         error,
       );
       return null;
-    })) as HTMLType;
+    });
   } catch {
     throw new JSONParseError(`Failed to parse JSON for ${objectRef}`);
   }
