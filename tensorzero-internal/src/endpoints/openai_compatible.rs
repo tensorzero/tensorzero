@@ -114,9 +114,8 @@ pub struct OpenAICompatibleFunctionCall {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct OpenAICompatibleFunctionCallDelta {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub name: Option<String>,
+pub struct OpenAICompatibleToolCallDelta {
+    pub name: String,
     pub arguments: String,
 }
 
@@ -139,7 +138,7 @@ pub struct OpenAICompatibleToolCallChunk {
     /// The type of the tool. Currently, only `function` is supported.
     pub r#type: String,
     /// The function that the model called.
-    pub function: OpenAICompatibleFunctionCallDelta,
+    pub function: OpenAICompatibleToolCallDelta,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -999,8 +998,8 @@ fn process_chat_content_chunk(
                     id: if is_new { Some(tool_call.id) } else { None },
                     index: *index,
                     r#type: "function".to_string(),
-                    function: OpenAICompatibleFunctionCallDelta {
-                        name: tool_call.raw_name,
+                    function: OpenAICompatibleToolCallDelta {
+                        name: tool_call.raw_name.unwrap_or_default(),
                         arguments: tool_call.raw_arguments,
                     },
                 });
@@ -1531,7 +1530,7 @@ mod tests {
         assert_eq!(tool_calls.len(), 1);
         assert_eq!(tool_calls[0].id, Some("1".to_string()));
         assert_eq!(tool_calls[0].index, 0);
-        assert_eq!(tool_calls[0].function.name, Some("test_tool".to_string()));
+        assert_eq!(tool_calls[0].function.name, "test_tool".to_string());
         assert_eq!(tool_calls[0].function.arguments, "{}");
 
         let content: Vec<ContentBlockChunk> = vec![];
@@ -1576,11 +1575,11 @@ mod tests {
         assert_eq!(tool_calls.len(), 2);
         assert_eq!(tool_calls[0].id, Some("123".to_string()));
         assert_eq!(tool_calls[0].index, 0);
-        assert_eq!(tool_calls[0].function.name, Some("middle_tool".to_string()));
+        assert_eq!(tool_calls[0].function.name, "middle_tool".to_string());
         assert_eq!(tool_calls[0].function.arguments, "{\"key\": \"value\"}");
         assert_eq!(tool_calls[1].id, Some("5".to_string()));
         assert_eq!(tool_calls[1].index, 1);
-        assert_eq!(tool_calls[1].function.name, Some("last_tool".to_string()));
+        assert_eq!(tool_calls[1].function.name, "last_tool".to_string());
         assert_eq!(tool_calls[1].function.arguments, "{\"key\": \"value\"}");
     }
 

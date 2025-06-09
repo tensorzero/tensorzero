@@ -547,7 +547,7 @@ async def test_async_tool_call_streaming(async_client):
             assert len(chunk.choices[0].delta.tool_calls) == 1
             tool_call = chunk.choices[0].delta.tool_calls[0]
             assert tool_call.type == "function"
-            if tool_call.function.name is not None:
+            if tool_call.function.name is not None and tool_call.function.name != "":
                 assert not name_seen
                 assert tool_call.function.name == "get_temperature"
                 name_seen = True

@@ -2093,8 +2093,13 @@ async fn e2e_test_tool_call_streaming() {
                 assert!(content_block.get("raw_name").is_some());
             } else {
                 assert!(
-                    content_block.get("raw_name").is_none(),
-                    "Expected no raw_name in non-first block, got {content_block:#?}",
+                    content_block
+                        .get("raw_name")
+                        .unwrap()
+                        .as_str()
+                        .unwrap()
+                        .is_empty(),
+                    "Expected empty raw_name in non-first block, got {content_block:#?}",
                 );
             }
         } else {

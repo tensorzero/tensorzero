@@ -3901,10 +3901,16 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
             match block_type {
                 "tool_call" => {
                     if let Some(block_raw_name) = block.get("raw_name") {
-                        if tool_name.is_some() {
-                            panic!("Raw name already seen, got {block:#?}");
+                        match tool_name {
+                            Some(_) => {
+                                if !block_raw_name.as_str().unwrap().is_empty() {
+                                    panic!("Raw name already seen, got {block:#?}");
+                                }
+                            }
+                            None => {
+                                tool_name = Some(block_raw_name.as_str().unwrap().to_string());
+                            }
                         }
-                        tool_name = Some(block_raw_name.as_str().unwrap().to_string());
                     }
 
                     let block_tool_id = block.get("id").unwrap().as_str().unwrap();
@@ -5107,10 +5113,16 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
             match block_type {
                 "tool_call" => {
                     if let Some(block_raw_name) = block.get("raw_name") {
-                        if tool_name.is_some() {
-                            panic!("Raw name already seen, got {block:#?}");
+                        match tool_name {
+                            Some(_) => {
+                                if !block_raw_name.as_str().unwrap().is_empty() {
+                                    panic!("Raw name already seen, got {block:#?}");
+                                }
+                            }
+                            None => {
+                                tool_name = Some(block_raw_name.as_str().unwrap().to_string());
+                            }
                         }
-                        tool_name = Some(block_raw_name.as_str().unwrap().to_string());
                     }
 
                     let block_tool_id = block.get("id").unwrap().as_str().unwrap();
@@ -7032,10 +7044,16 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
                     // If they start, we'd want to know.
                     // So we check that the raw name shows up once.
                     if let Some(block_raw_name) = block.get("raw_name") {
-                        if tool_name.is_some() {
-                            panic!("Raw name already seen, got {block:#?}");
+                        match tool_name {
+                            Some(_) => {
+                                if !block_raw_name.as_str().unwrap().is_empty() {
+                                    panic!("Raw name already seen, got {block:#?}");
+                                }
+                            }
+                            None => {
+                                tool_name = Some(block_raw_name.as_str().unwrap().to_string());
+                            }
                         }
-                        tool_name = Some(block_raw_name.as_str().unwrap().to_string());
                     }
 
                     let block_tool_id = block.get("id").unwrap().as_str().unwrap();
@@ -8297,10 +8315,16 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
             match block_type {
                 "tool_call" => {
                     if let Some(block_raw_name) = block.get("raw_name") {
-                        if tool_name.is_some() {
-                            panic!("Raw name already seen, got {block:#?}");
+                        match tool_name {
+                            Some(_) => {
+                                if !block_raw_name.as_str().unwrap().is_empty() {
+                                    panic!("Raw name already seen, got {block:#?}");
+                                }
+                            }
+                            None => {
+                                tool_name = Some(block_raw_name.as_str().unwrap().to_string());
+                            }
                         }
-                        tool_name = Some(block_raw_name.as_str().unwrap().to_string());
                     }
 
                     let block_tool_id = block.get("id").unwrap().as_str().unwrap();
@@ -9018,6 +9042,9 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
                             "get_humidity" => {
                                 assert!(get_humidity_tool_id.is_none());
                                 get_humidity_tool_id = Some(block_tool_id.to_string());
+                            }
+                            "" => {
+                                // Do nothing with the empty string
                             }
                             _ => {
                                 panic!("Unexpected tool name: {block_raw_name}");
