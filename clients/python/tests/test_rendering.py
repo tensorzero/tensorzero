@@ -30,16 +30,47 @@ def test_sync_render_inferences_success(embedded_sync_client: TensorZeroGateway)
                     "messages": [
                         {
                             "role": "user",
-                            "content": [{"type": "thought", "text": "hmmm"}, {"type": "text", "value": "bar"},
-                                        {"type": "tool_call", "id": "123", "arguments": {"foo": "bar"}, "name": "test_tool"}],
+                            "content": [
+                                {"type": "thought", "text": "hmmm"},
+                                {"type": "text", "value": "bar"},
+                                {
+                                    "type": "tool_call",
+                                    "id": "123",
+                                    "arguments": {"foo": "bar"},
+                                    "name": "test_tool",
+                                },
+                            ],
                         },
                         {
                             "role": "assistant",
-                            "content": [{"type": "text", "value": "Hello world"}, {"type": "tool_result", "id": "123", "name": "test_tool", "result": "test"}, {"type": "unknown", "data": [{"woo": "hoo"}]}],
+                            "content": [
+                                {"type": "text", "value": "Hello world"},
+                                {
+                                    "type": "tool_result",
+                                    "id": "123",
+                                    "name": "test_tool",
+                                    "result": "test",
+                                },
+                                {"type": "unknown", "data": [{"woo": "hoo"}]},
+                            ],
                         },
                         {
                             "role": "user",
-                            "content": [{"type": "image", "image": {"mime_type": "image/png"}, "storage_path": {"kind": {"type": "s3_compatible"}, "bucket_name": "tensorzero-e2e-test-images", "region": "us-east-1", "prefix": ""}, "path": "observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"}],
+                            "content": [
+                                {
+                                    "type": "image",
+                                    "image": {"mime_type": "image/png"},
+                                    "storage_path": {
+                                        "kind": {
+                                            "type": "s3_compatible",
+                                            "bucket_name": "tensorzero-e2e-test-images",
+                                            "region": "us-east-1",
+                                            "prefix": "",
+                                        },
+                                        "path": "observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png",
+                                    },
+                                }
+                            ],
                         },
                     ],
                 },
@@ -69,7 +100,9 @@ def test_sync_render_inferences_success(embedded_sync_client: TensorZeroGateway)
                     "messages": [
                         {
                             "role": "user",
-                            "content": [{"type": "text", "value": {"country": "Japan"}}],
+                            "content": [
+                                {"type": "text", "value": {"country": "Japan"}}
+                            ],
                         },
                     ],
                 },
@@ -391,7 +424,7 @@ async def test_async_render_inferences_success(
                             "content": [
                                 {
                                     "type": "image",
-                                    "file": {
+                                    "image": {
                                         "mime_type": "image/png",
                                     },
                                     "storage_path": {
@@ -434,7 +467,9 @@ async def test_async_render_inferences_success(
                     "messages": [
                         {
                             "role": "user",
-                            "content": [{"type": "text", "value": {"country": "Japan"}}],
+                            "content": [
+                                {"type": "text", "value": {"country": "Japan"}}
+                            ],
                         }
                     ],
                 },

@@ -1,4 +1,3 @@
-from abc import ABC
 from typing import (
     Any,
     AsyncIterator,
@@ -35,12 +34,10 @@ from tensorzero.types import (
     InferenceFilterTreeNode,
 )
 
-
 @final
 class StoredInferenceInputMessage:
     role: Literal["user", "assistant"]
     content: List[ContentBlock]
-
 
 @final
 class StoredInferenceInput:
@@ -58,7 +55,6 @@ class StoredInference:
     inference_id: UUID
     tool_params: Optional[ToolCallConfigDatabaseInsert]
     output_schema: Optional[Dict[str, Any]]
-
 
 @final
 class RenderedStoredInference:
