@@ -24,5 +24,5 @@ mod proxy;
 mod render_inferences;
 mod retries;
 mod streaming_errors;
-mod timeouts;
 mod template;
+mod timeouts;
