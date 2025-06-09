@@ -6,6 +6,7 @@ import httpx
 from .client import AsyncTensorZeroGateway, BaseTensorZeroGateway, TensorZeroGateway
 from .tensorzero import (
     RenderedStoredInference,
+    StoredInference,
 )
 from .tensorzero import (
     _start_http_gateway as _start_http_gateway,
@@ -40,11 +41,6 @@ from .types import (
     NotNode,
     OrNode,
     RawText,
-    StoredChatInference,
-    StoredInference,
-    StoredInferenceInput,
-    StoredInferenceInputMessage,
-    StoredJsonInference,
     System,
     TensorZeroError,
     TensorZeroInternalError,
@@ -70,7 +66,6 @@ __all__ = [
     "BooleanMetricNode",
     "ChatDatapointInsert",
     "ChatInferenceDatapointInput",  # DEPRECATED
-    "StoredChatInference",
     "ChatInferenceResponse",
     "ContentBlock",
     "Datapoint",
@@ -93,7 +88,6 @@ __all__ = [
     "JsonDatapointInsert",
     "JsonInferenceDatapointInput",  # DEPRECATED
     "JsonInferenceOutput",
-    "StoredJsonInference",
     "JsonInferenceResponse",
     "Message",
     "NotNode",

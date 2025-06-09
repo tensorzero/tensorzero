@@ -5,10 +5,7 @@ from tensorzero import (
     AsyncTensorZeroGateway,
     FileBase64,
     JsonInferenceOutput,
-    StoredChatInference,
-    StoredInferenceInput,
-    StoredInferenceInputMessage,
-    StoredJsonInference,
+    StoredInference,
     TensorZeroGateway,
     Text,
     Thought,
@@ -24,60 +21,28 @@ from tensorzero.util import uuid7
 def test_sync_render_inferences_success(embedded_sync_client: TensorZeroGateway):
     rendered_inferences = embedded_sync_client.experimental_render_inferences(
         stored_inferences=[
-            StoredChatInference(
+            StoredInference(
+                type="chat",
                 function_name="basic_test",
                 variant_name="default",
-                input=StoredInferenceInput(
-                    system={"assistant_name": "foo"},
-                    messages=[
-                        StoredInferenceInputMessage(
-                            role="user",
-                            content=[
-                                {"type": "thought", "text": "hmmm"},
-                                {"type": "text", "value": "bar"},
-                                {
-                                    "type": "tool_call",
-                                    "id": "123",
-                                    "arguments": {"foo": "bar"},
-                                    "name": "test_tool",
-                                },
-                            ],
-                        ),
-                        StoredInferenceInputMessage(
-                            role="assistant",
-                            content=[
-                                {"type": "text", "value": "Hello world"},
-                                {
-                                    "type": "tool_result",
-                                    "id": "123",
-                                    "name": "test_tool",
-                                    "result": "test",
-                                },
-                                {"type": "unknown", "data": [{"woo": "hoo"}]},
-                            ],
-                        ),
-                        StoredInferenceInputMessage(
-                            role="user",
-                            content=[
-                                {
-                                    "type": "image",
-                                    "image": {
-                                        "mime_type": "image/png",
-                                    },
-                                    "storage_path": {
-                                        "kind": {
-                                            "type": "s3_compatible",
-                                            "bucket_name": "tensorzero-e2e-test-images",
-                                            "region": "us-east-1",
-                                            "prefix": "",
-                                        },
-                                        "path": "observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png",
-                                    },
-                                }
-                            ],
-                        ),
+                input={
+                    "system": {"assistant_name": "foo"},
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": [{"type": "thought", "text": "hmmm"}, {"type": "text", "value": "bar"},
+                                        {"type": "tool_call", "id": "123", "arguments": {"foo": "bar"}, "name": "test_tool"}],
+                        },
+                        {
+                            "role": "assistant",
+                            "content": [{"type": "text", "value": "Hello world"}, {"type": "tool_result", "id": "123", "name": "test_tool", "result": "test"}, {"type": "unknown", "data": [{"woo": "hoo"}]}],
+                        },
+                        {
+                            "role": "user",
+                            "content": [{"type": "image", "image": {"mime_type": "image/png"}, "storage_path": {"kind": {"type": "s3_compatible"}, "bucket_name": "tensorzero-e2e-test-images", "region": "us-east-1", "prefix": ""}, "path": "observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"}],
+                        },
                     ],
-                ),
+                },
                 output=[Text(text="Hello world")],
                 episode_id=uuid7(),
                 inference_id=uuid7(),
@@ -93,19 +58,21 @@ def test_sync_render_inferences_success(embedded_sync_client: TensorZeroGateway)
                     tool_choice="auto",
                     parallel_tool_calls=False,
                 ),
+                output_schema=None,
             ),
-            StoredJsonInference(
+            StoredInference(
+                type="json",
                 function_name="json_success",
                 variant_name="dummy",
-                input=StoredInferenceInput(
-                    system={"assistant_name": "Dr. Mehta"},
-                    messages=[
-                        StoredInferenceInputMessage(
-                            role="user",
-                            content=[{"type": "text", "value": {"country": "Japan"}}],
-                        )
+                input={
+                    "system": {"assistant_name": "Dr. Mehta"},
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": [{"type": "text", "value": {"country": "Japan"}}],
+                        },
                     ],
-                ),
+                },
                 output=JsonInferenceOutput(
                     parsed={"answer": "Tokyo"}, raw='{"answer": "Tokyo"}'
                 ),
@@ -115,6 +82,7 @@ def test_sync_render_inferences_success(embedded_sync_client: TensorZeroGateway)
                     "type": "object",
                     "properties": {"answer": {"type": "string"}},
                 },
+                tool_params=None,
             ),
         ],
         variants={"basic_test": "test", "json_success": "test"},
@@ -241,18 +209,19 @@ def test_sync_render_inferences_nonexistent_function(
     """Test that render_inferences drops if the function does not exist at all."""
     rendered_inferences = embedded_sync_client.experimental_render_inferences(
         stored_inferences=[
-            StoredChatInference(
+            StoredInference(
+                type="chat",
                 function_name="non_existent_function",
                 variant_name="default",
-                input=StoredInferenceInput(
-                    system={"assistant_name": "foo"},
-                    messages=[
-                        StoredInferenceInputMessage(
-                            role="user",
-                            content=[{"type": "text", "value": "bar"}],
-                        )
+                input={
+                    "system": {"assistant_name": "foo"},
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": [{"type": "text", "value": "bar"}],
+                        }
                     ],
-                ),
+                },
                 output=[Text(text="Hello world")],
                 episode_id=uuid7(),
                 inference_id=uuid7(),
@@ -261,6 +230,7 @@ def test_sync_render_inferences_nonexistent_function(
                     tool_choice="auto",
                     parallel_tool_calls=False,
                 ),
+                output_schema=None,
             )
         ],
         variants={},
@@ -275,18 +245,19 @@ def test_sync_render_inferences_unspecified_function(
     """Test that render_inferences drops if the function is not specified in the variants map."""
     rendered_inferences = embedded_sync_client.experimental_render_inferences(
         stored_inferences=[
-            StoredChatInference(
+            StoredInference(
+                type="chat",
                 function_name="non_existent_function",
                 variant_name="default",
-                input=StoredInferenceInput(
-                    system={"assistant_name": "foo"},
-                    messages=[
-                        StoredInferenceInputMessage(
-                            role="user",
-                            content=[{"type": "text", "value": "bar"}],
-                        )
+                input={
+                    "system": {"assistant_name": "foo"},
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": [{"type": "text", "value": "bar"}],
+                        }
                     ],
-                ),
+                },
                 output=[Text(text="Hello world")],
                 episode_id=uuid7(),
                 inference_id=uuid7(),
@@ -295,6 +266,7 @@ def test_sync_render_inferences_unspecified_function(
                     tool_choice="auto",
                     parallel_tool_calls=False,
                 ),
+                output_schema=None,
             )
         ],
         variants={},
@@ -308,18 +280,19 @@ def test_sync_render_inferences_no_variant(embedded_sync_client: TensorZeroGatew
     with pytest.raises(Exception) as excinfo:
         embedded_sync_client.experimental_render_inferences(
             stored_inferences=[
-                StoredChatInference(
+                StoredInference(
+                    type="chat",
                     function_name="basic_test",  # This function exists in the config
                     variant_name="non_existent_variant",
-                    input=StoredInferenceInput(
-                        system={"assistant_name": "foo"},
-                        messages=[
-                            StoredInferenceInputMessage(
-                                role="user",
-                                content=[{"type": "text", "value": "bar"}],
-                            )
+                    input={
+                        "system": {"assistant_name": "foo"},
+                        "messages": [
+                            {
+                                "role": "user",
+                                "content": [{"type": "text", "value": "bar"}],
+                            }
                         ],
-                    ),
+                    },
                     output=[Text(text="Hello world")],
                     episode_id=uuid7(),
                     inference_id=uuid7(),
@@ -328,6 +301,7 @@ def test_sync_render_inferences_no_variant(embedded_sync_client: TensorZeroGatew
                         tool_choice="auto",
                         parallel_tool_calls=False,
                     ),
+                    output_schema=None,
                 )
             ],
             variants={"basic_test": "non_existent_variant"},
@@ -343,18 +317,19 @@ def test_sync_render_inferences_missing_variable(
     """Test that render_inferences drops an example if a template variable is missing."""
     rendered_inferences = embedded_sync_client.experimental_render_inferences(
         stored_inferences=[
-            StoredChatInference(
+            StoredInference(
+                type="chat",
                 function_name="basic_test",  # Uses assistant_name in system prompt
                 variant_name="default",
-                input=StoredInferenceInput(
-                    system={"some_other_variable": "foo"},  # Missing assistant_name
-                    messages=[
-                        StoredInferenceInputMessage(
-                            role="user",
-                            content=[{"type": "text", "value": "bar"}],
-                        )
+                input={
+                    "system": {"some_other_variable": "foo"},  # Missing assistant_name
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": [{"type": "text", "value": "bar"}],
+                        }
                     ],
-                ),
+                },
                 output=[Text(text="Hello world")],
                 episode_id=uuid7(),
                 inference_id=uuid7(),
@@ -363,6 +338,7 @@ def test_sync_render_inferences_missing_variable(
                     tool_choice="auto",
                     parallel_tool_calls=False,
                 ),
+                output_schema=None,
             )
         ],
         variants={"basic_test": "test"},
@@ -377,15 +353,16 @@ async def test_async_render_inferences_success(
 ):
     rendered_inferences = await embedded_async_client.experimental_render_inferences(
         stored_inferences=[
-            StoredChatInference(
+            StoredInference(
+                type="chat",
                 function_name="basic_test",
                 variant_name="default",
-                input=StoredInferenceInput(
-                    system={"assistant_name": "foo"},
-                    messages=[
-                        StoredInferenceInputMessage(
-                            role="user",
-                            content=[
+                input={
+                    "system": {"assistant_name": "foo"},
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": [
                                 {"type": "thought", "text": "hmmm"},
                                 {"type": "text", "value": "bar"},
                                 {
@@ -395,10 +372,10 @@ async def test_async_render_inferences_success(
                                     "name": "test_tool",
                                 },
                             ],
-                        ),
-                        StoredInferenceInputMessage(
-                            role="assistant",
-                            content=[
+                        },
+                        {
+                            "role": "assistant",
+                            "content": [
                                 {"type": "text", "value": "Hello world"},
                                 {
                                     "type": "tool_result",
@@ -408,13 +385,13 @@ async def test_async_render_inferences_success(
                                 },
                                 {"type": "unknown", "data": [{"woo": "hoo"}]},
                             ],
-                        ),
-                        StoredInferenceInputMessage(
-                            role="user",
-                            content=[
+                        },
+                        {
+                            "role": "user",
+                            "content": [
                                 {
                                     "type": "image",
-                                    "image": {
+                                    "file": {
                                         "mime_type": "image/png",
                                     },
                                     "storage_path": {
@@ -428,9 +405,9 @@ async def test_async_render_inferences_success(
                                     },
                                 }
                             ],
-                        ),
+                        },
                     ],
-                ),
+                },
                 output=[Text(text="Hello world")],
                 episode_id=uuid7(),
                 inference_id=uuid7(),
@@ -446,19 +423,21 @@ async def test_async_render_inferences_success(
                     tool_choice="auto",
                     parallel_tool_calls=False,
                 ),
+                output_schema=None,
             ),
-            StoredJsonInference(
+            StoredInference(
+                type="json",
                 function_name="json_success",
                 variant_name="dummy",
-                input=StoredInferenceInput(
-                    system={"assistant_name": "Dr. Mehta"},
-                    messages=[
-                        StoredInferenceInputMessage(
-                            role="user",
-                            content=[{"type": "text", "value": {"country": "Japan"}}],
-                        )
+                input={
+                    "system": {"assistant_name": "Dr. Mehta"},
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": [{"type": "text", "value": {"country": "Japan"}}],
+                        }
                     ],
-                ),
+                },
                 output=JsonInferenceOutput(
                     parsed={"answer": "Tokyo"},
                     raw="""{"answer": "Tokyo"}""",
@@ -469,6 +448,7 @@ async def test_async_render_inferences_success(
                     "type": "object",
                     "properties": {"answer": {"type": "string"}},
                 },
+                tool_params=None,
             ),
         ],
         variants={"basic_test": "test", "json_success": "test"},
@@ -597,18 +577,19 @@ async def test_async_render_inferences_nonexistent_function(
     """Test that render_inferences drops if the function does not exist at all."""
     rendered_inferences = await embedded_async_client.experimental_render_inferences(
         stored_inferences=[
-            StoredChatInference(
+            StoredInference(
+                type="chat",
                 function_name="non_existent_function",
                 variant_name="default",
-                input=StoredInferenceInput(
-                    system={"assistant_name": "foo"},
-                    messages=[
-                        StoredInferenceInputMessage(
-                            role="user",
-                            content=[{"type": "text", "value": "bar"}],
-                        )
+                input={
+                    "system": {"assistant_name": "foo"},
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": [{"type": "text", "value": "bar"}],
+                        }
                     ],
-                ),
+                },
                 output=[Text(text="Hello world")],
                 episode_id=uuid7(),
                 inference_id=uuid7(),
@@ -617,6 +598,7 @@ async def test_async_render_inferences_nonexistent_function(
                     tool_choice="auto",
                     parallel_tool_calls=False,
                 ),
+                output_schema=None,
             )
         ],
         variants={},
@@ -632,18 +614,19 @@ async def test_async_render_inferences_unspecified_function(
     """Test that render_inferences drops if the function is not specified in the variants map."""
     rendered_inferences = await embedded_async_client.experimental_render_inferences(
         stored_inferences=[
-            StoredChatInference(
+            StoredInference(
+                type="chat",
                 function_name="non_existent_function",
                 variant_name="default",
-                input=StoredInferenceInput(
-                    system={"assistant_name": "foo"},
-                    messages=[
-                        StoredInferenceInputMessage(
-                            role="user",
-                            content=[{"type": "text", "value": "bar"}],
-                        )
+                input={
+                    "system": {"assistant_name": "foo"},
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": [{"type": "text", "value": "bar"}],
+                        }
                     ],
-                ),
+                },
                 output=[Text(text="Hello world")],
                 episode_id=uuid7(),
                 inference_id=uuid7(),
@@ -652,6 +635,7 @@ async def test_async_render_inferences_unspecified_function(
                     tool_choice="auto",
                     parallel_tool_calls=False,
                 ),
+                output_schema=None,
             )
         ],
         variants={},
@@ -668,18 +652,19 @@ async def test_async_render_inferences_no_variant(
     with pytest.raises(Exception) as excinfo:
         await embedded_async_client.experimental_render_inferences(
             stored_inferences=[
-                StoredChatInference(
+                StoredInference(
+                    type="chat",
                     function_name="basic_test",  # This function exists in the config
                     variant_name="non_existent_variant",
-                    input=StoredInferenceInput(
-                        system={"assistant_name": "foo"},
-                        messages=[
-                            StoredInferenceInputMessage(
-                                role="user",
-                                content=[{"type": "text", "value": "bar"}],
-                            )
+                    input={
+                        "system": {"assistant_name": "foo"},
+                        "messages": [
+                            {
+                                "role": "user",
+                                "content": [{"type": "text", "value": "bar"}],
+                            }
                         ],
-                    ),
+                    },
                     output=[Text(text="Hello world")],
                     episode_id=uuid7(),
                     inference_id=uuid7(),
@@ -688,6 +673,7 @@ async def test_async_render_inferences_no_variant(
                         tool_choice="auto",
                         parallel_tool_calls=False,
                     ),
+                    output_schema=None,
                 )
             ],
             variants={"basic_test": "non_existent_variant"},
@@ -704,18 +690,19 @@ async def test_async_render_inferences_missing_variable(
     """Test that render_inferences drops an example if a template variable is missing."""
     rendered_inferences = await embedded_async_client.experimental_render_inferences(
         stored_inferences=[
-            StoredChatInference(
+            StoredInference(
+                type="chat",
                 function_name="basic_test",  # Uses assistant_name in system prompt
                 variant_name="default",
-                input=StoredInferenceInput(
-                    system={"some_other_variable": "foo"},  # Missing assistant_name
-                    messages=[
-                        StoredInferenceInputMessage(
-                            role="user",
-                            content=[{"type": "text", "value": "bar"}],
-                        )
+                input={
+                    "system": {"some_other_variable": "foo"},  # Missing assistant_name
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": [{"type": "text", "value": "bar"}],
+                        }
                     ],
-                ),
+                },
                 output=[Text(text="Hello world")],
                 episode_id=uuid7(),
                 inference_id=uuid7(),
@@ -724,6 +711,7 @@ async def test_async_render_inferences_missing_variable(
                     tool_choice="auto",
                     parallel_tool_calls=False,
                 ),
+                output_schema=None,
             )
         ],
         variants={"basic_test": "test"},

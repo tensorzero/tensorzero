@@ -1,3 +1,4 @@
+from abc import ABC
 from typing import (
     Any,
     AsyncIterator,
@@ -27,12 +28,37 @@ from tensorzero import (
     InferenceInput,
     InferenceResponse,
     JsonDatapointInsert,
-    StoredInference,
+    JsonInferenceOutput,
 )
 from tensorzero.internal import ModelInput, ToolCallConfigDatabaseInsert
 from tensorzero.types import (
     InferenceFilterTreeNode,
 )
+
+
+@final
+class StoredInferenceInputMessage:
+    role: Literal["user", "assistant"]
+    content: List[ContentBlock]
+
+
+@final
+class StoredInferenceInput:
+    system: Any
+    messages: List[StoredInferenceInputMessage]
+
+@final
+class StoredInference:
+    type: Literal["chat", "json"]
+    function_name: str
+    variant_name: str
+    input: StoredInferenceInput
+    output: List[ContentBlock] | JsonInferenceOutput
+    episode_id: UUID
+    inference_id: UUID
+    tool_params: Optional[ToolCallConfigDatabaseInsert]
+    output_schema: Optional[Dict[str, Any]]
+
 
 @final
 class RenderedStoredInference:

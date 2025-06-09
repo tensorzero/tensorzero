@@ -1,9 +1,9 @@
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::{
-    content_block_chat_output_to_python, serialize_to_dict, uuid_to_python,
+    content_block_chat_output_to_python, deserialize_from_pyobj, serialize_to_dict, uuid_to_python,
 };
 #[cfg(feature = "pyo3")]
-use pyo3::{prelude::*, IntoPyObjectExt};
+use pyo3::{exceptions::PyValueError, prelude::*, IntoPyObjectExt};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
@@ -37,6 +37,65 @@ impl std::fmt::Display for StoredInference {
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl StoredInference {
+    #[new]
+    pub fn new<'py>(
+        py: Python<'py>,
+        r#type: String,
+        function_name: String,
+        variant_name: String,
+        input: Bound<'py, PyAny>,
+        output: Bound<'py, PyAny>,
+        episode_id: Bound<'py, PyAny>,
+        inference_id: Bound<'py, PyAny>,
+        tool_params: Option<Bound<'py, PyAny>>,
+        output_schema: Option<Bound<'py, PyAny>>,
+    ) -> PyResult<Self> {
+        println!("input: {:?}", input);
+        let input: ResolvedInput = deserialize_from_pyobj(py, &input)?;
+        let episode_id: Uuid = deserialize_from_pyobj(py, &episode_id)?;
+        let inference_id: Uuid = deserialize_from_pyobj(py, &inference_id)?;
+        match r#type.as_str() {
+            "chat" => {
+                let output: Vec<ContentBlockChatOutput> = deserialize_from_pyobj(py, &output)?;
+                let Some(tool_params) = tool_params.map(|x| deserialize_from_pyobj(py, &x)) else {
+                    return Err(PyValueError::new_err(
+                        "tool_params is required for chat inferences",
+                    ));
+                };
+                let tool_params: ToolCallConfigDatabaseInsert = tool_params?;
+                Ok(Self::Chat(StoredChatInference {
+                    function_name,
+                    variant_name,
+                    input,
+                    output,
+                    episode_id,
+                    inference_id,
+                    tool_params,
+                }))
+            }
+            "json" => {
+                let output: JsonInferenceOutput = deserialize_from_pyobj(py, &output)?;
+                let Some(output_schema) = output_schema.map(|x| deserialize_from_pyobj(py, &x))
+                else {
+                    return Err(PyValueError::new_err(
+                        "output_schema is required for json inferences",
+                    ));
+                };
+                let output_schema: Value = output_schema?;
+                Ok(Self::Json(StoredJsonInference {
+                    function_name,
+                    variant_name,
+                    input,
+                    output,
+                    episode_id,
+                    inference_id,
+                    output_schema,
+                }))
+            }
+            _ => Err(PyValueError::new_err(format!("Invalid type: {}", r#type))),
+        }
+    }
+
     pub fn __repr__(&self) -> String {
         self.to_string()
     }
