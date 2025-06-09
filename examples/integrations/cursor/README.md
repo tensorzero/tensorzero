@@ -13,6 +13,7 @@ This example shows how to use the TensorZero Gateway as a proxy between Cursor a
    See `.env.example` for an example.
 2. Generate a strong API key to protect your gateway endpoint from unauthorized access.
    Set it as the value for `API_TOKEN` in your `.env` file.
+   We've had some issues with special characters in this step so recommend you use an alphanumeric string to be safe.
    Optionally, set `USER="yourname"` if you'd like to tag each request with your name for downstream use.
 3. Create an [ngrok](https://ngrok.com/) account.
    Grab your auth token and add it to the `.env` file as the value for `NGROK_AUTHTOKEN`.
