@@ -95,48 +95,8 @@ pub async fn parse_jsonl_batch_file<T: DeserializeOwned, E: std::error::Error>(
     })
 }
 
-/// Like `inject_extra_request_data_and_send`, but for streaming requests
-/// Produces an `EventSource` instead of a `Response`.
-pub async fn inject_extra_request_data_and_send_eventsource(
-    provider_type: &str,
-    config: &FullExtraBodyConfig,
-    extra_headers_config: &FullExtraHeadersConfig,
-    model_provider_data: impl Into<ModelProviderRequestInfo>,
-    model_name: &str,
-    mut body: serde_json::Value,
-    builder: reqwest::RequestBuilder,
-) -> Result<(EventSource, String), Error> {
-    let headers = inject_extra_request_data(
-        config,
-        extra_headers_config,
-        model_provider_data,
-        model_name,
-        &mut body,
-    )?;
-    let raw_request = body.to_string();
-    // Apply the headers as the very last step, so that they can overwrite all
-    // other headers (including things like `Authorization` and `Content-Type`)
-    Ok((
-        builder
-            .body(raw_request.clone())
-            .header("content-type", "application/json")
-            .headers(headers)
-            .eventsource()
-            .map_err(|e| {
-                Error::new(ErrorDetails::InferenceClient {
-                    message: format!("Error sending request: {}", DisplayOrDebugGateway::new(e)),
-                    status_code: None,
-                    provider_type: provider_type.to_string(),
-                    raw_request: Some(raw_request.clone()),
-                    raw_response: None,
-                })
-            })?,
-        raw_request,
-    ))
-}
-
 /// Injects extra headers/body fields into a request builder, and sends the request.
-/// This is used when implementing non-streaming inference for a model provier,
+/// This is used when implementing non-streaming inference for a model provider,
 /// and is responsible for actually submitting the HTTP request.
 pub async fn inject_extra_request_data_and_send(
     provider_type: &str,
@@ -168,6 +128,46 @@ pub async fn inject_extra_request_data_and_send(
                 Error::new(ErrorDetails::InferenceClient {
                     status_code: e.status(),
                     message: format!("Error sending request: {}", DisplayOrDebugGateway::new(e)),
+                    provider_type: provider_type.to_string(),
+                    raw_request: Some(raw_request.clone()),
+                    raw_response: None,
+                })
+            })?,
+        raw_request,
+    ))
+}
+
+/// Like `inject_extra_request_data_and_send`, but for streaming requests
+/// Produces an `EventSource` instead of a `Response`.
+pub async fn inject_extra_request_data_and_send_eventsource(
+    provider_type: &str,
+    config: &FullExtraBodyConfig,
+    extra_headers_config: &FullExtraHeadersConfig,
+    model_provider_data: impl Into<ModelProviderRequestInfo>,
+    model_name: &str,
+    mut body: serde_json::Value,
+    builder: reqwest::RequestBuilder,
+) -> Result<(EventSource, String), Error> {
+    let headers = inject_extra_request_data(
+        config,
+        extra_headers_config,
+        model_provider_data,
+        model_name,
+        &mut body,
+    )?;
+    let raw_request = body.to_string();
+    // Apply the headers as the very last step, so that they can overwrite all
+    // other headers (including things like `Authorization` and `Content-Type`)
+    Ok((
+        builder
+            .body(raw_request.clone())
+            .header("content-type", "application/json")
+            .headers(headers)
+            .eventsource()
+            .map_err(|e| {
+                Error::new(ErrorDetails::InferenceClient {
+                    message: format!("Error sending request: {}", DisplayOrDebugGateway::new(e)),
+                    status_code: None,
                     provider_type: provider_type.to_string(),
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
