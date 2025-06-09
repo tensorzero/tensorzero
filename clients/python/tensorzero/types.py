@@ -269,7 +269,7 @@ class ToolCallChunk(ContentBlockChunk):
     id: str
     # `raw_arguments` will come as partial JSON
     raw_arguments: str
-    raw_name: Optional[str] = None
+    raw_name: str
     type: str = "tool_call"
 
 
@@ -352,7 +352,7 @@ def parse_content_block_chunk(block: Dict[str, Any]) -> ContentBlockChunk:
         return ToolCallChunk(
             id=block["id"],
             raw_arguments=block["raw_arguments"],
-            raw_name=block.get("raw_name"),
+            raw_name=block["raw_name"],
         )
     elif block_type == "thought":
         return ThoughtChunk(id=block["id"], text=block["text"])
