@@ -39,7 +39,6 @@
     "@react-router/node": "^7.6.1",
     "@react-router/serve": "^7.6.1",
     "@tailwindcss/vite": "^4.1.2",
-    "@tanstack/react-pacer": "^0.8.0",
     "@vitejs/plugin-react": "^4.3.4",
     "ajv": "^8.17.1",
     "class-variance-authority": "^0.7.1",
