@@ -6,6 +6,8 @@ import httpx
 from .client import AsyncTensorZeroGateway, BaseTensorZeroGateway, TensorZeroGateway
 from .tensorzero import (
     RenderedStoredInference,
+    ResolvedInput,
+    ResolvedInputMessage,
     StoredInference,
 )
 from .tensorzero import (
@@ -80,9 +82,9 @@ __all__ = [
     "ImageBase64",
     "ImageUrl",
     "InferenceChunk",
+    "ResolvedInput",
+    "ResolvedInputMessage",
     "StoredInference",
-    "StoredInferenceInput",
-    "StoredInferenceInputMessage",
     "InferenceInput",
     "InferenceResponse",
     "JsonDatapointInsert",

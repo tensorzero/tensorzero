@@ -7,6 +7,7 @@ from typing import (
     List,
     Literal,
     Optional,
+    Type,
     Union,
     final,
 )
@@ -27,7 +28,6 @@ from tensorzero import (
     InferenceInput,
     InferenceResponse,
     JsonDatapointInsert,
-    JsonInferenceOutput,
 )
 from tensorzero.internal import ModelInput, ToolCallConfigDatabaseInsert
 from tensorzero.types import (
@@ -35,26 +35,51 @@ from tensorzero.types import (
 )
 
 @final
-class StoredInferenceInputMessage:
+class ResolvedInputMessage:
     role: Literal["user", "assistant"]
     content: List[ContentBlock]
 
 @final
-class StoredInferenceInput:
-    system: Any
-    messages: List[StoredInferenceInputMessage]
+class ResolvedInput:
+    system: Optional[str | Dict[str, Any]]
+    messages: List[ResolvedInputMessage]
 
 @final
 class StoredInference:
-    type: Literal["chat", "json"]
-    function_name: str
-    variant_name: str
-    input: StoredInferenceInput
-    output: List[ContentBlock] | JsonInferenceOutput
-    episode_id: UUID
-    inference_id: UUID
-    tool_params: Optional[ToolCallConfigDatabaseInsert]
-    output_schema: Optional[Dict[str, Any]]
+    Chat: Type["StoredInference"]
+    Json: Type["StoredInference"]
+
+    def __init__(
+        self,
+        type: str,
+        function_name: str,
+        variant_name: str,
+        input: Any,
+        output: Any,
+        episode_id: Any,
+        inference_id: Any,
+        tool_params: Optional[Any] = None,
+        output_schema: Optional[Any] = None,
+    ) -> None: ...
+    def __repr__(self) -> str: ...
+    @property
+    def function_name(self) -> str: ...
+    @property
+    def variant_name(self) -> str: ...
+    @property
+    def input(self) -> ResolvedInput: ...
+    @property
+    def output(self) -> Any: ...
+    @property
+    def episode_id(self) -> Any: ...
+    @property
+    def inference_id(self) -> Any: ...
+    @property
+    def tool_params(self) -> Optional[Any]: ...
+    @property
+    def output_schema(self) -> Optional[Any]: ...
+    @property
+    def type(self) -> str: ...
 
 @final
 class RenderedStoredInference:
@@ -665,5 +690,7 @@ __all__ = [
     "LocalHttpGateway",
     "_start_http_gateway",
     "RenderedStoredInference",
-    "StoredInference"
+    "StoredInference",
+    "ResolvedInput",
+    "ResolvedInputMessage",
 ]

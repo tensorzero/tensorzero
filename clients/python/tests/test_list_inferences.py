@@ -13,6 +13,7 @@ from tensorzero import (
     ToolCall,
     ToolResult,
 )
+from tensorzero.tensorzero import StoredInference
 
 
 def test_simple_list_json_inferences(embedded_sync_client: TensorZeroGateway):
@@ -27,6 +28,7 @@ def test_simple_list_json_inferences(embedded_sync_client: TensorZeroGateway):
     assert len(inferences) == 2
     for inference in inferences:
         assert inference.function_name == "extract_entities"
+        assert isinstance(inference, StoredInference.Json)
         assert isinstance(inference.variant_name, str)
         input = inference.input
         messages = input.messages
@@ -86,7 +88,6 @@ def test_simple_query_chat_function(embedded_sync_client: TensorZeroGateway):
         # Type narrowing: we know these are Chat inferences
         assert inference.type == "chat"
         output = inference.output
-        assert isinstance(output, list)
         assert len(output) == 1
         output_0 = output[0]
         assert output_0.type == "text"
@@ -147,7 +148,6 @@ def test_simple_query_chat_function_with_tools(embedded_sync_client: TensorZeroG
         # Type narrowing: we know these are Chat inferences
         assert inference.type == "chat"
         output = inference.output
-        assert isinstance(output, list)
         assert len(output) >= 1
         for output_item in output:
             if output_item.type == "text":
@@ -419,7 +419,6 @@ async def test_simple_query_chat_function_async(
         # Type narrowing: we know these are Chat inferences
         assert inference.type == "chat"
         output = inference.output
-        assert isinstance(output, list)
         assert len(output) == 1
         output_0 = output[0]
         assert output_0.type == "text"

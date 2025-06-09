@@ -27,9 +27,12 @@ use python_helpers::{
 };
 use tensorzero_internal::{
     clickhouse::ClickhouseFormat,
-    inference::types::pyo3_helpers::{
-        deserialize_from_pyobj, deserialize_from_stored_inference, serialize_to_dict,
-        tensorzero_internal_error, JSON_DUMPS, JSON_LOADS,
+    inference::types::{
+        pyo3_helpers::{
+            deserialize_from_pyobj, deserialize_from_stored_inference, serialize_to_dict,
+            tensorzero_internal_error, JSON_DUMPS, JSON_LOADS,
+        },
+        ResolvedInput, ResolvedInputMessage,
     },
 };
 use tensorzero_internal::{
@@ -71,6 +74,8 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<LocalHttpGateway>()?;
     m.add_class::<RenderedStoredInference>()?;
     m.add_class::<StoredInference>()?;
+    m.add_class::<ResolvedInput>()?;
+    m.add_class::<ResolvedInputMessage>()?;
 
     let py_json = PyModule::import(m.py(), "json")?;
     let json_loads = py_json.getattr("loads")?;

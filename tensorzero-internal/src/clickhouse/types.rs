@@ -38,6 +38,7 @@ impl std::fmt::Display for StoredInference {
 #[pymethods]
 impl StoredInference {
     #[new]
+    #[expect(clippy::too_many_arguments)]
     pub fn new<'py>(
         py: Python<'py>,
         r#type: String,
@@ -91,7 +92,7 @@ impl StoredInference {
                     output_schema,
                 }))
             }
-            _ => Err(PyValueError::new_err(format!("Invalid type: {}", r#type))),
+            _ => Err(PyValueError::new_err(format!("Invalid type: {type}"))),
         }
     }
 

@@ -537,7 +537,6 @@ class TensorZeroTypeEncoder(JSONEncoder):
             super().default(o)
 
 
-
 ToolChoice = Union[Literal["auto", "required", "off"], Dict[Literal["specific"], str]]
 
 
