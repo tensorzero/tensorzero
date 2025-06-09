@@ -537,44 +537,6 @@ class TensorZeroTypeEncoder(JSONEncoder):
             super().default(o)
 
 
-# @dataclass
-# class StoredInferenceInputMessage:
-#     role: Literal["user", "assistant"]
-#     content: Any
-
-
-# @dataclass
-# class StoredInferenceInput:
-#     messages: List[StoredInferenceInputMessage]
-#     system: Optional[System]
-
-
-# @dataclass
-# class StoredChatInference:
-#     function_name: str
-#     variant_name: str
-#     input: StoredInferenceInput
-#     output: List[ContentBlock]
-#     episode_id: UUID
-#     inference_id: UUID
-#     tool_params: ToolParams
-#     type: Literal["chat"] = "chat"
-
-
-# @dataclass
-# class StoredJsonInference:
-#     function_name: str
-#     variant_name: str
-#     input: StoredInferenceInput
-#     output: JsonInferenceOutput
-#     episode_id: UUID
-#     inference_id: UUID
-#     output_schema: Any
-#     type: Literal["json"] = "json"
-
-
-# StoredInference = Union[StoredChatInference, StoredJsonInference]
-
 
 ToolChoice = Union[Literal["auto", "required", "off"], Dict[Literal["specific"], str]]
 

@@ -50,7 +50,6 @@ impl StoredInference {
         tool_params: Option<Bound<'py, PyAny>>,
         output_schema: Option<Bound<'py, PyAny>>,
     ) -> PyResult<Self> {
-        println!("input: {:?}", input);
         let input: ResolvedInput = deserialize_from_pyobj(py, &input)?;
         let episode_id: Uuid = deserialize_from_pyobj(py, &episode_id)?;
         let inference_id: Uuid = deserialize_from_pyobj(py, &inference_id)?;

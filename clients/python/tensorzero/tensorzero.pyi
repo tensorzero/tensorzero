@@ -665,4 +665,5 @@ __all__ = [
     "LocalHttpGateway",
     "_start_http_gateway",
     "RenderedStoredInference",
+    "StoredInference"
 ]
