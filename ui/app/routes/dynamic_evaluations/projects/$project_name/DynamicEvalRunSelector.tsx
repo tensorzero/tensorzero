@@ -164,7 +164,7 @@ export function DynamicEvalRunSelector({
                 ) : (
                   <>
                     <CommandEmpty>No results found.</CommandEmpty>
-                    {!canAddMore && (
+                    {!canAddMore && !isLoading && (
                       <div className="px-2 py-1.5 text-sm text-amber-600">
                         Maximum of {MAX_SELECTIONS} runs can be selected.
                       </div>
