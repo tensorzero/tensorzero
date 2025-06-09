@@ -334,6 +334,29 @@ def render_output(
     return {"role": role_map["assistant"], "parts": content}
 
 
+def merge_messages(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Merge consecutive messages with the same role by concatenating their content.
+
+    Args:
+        messages: List of dicts, each with 'role' (str) and 'content' (List[dict]) keys.
+
+    Returns:
+        A new list of messages where any runs of the same role have had their content lists merged.
+    """
+    merged: List[Dict[str, Any]] = []
+    for msg in messages:
+        role = msg.get("role")
+        parts = msg.get("parts", [])
+        if merged and merged[-1]["role"] == role:
+            # Extend the last message’s content
+            merged[-1]["parts"].extend(parts)
+        else:
+            # Start a new message entry (copy content list to avoid side-effects)
+            merged.append({"role": role, "parts": list(parts)})
+    return merged
+
+
 def sample_to_google_messages(sample) -> List[Dict[str, Any]]:
     function_input = json.loads(sample["input"])
 
@@ -371,7 +394,7 @@ def sample_to_google_messages(sample) -> List[Dict[str, Any]]:
 
     return {
         "systemInstruction": system_message,
-        "contents": rendered_messages,
+        "contents": merge_messages(rendered_messages),
     }
 
 
