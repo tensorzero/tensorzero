@@ -69,6 +69,9 @@ services:
       - ./nginx/nginx.conf.template:/etc/nginx/nginx.conf.template
       - ./nginx/entrypoint.sh:/entrypoint.sh
       - ./nginx/modify_body.lua:/modify_body.lua
+    environment:
+      - API_TOKEN=${API_TOKEN}
+      - USER=${USER}
     env_file:
       - ${ENV_FILE:-.env}
     command: /bin/sh -c "/entrypoint.sh openresty -g 'daemon off;'"
