@@ -14,7 +14,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "2025.6.0"
+version = "2025.6.1"
 rust-version = "1.85.0"
 license = "Apache-2.0"
 
@@ -55,7 +55,9 @@ tracing-opentelemetry-instrumentation-sdk = { version = "0.29.0", features = [
     "tracing_level_info",
 ] }
 tower-http = { version = "0.6.4", features = ["trace"] }
-mime = { git = "https://github.com/hyperium/mime", rev = "1ef137c7358fc64e07c8a640e4e9ba2a784b7f7d", features = ["serde1"] }
+mime = { git = "https://github.com/hyperium/mime", rev = "1ef137c7358fc64e07c8a640e4e9ba2a784b7f7d", features = [
+    "serde1",
+] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
