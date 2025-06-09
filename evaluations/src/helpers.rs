@@ -10,6 +10,7 @@ use tensorzero_internal::{
     cache::CacheEnabledMode, clickhouse::ClickHouseConnectionInfo, function::FunctionConfig,
     tool::ToolCallConfigDatabaseInsert,
 };
+use tracing::debug;
 use tracing_subscriber::EnvFilter;
 use uuid::Uuid;
 
@@ -103,6 +104,7 @@ pub async fn check_static_eval_human_feedback(
         LIMIT 1
         FORMAT JSONEachRow
     "#;
+    debug!(query = %query, "Executing ClickHouse query");
     let escaped_serialized_output = escape_string_for_clickhouse_literal(&serialized_output);
     let result = clickhouse
         .run_query_synchronous(
@@ -114,6 +116,7 @@ pub async fn check_static_eval_human_feedback(
             ]),
         )
         .await?;
+    debug!(result_length = result.len(), "Query executed successfully");
     if result.is_empty() {
         return Ok(None);
     }
