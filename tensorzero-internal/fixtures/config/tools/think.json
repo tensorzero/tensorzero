@@ -1,0 +1,13 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "description": "Think about the question and the information you have gathered so far. This is a good time to plan your next steps.",
+  "properties": {
+    "thought": {
+      "type": "string",
+      "description": "Your thoughts on the question and the information you have gathered so far."
+    }
+  },
+  "required": ["thought"],
+  "additionalProperties": false
+}

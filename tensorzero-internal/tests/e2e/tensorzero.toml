@@ -3071,6 +3071,17 @@ model = "gpt-4o-mini-2024-07-18"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 json_mode = "strict"
 
+[functions.multi_hop_rag_agent]
+type = "chat"
+tools = ["think", "search_wikipedia", "load_wikipedia_page", "answer_question"]
+tool_choice = "required"
+parallel_tool_calls = true
+
+[functions.multi_hop_rag_agent.variants.baseline]
+type = "chat_completion"
+model = "openai::gpt-4o-mini"
+system_template = "../../fixtures/config/functions/multi_hop_rag_agent/baseline/system_template.txt"
+
 [functions.write_haiku]
 type = "chat"
 user_schema = "../../fixtures/config/functions/write_haiku/user_schema.json"
@@ -3198,6 +3209,26 @@ parameters = "../../fixtures/config/tools/get_temperature.json"
 [tools.get_humidity]
 description = "Get the current humidity in a given location"
 parameters = "../../fixtures/config/tools/get_humidity.json"
+
+[tools.think]
+description = "Think about the question and the information you have gathered so far. This is a good time to plan your next steps."
+parameters = "../../fixtures/config/tools/think.json"
+strict = true
+
+[tools.search_wikipedia]
+description = "Search Wikipedia for pages that match the query. Returns a list of page titles."
+parameters = "../../fixtures/config/tools/search_wikipedia.json"
+strict = true
+
+[tools.load_wikipedia_page]
+description = "Load a Wikipedia page. Returns the page content, or an error if the page does not exist."
+parameters = "../../fixtures/config/tools/load_wikipedia_page.json"
+strict = true
+
+[tools.answer_question]
+description = "End the search process and answer a question. Returns the answer to the question."
+parameters = "../../fixtures/config/tools/answer_question.json"
+strict = true
 
 
 # ┌────────────────────────────────────────────────────────────────────────────┐

@@ -82,7 +82,7 @@ impl StorageKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(feature = "pyo3", pyclass)]
+#[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct StoragePath {
     pub kind: StorageKind,
     #[serde(
@@ -90,6 +90,21 @@ pub struct StoragePath {
         deserialize_with = "deserialize_storage_path"
     )]
     pub path: object_store::path::Path,
+}
+
+impl std::fmt::Display for StoragePath {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl StoragePath {
+    pub fn __repr__(&self) -> String {
+        self.to_string()
+    }
 }
 
 fn serialize_storage_path<S: Serializer>(
