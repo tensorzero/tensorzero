@@ -1082,6 +1082,7 @@ mod tests {
                     config: good_provider_config,
                     extra_body: Default::default(),
                     extra_headers: Default::default(),
+                    timeouts: Default::default(),
                 },
             )]),
         };
@@ -1094,6 +1095,7 @@ mod tests {
                     config: json_provider_config,
                     extra_body: Default::default(),
                     extra_headers: Default::default(),
+                    timeouts: Default::default(),
                 },
             )]),
         };
@@ -1110,6 +1112,7 @@ mod tests {
                     config: tool_provider_config,
                     extra_body: Default::default(),
                     extra_headers: Default::default(),
+                    timeouts: Default::default(),
                 },
             )]),
         };
@@ -1122,6 +1125,7 @@ mod tests {
                     config: error_provider_config,
                     extra_body: Default::default(),
                     extra_headers: Default::default(),
+                    timeouts: Default::default(),
                 },
             )]),
         };
@@ -1313,6 +1317,7 @@ mod tests {
                     config: good_provider_config,
                     extra_body: Default::default(),
                     extra_headers: Default::default(),
+                    timeouts: Default::default(),
                 },
             )]),
         };
@@ -1896,6 +1901,7 @@ mod tests {
                     config: good_provider_config,
                     extra_body: Default::default(),
                     extra_headers: Default::default(),
+                    timeouts: Default::default(),
                 },
             )]),
         };
@@ -1908,6 +1914,7 @@ mod tests {
                     config: error_provider_config,
                     extra_body: Default::default(),
                     extra_headers: Default::default(),
+                    timeouts: Default::default(),
                 },
             )]),
         };

@@ -82,7 +82,10 @@ async def test_async_basic_inference(async_client):
     ]
 
     result = await async_client.chat.completions.create(
-        extra_body={"tensorzero::episode_id": str(uuid7())},
+        extra_body={
+            "tensorzero::episode_id": str(uuid7()),
+            "tensorzero::tags": {"foo": "bar"},
+        },
         messages=messages,
         model="tensorzero::function_name::basic_test",
         temperature=0.4,

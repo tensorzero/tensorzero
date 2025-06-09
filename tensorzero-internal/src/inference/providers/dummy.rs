@@ -538,9 +538,13 @@ impl InferenceProvider for DummyProvider {
             false => Some(FinishReason::Stop),
         };
         let split_tool_name = self.model_name == "tool_split_name";
+        let slow_second_chunk = self.model_name == "slow_second_chunk";
         let stream: ProviderInferenceResponseStreamInner = Box::pin(
             tokio_stream::iter(content_chunks.into_iter().enumerate())
-                .map(move |(i, chunk)| {
+                .then(move |(i, chunk)| async move {
+                    if slow_second_chunk && i == 1 {
+                        tokio::time::sleep(Duration::from_secs(2)).await;
+                    }
                     if err_in_stream && i == 3 {
                         return Err(Error::new(ErrorDetails::InferenceClient {
                             message: "Dummy error in stream".to_string(),
