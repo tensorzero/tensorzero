@@ -381,7 +381,7 @@ async fn slow_second_chunk_streaming(payload: Value) {
         }
     }
 
-    // The overall stream duration should be at least 2 seconds, becaues we used the 'slow_second_chunk' model
+    // The overall stream duration should be at least 2 seconds, because we used the 'slow_second_chunk' model
     let elapsed = start.elapsed();
     assert!(
         elapsed >= Duration::from_millis(2000),
