@@ -15,6 +15,7 @@ use uuid::Uuid;
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
+use crate::inference::providers::helpers::check_new_tool_call_name;
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::file::require_image;
@@ -338,6 +339,8 @@ fn stream_google_ai_studio_gemini(
     start_time: Instant,
 ) -> ProviderInferenceResponseStreamInner {
     Box::pin(async_stream::stream! {
+        let mut last_tool_name = None;
+        let mut last_tool_idx = None;
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
@@ -364,11 +367,13 @@ fn stream_google_ai_studio_gemini(
                                 continue;
                             }
                         };
-                        yield GoogleAIStudioGeminiResponseWithMetadata {
-                            raw_response: message.data,
-                            response: data,
-                            latency: start_time.elapsed(),
-                        }.try_into();
+                        yield convert_stream_response_with_metadata_to_chunk(
+                            message.data,
+                            data,
+                            start_time.elapsed(),
+                            &mut last_tool_name,
+                            &mut last_tool_idx,
+                        )
                     }
                 }
             }
@@ -770,31 +775,30 @@ enum GeminiResponseContentPartData {
     // TODO (if needed): VideoMetadata { video_metadata: VideoMetadata },
 }
 
-impl TryFrom<GeminiResponseContentPart> for ContentBlockChunk {
-    type Error = Error;
-    /// Google AI Studio Gemini does not support parallel tool calling or multiple content blocks as far as I can tell.
-    /// So there is no issue with bookkeeping IDs for content blocks.
-    /// We should revisit this if they begin to support it.
-    fn try_from(part: GeminiResponseContentPart) -> Result<Self, Self::Error> {
-        if part.thought {
-            match part.data {
-                FlattenUnknown::Normal(GeminiResponseContentPartData::Text(text)) => {
-                    return Ok(ContentBlockChunk::Thought(ThoughtChunk {
-                        id: "0".to_string(),
-                        text: Some(text),
-                        signature: part.thought_signature,
-                    }));
-                }
-                // Handle 'thought/thoughtSignature' with no other fields
-                FlattenUnknown::Unknown(obj) if obj.as_object().is_some_and(|m| m.is_empty()) => {
-                    return Ok(ContentBlockChunk::Thought(ThoughtChunk {
-                        id: "0".to_string(),
-                        text: None,
-                        signature: part.thought_signature,
-                    }));
-                }
-                _ => {
-                    return Err(Error::new(ErrorDetails::InferenceServer {
+fn content_part_to_tensorzero_chunk(
+    part: GeminiResponseContentPart,
+    last_tool_name: &mut Option<String>,
+    last_tool_idx: &mut Option<u32>,
+) -> Result<ContentBlockChunk, Error> {
+    if part.thought {
+        match part.data {
+            FlattenUnknown::Normal(GeminiResponseContentPartData::Text(text)) => {
+                return Ok(ContentBlockChunk::Thought(ThoughtChunk {
+                    id: "0".to_string(),
+                    text: Some(text),
+                    signature: part.thought_signature,
+                }));
+            }
+            // Handle 'thought/thoughtSignature' with no other fields
+            FlattenUnknown::Unknown(obj) if obj.as_object().is_some_and(|m| m.is_empty()) => {
+                return Ok(ContentBlockChunk::Thought(ThoughtChunk {
+                    id: "0".to_string(),
+                    text: None,
+                    signature: part.thought_signature,
+                }));
+            }
+            _ => {
+                return Err(Error::new(ErrorDetails::InferenceServer {
                         message:
                             format!(
                                 "Thought part in Google AI Studio Gemini response must be a text block: {part:?}"
@@ -803,31 +807,47 @@ impl TryFrom<GeminiResponseContentPart> for ContentBlockChunk {
                         raw_request: None,
                         raw_response: Some(serde_json::to_string(&part).unwrap_or_default()),
                     }));
-                }
             }
         }
-        match part.data {
-            FlattenUnknown::Normal(GeminiResponseContentPartData::Text(text)) => {
-                Ok(ContentBlockChunk::Text(TextChunk {
-                    text,
-                    id: "0".to_string(),
-                }))
-            }
-            FlattenUnknown::Normal(GeminiResponseContentPartData::FunctionCall(function_call)) => {
-                let arguments = serialize_or_log(&function_call.args);
-                Ok(ContentBlockChunk::ToolCall(ToolCallChunk {
-                    raw_name: function_call.name,
-                    raw_arguments: arguments,
-                    id: "0".to_string(),
-                }))
-            }
-            FlattenUnknown::Unknown(part) => Err(Error::new(ErrorDetails::InferenceServer {
-                message: "Unknown content part in Google AI Studio Gemini response".to_string(),
-                provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: None,
-                raw_response: Some(part.to_string()),
-            })),
+    }
+    match part.data {
+        FlattenUnknown::Normal(GeminiResponseContentPartData::Text(text)) => {
+            Ok(ContentBlockChunk::Text(TextChunk {
+                text,
+                id: "0".to_string(),
+            }))
         }
+        FlattenUnknown::Normal(GeminiResponseContentPartData::FunctionCall(function_call)) => {
+            let arguments = serialize_or_log(&function_call.args);
+            let name = check_new_tool_call_name(function_call.name, last_tool_name);
+            if name.is_some() {
+                // If a name comes from check_new_tool_call_name, we need to increment the tool call index
+                // because this is a new tool call.
+                // This will be used as a new ID so we can differentiate between tool calls.
+                let new_tool_idx = match last_tool_idx {
+                    Some(idx) => *idx + 1,
+                    None => 0,
+                };
+                *last_tool_idx = Some(new_tool_idx);
+            }
+            let id = match last_tool_idx {
+                Some(idx) => idx.to_string(),
+                None => return Err(Error::new(ErrorDetails::Inference {
+                    message: "Tool call index is not set in Google AI Studio Gemini. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/discussions/categories/bug-reports".to_string(),
+                })),
+            };
+            Ok(ContentBlockChunk::ToolCall(ToolCallChunk {
+                raw_name: name,
+                raw_arguments: arguments,
+                id,
+            }))
+        }
+        FlattenUnknown::Unknown(part) => Err(Error::new(ErrorDetails::InferenceServer {
+            message: "Unknown content part in Google AI Studio Gemini response".to_string(),
+            provider_type: PROVIDER_TYPE.to_string(),
+            raw_request: None,
+            raw_response: Some(part.to_string()),
+        })),
     }
 }
 
@@ -1048,65 +1068,56 @@ impl<'a> TryFrom<GeminiResponseWithMetadata<'a>> for ProviderInferenceResponse {
     }
 }
 
-struct GoogleAIStudioGeminiResponseWithMetadata {
+fn convert_stream_response_with_metadata_to_chunk(
+    raw_response: String,
     response: GeminiResponse,
     latency: Duration,
-    raw_response: String,
-}
+    last_tool_name: &mut Option<String>,
+    last_tool_idx: &mut Option<u32>,
+) -> Result<ProviderInferenceResponseChunk, Error> {
+    let first_candidate = response.candidates.into_iter().next().ok_or_else(|| {
+        Error::new(ErrorDetails::InferenceServer {
+            message: "Google AI Studio Gemini response has no candidates".to_string(),
+            raw_request: None,
+            raw_response: Some(raw_response.clone()),
+            provider_type: PROVIDER_TYPE.to_string(),
+        })
+    })?;
 
-impl TryFrom<GoogleAIStudioGeminiResponseWithMetadata> for ProviderInferenceResponseChunk {
-    type Error = Error;
-    fn try_from(response: GoogleAIStudioGeminiResponseWithMetadata) -> Result<Self, Self::Error> {
-        let GoogleAIStudioGeminiResponseWithMetadata {
-            response,
-            latency,
-            raw_response,
-        } = response;
+    // Gemini sometimes returns chunks without content (e.g. they might have usage only).
+    let mut content: Vec<ContentBlockChunk> = match first_candidate.content {
+        Some(content) => content
+            .parts
+            .into_iter()
+            .map(|part| content_part_to_tensorzero_chunk(part, last_tool_name, last_tool_idx))
+            .collect::<Result<Vec<ContentBlockChunk>, Error>>()?,
+        None => vec![],
+    };
 
-        let first_candidate = response.candidates.into_iter().next().ok_or_else(|| {
-            Error::new(ErrorDetails::InferenceServer {
-                message: "Google AI Studio Gemini response has no candidates".to_string(),
-                raw_request: None,
-                raw_response: Some(raw_response.clone()),
-                provider_type: PROVIDER_TYPE.to_string(),
-            })
-        })?;
-
-        // Gemini sometimes returns chunks without content (e.g. they might have usage only).
-        let mut content: Vec<ContentBlockChunk> = match first_candidate.content {
-            Some(content) => content
-                .parts
-                .into_iter()
-                .map(|part| part.try_into())
-                .collect::<Result<Vec<ContentBlockChunk>, Error>>()?,
-            None => vec![],
-        };
-
-        // Gemini occasionally spuriously returns empty text chunks. We filter these out.
-        content.retain(|chunk| match chunk {
-            ContentBlockChunk::Text(text) => !text.text.is_empty(),
-            _ => true,
-        });
-        // Google AI Studio returns the running usage metadata in each chunk.
-        // We only want to return the final usage metadata once the stream has ended.
-        // So, we clear the usage metadata if the finish reason is not set.
-        let usage = if first_candidate.finish_reason.as_ref().is_none() {
-            None
-        } else {
-            response
-                .usage_metadata
-                .map(|usage_metadata| usage_metadata.into())
-        };
-        Ok(ProviderInferenceResponseChunk::new(
-            content,
-            usage,
-            raw_response,
-            latency,
-            first_candidate
-                .finish_reason
-                .map(|finish_reason| finish_reason.into()),
-        ))
-    }
+    // Gemini occasionally spuriously returns empty text chunks. We filter these out.
+    content.retain(|chunk| match chunk {
+        ContentBlockChunk::Text(text) => !text.text.is_empty(),
+        _ => true,
+    });
+    // Google AI Studio returns the running usage metadata in each chunk.
+    // We only want to return the final usage metadata once the stream has ended.
+    // So, we clear the usage metadata if the finish reason is not set.
+    let usage = if first_candidate.finish_reason.as_ref().is_none() {
+        None
+    } else {
+        response
+            .usage_metadata
+            .map(|usage_metadata| usage_metadata.into())
+    };
+    Ok(ProviderInferenceResponseChunk::new(
+        content,
+        usage,
+        raw_response,
+        latency,
+        first_candidate
+            .finish_reason
+            .map(|finish_reason| finish_reason.into()),
+    ))
 }
 
 fn handle_google_ai_studio_error(
@@ -2043,14 +2054,20 @@ mod tests {
             }),
         };
 
-        let response_with_metadata = GoogleAIStudioGeminiResponseWithMetadata {
-            raw_response: "my_raw_chunk".to_string(),
-            response,
-            latency: Duration::from_millis(100),
-        };
-
         // Convert to ProviderInferenceResponseChunk
-        let chunk: ProviderInferenceResponseChunk = response_with_metadata.try_into().unwrap();
+        let mut last_tool_name = None;
+        let mut last_tool_idx = None;
+        let chunk: ProviderInferenceResponseChunk = convert_stream_response_with_metadata_to_chunk(
+            "my_raw_chunk".to_string(),
+            response,
+            Duration::from_millis(100),
+            &mut last_tool_name,
+            &mut last_tool_idx,
+        )
+        .unwrap();
+
+        // Verify tool call tracking state - should remain None for text chunks
+        assert_eq!(last_tool_idx, None);
 
         // Verify content
         assert_eq!(chunk.content.len(), 1);
@@ -2094,14 +2111,20 @@ mod tests {
             }),
         };
 
-        let response_with_metadata = GoogleAIStudioGeminiResponseWithMetadata {
-            raw_response: "my_raw_chunk".to_string(),
-            response,
-            latency: Duration::from_millis(50),
-        };
-
         // Convert to ProviderInferenceResponseChunk
-        let chunk: ProviderInferenceResponseChunk = response_with_metadata.try_into().unwrap();
+        let mut last_tool_name = None;
+        let mut last_tool_idx = None;
+        let chunk: ProviderInferenceResponseChunk = convert_stream_response_with_metadata_to_chunk(
+            "my_raw_chunk".to_string(),
+            response,
+            Duration::from_millis(50),
+            &mut last_tool_name,
+            &mut last_tool_idx,
+        )
+        .unwrap();
+
+        // Verify tool call tracking state - should remain None for text chunks
+        assert_eq!(last_tool_idx, None);
 
         // Verify content
         assert_eq!(chunk.content.len(), 1);
@@ -2149,14 +2172,20 @@ mod tests {
             }),
         };
 
-        let response_with_metadata = GoogleAIStudioGeminiResponseWithMetadata {
-            raw_response: "my_raw_chunk".to_string(),
-            response,
-            latency: Duration::from_millis(75),
-        };
-
         // Convert to ProviderInferenceResponseChunk
-        let chunk: ProviderInferenceResponseChunk = response_with_metadata.try_into().unwrap();
+        let mut last_tool_name = None;
+        let mut last_tool_idx = None;
+        let chunk: ProviderInferenceResponseChunk = convert_stream_response_with_metadata_to_chunk(
+            "my_raw_chunk".to_string(),
+            response,
+            Duration::from_millis(75),
+            &mut last_tool_name,
+            &mut last_tool_idx,
+        )
+        .unwrap();
+
+        // Verify tool call tracking state - should remain None for text chunks
+        assert_eq!(last_tool_idx, None);
 
         // Verify empty text chunks are filtered out
         assert_eq!(chunk.content.len(), 1);
@@ -2194,19 +2223,26 @@ mod tests {
             }),
         };
 
-        let response_with_metadata = GoogleAIStudioGeminiResponseWithMetadata {
-            raw_response: "my_raw_chunk".to_string(),
-            response,
-            latency: Duration::from_millis(120),
-        };
-
         // Convert to ProviderInferenceResponseChunk
-        let chunk: ProviderInferenceResponseChunk = response_with_metadata.try_into().unwrap();
+        let mut last_tool_name = None;
+        let mut last_tool_idx = None;
+        let chunk: ProviderInferenceResponseChunk = convert_stream_response_with_metadata_to_chunk(
+            "my_raw_chunk".to_string(),
+            response,
+            Duration::from_millis(120),
+            &mut last_tool_name,
+            &mut last_tool_idx,
+        )
+        .unwrap();
+
+        // Verify tool call tracking state - should be Some(0) for first tool call
+        assert_eq!(last_tool_idx, Some(0));
+        assert_eq!(last_tool_name, Some("get_weather".to_string()));
 
         // Verify function call content
         assert_eq!(chunk.content.len(), 1);
         if let ContentBlockChunk::ToolCall(tool_call) = &chunk.content[0] {
-            assert_eq!(tool_call.raw_name, "get_weather");
+            assert_eq!(tool_call.raw_name, Some("get_weather".to_string()));
             assert_eq!(tool_call.id, "0");
             // Check that arguments were serialized correctly
             let args: serde_json::Value = serde_json::from_str(&tool_call.raw_arguments).unwrap();
@@ -2235,14 +2271,20 @@ mod tests {
             }),
         };
 
-        let response_with_metadata = GoogleAIStudioGeminiResponseWithMetadata {
-            raw_response: "my_raw_chunk".to_string(),
-            response,
-            latency: Duration::from_millis(60),
-        };
-
         // Convert to ProviderInferenceResponseChunk
-        let chunk: ProviderInferenceResponseChunk = response_with_metadata.try_into().unwrap();
+        let mut last_tool_name = None;
+        let mut last_tool_idx = None;
+        let chunk: ProviderInferenceResponseChunk = convert_stream_response_with_metadata_to_chunk(
+            "my_raw_chunk".to_string(),
+            response,
+            Duration::from_millis(60),
+            &mut last_tool_name,
+            &mut last_tool_idx,
+        )
+        .unwrap();
+
+        // Verify tool call tracking state - should remain None for responses without content
+        assert_eq!(last_tool_idx, None);
 
         // Verify empty content
         assert_eq!(chunk.content.len(), 0);
@@ -2268,14 +2310,19 @@ mod tests {
             }),
         };
 
-        let response_with_metadata = GoogleAIStudioGeminiResponseWithMetadata {
-            raw_response: "my_raw_chunk".to_string(),
+        // Convert to ProviderInferenceResponseChunk
+        let mut last_tool_name = None;
+        let mut last_tool_idx = None;
+        let result = convert_stream_response_with_metadata_to_chunk(
+            "my_raw_chunk".to_string(),
             response,
-            latency: Duration::from_millis(30),
-        };
+            Duration::from_millis(30),
+            &mut last_tool_name,
+            &mut last_tool_idx,
+        );
 
-        // Attempt to convert to ProviderInferenceResponseChunk
-        let result = ProviderInferenceResponseChunk::try_from(response_with_metadata);
+        // Should remain None when there's an error
+        assert_eq!(last_tool_idx, None);
 
         // Verify error is returned
         assert!(result.is_err());
@@ -2335,13 +2382,21 @@ mod tests {
                 }),
             };
 
-            let response_with_metadata = GoogleAIStudioGeminiResponseWithMetadata {
-                raw_response: "my_raw_chunk".to_string(),
-                response,
-                latency: Duration::from_millis(10),
-            };
-
-            let chunk: ProviderInferenceResponseChunk = response_with_metadata.try_into().unwrap();
+            let chunk: ProviderInferenceResponseChunk = {
+                let mut last_tool_name = None;
+                let mut last_tool_idx = None;
+                let result = convert_stream_response_with_metadata_to_chunk(
+                    "my_raw_chunk".to_string(),
+                    response,
+                    Duration::from_millis(10),
+                    &mut last_tool_name,
+                    &mut last_tool_idx,
+                );
+                // Verify tool call tracking state
+                assert_eq!(last_tool_idx, None);
+                result
+            }
+            .unwrap();
             assert_eq!(chunk.finish_reason, Some(expected_reason));
         }
     }

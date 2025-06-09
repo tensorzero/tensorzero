@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, Serializer};
 use serde_json::Value;
 
 #[cfg(feature = "pyo3")]
@@ -418,8 +418,22 @@ pub enum ToolChoice {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct ToolCallChunk {
     pub id: String,
-    pub raw_name: String,
+    #[serde(serialize_with = "serialize_option_string_as_empty")]
+    pub raw_name: Option<String>,
     pub raw_arguments: String,
+}
+
+fn serialize_option_string_as_empty<S>(
+    value: &Option<String>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    match value {
+        Some(s) => serializer.serialize_str(s),
+        None => serializer.serialize_str(""),
+    }
 }
 
 pub const IMPLICIT_TOOL_NAME: &str = "respond";

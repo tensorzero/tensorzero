@@ -500,8 +500,8 @@ async function parseInferenceRow(
         row.tool_params === ""
           ? {}
           : z
-            .record(z.string(), z.unknown())
-            .parse(JSON.parse(row.tool_params)),
+              .record(z.string(), z.unknown())
+              .parse(JSON.parse(row.tool_params)),
       extra_body,
     };
   } else {
