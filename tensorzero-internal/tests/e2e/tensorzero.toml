@@ -664,6 +664,36 @@ candidates = ["good", "reasoner"]
 
 [functions.basic_test_timeout.variants.best_of_n_judge_timeout.evaluator]
 model = "slow_with_timeout"
+[functions.basic_test_template_no_schema]
+type = "chat"
+
+[functions.basic_test_template_no_schema.variants.test]
+type = "chat_completion"
+model = "dummy::echo_request_messages"
+system_template = "../../fixtures/config/functions/basic_test_template_no_schema/prompt/system_template.minijinja"
+assistant_template = "../../fixtures/config/functions/basic_test_template_no_schema/prompt/assistant_template.minijinja"
+user_template = "../../fixtures/config/functions/basic_test_template_no_schema/prompt/user_template.minijinja"
+
+[functions.basic_test_template_no_schema.variants.mixture_of_n]
+type = "experimental_mixture_of_n"
+candidates = ["test", "test"]
+
+[functions.basic_test_template_no_schema.variants.mixture_of_n.fuser]
+model = "dummy::echo_request_messages"
+system_template = "../../fixtures/config/functions/basic_test_template_no_schema/prompt/system_template_2.minijinja"
+assistant_template = "../../fixtures/config/functions/basic_test_template_no_schema/prompt/assistant_template_2.minijinja"
+user_template = "../../fixtures/config/functions/basic_test_template_no_schema/prompt/user_template_2.minijinja"
+
+[functions.basic_test_template_no_schema.variants.best_of_n]
+type = "experimental_best_of_n_sampling"
+candidates = ["test", "test"]
+
+[functions.basic_test_template_no_schema.variants.best_of_n.evaluator]
+model = "dummy::best_of_n_0"
+system_template = "../../fixtures/config/functions/basic_test_template_no_schema/prompt/system_template_2.minijinja"
+assistant_template = "../../fixtures/config/functions/basic_test_template_no_schema/prompt/assistant_template_2.minijinja"
+user_template = "../../fixtures/config/functions/basic_test_template_no_schema/prompt/user_template_2.minijinja"
+
 
 [functions.basic_test_no_system_schema]
 type = "chat"
@@ -3138,6 +3168,16 @@ level = "inference"
 
 [metrics.prometheus_test_float2]
 type = "float"
+optimize = "max"
+level = "inference"
+
+[metrics.jaccard_similarity]
+type = "float"
+optimize = "max"
+level = "inference"
+
+[metrics.exact_match]
+type = "boolean"
 optimize = "max"
 level = "inference"
 

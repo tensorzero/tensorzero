@@ -4,78 +4,20 @@ use std::collections::HashMap;
 use pyo3::prelude::*;
 #[cfg(feature = "pyo3")]
 use pyo3::types::{PyAny, PyList};
-use serde::Deserialize;
 use serde_json::Value;
 #[cfg(feature = "pyo3")]
 use tensorzero_internal::inference::types::pyo3_helpers::{
     content_block_output_to_python, serialize_to_dict, uuid_to_python,
 };
 use tensorzero_internal::{
+    clickhouse::types::StoredInference,
     config_parser::Config,
     error::{Error, ErrorDetails},
-    inference::types::{
-        ContentBlockChatOutput, ContentBlockOutput, JsonInferenceOutput, ModelInput, ResolvedInput,
-    },
+    inference::types::{ContentBlockOutput, ModelInput},
     tool::ToolCallConfigDatabaseInsert,
     variant::{chat_completion::prepare_model_input, VariantConfig},
 };
 use uuid::Uuid;
-
-/// Represents an stored inference to be used for optimization.
-/// These are retrieved from the database in this format.
-/// NOTE / TODO: As an incremental step we are deserializing this enum from Python.
-/// in the final version we should instead make this a native PyO3 class and
-/// avoid deserialization entirely unless given a dict.
-#[derive(Debug, Deserialize, PartialEq)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum StoredInference {
-    Chat(StoredChatInference),
-    Json(StoredJsonInference),
-}
-
-#[derive(Debug, Deserialize, PartialEq)]
-pub struct StoredChatInference {
-    pub function_name: String,
-    pub variant_name: String,
-    pub input: ResolvedInput,
-    pub output: Vec<ContentBlockChatOutput>,
-    pub episode_id: Uuid,
-    pub inference_id: Uuid,
-    pub tool_params: ToolCallConfigDatabaseInsert,
-}
-
-#[derive(Debug, Deserialize, PartialEq)]
-pub struct StoredJsonInference {
-    pub function_name: String,
-    pub variant_name: String,
-    pub input: ResolvedInput,
-    pub output: JsonInferenceOutput,
-    pub episode_id: Uuid,
-    pub inference_id: Uuid,
-    pub output_schema: Value,
-}
-
-impl StoredInference {
-    pub fn input_mut(&mut self) -> &mut ResolvedInput {
-        match self {
-            StoredInference::Chat(example) => &mut example.input,
-            StoredInference::Json(example) => &mut example.input,
-        }
-    }
-    pub fn input(&self) -> &ResolvedInput {
-        match self {
-            StoredInference::Chat(example) => &example.input,
-            StoredInference::Json(example) => &example.input,
-        }
-    }
-
-    pub fn function_name(&self) -> &str {
-        match self {
-            StoredInference::Chat(example) => &example.function_name,
-            StoredInference::Json(example) => &example.function_name,
-        }
-    }
-}
 
 /// Represents an inference that has been prepared for fine-tuning.
 /// This is constructed by rendering a StoredInference with a variant for messages
@@ -207,6 +149,7 @@ fn render_model_input(
         system_template_name,
         user_template_name,
         assistant_template_name,
+        function_config.template_schema_info(),
     )
 }
 

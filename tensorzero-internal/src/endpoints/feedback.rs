@@ -17,11 +17,11 @@ use crate::config_parser::{Config, MetricConfigLevel, MetricConfigType};
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
-use crate::inference::types::batch::deserialize_optional_json_string;
 use crate::inference::types::{
     parse_chat_output, ContentBlockChatOutput, ContentBlockOutput, Text,
 };
 use crate::jsonschema_util::StaticJSONSchema;
+use crate::serde_util::deserialize_optional_json_string;
 use crate::tool::{ToolCall, ToolCallConfig, ToolCallConfigDatabaseInsert};
 use crate::uuid_util::uuid_elapsed;
 
@@ -459,7 +459,7 @@ async fn get_function_name(
         "SELECT function_name FROM {table_name} FINAL WHERE {identifier_key} = toUInt128(toUUID('{target_id}'))"
     );
     let function_name = connection_info
-        .run_query_synchronous(query, None)
+        .run_query_synchronous_no_params(query)
         .await?
         .trim()
         .to_string();
@@ -636,10 +636,10 @@ async fn get_dynamic_demonstration_info(
             let result = clickhouse_client
                 .run_query_synchronous(
                     parameterized_query,
-                    Some(&HashMap::from([
+                    &HashMap::from([
                         ("function_name", function_name),
                         ("inference_id", &inference_id.to_string()),
-                    ])),
+                    ]),
                 )
                 .await?;
 
@@ -664,10 +664,10 @@ async fn get_dynamic_demonstration_info(
             let result = clickhouse_client
                 .run_query_synchronous(
                     parameterized_query,
-                    Some(&HashMap::from([
+                    &HashMap::from([
                         ("function_name", function_name),
                         ("inference_id", &inference_id.to_string()),
-                    ])),
+                    ]),
                 )
                 .await?;
             let result_value = serde_json::from_str::<Value>(&result).map_err(|e| {

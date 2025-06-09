@@ -17,6 +17,7 @@ use crate::jsonschema_util::{JsonSchemaRef, StaticJSONSchema};
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
 use crate::tool::{DynamicToolParams, StaticToolConfig, ToolCallConfig, ToolChoice};
+use crate::variant::chat_completion::TemplateSchemaInfo;
 use crate::variant::{InferenceConfig, JsonMode, Variant, VariantConfig};
 
 #[derive(Debug)]
@@ -36,6 +37,13 @@ impl FunctionConfig {
         match self {
             FunctionConfig::Chat(_) => FunctionConfigType::Chat,
             FunctionConfig::Json(_) => FunctionConfigType::Json,
+        }
+    }
+
+    pub fn table_name(&self) -> &str {
+        match self {
+            FunctionConfig::Chat(_) => "ChatInference",
+            FunctionConfig::Json(_) => "JsonInference",
         }
     }
 }
@@ -233,6 +241,14 @@ impl FunctionConfig {
                     original_response,
                 )))
             }
+        }
+    }
+
+    pub fn template_schema_info(&self) -> TemplateSchemaInfo {
+        TemplateSchemaInfo {
+            has_system_schema: self.system_schema().is_some(),
+            has_user_schema: self.user_schema().is_some(),
+            has_assistant_schema: self.assistant_schema().is_some(),
         }
     }
 

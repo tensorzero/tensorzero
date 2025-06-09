@@ -317,6 +317,15 @@ impl std::fmt::Display for MetricConfigLevel {
     }
 }
 
+impl MetricConfigLevel {
+    pub fn inference_column_name(&self) -> &'static str {
+        match self {
+            MetricConfigLevel::Inference => "id",
+            MetricConfigLevel::Episode => "episode_id",
+        }
+    }
+}
+
 impl<'c> Config<'c> {
     pub async fn load_and_verify_from_path(config_path: &Path) -> Result<Config<'c>, Error> {
         Self::load_from_path_optional_verify_credentials(config_path, true).await
@@ -1704,7 +1713,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             ErrorDetails::Config {
-                message: "`functions.templates_with_variables_chat.variants.variant_with_variables.system_template`: schema is required when template is specified and needs variables".to_string()
+                message: "`functions.templates_with_variables_chat.variants.variant_with_variables.system_template`: template needs variables: [message] but only `system_text` is allowed when template has no schema".to_string()
             }.into()
         );
         let mut sample_config = get_sample_valid_config();
@@ -1717,7 +1726,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             ErrorDetails::Config {
-                message: "`functions.templates_with_variables_json.variants.variant_with_variables.system_template`: schema is required when template is specified and needs variables".to_string()
+                message: "`functions.templates_with_variables_json.variants.variant_with_variables.system_template`: template needs variables: [message] but only `system_text` is allowed when template has no schema".to_string()
             }.into()
         );
     }
@@ -1739,7 +1748,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             ErrorDetails::Config {
-                message: "`functions.templates_with_variables_chat.variants.variant_with_variables.user_template`: schema is required when template is specified and needs variables".to_string()
+                message: "`functions.templates_with_variables_chat.variants.variant_with_variables.user_template`: template needs variables: [message] but only `user_text` is allowed when template has no schema".to_string()
             }.into()
         );
 
@@ -1753,7 +1762,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             ErrorDetails::Config {
-                message: "`functions.templates_with_variables_json.variants.variant_with_variables.user_template`: schema is required when template is specified and needs variables".to_string()
+                message: "`functions.templates_with_variables_json.variants.variant_with_variables.user_template`: template needs variables: [message] but only `user_text` is allowed when template has no schema".to_string()
             }.into()
         );
     }
@@ -1776,7 +1785,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             ErrorDetails::Config {
-                message: "`functions.templates_with_variables_chat.variants.variant_with_variables.assistant_template`: schema is required when template is specified and needs variables".to_string()
+                message: "`functions.templates_with_variables_chat.variants.variant_with_variables.assistant_template`: template needs variables: [message] but only `assistant_text` is allowed when template has no schema".to_string()
             }.into()
         );
         let mut sample_config = get_sample_valid_config();
@@ -1789,7 +1798,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             ErrorDetails::Config {
-                message: "`functions.templates_with_variables_json.variants.variant_with_variables.assistant_template`: schema is required when template is specified and needs variables".to_string()
+                message: "`functions.templates_with_variables_json.variants.variant_with_variables.assistant_template`: template needs variables: [message] but only `assistant_text` is allowed when template has no schema".to_string()
             }.into()
         );
     }
@@ -2898,5 +2907,26 @@ thinking = { type = "enabled", budget_tokens = 1024 }
                 .contains("models.my-model.providers.gcp-vertex-gemini: Exactly one of model_id or endpoint_id must be provided"),
             "Unexpected error message: {err_msg}"
         );
+    }
+
+    #[tokio::test]
+    async fn test_config_invalid_template_no_schema() {
+        let config_str = r#"
+        [functions.no_schema]
+        type = "chat"
+
+        [functions.no_schema.variants.invalid_system_template]
+        type = "chat_completion"
+        model = "dummy::echo_request_messages"
+        system_template = "fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+        "#;
+
+        let config = toml::from_str(config_str).expect("Failed to parse sample config");
+        let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let err = Config::load_from_toml(config, base_path.clone())
+            .await
+            .expect_err("Config should fail to load");
+
+        assert_eq!(err.to_string(), "`functions.no_schema.variants.invalid_system_template.system_template`: template needs variables: [assistant_name] but only `system_text` is allowed when template has no schema");
     }
 }

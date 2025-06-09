@@ -239,6 +239,9 @@ pub enum ErrorDetails {
     InvalidFunctionVariants {
         message: String,
     },
+    InvalidMetricName {
+        metric_name: String,
+    },
     InvalidMessage {
         message: String,
     },
@@ -436,6 +439,7 @@ impl ErrorDetails {
             ErrorDetails::InvalidTensorzeroUuid { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidFunctionVariants { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidVariantForOptimization { .. } => tracing::Level::WARN,
+            ErrorDetails::InvalidMetricName { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidMessage { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidModel { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidModelProvider { .. } => tracing::Level::ERROR,
@@ -529,6 +533,7 @@ impl ErrorDetails {
             ErrorDetails::InvalidDynamicEvaluationRun { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidFunctionVariants { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidMessage { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::InvalidMetricName { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidModel { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidModelProvider { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidOpenAICompatibleRequest { .. } => StatusCode::BAD_REQUEST,
@@ -812,6 +817,9 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::InvalidFunctionVariants { message } => write!(f, "{message}"),
             ErrorDetails::InvalidTensorzeroUuid { message, kind } => {
                 write!(f, "Invalid {kind} ID: {message}")
+            }
+            ErrorDetails::InvalidMetricName { metric_name } => {
+                write!(f, "Invalid metric name: {metric_name}")
             }
             ErrorDetails::InvalidMessage { message } => write!(f, "{message}"),
             ErrorDetails::InvalidModel { model_name } => {

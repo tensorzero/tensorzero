@@ -82,7 +82,10 @@ async def test_async_basic_inference(async_client):
     ]
 
     result = await async_client.chat.completions.create(
-        extra_body={"tensorzero::episode_id": str(uuid7())},
+        extra_body={
+            "tensorzero::episode_id": str(uuid7()),
+            "tensorzero::tags": {"foo": "bar"},
+        },
         messages=messages,
         model="tensorzero::function_name::basic_test",
         temperature=0.4,
@@ -99,6 +102,7 @@ async def test_async_basic_inference(async_client):
     assert usage.completion_tokens == 10
     assert usage.total_tokens == 20
     assert result.choices[0].finish_reason == "stop"
+    assert result.service_tier is None
 
 
 class DummyModel(BaseModel):
@@ -209,6 +213,7 @@ async def test_async_inference_streaming_with_cache(async_client):
 
     content = ""
     for i, chunk in enumerate(chunks[:-1]):  # All but the last chunk
+        assert chunk.service_tier is None
         if i < len(expected_text):
             assert chunk.choices[0].delta.content == expected_text[i]
             content += chunk.choices[0].delta.content
