@@ -2632,6 +2632,13 @@ model = "tool"
 system_template = "../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
 max_tokens = 100
 
+[functions.weather_helper.variants.split_tool_name]
+type = "chat_completion"
+weight = 1
+model = "dummy::tool_split_name"
+system_template = "../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
+max_tokens = 100
+
 [functions.weather_helper.variants.bad_tool]
 type = "chat_completion"
 model = "bad_tool"

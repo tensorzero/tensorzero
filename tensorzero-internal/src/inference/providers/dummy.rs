@@ -526,7 +526,7 @@ impl InferenceProvider for DummyProvider {
         let created = current_timestamp();
 
         let (content_chunks, is_tool_call) = match self.model_name.as_str() {
-            "tool" => (DUMMY_STREAMING_TOOL_RESPONSE.to_vec(), true),
+            "tool" | "tool_split_name" => (DUMMY_STREAMING_TOOL_RESPONSE.to_vec(), true),
             "reasoner" => (DUMMY_STREAMING_RESPONSE.to_vec(), false),
             _ => (DUMMY_STREAMING_RESPONSE.to_vec(), false),
         };
@@ -537,6 +537,7 @@ impl InferenceProvider for DummyProvider {
             true => Some(FinishReason::ToolCall),
             false => Some(FinishReason::Stop),
         };
+        let split_tool_name = self.model_name == "tool_split_name";
         let stream: ProviderInferenceResponseStreamInner = Box::pin(
             tokio_stream::iter(content_chunks.into_iter().enumerate())
                 .map(move |(i, chunk)| {
@@ -550,8 +551,16 @@ impl InferenceProvider for DummyProvider {
                         }));
                     }
                     // We want to simulate the tool name being in the first chunk, but not in the subsequent chunks.
-                    let tool_name = if i == 0 {
+                    let tool_name = if i == 0 && !split_tool_name {
                         Some("get_temperature".to_string())
+                    } else if split_tool_name {
+                        if i == 0 {
+                            Some("get_temp".to_string())
+                        } else if i == 1 {
+                            Some("erature".to_string())
+                        } else {
+                            None
+                        }
                     } else {
                         None
                     };
