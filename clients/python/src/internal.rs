@@ -40,7 +40,7 @@ pub fn get_template_config(
                 "Variant {variant_name} not found in function {function_name}",
             ))
         })?;
-    let VariantConfig::ChatCompletion(config) = variant_config else {
+    let VariantConfig::ChatCompletion(config) = &variant_config.inner else {
         return Err(PyValueError::new_err(format!(
             "Variant {variant_name} is not a ChatCompletion variant"
         )));

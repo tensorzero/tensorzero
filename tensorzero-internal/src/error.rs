@@ -205,6 +205,11 @@ pub enum ErrorDetails {
     InferenceTimeout {
         variant_name: String,
     },
+    VariantTimeout {
+        variant_name: Option<String>,
+        timeout: Duration,
+        streaming: bool,
+    },
     ModelProviderTimeout {
         provider_name: String,
         timeout: Duration,
@@ -427,6 +432,7 @@ impl ErrorDetails {
             ErrorDetails::InferenceServer { .. } => tracing::Level::ERROR,
             ErrorDetails::InferenceTimeout { .. } => tracing::Level::WARN,
             ErrorDetails::ModelProviderTimeout { .. } => tracing::Level::WARN,
+            ErrorDetails::VariantTimeout { .. } => tracing::Level::WARN,
             ErrorDetails::InputValidation { .. } => tracing::Level::WARN,
             ErrorDetails::InternalError { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidBaseUrl { .. } => tracing::Level::ERROR,
@@ -519,6 +525,7 @@ impl ErrorDetails {
             ErrorDetails::InferenceServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InferenceTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
             ErrorDetails::ModelProviderTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
+            ErrorDetails::VariantTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
             ErrorDetails::InvalidClientMode { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidTensorzeroUuid { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidUuid { .. } => StatusCode::BAD_REQUEST,
@@ -626,6 +633,22 @@ impl std::fmt::Display for ErrorDetails {
                         f,
                         "Model provider {provider_name} timed out due to configured `non_streaming.total_ms` timeout ({timeout:?})"
                     )
+                }
+            }
+            ErrorDetails::VariantTimeout {
+                variant_name,
+                timeout,
+                streaming,
+            } => {
+                let variant_description = if let Some(variant_name) = variant_name {
+                    format!("Variant `{variant_name}`")
+                } else {
+                    "Unknown variant".to_string()
+                };
+                if *streaming {
+                    write!(f, "{variant_description} timed out due to configured `streaming.ttft_ms` timeout ({timeout:?})")
+                } else {
+                    write!(f, "{variant_description} timed out due to configured `non_streaming.total_ms` timeout ({timeout:?})")
                 }
             }
             ErrorDetails::ObjectStoreWrite { message, path } => {
