@@ -2,35 +2,64 @@ use anyhow::{bail, Result};
 use serde_json::Value;
 use tensorzero::InferenceResponse;
 use tensorzero_internal::endpoints::datasets::Datapoint;
+use tracing::{debug, instrument, warn};
 
+#[instrument(skip(inference_response, datapoint), fields(datapoint_id = %datapoint.id()))]
 pub(super) fn run_exact_match_evaluator(
     inference_response: &InferenceResponse,
     datapoint: &Datapoint,
 ) -> Result<Option<Value>> {
     match (inference_response, datapoint) {
         (InferenceResponse::Chat(response), Datapoint::Chat(datapoint)) => {
+            debug!("Running exact match evaluation for chat response");
             match &datapoint.output {
                 // Right now this is order-sensitive, but we may consider relaxing this in the future
-                Some(output) => Ok(Some(Value::Bool(output == &response.content))),
-                None => Ok(None),
+                Some(output) => {
+                    let matches = output == &response.content;
+                    debug!(matches = %matches, "Chat exact match comparison completed");
+                    Ok(Some(Value::Bool(matches)))
+                }
+                None => {
+                    debug!("No reference output available for chat comparison");
+                    Ok(None)
+                }
             }
         }
         (InferenceResponse::Json(json_completion), Datapoint::Json(json_inference)) => {
+            debug!("Running exact match evaluation for JSON response");
             match &json_inference.output {
                 Some(output) => {
                     // `output.parsed` is an Option<Value> but it should always be Some here
                     if output.parsed.is_none() {
-                        tracing::warn!("Datapoint {} has no parsed output", json_inference.id);
+                        warn!("Datapoint {} has no parsed output", json_inference.id);
                         return Ok(None);
                     }
-                    Ok(Some(Value::Bool(
-                        output.parsed == json_completion.output.parsed,
-                    )))
+                    let matches = output.parsed == json_completion.output.parsed;
+                    debug!(matches = %matches, "JSON exact match comparison completed");
+                    Ok(Some(Value::Bool(matches)))
                 }
-                None => Ok(None),
+                None => {
+                    debug!("No reference output available for JSON comparison");
+                    Ok(None)
+                }
             }
         }
-        _ => bail!("Datapoint and inference response types do not match"),
+        _ => {
+            let datapoint_type = match datapoint {
+                Datapoint::Chat(_) => "Chat",
+                Datapoint::Json(_) => "Json",
+            };
+            let response_type = match inference_response {
+                InferenceResponse::Chat(_) => "Chat",
+                InferenceResponse::Json(_) => "Json",
+            };
+            warn!(
+                datapoint_type = %datapoint_type,
+                response_type = %response_type,
+                "Datapoint and inference response types do not match"
+            );
+            bail!("Datapoint and inference response types do not match")
+        }
     }
 }
 
