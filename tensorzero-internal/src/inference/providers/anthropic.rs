@@ -2,7 +2,7 @@ use futures::StreamExt;
 use lazy_static::lazy_static;
 use mime::MediaType;
 use reqwest::StatusCode;
-use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
+use reqwest_eventsource::{Event, EventSource};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -15,6 +15,9 @@ use url::Url;
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
+use crate::inference::providers::helpers::{
+    inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
+};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
@@ -35,7 +38,7 @@ use crate::model::{
 };
 use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice, ToolConfig};
 
-use super::helpers::{inject_extra_request_data, peek_first_chunk};
+use super::helpers::peek_first_chunk;
 use super::openai::convert_stream_error;
 
 lazy_static! {
@@ -141,7 +144,7 @@ impl InferenceProvider for AnthropicProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let mut request_body =
+        let request_body =
             serde_json::to_value(AnthropicRequestBody::new(&self.model_name, request)?).map_err(
                 |e| {
                     Error::new(ErrorDetails::Serialization {
@@ -152,33 +155,23 @@ impl InferenceProvider for AnthropicProvider {
                     })
                 },
             )?;
-        let headers = inject_extra_request_data(
+        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let start_time = Instant::now();
+        let builder = http_client
+            .post(ANTHROPIC_BASE_URL.as_ref())
+            .header("anthropic-version", ANTHROPIC_API_VERSION)
+            .header("x-api-key", api_key.expose_secret());
+
+        let (res, raw_request) = inject_extra_request_data_and_send(
+            PROVIDER_TYPE,
             &request.extra_body,
             &request.extra_headers,
             model_provider,
             tensorzero_model_name,
-            &mut request_body,
-        )?;
-        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
-        let start_time = Instant::now();
-        let res = http_client
-            .post(ANTHROPIC_BASE_URL.as_ref())
-            .header("anthropic-version", ANTHROPIC_API_VERSION)
-            .header("x-api-key", api_key.expose_secret())
-            .header("content-type", "application/json")
-            .headers(headers)
-            .json(&request_body)
-            .send()
-            .await
-            .map_err(|e| {
-                Error::new(ErrorDetails::InferenceClient {
-                    status_code: e.status(),
-                    message: format!("Error sending request: {}", DisplayOrDebugGateway::new(e)),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
-                    raw_response: None,
-                })
-            })?;
+            request_body,
+            builder,
+        )
+        .await?;
         let latency = Latency::NonStreaming {
             response_time: start_time.elapsed(),
         };
@@ -190,7 +183,7 @@ impl InferenceProvider for AnthropicProvider {
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 })
             })?;
@@ -202,7 +195,7 @@ impl InferenceProvider for AnthropicProvider {
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_request: Some(raw_request.clone()),
                     raw_response: Some(raw_response.clone()),
                 })
             })?;
@@ -210,7 +203,8 @@ impl InferenceProvider for AnthropicProvider {
             let response_with_latency = AnthropicResponseWithMetadata {
                 response,
                 latency,
-                request: request_body,
+                raw_request,
+                generic_request: request,
                 input_messages: request.messages.clone(),
                 function_type: &request.function_type,
                 json_mode: &request.json_mode,
@@ -225,7 +219,7 @@ impl InferenceProvider for AnthropicProvider {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing response: {}", DisplayOrDebugGateway::new(e)),
                     provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 })
             })?;
@@ -233,15 +227,11 @@ impl InferenceProvider for AnthropicProvider {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing response: {}", DisplayOrDebugGateway::new(e)),
                     provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_request: Some(raw_request.clone()),
                     raw_response: Some(response_text),
                 })
             })?;
-            handle_anthropic_error(
-                response_code,
-                error_body.error,
-                serde_json::to_string(&request_body).unwrap_or_default(),
-            )
+            handle_anthropic_error(response_code, error_body.error, raw_request)
         }
     }
 
@@ -257,7 +247,7 @@ impl InferenceProvider for AnthropicProvider {
         api_key: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let mut request_body =
+        let request_body =
             serde_json::to_value(AnthropicRequestBody::new(&self.model_name, request)?).map_err(
                 |e| {
                     Error::new(ErrorDetails::Serialization {
@@ -268,40 +258,23 @@ impl InferenceProvider for AnthropicProvider {
                     })
                 },
             )?;
-        let headers = inject_extra_request_data(
+        let start_time = Instant::now();
+        let api_key = self.credentials.get_api_key(api_key)?;
+        let builder = http_client
+            .post(ANTHROPIC_BASE_URL.as_ref())
+            .header("anthropic-version", ANTHROPIC_API_VERSION)
+            .header("x-api-key", api_key.expose_secret());
+
+        let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
+            PROVIDER_TYPE,
             &request.extra_body,
             &request.extra_headers,
             model_provider,
             model_name,
-            &mut request_body,
-        )?;
-        let raw_request = serde_json::to_string(&request_body).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!(
-                    "Error serializing request body as JSON: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-            })
-        })?;
-        let start_time = Instant::now();
-        let api_key = self.credentials.get_api_key(api_key)?;
-        let event_source = http_client
-            .post(ANTHROPIC_BASE_URL.as_ref())
-            .header("anthropic-version", ANTHROPIC_API_VERSION)
-            .header("content-type", "application/json")
-            .header("x-api-key", api_key.expose_secret())
-            .headers(headers)
-            .json(&request_body)
-            .eventsource()
-            .map_err(|e| {
-                Error::new(ErrorDetails::InferenceClient {
-                    message: format!("Error sending request: {}", DisplayOrDebugGateway::new(e)),
-                    status_code: None,
-                    provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: Some(raw_request.clone()),
-                    raw_response: None,
-                })
-            })?;
+            request_body,
+            builder,
+        )
+        .await?;
         let mut stream = stream_anthropic(event_source, start_time).peekable();
         let chunk = peek_first_chunk(&mut stream, &raw_request, PROVIDER_TYPE).await?;
         if matches!(
@@ -938,7 +911,8 @@ struct AnthropicResponseWithMetadata<'a> {
     response: AnthropicResponse,
     raw_response: String,
     latency: Latency,
-    request: serde_json::Value,
+    raw_request: String,
+    generic_request: &'a ModelInferenceRequest<'a>,
     input_messages: Vec<RequestMessage>,
     function_type: &'a FunctionType,
     json_mode: &'a ModelInferenceRequestJsonMode,
@@ -953,23 +927,14 @@ impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceRespons
             response,
             raw_response,
             latency,
-            request: request_body,
+            raw_request,
+            generic_request,
             input_messages,
             function_type,
             json_mode,
             model_name,
             provider_name,
         } = value;
-
-        let raw_request = serde_json::to_string(&request_body).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!(
-                    "Error serializing request body as JSON: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-            })
-        })?;
-
         let output: Vec<ContentBlockOutput> = response
             .content
             .into_iter()
@@ -988,10 +953,7 @@ impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceRespons
         Ok(ProviderInferenceResponse::new(
             ProviderInferenceResponseArgs {
                 output: content,
-                system: request_body
-                    .get("system")
-                    .and_then(|s| s.as_str())
-                    .map(|s| s.to_owned()),
+                system: generic_request.system.clone(),
                 input_messages,
                 raw_request,
                 raw_response,
@@ -2016,6 +1978,27 @@ mod tests {
                 output_tokens: 50,
             },
         };
+        let generic_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["test_user".to_string().into()],
+            }],
+            system: None,
+            temperature: Some(0.5),
+            max_tokens: Some(100),
+            seed: Some(69),
+            top_p: Some(0.9),
+            presence_penalty: Some(0.1),
+            frequency_penalty: Some(0.2),
+            stream: false,
+            json_mode: ModelInferenceRequestJsonMode::On,
+            tool_config: None,
+            function_type: FunctionType::Chat,
+            output_schema: None,
+            extra_body: Default::default(),
+            ..Default::default()
+        };
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
         };
@@ -2040,7 +2023,8 @@ mod tests {
             response: anthropic_response_body.clone(),
             raw_response: raw_response.clone(),
             latency: latency.clone(),
-            request: serde_json::to_value(&request_body).unwrap(),
+            raw_request: raw_request.clone(),
+            generic_request: &generic_request,
             input_messages: input_messages.clone(),
             function_type: &FunctionType::Chat,
             json_mode: &ModelInferenceRequestJsonMode::Off,
@@ -2100,7 +2084,8 @@ mod tests {
             response: anthropic_response_body.clone(),
             raw_response: raw_response.clone(),
             latency: latency.clone(),
-            request: serde_json::to_value(&request_body).unwrap(),
+            raw_request: raw_request.clone(),
+            generic_request: &generic_request,
             input_messages: input_messages.clone(),
             function_type: &FunctionType::Chat,
             json_mode: &ModelInferenceRequestJsonMode::Off,
@@ -2173,7 +2158,8 @@ mod tests {
             response: anthropic_response_body.clone(),
             raw_response: raw_response.clone(),
             latency: latency.clone(),
-            request: serde_json::to_value(&request_body).unwrap(),
+            raw_request: raw_request.clone(),
+            generic_request: &generic_request,
             input_messages: input_messages.clone(),
             function_type: &FunctionType::Chat,
             json_mode: &ModelInferenceRequestJsonMode::Off,
