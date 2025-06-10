@@ -437,6 +437,7 @@ struct UninitializedLLMJudgeChatCompletionVariantConfig {
     frequency_penalty: Option<f32>,
     seed: Option<u32>,
     json_mode: JsonMode, // This is a JSON function
+    stop_sequences: Option<Vec<String>>,
     #[serde(default)]
     retries: RetryConfig,
     #[serde(default)]
@@ -489,6 +490,7 @@ fn convert_chat_completion_judge_to_variant<P: AsRef<Path>>(
         presence_penalty: params.presence_penalty,
         frequency_penalty: params.frequency_penalty,
         seed: params.seed,
+        stop_sequences: params.stop_sequences,
         json_mode: Some(params.json_mode),
         retries: params.retries,
         extra_body: params.extra_body,
@@ -537,6 +539,7 @@ struct UninitializedLLMJudgeDiclVariantConfig {
     max_tokens: Option<u32>,
     seed: Option<u32>,
     json_mode: Option<JsonMode>,
+    stop_sequences: Option<Vec<String>>,
     #[serde(default)]
     extra_body: Option<ExtraBodyConfig>,
     #[serde(default)]
@@ -641,6 +644,7 @@ impl UninitializedLLMJudgeVariantConfig {
                             frequency_penalty: params.evaluator.frequency_penalty,
                             seed: params.evaluator.seed,
                             json_mode: Some(params.evaluator.json_mode),
+                            stop_sequences: params.evaluator.stop_sequences,
                             retries: params.evaluator.retries,
                             extra_body: params.evaluator.extra_body,
                             extra_headers: params.evaluator.extra_headers,
@@ -695,6 +699,7 @@ impl UninitializedLLMJudgeVariantConfig {
                             seed: params.fuser.seed,
                             json_mode: Some(params.fuser.json_mode),
                             retries: params.fuser.retries,
+                            stop_sequences: params.fuser.stop_sequences,
                             extra_body: params.fuser.extra_body,
                             extra_headers: params.fuser.extra_headers,
                         },
@@ -729,6 +734,7 @@ impl UninitializedLLMJudgeVariantConfig {
                     extra_body: params.extra_body,
                     extra_headers: params.extra_headers,
                     retries: params.retries,
+                    stop_sequences: params.stop_sequences,
                 }))
             }
             UninitializedLLMJudgeVariantConfig::ChainOfThought(params) => {
@@ -792,6 +798,7 @@ fn check_convert_variant_to_llm_judge_variant(
                     seed: variant.seed,
                     json_mode: JsonMode::Off,
                     retries: variant.retries,
+                    stop_sequences: variant.stop_sequences,
                     extra_body: variant.extra_body,
                     extra_headers: variant.extra_headers,
                 },
@@ -815,6 +822,7 @@ fn check_convert_variant_to_llm_judge_variant(
                         seed: variant.evaluator.inner.seed,
                         json_mode: JsonMode::Off,
                         retries: variant.evaluator.inner.retries,
+                        stop_sequences: variant.evaluator.inner.stop_sequences,
                         extra_body: variant.evaluator.inner.extra_body,
                         extra_headers: variant.evaluator.inner.extra_headers,
                     },
@@ -839,6 +847,7 @@ fn check_convert_variant_to_llm_judge_variant(
                         seed: variant.fuser.inner.seed,
                         json_mode: JsonMode::Off,
                         retries: variant.fuser.inner.retries,
+                        stop_sequences: variant.fuser.inner.stop_sequences,
                         extra_body: variant.fuser.inner.extra_body,
                         extra_headers: variant.fuser.inner.extra_headers,
                     },
@@ -862,6 +871,7 @@ fn check_convert_variant_to_llm_judge_variant(
                 extra_body: variant.extra_body,
                 extra_headers: variant.extra_headers,
                 retries: variant.retries,
+                stop_sequences: variant.stop_sequences,
             },
         )),
         VariantConfig::ChainOfThought(variant) => {
@@ -879,6 +889,7 @@ fn check_convert_variant_to_llm_judge_variant(
                         seed: variant.inner.seed,
                         json_mode: JsonMode::Off,
                         retries: variant.inner.retries,
+                        stop_sequences: variant.inner.stop_sequences,
                         extra_body: variant.inner.extra_body,
                         extra_headers: variant.inner.extra_headers,
                     },
@@ -1003,6 +1014,7 @@ mod tests {
                         retries: RetryConfig::default(),
                         extra_body: Default::default(),
                         extra_headers: Default::default(),
+                        stop_sequences: None,
                     },
                 ),
             );
@@ -1124,6 +1136,7 @@ mod tests {
                         retries: RetryConfig::default(),
                         extra_body: Default::default(),
                         extra_headers: Default::default(),
+                        stop_sequences: None,
                     },
                 ),
             );
@@ -1273,6 +1286,7 @@ mod tests {
                         retries: RetryConfig::default(),
                         extra_body: Default::default(),
                         extra_headers: Default::default(),
+                        stop_sequences: None,
                     },
                 ),
             );
@@ -1297,6 +1311,7 @@ mod tests {
                         retries: RetryConfig::default(),
                         extra_body: Default::default(),
                         extra_headers: Default::default(),
+                        stop_sequences: None,
                     },
                 ),
             );
@@ -1409,6 +1424,7 @@ mod tests {
                         retries: RetryConfig::default(),
                         extra_body: Default::default(),
                         extra_headers: Default::default(),
+                        stop_sequences: None,
                     },
                 ),
             );
@@ -1476,6 +1492,7 @@ mod tests {
                         retries: RetryConfig::default(),
                         extra_body: Default::default(),
                         extra_headers: Default::default(),
+                        stop_sequences: None,
                     },
                 ),
             );
@@ -1545,6 +1562,7 @@ mod tests {
                         retries: RetryConfig::default(),
                         extra_body: Default::default(),
                         extra_headers: Default::default(),
+                        stop_sequences: None,
                     },
                 ),
             );

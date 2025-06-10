@@ -511,6 +511,8 @@ struct MistralRequest<'a> {
     tools: Option<Vec<MistralTool<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_choice: Option<MistralToolChoice>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stop: Option<Cow<'a, [String]>>,
 }
 
 impl<'a> MistralRequest<'a> {
@@ -540,6 +542,7 @@ impl<'a> MistralRequest<'a> {
             response_format,
             tools,
             tool_choice,
+            stop: request.borrow_stop_sequences(),
         })
     }
 }
@@ -909,6 +912,7 @@ mod tests {
             response_format: Some(MistralResponseFormat::JsonObject),
             tools: None,
             tool_choice: None,
+            stop: None,
         };
         let raw_request = serde_json::to_string(&request_body).unwrap();
         let raw_response = "test_response".to_string();
@@ -1003,6 +1007,7 @@ mod tests {
             response_format: Some(MistralResponseFormat::JsonObject),
             tools: None,
             tool_choice: None,
+            stop: None,
         };
         let raw_request = serde_json::to_string(&request_body).unwrap();
         let result = ProviderInferenceResponse::try_from(MistralResponseWithMetadata {
@@ -1064,6 +1069,7 @@ mod tests {
             response_format: Some(MistralResponseFormat::JsonObject),
             tools: None,
             tool_choice: None,
+            stop: None,
         };
         let result = ProviderInferenceResponse::try_from(MistralResponseWithMetadata {
             response: invalid_response_no_choices,
@@ -1115,6 +1121,7 @@ mod tests {
             response_format: Some(MistralResponseFormat::JsonObject),
             tools: None,
             tool_choice: None,
+            stop: None,
         };
         let result = ProviderInferenceResponse::try_from(MistralResponseWithMetadata {
             response: invalid_response_multiple_choices,

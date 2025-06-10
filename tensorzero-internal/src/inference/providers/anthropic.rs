@@ -647,6 +647,8 @@ struct AnthropicRequestBody<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     top_p: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    stop_sequences: Option<Cow<'a, [String]>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     tool_choice: Option<AnthropicToolChoice<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<Vec<AnthropicTool<'a>>>,
@@ -713,6 +715,7 @@ impl<'a> AnthropicRequestBody<'a> {
             top_p: request.top_p,
             tool_choice,
             tools,
+            stop_sequences: request.borrow_stop_sequences(),
         })
     }
 }
@@ -926,7 +929,7 @@ impl From<AnthropicStopReason> for FinishReason {
         match value {
             AnthropicStopReason::EndTurn => FinishReason::Stop,
             AnthropicStopReason::MaxTokens => FinishReason::Length,
-            AnthropicStopReason::StopSequence => FinishReason::Stop,
+            AnthropicStopReason::StopSequence => FinishReason::StopSequence,
             AnthropicStopReason::ToolUse => FinishReason::ToolCall,
             AnthropicStopReason::Unknown => FinishReason::Unknown,
         }
@@ -1556,6 +1559,7 @@ mod tests {
                 top_p: None,
                 tool_choice: None,
                 tools: None,
+                stop_sequences: None,
             }
         );
 
@@ -1606,6 +1610,7 @@ mod tests {
                 top_p: None,
                 tool_choice: None,
                 tools: None,
+                stop_sequences: None,
             }
         );
 
@@ -1660,6 +1665,7 @@ mod tests {
                 top_p: None,
                 tool_choice: None,
                 tools: None,
+                stop_sequences: None,
             }
         );
 
@@ -2029,6 +2035,7 @@ mod tests {
             temperature: None,
             tool_choice: None,
             tools: None,
+            stop_sequences: None,
         };
         let raw_response = "{\"foo\": \"bar\"}".to_string();
         let input_messages = vec![RequestMessage {
@@ -2090,6 +2097,7 @@ mod tests {
             top_p: Some(0.5),
             tool_choice: None,
             tools: None,
+            stop_sequences: None,
         };
         let input_messages = vec![RequestMessage {
             role: Role::Assistant,
@@ -2163,6 +2171,7 @@ mod tests {
             top_p: Some(0.5),
             tool_choice: None,
             tools: None,
+            stop_sequences: None,
         };
         let input_messages = vec![RequestMessage {
             role: Role::User,

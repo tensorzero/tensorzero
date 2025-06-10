@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::sync::OnceLock;
 
 use futures::{StreamExt, TryStreamExt};
@@ -358,6 +359,8 @@ struct XAIRequest<'a> {
     tools: Option<Vec<OpenAITool<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_choice: Option<OpenAIToolChoice<'a>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stop: Option<Cow<'a, [String]>>,
 }
 
 impl<'a> XAIRequest<'a> {
@@ -402,6 +405,7 @@ impl<'a> XAIRequest<'a> {
             stream_options,
             tools,
             tool_choice,
+            stop: request.borrow_stop_sequences(),
         })
     }
 }

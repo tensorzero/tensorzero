@@ -500,6 +500,11 @@ where
                 json_mode: json_mode.unwrap_or(JsonMode::Off).into(),
                 function_type: FunctionType::Chat,
                 output_schema: inference_config.dynamic_output_schema.map(|v| &v.value),
+                stop_sequences: inference_params
+                    .chat_completion
+                    .stop_sequences
+                    .clone()
+                    .map(Cow::Owned),
                 extra_body,
                 extra_headers,
                 extra_cache_key: inference_config.extra_cache_key.clone(),
@@ -536,6 +541,11 @@ where
                 json_mode: json_mode.unwrap_or(JsonMode::Strict).into(),
                 function_type: FunctionType::Json,
                 output_schema,
+                stop_sequences: inference_params
+                    .chat_completion
+                    .stop_sequences
+                    .clone()
+                    .map(Cow::Owned),
                 extra_body,
                 extra_headers,
                 extra_cache_key: inference_config.extra_cache_key.clone(),
@@ -737,6 +747,7 @@ mod tests {
                 frequency_penalty: Some(0.0),
                 seed: Some(42),
                 json_mode: None,
+                stop_sequences: None,
             },
         };
 

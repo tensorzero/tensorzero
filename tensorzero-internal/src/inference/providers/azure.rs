@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::sync::OnceLock;
 
 use futures::{StreamExt, TryStreamExt};
@@ -379,6 +380,8 @@ struct AzureRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     top_p: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    stop: Option<Cow<'a, [String]>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     presence_penalty: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     frequency_penalty: Option<f32>,
@@ -404,6 +407,7 @@ impl<'a> AzureRequest<'a> {
             messages,
             temperature: request.temperature,
             top_p: request.top_p,
+            stop: request.borrow_stop_sequences(),
             presence_penalty: request.presence_penalty,
             frequency_penalty: request.frequency_penalty,
             max_tokens: request.max_tokens,

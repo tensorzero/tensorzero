@@ -342,6 +342,8 @@ struct VLLMRequest<'a> {
     guided_json: Option<&'a Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     seed: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stop: Option<Cow<'a, [String]>>,
 }
 
 impl<'a> VLLMRequest<'a> {
@@ -386,6 +388,7 @@ impl<'a> VLLMRequest<'a> {
             stream_options,
             guided_json,
             seed: request.seed,
+            stop: request.borrow_stop_sequences(),
         })
     }
 }

@@ -369,6 +369,8 @@ struct FireworksRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     frequency_penalty: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    stop: Option<Cow<'a, [String]>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     max_tokens: Option<u32>,
     stream: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -405,6 +407,7 @@ impl<'a> FireworksRequest<'a> {
             top_p: request.top_p,
             presence_penalty: request.presence_penalty,
             frequency_penalty: request.frequency_penalty,
+            stop: request.borrow_stop_sequences(),
             max_tokens: request.max_tokens,
             stream: request.stream,
             response_format,

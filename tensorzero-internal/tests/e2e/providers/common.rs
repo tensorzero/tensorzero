@@ -24,13 +24,14 @@ use tensorzero::{
     CacheParamsOptions, ClientInferenceParams, ClientInput, ClientInputMessage,
     ClientInputMessageContent, InferenceOutput, InferenceResponse,
 };
+use tensorzero_internal::endpoints::inference::ChatCompletionInferenceParams;
 
 use tensorzero_internal::endpoints::object_storage::{
     get_object_handler, ObjectResponse, PathParams,
 };
 
 use tensorzero_internal::gateway_util::AppStateData;
-use tensorzero_internal::inference::types::TextKind;
+use tensorzero_internal::inference::types::{FinishReason, TextKind};
 use tensorzero_internal::{
     cache::CacheEnabledMode,
     inference::types::{
@@ -207,6 +208,7 @@ macro_rules! generate_provider_tests {
         use $crate::providers::common::test_multiple_text_blocks_in_message_with_provider;
         use $crate::providers::common::test_streaming_include_original_response_with_provider;
         use $crate::providers::common::test_pdf_inference_with_provider_filesystem;
+        use $crate::providers::common::test_stop_sequences_inference_request_with_provider;
 
         #[tokio::test]
         async fn test_simple_inference_request() {
@@ -426,6 +428,14 @@ macro_rules! generate_provider_tests {
             }
         }
         $crate::make_gateway_test_functions!(test_dynamic_tool_use_inference_request);
+
+        async fn test_stop_sequences_inference_request(client: tensorzero::Client) {
+            let providers = $func().await.simple_inference;
+            for provider in providers {
+                test_stop_sequences_inference_request_with_provider(provider, &client).await;
+            }
+        }
+        $crate::make_gateway_test_functions!(test_stop_sequences_inference_request);
 
         async fn test_dynamic_tool_use_streaming_inference_request(client: tensorzero::Client) {
             let providers = $func().await.dynamic_tool_use_inference;
@@ -7913,6 +7923,129 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
         }
         _ => {
             panic!("Expected a text block, got {first:?}");
+        }
+    }
+}
+
+pub async fn test_stop_sequences_inference_request_with_provider(
+    provider: E2ETestProvider,
+    client: &tensorzero::Client,
+) {
+    let episode_id = Uuid::now_v7();
+    let extra_headers = get_extra_headers();
+
+    let response = client
+        .inference(tensorzero::ClientInferenceParams {
+            function_name: Some("basic_test".to_string()),
+            model_name: None,
+            variant_name: Some(provider.variant_name.clone()),
+            episode_id: Some(episode_id),
+            input: tensorzero::ClientInput {
+                system: Some(json!({"assistant_name": "Dr. Mehta"})),
+                messages: vec![tensorzero::ClientInputMessage {
+                    role: Role::User,
+                    content: vec![tensorzero::ClientInputMessageContent::Text(
+                        TextKind::Text {
+                            text: "Write me a short sentence ending with the word TensorZero. Don't say anything else."
+                                .to_string(),
+                        },
+                    )],
+                }],
+            },
+            extra_headers,
+            params: tensorzero::InferenceParams {
+                chat_completion: ChatCompletionInferenceParams {
+                    stop_sequences: Some(vec!["TensorZero".to_string()]),
+                    ..Default::default()
+                }
+            },
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+
+    match response {
+        tensorzero::InferenceOutput::NonStreaming(response) => {
+            let InferenceResponse::Chat(response) = response else {
+                panic!("Expected a chat response");
+            };
+
+            // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+            // Check ClickHouse - ChatInference Table
+            let clickhouse = get_clickhouse().await;
+
+            println!("Response: {response:#?}");
+
+            let model_inference =
+                select_model_inference_clickhouse(&clickhouse, response.inference_id)
+                    .await
+                    .unwrap();
+            println!("Model inference: {model_inference:#?}");
+
+            let chat_inference =
+                select_chat_inference_clickhouse(&clickhouse, response.inference_id)
+                    .await
+                    .unwrap();
+            println!("Chat inference: {chat_inference:#?}");
+
+            // Just check 'stop_sequences', as we check ModelInference and ChatInference in lots of other tests
+            let inference_params = chat_inference
+                .get("inference_params")
+                .unwrap()
+                .as_str()
+                .unwrap();
+            let inference_params: Value = serde_json::from_str(inference_params).unwrap();
+            let inference_params = inference_params.get("chat_completion").unwrap();
+            let stop_sequences = inference_params
+                .get("stop_sequences")
+                .unwrap()
+                .as_array()
+                .unwrap();
+            assert_eq!(stop_sequences.len(), 1);
+            assert_eq!(stop_sequences[0].as_str().unwrap(), "TensorZero");
+
+            // Only some providers have a stop_sequence finish reason -
+            // other providers will just give us 'stop'
+            const MISSING_STOP_SEQUENCE_PROVIDERS: &[&str] = &[
+                "fireworks",
+                "vllm",
+                "sglang",
+                "mistral",
+                "gcp_vertex_gemini",
+                "google_ai_studio_gemini",
+                "xai",
+                "together",
+                "deepseek",
+                "openrouter",
+                "openai",
+                "sglang",
+                "mistral",
+                "azure",
+                "groq",
+                "hyperbolic",
+            ];
+            if MISSING_STOP_SEQUENCE_PROVIDERS.contains(&provider.model_provider_name.as_str())
+                || provider.model_name == "gemma-3-1b-aws-sagemaker-openai"
+            {
+                assert_eq!(response.finish_reason, Some(FinishReason::Stop));
+            } else {
+                assert_eq!(response.finish_reason, Some(FinishReason::StopSequence));
+            }
+            // TGI gives us a finish_reason of StopSequence, but still include the stop sequence in the response
+            if !(provider.model_provider_name == "tgi"
+                || provider.model_name == "gemma-3-1b-aws-sagemaker-tgi")
+            {
+                let json = serde_json::to_string(&response).unwrap();
+                assert!(
+                    !json.to_lowercase().contains("tensorzero"),
+                    "TensorZero should not be in the response: `{json}`"
+                );
+            }
+        }
+        tensorzero::InferenceOutput::Streaming(_) => {
+            panic!("Unexpected streaming response");
         }
     }
 }
