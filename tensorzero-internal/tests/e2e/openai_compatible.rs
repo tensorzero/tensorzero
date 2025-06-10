@@ -963,3 +963,46 @@ async fn test_openai_compatible_streaming() {
         assert_eq!(response_model, "tensorzero::model_name::openai::gpt-4o");
     }
 }
+
+// Test using 'stop' parameter in the openai-compatible endpoint
+#[tokio::test]
+async fn test_openai_compatible_stop_sequence() {
+    let client = Client::new();
+
+    let payload = json!({
+        "model": "tensorzero::model_name::anthropic::claude-3-7-sonnet-20250219",
+        "messages": [
+            {
+                "role": "user",
+                "content": "Output 'Hello' followed by either 'zero' or 'one'. Do not output anything else"
+            }
+        ],
+        "stop": ["zero", "one"],
+        "stream": false,
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/openai/v1/chat/completions"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    let response_json = response.json::<Value>().await.unwrap();
+
+    println!("API response: {response_json}");
+    let finish_reason = response_json["choices"][0]["finish_reason"]
+        .as_str()
+        .unwrap();
+    assert_eq!(finish_reason, "stop");
+    let output = response_json["choices"][0]["message"]["content"]
+        .as_str()
+        .unwrap();
+    assert!(output.contains("Hello"), "Unexpected output: {output}");
+    assert!(
+        !output.contains("zero") && !output.contains("one"),
+        "Unexpected output: {output}"
+    );
+
+    // We don't bother checking ClickHouse, as we do that in lots of other tests
+}
