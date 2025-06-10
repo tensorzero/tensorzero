@@ -33,8 +33,6 @@ Take a look at the server running on `http://localhost:14000` to see what your r
 <details>
 <summary>Intercepting Cursor Tab Requests</summary>
 
-> [!NOTE]
->
 > This section is mostly for reference.
 > You do not need to do this to run the Cursor integration today.
 
@@ -47,5 +45,7 @@ Take a look at the server running on `http://localhost:14000` to see what your r
 ## A Haiku about This Integration
 
 _Cursor calls go through_
+
 _TensorZero watches them_
+
 _See the requests flow_
