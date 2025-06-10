@@ -215,7 +215,7 @@ routing = ["gcp_vertex_gemini"]
 [models."gemini-2.5-pro-preview-05-06".providers.gcp_vertex_gemini]
 type = "gcp_vertex_gemini"
 model_id = "gemini-2.5-pro-preview-05-06"
-location = "us-central1"
+location = "global"
 project_id = "tensorzero-public"
 
 

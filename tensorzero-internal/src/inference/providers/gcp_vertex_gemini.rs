@@ -344,6 +344,17 @@ pub fn parse_shorthand_url<'a>(
     }
 }
 
+// The global endpoint uses 'aiplatform.googleapis.com', while every other location
+// location uses '{location}-aiplatform.googleapis.com':
+// https://cloud.google.com/vertex-ai/generative-ai/docs/learn/locations
+fn location_subdomain_prefix(location: &str) -> String {
+    if location == "global" {
+        "".to_string()
+    } else {
+        format!("{location}-")
+    }
+}
+
 impl GCPVertexGeminiProvider {
     // Constructs a provider from a shorthand string of the form:
     // * 'projects/<project_id>/locations/<location>/publishers/google/models/XXX'
@@ -383,13 +394,15 @@ impl GCPVertexGeminiProvider {
             ),
         };
 
+        let location_prefix = location_subdomain_prefix(location);
+
         let request_url = format!(
-            "https://{location}-aiplatform.googleapis.com/v1/{project_url_path}:generateContent"
+            "https://{location_prefix}aiplatform.googleapis.com/v1/{project_url_path}:generateContent"
         );
-        let streaming_request_url = format!("https://{location}-aiplatform.googleapis.com/v1/{project_url_path}:streamGenerateContent?alt=sse");
-        let audience = format!("https://{location}-aiplatform.googleapis.com/");
+        let streaming_request_url = format!("https://{location_prefix}aiplatform.googleapis.com/v1/{project_url_path}:streamGenerateContent?alt=sse");
+        let audience = format!("https://{location_prefix}aiplatform.googleapis.com/");
         let api_v1_base_url = Url::parse(&format!(
-            "https://{location}-aiplatform.googleapis.com/v1/"
+            "https://{location_prefix}aiplatform.googleapis.com/v1/"
         ))
         .map_err(|e| {
             Error::new(ErrorDetails::InternalError {
@@ -433,8 +446,10 @@ impl GCPVertexGeminiProvider {
             )?
         };
 
+        let location_prefix = location_subdomain_prefix(&location);
+
         let api_v1_base_url = Url::parse(&format!(
-            "https://{location}-aiplatform.googleapis.com/v1/"
+            "https://{location_prefix}aiplatform.googleapis.com/v1/"
         ))
         .map_err(|e| {
             Error::new(ErrorDetails::InternalError {
@@ -442,14 +457,14 @@ impl GCPVertexGeminiProvider {
             })
         })?;
         let (model_or_endpoint_id, request_url, streaming_request_url) = match (&model_id, &endpoint_id) {
-            (Some(model_id), None) => (model_id.clone(), format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model_id}:generateContent"),
-                                               format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model_id}:streamGenerateContent?alt=sse")),
-            (None, Some(endpoint_id)) => (endpoint_id.clone(), format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/endpoints/{endpoint_id}:generateContent"),
-                                                  format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/endpoints/{endpoint_id}:streamGenerateContent?alt=sse")),
+            (Some(model_id), None) => (model_id.clone(), format!("https://{location_prefix}aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model_id}:generateContent"),
+                                               format!("https://{location_prefix}aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model_id}:streamGenerateContent?alt=sse")),
+            (None, Some(endpoint_id)) => (endpoint_id.clone(), format!("https://{location_prefix}aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/endpoints/{endpoint_id}:generateContent"),
+                                                  format!("https://{location_prefix}aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/endpoints/{endpoint_id}:streamGenerateContent?alt=sse")),
             _ => return Err(ErrorDetails::InvalidProviderConfig { message: "Exactly one of model_id or endpoint_id must be provided".to_string() }.into())
         };
 
-        let audience = format!("https://{location}-aiplatform.googleapis.com/");
+        let audience = format!("https://{location_prefix}aiplatform.googleapis.com/");
 
         let batch_config = match &provider_types.gcp_vertex_gemini {
             Some(GCPProviderTypeConfig { batch: Some(GCPBatchConfigType::CloudStorage(GCPBatchConfigCloudStorage {
@@ -459,7 +474,7 @@ impl GCPVertexGeminiProvider {
                 Some(BatchConfig {
                     input_uri_prefix: input_uri_prefix.clone(),
                     output_uri_prefix: output_uri_prefix.clone(),
-                    batch_request_url: format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/batchPredictionJobs"),
+                    batch_request_url: format!("https://{location_prefix}aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/batchPredictionJobs"),
                 })
             }
             _ => None,
