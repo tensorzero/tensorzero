@@ -1454,6 +1454,12 @@ pub struct CollectChunksArgs<'a, 'b> {
     pub model_name: Arc<str>,
     pub model_provider_name: Arc<str>,
     pub raw_request: String,
+    /// We may sometimes construct a fake stream from a non-streaming response
+    /// (e.g. in `mixture_of_n` if we have a successful non-streaming candidate, but
+    /// a streaming fuser request fails).
+    /// In this case, we want to store the original 'raw_response', instead of building
+    /// it up from the chunks.
+    pub raw_response: Option<String>,
     pub inference_params: InferenceParams,
     pub system: Option<String>,
     pub input_messages: Vec<RequestMessage>,
@@ -1478,6 +1484,7 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
         model_name,
         model_provider_name,
         raw_request,
+        raw_response,
         inference_params,
         system,
         input_messages,
@@ -1504,11 +1511,15 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
     // are not reordered.
     let mut blocks: IndexMap<(ContentBlockOutputType, String), ContentBlockOutput> =
         IndexMap::new();
-    let raw_response: String = value
-        .iter()
-        .map(|chunk| chunk.raw_response())
-        .collect::<Vec<&str>>()
-        .join("\n");
+    // If the variant gave us an explicit 'raw_response', use that.
+    // Otherwise, concatenate the raw_response from each chunk.
+    let raw_response = raw_response.unwrap_or_else(|| {
+        value
+            .iter()
+            .map(|chunk| chunk.raw_response())
+            .collect::<Vec<&str>>()
+            .join("\n")
+    });
     let mut usage: Usage = Usage::default();
     let mut ttft: Option<Duration> = None;
     let response_time = value
@@ -2520,6 +2531,7 @@ mod tests {
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
             raw_request: raw_request.clone(),
+            raw_response: None,
             inference_params: InferenceParams::default(),
             function_name: "",
             variant_name: "",
@@ -2584,6 +2596,7 @@ mod tests {
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
             raw_request: raw_request.clone(),
+            raw_response: None,
             inference_params: InferenceParams::default(),
             function_name: "",
             variant_name: "",
@@ -2680,6 +2693,7 @@ mod tests {
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
             raw_request: raw_request.clone(),
+            raw_response: None,
             inference_params: InferenceParams::default(),
             function_name: "",
             variant_name: "",
@@ -2759,6 +2773,7 @@ mod tests {
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
             raw_request: raw_request.clone(),
+            raw_response: None,
             inference_params: InferenceParams::default(),
             function_name: "",
             variant_name: "",
@@ -2840,6 +2855,7 @@ mod tests {
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
             raw_request: raw_request.clone(),
+            raw_response: None,
             inference_params: InferenceParams::default(),
             function_name: "",
             variant_name: "",
@@ -2944,6 +2960,7 @@ mod tests {
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
             raw_request: raw_request.clone(),
+            raw_response: None,
             inference_params: InferenceParams::default(),
             function_name: "",
             variant_name: "",
@@ -3052,6 +3069,7 @@ mod tests {
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
             raw_request: raw_request.clone(),
+            raw_response: None,
             inference_params: InferenceParams::default(),
             function_name: "",
             variant_name: "",
@@ -3184,6 +3202,7 @@ mod tests {
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
             raw_request: raw_request.clone(),
+            raw_response: None,
             inference_params: InferenceParams::default(),
             function_name: "",
             variant_name: "",
@@ -3295,6 +3314,7 @@ mod tests {
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
             raw_request: raw_request.clone(),
+            raw_response: None,
             inference_params: InferenceParams::default(),
             function_name: "",
             variant_name: "",
@@ -3380,6 +3400,7 @@ mod tests {
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
             raw_request: raw_request.clone(),
+            raw_response: None,
             inference_params: InferenceParams::default(),
             function_name: "",
             variant_name: "",
@@ -3456,6 +3477,7 @@ mod tests {
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
             raw_request: raw_request.clone(),
+            raw_response: None,
             inference_params: InferenceParams::default(),
             function_name: "",
             variant_name: "",
@@ -3536,6 +3558,7 @@ mod tests {
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
             raw_request: raw_request.clone(),
+            raw_response: None,
             inference_params: InferenceParams::default(),
             function_name: "",
             variant_name: "",
@@ -3600,6 +3623,7 @@ mod tests {
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
             raw_request: raw_request.clone(),
+            raw_response: None,
             inference_params: InferenceParams::default(),
             function_name: "",
             variant_name: "",
@@ -3716,6 +3740,7 @@ mod tests {
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
             raw_request: raw_request.clone(),
+            raw_response: None,
             inference_params: InferenceParams::default(),
             function_name: "",
             variant_name: "",
