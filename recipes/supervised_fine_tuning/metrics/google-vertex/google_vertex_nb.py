@@ -40,9 +40,9 @@ MAX_SAMPLES = 100_000
 MODEL_NAME = "gemini-2.0-flash-lite-001"
 
 # Google Cloud Variables
-PROJECT_ID = "<gcp-project-id>"
-LOCATION = "<gcp-region>"  # For example, "us-central1"
-BUCKET_NAME = "<gcp-bucket-name>"
+PROJECT_ID = "alpine-realm-415615"
+LOCATION = "us-central1"
+BUCKET_NAME = "tensorzero-fine-tuning"
 
 # %%
 import json
@@ -57,11 +57,19 @@ import numpy as np
 import pandas as pd
 import toml
 import vertexai
-from clickhouse_connect import get_client
 from google.cloud import storage
 from google.cloud.aiplatform_v1.types import JobState
 from IPython.display import clear_output
-from minijinja import Environment
+from tensorzero import (
+    BooleanMetricNode,
+    FloatMetricNode,
+    RawText,
+    TensorZeroGateway,
+    Text,
+    Thought,
+    ToolCall,
+    ToolResult,
+)
 from tensorzero.util import uuid7
 from vertexai.tuning import sft
 
@@ -70,6 +78,16 @@ from vertexai.tuning import sft
 
 # %%
 vertexai.init(project=PROJECT_ID, location=LOCATION)
+
+# %% [markdown]
+# Initialize the TensorZero client
+
+# %%
+tensorzero_client = TensorZeroGateway.build_embedded(
+    config_file=CONFIG_PATH,
+    clickhouse_url=os.environ["TENSORZERO_CLICKHOUSE_URL"],
+    timeout=15,
+)
 
 # %% [markdown]
 # Load the TensorZero configuration file.
@@ -85,21 +103,7 @@ with config_path.open("r") as f:
     config = toml.load(f)
 
 # %% [markdown]
-# Retrieve the metric configuration.
-
-# %%
-assert "metrics" in config, "No `[metrics]` section found in config"
-assert METRIC_NAME in config["metrics"], (
-    f"No metric named `{METRIC_NAME}` found in config"
-)
-
-metric = config["metrics"][METRIC_NAME]
-
-metric
-
-# %% [markdown]
-# Retrieve the configuration for the variant with the templates we'll use for fine-tuning.
-#
+# Valudate config
 
 # %%
 assert "functions" in config, "No `[functions]` section found in config"
@@ -113,296 +117,213 @@ assert TEMPLATE_VARIANT_NAME in config["functions"][FUNCTION_NAME]["variants"], 
     f"No variant named `{TEMPLATE_VARIANT_NAME}` found in function `{FUNCTION_NAME}`"
 )
 
-function_type = config["functions"][FUNCTION_NAME]["type"]
 variant = config["functions"][FUNCTION_NAME]["variants"][TEMPLATE_VARIANT_NAME]
 
 variant
 
 # %% [markdown]
-# Retrieve the system, user, and assistant templates in the variant (if any), and initialize a minijinja environment with them.
-#
+# Retrieve the metric configuration.
 
 # %%
-templates = {}
-
-if "assistant_template" in variant:
-    assistant_template_path = config_path.parent / variant["assistant_template"]
-    with assistant_template_path.open("r") as f:
-        templates["assistant"] = f.read()
-
-if "system_template" in variant:
-    system_template_path = config_path.parent / variant["system_template"]
-    with system_template_path.open("r") as f:
-        templates["system"] = f.read()
-
-if "user_template" in variant:
-    user_template_path = config_path.parent / variant["user_template"]
-    with user_template_path.open("r") as f:
-        templates["user"] = f.read()
-
-env = Environment(templates=templates)
-
-# %% [markdown]
-# Initialize the ClickHouse client.
-#
-
-# %%
-assert "TENSORZERO_CLICKHOUSE_URL" in os.environ, (
-    "TENSORZERO_CLICKHOUSE_URL environment variable not set"
+assert "metrics" in config, "No `[metrics]` section found in config"
+assert METRIC_NAME in config["metrics"], (
+    f"No metric named `{METRIC_NAME}` found in config"
 )
 
-clickhouse_client = get_client(dsn=os.environ["TENSORZERO_CLICKHOUSE_URL"])
+metric = config["metrics"][METRIC_NAME]
+
+metric
 
 # %% [markdown]
-# Determine the ClickHouse table name for the function.
-#
-
-# %%
-inference_table_name = {"chat": "ChatInference", "json": "JsonInference"}.get(
-    function_type
-)
-
-if inference_table_name is None:
-    raise ValueError(f"Unsupported function type: {function_type}")
-
-# %% [markdown]
-# Determine the ClickHouse table name for the metric.
-
-# %%
-feedback_table_name = {
-    "float": "FloatMetricFeedback",
-    "boolean": "BooleanMetricFeedback",
-}.get(metric["type"])
-
-if feedback_table_name is None:
-    raise ValueError(f"Unsupported metric type: {metric['type']}")
-
-# %% [markdown]
-# Determine the correct join key to use for the metric on the inference table.
-#
-
-# %%
-inference_join_key = {
-    "episode": "episode_id",
-    "inference": "id",
-}.get(metric["level"])
-
-if inference_join_key is None:
-    raise ValueError(f"Unsupported metric level: {metric['level']}")
-
-# %% [markdown]
-# Query the inferences and feedback from ClickHouse.
-#
-# If the metric is a float metric, we need to filter the data based on the threshold.
-#
+# Set the metric filter
 
 # %%
 assert "optimize" in metric, "Metric is missing the `optimize` field"
 
-threshold = FLOAT_METRIC_THRESHOLD if metric["type"] == "float" else 0.5
-comparison_operator = ">=" if metric["optimize"] == "max" else "<="
+if metric.get("type") == "float":
+    comparison_operator = ">=" if metric["optimize"] == "max" else "<="
+    metric_node = FloatMetricNode(
+        metric_name=METRIC_NAME,
+        value=FLOAT_METRIC_THRESHOLD,
+        comparison_operator=comparison_operator,
+    )
+elif metric.get("type") == "boolean":
+    metric_node = BooleanMetricNode(
+        metric_name=METRIC_NAME,
+        value=True if metric["optimize"] == "max" else False,
+    )
 
-query = f"""
-SELECT
-    i.variant_name,
-    i.input,
-    i.output,
-    f.value,
-    i.episode_id
-FROM
-    {inference_table_name} i
-JOIN
-    (SELECT
-        target_id,
-        value,
-        ROW_NUMBER() OVER (PARTITION BY target_id ORDER BY timestamp DESC) as rn
-    FROM
-        {feedback_table_name}
-    WHERE
-        metric_name = %(metric_name)s
-        AND value {comparison_operator} %(threshold)s
-    ) f ON i.{inference_join_key} = f.target_id and f.rn = 1
-WHERE
-    i.function_name = %(function_name)s
-LIMIT %(max_samples)s
-"""
-
-params = {
-    "function_name": FUNCTION_NAME,
-    "metric_name": METRIC_NAME,
-    "comparison_operator": comparison_operator,
-    "threshold": threshold,
-    "max_samples": MAX_SAMPLES,
-}
-
-df = clickhouse_client.query_df(query, params)
-
-df.head()
+metric_node
 
 # %% [markdown]
-# Render the inputs using the templates.
-#
+# Query the inferences and feedback from ClickHouse.
+
+# %%
+stored_inferences = tensorzero_client.experimental_list_inferences(
+    function_name=FUNCTION_NAME,
+    variant_name=None,
+    filters=metric_node,
+    limit=MAX_SAMPLES,
+)
+
+# %% [markdown]
+# Render the stored inferences
+
+# %%
+rendered_inferences = tensorzero_client.experimental_render_inferences(
+    stored_inferences=stored_inferences,
+    variants={FUNCTION_NAME: TEMPLATE_VARIANT_NAME},
+)
+
+# %% [markdown]
+# Convert inferences to vertex format
 
 # %%
 role_map = {
     "user": "user",
     "assistant": "model",
-    "system": "system",  # The role field of systemInstruction is ignored and doesn't affect the performance of the model.
+    "system": "system",
 }
 
 
-def render_message(message: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    role = message["role"]
-    assert role in ["user", "assistant"], f"Invalid role: {role}"
-    content: List[Dict[str, Any]] = []
+def merge_messages(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Merge consecutive messages with the same role into a single message.
+    """
+    merged: List[Dict[str, Any]] = []
+    for msg in messages:
+        role = msg["role"]
+        parts = msg.get("parts", [])
+        if merged and merged[-1]["role"] == role:
+            merged[-1]["parts"].extend(parts)
+        else:
+            merged.append({"role": role, "parts": list(parts)})
+    return merged
 
-    for content_block in message["content"]:
-        if content_block["type"] == "text":
-            parsed_content = content_block["value"]
-            if not isinstance(parsed_content, str):
-                parsed_content = env.render_template(role, **parsed_content)
-            content.append({"text": parsed_content})
-        elif content_block["type"] == "raw_text":
-            content.append({"text": content_block["value"]})
-        elif content_block["type"] == "thought":
-            content.append({"text": f"<think>{content_block['text']}</think>"})
-        elif content_block["type"] == "tool_call" and role == "assistant":
-            content.append(
+
+def render_chat_message(
+    role: str,
+    content_blocks: List[
+        Any
+    ],  # instances of Text, RawText, Thought, ToolCall, ToolResult
+) -> Optional[Dict[str, Any]]:
+    """
+    Render a single chat message into Google “parts” format.
+    """
+    parts: List[Dict[str, Any]] = []
+    for blk in content_blocks:
+        # plain text
+        if isinstance(blk, Text):
+            parts.append({"text": blk.text})
+        elif isinstance(blk, RawText):  # Verify if needed
+            parts.append({"text": blk.value})
+        # internal “thoughts”
+        elif isinstance(blk, Thought):
+            parts.append({"text": f"<think>{blk.text}</think>"})
+        # function call (assistant only)
+        elif isinstance(blk, ToolCall) and role == "assistant":
+            args = blk.raw_arguments
+            # raw_arguments might already be a dict or JSON string
+            if isinstance(args, str):
+                args = json.loads(args)
+            parts.append(
                 {
                     "functionCall": {
-                        "name": content_block["name"],
-                        "args": json.loads(content_block["arguments"]),
+                        "name": blk.name,
+                        "args": args,
                     }
                 }
             )
-        elif content_block["type"] == "tool_result" and role == "user":
-            content.append(
+        # function result (user only)
+        elif isinstance(blk, ToolResult) and role == "user":
+            parts.append(
                 {
                     "functionResponse": {
-                        "name": content_block["name"],
-                        "response": {"result": content_block["result"]},
+                        "name": blk.name,
+                        "response": {"result": blk.result},
                     }
                 }
             )
         else:
             warnings.warn(
-                f"We do not support content block type: {content_block['type']}, dropping example.",
+                f"Unsupported block type {type(blk)} in role={role}, skipping inference.",
                 UserWarning,
             )
             return None
-
-    return {
-        "role": role_map[role],
-        "parts": content,
-    }
+    return {"role": role_map[role], "parts": parts}
 
 
-def render_output(
-    output: List[Dict[str, Any]],
-) -> Dict[str, Any]:
+def inference_to_google(
+    inf,
+) -> Optional[Dict[str, Any]]:
     """
-    Parses the assistant message from an observation using the provided function configuration.
+    Convert a single rendered_inference into the Google Vertex format dict.
     """
-    content: List[Dict[str, Any]] = []
+    model_input = inf.input
+    rendered_msgs: List[Dict[str, Any]] = []
 
-    if function_type == "json":
-        content.append({"text": output["raw"]})
-    elif function_type == "chat":
-        for content_block in output:
-            if content_block["type"] == "text":
-                content.append({"text": content_block["text"]})
-            elif content_block["type"] == "thought":
-                content.append({"text": f"<think>{content_block['text']}</think>"})
-            elif content_block["type"] == "tool_call":
-                content.append(
-                    {
-                        "functionCall": {
-                            "name": content_block["name"],
-                            "args": content_block["arguments"],
-                        }
-                    }
-                )
-            else:
-                warnings.warn(
-                    f"We do not support content block type: {content_block['type']}, dropping example.",
-                    UserWarning,
-                )
-                return None
+    # 1) systemInstruction
+    if model_input.system:
+        system_instruction = {
+            "role": role_map["system"],
+            "parts": [{"text": model_input.system}],
+        }
     else:
-        raise ValueError(f"Unsupported function type: {function_type}")
+        system_instruction = None
 
-    return {"role": role_map["assistant"], "parts": content}
-
-
-def merge_messages(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """
-    Merge consecutive messages with the same role by concatenating their content.
-
-    Args:
-        messages: List of dicts, each with 'role' (str) and 'content' (List[dict]) keys.
-
-    Returns:
-        A new list of messages where any runs of the same role have had their content lists merged.
-    """
-    merged: List[Dict[str, Any]] = []
-    for msg in messages:
-        role = msg.get("role")
-        parts = msg.get("parts", [])
-        if merged and merged[-1]["role"] == role:
-            # Extend the last message’s content
-            merged[-1]["parts"].extend(parts)
-        else:
-            # Start a new message entry (copy content list to avoid side-effects)
-            merged.append({"role": role, "parts": list(parts)})
-    return merged
-
-
-def sample_to_google_messages(sample) -> List[Dict[str, Any]]:
-    function_input = json.loads(sample["input"])
-
-    rendered_messages = []
-
-    # Add the system message to the rendered messages
-    # If there is data passed in or a system template there must be a system message
-    system = function_input.get("system", {})
-    if len(system) > 0 or system_template_path:
-        if system_template_path:
-            system_message = {
-                "role": role_map["system"],
-                "parts": [{"text": env.render_template("system", **system)}],
-            }
-        else:
-            system_message = {"role": role_map["system"], "parts": [{"text": system}]}
-
-    # Add the input messages to the rendered messages
-    for message in function_input["messages"]:
-        rendered_message = render_message(message)
-        if rendered_message is None:
-            # `render_message` will return None if the message contains an unknown or unsupported content block.
-            # The entire example is dropped if this is the case.
+    # 2) all user/assistant messages
+    for msg in model_input.messages:
+        rendered = render_chat_message(msg.role, msg.content)
+        if rendered is None:
             return None
-        rendered_messages.append(render_message(message))
+        rendered_msgs.append(rendered)
 
-    # Add the output to the messages
-    output = json.loads(sample["output"])
-    rendered_output = render_output(output)
-    if rendered_output is None:
-        # `render_output` will return None if the output contains an unknown or unsupported content block.
-        # The entire example is dropped if this is the case.
-        return None
-    rendered_messages.append(rendered_output)
+    # 3) the assistant’s output
+    #    (same logic as render_chat_message but without ToolResult)
+    out_parts: List[Dict[str, Any]] = []
+    for blk in inf.output:
+        if isinstance(blk, Text):
+            out_parts.append({"text": blk.text})
+        elif isinstance(blk, Thought):
+            out_parts.append({"text": f"<think>{blk.text}</think>"})
+        elif isinstance(blk, ToolCall):
+            args = blk.raw_arguments
+            if isinstance(args, str):
+                args = json.loads(args)
+            out_parts.append(
+                {
+                    "functionCall": {
+                        "name": blk.name,
+                        "args": args,
+                    }
+                }
+            )
+        else:
+            warnings.warn(
+                f"Unsupported output block {type(blk)}, skipping inference.",
+                UserWarning,
+            )
+            return None
+    rendered_msgs.append({"role": role_map["assistant"], "parts": out_parts})
 
-    return {
-        "systemInstruction": system_message,
-        "contents": merge_messages(rendered_messages),
-    }
+    # 4) merge any consecutive roles and return
+    contents = merge_messages(rendered_msgs)
+    result = {"google_messages": {"contents": contents}}
+    if system_instruction:
+        result["google_messages"]["systemInstruction"] = system_instruction
+    # optionally keep track of episode
+    if hasattr(inf, "episode_id"):
+        result["episode_id"] = inf.episode_id
+    return result
 
 
-df["google_messages"] = df.apply(sample_to_google_messages, axis=1)
+google_payloads = []
+for inf in rendered_inferences:
+    payload = inference_to_google(inf)
+    if payload is not None:
+        google_payloads.append(payload)
 
-# Drop null rows
-df = df[df["google_messages"].notna()]
-
+df = pd.DataFrame(google_payloads)
 df.head()
 
 # %% [markdown]
@@ -432,9 +353,6 @@ print(f"Training set size: {len(train_df)}")
 print(f"Validation set size: {len(val_df)}")
 print(f"Actual validation fraction: {len(val_df) / len(df):.2f}")
 
-
-# %% [markdown]
-# Create a google clous storage bucket
 
 # %% [markdown]
 # Upload the training and validation datasets to GCP

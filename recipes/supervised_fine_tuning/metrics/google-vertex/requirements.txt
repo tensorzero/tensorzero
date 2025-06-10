@@ -9,7 +9,7 @@ anyio==4.9.0
     #   jupyter-server
 appnope==0.1.4
     # via ipykernel
-argon2-cffi==23.1.0
+argon2-cffi==25.1.0
     # via jupyter-server
 argon2-cffi-bindings==21.2.0
     # via argon2-cffi
@@ -63,14 +63,14 @@ fastjsonschema==2.21.1
     # via nbformat
 fqdn==1.5.1
     # via jsonschema
-google-api-core==2.24.2
+google-api-core==2.25.0
     # via
     #   google-cloud-aiplatform
     #   google-cloud-bigquery
     #   google-cloud-core
     #   google-cloud-resource-manager
     #   google-cloud-storage
-google-auth==2.40.2
+google-auth==2.40.3
     # via
     #   google-api-core
     #   google-cloud-aiplatform
@@ -79,9 +79,9 @@ google-auth==2.40.2
     #   google-cloud-resource-manager
     #   google-cloud-storage
     #   google-genai
-google-cloud-aiplatform==1.94.0
+google-cloud-aiplatform==1.96.0
     # via -r requirements.in
-google-cloud-bigquery==3.33.0
+google-cloud-bigquery==3.34.0
     # via google-cloud-aiplatform
 google-cloud-core==2.4.3
     # via
@@ -95,7 +95,7 @@ google-crc32c==1.7.1
     # via
     #   google-cloud-storage
     #   google-resumable-media
-google-genai==1.16.1
+google-genai==1.19.0
     # via google-cloud-aiplatform
 google-resumable-media==2.7.2
     # via
@@ -108,13 +108,13 @@ googleapis-common-protos==1.70.0
     #   grpcio-status
 grpc-google-iam-v1==0.14.2
     # via google-cloud-resource-manager
-grpcio==1.71.0
+grpcio==1.73.0
     # via
     #   google-api-core
     #   googleapis-common-protos
     #   grpc-google-iam-v1
     #   grpcio-status
-grpcio-status==1.71.0
+grpcio-status==1.73.0
     # via google-api-core
 h11==0.16.0
     # via httpcore
@@ -135,7 +135,7 @@ ipykernel==6.29.5
     # via
     #   -r requirements.in
     #   jupyterlab
-ipython==8.36.0
+ipython==8.37.0
     # via ipykernel
 isoduration==20.11.0
     # via jsonschema
@@ -151,7 +151,7 @@ json5==0.12.0
     # via jupyterlab-server
 jsonpointer==3.0.0
     # via jsonschema
-jsonschema==4.23.0
+jsonschema==4.24.0
     # via
     #   jupyter-events
     #   jupyterlab-server
@@ -163,7 +163,7 @@ jupyter-client==8.6.3
     #   ipykernel
     #   jupyter-server
     #   nbclient
-jupyter-core==5.7.2
+jupyter-core==5.8.1
     # via
     #   ipykernel
     #   jupyter-client
@@ -185,7 +185,7 @@ jupyter-server==2.16.0
     #   notebook-shim
 jupyter-server-terminals==0.5.3
     # via jupyter-server
-jupyterlab==4.4.2
+jupyterlab==4.4.3
     # via notebook
 jupyterlab-pygments==0.3.0
     # via nbconvert
@@ -218,7 +218,7 @@ nbformat==5.10.4
     #   nbconvert
 nest-asyncio==1.6.0
     # via ipykernel
-notebook==7.4.2
+notebook==7.4.3
     # via -r requirements.in
 notebook-shim==0.2.4
     # via
@@ -241,7 +241,7 @@ packaging==25.0
     #   jupyterlab
     #   jupyterlab-server
     #   nbconvert
-pandas==2.2.3
+pandas==2.3.0
     # via -r requirements.in
 pandocfilters==1.5.1
     # via nbconvert
@@ -251,7 +251,7 @@ pexpect==4.9.0
     # via ipython
 platformdirs==4.3.8
     # via jupyter-core
-prometheus-client==0.22.0
+prometheus-client==0.22.1
     # via jupyter-server
 prompt-toolkit==3.0.51
     # via ipython
@@ -260,7 +260,7 @@ proto-plus==1.26.1
     #   google-api-core
     #   google-cloud-aiplatform
     #   google-cloud-resource-manager
-protobuf==5.29.4
+protobuf==6.31.1
     # via
     #   google-api-core
     #   google-cloud-aiplatform
@@ -319,7 +319,7 @@ referencing==0.36.2
     #   jsonschema
     #   jsonschema-specifications
     #   jupyter-events
-requests==2.32.3
+requests==2.32.4
     # via
     #   google-api-core
     #   google-cloud-bigquery
@@ -342,7 +342,7 @@ rsa==4.9.1
     # via google-auth
 send2trash==1.8.3
     # via jupyter-server
-setuptools==80.8.0
+setuptools==80.9.0
     # via jupyterlab
 shapely==2.1.1
     # via google-cloud-aiplatform
@@ -356,7 +356,7 @@ soupsieve==2.7
     # via beautifulsoup4
 stack-data==0.6.3
     # via ipython
-tensorzero==2025.5.7
+tensorzero==2025.6.1
     # via -r requirements.in
 terminado==0.18.1
     # via
@@ -392,7 +392,7 @@ traitlets==5.14.3
     #   nbformat
 types-python-dateutil==2.9.0.20250516
     # via arrow
-typing-extensions==4.13.2
+typing-extensions==4.14.0
     # via
     #   anyio
     #   async-lru
