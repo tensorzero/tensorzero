@@ -749,6 +749,19 @@ impl Client {
         }
     }
 
+    /// Query the Clickhouse database for inferences.
+    ///
+    /// This function is only available in EmbeddedGateway mode.
+    ///
+    /// # Arguments
+    ///
+    /// * `function_name` - The name of the function to query.
+    /// * `variant_name` - The name of the variant to query. Optional
+    /// * `filters` - A filter tree to apply to the query. Optional
+    /// * `output_source` - The source of the output to query. "inference" or "demonstration"
+    /// * `limit` - The maximum number of inferences to return. Optional
+    /// * `offset` - The offset to start from. Optional
+    /// * `format` - The format to return the inferences in. For now, only "JSONEachRow" is supported.
     pub async fn experimental_list_inferences(
         &self,
         params: ListInferencesParams<'_>,

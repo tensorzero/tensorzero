@@ -130,18 +130,20 @@ pub async fn test_boolean_metric_filter() {
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_and_filter_multiple_float_metrics() {
     let client = make_embedded_gateway().await;
-    let filter_node = InferenceFilterTreeNode::And(vec![
-        InferenceFilterTreeNode::FloatMetric(FloatMetricNode {
-            metric_name: "jaccard_similarity".to_string(),
-            value: 0.5,
-            comparison_operator: FloatComparisonOperator::GreaterThan,
-        }),
-        InferenceFilterTreeNode::FloatMetric(FloatMetricNode {
-            metric_name: "jaccard_similarity".to_string(),
-            value: 0.8,
-            comparison_operator: FloatComparisonOperator::LessThan,
-        }),
-    ]);
+    let filter_node = InferenceFilterTreeNode::And {
+        children: vec![
+            InferenceFilterTreeNode::FloatMetric(FloatMetricNode {
+                metric_name: "jaccard_similarity".to_string(),
+                value: 0.5,
+                comparison_operator: FloatComparisonOperator::GreaterThan,
+            }),
+            InferenceFilterTreeNode::FloatMetric(FloatMetricNode {
+                metric_name: "jaccard_similarity".to_string(),
+                value: 0.8,
+                comparison_operator: FloatComparisonOperator::LessThan,
+            }),
+        ],
+    };
     let opts = ListInferencesParams {
         function_name: "extract_entities",
         variant_name: None,
@@ -164,22 +166,24 @@ pub async fn test_and_filter_multiple_float_metrics() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_or_filter_mixed_metrics() {
     let client = make_embedded_gateway().await;
-    let filter_node = InferenceFilterTreeNode::Or(vec![
-        InferenceFilterTreeNode::FloatMetric(FloatMetricNode {
-            metric_name: "jaccard_similarity".to_string(),
-            value: 0.8,
-            comparison_operator: FloatComparisonOperator::GreaterThanOrEqual,
-        }),
-        InferenceFilterTreeNode::BooleanMetric(BooleanMetricNode {
-            metric_name: "exact_match".to_string(),
-            value: true,
-        }),
-        InferenceFilterTreeNode::BooleanMetric(BooleanMetricNode {
-            // Episode-level metric
-            metric_name: "goal_achieved".to_string(),
-            value: true,
-        }),
-    ]);
+    let filter_node = InferenceFilterTreeNode::Or {
+        children: vec![
+            InferenceFilterTreeNode::FloatMetric(FloatMetricNode {
+                metric_name: "jaccard_similarity".to_string(),
+                value: 0.8,
+                comparison_operator: FloatComparisonOperator::GreaterThanOrEqual,
+            }),
+            InferenceFilterTreeNode::BooleanMetric(BooleanMetricNode {
+                metric_name: "exact_match".to_string(),
+                value: true,
+            }),
+            InferenceFilterTreeNode::BooleanMetric(BooleanMetricNode {
+                // Episode-level metric
+                metric_name: "goal_achieved".to_string(),
+                value: true,
+            }),
+        ],
+    };
     let opts = ListInferencesParams {
         function_name: "extract_entities",
         variant_name: None,
@@ -202,16 +206,20 @@ async fn test_or_filter_mixed_metrics() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_not_filter() {
     let client = make_embedded_gateway().await;
-    let filter_node = InferenceFilterTreeNode::Not(Box::new(InferenceFilterTreeNode::Or(vec![
-        InferenceFilterTreeNode::BooleanMetric(BooleanMetricNode {
-            metric_name: "exact_match".to_string(),
-            value: true,
+    let filter_node = InferenceFilterTreeNode::Not {
+        child: Box::new(InferenceFilterTreeNode::Or {
+            children: vec![
+                InferenceFilterTreeNode::BooleanMetric(BooleanMetricNode {
+                    metric_name: "exact_match".to_string(),
+                    value: true,
+                }),
+                InferenceFilterTreeNode::BooleanMetric(BooleanMetricNode {
+                    metric_name: "exact_match".to_string(),
+                    value: false,
+                }),
+            ],
         }),
-        InferenceFilterTreeNode::BooleanMetric(BooleanMetricNode {
-            metric_name: "exact_match".to_string(),
-            value: false,
-        }),
-    ])));
+    };
     let opts = ListInferencesParams {
         function_name: "extract_entities",
         variant_name: None,

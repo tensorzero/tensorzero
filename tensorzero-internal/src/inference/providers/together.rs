@@ -611,7 +611,6 @@ fn stream_together(
     parse_think_blocks: bool,
 ) -> ProviderInferenceResponseStreamInner {
     let mut tool_call_ids = Vec::new();
-    let mut tool_call_names = Vec::new();
     let mut thinking_state = ThinkingState::Normal;
     Box::pin(async_stream::stream! {
         while let Some(ev) = event_source.next().await {
@@ -645,7 +644,7 @@ fn stream_together(
 
                         let latency = start_time.elapsed();
                         let stream_message = data.and_then(|d| {
-                            together_to_tensorzero_chunk(message.data, d, latency, &mut tool_call_ids, &mut tool_call_names, &mut thinking_state, parse_think_blocks)
+                            together_to_tensorzero_chunk(message.data, d, latency, &mut tool_call_ids, &mut thinking_state, parse_think_blocks)
                         });
                         yield stream_message;
                     }
@@ -667,7 +666,6 @@ fn together_to_tensorzero_chunk(
     mut chunk: TogetherChatChunk,
     latency: Duration,
     tool_call_ids: &mut Vec<String>,
-    tool_call_names: &mut Vec<String>,
     thinking_state: &mut ThinkingState,
     parse_think_blocks: bool,
 ) -> Result<ProviderInferenceResponseChunk, Error> {
@@ -734,26 +732,10 @@ fn together_to_tensorzero_chunk(
                             .clone()
                     }
                 };
-                let name = match tool_call.function.name {
-                    Some(name) => {
-                        tool_call_names.push(name.clone());
-                        name
-                    }
-                    None => {
-                        tool_call_names
-                            .get(index as usize)
-                            .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
-                                message: "Tool call index out of bounds (meaning we haven't seen this many names in the stream)".to_string(),
-                                raw_request: None,
-                                raw_response: None,
-                                provider_type: PROVIDER_TYPE.to_string(),
-                            }))?
-                            .clone()
-                    }
-                };
+
                 content.push(ContentBlockChunk::ToolCall(ToolCallChunk {
                     id,
-                    raw_name: name,
+                    raw_name: tool_call.function.name,
                     raw_arguments: tool_call.function.arguments.unwrap_or_default(),
                 }));
             }
@@ -1194,7 +1176,6 @@ mod tests {
         };
 
         let mut tool_call_ids = Vec::new();
-        let mut tool_call_names = Vec::new();
         let mut thinking_state = ThinkingState::Normal;
 
         // With parsing enabled
@@ -1203,7 +1184,6 @@ mod tests {
             chunk.clone(),
             Duration::from_millis(100),
             &mut tool_call_ids,
-            &mut tool_call_names,
             &mut thinking_state,
             true,
         )
@@ -1231,7 +1211,6 @@ mod tests {
             chunk,
             Duration::from_millis(100),
             &mut tool_call_ids,
-            &mut tool_call_names,
             &mut thinking_state,
             true,
         )
@@ -1264,7 +1243,6 @@ mod tests {
             chunk,
             Duration::from_millis(100),
             &mut tool_call_ids,
-            &mut tool_call_names,
             &mut thinking_state,
             true,
         )
@@ -1292,7 +1270,6 @@ mod tests {
             chunk,
             Duration::from_millis(100),
             &mut tool_call_ids,
-            &mut tool_call_names,
             &mut thinking_state,
             true,
         )
@@ -1322,14 +1299,12 @@ mod tests {
             usage: None,
         };
         let mut tool_call_ids = vec!["id1".to_string()];
-        let mut tool_call_names = vec!["name1".to_string()];
         let mut thinking_state = ThinkingState::Normal;
         let message = together_to_tensorzero_chunk(
             "my_raw_chunk".to_string(),
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
-            &mut tool_call_names,
             &mut thinking_state,
             true,
         )
@@ -1365,7 +1340,6 @@ mod tests {
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
-            &mut tool_call_names,
             &mut thinking_state,
             true,
         )
@@ -1374,7 +1348,7 @@ mod tests {
             message.content,
             vec![ContentBlockChunk::ToolCall(ToolCallChunk {
                 id: "id1".to_string(),
-                raw_name: "name1".to_string(),
+                raw_name: None,
                 raw_arguments: "{\"hello\":\"world\"}".to_string(),
             })]
         );
@@ -1402,7 +1376,6 @@ mod tests {
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
-            &mut tool_call_names,
             &mut thinking_state,
             true,
         )
@@ -1440,7 +1413,6 @@ mod tests {
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
-            &mut tool_call_names,
             &mut thinking_state,
             true,
         )
@@ -1449,16 +1421,12 @@ mod tests {
             message.content,
             vec![ContentBlockChunk::ToolCall(ToolCallChunk {
                 id: "id2".to_string(),
-                raw_name: "name2".to_string(),
+                raw_name: Some("name2".to_string()),
                 raw_arguments: "{\"hello\":\"world\"}".to_string(),
             })]
         );
         // Check that the lists were updated
         assert_eq!(tool_call_ids, vec!["id1".to_string(), "id2".to_string()]);
-        assert_eq!(
-            tool_call_names,
-            vec!["name1".to_string(), "name2".to_string()]
-        );
 
         // Check a chunk with no choices and only usage
         let chunk = TogetherChatChunk {
@@ -1474,7 +1442,6 @@ mod tests {
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
-            &mut tool_call_names,
             &mut thinking_state,
             true,
         )
@@ -1504,7 +1471,6 @@ mod tests {
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
-            &mut tool_call_names,
             &mut thinking_state,
             true,
         )
@@ -1528,7 +1494,6 @@ mod tests {
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
-            &mut tool_call_names,
             &mut thinking_state,
             true,
         )
@@ -1559,7 +1524,6 @@ mod tests {
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
-            &mut tool_call_names,
             &mut thinking_state,
             true,
         )
@@ -1581,14 +1545,12 @@ mod tests {
             usage: None,
         };
         let mut tool_call_ids = vec![];
-        let mut tool_call_names = vec![];
         let mut thinking_state = ThinkingState::Normal;
         let message = together_to_tensorzero_chunk(
             "my_raw_chunk".to_string(),
             chunk,
             Duration::from_millis(50),
             &mut tool_call_ids,
-            &mut tool_call_names,
             &mut thinking_state,
             false,
         )

@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::time::Duration;
 
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Json, Response};
@@ -194,6 +195,9 @@ pub enum ErrorDetails {
         mode: String,
         message: String,
     },
+    InvalidInferenceOutputSource {
+        source: String,
+    },
     ObjectStoreWrite {
         message: String,
         path: StoragePath,
@@ -203,6 +207,11 @@ pub enum ErrorDetails {
     },
     InferenceTimeout {
         variant_name: String,
+    },
+    ModelProviderTimeout {
+        provider_name: String,
+        timeout: Duration,
+        streaming: bool,
     },
     InputValidation {
         source: Box<Error>,
@@ -420,6 +429,7 @@ impl ErrorDetails {
             ErrorDetails::InferenceNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::InferenceServer { .. } => tracing::Level::ERROR,
             ErrorDetails::InferenceTimeout { .. } => tracing::Level::WARN,
+            ErrorDetails::ModelProviderTimeout { .. } => tracing::Level::WARN,
             ErrorDetails::InputValidation { .. } => tracing::Level::WARN,
             ErrorDetails::InternalError { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidBaseUrl { .. } => tracing::Level::ERROR,
@@ -429,6 +439,7 @@ impl ErrorDetails {
             ErrorDetails::InvalidDiclConfig { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidDatasetName { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidDynamicEvaluationRun { .. } => tracing::Level::ERROR,
+            ErrorDetails::InvalidInferenceOutputSource { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidTensorzeroUuid { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidFunctionVariants { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidVariantForOptimization { .. } => tracing::Level::WARN,
@@ -511,6 +522,7 @@ impl ErrorDetails {
             ErrorDetails::InferenceNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::InferenceServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InferenceTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
+            ErrorDetails::ModelProviderTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
             ErrorDetails::InvalidClientMode { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidTensorzeroUuid { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidUuid { .. } => StatusCode::BAD_REQUEST,
@@ -524,6 +536,7 @@ impl ErrorDetails {
             ErrorDetails::InvalidDatasetName { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidDynamicEvaluationRun { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidFunctionVariants { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::InvalidInferenceOutputSource { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidMessage { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidMetricName { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidModel { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -602,6 +615,23 @@ impl std::fmt::Display for ErrorDetails {
                         .collect::<Vec<_>>()
                         .join("\n")
                 )
+            }
+            ErrorDetails::ModelProviderTimeout {
+                provider_name,
+                timeout,
+                streaming,
+            } => {
+                if *streaming {
+                    write!(
+                        f,
+                        "Model provider {provider_name} timed out due to configured `streaming.ttft_ms` timeout ({timeout:?})"
+                    )
+                } else {
+                    write!(
+                        f,
+                        "Model provider {provider_name} timed out due to configured `non_streaming.total_ms` timeout ({timeout:?})"
+                    )
+                }
             }
             ErrorDetails::ObjectStoreWrite { message, path } => {
                 write!(
@@ -792,6 +822,9 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::InvalidFunctionVariants { message } => write!(f, "{message}"),
             ErrorDetails::InvalidTensorzeroUuid { message, kind } => {
                 write!(f, "Invalid {kind} ID: {message}")
+            }
+            ErrorDetails::InvalidInferenceOutputSource { source } => {
+                write!(f, "Invalid inference output source: {source}. Should be one of: \"inference\" or \"demonstration\".")
             }
             ErrorDetails::InvalidMetricName { metric_name } => {
                 write!(f, "Invalid metric name: {metric_name}")

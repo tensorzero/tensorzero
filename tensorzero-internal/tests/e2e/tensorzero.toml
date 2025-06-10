@@ -465,6 +465,30 @@ routing = ["dummy"]
 type = "dummy"
 model_name = "null"
 
+[models.slow_with_timeout]
+routing = ["slow"]
+
+[models.slow_with_timeout.providers.slow]
+type = "dummy"
+model_name = "slow"
+
+[models.slow_with_timeout.providers.slow.timeouts]
+non_streaming = { total_ms = 400 }
+streaming = { ttft_ms = 500 }
+
+[models.slow_second_chunk]
+routing = ["slow"]
+
+[models.slow_second_chunk.providers.slow]
+type = "dummy"
+model_name = "slow_second_chunk"
+
+[models.slow_second_chunk.providers.slow.timeouts]
+# The model takes 2 seconds to produce the second chunk,
+# but produces the first chunk with no delay.
+# As a result, this timeout should never be hit.
+streaming = { ttft_ms = 500 }
+
 [models.slow]
 routing = ["slow"]
 
@@ -608,6 +632,38 @@ model_name = "text-embedding-3-small"
 # │                                 FUNCTIONS                                  │
 # └────────────────────────────────────────────────────────────────────────────┘
 
+[functions.basic_test_timeout]
+type = "chat"
+
+[functions.basic_test_timeout.variants.slow_second_chunk]
+type = "chat_completion"
+model = "slow_second_chunk"
+
+[functions.basic_test_timeout.variants.good]
+type = "chat_completion"
+model = "dummy::good"
+
+[functions.basic_test_timeout.variants.reasoner]
+type = "chat_completion"
+model = "dummy::reasoner"
+
+[functions.basic_test_timeout.variants.timeout]
+type = "chat_completion"
+model = "slow_with_timeout"
+
+[functions.basic_test_timeout.variants.best_of_n]
+type = "experimental_best_of_n_sampling"
+candidates = ["good", "timeout", "reasoner"]
+
+[functions.basic_test_timeout.variants.best_of_n.evaluator]
+model = "dummy::best_of_n_0"
+
+[functions.basic_test_timeout.variants.best_of_n_judge_timeout]
+type = "experimental_best_of_n_sampling"
+candidates = ["good", "reasoner"]
+
+[functions.basic_test_timeout.variants.best_of_n_judge_timeout.evaluator]
+model = "slow_with_timeout"
 [functions.basic_test_template_no_schema]
 type = "chat"
 
@@ -2632,6 +2688,12 @@ model = "tool"
 system_template = "../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
 max_tokens = 100
 
+[functions.weather_helper.variants.split_tool_name]
+type = "chat_completion"
+model = "dummy::tool_split_name"
+system_template = "../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
+max_tokens = 100
+
 [functions.weather_helper.variants.bad_tool]
 type = "chat_completion"
 model = "bad_tool"
@@ -3009,6 +3071,17 @@ model = "gpt-4o-mini-2024-07-18"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 json_mode = "strict"
 
+[functions.multi_hop_rag_agent]
+type = "chat"
+tools = ["think", "search_wikipedia", "load_wikipedia_page", "answer_question"]
+tool_choice = "required"
+parallel_tool_calls = true
+
+[functions.multi_hop_rag_agent.variants.baseline]
+type = "chat_completion"
+model = "openai::gpt-4o-mini"
+system_template = "../../fixtures/config/functions/multi_hop_rag_agent/baseline/system_template.txt"
+
 [functions.write_haiku]
 type = "chat"
 user_schema = "../../fixtures/config/functions/write_haiku/user_schema.json"
@@ -3136,6 +3209,26 @@ parameters = "../../fixtures/config/tools/get_temperature.json"
 [tools.get_humidity]
 description = "Get the current humidity in a given location"
 parameters = "../../fixtures/config/tools/get_humidity.json"
+
+[tools.think]
+description = "Think about the question and the information you have gathered so far. This is a good time to plan your next steps."
+parameters = "../../fixtures/config/tools/think.json"
+strict = true
+
+[tools.search_wikipedia]
+description = "Search Wikipedia for pages that match the query. Returns a list of page titles."
+parameters = "../../fixtures/config/tools/search_wikipedia.json"
+strict = true
+
+[tools.load_wikipedia_page]
+description = "Load a Wikipedia page. Returns the page content, or an error if the page does not exist."
+parameters = "../../fixtures/config/tools/load_wikipedia_page.json"
+strict = true
+
+[tools.answer_question]
+description = "End the search process and answer a question. Returns the answer to the question."
+parameters = "../../fixtures/config/tools/answer_question.json"
+strict = true
 
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
