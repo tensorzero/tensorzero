@@ -58,6 +58,20 @@ pub async fn inference_handler(
     StructuredJson(openai_compatible_params): StructuredJson<OpenAICompatibleParams>,
 ) -> Result<Response<Body>, Error> {
     if !openai_compatible_params.unknown_fields.is_empty() {
+        if openai_compatible_params.tensorzero_deny_unknown_fields {
+            let mut unknown_field_names = openai_compatible_params
+                .unknown_fields
+                .keys()
+                .cloned()
+                .collect::<Vec<_>>();
+
+            unknown_field_names.sort();
+            let unknown_field_names = unknown_field_names.join(", ");
+
+            return Err(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
+                message: format!("`tensorzero::deny_unknown_fields` is set to true, but found unknown fields in the request: [{unknown_field_names}]")
+            }));
+        }
         tracing::warn!(
             "Ignoring unknown fields in OpenAI-compatible request: {:?}",
             openai_compatible_params
@@ -280,6 +294,8 @@ pub struct OpenAICompatibleParams {
     tensorzero_extra_headers: UnfilteredInferenceExtraHeaders,
     #[serde(default, rename = "tensorzero::tags")]
     tensorzero_tags: HashMap<String, String>,
+    #[serde(default, rename = "tensorzero::deny_unknown_fields")]
+    tensorzero_deny_unknown_fields: bool,
     #[serde(flatten)]
     unknown_fields: HashMap<String, Value>,
 }
@@ -1174,6 +1190,7 @@ mod tests {
                 tensorzero_extra_body: UnfilteredInferenceExtraBody::default(),
                 tensorzero_extra_headers: UnfilteredInferenceExtraHeaders::default(),
                 tensorzero_tags: tensorzero_tags.clone(),
+                tensorzero_deny_unknown_fields: false,
                 unknown_fields: Default::default(),
                 stream_options: None,
             },
@@ -1641,6 +1658,7 @@ mod tests {
                 tensorzero_tags: HashMap::new(),
                 unknown_fields: Default::default(),
                 stream_options: None,
+                tensorzero_deny_unknown_fields: false,
             },
         )
         .unwrap();
@@ -1678,6 +1696,7 @@ mod tests {
                 tensorzero_tags: HashMap::new(),
                 unknown_fields: Default::default(),
                 stream_options: None,
+                tensorzero_deny_unknown_fields: false,
             },
         )
         .unwrap();
@@ -1721,6 +1740,7 @@ mod tests {
                 tensorzero_tags: HashMap::new(),
                 unknown_fields: Default::default(),
                 stream_options: None,
+                tensorzero_deny_unknown_fields: false,
             },
         )
         .unwrap();
@@ -1764,6 +1784,7 @@ mod tests {
                 tensorzero_tags: HashMap::new(),
                 unknown_fields: Default::default(),
                 stream_options: None,
+                tensorzero_deny_unknown_fields: false,
             },
         )
         .unwrap();
