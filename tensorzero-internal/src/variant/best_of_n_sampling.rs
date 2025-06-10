@@ -756,7 +756,7 @@ mod tests {
         },
         minijinja_util::tests::get_test_template_config,
         model::{ModelConfig, ModelProvider, ProviderConfig},
-        variant::VariantConfig,
+        variant::{VariantConfig, VariantInfo},
     };
 
     use super::*;
@@ -1263,14 +1263,17 @@ mod tests {
         let function = FunctionConfig::Chat(FunctionConfigChat {
             variants: HashMap::from([(
                 "best_of_n_1".into(),
-                VariantConfig::BestOfNSampling(BestOfNSamplingConfig {
-                    candidates: vec![],
-                    weight: None,
-                    timeout_s: 0.0,
-                    evaluator: EvaluatorConfig {
-                        inner: Default::default(),
-                    },
-                }),
+                VariantInfo {
+                    inner: VariantConfig::BestOfNSampling(BestOfNSamplingConfig {
+                        candidates: vec![],
+                        weight: None,
+                        timeout_s: 0.0,
+                        evaluator: EvaluatorConfig {
+                            inner: Default::default(),
+                        },
+                    }),
+                    timeouts: Default::default(),
+                },
             )]),
             ..Default::default()
         });

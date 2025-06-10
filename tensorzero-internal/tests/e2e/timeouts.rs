@@ -14,6 +14,118 @@ use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
 
+// Variant timeout tests
+
+#[tokio::test]
+async fn test_variant_timeout_non_streaming() {
+    let payload = json!({
+        "function_name": "basic_test_variant_timeout",
+        "variant_name": "slow_timeout",
+        "episode_id": Uuid::now_v7(),
+        "input": {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Hello, world!"
+                }
+            ]
+        },
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    let response_json = response.json::<Value>().await.unwrap();
+    assert_eq!(
+        response_json,
+        json!({
+            "error":"All variants failed with errors: slow_timeout: Variant `slow_timeout` timed out due to configured `non_streaming.total_ms` timeout (400ms)"
+        })
+    );
+}
+
+#[tokio::test]
+async fn test_variant_timeout_streaming() {
+    let payload = json!({
+        "function_name": "basic_test_variant_timeout",
+        "variant_name": "slow_timeout",
+        "episode_id": Uuid::now_v7(),
+        "input": {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Hello, world!"
+                }
+            ]
+        },
+        "stream": true,
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    let status = response.status();
+    let response_json = response.json::<Value>().await.unwrap();
+    assert_eq!(
+        response_json,
+        json!({
+            "error":"All variants failed with errors: slow_timeout: Variant `slow_timeout` timed out due to configured `streaming.ttft_ms` timeout (500ms)"
+        })
+    );
+    assert_eq!(status, StatusCode::BAD_GATEWAY);
+}
+
+#[tokio::test]
+async fn test_variant_timeout_slow_second_chunk_streaming() {
+    slow_second_chunk_streaming(json!({
+        "function_name": "basic_test_variant_timeout",
+        "variant_name": "slow_second_chunk",
+        "episode_id": Uuid::now_v7(),
+        "input": {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Hello, world!"
+                }
+            ]
+        },
+        "stream": true,
+    }))
+    .await;
+}
+
+// We don't currently support setting an actual variant as the judge,
+// so we can't apply a variant timeout to the judge itself.
+
+// Test that if a candidate times out, the evaluator can still see the other candidates
+#[tokio::test]
+async fn test_variant_timeout_best_of_n_other_candidate() {
+    best_of_n_other_candidate(json!({
+        "function_name": "basic_test_variant_timeout",
+        "variant_name": "best_of_n",
+        "episode_id": Uuid::now_v7(),
+        "input": {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Hello, world!"
+                }
+            ]
+        },
+    }))
+    .await;
+}
+
+// Model provider timeout tests
+
 #[tokio::test]
 async fn test_model_provider_timeout_non_streaming() {
     let payload = json!({
@@ -83,7 +195,7 @@ async fn test_model_provider_timeout_streaming() {
 
 #[tokio::test]
 async fn test_model_provider_timeout_slow_second_chunk_streaming() {
-    let payload = json!({
+    slow_second_chunk_streaming(json!({
         "function_name": "basic_test_timeout",
         "variant_name": "slow_second_chunk",
         "episode_id": Uuid::now_v7(),
@@ -96,58 +208,14 @@ async fn test_model_provider_timeout_slow_second_chunk_streaming() {
             ]
         },
         "stream": true,
-    });
-
-    let start = Instant::now();
-    let mut response = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .eventsource()
-        .unwrap();
-
-    let mut inference_id = None;
-
-    while let Some(event) = response.next().await {
-        let chunk = event.unwrap();
-        println!("chunk: {chunk:?}");
-        if let Event::Message(event) = chunk {
-            if event.data == "[DONE]" {
-                break;
-            }
-            let event = serde_json::from_str::<Value>(&event.data).unwrap();
-            inference_id = Some(event["inference_id"].as_str().unwrap().parse().unwrap());
-        }
-    }
-
-    // The overall stream duration should be at least 2 seconds, becaues we used the 'slow_second_chunk' model
-    let elapsed = start.elapsed();
-    assert!(
-        elapsed >= Duration::from_millis(2000),
-        "slow_second_chunk should take at least 2 seconds, but took {elapsed:?}"
-    );
-
-    // Wait 100ms to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-
-    let clickhouse = get_clickhouse().await;
-
-    let model_inference = select_model_inference_clickhouse(&clickhouse, inference_id.unwrap())
-        .await
-        .unwrap();
-
-    // The TTFT should be under 400ms (it should really be instant, but we give some buffer in case CI is overloaded)
-    // As a result, the 'streaming.ttft_ms' timeout was not hit.
-    let ttft_ms = model_inference["ttft_ms"].as_u64().unwrap();
-    assert!(
-        ttft_ms <= 400,
-        "ttft_ms should be less than 400ms, but was {ttft_ms}"
-    );
+    }))
+    .await;
 }
 
 // Test that if a candidate times out, the evaluator can still see the other candidates
 #[tokio::test]
 async fn test_model_provider_timeout_best_of_n_other_candidate() {
-    let payload = json!({
+    best_of_n_other_candidate(json!({
         "function_name": "basic_test_timeout",
         "variant_name": "best_of_n",
         "episode_id": Uuid::now_v7(),
@@ -159,8 +227,11 @@ async fn test_model_provider_timeout_best_of_n_other_candidate() {
                 }
             ]
         },
-    });
+    }))
+    .await;
+}
 
+async fn best_of_n_other_candidate(payload: Value) {
     let response = Client::new()
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
@@ -223,7 +294,7 @@ async fn test_model_provider_timeout_best_of_n_other_candidate() {
 
 #[tokio::test]
 async fn test_model_provider_timeout_best_of_n_judge_timeout() {
-    let payload = json!({
+    best_of_n_judge_timeout(json!({
         "function_name": "basic_test_timeout",
         "variant_name": "best_of_n_judge_timeout",
         "episode_id": Uuid::now_v7(),
@@ -235,8 +306,11 @@ async fn test_model_provider_timeout_best_of_n_judge_timeout() {
                 }
             ]
         },
-    });
+    }))
+    .await;
+}
 
+async fn best_of_n_judge_timeout(payload: Value) {
     let response = Client::new()
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
@@ -283,4 +357,51 @@ async fn test_model_provider_timeout_best_of_n_judge_timeout() {
     }
     model_names.sort();
     assert_eq!(model_names, ["dummy::good", "dummy::reasoner"]);
+}
+
+async fn slow_second_chunk_streaming(payload: Value) {
+    let start = Instant::now();
+    let mut response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .eventsource()
+        .unwrap();
+
+    let mut inference_id = None;
+
+    while let Some(event) = response.next().await {
+        let chunk = event.unwrap();
+        println!("chunk: {chunk:?}");
+        if let Event::Message(event) = chunk {
+            if event.data == "[DONE]" {
+                break;
+            }
+            let event = serde_json::from_str::<Value>(&event.data).unwrap();
+            inference_id = Some(event["inference_id"].as_str().unwrap().parse().unwrap());
+        }
+    }
+
+    // The overall stream duration should be at least 2 seconds, because we used the 'slow_second_chunk' model
+    let elapsed = start.elapsed();
+    assert!(
+        elapsed >= Duration::from_millis(2000),
+        "slow_second_chunk should take at least 2 seconds, but took {elapsed:?}"
+    );
+
+    // Wait 100ms to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    let clickhouse = get_clickhouse().await;
+
+    let model_inference = select_model_inference_clickhouse(&clickhouse, inference_id.unwrap())
+        .await
+        .unwrap();
+
+    // The TTFT should be under 400ms (it should really be instant, but we give some buffer in case CI is overloaded)
+    // As a result, the 'streaming.ttft_ms' timeout was not hit.
+    let ttft_ms = model_inference["ttft_ms"].as_u64().unwrap();
+    assert!(
+        ttft_ms <= 400,
+        "ttft_ms should be less than 400ms, but was {ttft_ms}"
+    );
 }

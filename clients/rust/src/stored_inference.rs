@@ -123,7 +123,7 @@ fn render_model_input(
                 name: variant_name.clone(),
             })
         })?;
-    let VariantConfig::ChatCompletion(chat_completion_config) = variant_config else {
+    let VariantConfig::ChatCompletion(chat_completion_config) = &variant_config.inner else {
         return Err(Error::new(ErrorDetails::InvalidVariantForOptimization {
             function_name: inference_example.function_name().to_string(),
             variant_name: variant_name.clone(),
