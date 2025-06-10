@@ -36,7 +36,7 @@ def test_sync_render_inferences_success(embedded_sync_client: TensorZeroGateway)
                                 {
                                     "type": "tool_call",
                                     "id": "123",
-                                    "arguments": {"foo": "bar"},
+                                    "arguments": '{"foo": "bar"}',
                                     "name": "test_tool",
                                 },
                             ],
@@ -143,7 +143,7 @@ def test_sync_render_inferences_success(embedded_sync_client: TensorZeroGateway)
     assert isinstance(content[2], ToolCall)
     assert content[2].type == "tool_call"
     assert content[2].id == "123"
-    assert content[2].arguments == '{"foo":"bar"}'
+    assert content[2].arguments == '{"foo": "bar"}'
     assert content[2].name == "test_tool"
     message = messages[1]
     assert message.role == "assistant"
@@ -401,7 +401,7 @@ async def test_async_render_inferences_success(
                                 {
                                     "type": "tool_call",
                                     "id": "123",
-                                    "arguments": {"foo": "bar"},
+                                    "arguments": '{"foo": "bar"}',
                                     "name": "test_tool",
                                 },
                             ],
@@ -511,7 +511,7 @@ async def test_async_render_inferences_success(
     assert isinstance(content[2], ToolCall)
     assert content[2].type == "tool_call"
     assert content[2].id == "123"
-    assert content[2].arguments == """{"foo":"bar"}"""
+    assert content[2].arguments == """{"foo": "bar"}"""
     assert content[2].name == "test_tool"
     message = messages[1]
     assert message.role == "assistant"

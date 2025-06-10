@@ -1,4 +1,5 @@
 use crate::serde_util::{deserialize_json_string, deserialize_optional_json_string};
+use crate::tool::ToolCallInput;
 use derive_builder::Builder;
 use extra_body::{FullExtraBodyConfig, UnfilteredInferenceExtraBody};
 use extra_headers::{FullExtraHeadersConfig, UnfilteredInferenceExtraHeaders};
@@ -123,7 +124,7 @@ impl InputMessageContent {
                 }
             }
             InputMessageContent::ToolCall(tool_call) => {
-                ResolvedInputMessageContent::ToolCall(tool_call)
+                ResolvedInputMessageContent::ToolCall(tool_call.try_into()?)
             }
             InputMessageContent::ToolResult(tool_result) => {
                 ResolvedInputMessageContent::ToolResult(tool_result)
@@ -181,7 +182,7 @@ pub struct InputMessage {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum InputMessageContent {
     Text(TextKind),
-    ToolCall(ToolCall),
+    ToolCall(ToolCallInput),
     ToolResult(ToolResult),
     RawText {
         value: String,
@@ -3812,8 +3813,10 @@ mod tests {
         match &message.content[1] {
             InputMessageContent::ToolCall(tool_call) => {
                 assert_eq!(tool_call.id, "123");
-                assert_eq!(tool_call.name, "test_tool");
-                assert_eq!(tool_call.arguments, "{}");
+                assert_eq!(tool_call.name, Some("test_tool".to_string()));
+                assert_eq!(tool_call.arguments, Some(json!("{}")));
+                assert_eq!(tool_call.raw_name, None);
+                assert_eq!(tool_call.raw_arguments, None);
             }
             _ => panic!("Expected ToolCall content"),
         }
@@ -3840,8 +3843,10 @@ mod tests {
         match &message.content[1] {
             InputMessageContent::ToolCall(tool_call) => {
                 assert_eq!(tool_call.id, "456");
-                assert_eq!(tool_call.name, "another_tool");
-                assert_eq!(tool_call.arguments, "{\"key\":\"value\"}");
+                assert_eq!(tool_call.name, Some("another_tool".to_string()));
+                assert_eq!(tool_call.arguments, Some(json!({"key":"value"})));
+                assert_eq!(tool_call.raw_name, None);
+                assert_eq!(tool_call.raw_arguments, None,);
             }
             _ => panic!("Expected ToolCall content"),
         }

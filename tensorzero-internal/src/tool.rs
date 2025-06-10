@@ -279,7 +279,7 @@ pub struct BatchDynamicToolParams {
 pub struct BatchDynamicToolParamsWithSize(pub BatchDynamicToolParams, pub usize);
 
 /// A ToolCall is a request by a model to call a Tool
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
 pub struct ToolCall {
     pub name: String,
@@ -354,16 +354,6 @@ impl TryFrom<ToolCallInput> for ToolCall {
             arguments,
             id: value.id,
         })
-    }
-}
-
-impl<'de> Deserialize<'de> for ToolCall {
-    fn deserialize<D>(deserializer: D) -> Result<ToolCall, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let helper = ToolCallInput::deserialize(deserializer)?;
-        ToolCall::try_from(helper).map_err(serde::de::Error::custom)
     }
 }
 
@@ -1102,7 +1092,8 @@ mod tests {
             "raw_arguments": "my raw arguments",
             "id": "123"
         });
-        let tool_call: ToolCall = serde_json::from_value(tool_call).unwrap();
+        let tool_call_input: ToolCallInput = serde_json::from_value(tool_call).unwrap();
+        let tool_call: ToolCall = tool_call_input.try_into().unwrap();
         assert_eq!(tool_call.name, "get_temperature");
         assert_eq!(tool_call.arguments, "my raw arguments");
         assert_eq!(tool_call.id, "123");
@@ -1115,7 +1106,8 @@ mod tests {
             "arguments": {"my": "arguments"},
             "id": "123"
         });
-        let tool_call: ToolCall = serde_json::from_value(tool_call).unwrap();
+        let tool_call_input = serde_json::from_value::<ToolCallInput>(tool_call).unwrap();
+        let tool_call = TryInto::<ToolCall>::try_into(tool_call_input).unwrap();
         assert_eq!(tool_call.name, "get_temperature");
         assert_eq!(tool_call.arguments, "{\"my\":\"arguments\"}");
         assert_eq!(tool_call.id, "123");
@@ -1140,10 +1132,12 @@ mod tests {
             "arguments": "{\"my\": \"arguments\"}",
             "id": "123"
         });
-        let err_msg = serde_json::from_value::<ToolCall>(tool_call)
-            .unwrap_err()
-            .to_string();
-        assert_eq!(err_msg, "ToolCall must have `name` or `raw_name` set");
+        let tool_call_input = serde_json::from_value::<ToolCallInput>(tool_call).unwrap();
+        let err = TryInto::<ToolCall>::try_into(tool_call_input).unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "ToolCall must have `name` or `raw_name` set"
+        );
     }
 
     #[test]
@@ -1155,10 +1149,7 @@ mod tests {
         let err_msg = serde_json::from_value::<ToolCall>(tool_call)
             .unwrap_err()
             .to_string();
-        assert_eq!(
-            err_msg,
-            "ToolCall must have `arguments` or `raw_arguments` set"
-        );
+        assert_eq!(err_msg, "missing field `arguments`");
     }
 
     #[test]
@@ -1169,7 +1160,12 @@ mod tests {
             "id": "123",
             "arguments": "My string arguments"
         });
-        serde_json::from_value::<ToolCall>(tool_call).unwrap();
+        let tool_call_input = serde_json::from_value::<ToolCallInput>(tool_call).unwrap();
+        let tool_call = TryInto::<ToolCall>::try_into(tool_call_input).unwrap();
+        assert_eq!(tool_call.arguments, "My string arguments");
+        assert_eq!(tool_call.name, "get_temperature");
+        assert_eq!(tool_call.id, "123");
+
         assert!(logs_contain("Deprecation Warning: Treating string 'ToolCall.arguments' as a serialized JSON object."))
     }
 }
