@@ -1,10 +1,7 @@
 #!/usr/bin/env python
-# import warnings
 
 
 from example.crew import Example
-
-# warnings.filterwarnings("ignore", category=SyntaxWarning, module="pysbd")
 
 
 def run():
