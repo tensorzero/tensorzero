@@ -397,7 +397,6 @@ fn stream_deepseek(
     start_time: Instant,
 ) -> ProviderInferenceResponseStreamInner {
     let mut tool_call_ids = Vec::new();
-    let mut tool_call_names = Vec::new();
     Box::pin(async_stream::stream! {
         while let Some(ev) = event_source.next().await {
             match ev {
@@ -422,7 +421,7 @@ fn stream_deepseek(
 
                         let latency = start_time.elapsed();
                         let stream_message = data.and_then(|d| {
-                            deepseek_to_tensorzero_chunk(message.data, d, latency, &mut tool_call_ids, &mut tool_call_names)
+                            deepseek_to_tensorzero_chunk(message.data, d, latency, &mut tool_call_ids)
                         });
                         yield stream_message;
                     }
@@ -483,7 +482,6 @@ fn deepseek_to_tensorzero_chunk(
     mut chunk: DeepSeekChatChunk,
     latency: Duration,
     tool_call_ids: &mut Vec<String>,
-    tool_names: &mut Vec<String>,
 ) -> Result<ProviderInferenceResponseChunk, Error> {
     if chunk.choices.len() > 1 {
         return Err(ErrorDetails::InferenceServer {
@@ -534,26 +532,10 @@ fn deepseek_to_tensorzero_chunk(
                             .clone()
                     }
                 };
-                let name = match tool_call.function.name {
-                    Some(name) => {
-                        tool_names.push(name.clone());
-                        name
-                    }
-                    None => {
-                        tool_names
-                            .get(index as usize)
-                            .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
-                                message: "Tool call index out of bounds (meaning we haven't seen this many names in the stream)".to_string(),
-                                raw_request: None,
-                                raw_response: None,
-                                provider_type: PROVIDER_TYPE.to_string(),
-                            }))?
-                            .clone()
-                    }
-                };
+
                 content.push(ContentBlockChunk::ToolCall(ToolCallChunk {
                     id,
-                    raw_name: name,
+                    raw_name: tool_call.function.name,
                     raw_arguments: tool_call.function.arguments.unwrap_or_default(),
                 }));
             }

@@ -42,7 +42,7 @@ use crate::jsonschema_util::DynamicJSONSchema;
 use crate::model::ModelTable;
 use crate::tool::{DynamicToolParams, ToolCallConfig, ToolChoice};
 use crate::variant::chat_completion::ChatCompletionConfig;
-use crate::variant::{InferenceConfig, JsonMode, Variant, VariantConfig};
+use crate::variant::{InferenceConfig, JsonMode, Variant, VariantConfig, VariantInfo};
 
 use super::dynamic_evaluation_run::validate_inference_episode_id_and_apply_dynamic_evaluation_run;
 use super::validate_tags;
@@ -271,7 +271,7 @@ pub async fn inference(
         candidate_variant_names.retain(|name| {
             if let Some(variant) = function.variants().get(*name) {
                 // Retain 'None' and positive-weight variants, discarding zero-weight variants
-                variant.weight().is_none_or(|w| w > 0.0)
+                variant.inner.weight().is_none_or(|w| w > 0.0)
             } else {
                 // Keep missing variants - later code will error if we try to use them
                 true
@@ -525,10 +525,13 @@ fn find_function(params: &Params, config: &Config) -> Result<(Arc<FunctionConfig
                 Arc::new(FunctionConfig::Chat(FunctionConfigChat {
                     variants: [(
                         model_name.clone(),
-                        VariantConfig::ChatCompletion(ChatCompletionConfig {
-                            model: (&**model_name).into(),
-                            ..Default::default()
-                        }),
+                        VariantInfo {
+                            timeouts: Default::default(),
+                            inner: VariantConfig::ChatCompletion(ChatCompletionConfig {
+                                model: (&**model_name).into(),
+                                ..Default::default()
+                            }),
+                        },
                     )]
                     .into_iter()
                     .collect(),

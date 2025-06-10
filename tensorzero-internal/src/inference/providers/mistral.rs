@@ -14,6 +14,7 @@ use crate::{
     endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
     inference::{
+        providers::helpers::check_new_tool_call_name,
         providers::helpers::{
             inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
         },
@@ -318,6 +319,7 @@ pub fn stream_mistral(
 ) -> ProviderInferenceResponseStreamInner {
     Box::pin(async_stream::stream! {
         while let Some(ev) = event_source.next().await {
+            let mut last_tool_name = None;
             match ev {
                 Err(e) => {
                     yield Err(convert_stream_error(PROVIDER_TYPE.to_string(), e).await);
@@ -340,7 +342,7 @@ pub fn stream_mistral(
                             }.into());
                         let latency = start_time.elapsed();
                         let stream_message = data.and_then(|d| {
-                            mistral_to_tensorzero_chunk(message.data, d, latency)
+                            mistral_to_tensorzero_chunk(message.data, d, latency, &mut last_tool_name)
                         });
                         yield stream_message;
                     }
@@ -712,6 +714,7 @@ fn mistral_to_tensorzero_chunk(
     raw_message: String,
     mut chunk: MistralChatChunk,
     latency: Duration,
+    last_tool_name: &mut Option<String>,
 ) -> Result<ProviderInferenceResponseChunk, Error> {
     if chunk.choices.len() > 1 {
         return Err(ErrorDetails::InferenceServer {
@@ -741,7 +744,7 @@ fn mistral_to_tensorzero_chunk(
             for tool_call in tool_calls {
                 content.push(ContentBlockChunk::ToolCall(ToolCallChunk {
                     id: tool_call.id,
-                    raw_name: tool_call.function.name,
+                    raw_name: check_new_tool_call_name(tool_call.function.name, last_tool_name),
                     raw_arguments: tool_call.function.arguments,
                 }));
             }

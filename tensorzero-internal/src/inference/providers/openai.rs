@@ -741,7 +741,6 @@ pub fn stream_openai(
     start_time: Instant,
 ) -> ProviderInferenceResponseStreamInner {
     let mut tool_call_ids = Vec::new();
-    let mut tool_call_names = Vec::new();
     Box::pin(async_stream::stream! {
         futures::pin_mut!(event_source);
         while let Some(ev) = event_source.next().await {
@@ -774,7 +773,7 @@ pub fn stream_openai(
 
                         let latency = start_time.elapsed();
                         let stream_message = data.and_then(|d| {
-                            openai_to_tensorzero_chunk(message.data, d, latency, &mut tool_call_ids, &mut tool_call_names)
+                            openai_to_tensorzero_chunk(message.data, d, latency, &mut tool_call_ids)
                         });
                         yield stream_message;
                     }
@@ -1895,7 +1894,6 @@ fn openai_to_tensorzero_chunk(
     mut chunk: OpenAIChatChunk,
     latency: Duration,
     tool_call_ids: &mut Vec<String>,
-    tool_names: &mut Vec<String>,
 ) -> Result<ProviderInferenceResponseChunk, Error> {
     if chunk.choices.len() > 1 {
         return Err(ErrorDetails::InferenceServer {
@@ -1939,26 +1937,10 @@ fn openai_to_tensorzero_chunk(
                             .clone()
                     }
                 };
-                let name = match tool_call.function.name {
-                    Some(name) => {
-                        tool_names.push(name.clone());
-                        name
-                    }
-                    None => {
-                        tool_names
-                            .get(index as usize)
-                            .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
-                                message: "Tool call index out of bounds (meaning we haven't seen this many names in the stream)".to_string(),
-                                raw_request: None,
-                                raw_response: None,
-                                provider_type: PROVIDER_TYPE.to_string(),
-                            }))?
-                            .clone()
-                    }
-                };
+
                 content.push(ContentBlockChunk::ToolCall(ToolCallChunk {
                     id,
-                    raw_name: name,
+                    raw_name: tool_call.function.name,
                     raw_arguments: tool_call.function.arguments.unwrap_or_default(),
                 }));
             }
@@ -3068,13 +3050,11 @@ mod tests {
             usage: None,
         };
         let mut tool_call_ids = vec!["id1".to_string()];
-        let mut tool_call_names = vec!["name1".to_string()];
         let message = openai_to_tensorzero_chunk(
             "my_raw_chunk".to_string(),
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
-            &mut tool_call_names,
         )
         .unwrap();
         assert_eq!(
@@ -3108,14 +3088,13 @@ mod tests {
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
-            &mut tool_call_names,
         )
         .unwrap();
         assert_eq!(
             message.content,
             vec![ContentBlockChunk::ToolCall(ToolCallChunk {
                 id: "id1".to_string(),
-                raw_name: "name1".to_string(),
+                raw_name: None,
                 raw_arguments: "{\"hello\":\"world\"}".to_string(),
             })]
         );
@@ -3143,7 +3122,6 @@ mod tests {
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
-            &mut tool_call_names,
         )
         .unwrap_err();
         let details = error.get_details();
@@ -3179,24 +3157,19 @@ mod tests {
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
-            &mut tool_call_names,
         )
         .unwrap();
         assert_eq!(
             message.content,
             vec![ContentBlockChunk::ToolCall(ToolCallChunk {
                 id: "id2".to_string(),
-                raw_name: "name2".to_string(),
+                raw_name: Some("name2".to_string()),
                 raw_arguments: "{\"hello\":\"world\"}".to_string(),
             })]
         );
         assert_eq!(message.finish_reason, Some(FinishReason::Stop));
         // Check that the lists were updated
         assert_eq!(tool_call_ids, vec!["id1".to_string(), "id2".to_string()]);
-        assert_eq!(
-            tool_call_names,
-            vec!["name1".to_string(), "name2".to_string()]
-        );
 
         // Check a chunk with no choices and only usage
         // Test a correct new tool chunk
@@ -3213,7 +3186,6 @@ mod tests {
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
-            &mut tool_call_names,
         )
         .unwrap();
         assert_eq!(message.content, vec![]);

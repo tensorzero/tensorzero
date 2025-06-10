@@ -358,7 +358,6 @@ fn stream_anthropic(
 ) -> ProviderInferenceResponseStreamInner {
     Box::pin(async_stream::stream! {
         let mut current_tool_id : Option<String> = None;
-        let mut current_tool_name: Option<String> = None;
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
@@ -388,7 +387,6 @@ fn stream_anthropic(
                                 data,
                                 start_time.elapsed(),
                                 &mut current_tool_id,
-                                &mut current_tool_name,
                             )
                         });
 
@@ -995,7 +993,6 @@ fn anthropic_to_tensorzero_stream_message(
     message: GCPVertexAnthropicStreamMessage,
     message_latency: Duration,
     current_tool_id: &mut Option<String>,
-    current_tool_name: &mut Option<String>,
 ) -> Result<Option<ProviderInferenceResponseChunk>, Error> {
     match message {
         GCPVertexAnthropicStreamMessage::ContentBlockDelta { delta, index } => match delta {
@@ -1017,12 +1014,7 @@ fn anthropic_to_tensorzero_stream_message(
                     // This is necessary because the ToolCallChunk must always contain the tool name and ID
                     // even though Anthropic only sends the tool ID and name in the ToolUse chunk and not InputJSONDelta
                     vec![ContentBlockChunk::ToolCall(ToolCallChunk {
-                        raw_name: current_tool_name.clone().ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
-                            message: "Got InputJsonDelta chunk from Anthropic without current tool name being set by a ToolUse".to_string(),
-                            provider_type: PROVIDER_TYPE.to_string(),
-                            raw_request: None,
-                            raw_response: None,
-                        }))?,
+                        raw_name: None,
                         id: current_tool_id.clone().ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                             message: "Got InputJsonDelta chunk from Anthropic without current tool id being set by a ToolUse".to_string(),
                             provider_type: PROVIDER_TYPE.to_string(),
@@ -1065,11 +1057,10 @@ fn anthropic_to_tensorzero_stream_message(
             GCPVertexAnthropicMessageBlock::ToolUse { id, name, .. } => {
                 // This is a new tool call, update the ID for future chunks
                 *current_tool_id = Some(id.clone());
-                *current_tool_name = Some(name.clone());
                 Ok(Some(ProviderInferenceResponseChunk::new(
                     vec![ContentBlockChunk::ToolCall(ToolCallChunk {
                         id,
-                        raw_name: name,
+                        raw_name: Some(name),
                         // As far as I can tell this is always {} so we ignore
                         raw_arguments: "".to_string(),
                     })],
@@ -2170,7 +2161,6 @@ mod tests {
 
         // Test ContentBlockDelta with TextDelta
         let mut current_tool_id = None;
-        let mut current_tool_name = None;
         let content_block_delta = GCPVertexAnthropicStreamMessage::ContentBlockDelta {
             delta: GCPVertexAnthropicMessageBlock::TextDelta {
                 text: "Hello".to_string(),
@@ -2183,7 +2173,6 @@ mod tests {
             content_block_delta,
             latency,
             &mut current_tool_id,
-            &mut current_tool_name,
         );
         assert!(result.is_ok());
         let chunk = result.unwrap().unwrap();
@@ -2199,7 +2188,6 @@ mod tests {
 
         // Test ContentBlockDelta with InputJsonDelta but no previous tool info
         let mut current_tool_id = None;
-        let mut current_tool_name = None;
         let content_block_delta = GCPVertexAnthropicStreamMessage::ContentBlockDelta {
             delta: GCPVertexAnthropicMessageBlock::InputJsonDelta {
                 partial_json: "aaaa: bbbbb".to_string(),
@@ -2212,13 +2200,12 @@ mod tests {
             content_block_delta,
             latency,
             &mut current_tool_id,
-            &mut current_tool_name,
         );
         let details = result.unwrap_err().get_owned_details();
         assert_eq!(
             details,
             ErrorDetails::InferenceServer {
-                message: "Got InputJsonDelta chunk from Anthropic without current tool name being set by a ToolUse".to_string(),
+                message: "Got InputJsonDelta chunk from Anthropic without current tool id being set by a ToolUse".to_string(),
                 raw_request: None,
                 raw_response: None,
                 provider_type: PROVIDER_TYPE.to_string()
@@ -2227,7 +2214,6 @@ mod tests {
 
         // Test ContentBlockDelta with InputJsonDelta and previous tool info
         let mut current_tool_id = Some("tool_id".to_string());
-        let mut current_tool_name = Some("tool_name".to_string());
         let content_block_delta = GCPVertexAnthropicStreamMessage::ContentBlockDelta {
             delta: GCPVertexAnthropicMessageBlock::InputJsonDelta {
                 partial_json: "aaaa: bbbbb".to_string(),
@@ -2240,14 +2226,13 @@ mod tests {
             content_block_delta,
             latency,
             &mut current_tool_id,
-            &mut current_tool_name,
         );
         let chunk = result.unwrap().unwrap();
         assert_eq!(chunk.content.len(), 1);
         match &chunk.content[0] {
             ContentBlockChunk::ToolCall(tool_call) => {
                 assert_eq!(tool_call.id, "tool_id".to_string());
-                assert_eq!(tool_call.raw_name, "tool_name".to_string());
+                assert_eq!(tool_call.raw_name, None);
                 assert_eq!(tool_call.raw_arguments, "aaaa: bbbbb".to_string());
             }
             _ => panic!("Expected a tool call content block"),
@@ -2256,7 +2241,6 @@ mod tests {
 
         // Test ContentBlockStart with ToolUse
         let mut current_tool_id = None;
-        let mut current_tool_name = None;
         let content_block_start = GCPVertexAnthropicStreamMessage::ContentBlockStart {
             content_block: GCPVertexAnthropicMessageBlock::ToolUse {
                 id: "tool1".to_string(),
@@ -2271,25 +2255,22 @@ mod tests {
             content_block_start,
             latency,
             &mut current_tool_id,
-            &mut current_tool_name,
         );
         let chunk = result.unwrap().unwrap();
         assert_eq!(chunk.content.len(), 1);
         match &chunk.content[0] {
             ContentBlockChunk::ToolCall(tool_call) => {
                 assert_eq!(tool_call.id, "tool1".to_string());
-                assert_eq!(tool_call.raw_name, "calculator".to_string());
+                assert_eq!(tool_call.raw_name, Some("calculator".to_string()));
                 assert_eq!(tool_call.raw_arguments, "".to_string());
             }
             _ => panic!("Expected a tool call content block"),
         }
         assert_eq!(chunk.latency, latency);
         assert_eq!(current_tool_id, Some("tool1".to_string()));
-        assert_eq!(current_tool_name, Some("calculator".to_string()));
 
         // Test ContentBlockStart with Text
         let mut current_tool_id = None;
-        let mut current_tool_name = None;
         let content_block_start = GCPVertexAnthropicStreamMessage::ContentBlockStart {
             content_block: GCPVertexAnthropicMessageBlock::Text {
                 text: "Hello".to_string(),
@@ -2302,7 +2283,6 @@ mod tests {
             content_block_start,
             latency,
             &mut current_tool_id,
-            &mut current_tool_name,
         );
         let chunk = result.unwrap().unwrap();
         assert_eq!(chunk.content.len(), 1);
@@ -2317,7 +2297,6 @@ mod tests {
 
         // Test ContentBlockStart with InputJsonDelta (should fail)
         let mut current_tool_id = None;
-        let mut current_tool_name = None;
         let content_block_start = GCPVertexAnthropicStreamMessage::ContentBlockStart {
             content_block: GCPVertexAnthropicMessageBlock::InputJsonDelta {
                 partial_json: "aaaa: bbbbb".to_string(),
@@ -2330,7 +2309,6 @@ mod tests {
             content_block_start,
             latency,
             &mut current_tool_id,
-            &mut current_tool_name,
         );
         let details = result.unwrap_err().get_owned_details();
         assert_eq!(
@@ -2351,7 +2329,6 @@ mod tests {
             content_block_stop,
             latency,
             &mut current_tool_id,
-            &mut current_tool_name,
         );
         assert!(result.is_ok());
         assert!(result.unwrap().is_none());
@@ -2366,7 +2343,6 @@ mod tests {
             error_message,
             latency,
             &mut current_tool_id,
-            &mut current_tool_name,
         );
         let details = result.unwrap_err().get_owned_details();
         assert_eq!(
@@ -2393,7 +2369,6 @@ mod tests {
             message_delta,
             latency,
             &mut current_tool_id,
-            &mut current_tool_name,
         );
         assert!(result.is_ok());
         let chunk = result.unwrap().unwrap();
@@ -2414,7 +2389,6 @@ mod tests {
             message_start,
             latency,
             &mut current_tool_id,
-            &mut current_tool_name,
         );
         assert!(result.is_ok());
         let chunk = result.unwrap().unwrap();
@@ -2433,7 +2407,6 @@ mod tests {
             message_stop,
             latency,
             &mut current_tool_id,
-            &mut current_tool_name,
         );
         assert!(result.is_ok());
         assert!(result.unwrap().is_none());
@@ -2446,7 +2419,6 @@ mod tests {
             ping,
             latency,
             &mut current_tool_id,
-            &mut current_tool_name,
         );
         assert!(result.is_ok());
         assert!(result.unwrap().is_none());

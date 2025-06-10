@@ -4,89 +4,33 @@ use std::collections::HashMap;
 use pyo3::prelude::*;
 #[cfg(feature = "pyo3")]
 use pyo3::types::{PyAny, PyList};
-use serde::Deserialize;
+use serde::Serialize;
 use serde_json::Value;
 #[cfg(feature = "pyo3")]
 use tensorzero_internal::inference::types::pyo3_helpers::{
-    content_block_output_to_python, serialize_to_dict, uuid_to_python,
+    content_block_chat_output_to_python, serialize_to_dict, uuid_to_python,
 };
+use tensorzero_internal::inference::types::Text;
 use tensorzero_internal::{
+    clickhouse::types::StoredInference,
     config_parser::Config,
     error::{Error, ErrorDetails},
-    inference::types::{
-        ContentBlockChatOutput, ContentBlockOutput, JsonInferenceOutput, ModelInput, ResolvedInput,
-    },
+    inference::types::{ContentBlockChatOutput, ModelInput},
     tool::ToolCallConfigDatabaseInsert,
     variant::{chat_completion::prepare_model_input, VariantConfig},
 };
 use uuid::Uuid;
 
-/// Represents an stored inference to be used for optimization.
-/// These are retrieved from the database in this format.
-/// NOTE / TODO: As an incremental step we are deserializing this enum from Python.
-/// in the final version we should instead make this a native PyO3 class and
-/// avoid deserialization entirely unless given a dict.
-#[derive(Debug, Deserialize, PartialEq)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum StoredInference {
-    Chat(StoredChatInference),
-    Json(StoredJsonInference),
-}
-
-#[derive(Debug, Deserialize, PartialEq)]
-pub struct StoredChatInference {
-    pub function_name: String,
-    pub variant_name: String,
-    pub input: ResolvedInput,
-    pub output: Vec<ContentBlockChatOutput>,
-    pub episode_id: Uuid,
-    pub inference_id: Uuid,
-    pub tool_params: ToolCallConfigDatabaseInsert,
-}
-
-#[derive(Debug, Deserialize, PartialEq)]
-pub struct StoredJsonInference {
-    pub function_name: String,
-    pub variant_name: String,
-    pub input: ResolvedInput,
-    pub output: JsonInferenceOutput,
-    pub episode_id: Uuid,
-    pub inference_id: Uuid,
-    pub output_schema: Value,
-}
-
-impl StoredInference {
-    pub fn input_mut(&mut self) -> &mut ResolvedInput {
-        match self {
-            StoredInference::Chat(example) => &mut example.input,
-            StoredInference::Json(example) => &mut example.input,
-        }
-    }
-    pub fn input(&self) -> &ResolvedInput {
-        match self {
-            StoredInference::Chat(example) => &example.input,
-            StoredInference::Json(example) => &example.input,
-        }
-    }
-
-    pub fn function_name(&self) -> &str {
-        match self {
-            StoredInference::Chat(example) => &example.function_name,
-            StoredInference::Json(example) => &example.function_name,
-        }
-    }
-}
-
 /// Represents an inference that has been prepared for fine-tuning.
 /// This is constructed by rendering a StoredInference with a variant for messages
 /// and by resolving all network resources (e.g. images).
-#[cfg_attr(feature = "pyo3", pyclass)]
-#[derive(Debug, PartialEq)]
+#[cfg_attr(feature = "pyo3", pyclass(str))]
+#[derive(Debug, PartialEq, Serialize)]
 pub struct RenderedStoredInference {
     pub function_name: String,
     pub variant_name: String,
     pub input: ModelInput,
-    pub output: Vec<ContentBlockOutput>,
+    pub output: Vec<ContentBlockChatOutput>,
     pub episode_id: Uuid,
     pub inference_id: Uuid,
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
@@ -116,7 +60,7 @@ impl RenderedStoredInference {
         let output = self
             .output
             .iter()
-            .map(|x| content_block_output_to_python(py, x))
+            .map(|x| content_block_chat_output_to_python(py, x.clone()))
             .collect::<PyResult<Vec<_>>>()?;
         PyList::new(py, output).map(|list| list.into_any())
     }
@@ -139,6 +83,18 @@ impl RenderedStoredInference {
     #[getter]
     pub fn get_output_schema<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         serialize_to_dict(py, self.output_schema.clone()).map(|x| x.into_bound(py))
+    }
+
+    pub fn __repr__(&self) -> String {
+        self.to_string()
+    }
+}
+
+impl std::fmt::Display for RenderedStoredInference {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Serialize the rendered inference to pretty-printed JSON
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
     }
 }
 
@@ -167,7 +123,7 @@ fn render_model_input(
                 name: variant_name.clone(),
             })
         })?;
-    let VariantConfig::ChatCompletion(chat_completion_config) = variant_config else {
+    let VariantConfig::ChatCompletion(chat_completion_config) = &variant_config.inner else {
         return Err(Error::new(ErrorDetails::InvalidVariantForOptimization {
             function_name: inference_example.function_name().to_string(),
             variant_name: variant_name.clone(),
@@ -207,6 +163,7 @@ fn render_model_input(
         system_template_name,
         user_template_name,
         assistant_template_name,
+        function_config.template_schema_info(),
     )
 }
 
@@ -226,15 +183,15 @@ pub fn render_stored_inference(
             function_name: example.function_name,
             variant_name: example.variant_name,
             input: model_input,
-            output: example.output.into_iter().map(|x| x.into()).collect(),
+            output: example.output,
             episode_id: example.episode_id,
             inference_id: example.inference_id,
             tool_params: Some(example.tool_params),
             output_schema: None,
         }),
         StoredInference::Json(example) => {
-            let output: Vec<ContentBlockOutput> = match example.output.raw {
-                Some(raw) => vec![raw.into()],
+            let output: Vec<ContentBlockChatOutput> = match example.output.raw {
+                Some(raw) => vec![ContentBlockChatOutput::Text(Text { text: raw })],
                 None => vec![],
             };
             Ok(RenderedStoredInference {

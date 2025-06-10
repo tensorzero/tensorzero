@@ -82,7 +82,10 @@ async def test_async_basic_inference(async_client):
     ]
 
     result = await async_client.chat.completions.create(
-        extra_body={"tensorzero::episode_id": str(uuid7())},
+        extra_body={
+            "tensorzero::episode_id": str(uuid7()),
+            "tensorzero::tags": {"foo": "bar"},
+        },
         messages=messages,
         model="tensorzero::function_name::basic_test",
         temperature=0.4,
@@ -99,6 +102,7 @@ async def test_async_basic_inference(async_client):
     assert usage.completion_tokens == 10
     assert usage.total_tokens == 20
     assert result.choices[0].finish_reason == "stop"
+    assert result.service_tier is None
 
 
 class DummyModel(BaseModel):
@@ -209,6 +213,7 @@ async def test_async_inference_streaming_with_cache(async_client):
 
     content = ""
     for i, chunk in enumerate(chunks[:-1]):  # All but the last chunk
+        assert chunk.service_tier is None
         if i < len(expected_text):
             assert chunk.choices[0].delta.content == expected_text[i]
             content += chunk.choices[0].delta.content
@@ -527,6 +532,7 @@ async def test_async_tool_call_streaming(async_client):
     ]
     previous_inference_id = None
     previous_episode_id = None
+    name_seen = False
     for i, chunk in enumerate(chunks):
         if previous_inference_id is not None:
             assert chunk.id == previous_inference_id
@@ -544,7 +550,10 @@ async def test_async_tool_call_streaming(async_client):
             assert len(chunk.choices[0].delta.tool_calls) == 1
             tool_call = chunk.choices[0].delta.tool_calls[0]
             assert tool_call.type == "function"
-            assert tool_call.function.name == "get_temperature"
+            if tool_call.function.name is not None and tool_call.function.name != "":
+                assert not name_seen
+                assert tool_call.function.name == "get_temperature"
+                name_seen = True
             assert tool_call.function.arguments == expected_text[i]
         else:
             assert chunk.choices[0].delta.content is None
@@ -552,6 +561,7 @@ async def test_async_tool_call_streaming(async_client):
             # We did not send 'include_usage'
             assert chunk.usage is None
             assert chunk.choices[0].finish_reason == "tool_calls"
+    assert name_seen
 
 
 @pytest.mark.asyncio

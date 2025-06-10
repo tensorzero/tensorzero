@@ -27,18 +27,16 @@ impl Migration for Migration0019<'_> {
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         self.clickhouse
-            .run_query_synchronous(
+            .run_query_synchronous_no_params(
                 "ALTER TABLE ChatInference ADD COLUMN IF NOT EXISTS extra_body Nullable(String)"
                     .to_string(),
-                None,
             )
             .await?;
 
         self.clickhouse
-            .run_query_synchronous(
+            .run_query_synchronous_no_params(
                 "ALTER TABLE JsonInference ADD COLUMN IF NOT EXISTS extra_body Nullable(String)"
                     .to_string(),
-                None,
             )
             .await?;
 

@@ -6,12 +6,17 @@ import httpx
 from .client import AsyncTensorZeroGateway, BaseTensorZeroGateway, TensorZeroGateway
 from .tensorzero import (
     RenderedStoredInference,
+    ResolvedInput,
+    ResolvedInputMessage,
+    StoredInference,
 )
 from .tensorzero import (
     _start_http_gateway as _start_http_gateway,
 )
 from .types import (
+    AndNode,
     BaseTensorZeroError,
+    BooleanMetricNode,
     ChatDatapointInsert,
     ChatInferenceDatapointInput,  # DEPRECATED
     ChatInferenceResponse,
@@ -24,6 +29,7 @@ from .types import (
     FileBase64,
     FileUrl,
     FinishReason,
+    FloatMetricNode,
     ImageBase64,
     ImageUrl,
     InferenceChunk,
@@ -34,10 +40,9 @@ from .types import (
     JsonInferenceOutput,
     JsonInferenceResponse,
     Message,
+    NotNode,
+    OrNode,
     RawText,
-    StoredChatInference,
-    StoredInference,
-    StoredJsonInference,
     System,
     TensorZeroError,
     TensorZeroInternalError,
@@ -56,12 +61,13 @@ from .types import (
 )
 
 __all__ = [
+    "AndNode",
     "AsyncTensorZeroGateway",
     "BaseTensorZeroError",
     "BaseTensorZeroGateway",
+    "BooleanMetricNode",
     "ChatDatapointInsert",
     "ChatInferenceDatapointInput",  # DEPRECATED
-    "StoredChatInference",
     "ChatInferenceResponse",
     "ContentBlock",
     "Datapoint",
@@ -72,18 +78,22 @@ __all__ = [
     "FileBase64",
     "FileUrl",
     "FinishReason",
+    "FloatMetricNode",
     "ImageBase64",
     "ImageUrl",
     "InferenceChunk",
+    "ResolvedInput",
+    "ResolvedInputMessage",
     "StoredInference",
     "InferenceInput",
     "InferenceResponse",
     "JsonDatapointInsert",
     "JsonInferenceDatapointInput",  # DEPRECATED
     "JsonInferenceOutput",
-    "StoredJsonInference",
     "JsonInferenceResponse",
     "Message",
+    "NotNode",
+    "OrNode",
     "patch_openai_client",
     "RawText",
     "RenderedStoredInference",

@@ -89,7 +89,8 @@ class ClientType(Enum):
 async def async_client(request: FixtureRequest):
     if request.param == ClientType.HttpGateway:
         client_fut = AsyncTensorZeroGateway.build_http(
-            gateway_url="http://localhost:3000"
+            gateway_url="http://localhost:3000",
+            verbose_errors=True,
         )
         assert inspect.isawaitable(client_fut)
         async with await client_fut as client:
@@ -725,8 +726,11 @@ async def test_async_tool_call_streaming(async_client: AsyncTensorZeroGateway):
         if i + 1 < len(chunks):
             assert len(chunk.content) == 1
             assert isinstance(chunk.content[0], ToolCallChunk)
+            if i == 0:
+                assert chunk.content[0].raw_name == "get_temperature"
+            else:
+                assert chunk.content[0].raw_name == ""
             assert chunk.content[0].type == "tool_call"
-            assert chunk.content[0].raw_name == "get_temperature"
             assert chunk.content[0].id == "0"
             assert chunk.content[0].raw_arguments == expected_text[i]
         else:
@@ -1019,7 +1023,8 @@ async def test_async_error():
 def sync_client(request: FixtureRequest):
     if request.param == ClientType.HttpGateway:
         with TensorZeroGateway.build_http(
-            gateway_url="http://localhost:3000"
+            gateway_url="http://localhost:3000",
+            verbose_errors=True,
         ) as client:
             yield client
     else:
@@ -1710,7 +1715,10 @@ def test_sync_tool_call_streaming(sync_client: TensorZeroGateway):
             assert len(chunk.content) == 1
             assert isinstance(chunk.content[0], ToolCallChunk)
             assert chunk.content[0].type == "tool_call"
-            assert chunk.content[0].raw_name == "get_temperature"
+            if i == 0:
+                assert chunk.content[0].raw_name == "get_temperature"
+            else:
+                assert chunk.content[0].raw_name == ""
             assert chunk.content[0].id == "0"
             assert chunk.content[0].raw_arguments == expected_text[i]
         else:

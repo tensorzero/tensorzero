@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, Serializer};
 use serde_json::Value;
 
 #[cfg(feature = "pyo3")]
@@ -25,13 +25,20 @@ use crate::{
 /// A Tool object describes how a tool can be dynamically configured by the user.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(feature = "pyo3", pyclass)]
+#[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct Tool {
     pub description: String,
     pub parameters: Value,
     pub name: String,
     #[serde(default)]
     pub strict: bool,
+}
+
+impl std::fmt::Display for Tool {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
 }
 
 #[cfg(feature = "pyo3")]
@@ -55,6 +62,10 @@ impl Tool {
     #[getter]
     pub fn get_strict(&self) -> bool {
         self.strict
+    }
+
+    pub fn __repr__(&self) -> String {
+        self.to_string()
     }
 }
 
@@ -205,7 +216,7 @@ impl ToolCallConfig {
 /// ToolCallConfigDatabaseInsert is a lightweight version of ToolCallConfig that can be serialized and cloned.
 /// It is used to insert the ToolCallConfig into the database.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
-#[cfg_attr(feature = "pyo3", pyclass)]
+#[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct ToolCallConfigDatabaseInsert {
     pub tools_available: Vec<Tool>,
     pub tool_choice: ToolChoice,
@@ -213,6 +224,13 @@ pub struct ToolCallConfigDatabaseInsert {
     // This is complicated because ToolChoice is an enum with some simple arms and some
     // struct arms. We would likely need to land on one of the serde options for enums (tagged?)
     pub parallel_tool_calls: Option<bool>,
+}
+
+impl std::fmt::Display for ToolCallConfigDatabaseInsert {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
 }
 
 #[cfg(feature = "pyo3")]
@@ -226,6 +244,10 @@ impl ToolCallConfigDatabaseInsert {
     #[getter]
     pub fn get_parallel_tool_calls(&self) -> Option<bool> {
         self.parallel_tool_calls
+    }
+
+    pub fn __repr__(&self) -> String {
+        self.to_string()
     }
 }
 
@@ -258,11 +280,26 @@ pub struct BatchDynamicToolParamsWithSize(pub BatchDynamicToolParams, pub usize)
 
 /// A ToolCall is a request by a model to call a Tool
 #[derive(Clone, Debug, PartialEq, Serialize)]
-#[cfg_attr(feature = "pyo3", pyclass(get_all))]
+#[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
 pub struct ToolCall {
     pub name: String,
     pub arguments: String,
     pub id: String,
+}
+
+impl std::fmt::Display for ToolCall {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl ToolCall {
+    pub fn __repr__(&self) -> String {
+        self.to_string()
+    }
 }
 
 /// The input format that we accept from the clients.
@@ -333,13 +370,28 @@ impl<'de> Deserialize<'de> for ToolCall {
 /// A ToolCallOutput is a request by a model to call a Tool
 /// in the form that we return to the client / ClickHouse
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(feature = "pyo3", pyclass)]
+#[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct ToolCallOutput {
     pub arguments: Option<Value>,
     pub id: String,
     pub name: Option<String>,
     pub raw_arguments: String,
     pub raw_name: String,
+}
+
+impl std::fmt::Display for ToolCallOutput {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl ToolCallOutput {
+    pub fn __repr__(&self) -> String {
+        self.to_string()
+    }
 }
 
 impl ToolCallOutput {
@@ -390,13 +442,28 @@ impl ToolCallConfig {
 }
 
 /// A ToolResult is the outcome of a ToolCall, which we may want to present back to the model
-#[cfg_attr(feature = "pyo3", pyclass(get_all))]
+#[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ToolResult {
     pub name: String,
     pub result: String,
     pub id: String,
+}
+
+impl std::fmt::Display for ToolResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl ToolResult {
+    pub fn __repr__(&self) -> String {
+        self.to_string()
+    }
 }
 
 /// Most inference providers allow the user to force a tool to be used
@@ -418,8 +485,22 @@ pub enum ToolChoice {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct ToolCallChunk {
     pub id: String,
-    pub raw_name: String,
+    #[serde(serialize_with = "serialize_option_string_as_empty")]
+    pub raw_name: Option<String>,
     pub raw_arguments: String,
+}
+
+fn serialize_option_string_as_empty<S>(
+    value: &Option<String>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    match value {
+        Some(s) => serializer.serialize_str(s),
+        None => serializer.serialize_str(""),
+    }
 }
 
 pub const IMPLICIT_TOOL_NAME: &str = "respond";
