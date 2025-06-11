@@ -87,6 +87,7 @@ def download_file(filename, remote_etag):
                 raise Exception(
                     f"ETag mismatch after downloading: {local_etag} != {remote_etag}"
                 )
+            return
         except Exception as e:
             print(
                 f"Error downloading `{filename}` (attempt {i + 1} of {RETRIES}): {e}",
