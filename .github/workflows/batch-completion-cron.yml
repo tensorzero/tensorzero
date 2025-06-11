@@ -167,7 +167,7 @@ jobs:
 
     - name: Anthropic Batch Inference
       env:
-        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        ANTHROPIC_API_KEY: ${{ secrets.BATCH_CRON_ANTHROPIC_API_KEY }}
       run: |
         python -c "
         import anthropic
