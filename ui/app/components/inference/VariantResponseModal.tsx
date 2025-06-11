@@ -16,6 +16,71 @@ import type { InferenceResponse } from "~/utils/tensorzero";
 import { Card, CardContent } from "~/components/ui/card";
 import type { VariantResponseInfo } from "~/routes/api/tensorzero/inference.utils";
 
+interface ResponseColumnProps {
+  title: string;
+  response: VariantResponseInfo | null;
+  errorMessage?: string | null;
+  children?: React.ReactNode;
+  item: ParsedInferenceRow | ParsedDatasetRow;
+}
+
+function ResponseColumn({
+  title,
+  response,
+  errorMessage,
+  children,
+  item,
+}: ResponseColumnProps) {
+  return (
+    <div className="flex flex-1 flex-col">
+      <div className="mb-2 flex items-center justify-between">
+        <h3 className="text-sm font-semibold">{title}</h3>
+        {children}
+      </div>
+      {errorMessage ? (
+        <div className="flex-1">
+          <Card>
+            <CardContent className="pt-8">
+              <div className="text-red-600">
+                <p className="font-semibold">Error</p>
+                <p>{errorMessage}</p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      ) : (
+        response && (
+          <>
+            {response.output && (
+              <div className="flex-1">
+                <NewOutput
+                  output={
+                    "output_schema" in item && item.output_schema
+                      ? { ...response.output, schema: item.output_schema }
+                      : response.output
+                  }
+                />
+              </div>
+            )}
+
+            {response.usage && (
+              <div className="mt-4">
+                <h4 className="mb-1 text-xs font-semibold">Usage</h4>
+                <p className="text-xs">
+                  Input tokens: {response.usage.input_tokens}
+                </p>
+                <p className="text-xs">
+                  Output tokens: {response.usage.output_tokens}
+                </p>
+              </div>
+            )}
+          </>
+        )
+      )}
+    </div>
+  );
+}
+
 interface VariantResponseModalProps {
   isOpen: boolean;
   isLoading: boolean;
@@ -65,65 +130,6 @@ export function VariantResponseModal({
     setShowRawResponse(false);
   }, [isOpen]);
 
-  const ResponseColumn = ({
-    title,
-    response,
-    errorMessage,
-    children,
-  }: {
-    title: string;
-    response: VariantResponseInfo | null;
-    errorMessage?: string | null;
-    children?: React.ReactNode;
-  }) => (
-    <div className="flex flex-1 flex-col">
-      <div className="mb-2 flex items-center justify-between">
-        <h3 className="text-sm font-semibold">{title}</h3>
-        {children}
-      </div>
-      {errorMessage ? (
-        <div className="flex-1">
-          <Card>
-            <CardContent className="pt-8">
-              <div className="text-red-600">
-                <p className="font-semibold">Error</p>
-                <p>{errorMessage}</p>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      ) : (
-        response && (
-          <>
-            {response.output && (
-              <div className="flex-1">
-                <NewOutput
-                  output={
-                    "output_schema" in item && item.output_schema
-                      ? { ...response.output, schema: item.output_schema }
-                      : response.output
-                  }
-                />
-              </div>
-            )}
-
-            {response.usage && (
-              <div className="mt-4">
-                <h4 className="mb-1 text-xs font-semibold">Usage</h4>
-                <p className="text-xs">
-                  Input tokens: {response.usage.input_tokens}
-                </p>
-                <p className="text-xs">
-                  Output tokens: {response.usage.output_tokens}
-                </p>
-              </div>
-            )}
-          </>
-        )
-      )}
-    </div>
-  );
-
   // Create a dynamic title based on the source
   const getTitle = () => {
     if (source === "inference") {
@@ -172,11 +178,16 @@ export function VariantResponseModal({
           ) : (
             <>
               <div className="flex flex-col gap-4 md:grid md:min-h-[300px] md:grid-cols-2">
-                <ResponseColumn title="Original" response={baselineResponse} />
+                <ResponseColumn
+                  title="Original"
+                  response={baselineResponse}
+                  item={item}
+                />
                 <ResponseColumn
                   title="New"
                   response={variantResponse}
                   errorMessage={error}
+                  item={item}
                 >
                   {children}
                 </ResponseColumn>
