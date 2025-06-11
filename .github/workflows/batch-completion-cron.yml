@@ -139,6 +139,7 @@ jobs:
             predictions_format='jsonl',
             gcs_source=f'gs://{bucket_name}/{input_blob_name}',
             gcs_destination_prefix=f'gs://{bucket_name}/{output_blob_name}',
+            wait_for_completion=False
         )
         
         print(f'Vertex AI Batch Job Created: {job.name}')
