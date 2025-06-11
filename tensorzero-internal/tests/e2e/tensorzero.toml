@@ -1037,6 +1037,12 @@ model = "llama-scout-groq"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
+[functions.basic_test.variants.groq-shorthand]
+type = "chat_completion"
+model = "groq::meta-llama/llama-4-scout-17b-16e-instruct"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
 [functions.basic_test.variants.groq-extra-body]
 type = "chat_completion"
 model = "llama-scout-groq"
@@ -1199,6 +1205,12 @@ extra_headers = [
 [functions.basic_test.variants.openrouter-dynamic]
 type = "chat_completion"
 model = "gpt_4_1_mini_openrouter_dynamic"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.openrouter-shorthand]
+type = "chat_completion"
+model = "openrouter::openai/gpt-4.1"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
