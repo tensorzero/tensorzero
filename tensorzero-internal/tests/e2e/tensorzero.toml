@@ -2321,6 +2321,7 @@ type = "chat_completion"
 model = "gemini-2.0-flash-lite-tuned"
 system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
+json_mode = "strict"
 max_tokens = 100
 
 [functions.dynamic_json.variants.google-ai-studio-gemini-flash-8b]
