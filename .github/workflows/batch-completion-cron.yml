@@ -1,0 +1,172 @@
+name: Batch Inference Completion-time Cron Job
+
+on:
+  schedule:
+    # Runs every hour at minute 0
+    - cron: '0 * * * *'
+  workflow_dispatch: # Allow manual triggering
+
+env:
+  # Fixed input for all batch jobs
+  BATCH_INPUT: |
+    {"custom_id": "request-1", "method": "POST", "url": "/v1/chat/completions", "body": {"model": "gpt-4", "messages": [{"role": "user", "content": "What is the capital of France?"}], "max_tokens": 100}}
+
+jobs:
+  batch-inference:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+
+    - name: Install dependencies
+      run: |
+        pip install openai google-cloud-aiplatform anthropic requests
+
+    - name: Create batch input file
+      run: |
+        mkdir -p batch_inputs
+        echo '${{ env.BATCH_INPUT }}' > batch_inputs/input.jsonl
+
+    - name: OpenAI Batch Inference
+      env:
+        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      run: |
+        python -c "
+        import openai
+        import json
+        from datetime import datetime
+        
+        client = openai.OpenAI()
+        
+        # Upload batch input file
+        batch_input_file = client.files.create(
+            file=open('batch_inputs/input.jsonl', 'rb'),
+            purpose='batch'
+        )
+        
+        # Create batch job
+        batch_job = client.batches.create(
+            input_file_id=batch_input_file.id,
+            endpoint='/v1/chat/completions',
+            completion_window='24h',
+            metadata={'source': 'github-actions', 'timestamp': datetime.now().isoformat()}
+        )
+        
+        print(f'OpenAI Batch Job Created: {batch_job.id}')
+        print(f'Status: {batch_job.status}')
+        "
+
+    - name: Google Vertex AI Batch Inference
+      env:
+        GOOGLE_APPLICATION_CREDENTIALS_JSON: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_JSON }}
+        GOOGLE_CLOUD_PROJECT: tensorzero-public
+        GOOGLE_CLOUD_REGION: us-east1
+      run: |
+        # Create service account key file
+        echo '${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_JSON }}' > /tmp/gcp-key.json
+        export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-key.json
+        
+        python -c "
+        from google.cloud import aiplatform
+        from google.cloud import storage
+        import json
+        from datetime import datetime
+        import uuid
+        
+        # Initialize Vertex AI
+        aiplatform.init(
+            project='tensorzero-public',
+            location='us-east1'
+        )
+        
+        # Create batch prediction input
+        batch_input = {
+            'instances': [
+                {
+                    'messages': [
+                        {'role': 'user', 'content': 'What is the capital of France?'}
+                    ]
+                }
+            ]
+        }
+        
+        # Upload to GCS (you'll need a bucket)
+        storage_client = storage.Client()
+        bucket_name = 'tensorzero-batch-tests-input'
+        bucket = storage_client.bucket(bucket_name)
+        
+        # Create unique filename
+        timestamp = datetime.now().strftime('%Y%m%d-%H%M%S')
+        input_blob_name = f'batch-inputs/gemini-input-{timestamp}.jsonl'
+        output_blob_name = f'batch-outputs/gemini-output-{timestamp}/'
+        
+        # Upload input file
+        blob = bucket.blob(input_blob_name)
+        blob.upload_from_string(json.dumps(batch_input))
+        
+        # Create batch prediction job
+        job = aiplatform.BatchPredictionJob.create(
+            job_display_name=f'gemini-batch-{timestamp}',
+            model_name='publishers/google/models/gemini-1.5-flash-001',
+            instances_format='jsonl',
+            predictions_format='jsonl',
+            gcs_source=f'gs://{bucket_name}/{input_blob_name}',
+            gcs_destination_prefix=f'gs://{bucket_name}/{output_blob_name}',
+        )
+        
+        print(f'Vertex AI Batch Job Created: {job.name}')
+        print(f'State: {job.state}')
+        "
+
+    - name: Anthropic Batch Inference
+      env:
+        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      run: |
+        python -c "
+        import anthropic
+        import json
+        from datetime import datetime
+        
+        client = anthropic.Anthropic()
+        
+        # Create batch input for Anthropic format
+        batch_input = {
+            'custom_id': 'request-1',
+            'params': {
+                'model': 'claude-3-haiku-20240307',
+                'max_tokens': 100,
+                'messages': [
+                    {'role': 'user', 'content': 'What is the capital of France?'}
+                ]
+            }
+        }
+        
+        # Write to file
+        with open('batch_inputs/anthropic_input.jsonl', 'w') as f:
+            f.write(json.dumps(batch_input) + '\n')
+        
+        # Create batch job
+        with open('batch_inputs/anthropic_input.jsonl', 'rb') as f:
+            batch_job = client.beta.messages.batches.create(
+                requests_file=f
+            )
+        
+        print(f'Anthropic Batch Job Created: {batch_job.id}')
+        print(f'Processing Status: {batch_job.processing_status}')
+        "
+
+    - name: Log completion
+      run: |
+        echo "Batch inference jobs submitted at $(date)"
+        echo "All three providers have been triggered successfully"
+
+    - name: Cleanup
+      run: |
+        rm -rf batch_inputs/
+        rm -f /tmp/gcp-key.json
