@@ -13,7 +13,7 @@ import {
 } from "~/components/layout/PageLayout";
 import { PageLayout } from "~/components/layout/PageLayout";
 import Input from "~/components/inference/Input";
-import { data, isRouteErrorResponse, redirect } from "react-router";
+import { data, isRouteErrorResponse, redirect, Link } from "react-router";
 import Output from "~/components/inference/NewOutput";
 import {
   consolidate_evaluation_results,
@@ -441,24 +441,46 @@ function OutputsSection({
             className="flex max-w-[450px] min-w-[300px] shrink-0 flex-col justify-between"
           >
             <div>
-              <div className="mb-2 flex">
+              <div className="mb-2 flex flex-col gap-1">
                 {result.id === "Reference" ? (
-                  <EvaluationRunBadge
-                    runInfo={{
-                      evaluation_run_id: "",
-                      variant_name: result.variant_name,
-                    }}
-                    getColor={() => "bg-gray-100 text-gray-700"}
-                  />
+                  <>
+                    <EvaluationRunBadge
+                      runInfo={{
+                        evaluation_run_id: "",
+                        variant_name: result.variant_name,
+                      }}
+                      getColor={() => "bg-gray-100 text-gray-700"}
+                    />
+                    <div className="text-xs text-transparent">
+                      Inference: placeholder
+                    </div>
+                  </>
                 ) : (
-                  <EvaluationRunBadge
-                    runInfo={{
-                      evaluation_run_id: result.id,
-                      variant_name: result.variant_name,
-                    }}
-                    // Use the getColor obtained from the correct context
-                    getColor={getColor}
-                  />
+                  <>
+                    <EvaluationRunBadge
+                      runInfo={{
+                        evaluation_run_id: result.id,
+                        variant_name: result.variant_name,
+                      }}
+                      // Use the getColor obtained from the correct context
+                      getColor={getColor}
+                    />
+                    {result.inferenceId ? (
+                      <div className="text-xs text-gray-500">
+                        Inference:{" "}
+                        <Link
+                          to={`/observability/inferences/${result.inferenceId}`}
+                          className="text-blue-600 hover:text-blue-800 hover:underline"
+                        >
+                          {result.inferenceId}
+                        </Link>
+                      </div>
+                    ) : (
+                      <div className="text-xs text-transparent">
+                        Inference: placeholder
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
               <Output output={result.output} />
