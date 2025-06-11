@@ -4,6 +4,9 @@ on:
   schedule:
     # Runs every hour at minute 0
     - cron: '0 * * * *'
+  push:
+    branches:
+      - aaron/batch-completion-time
   workflow_dispatch: # Allow manual triggering
 
 env:
