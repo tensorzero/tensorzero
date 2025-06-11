@@ -43,6 +43,7 @@ import { useToast } from "~/hooks/use-toast";
 import {
   prepareInferenceActionRequest,
   useInferenceActionFetcher,
+  type VariantResponseInfo,
 } from "~/routes/api/tensorzero/inference.utils";
 import { ActionBar } from "~/components/layout/ActionBar";
 import { TryWithVariantButton } from "~/components/inference/TryWithVariantButton";
@@ -476,7 +477,11 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
               <input
                 type="hidden"
                 name="value"
-                value={JSON.stringify(variantInferenceFetcher.data.info.output)}
+                value={JSON.stringify(
+                  prepareDemonstrationFromVariantOutput(
+                    variantInferenceFetcher.data.info,
+                  ),
+                )}
               />
               <DemonstrationFeedbackButton
                 isSubmitting={
@@ -553,4 +558,20 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
       </div>
     </div>
   );
+}
+
+function prepareDemonstrationFromVariantOutput(
+  variantOutput: VariantResponseInfo,
+) {
+  const output = variantOutput.output;
+  // output can either be a JsonInferenceOutput or a ContentBlockOutput[] (or undefined)
+  // if it is a JsonInferenceOutput, we need to take the Parsed field and throw if it is missing
+  // if it is a ContentBlockOutput[], we can return as is
+  if (Array.isArray(output)) {
+    return output;
+  } else if (output && "parsed" in output) {
+    return output.parsed;
+  } else {
+    throw new Error("Invalid variant output");
+  }
 }
