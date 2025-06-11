@@ -15,9 +15,8 @@ env:
     {"custom_id": "request-1", "method": "POST", "url": "/v1/chat/completions", "body": {"model": "gpt-4", "messages": [{"role": "user", "content": "What is the capital of France?"}], "max_tokens": 100}}
 
 jobs:
-  batch-inference:
+  openai-batch:
     runs-on: ubuntu-latest
-    
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -29,7 +28,7 @@ jobs:
 
     - name: Install dependencies
       run: |
-        pip install openai google-cloud-aiplatform anthropic requests
+        pip install openai requests
 
     - name: Create batch input file
       run: |
@@ -65,14 +64,33 @@ jobs:
         print(f'Status: {batch_job.status}')
         "
 
+    - name: Cleanup
+      run: |
+        rm -rf batch_inputs/
+
+  google-vertex-batch:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+
+    - name: Install dependencies
+      run: |
+        pip install google-cloud-aiplatform google-cloud-storage
+
     - name: Google Vertex AI Batch Inference
       env:
-        GOOGLE_APPLICATION_CREDENTIALS_JSON: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
+        GOOGLE_APPLICATION_CREDENTIALS_JSON: ${{ secrets.GCP_JWT_KEY }}
         GOOGLE_CLOUD_PROJECT: tensorzero-public
         GOOGLE_CLOUD_REGION: us-east1
       run: |
         # Create service account key file
-        echo '${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}' > /tmp/gcp-key.json
+        echo '${{ secrets.GCP_JWT_KEY }}' > /tmp/gcp-key.json
         export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-key.json
         
         python -c "
@@ -127,6 +145,25 @@ jobs:
         print(f'State: {job.state}')
         "
 
+    - name: Cleanup
+      run: |
+        rm -f /tmp/gcp-key.json
+
+  anthropic-batch:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+
+    - name: Install dependencies
+      run: |
+        pip install anthropic
+
     - name: Anthropic Batch Inference
       env:
         ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -164,12 +201,15 @@ jobs:
         print(f'Processing Status: {batch_job.processing_status}')
         "
 
+    - name: Cleanup
+      run: |
+        rm -rf batch_inputs/
+
+  log-completion:
+    needs: [openai-batch, google-vertex-batch, anthropic-batch]
+    runs-on: ubuntu-latest
+    steps:
     - name: Log completion
       run: |
         echo "Batch inference jobs submitted at $(date)"
         echo "All three providers have been triggered successfully"
-
-    - name: Cleanup
-      run: |
-        rm -rf batch_inputs/
-        rm -f /tmp/gcp-key.json
