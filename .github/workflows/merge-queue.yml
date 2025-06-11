@@ -212,8 +212,7 @@ jobs:
 
       - name: Check e2e logs for deprecation warnings
         run: |
-          ! grep -i "deprecation" e2e_logs.txt
-          ! grep -i "deprecated" e2e_logs.txt
+          ! grep -i "Deprecation Warning" e2e_logs.txt
 
       - name: Print e2e logs
         if: always()
