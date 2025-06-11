@@ -1,0 +1,8 @@
+# We're storing images for observability locally; you could use S3-compatible storage instead
+object_storage/
+
+# Follow the instructions in the example's README.md to download the dataset
+data/papers/
+data/images/
+data/dataset/
+data/labels.csv
