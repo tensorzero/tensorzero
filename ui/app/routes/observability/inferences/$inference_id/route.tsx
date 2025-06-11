@@ -274,6 +274,8 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
     const data = demonstrationFeedbackFetcher.data;
     if (currentState === "idle" && data?.redirectTo) {
       navigate(data.redirectTo);
+      setOpenModal(null);
+      setSelectedVariant(null);
     }
   }, [
     demonstrationFeedbackFetcher.data,
@@ -466,14 +468,24 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
           selectedVariant={selectedVariant}
           source={variantSource}
         >
-          <demonstrationFeedbackFetcher.Form method="post">
-            <input type="hidden" name="_action" value="addDemonstration" />
-            <DemonstrationFeedbackButton
-              isSubmitting={demonstrationFeedbackFetcher.state === "submitting"}
-              variantResponse={variantInferenceFetcher.data?.info ?? null}
-              submissionError={demonstrationFeedbackFormError}
-            />
-          </demonstrationFeedbackFetcher.Form>
+          {variantInferenceFetcher.data?.info && (
+            <demonstrationFeedbackFetcher.Form method="post">
+              <input type="hidden" name="_action" value="addFeedback" />
+              <input type="hidden" name="metricName" value="demonstration" />
+              <input type="hidden" name="inferenceId" value={inference.id} />
+              <input
+                type="hidden"
+                name="value"
+                value={JSON.stringify(variantInferenceFetcher.data.info.output)}
+              />
+              <DemonstrationFeedbackButton
+                isSubmitting={
+                  demonstrationFeedbackFetcher.state === "submitting"
+                }
+                submissionError={demonstrationFeedbackFormError}
+              />
+            </demonstrationFeedbackFetcher.Form>
+          )}
         </VariantResponseModal>
       )}
       <Toaster />

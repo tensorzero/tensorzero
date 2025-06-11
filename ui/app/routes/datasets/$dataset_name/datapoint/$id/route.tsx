@@ -366,7 +366,6 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
           item={datapoint}
           selectedVariant={selectedVariant}
           source="datapoint"
-          inference_id={null}
         />
       )}
     </PageLayout>
