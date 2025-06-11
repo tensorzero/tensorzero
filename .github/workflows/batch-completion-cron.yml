@@ -37,7 +37,7 @@ jobs:
 
     - name: OpenAI Batch Inference
       env:
-        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        OPENAI_API_KEY: ${{ secrets.BATCH_CRON_OPENAI_API_KEY }}
       run: |
         python -c "
         import openai
