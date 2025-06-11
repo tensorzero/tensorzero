@@ -43,10 +43,32 @@ jobs:
         import openai
         import json
         from datetime import datetime
+        import secrets
+        import string
+        
+        # Generate random string
+        random_str = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(10))
         
         client = openai.OpenAI()
         
         # Upload batch input file
+        batch_input = {
+            'custom_id': 'request-1',
+            'method': 'POST',
+            'url': '/v1/chat/completions',
+            'body': {
+                'model': 'gpt-4',
+                'messages': [{
+                    'role': 'user',
+                    'content': f'My id is {random_str}. What is the capital of France?'
+                }],
+                'max_tokens': 100
+            }
+        }
+        
+        with open('batch_inputs/input.jsonl', 'w') as f:
+            f.write(json.dumps(batch_input) + '\n')
+        
         batch_input_file = client.files.create(
             file=open('batch_inputs/input.jsonl', 'rb'),
             purpose='batch'
@@ -99,6 +121,11 @@ jobs:
         import json
         from datetime import datetime
         import uuid
+        import secrets
+        import string
+        
+        # Generate random string
+        random_str = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(10))
         
         # Initialize Vertex AI
         aiplatform.init(
@@ -107,7 +134,16 @@ jobs:
         )
         
         # Create batch prediction input
-        batch_input = {'request':{'contents': [{"role": "user", "parts": [{"text": 'What is the capital of France?'}]}]}}
+        batch_input = {
+            'request': {
+                'contents': [{
+                    'role': 'user',
+                    'parts': [{
+                        'text': f'My id is {random_str}. What is the capital of France?'
+                    }]
+                }]
+            }
+        }
         
         # Upload to GCS (you'll need a bucket)
         storage_client = storage.Client()
@@ -164,9 +200,13 @@ jobs:
         import anthropic
         from anthropic.types.message_create_params import MessageCreateParamsNonStreaming
         from anthropic.types.messages.batch_create_params import Request
-
         import json
         from datetime import datetime
+        import secrets
+        import string
+        
+        # Generate random string
+        random_str = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(10))
         
         client = anthropic.Anthropic()
         
@@ -179,7 +219,7 @@ jobs:
                         max_tokens=1024,
                         messages=[{
                             'role': 'user',
-                            'content': 'What is the capital of France?',
+                            'content': f'My id is {random_str}. What is the capital of France?',
                         }]
                     )
                 ),
