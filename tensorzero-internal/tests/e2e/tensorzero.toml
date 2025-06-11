@@ -75,7 +75,7 @@ api_key_location = "dynamic::azure_openai_api_key"
 [models."llama-scout-groq"]
 routing = ["groq"]
 
-# The llama-scout-groq model is temporary set to Llama 3 instead
+# The llama-scout-groq model is temporarily set to Llama 3 instead
 # of Llama 4 scout, since Groq is having issues with Scout
 
 [models."llama-scout-groq".providers.groq]
