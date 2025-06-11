@@ -19,6 +19,16 @@ This example shows how to use the TensorZero Gateway as a proxy between Cursor a
    Grab your auth token and add it to the `.env` file as the value for `NGROK_AUTHTOKEN`.
 4. Run `docker compose up` to stand up ClickHouse, the TensorZero Gateway, the TensorZero UI, Nginx, and ngrok.
    To avoid port conflicts, ClickHouse and TensorZero services that would normally bind to ports `XXXX` bind to `1XXXX` instead (e.g. `3000` → `13000`).
+## ⚠️ Windows Users: Fix for nginx entrypoint.sh Line Endings
+
+If you encounter an error from the `nginx` service about not finding `entrypoint.sh` when running `docker compose up`, it may be due to incorrect line endings in the file (Windows uses `\r\n` instead of Unix-style `\n`).  
+To fix this, run the following PowerShell command in your project directory to convert the line endings to Unix-style:
+
+```powershell
+$content = Get-Content ./nginx/entrypoint.sh -Raw
+$content -replace "`r`n", "`n" | Set-Content ./nginx/entrypoint.sh -NoNewline -Encoding UTF8
+```
+
 5. Visit `http://localhost:4040` and grab your ngrok URL.
 6. Set your Cursor `OPENAI_BASE_URL` to your ngrok URL with the `/openai/v1` suffix (e.g. `https://your-id.ngrok-free.app/openai/v1`).
    This should be available in your Cursor model settings.
