@@ -30,6 +30,7 @@ interface VariantResponseModalProps {
   error?: string | null;
   variantResponse: VariantResponseInfo | null;
   rawResponse: InferenceResponse | null;
+  children?: React.ReactNode;
 }
 
 export function VariantResponseModal({
@@ -43,6 +44,7 @@ export function VariantResponseModal({
   error,
   variantResponse,
   rawResponse,
+  children,
 }: VariantResponseModalProps) {
   const [showRawResponse, setShowRawResponse] = useState(false);
 
@@ -67,13 +69,18 @@ export function VariantResponseModal({
     title,
     response,
     errorMessage,
+    children,
   }: {
     title: string;
     response: VariantResponseInfo | null;
     errorMessage?: string | null;
+    children?: React.ReactNode;
   }) => (
     <div className="flex flex-1 flex-col">
-      <h3 className="mb-2 text-sm font-semibold">{title}</h3>
+      <div className="mb-2 flex items-center justify-between">
+        <h3 className="text-sm font-semibold">{title}</h3>
+        {children}
+      </div>
       {errorMessage ? (
         <div className="flex-1">
           <Card>
@@ -170,8 +177,11 @@ export function VariantResponseModal({
                   title="New"
                   response={variantResponse}
                   errorMessage={error}
-                />
+                >
+                  {children}
+                </ResponseColumn>
               </div>
+
               <Separator className="my-4" />
               <div>
                 <Button

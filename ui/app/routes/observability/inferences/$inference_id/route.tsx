@@ -52,6 +52,7 @@ import { HumanFeedbackModal } from "~/components/feedback/HumanFeedbackModal";
 import { HumanFeedbackForm } from "~/components/feedback/HumanFeedbackForm";
 import { isServerRequestError } from "~/utils/common";
 import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
+import { DemonstrationFeedbackButton } from "~/components/feedback/DemonstrationFeedbackButton";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { inference_id } = params;
@@ -263,6 +264,23 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
     }
   }, [addToDatasetFetcher.data, addToDatasetFetcher.state, navigate]);
 
+  const demonstrationFeedbackFetcher = useFetcher<typeof action>();
+  const demonstrationFeedbackFormError =
+    demonstrationFeedbackFetcher.state === "idle"
+      ? (demonstrationFeedbackFetcher.data?.error ?? null)
+      : null;
+  useEffect(() => {
+    const currentState = demonstrationFeedbackFetcher.state;
+    const data = demonstrationFeedbackFetcher.data;
+    if (currentState === "idle" && data?.redirectTo) {
+      navigate(data.redirectTo);
+    }
+  }, [
+    demonstrationFeedbackFetcher.data,
+    demonstrationFeedbackFetcher.state,
+    navigate,
+  ]);
+
   const handleAddToDataset = (
     dataset: string,
     output: "inherit" | "demonstration" | "none",
@@ -447,7 +465,16 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
           inferenceUsage={getTotalInferenceUsage(model_inferences)}
           selectedVariant={selectedVariant}
           source={variantSource}
-        />
+        >
+          <demonstrationFeedbackFetcher.Form method="post">
+            <input type="hidden" name="_action" value="addDemonstration" />
+            <DemonstrationFeedbackButton
+              isSubmitting={demonstrationFeedbackFetcher.state === "submitting"}
+              variantResponse={variantInferenceFetcher.data?.info ?? null}
+              submissionError={demonstrationFeedbackFormError}
+            />
+          </demonstrationFeedbackFetcher.Form>
+        </VariantResponseModal>
       )}
       <Toaster />
     </PageLayout>
