@@ -405,3 +405,91 @@ async fn slow_second_chunk_streaming(payload: Value) {
         "ttft_ms should be less than 400ms, but was {ttft_ms}"
     );
 }
+
+// Model timeout tests
+
+#[tokio::test]
+async fn test_model_timeout_non_streaming() {
+    let payload = json!({
+        "function_name": "basic_test_model_timeout",
+        "variant_name": "slow_variant",
+        "episode_id": Uuid::now_v7(),
+        "input": {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Hello, world!"
+                }
+            ]
+        },
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    let response_json = response.json::<Value>().await.unwrap();
+    assert_eq!(
+        response_json,
+        json!({
+            "error":"All variants failed with errors: slow_variant: Model slow_model_timeout timed out due to configured `non_streaming.total_ms` timeout (400ms)"
+        })
+    );
+}
+
+#[tokio::test]
+async fn test_model_timeout_streaming() {
+    let payload = json!({
+        "function_name": "basic_test_model_timeout",
+        "variant_name": "slow_variant",
+        "episode_id": Uuid::now_v7(),
+        "input": {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Hello, world!"
+                }
+            ]
+        },
+        "stream": true,
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    let status = response.status();
+    let response_json = response.json::<Value>().await.unwrap();
+    assert_eq!(
+        response_json,
+        json!({
+            "error":"All variants failed with errors: slow_variant: Model slow_model_timeout timed out due to configured `streaming.ttft_ms` timeout (500ms)"
+        })
+    );
+    assert_eq!(status, StatusCode::BAD_GATEWAY);
+}
+
+#[tokio::test]
+async fn test_model_timeout_slow_second_chunk_streaming() {
+    slow_second_chunk_streaming(json!({
+        "function_name": "basic_test_model_timeout",
+        "variant_name": "slow_second_chunk",
+        "episode_id": Uuid::now_v7(),
+        "input": {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Hello, world!"
+                }
+            ]
+        },
+        "stream": true,
+    }))
+    .await;
+}
