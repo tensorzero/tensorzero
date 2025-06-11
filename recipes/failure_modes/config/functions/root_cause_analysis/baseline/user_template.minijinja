@@ -1,0 +1,29 @@
+# Root Cause Analysis Input
+
+---
+
+## System Message:
+{{ system_message }}
+
+---
+{% if tools_available is defined and tools_available %}
+## Available Tools:
+{% for tool in tools_available %}
+- **{{ tool.name }}**: {{ tool.description }}
+{% endfor %}
+---
+{% endif %}
+## Message History:
+{% for msg in messages %}
+**{{ msg.role | capitalize }}:**
+{{ msg.content }}
+{% endfor %}
+---
+
+## Feedback Metrics:
+{% for item in feedback %}
+- **{{ item.name }}:** {{ item.value }}
+{% endfor %}
+---
+
+Please analyze the failure of the LLM on this task based on the information above.
