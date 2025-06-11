@@ -181,13 +181,13 @@ jobs:
         batch_job = client.messages.batches.create(
             requests=[
                 Request(
-                    custom_id="my-first-request",
+                    custom_id='my-first-request',
                     params=MessageCreateParamsNonStreaming(
-                        model="claude-3-7-sonnet-20250219",
+                        model='claude-3-7-sonnet-20250219',
                         max_tokens=1024,
                         messages=[{
-                            "role": "user",
-                            "content": "What is the capital of France?",
+                            'role': 'user',
+                            'content': 'What is the capital of France?',
                         }]
                     )
                 ),
