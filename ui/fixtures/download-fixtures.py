@@ -9,6 +9,7 @@ import concurrent.futures
 import hashlib
 import os
 import subprocess
+import time
 from pathlib import Path
 
 import requests
@@ -68,21 +69,31 @@ def get_remote_etag(filename):
 
 def download_file(filename, remote_etag):
     """Download file from R2 bucket."""
-    url = f"{R2_BUCKET}/{filename}"
-    response = requests.get(url, stream=True)
-    response.raise_for_status()
+    RETRIES = 3
+    for i in range(RETRIES):
+        try:
+            url = f"{R2_BUCKET}/{filename}"
+            response = requests.get(url, stream=True)
+            response.raise_for_status()
 
-    local_file = S3_FIXTURES_DIR / filename
+            local_file = S3_FIXTURES_DIR / filename
 
-    with open(local_file, "wb") as f:
-        for chunk in response.iter_content(chunk_size=8192):
-            f.write(chunk)
+            with open(local_file, "wb") as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    f.write(chunk)
 
-    local_etag = calculate_etag(local_file)
-    if local_etag != remote_etag:
-        raise Exception(
-            f"ETag mismatch after downloading: {local_etag} != {remote_etag}"
-        )
+            local_etag = calculate_etag(local_file)
+            if local_etag != remote_etag:
+                raise Exception(
+                    f"ETag mismatch after downloading: {local_etag} != {remote_etag}"
+                )
+        except Exception as e:
+            print(
+                f"Error downloading `{filename}` (attempt {i + 1} of {RETRIES}): {e}",
+                flush=True,
+            )
+            time.sleep(1)
+    raise Exception(f"Failed to download `{filename}` after {RETRIES} attempts")
 
 
 def main():
