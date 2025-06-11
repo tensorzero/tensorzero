@@ -188,11 +188,11 @@ jobs:
         }
         
         # Write to file
-        with open('batch_inputs/anthropic_input.jsonl', 'w') as f:
+        with open('anthropic_input.jsonl', 'w') as f:
             f.write(json.dumps(batch_input) + '\n')
         
         # Create batch job
-        with open('batch_inputs/anthropic_input.jsonl', 'rb') as f:
+        with open('anthropic_input.jsonl', 'rb') as f:
             batch_job = client.beta.messages.batches.create(
                 requests_file=f
             )
