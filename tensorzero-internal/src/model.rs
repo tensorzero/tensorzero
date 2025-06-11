@@ -60,8 +60,18 @@ use serde::Deserialize;
 
 #[derive(Debug)]
 pub struct ModelConfig {
-    pub routing: Vec<Arc<str>>, // [provider name A, provider name B, ...]
-    pub providers: HashMap<Arc<str>, ModelProvider>, // provider name => provider config
+    routing: Vec<Arc<str>>, // [provider name A, provider name B, ...]
+    providers: HashMap<Arc<str>, ModelProvider>, // provider name => provider config
+}
+
+impl ModelConfig {
+    pub fn routing(&self) -> &Vec<Arc<str>> {
+        &self.routing
+    }
+
+    pub fn providers(&self) -> &HashMap<Arc<str>, ModelProvider> {
+        &self.providers
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -81,27 +91,28 @@ impl UninitializedModelConfig {
         // We first deserialize to `HashMap<Arc<str>, UninitializedModelProvider>`, and then
         // build `ModelProvider`s using the name keys from the map.
         let providers = self
-            .providers
+            .providers() // Use getter
+            .clone() // Clone the HashMap to allow calling into_iter
             .into_iter()
             .map(|(name, provider)| {
                 Ok((
                     name.clone(),
                     ModelProvider {
                         name: name.clone(),
-                        config: provider.config.load(provider_types).map_err(|e| {
+                        config: provider.config().clone().load(provider_types).map_err(|e| { // Use getter and clone
                             Error::new(ErrorDetails::Config {
                                 message: format!("models.{model_name}.providers.{name}: {e}"),
                             })
                         })?,
-                        extra_body: provider.extra_body,
-                        extra_headers: provider.extra_headers,
-                        timeouts: provider.timeouts,
+                        extra_body: provider.extra_body(), // Use getter
+                        extra_headers: provider.extra_headers(), // Use getter
+                        timeouts: provider.timeouts(), // Use getter
                     },
                 ))
             })
             .collect::<Result<HashMap<_, _>, Error>>()?;
         Ok(ModelConfig {
-            routing: self.routing,
+            routing: self.routing().clone(), // Use getter and clone
             providers,
         })
     }
@@ -362,7 +373,7 @@ impl ModelConfig {
         model_name: &'request str,
     ) -> Result<ModelInferenceResponse, Error> {
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
-        for provider_name in &self.routing {
+        for provider_name in self.routing() { // Use getter
             let request = self.filter_content_blocks(request, model_name, provider_name);
             let model_provider_request = ModelProviderRequest {
                 request: &request,
@@ -371,7 +382,7 @@ impl ModelConfig {
             };
             let cache_key = model_provider_request.get_cache_key()?;
             let provider = self
-                .providers
+                .providers() // Use getter
                 .get(model_provider_request.provider_name)
                 .ok_or_else(|| {
                     Error::new(ErrorDetails::ProviderNotFound {
@@ -434,14 +445,14 @@ impl ModelConfig {
         model_name: &'request str,
     ) -> Result<StreamResponseAndMessages, Error> {
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
-        for provider_name in &self.routing {
+        for provider_name in self.routing() { // Use getter
             let request = self.filter_content_blocks(request, model_name, provider_name);
             let model_provider_request = ModelProviderRequest {
                 request: &request,
                 model_name,
                 provider_name,
             };
-            let provider = self.providers.get(provider_name).ok_or_else(|| {
+            let provider = self.providers().get(provider_name).ok_or_else(|| { // Use getter
                 Error::new(ErrorDetails::ProviderNotFound {
                     provider_name: provider_name.to_string(),
                 })
@@ -484,8 +495,8 @@ impl ModelConfig {
         api_keys: &'request InferenceCredentials,
     ) -> Result<StartBatchModelInferenceResponse, Error> {
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
-        for provider_name in &self.routing {
-            let provider = self.providers.get(provider_name).ok_or_else(|| {
+        for provider_name in self.routing() { // Use getter
+            let provider = self.providers().get(provider_name).ok_or_else(|| { // Use getter
                 Error::new(ErrorDetails::ProviderNotFound {
                     provider_name: provider_name.to_string(),
                 })
@@ -572,37 +583,75 @@ fn consolidate_usage(chunks: &[ProviderInferenceResponseChunk]) -> Usage {
 #[derive(Debug, Deserialize)]
 pub(crate) struct UninitializedModelProvider {
     #[serde(flatten)]
-    pub config: UninitializedProviderConfig,
-    pub extra_body: Option<ExtraBodyConfig>,
-    pub extra_headers: Option<ExtraHeadersConfig>,
-    pub timeouts: Option<TimeoutsConfig>,
+    config: UninitializedProviderConfig,
+    extra_body: Option<ExtraBodyConfig>,
+    extra_headers: Option<ExtraHeadersConfig>,
+    timeouts: Option<TimeoutsConfig>,
+}
+
+impl UninitializedModelProvider {
+    pub fn config(&self) -> &UninitializedProviderConfig {
+        &self.config
+    }
+
+    pub fn extra_body(&self) -> Option<ExtraBodyConfig> {
+        self.extra_body.clone()
+    }
+
+    pub fn extra_headers(&self) -> Option<ExtraHeadersConfig> {
+        self.extra_headers.clone()
+    }
+
+    pub fn timeouts(&self) -> Option<TimeoutsConfig> {
+        self.timeouts.clone()
+    }
 }
 
 #[derive(Debug)]
 pub struct ModelProvider {
-    pub name: Arc<str>,
-    pub config: ProviderConfig,
-    pub extra_headers: Option<ExtraHeadersConfig>,
-    pub extra_body: Option<ExtraBodyConfig>,
-    pub timeouts: Option<TimeoutsConfig>,
+    name: Arc<str>,
+    config: ProviderConfig,
+    extra_headers: Option<ExtraHeadersConfig>,
+    extra_body: Option<ExtraBodyConfig>,
+    timeouts: Option<TimeoutsConfig>,
 }
 
 impl ModelProvider {
+    pub fn name(&self) -> &Arc<str> {
+        &self.name
+    }
+
+    pub fn config(&self) -> &ProviderConfig {
+        &self.config
+    }
+
+    pub fn extra_headers(&self) -> &Option<ExtraHeadersConfig> {
+        &self.extra_headers
+    }
+
+    pub fn extra_body(&self) -> &Option<ExtraBodyConfig> {
+        &self.extra_body
+    }
+
+    pub fn timeouts(&self) -> &Option<TimeoutsConfig> {
+        &self.timeouts
+    }
+
     fn non_streaming_total_timeout(&self) -> Option<Duration> {
         Some(Duration::from_millis(
-            self.timeouts.as_ref()?.non_streaming.total_ms?,
+            self.timeouts().as_ref()?.non_streaming.total_ms?, // Use getter
         ))
     }
 
     fn streaming_ttft_timeout(&self) -> Option<Duration> {
         Some(Duration::from_millis(
-            self.timeouts.as_ref()?.streaming.ttft_ms?,
+            self.timeouts().as_ref()?.streaming.ttft_ms?, // Use getter
         ))
     }
 
     /// The name to report in the OTEL `gen_ai.system` attribute
     fn genai_system_name(&self) -> &'static str {
-        match &self.config {
+        match self.config() { // Use getter
             ProviderConfig::Anthropic(_) => "anthropic",
             ProviderConfig::AWSBedrock(_) => "aws_bedrock",
             ProviderConfig::AWSSagemaker(_) => "aws_sagemaker",
@@ -629,7 +678,7 @@ impl ModelProvider {
 
     /// The model name to report in the OTEL `gen_ai.request.model` attribute
     fn genai_model_name(&self) -> Option<&str> {
-        match &self.config {
+        match self.config() { // Use getter
             ProviderConfig::Anthropic(provider) => Some(provider.model_name()),
             ProviderConfig::AWSBedrock(provider) => Some(provider.model_id()),
             // SageMaker doesn't have a meaningful model name concept, as we just invoke an endpoint
@@ -660,9 +709,9 @@ impl ModelProvider {
 impl From<&ModelProvider> for ModelProviderRequestInfo {
     fn from(val: &ModelProvider) -> Self {
         ModelProviderRequestInfo {
-            provider_name: val.name.clone(),
-            extra_headers: val.extra_headers.clone(),
-            extra_body: val.extra_body.clone(),
+            provider_name: val.name().clone(), // Use getter
+            extra_headers: val.extra_headers().clone(), // Use getter
+            extra_body: val.extra_body().clone(), // Use getter
         }
     }
 }
@@ -1038,10 +1087,10 @@ pub struct StreamResponseAndMessages {
 }
 
 impl ModelProvider {
-    #[tracing::instrument(skip_all, fields(provider_name = &*self.name, otel.name = "model_provider_inference",
+    #[tracing::instrument(skip_all, fields(provider_name = &*self.name(), otel.name = "model_provider_inference", // Use getter
         gen_ai.operation.name = "chat",
-        gen_ai.system = self.genai_system_name(),
-        gen_ai.request.model = self.genai_model_name(),
+        gen_ai.system = self.genai_system_name(), // Uses getter via genai_system_name
+        gen_ai.request.model = self.genai_model_name(), // Uses getter via genai_model_name
     stream = false))]
     async fn infer(
         &self,
@@ -1049,7 +1098,7 @@ impl ModelProvider {
         client: &Client,
         api_keys: &InferenceCredentials,
     ) -> Result<ProviderInferenceResponse, Error> {
-        match &self.config {
+        match self.config() { // Use getter
             ProviderConfig::Anthropic(provider) => {
                 provider.infer(request, client, api_keys, self).await
             }
@@ -1106,10 +1155,10 @@ impl ModelProvider {
         }
     }
 
-    #[tracing::instrument(skip_all, fields(provider_name = &*self.name, otel.name = "model_provider_inference",
+    #[tracing::instrument(skip_all, fields(provider_name = &*self.name(), otel.name = "model_provider_inference", // Use getter
         gen_ai.operation.name = "chat",
-        gen_ai.system = self.genai_system_name(),
-        gen_ai.request.model = self.genai_model_name(),
+        gen_ai.system = self.genai_system_name(), // Uses getter via genai_system_name
+        gen_ai.request.model = self.genai_model_name(), // Uses getter via genai_model_name
     stream = true))]
     async fn infer_stream(
         &self,
@@ -1117,7 +1166,7 @@ impl ModelProvider {
         client: &Client,
         api_keys: &InferenceCredentials,
     ) -> Result<StreamAndRawRequest, Error> {
-        let (stream, raw_request) = match &self.config {
+        let (stream, raw_request) = match self.config() { // Use getter
             ProviderConfig::Anthropic(provider) => {
                 provider.infer_stream(request, client, api_keys, self).await
             }
@@ -1197,7 +1246,7 @@ impl ModelProvider {
         client: &'a Client,
         api_keys: &'a InferenceCredentials,
     ) -> Result<StartBatchProviderInferenceResponse, Error> {
-        match &self.config {
+        match self.config() { // Use getter
             ProviderConfig::Anthropic(provider) => {
                 provider
                     .start_batch_inference(requests, client, api_keys)
@@ -1308,7 +1357,7 @@ impl ModelProvider {
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<PollBatchInferenceResponse, Error> {
-        match &self.config {
+        match self.config() { // Use getter
             ProviderConfig::Anthropic(provider) => {
                 provider
                     .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
@@ -1702,7 +1751,7 @@ impl ShorthandModelConfig for ModelConfig {
 
     fn validate(&self, model_name: &str) -> Result<(), Error> {
         // Ensure that the model has at least one provider
-        if self.routing.is_empty() {
+        if self.routing().is_empty() { // Use getter
             return Err(ErrorDetails::Config {
                 message: format!("`models.{model_name}`: `routing` must not be empty"),
             }
@@ -1711,7 +1760,7 @@ impl ShorthandModelConfig for ModelConfig {
 
         // Ensure that routing entries are unique and exist as keys in providers
         let mut seen_providers = std::collections::HashSet::new();
-        for provider in &self.routing {
+        for provider in self.routing() { // Use getter
             if provider.starts_with("tensorzero::") {
                 return Err(ErrorDetails::Config {
                     message: format!("`models.{model_name}.routing`: Provider name cannot start with 'tensorzero::': {provider}"),
@@ -1725,7 +1774,7 @@ impl ShorthandModelConfig for ModelConfig {
                 .into());
             }
 
-            if !self.providers.contains_key(provider) {
+            if !self.providers().contains_key(provider) { // Use getter
                 return Err(ErrorDetails::Config {
             message: format!(
                 "`models.{model_name}`: `routing` contains entry `{provider}` that does not exist in `providers`"
@@ -1736,7 +1785,7 @@ impl ShorthandModelConfig for ModelConfig {
         }
 
         // Validate each provider
-        for provider_name in self.providers.keys() {
+        for provider_name in self.providers().keys() { // Use getter
             if !seen_providers.contains(provider_name) {
                 return Err(ErrorDetails::Config {
                     message: format!(
@@ -1753,6 +1802,7 @@ impl ShorthandModelConfig for ModelConfig {
 #[cfg(test)]
 mod tests {
     use std::{borrow::Cow, cell::Cell};
+    use crate::config_parser::TimeoutsConfig;
 
     use crate::cache::CacheEnabledMode;
     use crate::config_parser::SKIP_CREDENTIAL_VALIDATION;
@@ -2601,5 +2651,100 @@ mod tests {
 
         assert_eq!(cache.get(), None);
         assert_eq!(make_creds_call_count.get(), 1);
+    }
+}
+
+#[cfg(test)]
+mod tests_getters {
+    use super::*;
+    use std::collections::HashMap;
+    use std::sync::Arc;
+    use crate::config_parser::TimeoutsConfig; // Ensure TimeoutsConfig is in scope
+    use crate::inference::types::extra_body::ExtraBodyConfig;
+    use crate::inference::types::extra_headers::ExtraHeadersConfig;
+
+    #[test]
+    fn test_model_config_getters() {
+        let routing_vec: Vec<Arc<str>> = vec![Arc::from("provider1"), Arc::from("provider2")];
+        let providers_map: HashMap<Arc<str>, ModelProvider> = HashMap::new(); // Keep it simple for this test
+
+        let model_config = ModelConfig {
+            routing: routing_vec.clone(),
+            providers: providers_map.clone(),
+        };
+
+        assert_eq!(model_config.routing(), &routing_vec);
+        assert_eq!(model_config.providers().len(), providers_map.len());
+    }
+
+    #[test]
+    fn test_uninitialized_model_config_getters() {
+        let routing_vec: Vec<Arc<str>> = vec![Arc::from("p1"), Arc::from("p2")];
+        let providers_map: HashMap<Arc<str>, UninitializedModelProvider> = HashMap::new();
+
+        let uninit_model_config = UninitializedModelConfig {
+            routing: routing_vec.clone(),
+            providers: providers_map.clone(),
+        };
+
+        assert_eq!(uninit_model_config.routing(), &routing_vec); // Assuming routing() returns &Vec<Arc<str>>
+        assert_eq!(uninit_model_config.providers().len(), providers_map.len());
+    }
+
+    #[test]
+    fn test_model_provider_getters() {
+        let name_val: Arc<str> = Arc::from("test_provider");
+        // For ProviderConfig, we might need a simple variant if DummyProvider is not easily instantiable here
+        // Or, if a default can be derived/created for one of its variants.
+        // Let's assume a simple way to create a ProviderConfig variant for testing, or use Default if available.
+        // This part might need adjustment based on actual ProviderConfig structure.
+        // For now, let's imagine a simple constructor or default for a variant like OpenAIProvider
+        let config_val = ProviderConfig::OpenAI(OpenAIProvider::new("test_model".to_string(), None, None).unwrap());
+
+        let extra_headers_val: Option<ExtraHeadersConfig> = Some(HashMap::new());
+        let extra_body_val: Option<ExtraBodyConfig> = Some(HashMap::new());
+        let timeouts_val: Option<TimeoutsConfig> = Some(TimeoutsConfig::default());
+
+        let model_provider = ModelProvider {
+            name: name_val.clone(),
+            config: config_val, // Assuming ProviderConfig can be cloned or this needs specific setup
+            extra_headers: extra_headers_val.clone(),
+            extra_body: extra_body_val.clone(),
+            timeouts: timeouts_val.clone(),
+        };
+
+        assert_eq!(model_provider.name(), &name_val);
+        // For config, we might only be able to assert its variant or a specific field if PartialEq is not derived
+        assert!(matches!(model_provider.config(), ProviderConfig::OpenAI(_)));
+        assert_eq!(model_provider.extra_headers(), &extra_headers_val);
+        assert_eq!(model_provider.extra_body(), &extra_body_val);
+        assert_eq!(model_provider.timeouts(), &timeouts_val);
+    }
+
+    #[test]
+    fn test_uninitialized_model_provider_getters() {
+        // Similar to ModelProvider, UninitializedProviderConfig needs a way to be instantiated for testing.
+        // This might require using a specific variant that's easy to set up.
+        // Let's assume UninitializedProviderConfig::OpenAI can be created.
+        let config_val = UninitializedProviderConfig::OpenAI {
+            model_name: "test_uninit_model".to_string(),
+            api_base: None,
+            api_key_location: None,
+        };
+        let extra_body_val: Option<ExtraBodyConfig> = Some(HashMap::new());
+        let extra_headers_val: Option<ExtraHeadersConfig> = Some(HashMap::new());
+        let timeouts_val: Option<TimeoutsConfig> = Some(TimeoutsConfig::default());
+
+        let uninit_provider = UninitializedModelProvider {
+            config: config_val, // Assuming UninitializedProviderConfig can be cloned or this requires specific setup
+            extra_body: extra_body_val.clone(),
+            extra_headers: extra_headers_val.clone(),
+            timeouts: timeouts_val.clone(),
+        };
+
+        assert!(matches!(uninit_provider.config(), UninitializedProviderConfig::OpenAI(_)));
+        assert_eq!(uninit_provider.extra_body(), extra_body_val);
+        assert_eq!(uninit_provider.extra_headers(), extra_headers_val);
+        assert_eq!(uninit_provider.timeouts(), timeouts_val);
     }
 }

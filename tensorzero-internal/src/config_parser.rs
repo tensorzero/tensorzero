@@ -44,16 +44,58 @@ pub fn skip_credential_validation() -> bool {
 
 #[derive(Debug, Default)]
 pub struct Config<'c> {
-    pub gateway: GatewayConfig,
-    pub models: ModelTable,                    // model name => model config
-    pub embedding_models: EmbeddingModelTable, // embedding model name => embedding model config
-    pub functions: HashMap<String, Arc<FunctionConfig>>, // function name => function config
-    pub metrics: HashMap<String, MetricConfig>, // metric name => metric config
-    pub tools: HashMap<String, Arc<StaticToolConfig>>, // tool name => tool config
-    pub evaluations: HashMap<String, Arc<EvaluationConfig>>, // evaluation name => evaluation config
-    pub templates: TemplateConfig<'c>,
-    pub object_store_info: Option<ObjectStoreInfo>,
-    pub provider_types: ProviderTypesConfig,
+    pub(crate) gateway: GatewayConfig,
+    pub(crate) models: ModelTable,                    // model name => model config
+    pub(crate) embedding_models: EmbeddingModelTable, // embedding model name => embedding model config
+    pub(crate) functions: HashMap<String, Arc<FunctionConfig>>, // function name => function config
+    pub(crate) metrics: HashMap<String, MetricConfig>, // metric name => metric config
+    pub(crate) tools: HashMap<String, Arc<StaticToolConfig>>, // tool name => tool config
+    pub(crate) evaluations: HashMap<String, Arc<EvaluationConfig>>, // evaluation name => evaluation config
+    pub(crate) templates: TemplateConfig<'c>,
+    pub(crate) object_store_info: Option<ObjectStoreInfo>,
+    pub(crate) provider_types: ProviderTypesConfig,
+}
+
+impl<'c> Config<'c> {
+    pub fn gateway(&self) -> &GatewayConfig {
+        &self.gateway
+    }
+
+    pub fn models(&self) -> &ModelTable {
+        &self.models
+    }
+
+    pub fn embedding_models(&self) -> &EmbeddingModelTable {
+        &self.embedding_models
+    }
+
+    pub fn functions(&self) -> &HashMap<String, Arc<FunctionConfig>> {
+        &self.functions
+    }
+
+    pub fn metrics(&self) -> &HashMap<String, MetricConfig> {
+        &self.metrics
+    }
+
+    pub fn tools(&self) -> &HashMap<String, Arc<StaticToolConfig>> {
+        &self.tools
+    }
+
+    pub fn evaluations(&self) -> &HashMap<String, Arc<EvaluationConfig>> {
+        &self.evaluations
+    }
+
+    pub fn templates(&self) -> &TemplateConfig<'c> {
+        &self.templates
+    }
+
+    pub fn object_store_info(&self) -> &Option<ObjectStoreInfo> {
+        &self.object_store_info
+    }
+
+    pub fn provider_types(&self) -> &ProviderTypesConfig {
+        &self.provider_types
+    }
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -326,6 +368,9 @@ impl MetricConfigLevel {
     }
 }
 
+// NOTE: The impl<'c> Config<'c> block is now above the struct definition after the previous change.
+// This is a bit unconventional but shouldn't affect compilation.
+
 impl<'c> Config<'c> {
     pub async fn load_and_verify_from_path(config_path: &Path) -> Result<Config<'c>, Error> {
         Self::load_from_path_optional_verify_credentials(config_path, true).await
@@ -364,7 +409,7 @@ impl<'c> Config<'c> {
         };
 
         if validate_credentials {
-            if let Some(object_store) = &config.object_store_info {
+            if let Some(object_store) = &config.object_store_info() {
                 object_store.verify().await?;
             }
         }
@@ -381,13 +426,15 @@ impl<'c> Config<'c> {
         let templates = TemplateConfig::new();
 
         let functions = uninitialized_config
-            .functions
+            .functions() // getter
+            .clone() // Clone to allow into_iter if original is borrowed
             .into_iter()
             .map(|(name, config)| config.load(&name, &base_path).map(|c| (name, Arc::new(c))))
             .collect::<Result<HashMap<String, Arc<FunctionConfig>>, Error>>()?;
 
         let tools = uninitialized_config
-            .tools
+            .tools() // getter
+            .clone() // Clone to allow into_iter
             .into_iter()
             .map(|(name, config)| {
                 config
@@ -397,29 +444,31 @@ impl<'c> Config<'c> {
             .collect::<Result<HashMap<String, Arc<StaticToolConfig>>, Error>>()?;
 
         let models = uninitialized_config
-            .models
+            .models() // getter
+            .clone()  // Clone to allow into_iter
             .into_iter()
             .map(|(name, config)| {
                 config
-                    .load(&name, &uninitialized_config.provider_types)
+                    .load(&name, uninitialized_config.provider_types()) // getter
                     .map(|c| (name, c))
             })
             .collect::<Result<HashMap<_, _>, _>>()?;
 
         let embedding_models = uninitialized_config
-            .embedding_models
+            .embedding_models() // getter
+            .clone()            // Clone to allow into_iter
             .into_iter()
             .map(|(name, config)| {
                 config
-                    .load(&uninitialized_config.provider_types)
+                    .load(uninitialized_config.provider_types()) // getter
                     .map(|c| (name, c))
             })
             .collect::<Result<HashMap<_, _>, _>>()?;
 
-        let object_store_info = ObjectStoreInfo::new(uninitialized_config.object_storage)?;
+        let object_store_info = ObjectStoreInfo::new(uninitialized_config.object_storage())?; // getter
 
         let mut config = Config {
-            gateway: uninitialized_config.gateway,
+            gateway: uninitialized_config.gateway().clone(), // getter and clone
             models: models.try_into().map_err(|e| {
                 Error::new(ErrorDetails::Config {
                     message: format!("Failed to load models: {e}"),
@@ -430,21 +479,21 @@ impl<'c> Config<'c> {
                     message: format!("Failed to load embedding models: {e}"),
                 })
             })?,
-            functions,
-            metrics: uninitialized_config.metrics,
-            tools,
-            evaluations: HashMap::new(),
+            functions, // Already processed using getters
+            metrics: uninitialized_config.metrics().clone(), // getter and clone
+            tools,     // Already processed using getters
+            evaluations: HashMap::new(), // Placeholder, will be populated below
             templates,
             object_store_info,
-            provider_types: uninitialized_config.provider_types,
+            provider_types: uninitialized_config.provider_types().clone(), // getter and clone
         };
 
         // Initialize the templates
-        let template_paths = config.get_templates();
-        config.templates.initialize(
+        let template_paths = config.get_templates(); // Uses getter
+        config.templates_mut().initialize( // Assuming a templates_mut() or direct access for initialization
             template_paths,
             config
-                .gateway
+                .gateway() // Uses getter
                 .enable_template_filesystem_access
                 .then_some(base_path.clone()),
         )?;
@@ -454,15 +503,15 @@ impl<'c> Config<'c> {
 
         // We add the evaluations after validation since we will be writing tensorzero:: functions to the functions map
         // and tensorzero:: metrics to the metrics map
-        let mut evaluations = HashMap::new();
-        for (name, evaluation_config) in uninitialized_config.evaluations {
+        let mut evaluations_map = HashMap::new();
+        for (name, evaluation_config) in uninitialized_config.evaluations().clone().into_iter() { // getter, clone, into_iter
             let (evaluation_config, evaluation_function_configs, evaluation_metric_configs) =
-                evaluation_config.load(&config.functions, &base_path, &name)?;
-            evaluations.insert(name, Arc::new(EvaluationConfig::Static(evaluation_config)));
+                evaluation_config.load(config.functions(), &base_path, &name)?; // Uses getter from Config
+            evaluations_map.insert(name, Arc::new(EvaluationConfig::Static(evaluation_config)));
             for (evaluation_function_name, evaluation_function_config) in
                 evaluation_function_configs
             {
-                if config.functions.contains_key(&evaluation_function_name) {
+                if config.functions().contains_key(&evaluation_function_name) { // Uses getter
                     return Err(ErrorDetails::Config {
                         message: format!(
                             "Duplicate evaluator function name: `{evaluation_function_name}` already exists. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports."
@@ -472,7 +521,7 @@ impl<'c> Config<'c> {
                 }
                 for variant in evaluation_function_config.variants().values() {
                     for template in variant.get_all_template_paths() {
-                        config.templates.add_template(
+                        config.templates_mut().add_template( // Assuming a templates_mut() or direct access for initialization
                             template.path.to_string_lossy().as_ref(),
                             &template.contents,
                         )?;
@@ -480,30 +529,30 @@ impl<'c> Config<'c> {
                 }
                 evaluation_function_config
                     .validate(
-                        &config.tools,
-                        &mut config.models,
-                        &config.embedding_models,
-                        &config.templates,
+                        config.tools(),
+                        config.models_mut(), // Assuming a models_mut() or direct access for initialization
+                        config.embedding_models(),
+                        config.templates(),
                         &evaluation_function_name,
                     )
                     .await?;
                 config
-                    .functions
+                    .functions_mut() // Assuming a functions_mut() or direct access for initialization
                     .insert(evaluation_function_name, evaluation_function_config);
             }
             for (evaluation_metric_name, evaluation_metric_config) in evaluation_metric_configs {
-                if config.metrics.contains_key(&evaluation_metric_name) {
+                if config.metrics().contains_key(&evaluation_metric_name) { // Uses getter
                     return Err(ErrorDetails::Config {
                         message: format!("Duplicate evaluator metric name: `{evaluation_metric_name}` already exists. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports."),
                     }
                     .into());
                 }
                 config
-                    .metrics
+                    .metrics_mut() // Assuming a metrics_mut() or direct access for initialization
                     .insert(evaluation_metric_name, evaluation_metric_config);
             }
         }
-        config.evaluations = evaluations;
+        config.evaluations = evaluations_map; // Assign to the field
 
         Ok(config)
     }
@@ -512,7 +561,7 @@ impl<'c> Config<'c> {
     #[instrument(skip_all)]
     async fn validate(&mut self) -> Result<(), Error> {
         // Validate each function
-        for (function_name, function) in &self.functions {
+        for (function_name, function) in self.functions() { // Uses getter
             if function_name.starts_with("tensorzero::") {
                 return Err(ErrorDetails::Config {
                     message: format!(
@@ -523,17 +572,17 @@ impl<'c> Config<'c> {
             }
             function
                 .validate(
-                    &self.tools,
-                    &mut self.models, // NOTE: in here there might be some models created using shorthand initialization
-                    &self.embedding_models,
-                    &self.templates,
+                    self.tools(),
+                    self.models_mut(), // Assuming a models_mut()
+                    self.embedding_models(),
+                    self.templates(),
                     function_name,
                 )
                 .await?;
         }
 
         // Ensure that no metrics are named "comment" or "demonstration"
-        for metric_name in self.metrics.keys() {
+        for metric_name in self.metrics().keys() { // Uses getter
             if metric_name == "comment" || metric_name == "demonstration" {
                 return Err(ErrorDetails::Config {
                     message: format!("Metric name '{metric_name}' is reserved and cannot be used"),
@@ -549,7 +598,7 @@ impl<'c> Config<'c> {
         }
 
         // Validate each model
-        for (model_name, model) in self.models.iter_static_models() {
+        for (model_name, model) in self.models().iter_static_models() { // Uses getter
             if model_name.starts_with("tensorzero::") {
                 return Err(ErrorDetails::Config {
                     message: format!("Model name cannot start with 'tensorzero::': {model_name}"),
@@ -559,7 +608,7 @@ impl<'c> Config<'c> {
             model.validate(model_name)?;
         }
 
-        for embedding_model_name in self.embedding_models.keys() {
+        for embedding_model_name in self.embedding_models().keys() { // Uses getter
             if embedding_model_name.starts_with("tensorzero::") {
                 return Err(ErrorDetails::Config {
                     message: format!(
@@ -571,7 +620,7 @@ impl<'c> Config<'c> {
         }
 
         // Validate each tool
-        for tool_name in self.tools.keys() {
+        for tool_name in self.tools().keys() { // Uses getter
             if tool_name.starts_with("tensorzero::") {
                 return Err(ErrorDetails::Config {
                     message: format!("Tool name cannot start with 'tensorzero::': {tool_name}"),
@@ -602,7 +651,7 @@ impl<'c> Config<'c> {
             ))))
         } else {
             Ok(Cow::Borrowed(
-                self.functions.get(function_name).ok_or_else(|| {
+                self.functions().get(function_name).ok_or_else(|| { // Uses getter
                     Error::new(ErrorDetails::UnknownFunction {
                         name: function_name.to_string(),
                     })
@@ -613,7 +662,7 @@ impl<'c> Config<'c> {
 
     /// Get a metric by name, producing an error if it's not found
     pub fn get_metric_or_err<'a>(&'a self, metric_name: &str) -> Result<&'a MetricConfig, Error> {
-        self.metrics.get(metric_name).ok_or_else(|| {
+        self.metrics().get(metric_name).ok_or_else(|| { // Uses getter
             Error::new(ErrorDetails::UnknownMetric {
                 name: metric_name.to_string(),
             })
@@ -622,12 +671,12 @@ impl<'c> Config<'c> {
 
     /// Get a metric by name
     pub fn get_metric<'a>(&'a self, metric_name: &str) -> Option<&'a MetricConfig> {
-        self.metrics.get(metric_name)
+        self.metrics().get(metric_name) // Uses getter
     }
 
     /// Get a tool by name
     pub fn get_tool<'a>(&'a self, tool_name: &str) -> Result<&'a Arc<StaticToolConfig>, Error> {
-        self.tools.get(tool_name).ok_or_else(|| {
+        self.tools().get(tool_name).ok_or_else(|| { // Uses getter
             Error::new(ErrorDetails::UnknownTool {
                 name: tool_name.to_string(),
             })
@@ -639,7 +688,7 @@ impl<'c> Config<'c> {
         &'a self,
         model_name: &Arc<str>,
     ) -> Result<CowNoClone<'a, ModelConfig>, Error> {
-        self.models.get(model_name).await?.ok_or_else(|| {
+        self.models().get(model_name).await?.ok_or_else(|| { // Uses getter
             Error::new(ErrorDetails::UnknownModel {
                 name: model_name.to_string(),
             })
@@ -651,21 +700,46 @@ impl<'c> Config<'c> {
     /// (relative to the directory containing the TOML file) to the file contents.
     /// The former path is used as the name of the template for retrievaluation by variants later.
     pub fn get_templates(&self) -> HashMap<String, String> {
-        let mut templates = HashMap::new();
+        let mut templates_map = HashMap::new();
 
-        for function in self.functions.values() {
+        for function in self.functions().values() { // Uses getter
             for variant in function.variants().values() {
                 let variant_template_paths = variant.get_all_template_paths();
                 for path in variant_template_paths {
-                    templates.insert(
+                    templates_map.insert(
                         path.path.to_string_lossy().to_string(),
                         path.contents.clone(),
                     );
                 }
             }
         }
-        templates
+        templates_map
     }
+
+    // Added mutable getters for fields that are modified after initial Config construction.
+    // These are needed because the fields are now private.
+    // Consider if there's a better way to handle this initialization logic,
+    // perhaps by passing more data into `Config::load_from_toml` or by having
+    // a builder pattern for `Config`.
+
+    pub(crate) fn models_mut(&mut self) -> &mut ModelTable {
+        &mut self.models
+    }
+
+    pub(crate) fn functions_mut(&mut self) -> &mut HashMap<String, Arc<FunctionConfig>> {
+        &mut self.functions
+    }
+
+    pub(crate) fn metrics_mut(&mut self) -> &mut HashMap<String, MetricConfig> {
+        &mut self.metrics
+    }
+
+    pub(crate) fn templates_mut(&mut self) -> &mut TemplateConfig<'c> {
+        &mut self.templates
+    }
+
+    // evaluations_mut was here but it's not used, let's remove it to keep the code clean.
+    // If it's needed later, it can be re-added.
 }
 
 /// A trait for loading configs with a base path
@@ -684,22 +758,60 @@ pub trait LoadableConfig<T> {
 #[serde(deny_unknown_fields)]
 struct UninitializedConfig {
     #[serde(default)]
-    pub gateway: GatewayConfig,
+    gateway: GatewayConfig,
     #[serde(default)]
-    pub models: HashMap<Arc<str>, UninitializedModelConfig>, // model name => model config
+    models: HashMap<Arc<str>, UninitializedModelConfig>,
     #[serde(default)]
-    pub embedding_models: HashMap<Arc<str>, UninitializedEmbeddingModelConfig>, // embedding model name => embedding model config
+    embedding_models: HashMap<Arc<str>, UninitializedEmbeddingModelConfig>,
     #[serde(default)]
-    pub functions: HashMap<String, UninitializedFunctionConfig>, // function name => function config
+    functions: HashMap<String, UninitializedFunctionConfig>,
     #[serde(default)]
-    pub metrics: HashMap<String, MetricConfig>, // metric name => metric config
+    metrics: HashMap<String, MetricConfig>,
     #[serde(default)]
-    pub tools: HashMap<String, UninitializedToolConfig>, // tool name => tool config
+    tools: HashMap<String, UninitializedToolConfig>,
     #[serde(default)]
-    pub evaluations: HashMap<String, UninitializedEvaluationConfig>, // evaluation name => evaluation
+    evaluations: HashMap<String, UninitializedEvaluationConfig>,
     #[serde(default)]
-    pub provider_types: ProviderTypesConfig, // global configuration for all model providers of a particular type
-    pub object_storage: Option<StorageKind>,
+    provider_types: ProviderTypesConfig,
+    object_storage: Option<StorageKind>,
+}
+
+impl UninitializedConfig {
+    pub fn gateway(&self) -> &GatewayConfig {
+        &self.gateway
+    }
+
+    pub fn models(&self) -> &HashMap<Arc<str>, UninitializedModelConfig> {
+        &self.models
+    }
+
+    pub fn embedding_models(&self) -> &HashMap<Arc<str>, UninitializedEmbeddingModelConfig> {
+        &self.embedding_models
+    }
+
+    pub fn functions(&self) -> &HashMap<String, UninitializedFunctionConfig> {
+        &self.functions
+    }
+
+    pub fn metrics(&self) -> &HashMap<String, MetricConfig> {
+        &self.metrics
+    }
+
+    pub fn tools(&self) -> &HashMap<String, UninitializedToolConfig> {
+        &self.tools
+    }
+
+    pub fn evaluations(&self) -> &HashMap<String, UninitializedEvaluationConfig> {
+        &self.evaluations
+    }
+
+    pub fn provider_types(&self) -> &ProviderTypesConfig {
+        &self.provider_types
+    }
+
+    pub fn object_storage(&self) -> Option<StorageKind> { // Returns cloned Option<StorageKind>
+        self.object_storage.clone()
+    }
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -1035,17 +1147,17 @@ mod tests {
             .expect("Failed to load config");
 
         // Ensure that removing the `[metrics]` section still parses the config
-        let mut config = get_sample_valid_config();
-        config
+        let mut config_table = get_sample_valid_config(); // Renamed to avoid conflict
+        config_table
             .remove("metrics")
             .expect("Failed to remove `[metrics]` section");
-        let config = Config::load_from_toml(config, base_path)
+        let config = Config::load_from_toml(config_table, base_path) // Use renamed table
             .await
             .expect("Failed to load config");
 
         // Check that the JSON mode is set properly on the JSON variants
         let prompt_a_json_mode = match &config
-            .functions
+            .functions() // Uses getter
             .get("json_with_schemas")
             .unwrap()
             .variants()
@@ -1059,7 +1171,7 @@ mod tests {
         assert_eq!(prompt_a_json_mode, &JsonMode::ImplicitTool);
 
         let prompt_b_json_mode = match &config
-            .functions
+            .functions() // Uses getter
             .get("json_with_schemas")
             .unwrap()
             .variants()
@@ -1074,7 +1186,7 @@ mod tests {
         // using the variant mode (json/chat)).
         assert_eq!(prompt_b_json_mode, None);
         // Check that the tool choice for get_weather is set to "specific" and the correct tool
-        let function = config.functions.get("weather_helper").unwrap();
+        let function = config.functions().get("weather_helper").unwrap(); // Uses getter
         match &**function {
             FunctionConfig::Chat(chat_config) => {
                 assert_eq!(
@@ -1086,7 +1198,7 @@ mod tests {
         }
         // Check that the best of n variant has multiple candidates
         let function = config
-            .functions
+            .functions() // Uses getter
             .get("templates_with_variables_chat")
             .unwrap();
         match &**function {
@@ -1108,13 +1220,13 @@ mod tests {
             _ => panic!("Expected a chat function"),
         }
         // Check that the async flag is set to false by default
-        assert!(!config.gateway.observability.async_writes);
+        assert!(!config.gateway().observability.async_writes); // Uses getter
 
         // To test that variant default weights work correctly,
         // We check `functions.templates_with_variables_json.variants.variant_with_variables.weight`
         // This variant's weight is unspecified, so it should default to 0
         let json_function = config
-            .functions
+            .functions() // Uses getter
             .get("templates_with_variables_json")
             .unwrap();
         match &**json_function {
@@ -1130,10 +1242,10 @@ mod tests {
             _ => panic!("Expected a JSON function"),
         }
 
-        assert_eq!(config.embedding_models.len(), 1);
+        assert_eq!(config.embedding_models().len(), 1); // Uses getter
 
         let embedding_model = config
-            .embedding_models
+            .embedding_models() // Uses getter
             .get("text-embedding-3-small")
             .await
             .expect("Error getting embedding model")
@@ -1145,7 +1257,7 @@ mod tests {
 
         // Check that the function for the LLM Judge evaluation is added to the functions table
         let function = config
-            .functions
+            .functions() // Uses getter
             .get("tensorzero::llm_judge::evaluation1::llm_judge_bool")
             .unwrap();
         match &**function {
@@ -1231,7 +1343,7 @@ mod tests {
         }
         // Check that the metric for the LLM Judge evaluator is added to the metrics table
         let metric = config
-            .metrics
+            .metrics() // Uses getter
             .get("tensorzero::evaluation_name::evaluation1::evaluator_name::llm_judge_bool")
             .unwrap();
         assert_eq!(metric.r#type, MetricConfigType::Boolean);
@@ -1240,7 +1352,7 @@ mod tests {
 
         // Check that the metric for the exact match evaluation is added to the metrics table
         let metric = config
-            .metrics
+            .metrics() // Uses getter
             .get("tensorzero::evaluation_name::evaluation1::evaluator_name::em_evaluator")
             .unwrap();
         assert_eq!(metric.r#type, MetricConfigType::Boolean);
@@ -1249,7 +1361,7 @@ mod tests {
 
         // Check that the metric for the LLM Judge float evaluation is added to the metrics table
         let metric = config
-            .metrics
+            .metrics() // Uses getter
             .get("tensorzero::evaluation_name::evaluation1::evaluator_name::llm_judge_float")
             .unwrap();
         assert_eq!(metric.r#type, MetricConfigType::Float);
@@ -1268,7 +1380,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(
-            parsed_config.gateway.bind_address.unwrap().to_string(),
+            parsed_config.gateway().bind_address.unwrap().to_string(), // Uses getter
             "0.0.0.0:3000"
         );
 
@@ -1277,7 +1389,7 @@ mod tests {
         let parsed_config = Config::load_from_toml(config.clone(), base_path.clone())
             .await
             .unwrap();
-        assert!(parsed_config.gateway.bind_address.is_none());
+        assert!(parsed_config.gateway().bind_address.is_none()); // Uses getter
 
         // Test with missing bind_address
         config.insert(
@@ -1287,7 +1399,7 @@ mod tests {
         let parsed_config = Config::load_from_toml(config.clone(), base_path.clone())
             .await
             .unwrap();
-        assert!(parsed_config.gateway.bind_address.is_none());
+        assert!(parsed_config.gateway().bind_address.is_none()); // Uses getter
 
         // Test with invalid bind address
         config["gateway"].as_table_mut().unwrap().insert(
@@ -1556,7 +1668,7 @@ mod tests {
         let result = Config::load_from_toml(config, base_path).await;
         let config = result.unwrap();
         // Check that the output schema is set to {}
-        let output_schema = match &**config.functions.get("json_with_schemas").unwrap() {
+        let output_schema = match &**config.functions().get("json_with_schemas").unwrap() { // Uses getter
             FunctionConfig::Json(json_config) => &json_config.output_schema,
             _ => panic!("Expected a JSON function"),
         };
@@ -2943,5 +3055,99 @@ thinking = { type = "enabled", budget_tokens = 1024 }
             .expect_err("Config should fail to load");
 
         assert_eq!(err.to_string(), "`functions.no_schema.variants.invalid_system_template.system_template`: template needs variables: [assistant_name] but only `system_text` is allowed when template has no schema");
+    }
+}
+
+#[cfg(test)]
+mod tests_getters {
+    use super::*;
+    use std::net::SocketAddr;
+
+    #[test]
+    fn test_config_getters() {
+        let gateway_config = GatewayConfig {
+            bind_address: Some(SocketAddr::from(([127, 0, 0, 1], 8080))),
+            debug: true,
+            ..Default::default()
+        };
+        let model_table = ModelTable::default();
+        let embedding_model_table = EmbeddingModelTable::default();
+        let functions_map: HashMap<String, Arc<FunctionConfig>> = HashMap::new();
+        let metrics_map: HashMap<String, MetricConfig> = HashMap::new();
+        let tools_map: HashMap<String, Arc<StaticToolConfig>> = HashMap::new();
+        let evaluations_map: HashMap<String, Arc<EvaluationConfig>> = HashMap::new();
+        let templates_config = TemplateConfig::new();
+        let object_store_info_val = None;
+        let provider_types_config = ProviderTypesConfig::default();
+
+        let config = Config {
+            gateway: gateway_config.clone(),
+            models: model_table.clone(),
+            embedding_models: embedding_model_table.clone(),
+            functions: functions_map.clone(),
+            metrics: metrics_map.clone(),
+            tools: tools_map.clone(),
+            evaluations: evaluations_map.clone(),
+            templates: templates_config, // TemplateConfig does not impl Clone
+            object_store_info: object_store_info_val.clone(),
+            provider_types: provider_types_config.clone(),
+        };
+
+        assert_eq!(config.gateway().debug, gateway_config.debug);
+        assert_eq!(config.gateway().bind_address, gateway_config.bind_address);
+        assert_eq!(config.models().static_model_len(), model_table.static_model_len());
+        assert_eq!(config.embedding_models().keys().len(), embedding_model_table.keys().len());
+        assert_eq!(config.functions().len(), functions_map.len());
+        assert_eq!(config.metrics().len(), metrics_map.len());
+        assert_eq!(config.tools().len(), tools_map.len());
+        assert_eq!(config.evaluations().len(), evaluations_map.len());
+        // assert_eq!(config.templates(), &templates_config); // TemplateConfig does not impl PartialEq
+        assert!(config.object_store_info().is_none());
+        assert!(config.provider_types().gcp_vertex_gemini.is_none());
+
+        // Test mutable getters - just ensure they compile and we can call a method that requires mut
+        let mut config_mut = config;
+        config_mut.models_mut().clear_shorthand_cache(); // Example mutable operation
+        let _ = config_mut.functions_mut().insert("test_func".to_string(), Arc::new(FunctionConfig::Chat(Default::default())));
+        let _ = config_mut.metrics_mut().insert("test_metric".to_string(), MetricConfig { r#type: MetricConfigType::Boolean, optimize: MetricConfigOptimize::Max, level: MetricConfigLevel::Inference });
+        // config_mut.templates_mut(); // templates_mut() exists
+    }
+
+    #[test]
+    fn test_uninitialized_config_getters() {
+        let gateway_config = GatewayConfig {
+            debug: true,
+            ..Default::default()
+        };
+        let models_map: HashMap<Arc<str>, UninitializedModelConfig> = HashMap::new();
+        let embedding_models_map: HashMap<Arc<str>, UninitializedEmbeddingModelConfig> = HashMap::new();
+        let functions_map: HashMap<String, UninitializedFunctionConfig> = HashMap::new();
+        let metrics_map: HashMap<String, MetricConfig> = HashMap::new();
+        let tools_map: HashMap<String, UninitializedToolConfig> = HashMap::new();
+        let evaluations_map: HashMap<String, UninitializedEvaluationConfig> = HashMap::new();
+        let provider_types_val = ProviderTypesConfig::default();
+        let object_storage_val = None;
+
+        let uninit_config = UninitializedConfig {
+            gateway: gateway_config.clone(),
+            models: models_map.clone(),
+            embedding_models: embedding_models_map.clone(),
+            functions: functions_map.clone(),
+            metrics: metrics_map.clone(),
+            tools: tools_map.clone(),
+            evaluations: evaluations_map.clone(),
+            provider_types: provider_types_val.clone(),
+            object_storage: object_storage_val.clone(),
+        };
+
+        assert_eq!(uninit_config.gateway().debug, gateway_config.debug);
+        assert_eq!(uninit_config.models().len(), models_map.len());
+        assert_eq!(uninit_config.embedding_models().len(), embedding_models_map.len());
+        assert_eq!(uninit_config.functions().len(), functions_map.len());
+        assert_eq!(uninit_config.metrics().len(), metrics_map.len());
+        assert_eq!(uninit_config.tools().len(), tools_map.len());
+        assert_eq!(uninit_config.evaluations().len(), evaluations_map.len());
+        assert!(uninit_config.provider_types().gcp_vertex_gemini.is_none());
+        assert!(uninit_config.object_storage().is_none());
     }
 }
