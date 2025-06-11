@@ -67,12 +67,12 @@ jobs:
 
     - name: Google Vertex AI Batch Inference
       env:
-        GOOGLE_APPLICATION_CREDENTIALS_JSON: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_JSON }}
+        GOOGLE_APPLICATION_CREDENTIALS_JSON: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
         GOOGLE_CLOUD_PROJECT: tensorzero-public
         GOOGLE_CLOUD_REGION: us-east1
       run: |
         # Create service account key file
-        echo '${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_JSON }}' > /tmp/gcp-key.json
+        echo '${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}' > /tmp/gcp-key.json
         export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-key.json
         
         python -c "
