@@ -107,15 +107,7 @@ jobs:
         )
         
         # Create batch prediction input
-        batch_input = {
-            'instances': [
-                {
-                    'messages': [
-                        {'role': 'user', 'content': 'What is the capital of France?'}
-                    ]
-                }
-            ]
-        }
+        batch_input = {'request':{'contents': [{"role": "user", "parts": [{"text": 'What is the capital of France?'}]}]}}
         
         # Upload to GCS (you'll need a bucket)
         storage_client = storage.Client()
