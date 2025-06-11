@@ -437,10 +437,7 @@ function OutputsSection({
       <SectionHeader heading="Output" />
       <div className="flex flex-row gap-4 overflow-x-auto">
         {outputsToDisplay.map((result) => (
-          <div
-            key={result.id}
-            className="flex w-1/2 min-w-[calc(50%-24px)] flex-col"
-          >
+          <div key={result.id} className="flex w-1/2 min-w-[45%] flex-col">
             <div>
               <div className="mb-2 flex">
                 {result.id === "Reference" ? (
