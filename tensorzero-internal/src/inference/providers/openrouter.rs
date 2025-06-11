@@ -59,7 +59,6 @@ const PROVIDER_TYPE: &str = "openrouter";
 #[derive(Debug)]
 pub struct OpenRouterProvider {
     model_name: String,
-    api_base: Option<Url>,
     credentials: OpenRouterCredentials,
 }
 
@@ -68,7 +67,6 @@ static DEFAULT_CREDENTIALS: OnceLock<OpenRouterCredentials> = OnceLock::new();
 impl OpenRouterProvider {
     pub fn new(
         model_name: String,
-        api_base: Option<Url>,
         api_key_location: Option<CredentialLocation>,
     ) -> Result<Self, Error> {
         let credentials = build_creds_caching_default(
@@ -79,7 +77,6 @@ impl OpenRouterProvider {
         )?;
         Ok(OpenRouterProvider {
             model_name,
-            api_base,
             credentials,
         })
     }
@@ -141,11 +138,7 @@ impl InferenceProvider for OpenRouterProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_url = get_chat_url(
-            self.api_base
-                .as_ref()
-                .unwrap_or(&OPENROUTER_DEFAULT_BASE_URL),
-        )?;
+        let request_url = get_chat_url(&OPENROUTER_DEFAULT_BASE_URL)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let request_body_obj = OpenRouterRequest::new(&self.model_name, request.request)?;
@@ -253,11 +246,7 @@ impl InferenceProvider for OpenRouterProvider {
                     ),
                 })
             })?;
-        let request_url = get_chat_url(
-            self.api_base
-                .as_ref()
-                .unwrap_or(&OPENROUTER_DEFAULT_BASE_URL),
-        )?;
+        let request_url = get_chat_url(&OPENROUTER_DEFAULT_BASE_URL)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let mut request_builder = http_client

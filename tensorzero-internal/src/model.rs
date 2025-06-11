@@ -794,7 +794,6 @@ pub(super) enum UninitializedProviderConfig {
     },
     OpenRouter {
         model_name: String,
-        api_base: Option<Url>,
         api_key_location: Option<CredentialLocation>,
     },
     Together {
@@ -978,13 +977,8 @@ impl UninitializedProviderConfig {
             }
             UninitializedProviderConfig::OpenRouter {
                 model_name,
-                api_base,
                 api_key_location,
-            } => ProviderConfig::OpenRouter(OpenRouterProvider::new(
-                model_name,
-                api_base,
-                api_key_location,
-            )?),
+            } => ProviderConfig::OpenRouter(OpenRouterProvider::new(model_name, api_key_location)?),
             UninitializedProviderConfig::Together {
                 model_name,
                 api_key_location,
@@ -1667,9 +1661,11 @@ impl ShorthandModelConfig for ModelConfig {
             "gcp_vertex_anthropic" => ProviderConfig::GCPVertexAnthropic(
                 GCPVertexAnthropicProvider::new_shorthand(model_name).await?,
             ),
+            "groq" => ProviderConfig::Groq(GroqProvider::new(model_name, None)?),
             "hyperbolic" => ProviderConfig::Hyperbolic(HyperbolicProvider::new(model_name, None)?),
             "mistral" => ProviderConfig::Mistral(MistralProvider::new(model_name, None)?),
             "openai" => ProviderConfig::OpenAI(OpenAIProvider::new(model_name, None, None)?),
+            "openrouter" => ProviderConfig::OpenRouter(OpenRouterProvider::new(model_name, None)?),
             "together" => ProviderConfig::Together(TogetherProvider::new(
                 model_name,
                 None,
