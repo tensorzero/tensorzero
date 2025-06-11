@@ -14,6 +14,7 @@ This example shows how to use the TensorZero Gateway as a proxy between Cursor a
 2. Generate a strong API key to protect your gateway endpoint from unauthorized access.
    Set it as the value for `API_TOKEN` in your `.env` file.
    We've had some issues with special characters in this step so recommend you use an alphanumeric string to be safe.
+   Optionally, set `USER="yourname"` if you'd like to tag each request with your name for downstream use.
 3. Create an [ngrok](https://ngrok.com/) account.
    Grab your auth token and add it to the `.env` file as the value for `NGROK_AUTHTOKEN`.
 4. Run `docker compose up` to stand up ClickHouse, the TensorZero Gateway, the TensorZero UI, Nginx, and ngrok.
@@ -32,8 +33,6 @@ Take a look at the server running on `http://localhost:14000` to see what your r
 <details>
 <summary>Intercepting Cursor Tab Requests</summary>
 
-> [!NOTE]
->
 > This section is mostly for reference.
 > You do not need to do this to run the Cursor integration today.
 
@@ -46,5 +45,7 @@ Take a look at the server running on `http://localhost:14000` to see what your r
 ## A Haiku about This Integration
 
 _Cursor calls go through_
+
 _TensorZero watches them_
+
 _See the requests flow_

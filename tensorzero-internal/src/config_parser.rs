@@ -25,7 +25,7 @@ use crate::variant::chain_of_thought::UninitializedChainOfThoughtConfig;
 use crate::variant::chat_completion::UninitializedChatCompletionConfig;
 use crate::variant::dicl::UninitializedDiclConfig;
 use crate::variant::mixture_of_n::UninitializedMixtureOfNConfig;
-use crate::variant::{Variant, VariantConfig};
+use crate::variant::{Variant, VariantConfig, VariantInfo};
 use std::error::Error as StdError;
 
 tokio::task_local! {
@@ -767,7 +767,7 @@ enum UninitializedFunctionConfig {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct UninitializedFunctionConfigChat {
-    variants: HashMap<String, UninitializedVariantConfig>, // variant name => variant config
+    variants: HashMap<String, UninitializedVariantInfo>, // variant name => variant config
     system_schema: Option<PathBuf>,
     user_schema: Option<PathBuf>,
     assistant_schema: Option<PathBuf>,
@@ -784,7 +784,7 @@ struct UninitializedFunctionConfigChat {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct UninitializedFunctionConfigJson {
-    variants: HashMap<String, UninitializedVariantConfig>, // variant name => variant config
+    variants: HashMap<String, UninitializedVariantInfo>, // variant name => variant config
     system_schema: Option<PathBuf>,
     user_schema: Option<PathBuf>,
     assistant_schema: Option<PathBuf>,
@@ -817,7 +817,7 @@ impl UninitializedFunctionConfig {
                     .map(|(name, variant)| variant.load(&base_path).map(|v| (name, v)))
                     .collect::<Result<HashMap<_, _>, Error>>()?;
                 for (name, variant) in variants.iter() {
-                    if let VariantConfig::ChatCompletion(chat_config) = variant {
+                    if let VariantConfig::ChatCompletion(chat_config) = &variant.inner {
                         if chat_config.json_mode.is_some() {
                             return Err(ErrorDetails::Config {
                                 message: format!(
@@ -866,7 +866,7 @@ impl UninitializedFunctionConfig {
 
                 for (name, variant) in variants.iter() {
                     let mut warn_variant = None;
-                    match variant {
+                    match &variant.inner {
                         VariantConfig::ChatCompletion(chat_config) => {
                             if chat_config.json_mode.is_none() {
                                 warn_variant = Some(name.clone());
@@ -911,6 +911,15 @@ impl UninitializedFunctionConfig {
     }
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct UninitializedVariantInfo {
+    #[serde(flatten)]
+    pub inner: UninitializedVariantConfig,
+    #[serde(default)]
+    pub timeouts: Option<TimeoutsConfig>,
+}
+
 #[derive(Debug, TensorZeroDeserialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
@@ -927,25 +936,29 @@ pub enum UninitializedVariantConfig {
     ChainOfThought(UninitializedChainOfThoughtConfig),
 }
 
-impl UninitializedVariantConfig {
-    pub fn load<P: AsRef<Path>>(self, base_path: P) -> Result<VariantConfig, Error> {
-        match self {
+impl UninitializedVariantInfo {
+    pub fn load<P: AsRef<Path>>(self, base_path: P) -> Result<VariantInfo, Error> {
+        let inner = match self.inner {
             UninitializedVariantConfig::ChatCompletion(params) => {
-                Ok(VariantConfig::ChatCompletion(params.load(base_path)?))
+                VariantConfig::ChatCompletion(params.load(base_path)?)
             }
             UninitializedVariantConfig::BestOfNSampling(params) => {
-                Ok(VariantConfig::BestOfNSampling(params.load(base_path)?))
+                VariantConfig::BestOfNSampling(params.load(base_path)?)
             }
             UninitializedVariantConfig::Dicl(params) => {
-                Ok(VariantConfig::Dicl(params.load(base_path)?))
+                VariantConfig::Dicl(params.load(base_path)?)
             }
             UninitializedVariantConfig::MixtureOfN(params) => {
-                Ok(VariantConfig::MixtureOfN(params.load(base_path)?))
+                VariantConfig::MixtureOfN(params.load(base_path)?)
             }
             UninitializedVariantConfig::ChainOfThought(params) => {
-                Ok(VariantConfig::ChainOfThought(params.load(base_path)?))
+                VariantConfig::ChainOfThought(params.load(base_path)?)
             }
-        }
+        };
+        Ok(VariantInfo {
+            inner,
+            timeouts: self.timeouts.unwrap_or_default(),
+        })
     }
 }
 
@@ -1031,26 +1044,28 @@ mod tests {
             .expect("Failed to load config");
 
         // Check that the JSON mode is set properly on the JSON variants
-        let prompt_a_json_mode = match config
+        let prompt_a_json_mode = match &config
             .functions
             .get("json_with_schemas")
             .unwrap()
             .variants()
             .get("openai_promptA")
             .unwrap()
+            .inner
         {
             VariantConfig::ChatCompletion(chat_config) => &chat_config.json_mode.unwrap(),
             _ => panic!("Expected a chat completion variant"),
         };
         assert_eq!(prompt_a_json_mode, &JsonMode::ImplicitTool);
 
-        let prompt_b_json_mode = match config
+        let prompt_b_json_mode = match &config
             .functions
             .get("json_with_schemas")
             .unwrap()
             .variants()
             .get("openai_promptB")
             .unwrap()
+            .inner
         {
             VariantConfig::ChatCompletion(chat_config) => chat_config.json_mode,
             _ => panic!("Expected a chat completion variant"),
@@ -1077,7 +1092,7 @@ mod tests {
         match &**function {
             FunctionConfig::Chat(chat_config) => {
                 if let Some(variant) = chat_config.variants.get("best_of_n") {
-                    match variant {
+                    match &variant.inner {
                         VariantConfig::BestOfNSampling(best_of_n_config) => {
                             assert!(
                                 best_of_n_config.candidates.len() > 1,
@@ -1105,7 +1120,7 @@ mod tests {
         match &**json_function {
             FunctionConfig::Json(json_config) => {
                 let variant = json_config.variants.get("variant_with_variables").unwrap();
-                match variant {
+                match &variant.inner {
                     VariantConfig::ChatCompletion(chat_config) => {
                         assert_eq!(chat_config.weight, None); // Default weight should be None
                     }
@@ -1136,7 +1151,7 @@ mod tests {
         match &**function {
             FunctionConfig::Json(json_config) => {
                 assert_eq!(json_config.variants.len(), 7);
-                match &json_config.variants["anthropic_promptA"] {
+                match &json_config.variants["anthropic_promptA"].inner {
                     VariantConfig::ChatCompletion(chat_config) => {
                         assert_eq!(chat_config.model, "anthropic::claude-3.5-sonnet".into());
                         assert_eq!(chat_config.weight, Some(1.0));
@@ -1157,7 +1172,7 @@ mod tests {
                     }
                     _ => panic!("Expected a chat completion variant"),
                 }
-                match &json_config.variants["best_of_3"] {
+                match &json_config.variants["best_of_3"].inner {
                     VariantConfig::BestOfNSampling(best_of_n_config) => {
                         assert_eq!(best_of_n_config.candidates.len(), 3);
                         assert_eq!(
@@ -1172,7 +1187,7 @@ mod tests {
                     }
                     _ => panic!("Expected a best of n sampling variant"),
                 }
-                match &json_config.variants["mixture_of_3"] {
+                match &json_config.variants["mixture_of_3"].inner {
                     VariantConfig::MixtureOfN(mixture_of_n_config) => {
                         assert_eq!(mixture_of_n_config.candidates.len(), 3);
                         assert_eq!(
@@ -1187,7 +1202,7 @@ mod tests {
                     }
                     _ => panic!("Expected a mixture of n sampling variant"),
                 }
-                match &json_config.variants["dicl"] {
+                match &json_config.variants["dicl"].inner {
                     VariantConfig::Dicl(dicl_config) => {
                         assert_eq!(
                             dicl_config.system_instructions,
@@ -1199,7 +1214,7 @@ mod tests {
                     }
                     _ => panic!("Expected a Dicl variant"),
                 }
-                match &json_config.variants["dicl_custom_system"] {
+                match &json_config.variants["dicl_custom_system"].inner {
                     VariantConfig::Dicl(dicl_config) => {
                         assert_eq!(
                             dicl_config.system_instructions,

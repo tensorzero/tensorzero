@@ -2,8 +2,6 @@ use std::borrow::Cow;
 use std::sync::OnceLock;
 
 use futures::{StreamExt, TryStreamExt};
-use reqwest::StatusCode;
-use reqwest_eventsource::RequestBuilderExt;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -13,6 +11,9 @@ use url::Url;
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
+use crate::inference::providers::helpers::{
+    inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
+};
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::{
@@ -23,7 +24,6 @@ use crate::inference::types::{
 use crate::inference::types::{ContentBlockOutput, ProviderInferenceResponseArgs};
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
 
-use super::helpers::inject_extra_request_data;
 use super::openai::{
     handle_openai_error, prepare_openai_messages, prepare_openai_tools, stream_openai,
     OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, OpenAITool, OpenAIToolChoice,
@@ -128,7 +128,7 @@ impl InferenceProvider for AzureProvider {
         api_key: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let mut request_body = serde_json::to_value(AzureRequest::new(request)?).map_err(|e| {
+        let request_body = serde_json::to_value(AzureRequest::new(request)?).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!(
                     "Error serializing Azure request: {}",
@@ -136,33 +136,23 @@ impl InferenceProvider for AzureProvider {
                 ),
             })
         })?;
-        let headers = inject_extra_request_data(
+        let request_url = get_azure_chat_url(&self.endpoint, &self.deployment_id)?;
+        let start_time = Instant::now();
+        let api_key = self.credentials.get_api_key(api_key)?;
+        let builder = http_client
+            .post(request_url)
+            .header("api-key", api_key.expose_secret());
+
+        let (res, raw_request) = inject_extra_request_data_and_send(
+            PROVIDER_TYPE,
             &request.extra_body,
             &request.extra_headers,
             model_provider,
             model_name,
-            &mut request_body,
-        )?;
-        let request_url = get_azure_chat_url(&self.endpoint, &self.deployment_id)?;
-        let start_time = Instant::now();
-        let api_key = self.credentials.get_api_key(api_key)?;
-        let res = http_client
-            .post(request_url)
-            .header("Content-Type", "application/json")
-            .header("api-key", api_key.expose_secret())
-            .headers(headers)
-            .json(&request_body)
-            .send()
-            .await
-            .map_err(|e| {
-                Error::new(ErrorDetails::InferenceClient {
-                    message: e.to_string(),
-                    status_code: Some(e.status().unwrap_or(StatusCode::INTERNAL_SERVER_ERROR)),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
-                    raw_response: None,
-                })
-            })?;
+            request_body,
+            builder,
+        )
+        .await?;
         if res.status().is_success() {
             let latency = Latency::NonStreaming {
                 response_time: start_time.elapsed(),
@@ -175,7 +165,7 @@ impl InferenceProvider for AzureProvider {
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 })
             })?;
@@ -184,7 +174,7 @@ impl InferenceProvider for AzureProvider {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing JSON response: {e}: {raw_response}"),
                     provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_request: Some(raw_request.clone()),
                     raw_response: Some(raw_response.clone()),
                 })
             })?;
@@ -192,7 +182,7 @@ impl InferenceProvider for AzureProvider {
             Ok(AzureResponseWithMetadata {
                 response,
                 latency,
-                request: request_body,
+                raw_request,
                 generic_request: request,
                 raw_response,
             }
@@ -206,12 +196,12 @@ impl InferenceProvider for AzureProvider {
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 })
             })?;
             Err(handle_openai_error(
-                &serde_json::to_string(&request_body).unwrap_or_default(),
+                &raw_request,
                 status,
                 &response,
                 PROVIDER_TYPE,
@@ -230,7 +220,7 @@ impl InferenceProvider for AzureProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let mut request_body = serde_json::to_value(AzureRequest::new(request)?).map_err(|e| {
+        let request_body = serde_json::to_value(AzureRequest::new(request)?).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!(
                     "Error serializing Azure request: {}",
@@ -238,43 +228,22 @@ impl InferenceProvider for AzureProvider {
                 ),
             })
         })?;
-        let headers = inject_extra_request_data(
+        let request_url = get_azure_chat_url(&self.endpoint, &self.deployment_id)?;
+        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let start_time = Instant::now();
+        let builder = http_client
+            .post(request_url)
+            .header("api-key", api_key.expose_secret());
+        let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
+            PROVIDER_TYPE,
             &request.extra_body,
             &request.extra_headers,
             model_provider,
             model_name,
-            &mut request_body,
-        )?;
-        let raw_request = serde_json::to_string(&request_body).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!(
-                    "Error serializing request body as JSON: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-            })
-        })?;
-        let request_url = get_azure_chat_url(&self.endpoint, &self.deployment_id)?;
-        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
-        let start_time = Instant::now();
-        let event_source = http_client
-            .post(request_url)
-            .header("Content-Type", "application/json")
-            .header("api-key", api_key.expose_secret())
-            .headers(headers)
-            .json(&request_body)
-            .eventsource()
-            .map_err(|e| {
-                Error::new(ErrorDetails::InferenceClient {
-                    message: format!(
-                        "Error sending request to Azure: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                    status_code: None,
-                    provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: Some(raw_request.clone()),
-                    raw_response: None,
-                })
-            })?;
+            request_body,
+            builder,
+        )
+        .await?;
         let stream = stream_openai(
             PROVIDER_TYPE.to_string(),
             event_source.map_err(TensorZeroEventError::EventSource),
@@ -459,7 +428,7 @@ struct AzureResponseWithMetadata<'a> {
     response: OpenAIResponse,
     raw_response: String,
     latency: Latency,
-    request: serde_json::Value,
+    raw_request: String,
     generic_request: &'a ModelInferenceRequest<'a>,
 }
 
@@ -469,7 +438,7 @@ impl<'a> TryFrom<AzureResponseWithMetadata<'a>> for ProviderInferenceResponse {
         let AzureResponseWithMetadata {
             mut response,
             latency,
-            request: request_body,
+            raw_request,
             generic_request,
             raw_response,
         } = value;
@@ -498,7 +467,7 @@ impl<'a> TryFrom<AzureResponseWithMetadata<'a>> for ProviderInferenceResponse {
             .pop()
             .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                 message: "Response has no choices (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
-                raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                raw_request: Some(raw_request.clone()),
                 raw_response: Some(raw_response.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
             }))?;
@@ -511,14 +480,6 @@ impl<'a> TryFrom<AzureResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 content.push(ContentBlockOutput::ToolCall(tool_call.into()));
             }
         }
-        let raw_request = serde_json::to_string(&request_body).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!(
-                    "Error serializing request body as JSON: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-            })
-        })?;
 
         Ok(ProviderInferenceResponse::new(
             ProviderInferenceResponseArgs {
@@ -770,7 +731,8 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_secs(0),
             },
-            request: serde_json::to_value(AzureRequest::new(&generic_request).unwrap()).unwrap(),
+            raw_request: serde_json::to_string(&AzureRequest::new(&generic_request).unwrap())
+                .unwrap(),
             generic_request: &generic_request,
         };
         let inference_response: ProviderInferenceResponse =

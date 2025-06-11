@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use futures::StreamExt;
 use reqwest::StatusCode;
-use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
+use reqwest_eventsource::{Event, EventSource};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::time::Instant;
@@ -13,6 +13,9 @@ use crate::cache::ModelProviderRequest;
 use crate::config_parser::skip_credential_validation;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
+use crate::inference::providers::helpers::{
+    inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
+};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
@@ -39,7 +42,7 @@ use super::anthropic::{
 use super::gcp_vertex_gemini::{
     default_api_key_location, parse_shorthand_url, GCPVertexCredentials, ShorthandUrl,
 };
-use super::helpers::{inject_extra_request_data, peek_first_chunk};
+use super::helpers::peek_first_chunk;
 use super::openai::convert_stream_error;
 
 /// Implements a subset of the GCP Vertex Gemini API as documented [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/generateContent) for non-streaming
@@ -193,43 +196,32 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let mut request_body = serde_json::to_value(GCPVertexAnthropicRequestBody::new(request)?)
+        let request_body = serde_json::to_value(GCPVertexAnthropicRequestBody::new(request)?)
             .map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!(
-                    "Error serializing GCP Vertex Anthropic request: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-            })
-        })?;
-        let headers = inject_extra_request_data(
-            &request.extra_body,
-            &request.extra_headers,
-            model_provider,
-            model_name,
-            &mut request_body,
-        )?;
+                Error::new(ErrorDetails::Serialization {
+                    message: format!(
+                        "Error serializing GCP Vertex Anthropic request: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
+                })
+            })?;
         let auth_headers = self
             .credentials
             .get_auth_headers(&self.audience, dynamic_api_keys)
             .await?;
         let start_time = Instant::now();
-        let res = http_client
-            .post(&self.request_url)
-            .headers(auth_headers)
-            .json(&request_body)
-            .headers(headers)
-            .send()
-            .await
-            .map_err(|e| {
-                Error::new(ErrorDetails::InferenceClient {
-                    status_code: e.status(),
-                    message: format!("Error sending request: {}", DisplayOrDebugGateway::new(e)),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
-                    raw_response: None,
-                })
-            })?;
+        let builder = http_client.post(&self.request_url).headers(auth_headers);
+
+        let (res, raw_request) = inject_extra_request_data_and_send(
+            PROVIDER_TYPE,
+            &request.extra_body,
+            &request.extra_headers,
+            model_provider,
+            model_name,
+            request_body,
+            builder,
+        )
+        .await?;
         let latency = Latency::NonStreaming {
             response_time: start_time.elapsed(),
         };
@@ -241,7 +233,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 })
             })?;
@@ -250,7 +242,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing JSON response: {e}: {raw_response}"),
                     provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_request: Some(raw_request.clone()),
                     raw_response: Some(raw_response.clone()),
                 })
             })?;
@@ -259,7 +251,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
                 response,
                 raw_response,
                 latency,
-                request: request_body,
+                raw_request,
                 function_type: &request.function_type,
                 json_mode: &request.json_mode,
                 generic_request: request,
@@ -273,7 +265,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing response: {e:?}"),
                     provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 })
             })?;
@@ -293,51 +285,33 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let mut request_body = serde_json::to_value(GCPVertexAnthropicRequestBody::new(request)?)
+        let request_body = serde_json::to_value(GCPVertexAnthropicRequestBody::new(request)?)
             .map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!(
-                    "Error serializing GCP Vertex Anthropic request: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-            })
-        })?;
-        let headers = inject_extra_request_data(
-            &request.extra_body,
-            &request.extra_headers,
-            model_provider,
-            model_name,
-            &mut request_body,
-        )?;
-        let raw_request = serde_json::to_string(&request_body).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!(
-                    "Error serializing request body as JSON: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-            })
-        })?;
+                Error::new(ErrorDetails::Serialization {
+                    message: format!(
+                        "Error serializing GCP Vertex Anthropic request: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
+                })
+            })?;
         let auth_headers = self
             .credentials
             .get_auth_headers(&self.audience, dynamic_api_keys)
             .await?;
         let start_time = Instant::now();
-        let event_source = http_client
+        let builder = http_client
             .post(&self.streaming_request_url)
-            .headers(auth_headers)
-            .header("content-type", "application/json")
-            .json(&request_body)
-            .headers(headers)
-            .eventsource()
-            .map_err(|e| {
-                Error::new(ErrorDetails::InferenceClient {
-                    message: format!("Error sending request: {}", DisplayOrDebugGateway::new(e)),
-                    status_code: None,
-                    provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
-                    raw_response: None,
-                })
-            })?;
+            .headers(auth_headers);
+        let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
+            PROVIDER_TYPE,
+            &request.extra_body,
+            &request.extra_headers,
+            model_provider,
+            model_name,
+            request_body,
+            builder,
+        )
+        .await?;
         let mut stream = stream_anthropic(event_source, start_time).peekable();
         let chunk = peek_first_chunk(&mut stream, &raw_request, PROVIDER_TYPE).await?;
         if matches!(
@@ -879,7 +853,7 @@ struct GCPVertexAnthropicResponseWithMetadata<'a> {
     response: GCPVertexAnthropicResponse,
     raw_response: String,
     latency: Latency,
-    request: serde_json::Value,
+    raw_request: String,
     function_type: &'a FunctionType,
     json_mode: &'a ModelInferenceRequestJsonMode,
     generic_request: &'a ModelInferenceRequest<'a>,
@@ -894,7 +868,7 @@ impl<'a> TryFrom<GCPVertexAnthropicResponseWithMetadata<'a>> for ProviderInferen
             response,
             raw_response,
             latency,
-            request,
+            raw_request,
             function_type,
             json_mode,
             generic_request,
@@ -907,14 +881,6 @@ impl<'a> TryFrom<GCPVertexAnthropicResponseWithMetadata<'a>> for ProviderInferen
             .into_iter()
             .map(|block| convert_to_output(model_name, provider_name, block))
             .collect::<Result<Vec<_>, _>>()?;
-        let raw_request = serde_json::to_string(&request).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!(
-                    "Error serializing request to GCP Vertex Anthropic: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-            })
-        })?;
 
         let content = if matches!(
             json_mode,
@@ -1974,7 +1940,7 @@ mod tests {
             response: anthropic_response_body.clone(),
             raw_response: raw_response.clone(),
             latency: latency.clone(),
-            request: serde_json::to_value(&request_body).unwrap(),
+            raw_request: raw_request.clone(),
             function_type: &FunctionType::Chat,
             json_mode: &ModelInferenceRequestJsonMode::Off,
             generic_request: &generic_request,
@@ -2067,7 +2033,7 @@ mod tests {
             response: anthropic_response_body.clone(),
             raw_response: raw_response.clone(),
             latency: latency.clone(),
-            request: serde_json::to_value(&request_body).unwrap(),
+            raw_request: raw_request.clone(),
             function_type: &FunctionType::Chat,
             json_mode: &ModelInferenceRequestJsonMode::Off,
             generic_request: &generic_request,
@@ -2160,7 +2126,7 @@ mod tests {
             response: anthropic_response_body.clone(),
             raw_response: raw_response.clone(),
             latency: latency.clone(),
-            request: serde_json::to_value(&request_body).unwrap(),
+            raw_request: raw_request.clone(),
             function_type: &FunctionType::Chat,
             json_mode: &ModelInferenceRequestJsonMode::Off,
             generic_request: &generic_request,

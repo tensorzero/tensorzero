@@ -12,6 +12,7 @@ use tensorzero_derive::TensorZeroDeserialize;
 use crate::{
     config_parser::{
         MetricConfig, MetricConfigLevel, MetricConfigOptimize, MetricConfigType, PathWithContents,
+        TimeoutsConfig,
     },
     error::{Error, ErrorDetails},
     function::{FunctionConfig, FunctionConfigJson},
@@ -24,7 +25,7 @@ use crate::{
         chat_completion::ChatCompletionConfig,
         dicl::DiclConfig,
         mixture_of_n::{FuserConfig, MixtureOfNConfig},
-        JsonMode, RetryConfig, VariantConfig,
+        JsonMode, RetryConfig, VariantConfig, VariantInfo,
     },
 };
 
@@ -259,7 +260,7 @@ enum UninitializedEvaluatorConfig {
 struct UninitializedLLMJudgeConfig {
     #[serde(default)]
     input_format: LLMJudgeInputFormat,
-    variants: HashMap<String, UninitializedLLMJudgeVariantConfig>,
+    variants: HashMap<String, UninitializedLLMJudgeVariantInfo>,
     output_type: LLMJudgeOutputType,
     optimize: LLMJudgeOptimize,
     #[serde(default)]
@@ -313,7 +314,7 @@ impl UninitializedEvaluatorConfig {
                 let nonzero_weights = variants
                     .iter()
                     // Treat a None weight as 0.0 for this check - we only care if we have multiple variants with an explicit positive weight
-                    .filter(|(_, variant)| variant.weight().unwrap_or(0.0) > 0.0)
+                    .filter(|(_, variant)| variant.inner.weight().unwrap_or(0.0) > 0.0)
                     .count();
                 if nonzero_weights != 1 && variants.len() > 1 {
                     return Err(ErrorDetails::Config {
@@ -329,7 +330,7 @@ impl UninitializedEvaluatorConfig {
                             message: "Failed to grab first variant from variants map. This should never happen, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.".to_string(),
                         }.into());
                     };
-                    if let Some(weight) = variant.weight() {
+                    if let Some(weight) = variant.inner.weight() {
                         if weight == 0.0 {
                             return Err(ErrorDetails::Config {
                                 message: format!("Evaluator `{evaluator_name}` in `[evaluations.{evaluation_name}]` must have exactly 1 variant that is active. You have specified a single inactive variant."),
@@ -337,7 +338,7 @@ impl UninitializedEvaluatorConfig {
                             .into());
                         }
                     }
-                    match variant {
+                    match &mut variant.inner {
                         VariantConfig::ChatCompletion(variant) => {
                             variant.weight = Some(1.0);
                         }
@@ -406,6 +407,13 @@ impl UninitializedEvaluatorConfig {
             }
         }
     }
+}
+
+#[derive(Debug, Deserialize)]
+struct UninitializedLLMJudgeVariantInfo {
+    #[serde(flatten)]
+    inner: UninitializedLLMJudgeVariantConfig,
+    timeouts: Option<TimeoutsConfig>,
 }
 
 #[derive(Debug, TensorZeroDeserialize)]
@@ -578,7 +586,7 @@ fn get_weight(active: Option<bool>) -> Option<f64> {
     }
 }
 
-impl UninitializedLLMJudgeVariantConfig {
+impl UninitializedLLMJudgeVariantInfo {
     pub fn load<P: AsRef<Path>>(
         self,
         base_path: &P,
@@ -586,9 +594,9 @@ impl UninitializedLLMJudgeVariantConfig {
         evaluator_name: &str,
         input_format: &LLMJudgeInputFormat,
         variant_name: &str,
-    ) -> Result<VariantConfig, Error> {
-        match self {
-            UninitializedLLMJudgeVariantConfig::ChatCompletion(params) => Ok(
+    ) -> Result<VariantInfo, Error> {
+        let inner = match self.inner {
+            UninitializedLLMJudgeVariantConfig::ChatCompletion(params) => {
                 VariantConfig::ChatCompletion(convert_chat_completion_judge_to_variant(
                     base_path,
                     evaluation_name,
@@ -596,8 +604,8 @@ impl UninitializedLLMJudgeVariantConfig {
                     variant_name,
                     input_format,
                     params,
-                )?),
-            ),
+                )?)
+            }
             UninitializedLLMJudgeVariantConfig::BestOfNSampling(params) => {
                 let evaluator_system_instructions =
                     read_system_instructions(params.evaluator.system_instructions, base_path)?;
@@ -626,7 +634,7 @@ impl UninitializedLLMJudgeVariantConfig {
                     }),
                     LLMJudgeInputFormat::Messages => None,
                 };
-                Ok(VariantConfig::BestOfNSampling(BestOfNSamplingConfig {
+                VariantConfig::BestOfNSampling(BestOfNSamplingConfig {
                     weight: get_weight(params.active),
                     timeout_s: params.timeout_s,
                     candidates: params.candidates,
@@ -650,7 +658,7 @@ impl UninitializedLLMJudgeVariantConfig {
                             extra_headers: params.evaluator.extra_headers,
                         },
                     },
-                }))
+                })
             }
             UninitializedLLMJudgeVariantConfig::MixtureOfNSampling(params) => {
                 let fuser_system_instructions =
@@ -680,7 +688,7 @@ impl UninitializedLLMJudgeVariantConfig {
                     }),
                     LLMJudgeInputFormat::Messages => None,
                 };
-                Ok(VariantConfig::MixtureOfN(MixtureOfNConfig {
+                VariantConfig::MixtureOfN(MixtureOfNConfig {
                     weight: get_weight(params.active),
                     timeout_s: params.timeout_s,
                     candidates: params.candidates,
@@ -704,7 +712,7 @@ impl UninitializedLLMJudgeVariantConfig {
                             extra_headers: params.fuser.extra_headers,
                         },
                     },
-                }))
+                })
             }
             UninitializedLLMJudgeVariantConfig::Dicl(params) => {
                 let dicl_system_instructions = params
@@ -718,7 +726,7 @@ impl UninitializedLLMJudgeVariantConfig {
                         )
                     })
                     .unwrap_or(crate::variant::dicl::default_system_instructions());
-                Ok(VariantConfig::Dicl(DiclConfig {
+                VariantConfig::Dicl(DiclConfig {
                     weight: get_weight(params.active),
                     embedding_model: params.embedding_model.into(),
                     k: params.k,
@@ -735,10 +743,10 @@ impl UninitializedLLMJudgeVariantConfig {
                     extra_headers: params.extra_headers,
                     retries: params.retries,
                     stop_sequences: params.stop_sequences,
-                }))
+                })
             }
             UninitializedLLMJudgeVariantConfig::ChainOfThought(params) => {
-                Ok(VariantConfig::ChainOfThought(ChainOfThoughtConfig {
+                VariantConfig::ChainOfThought(ChainOfThoughtConfig {
                     inner: convert_chat_completion_judge_to_variant(
                         base_path,
                         evaluation_name,
@@ -747,9 +755,13 @@ impl UninitializedLLMJudgeVariantConfig {
                         input_format,
                         params.inner,
                     )?,
-                }))
+                })
             }
-        }
+        };
+        Ok(VariantInfo {
+            inner,
+            timeouts: self.timeouts.unwrap_or_default(),
+        })
     }
 }
 
@@ -997,26 +1009,29 @@ mod tests {
             let mut variants = HashMap::new();
             variants.insert(
                 "test_variant".to_string(),
-                UninitializedLLMJudgeVariantConfig::ChatCompletion(
-                    UninitializedLLMJudgeChatCompletionVariantConfig {
-                        active: Some(true),
-                        model: Arc::from("gpt-3.5-turbo"),
-                        system_instructions: PathBuf::from(
-                            "evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
-                        ),
-                        temperature: Some(0.7),
-                        top_p: None,
-                        max_tokens: Some(100),
-                        presence_penalty: None,
-                        frequency_penalty: None,
-                        seed: None,
-                        json_mode: JsonMode::ImplicitTool,
-                        retries: RetryConfig::default(),
-                        extra_body: Default::default(),
-                        extra_headers: Default::default(),
-                        stop_sequences: None,
-                    },
-                ),
+                UninitializedLLMJudgeVariantInfo {
+                    inner: UninitializedLLMJudgeVariantConfig::ChatCompletion(
+                        UninitializedLLMJudgeChatCompletionVariantConfig {
+                            active: Some(true),
+                            model: Arc::from("gpt-3.5-turbo"),
+                            system_instructions: PathBuf::from(
+                                "evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
+                            ),
+                            temperature: Some(0.7),
+                            top_p: None,
+                            max_tokens: Some(100),
+                            presence_penalty: None,
+                            frequency_penalty: None,
+                            seed: None,
+                            json_mode: JsonMode::ImplicitTool,
+                            retries: RetryConfig::default(),
+                            extra_body: Default::default(),
+                            extra_headers: Default::default(),
+                            stop_sequences: None,
+                        },
+                    ),
+                    timeouts: None,
+                },
             );
 
             let llm_judge_config = UninitializedLLMJudgeConfig {
@@ -1119,26 +1134,29 @@ mod tests {
             let mut variants = HashMap::new();
             variants.insert(
                 "test_variant".to_string(),
-                UninitializedLLMJudgeVariantConfig::ChatCompletion(
-                    UninitializedLLMJudgeChatCompletionVariantConfig {
-                        active: Some(true),
-                        model: Arc::from("gpt-3.5-turbo"),
-                        system_instructions: PathBuf::from(
-                            "evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
-                        ),
-                        temperature: Some(0.7),
-                        top_p: None,
-                        max_tokens: Some(100),
-                        presence_penalty: None,
-                        frequency_penalty: None,
-                        seed: None,
-                        json_mode: JsonMode::ImplicitTool,
-                        retries: RetryConfig::default(),
-                        extra_body: Default::default(),
-                        extra_headers: Default::default(),
-                        stop_sequences: None,
-                    },
-                ),
+                UninitializedLLMJudgeVariantInfo {
+                    inner: UninitializedLLMJudgeVariantConfig::ChatCompletion(
+                        UninitializedLLMJudgeChatCompletionVariantConfig {
+                            active: Some(true),
+                            model: Arc::from("gpt-3.5-turbo"),
+                            system_instructions: PathBuf::from(
+                                "evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
+                            ),
+                            temperature: Some(0.7),
+                            top_p: None,
+                            max_tokens: Some(100),
+                            presence_penalty: None,
+                            frequency_penalty: None,
+                            seed: None,
+                            json_mode: JsonMode::ImplicitTool,
+                            retries: RetryConfig::default(),
+                            extra_body: Default::default(),
+                            extra_headers: Default::default(),
+                            stop_sequences: None,
+                        },
+                    ),
+                    timeouts: None,
+                },
             );
 
             let llm_judge_config = UninitializedLLMJudgeConfig {
@@ -1269,51 +1287,57 @@ mod tests {
             let mut test_variant1 = HashMap::new();
             test_variant1.insert(
                 "test_variant1".to_string(),
-                UninitializedLLMJudgeVariantConfig::ChatCompletion(
-                    UninitializedLLMJudgeChatCompletionVariantConfig {
-                        active: Some(true),
-                        model: Arc::from("gpt-3.5-turbo"),
-                        system_instructions: PathBuf::from(
-                            "evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
-                        ),
-                        temperature: Some(0.7),
-                        top_p: None,
-                        max_tokens: Some(100),
-                        presence_penalty: None,
-                        frequency_penalty: None,
-                        seed: None,
-                        json_mode: JsonMode::ImplicitTool,
-                        retries: RetryConfig::default(),
-                        extra_body: Default::default(),
-                        extra_headers: Default::default(),
-                        stop_sequences: None,
-                    },
-                ),
+                UninitializedLLMJudgeVariantInfo {
+                    inner: UninitializedLLMJudgeVariantConfig::ChatCompletion(
+                        UninitializedLLMJudgeChatCompletionVariantConfig {
+                            active: Some(true),
+                            model: Arc::from("gpt-3.5-turbo"),
+                            system_instructions: PathBuf::from(
+                                "evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
+                            ),
+                            temperature: Some(0.7),
+                            top_p: None,
+                            max_tokens: Some(100),
+                            presence_penalty: None,
+                            frequency_penalty: None,
+                            seed: None,
+                            json_mode: JsonMode::ImplicitTool,
+                            retries: RetryConfig::default(),
+                            extra_body: Default::default(),
+                            extra_headers: Default::default(),
+                            stop_sequences: None,
+                        },
+                    ),
+                    timeouts: None,
+                },
             );
 
             let mut test_variant2 = HashMap::new();
             test_variant2.insert(
                 "test_variant2".to_string(),
-                UninitializedLLMJudgeVariantConfig::ChatCompletion(
-                    UninitializedLLMJudgeChatCompletionVariantConfig {
-                        active: Some(true),
-                        model: Arc::from("gpt-4"),
-                        system_instructions: PathBuf::from(
-                            "evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
-                        ),
-                        temperature: Some(0.5),
-                        top_p: None,
-                        max_tokens: Some(200),
-                        presence_penalty: None,
-                        frequency_penalty: None,
-                        seed: None,
-                        json_mode: JsonMode::ImplicitTool,
-                        retries: RetryConfig::default(),
-                        extra_body: Default::default(),
-                        extra_headers: Default::default(),
-                        stop_sequences: None,
-                    },
-                ),
+                UninitializedLLMJudgeVariantInfo {
+                    inner: UninitializedLLMJudgeVariantConfig::ChatCompletion(
+                        UninitializedLLMJudgeChatCompletionVariantConfig {
+                            active: Some(true),
+                            model: Arc::from("gpt-4"),
+                            system_instructions: PathBuf::from(
+                                "evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
+                            ),
+                            temperature: Some(0.5),
+                            top_p: None,
+                            max_tokens: Some(200),
+                            presence_penalty: None,
+                            frequency_penalty: None,
+                            seed: None,
+                            json_mode: JsonMode::ImplicitTool,
+                            retries: RetryConfig::default(),
+                            extra_body: Default::default(),
+                            extra_headers: Default::default(),
+                            stop_sequences: None,
+                        },
+                    ),
+                    timeouts: None,
+                },
             );
 
             // Combine the two variants
@@ -1407,26 +1431,29 @@ mod tests {
             let mut variants = HashMap::new();
             variants.insert(
                 "test_variant".to_string(),
-                UninitializedLLMJudgeVariantConfig::ChatCompletion(
-                    UninitializedLLMJudgeChatCompletionVariantConfig {
-                        active: Some(true),
-                        model: Arc::from("gpt-3.5-turbo"),
-                        system_instructions: PathBuf::from(
-                            "evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
-                        ),
-                        temperature: Some(0.7),
-                        top_p: None,
-                        max_tokens: Some(100),
-                        presence_penalty: None,
-                        frequency_penalty: None,
-                        seed: None,
-                        json_mode: JsonMode::ImplicitTool,
-                        retries: RetryConfig::default(),
-                        extra_body: Default::default(),
-                        extra_headers: Default::default(),
-                        stop_sequences: None,
-                    },
-                ),
+                UninitializedLLMJudgeVariantInfo {
+                    inner: UninitializedLLMJudgeVariantConfig::ChatCompletion(
+                        UninitializedLLMJudgeChatCompletionVariantConfig {
+                            active: Some(true),
+                            model: Arc::from("gpt-3.5-turbo"),
+                            system_instructions: PathBuf::from(
+                                "evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
+                            ),
+                            temperature: Some(0.7),
+                            top_p: None,
+                            max_tokens: Some(100),
+                            presence_penalty: None,
+                            frequency_penalty: None,
+                            seed: None,
+                            json_mode: JsonMode::ImplicitTool,
+                            retries: RetryConfig::default(),
+                            extra_body: Default::default(),
+                            extra_headers: Default::default(),
+                            stop_sequences: None,
+                        },
+                    ),
+                    timeouts: None,
+                },
             );
 
             let llm_judge_config = UninitializedLLMJudgeConfig {
@@ -1475,26 +1502,29 @@ mod tests {
             let mut variants = HashMap::new();
             variants.insert(
                 "default_active_variant".to_string(),
-                UninitializedLLMJudgeVariantConfig::ChatCompletion(
-                    UninitializedLLMJudgeChatCompletionVariantConfig {
-                        active: None, // No 'active' field specified
-                        model: Arc::from("gpt-3.5-turbo"),
-                        system_instructions: PathBuf::from(
-                            "evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
-                        ),
-                        temperature: Some(0.7),
-                        top_p: None,
-                        max_tokens: Some(100),
-                        presence_penalty: None,
-                        frequency_penalty: None,
-                        seed: None,
-                        json_mode: JsonMode::ImplicitTool,
-                        retries: RetryConfig::default(),
-                        extra_body: Default::default(),
-                        extra_headers: Default::default(),
-                        stop_sequences: None,
-                    },
-                ),
+                UninitializedLLMJudgeVariantInfo {
+                    inner: UninitializedLLMJudgeVariantConfig::ChatCompletion(
+                        UninitializedLLMJudgeChatCompletionVariantConfig {
+                            active: None, // No 'active' field specified
+                            model: Arc::from("gpt-3.5-turbo"),
+                            system_instructions: PathBuf::from(
+                                "evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
+                            ),
+                            temperature: Some(0.7),
+                            top_p: None,
+                            max_tokens: Some(100),
+                            presence_penalty: None,
+                            frequency_penalty: None,
+                            seed: None,
+                            json_mode: JsonMode::ImplicitTool,
+                            retries: RetryConfig::default(),
+                            extra_body: Default::default(),
+                            extra_headers: Default::default(),
+                            stop_sequences: None,
+                        },
+                    ),
+                    timeouts: None,
+                },
             );
 
             let llm_judge_config = UninitializedLLMJudgeConfig {
@@ -1529,7 +1559,7 @@ mod tests {
                     assert_eq!(json_config.variants.len(), 1);
                     let variant = json_config.variants.get("default_active_variant").unwrap();
                     // Check that the weight is Some(1.0) which indicates it defaulted to active
-                    match variant {
+                    match &variant.inner {
                         VariantConfig::ChatCompletion(cc_config) => {
                             assert_eq!(cc_config.weight, Some(1.0));
                         }
@@ -1545,26 +1575,29 @@ mod tests {
             let mut variants = HashMap::new();
             variants.insert(
                 "inactive_variant".to_string(),
-                UninitializedLLMJudgeVariantConfig::ChatCompletion(
-                    UninitializedLLMJudgeChatCompletionVariantConfig {
-                        active: Some(false), // Explicitly inactive
-                        model: Arc::from("gpt-3.5-turbo"),
-                        system_instructions: PathBuf::from(
-                            "evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
-                        ),
-                        temperature: Some(0.7),
-                        top_p: None,
-                        max_tokens: Some(100),
-                        presence_penalty: None,
-                        frequency_penalty: None,
-                        seed: None,
-                        json_mode: JsonMode::ImplicitTool,
-                        retries: RetryConfig::default(),
-                        extra_body: Default::default(),
-                        extra_headers: Default::default(),
-                        stop_sequences: None,
-                    },
-                ),
+                UninitializedLLMJudgeVariantInfo {
+                    inner: UninitializedLLMJudgeVariantConfig::ChatCompletion(
+                        UninitializedLLMJudgeChatCompletionVariantConfig {
+                            active: Some(false), // Explicitly inactive
+                            model: Arc::from("gpt-3.5-turbo"),
+                            system_instructions: PathBuf::from(
+                                "evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
+                            ),
+                            temperature: Some(0.7),
+                            top_p: None,
+                            max_tokens: Some(100),
+                            presence_penalty: None,
+                            frequency_penalty: None,
+                            seed: None,
+                            json_mode: JsonMode::ImplicitTool,
+                            retries: RetryConfig::default(),
+                            extra_body: Default::default(),
+                            extra_headers: Default::default(),
+                            stop_sequences: None,
+                        },
+                    ),
+                    timeouts: None,
+                },
             );
 
             let llm_judge_config = UninitializedLLMJudgeConfig {

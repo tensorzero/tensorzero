@@ -18,7 +18,7 @@ use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
 use crate::tool::{DynamicToolParams, StaticToolConfig, ToolCallConfig, ToolChoice};
 use crate::variant::chat_completion::TemplateSchemaInfo;
-use crate::variant::{InferenceConfig, JsonMode, Variant, VariantConfig};
+use crate::variant::{InferenceConfig, JsonMode, Variant, VariantInfo};
 
 #[derive(Debug)]
 pub enum FunctionConfig {
@@ -50,7 +50,7 @@ impl FunctionConfig {
 
 #[derive(Debug, Default)]
 pub struct FunctionConfigChat {
-    pub variants: HashMap<String, VariantConfig>, // variant name => variant config
+    pub variants: HashMap<String, VariantInfo>, // variant name => variant config
     pub system_schema: Option<StaticJSONSchema>,
     pub user_schema: Option<StaticJSONSchema>,
     pub assistant_schema: Option<StaticJSONSchema>,
@@ -62,7 +62,7 @@ pub struct FunctionConfigChat {
 
 #[derive(Debug, Default)]
 pub struct FunctionConfigJson {
-    pub variants: HashMap<String, VariantConfig>, // variant name => variant config
+    pub variants: HashMap<String, VariantInfo>, // variant name => variant config
     pub system_schema: Option<StaticJSONSchema>,
     pub user_schema: Option<StaticJSONSchema>,
     pub assistant_schema: Option<StaticJSONSchema>,
@@ -72,7 +72,7 @@ pub struct FunctionConfigJson {
 }
 
 impl FunctionConfig {
-    pub fn variants(&self) -> &HashMap<String, VariantConfig> {
+    pub fn variants(&self) -> &HashMap<String, VariantInfo> {
         match self {
             FunctionConfig::Chat(params) => &params.variants,
             FunctionConfig::Json(params) => &params.variants,
@@ -433,15 +433,15 @@ fn validate_single_message(
 /// Sample a variant from the function based on variant weights (uniform random selection)
 pub fn sample_variant<'a>(
     candidate_variant_names: &mut Vec<&'a str>,
-    variants: &'a HashMap<String, VariantConfig>,
+    variants: &'a HashMap<String, VariantInfo>,
     function_name: &str,
     episode_id: &Uuid,
-) -> Result<(&'a str, &'a VariantConfig), Error> {
+) -> Result<(&'a str, &'a VariantInfo), Error> {
     // Compute the total weight of variants present in variant_names
     let total_weight = candidate_variant_names
         .iter()
         .filter_map(|name| variants.get(*name))
-        .map(|variant| variant.weight().unwrap_or(0.0))
+        .map(|variant| variant.inner.weight().unwrap_or(0.0))
         .sum::<f64>();
 
     // If the total weight is non-positive, perform uniform sampling
@@ -495,7 +495,7 @@ pub fn sample_variant<'a>(
                 message: format!("Function `{function_name}` has no variant `{variant_name}`"),
             })
         })?;
-        cumulative_weight += variant.weight().unwrap_or(0.0);
+        cumulative_weight += variant.inner.weight().unwrap_or(0.0);
         if cumulative_weight > random_threshold {
             sampled_variant_name = candidate_variant_names.swap_remove(i);
             break;
@@ -540,6 +540,7 @@ mod tests {
     use crate::minijinja_util::TemplateConfig;
     use crate::tool::ToolCall;
     use crate::variant::chat_completion::ChatCompletionConfig;
+    use crate::variant::VariantConfig;
 
     use super::*;
     use serde_json::json;
@@ -1374,17 +1375,20 @@ mod tests {
     #[test]
     fn test_sample_variant() {
         // Helper function to create a HashMap of variant names to their weights
-        fn create_variants(variant_weights: &[(&str, f64)]) -> HashMap<String, VariantConfig> {
+        fn create_variants(variant_weights: &[(&str, f64)]) -> HashMap<String, VariantInfo> {
             variant_weights
                 .iter()
                 .map(|&(name, weight)| {
                     (
                         name.to_string(),
-                        VariantConfig::ChatCompletion(ChatCompletionConfig {
-                            weight: Some(weight),
-                            model: "model-name".into(),
-                            ..Default::default()
-                        }),
+                        VariantInfo {
+                            inner: VariantConfig::ChatCompletion(ChatCompletionConfig {
+                                weight: Some(weight),
+                                model: "model-name".into(),
+                                ..Default::default()
+                            }),
+                            timeouts: Default::default(),
+                        },
                     )
                 })
                 .collect()
@@ -1393,11 +1397,14 @@ mod tests {
         // Helper function to test the distribution of variant weights by sampling them many times
         // and checking if the observed distribution is close to the expected distribution
         fn test_variant_distribution(
-            variants: &HashMap<String, VariantConfig>,
+            variants: &HashMap<String, VariantInfo>,
             sample_size: usize,
             tolerance: f64,
         ) {
-            let total_weight: f64 = variants.values().map(|v| v.weight().unwrap_or(0.0)).sum();
+            let total_weight: f64 = variants
+                .values()
+                .map(|v| v.inner.weight().unwrap_or(0.0))
+                .sum();
             let mut counts: HashMap<String, usize> = HashMap::new();
 
             for _ in 0..sample_size {
@@ -1413,7 +1420,7 @@ mod tests {
             }
 
             for (variant_name, variant) in variants {
-                let expected_prob = variant.weight().unwrap_or(0.0) / total_weight;
+                let expected_prob = variant.inner.weight().unwrap_or(0.0) / total_weight;
                 let actual_prob =
                     *counts.get(variant_name).unwrap_or(&0) as f64 / sample_size as f64;
                 let diff = (expected_prob - actual_prob).abs();

@@ -10,6 +10,8 @@ use tensorzero_internal::{
     cache::CacheEnabledMode, clickhouse::ClickHouseConnectionInfo, function::FunctionConfig,
     tool::ToolCallConfigDatabaseInsert,
 };
+use tracing::debug;
+use tracing_subscriber::EnvFilter;
 use uuid::Uuid;
 
 use crate::{Args, OutputFormat};
@@ -55,12 +57,16 @@ pub fn setup_logging(args: &Args) -> Result<()> {
             let subscriber = tracing_subscriber::FmtSubscriber::builder()
                 .with_writer(std::io::stderr)
                 .json()
+                .with_env_filter(EnvFilter::from_default_env())
                 .finish();
             tracing::subscriber::set_global_default(subscriber)
                 .map_err(|e| anyhow!("Failed to initialize tracing: {}", e))
         }
         OutputFormat::Pretty => {
-            let subscriber = tracing_subscriber::FmtSubscriber::new();
+            let subscriber = tracing_subscriber::FmtSubscriber::builder()
+                .with_writer(std::io::stderr)
+                .with_env_filter(EnvFilter::from_default_env())
+                .finish();
             tracing::subscriber::set_global_default(subscriber)
                 .map_err(|e| anyhow!("Failed to initialize tracing: {}", e))
         }
@@ -98,6 +104,7 @@ pub async fn check_static_eval_human_feedback(
         LIMIT 1
         FORMAT JSONEachRow
     "#;
+    debug!(query = %query, "Executing ClickHouse query");
     let escaped_serialized_output = escape_string_for_clickhouse_literal(&serialized_output);
     let result = clickhouse
         .run_query_synchronous(
@@ -109,6 +116,7 @@ pub async fn check_static_eval_human_feedback(
             ]),
         )
         .await?;
+    debug!(result_length = result.len(), "Query executed successfully");
     if result.is_empty() {
         return Ok(None);
     }

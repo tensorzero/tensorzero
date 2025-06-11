@@ -644,6 +644,44 @@ model_name = "text-embedding-3-small"
 # │                                 FUNCTIONS                                  │
 # └────────────────────────────────────────────────────────────────────────────┘
 
+# Variant timeout tests
+
+[functions.basic_test_variant_timeout]
+type = "chat"
+
+[functions.basic_test_variant_timeout.variants.slow_timeout]
+type = "chat_completion"
+model = "slow"
+
+[functions.basic_test_variant_timeout.variants.slow_timeout.timeouts]
+non_streaming = { total_ms = 400 }
+streaming = { ttft_ms = 500 }
+
+[functions.basic_test_variant_timeout.variants.slow_second_chunk]
+type = "chat_completion"
+model = "slow_second_chunk"
+
+[functions.basic_test_variant_timeout.variants.slow_second_chunk.timeouts]
+non_streaming = { total_ms = 400 }
+streaming = { ttft_ms = 500 }
+
+[functions.basic_test_variant_timeout.variants.best_of_n]
+type = "experimental_best_of_n_sampling"
+candidates = ["good", "slow_timeout", "reasoner"]
+
+[functions.basic_test_variant_timeout.variants.best_of_n.evaluator]
+model = "dummy::best_of_n_0"
+
+[functions.basic_test_variant_timeout.variants.good]
+type = "chat_completion"
+model = "dummy::good"
+
+[functions.basic_test_variant_timeout.variants.reasoner]
+type = "chat_completion"
+model = "dummy::reasoner"
+
+# Model provider timeout tests
+
 [functions.basic_test_timeout]
 type = "chat"
 
@@ -676,6 +714,7 @@ candidates = ["good", "reasoner"]
 
 [functions.basic_test_timeout.variants.best_of_n_judge_timeout.evaluator]
 model = "slow_with_timeout"
+
 [functions.basic_test_template_no_schema]
 type = "chat"
 

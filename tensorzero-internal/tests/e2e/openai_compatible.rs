@@ -886,6 +886,32 @@ async fn test_openai_compatible_warn_unknown_fields() {
 }
 
 #[tokio::test]
+async fn test_openai_compatible_deny_unknown_fields() {
+    let client = make_embedded_gateway_no_config().await;
+    let state = client.get_app_state_data().unwrap().clone();
+    let err = tensorzero_internal::endpoints::openai_compatible::inference_handler(
+        State(state),
+        HeaderMap::default(),
+        StructuredJson(
+            serde_json::from_value(serde_json::json!({
+                "messages": [],
+                "model": "tensorzero::model_name::dummy::good",
+                "tensorzero::deny_unknown_fields": true,
+                "my_fake_param": "fake_value",
+                "my_other_fake_param": "fake_value_2"
+            }))
+            .unwrap(),
+        ),
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(
+        err.to_string(),
+        "Invalid request to OpenAI-compatible endpoint: `tensorzero::deny_unknown_fields` is set to true, but found unknown fields in the request: [my_fake_param, my_other_fake_param]"
+    );
+}
+
+#[tokio::test]
 async fn test_openai_compatible_streaming() {
     use futures::StreamExt;
     use reqwest_eventsource::{Event, RequestBuilderExt};

@@ -13,7 +13,7 @@ use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 use object_store::gcp::{GcpCredential, GoogleCloudStorageBuilder};
 use object_store::{ObjectStore, StaticCredentialProvider};
 use reqwest::StatusCode;
-use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
+use reqwest_eventsource::{Event, EventSource};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::value::RawValue;
@@ -29,6 +29,9 @@ use crate::config_parser::{
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::providers::helpers::check_new_tool_call_name;
+use crate::inference::providers::helpers::{
+    inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
+};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::{
     BatchRequestRow, BatchStatus, PollBatchInferenceResponse, ProviderBatchInferenceOutput,
@@ -51,7 +54,7 @@ use crate::model::{
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use super::gcp_vertex_anthropic::make_gcp_sdk_credentials;
-use super::helpers::{inject_extra_request_data, parse_jsonl_batch_file, JsonlBatchFileInfo};
+use super::helpers::{parse_jsonl_batch_file, JsonlBatchFileInfo};
 use super::openai::convert_stream_error;
 
 const PROVIDER_NAME: &str = "GCP Vertex Gemini";
@@ -908,7 +911,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let mut request_body = serde_json::to_value(GCPVertexGeminiRequest::new(
+        let request_body = serde_json::to_value(GCPVertexGeminiRequest::new(
             provider_request.request,
             self.model_or_endpoint_id(),
         )?)
@@ -920,35 +923,23 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                 ),
             })
         })?;
-        let headers = inject_extra_request_data(
-            &provider_request.request.extra_body,
-            &provider_request.request.extra_headers,
-            model_provider,
-            provider_request.model_name,
-            &mut request_body,
-        )?;
         let auth_headers = self
             .credentials
             .get_auth_headers(&self.audience, dynamic_api_keys)
             .await?;
         tracing::info!("Making request with URL: {}", self.request_url);
         let start_time = Instant::now();
-        let res = http_client
-            .post(&self.request_url)
-            .json(&request_body)
-            .headers(auth_headers)
-            .headers(headers)
-            .send()
-            .await
-            .map_err(|e| {
-                Error::new(ErrorDetails::InferenceClient {
-                    status_code: e.status(),
-                    message: format!("Error sending request: {}", DisplayOrDebugGateway::new(e)),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
-                    raw_response: None,
-                })
-            })?;
+        let builder = http_client.post(&self.request_url).headers(auth_headers);
+        let (res, raw_request) = inject_extra_request_data_and_send(
+            PROVIDER_TYPE,
+            &provider_request.request.extra_body,
+            &provider_request.request.extra_headers,
+            model_provider,
+            provider_request.model_name,
+            request_body,
+            builder,
+        )
+        .await?;
         let latency = Latency::NonStreaming {
             response_time: start_time.elapsed(),
         };
@@ -960,7 +951,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 })
             })?;
@@ -969,14 +960,14 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing JSON response: {e}: {raw_response}"),
                     provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_request: Some(raw_request.clone()),
                     raw_response: Some(raw_response.clone()),
                 })
             })?;
             let response_with_latency = GCPVertexGeminiResponseWithMetadata {
                 response,
                 latency,
-                request: request_body,
+                raw_request,
                 generic_request: provider_request.request,
                 raw_response,
                 model_name: provider_request.model_name,
@@ -989,7 +980,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                 return Err(Error::new(ErrorDetails::InferenceServer {
                     message: "Model or endpoint not found. You may be specifying the wrong one of these. Standard GCP models should use a `model_id` and not an `endpoint_id`, while fine-tuned models should use an `endpoint_id`.".to_string(),
                     provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 }));
             };
@@ -1000,12 +991,12 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 })
             })?;
             Err(handle_gcp_vertex_gemini_error(
-                serde_json::to_string(&request_body).unwrap_or_default(),
+                raw_request,
                 response_code,
                 error_body,
             ))
@@ -1024,7 +1015,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let mut request_body = serde_json::to_value(GCPVertexGeminiRequest::new(
+        let request_body = serde_json::to_value(GCPVertexGeminiRequest::new(
             request,
             self.model_or_endpoint_id(),
         )?)
@@ -1036,45 +1027,25 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                 ),
             })
         })?;
-        let headers = inject_extra_request_data(
-            &request.extra_body,
-            &request.extra_headers,
-            model_provider,
-            model_name,
-            &mut request_body,
-        )?;
-        let raw_request = serde_json::to_string(&request_body).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!(
-                    "Error serializing request: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-            })
-        })?;
 
         let auth_headers = self
             .credentials
             .get_auth_headers(&self.audience, dynamic_api_keys)
             .await?;
         let start_time = Instant::now();
-        let event_source = http_client
+        let builder = http_client
             .post(&self.streaming_request_url)
-            .json(&request_body)
-            .headers(auth_headers)
-            .headers(headers)
-            .eventsource()
-            .map_err(|e| {
-                Error::new(ErrorDetails::InferenceClient {
-                    message: format!(
-                        "Error sending request to GCP Vertex Gemini: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                    status_code: None,
-                    provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
-                    raw_response: None,
-                })
-            })?;
+            .headers(auth_headers);
+        let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
+            PROVIDER_TYPE,
+            &request.extra_body,
+            &request.extra_headers,
+            model_provider,
+            model_name,
+            request_body,
+            builder,
+        )
+        .await?;
         let stream = stream_gcp_vertex_gemini(event_source, start_time).peekable();
         Ok((stream, raw_request))
     }
@@ -2144,7 +2115,7 @@ struct GCPVertexGeminiResponseWithMetadata<'a> {
     response: GCPVertexGeminiResponse,
     raw_response: String,
     latency: Latency,
-    request: serde_json::Value,
+    raw_request: String,
     generic_request: &'a ModelInferenceRequest<'a>,
     model_name: &'a str,
     provider_name: &'a str,
@@ -2191,7 +2162,7 @@ impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceR
             response,
             raw_response,
             latency,
-            request: request_body,
+            raw_request,
             generic_request,
             model_name,
             provider_name,
@@ -2204,20 +2175,13 @@ impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceR
                 Error::new(ErrorDetails::InferenceServer {
                     message: "GCP Vertex Gemini non-streaming response has no usage metadata"
                         .to_string(),
-                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_request: Some(raw_request.clone()),
                     raw_response: Some(raw_response.clone()),
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?
             .into();
-        let raw_request = serde_json::to_string(&request_body).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!(
-                    "Error serializing request: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-            })
-        })?;
+
         let system = generic_request.system.clone();
         let input_messages = generic_request.messages.clone();
 
@@ -2787,7 +2751,7 @@ mod tests {
         let response_with_latency = GCPVertexGeminiResponseWithMetadata {
             response,
             latency: latency.clone(),
-            request: serde_json::to_value(&request_body).unwrap(),
+            raw_request: raw_request.clone(),
             generic_request: &generic_request,
             raw_response: raw_response.clone(),
             model_name: "gemini-pro",
@@ -2888,7 +2852,7 @@ mod tests {
         let response_with_latency = GCPVertexGeminiResponseWithMetadata {
             response,
             latency: latency.clone(),
-            request: serde_json::to_value(&request_body).unwrap(),
+            raw_request: raw_request.clone(),
             generic_request: &generic_request,
             raw_response: raw_response.clone(),
             model_name: "gemini-pro",
@@ -3001,7 +2965,7 @@ mod tests {
         let response_with_latency = GCPVertexGeminiResponseWithMetadata {
             response,
             latency: latency.clone(),
-            request: serde_json::to_value(&request_body).unwrap(),
+            raw_request: raw_request.clone(),
             generic_request: &generic_request,
             raw_response: raw_response.clone(),
             model_name: "gemini-pro",
