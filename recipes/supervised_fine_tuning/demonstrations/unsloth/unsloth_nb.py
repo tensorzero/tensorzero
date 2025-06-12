@@ -98,7 +98,6 @@ LORA_TARGETS = [  # Which modules to inject LoRA into (often q_proj, v_proj, or 
 LORA_BIAS = "none"  # Whether to add bias in LoRA adapters (rarely needed)
 
 # %%
-import json
 import os
 import subprocess
 import tempfile
@@ -114,8 +113,6 @@ from datasets import Dataset
 from tensorzero import (
     ContentBlock,
     RawText,
-    StoredChatInference,
-    StoredJsonInference,
     TensorZeroGateway,
     Text,
     Thought,
@@ -236,44 +233,19 @@ tensorzero_client = TensorZeroGateway.build_embedded(
     timeout=15,
 )
 
+# %% [markdown]
+# Query the inferences and feedback from ClickHouse.
 
 # %%
-def double_parse_arguments(example_input):
-    for message in example_input["messages"]:
-        for block in message["content"]:
-            if block["type"] == "tool_call":
-                block["arguments"] = json.loads(block["arguments"])
+stored_inferences = tensorzero_client.experimental_list_inferences(
+    function_name=FUNCTION_NAME,
+    variant_name=None,
+    output_source="demonstration",
+    limit=MAX_SAMPLES,
+)
 
-
-stored_inferences = []
-for _, row in df.iterrows():
-    input_data = json.loads(row["input"])
-    double_parse_arguments(input_data)
-    output_data = json.loads(row["value"])
-    if function_type == "chat":
-        stored_inferences.append(
-            StoredChatInference(
-                function_name=FUNCTION_NAME,
-                variant_name=row["variant_name"],
-                input=input_data,
-                output=output_data,
-                episode_id=row["episode_id"],
-                inference_id=row["id"],
-                tool_params=json.loads(row["tool_params"]),
-            )
-        )
-    elif function_type == "json":
-        stored_inferences.append(
-            StoredJsonInference(
-                function_name=FUNCTION_NAME,
-                variant_name=row["variant_name"],
-                input=input_data,
-                output=output_data,
-                episode_id=row["episode_id"],
-                inference_id=row["id"],
-                output_schema=json.loads(row["output_schema"]),
-            )
-        )
+# %% [markdown]
+# Render the stored inferences
 
 # %%
 rendered_inferences = tensorzero_client.experimental_render_inferences(
