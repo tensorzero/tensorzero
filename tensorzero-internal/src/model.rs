@@ -431,6 +431,10 @@ impl ModelConfig {
                 provider_errors,
             }))
         };
+        // This is the top-level model timeout, which limits the total time taken to run all providers.
+        // Some of the providers may themselves have timeouts, which is fine. Provider timeouts
+        // are treated as just another kind of provider error - a timeout of N ms is equivalent
+        // to a provider taking N ms, and then producing a normal HTTP error.
         if let Some(timeout) = self.timeouts.non_streaming.total_ms {
             let timeout = Duration::from_millis(timeout);
             tokio::time::timeout(timeout, run_all_models)
@@ -500,6 +504,8 @@ impl ModelConfig {
                 provider_errors,
             }))
         };
+        // See the corresponding `non_streaming.total_ms` timeout in the `infer`
+        // method above for more details.
         if let Some(timeout) = self.timeouts.streaming.ttft_ms {
             let timeout = Duration::from_millis(timeout);
             tokio::time::timeout(timeout, run_all_models)
