@@ -449,6 +449,7 @@ pub async fn inference(
                     episode_id,
                     tool_config,
                     processing_time: Some(start_time.elapsed()),
+                    ttft_ms: None,
                     tags: params.tags,
                     extra_body,
                     extra_headers,
@@ -566,7 +567,11 @@ fn create_stream(
 ) -> impl Stream<Item = Result<InferenceResponseChunk, Error>> + Send {
     async_stream::stream! {
         let mut buffer = vec![];
+        let mut inference_ttft = None;
         while let Some(chunk) = stream.next().await {
+            if inference_ttft.is_none() {
+                inference_ttft = Some(metadata.start_time.elapsed());
+            }
             match chunk {
                 Ok(chunk) => {
                     buffer.push(chunk.clone());
@@ -648,6 +653,7 @@ fn create_stream(
                         tool_config,
                         processing_time: Some(start_time.elapsed()),
                         tags,
+                        ttft_ms: inference_ttft.map(|ttft| ttft.as_millis() as u32),
                         extra_body,
                         extra_headers,
                     };
@@ -724,6 +730,7 @@ pub struct InferenceDatabaseInsertMetadata {
     pub episode_id: Uuid,
     pub tool_config: Option<ToolCallConfig>,
     pub processing_time: Option<Duration>,
+    pub ttft_ms: Option<u32>,
     pub tags: HashMap<String, String>,
     pub extra_body: UnfilteredInferenceExtraBody,
     pub extra_headers: UnfilteredInferenceExtraHeaders,
