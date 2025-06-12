@@ -18,7 +18,7 @@ import {
   TextMessage,
   EmptyMessage,
 } from "~/components/layout/SnippetContent";
-
+import {safeStringify} from '../utils/safeStringify'
 interface InputSnippetProps {
   input: ResolvedInput;
 }
@@ -27,7 +27,7 @@ function renderContentBlock(block: ResolvedInputMessageContent, index: number) {
   switch (block.type) {
     case "text": {
       if (typeof block.value === "object") {
-        return <TextMessage key={index} label="Text (Arguments)" content={JSON.stringify(block.value, null, 2)} type="structured" />;
+        return <TextMessage key={index} label="Text (Arguments)" content={safeStringify(block.value, 2)} type="structured" />;
       }
 
       // Try to parse JSON strings
@@ -36,7 +36,7 @@ function renderContentBlock(block: ResolvedInputMessageContent, index: number) {
           const parsedJson = JSON.parse(block.value);
           if (typeof parsedJson === "object") {
             return (
-              <TextMessage key={index} label="Text (Arguments)" content={JSON.stringify(parsedJson, null, 2)} type="structured" />
+              <TextMessage key={index} label="Text (Arguments)" content={safeStringify(parsedJson, 2)} type="structured" />
             );
           }
         } catch {
@@ -55,7 +55,7 @@ function renderContentBlock(block: ResolvedInputMessageContent, index: number) {
         <ToolCallMessage
           key={index}
           toolName={block.name}
-          toolArguments={JSON.stringify(JSON.parse(block.arguments), null, 2)}
+          toolArguments={safeStringify(JSON.parse(block.arguments), 2)}
           // TODO: if arguments is null, display raw arguments without parsing
           toolCallId={block.id}
         />
@@ -119,7 +119,7 @@ export default function InputSnippet({ input }: InputSnippetProps) {
             <SnippetMessage>
               {typeof input.system === "object" ? (
                 <TextMessage
-                  content={JSON.stringify(input.system, null, 2)}
+                  content={safeStringify(input.system, 2)}
                   type="structured"
                 />
               ) : (
