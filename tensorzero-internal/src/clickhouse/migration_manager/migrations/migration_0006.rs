@@ -70,7 +70,7 @@ impl Migration for Migration0006<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Create the `BatchRequest` table
@@ -90,7 +90,7 @@ impl Migration for Migration0006<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Create the BatchIdByInferenceId table
@@ -104,7 +104,7 @@ impl Migration for Migration0006<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Create the materialized view for the BatchIdByInferenceId table
@@ -119,7 +119,7 @@ impl Migration for Migration0006<'_> {
             "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
         Ok(())
     }

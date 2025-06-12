@@ -2,7 +2,7 @@ use futures::{Stream, StreamExt, TryStreamExt};
 use lazy_static::lazy_static;
 use reqwest::multipart::{Form, Part};
 use reqwest::StatusCode;
-use reqwest_eventsource::{Event, RequestBuilderExt};
+use reqwest_eventsource::Event;
 use secrecy::{ExposeSecret, SecretString};
 use serde::de::IntoDeserializer;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -41,7 +41,9 @@ use crate::inference::types::{
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
-use crate::inference::providers::helpers::inject_extra_request_data;
+use crate::inference::providers::helpers::{
+    inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
+};
 
 use super::helpers::{parse_jsonl_batch_file, JsonlBatchFileInfo};
 use super::provider_trait::{TensorZeroEventError, WrappedProvider};
@@ -233,48 +235,23 @@ impl InferenceProvider for OpenAIProvider {
         let request_url = get_chat_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
-        let mut request_body = self.make_body(request)?;
-        let headers = inject_extra_request_data(
-            &request.request.extra_body,
-            &request.request.extra_headers,
-            model_provider,
-            request.model_name,
-            &mut request_body,
-        )?;
-
+        let request_body = self.make_body(request)?;
         let mut request_builder = http_client.post(request_url);
 
         if let Some(api_key) = api_key {
             request_builder = request_builder.bearer_auth(api_key.expose_secret());
         }
 
-        let raw_request = serde_json::to_string(&request_body).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!(
-                    "Error serializing request: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-            })
-        })?;
-
-        let res = request_builder
-            .body(raw_request.clone())
-            .header(reqwest::header::CONTENT_TYPE, "application/json")
-            .headers(headers)
-            .send()
-            .await
-            .map_err(|e| {
-                Error::new(ErrorDetails::InferenceClient {
-                    status_code: e.status(),
-                    message: format!(
-                        "Error sending request to OpenAI: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: Some(raw_request.clone()),
-                    raw_response: None,
-                })
-            })?;
+        let (res, raw_request) = inject_extra_request_data_and_send(
+            PROVIDER_TYPE,
+            &request.request.extra_body,
+            &request.request.extra_headers,
+            model_provider,
+            request.model_name,
+            request_body,
+            request_builder,
+        )
+        .await?;
 
         if res.status().is_success() {
             let raw_response = res.text().await.map_err(|e| {
@@ -343,7 +320,7 @@ impl InferenceProvider for OpenAIProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let mut request_body = serde_json::to_value(OpenAIRequest::new(&self.model_name, request)?)
+        let request_body = serde_json::to_value(OpenAIRequest::new(&self.model_name, request)?)
             .map_err(|e| {
                 Error::new(ErrorDetails::Serialization {
                     message: format!(
@@ -352,48 +329,23 @@ impl InferenceProvider for OpenAIProvider {
                     ),
                 })
             })?;
-        let headers = inject_extra_request_data(
+        let request_url = get_chat_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
+        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let start_time = Instant::now();
+        let mut request_builder = http_client.post(request_url);
+        if let Some(api_key) = api_key {
+            request_builder = request_builder.bearer_auth(api_key.expose_secret());
+        }
+        let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
+            PROVIDER_TYPE,
             &request.extra_body,
             &request.extra_headers,
             model_provider,
             model_name,
-            &mut request_body,
-        )?;
-        let raw_request = serde_json::to_string(&request_body).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!(
-                    "Error serializing request: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-            })
-        })?;
-        let request_url = get_chat_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
-        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
-        let start_time = Instant::now();
-        let mut request_builder = http_client
-            .post(request_url)
-            .header("Content-Type", "application/json");
-        if let Some(api_key) = api_key {
-            request_builder = request_builder.bearer_auth(api_key.expose_secret());
-        }
-        let event_source = request_builder
-            .json(&request_body)
-            // Important - the 'headers' call should come just before we sent the request with '.eventsource()',
-            // so that users can override any of the headers that we set.
-            .headers(headers)
-            .eventsource()
-            .map_err(|e| {
-                Error::new(ErrorDetails::InferenceClient {
-                    message: format!(
-                        "Error sending request to OpenAI: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                    status_code: None,
-                    provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
-                    raw_response: None,
-                })
-            })?;
+            request_body,
+            request_builder,
+        )
+        .await?;
 
         let stream = stream_openai(
             PROVIDER_TYPE.to_string(),
@@ -607,9 +559,7 @@ impl InferenceProvider for OpenAIProvider {
             .push(&batch_params.batch_id);
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let raw_request = request_url.to_string();
-        let mut request_builder = http_client
-            .get(request_url)
-            .header("Content-Type", "application/json");
+        let mut request_builder = http_client.get(request_url);
         if let Some(api_key) = api_key {
             request_builder = request_builder.bearer_auth(api_key.expose_secret());
         }
@@ -693,9 +643,7 @@ impl EmbeddingProvider for OpenAIProvider {
         let request_url =
             get_embedding_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
         let start_time = Instant::now();
-        let mut request_builder = client
-            .post(request_url)
-            .header("Content-Type", "application/json");
+        let mut request_builder = client.post(request_url);
         if let Some(api_key) = api_key {
             request_builder = request_builder.bearer_auth(api_key.expose_secret());
         }
@@ -793,7 +741,6 @@ pub fn stream_openai(
     start_time: Instant,
 ) -> ProviderInferenceResponseStreamInner {
     let mut tool_call_ids = Vec::new();
-    let mut tool_call_names = Vec::new();
     Box::pin(async_stream::stream! {
         futures::pin_mut!(event_source);
         while let Some(ev) = event_source.next().await {
@@ -826,7 +773,7 @@ pub fn stream_openai(
 
                         let latency = start_time.elapsed();
                         let stream_message = data.and_then(|d| {
-                            openai_to_tensorzero_chunk(message.data, d, latency, &mut tool_call_ids, &mut tool_call_names)
+                            openai_to_tensorzero_chunk(message.data, d, latency, &mut tool_call_ids)
                         });
                         yield stream_message;
                     }
@@ -1947,7 +1894,6 @@ fn openai_to_tensorzero_chunk(
     mut chunk: OpenAIChatChunk,
     latency: Duration,
     tool_call_ids: &mut Vec<String>,
-    tool_names: &mut Vec<String>,
 ) -> Result<ProviderInferenceResponseChunk, Error> {
     if chunk.choices.len() > 1 {
         return Err(ErrorDetails::InferenceServer {
@@ -1991,26 +1937,10 @@ fn openai_to_tensorzero_chunk(
                             .clone()
                     }
                 };
-                let name = match tool_call.function.name {
-                    Some(name) => {
-                        tool_names.push(name.clone());
-                        name
-                    }
-                    None => {
-                        tool_names
-                            .get(index as usize)
-                            .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
-                                message: "Tool call index out of bounds (meaning we haven't seen this many names in the stream)".to_string(),
-                                raw_request: None,
-                                raw_response: None,
-                                provider_type: PROVIDER_TYPE.to_string(),
-                            }))?
-                            .clone()
-                    }
-                };
+
                 content.push(ContentBlockChunk::ToolCall(ToolCallChunk {
                     id,
-                    raw_name: name,
+                    raw_name: tool_call.function.name,
                     raw_arguments: tool_call.function.arguments.unwrap_or_default(),
                 }));
             }
@@ -3120,13 +3050,11 @@ mod tests {
             usage: None,
         };
         let mut tool_call_ids = vec!["id1".to_string()];
-        let mut tool_call_names = vec!["name1".to_string()];
         let message = openai_to_tensorzero_chunk(
             "my_raw_chunk".to_string(),
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
-            &mut tool_call_names,
         )
         .unwrap();
         assert_eq!(
@@ -3160,14 +3088,13 @@ mod tests {
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
-            &mut tool_call_names,
         )
         .unwrap();
         assert_eq!(
             message.content,
             vec![ContentBlockChunk::ToolCall(ToolCallChunk {
                 id: "id1".to_string(),
-                raw_name: "name1".to_string(),
+                raw_name: None,
                 raw_arguments: "{\"hello\":\"world\"}".to_string(),
             })]
         );
@@ -3195,7 +3122,6 @@ mod tests {
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
-            &mut tool_call_names,
         )
         .unwrap_err();
         let details = error.get_details();
@@ -3231,24 +3157,19 @@ mod tests {
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
-            &mut tool_call_names,
         )
         .unwrap();
         assert_eq!(
             message.content,
             vec![ContentBlockChunk::ToolCall(ToolCallChunk {
                 id: "id2".to_string(),
-                raw_name: "name2".to_string(),
+                raw_name: Some("name2".to_string()),
                 raw_arguments: "{\"hello\":\"world\"}".to_string(),
             })]
         );
         assert_eq!(message.finish_reason, Some(FinishReason::Stop));
         // Check that the lists were updated
         assert_eq!(tool_call_ids, vec!["id1".to_string(), "id2".to_string()]);
-        assert_eq!(
-            tool_call_names,
-            vec!["name1".to_string(), "name2".to_string()]
-        );
 
         // Check a chunk with no choices and only usage
         // Test a correct new tool chunk
@@ -3265,7 +3186,6 @@ mod tests {
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
-            &mut tool_call_names,
         )
         .unwrap();
         assert_eq!(message.content, vec![]);

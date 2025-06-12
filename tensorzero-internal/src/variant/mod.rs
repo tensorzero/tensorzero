@@ -6,11 +6,13 @@ use serde::Deserialize;
 use serde::Serialize;
 use std::borrow::Cow;
 use std::sync::Arc;
+use tokio::time::error::Elapsed;
 use tokio::time::Duration;
 use tracing::instrument;
 use uuid::Uuid;
 
 use crate::config_parser::PathWithContents;
+use crate::config_parser::TimeoutsConfig;
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::InferenceIds;
 use crate::endpoints::inference::{InferenceClients, InferenceModels, InferenceParams};
@@ -31,6 +33,7 @@ use crate::jsonschema_util::DynamicJSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
 use crate::model::StreamResponse;
+use crate::model::StreamResponseAndMessages;
 use crate::tool::{create_dynamic_implicit_tool_config, ToolCallConfig};
 use crate::{inference::types::InferenceResult, model::ModelConfig};
 
@@ -39,6 +42,14 @@ pub mod chain_of_thought;
 pub mod chat_completion;
 pub mod dicl;
 pub mod mixture_of_n;
+
+/// Holds a particular variant implementation, plus additional top-level configuration
+/// that is applicable to any variant type.
+#[derive(Debug)]
+pub struct VariantInfo {
+    pub inner: VariantConfig,
+    pub timeouts: TimeoutsConfig,
+}
 
 #[derive(Debug)]
 pub enum VariantConfig {
@@ -190,7 +201,7 @@ impl VariantConfig {
     }
 }
 
-impl Variant for VariantConfig {
+impl Variant for VariantInfo {
     #[instrument(
         fields(function_name = %inference_config.function_name, variant_name = %inference_config.variant_name.unwrap_or(""), otel.name="variant_inference", stream=false),
         skip_all
@@ -204,68 +215,86 @@ impl Variant for VariantConfig {
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<InferenceResult, Error> {
-        match self {
-            VariantConfig::ChatCompletion(params) => {
-                params
-                    .infer(
-                        input,
-                        models,
-                        function,
-                        inference_config,
-                        clients,
-                        inference_params,
-                    )
-                    .await
-            }
-            VariantConfig::BestOfNSampling(params) => {
-                params
-                    .infer(
-                        input,
-                        models,
-                        function,
-                        inference_config,
-                        clients,
-                        inference_params,
-                    )
-                    .await
-            }
+        let fut = async {
+            match &self.inner {
+                VariantConfig::ChatCompletion(params) => {
+                    params
+                        .infer(
+                            input,
+                            models,
+                            function,
+                            inference_config,
+                            clients,
+                            inference_params,
+                        )
+                        .await
+                }
+                VariantConfig::BestOfNSampling(params) => {
+                    params
+                        .infer(
+                            input,
+                            models,
+                            function,
+                            inference_config,
+                            clients,
+                            inference_params,
+                        )
+                        .await
+                }
 
-            VariantConfig::Dicl(params) => {
-                params
-                    .infer(
-                        input,
-                        models,
-                        function,
-                        inference_config,
-                        clients,
-                        inference_params,
-                    )
-                    .await
+                VariantConfig::Dicl(params) => {
+                    params
+                        .infer(
+                            input,
+                            models,
+                            function,
+                            inference_config,
+                            clients,
+                            inference_params,
+                        )
+                        .await
+                }
+                VariantConfig::MixtureOfN(params) => {
+                    params
+                        .infer(
+                            input,
+                            models,
+                            function,
+                            inference_config,
+                            clients,
+                            inference_params,
+                        )
+                        .await
+                }
+                VariantConfig::ChainOfThought(params) => {
+                    params
+                        .infer(
+                            input,
+                            models,
+                            function,
+                            inference_config,
+                            clients,
+                            inference_params,
+                        )
+                        .await
+                }
             }
-            VariantConfig::MixtureOfN(params) => {
-                params
-                    .infer(
-                        input,
-                        models,
-                        function,
-                        inference_config,
-                        clients,
-                        inference_params,
-                    )
-                    .await
-            }
-            VariantConfig::ChainOfThought(params) => {
-                params
-                    .infer(
-                        input,
-                        models,
-                        function,
-                        inference_config,
-                        clients,
-                        inference_params,
-                    )
-                    .await
-            }
+        };
+        if let Some(timeout) = self.timeouts.non_streaming.total_ms {
+            let timeout = Duration::from_millis(timeout);
+            tokio::time::timeout(timeout, fut)
+                .await
+                // Convert the outer `Elapsed` error into a TensorZero error,
+                // so that it can be handled by the `match response` block below
+                .unwrap_or_else(|_: Elapsed| {
+                    Err(Error::new(ErrorDetails::VariantTimeout {
+                        variant_name: inference_config.variant_name.map(|v| v.to_string()),
+                        timeout,
+                        streaming: false,
+                    }))
+                })
+        } else {
+            fut.await
         }
     }
 
@@ -282,67 +311,86 @@ impl Variant for VariantConfig {
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
-        match self {
-            VariantConfig::ChatCompletion(params) => {
-                params
-                    .infer_stream(
-                        input,
-                        models,
-                        function,
-                        inference_config,
-                        clients,
-                        inference_params,
-                    )
-                    .await
+        let fut = async {
+            match &self.inner {
+                VariantConfig::ChatCompletion(params) => {
+                    params
+                        .infer_stream(
+                            input,
+                            models,
+                            function,
+                            inference_config,
+                            clients,
+                            inference_params,
+                        )
+                        .await
+                }
+                VariantConfig::BestOfNSampling(params) => {
+                    params
+                        .infer_stream(
+                            input,
+                            models,
+                            function,
+                            inference_config,
+                            clients,
+                            inference_params,
+                        )
+                        .await
+                }
+                VariantConfig::Dicl(params) => {
+                    params
+                        .infer_stream(
+                            input,
+                            models,
+                            function,
+                            inference_config,
+                            clients,
+                            inference_params,
+                        )
+                        .await
+                }
+                VariantConfig::MixtureOfN(params) => {
+                    params
+                        .infer_stream(
+                            input,
+                            models,
+                            function,
+                            inference_config,
+                            clients,
+                            inference_params,
+                        )
+                        .await
+                }
+                VariantConfig::ChainOfThought(params) => {
+                    params
+                        .infer_stream(
+                            input,
+                            models,
+                            function,
+                            inference_config,
+                            clients,
+                            inference_params,
+                        )
+                        .await
+                }
             }
-            VariantConfig::BestOfNSampling(params) => {
-                params
-                    .infer_stream(
-                        input,
-                        models,
-                        function,
-                        inference_config,
-                        clients,
-                        inference_params,
-                    )
-                    .await
-            }
-            VariantConfig::Dicl(params) => {
-                params
-                    .infer_stream(
-                        input,
-                        models,
-                        function,
-                        inference_config,
-                        clients,
-                        inference_params,
-                    )
-                    .await
-            }
-            VariantConfig::MixtureOfN(params) => {
-                params
-                    .infer_stream(
-                        input,
-                        models,
-                        function,
-                        inference_config,
-                        clients,
-                        inference_params,
-                    )
-                    .await
-            }
-            VariantConfig::ChainOfThought(params) => {
-                params
-                    .infer_stream(
-                        input,
-                        models,
-                        function,
-                        inference_config,
-                        clients,
-                        inference_params,
-                    )
-                    .await
-            }
+        };
+
+        // This future includes a call to `peek_first_chunk`, so applying
+        // `streaming_ttft_timeout` is correct.
+        if let Some(timeout) = self.timeouts.streaming.ttft_ms {
+            let timeout = Duration::from_millis(timeout);
+            tokio::time::timeout(timeout, fut)
+                .await
+                .unwrap_or_else(|_: Elapsed| {
+                    Err(Error::new(ErrorDetails::VariantTimeout {
+                        variant_name: inference_config.variant_name.map(|v| v.to_string()),
+                        timeout,
+                        streaming: true,
+                    }))
+                })
+        } else {
+            fut.await
         }
     }
 
@@ -356,7 +404,7 @@ impl Variant for VariantConfig {
         clients: &'a InferenceClients<'a>,
         inference_params: Vec<InferenceParams>,
     ) -> Result<StartBatchModelInferenceWithMetadata<'a>, Error> {
-        match self {
+        match &self.inner {
             VariantConfig::ChatCompletion(params) => {
                 params
                     .start_batch_inference(
@@ -385,7 +433,7 @@ impl Variant for VariantConfig {
         function_name: &str,
         variant_name: &str,
     ) -> Result<(), Error> {
-        match self {
+        match &self.inner {
             VariantConfig::ChatCompletion(params) => {
                 params
                     .validate(
@@ -450,7 +498,7 @@ impl Variant for VariantConfig {
     }
 
     fn get_all_template_paths(&self) -> Vec<&PathWithContents> {
-        match self {
+        match &self.inner {
             VariantConfig::ChatCompletion(params) => params.get_all_template_paths(),
             VariantConfig::BestOfNSampling(params) => params.get_all_template_paths(),
             VariantConfig::Dicl(params) => params.get_all_template_paths(),
@@ -598,15 +646,16 @@ async fn infer_model_request_stream<'request>(
     inference_params: InferenceParams,
     retry_config: RetryConfig,
 ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
-    let (
-        StreamResponse {
-            stream,
-            raw_request,
-            model_provider_name,
-            cached,
-        },
-        input_messages,
-    ) = (|| async {
+    let StreamResponseAndMessages {
+        response:
+            StreamResponse {
+                stream,
+                raw_request,
+                model_provider_name,
+                cached,
+            },
+        messages: input_messages,
+    } = (|| async {
         model_config
             .infer_stream(&request, clients, &model_name)
             .await
@@ -1011,6 +1060,7 @@ mod tests {
                     config: dummy_provider_config,
                     extra_body: Default::default(),
                     extra_headers: Default::default(),
+                    timeouts: Default::default(),
                 },
             )]),
         };
@@ -1118,6 +1168,7 @@ mod tests {
                     config: dummy_provider_config_json,
                     extra_body: Default::default(),
                     extra_headers: Default::default(),
+                    timeouts: Default::default(),
                 },
             )]),
         };
@@ -1175,6 +1226,7 @@ mod tests {
                     config: error_provider_config,
                     extra_body: Default::default(),
                     extra_headers: Default::default(),
+                    timeouts: Default::default(),
                 },
             )]),
         };
@@ -1296,6 +1348,7 @@ mod tests {
                         config: error_provider_config,
                         extra_body: Default::default(),
                         extra_headers: Default::default(),
+                        timeouts: Default::default(),
                     },
                 ),
                 (
@@ -1305,6 +1358,7 @@ mod tests {
                         config: dummy_provider_config,
                         extra_body: Default::default(),
                         extra_headers: Default::default(),
+                        timeouts: Default::default(),
                     },
                 ),
             ]),
@@ -1402,6 +1456,7 @@ mod tests {
                     config: dummy_provider_config,
                     extra_body: Default::default(),
                     extra_headers: Default::default(),
+                    timeouts: Default::default(),
                 },
             )]),
         }));
@@ -1573,6 +1628,7 @@ mod tests {
                         config: error_provider_config,
                         extra_body: Default::default(),
                         extra_headers: Default::default(),
+                        timeouts: Default::default(),
                     },
                 ),
                 (
@@ -1582,6 +1638,7 @@ mod tests {
                         config: dummy_provider_config,
                         extra_body: Default::default(),
                         extra_headers: Default::default(),
+                        timeouts: Default::default(),
                     },
                 ),
             ]),

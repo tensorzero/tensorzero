@@ -3,7 +3,7 @@ use std::{borrow::Cow, sync::OnceLock, time::Duration};
 use futures::StreamExt;
 use lazy_static::lazy_static;
 use reqwest::StatusCode;
-use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
+use reqwest_eventsource::{Event, EventSource};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use tokio::time::Instant;
@@ -13,19 +13,26 @@ use crate::{
     cache::ModelProviderRequest,
     endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
-    inference::types::{
-        batch::{BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse},
-        ContentBlockChunk, ContentBlockOutput, FinishReason, Latency, ModelInferenceRequest,
-        ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
-        ProviderInferenceResponse, ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
-        ProviderInferenceResponseStreamInner, TextChunk, Usage,
+    inference::{
+        providers::helpers::check_new_tool_call_name,
+        providers::helpers::{
+            inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
+        },
+        types::{
+            batch::{
+                BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse,
+            },
+            ContentBlockChunk, ContentBlockOutput, FinishReason, Latency, ModelInferenceRequest,
+            ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
+            ProviderInferenceResponse, ProviderInferenceResponseArgs,
+            ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, TextChunk, Usage,
+        },
     },
     model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider},
     tool::{ToolCall, ToolCallChunk, ToolChoice},
 };
 
 use super::{
-    helpers::inject_extra_request_data,
     openai::{
         convert_stream_error, get_chat_url, tensorzero_to_openai_messages, OpenAIFunction,
         OpenAIRequestMessage, OpenAISystemRequestMessage, OpenAITool, OpenAIToolType,
@@ -134,8 +141,8 @@ impl InferenceProvider for MistralProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let mut request_body =
-            serde_json::to_value(MistralRequest::new(&self.model_name, request)?).map_err(|e| {
+        let request_body = serde_json::to_value(MistralRequest::new(&self.model_name, request)?)
+            .map_err(|e| {
                 Error::new(ErrorDetails::Serialization {
                     message: format!(
                         "Error serializing Mistral request: {}",
@@ -143,36 +150,23 @@ impl InferenceProvider for MistralProvider {
                     ),
                 })
             })?;
-        let headers = inject_extra_request_data(
+        let request_url = get_chat_url(&MISTRAL_API_BASE)?;
+        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let start_time = Instant::now();
+        let builder = http_client
+            .post(request_url)
+            .bearer_auth(api_key.expose_secret());
+
+        let (res, raw_request) = inject_extra_request_data_and_send(
+            PROVIDER_TYPE,
             &request.extra_body,
             &request.extra_headers,
             model_provider,
             model_name,
-            &mut request_body,
-        )?;
-        let request_url = get_chat_url(&MISTRAL_API_BASE)?;
-        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
-        let start_time = Instant::now();
-        let res = http_client
-            .post(request_url)
-            .header("Content-Type", "application/json")
-            .bearer_auth(api_key.expose_secret())
-            .json(&request_body)
-            .headers(headers)
-            .send()
-            .await
-            .map_err(|e| {
-                Error::new(ErrorDetails::InferenceClient {
-                    status_code: e.status(),
-                    message: format!(
-                        "Error sending request to Mistral: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
-                    raw_response: None,
-                })
-            })?;
+            request_body,
+            builder,
+        )
+        .await?;
         let latency = Latency::NonStreaming {
             response_time: start_time.elapsed(),
         };
@@ -184,7 +178,7 @@ impl InferenceProvider for MistralProvider {
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 })
             })?;
@@ -196,7 +190,7 @@ impl InferenceProvider for MistralProvider {
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_request: Some(raw_request.clone()),
                     raw_response: Some(raw_response.clone()),
                 })
             })?;
@@ -205,7 +199,7 @@ impl InferenceProvider for MistralProvider {
                 response,
                 latency,
                 raw_response,
-                request: request_body,
+                raw_request,
                 generic_request: request,
             }
             .try_into()
@@ -219,7 +213,7 @@ impl InferenceProvider for MistralProvider {
                             DisplayOrDebugGateway::new(e)
                         ),
                         provider_type: PROVIDER_TYPE.to_string(),
-                        raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                        raw_request: Some(raw_request),
                         raw_response: None,
                     })
                 })?,
@@ -238,8 +232,8 @@ impl InferenceProvider for MistralProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let mut request_body =
-            serde_json::to_value(MistralRequest::new(&self.model_name, request)?).map_err(|e| {
+        let request_body = serde_json::to_value(MistralRequest::new(&self.model_name, request)?)
+            .map_err(|e| {
                 Error::new(ErrorDetails::Serialization {
                     message: format!(
                         "Error serializing Mistral request: {}",
@@ -247,43 +241,23 @@ impl InferenceProvider for MistralProvider {
                     ),
                 })
             })?;
-        let headers = inject_extra_request_data(
+        let request_url = get_chat_url(&MISTRAL_API_BASE)?;
+        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let start_time = Instant::now();
+        let builder = http_client
+            .post(request_url)
+            .bearer_auth(api_key.expose_secret());
+
+        let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
+            PROVIDER_TYPE,
             &request.extra_body,
             &request.extra_headers,
             model_provider,
             model_name,
-            &mut request_body,
-        )?;
-        let raw_request = serde_json::to_string(&request_body).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!(
-                    "Error serializing request: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-            })
-        })?;
-        let request_url = get_chat_url(&MISTRAL_API_BASE)?;
-        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
-        let start_time = Instant::now();
-        let event_source = http_client
-            .post(request_url)
-            .header("Content-Type", "application/json")
-            .bearer_auth(api_key.expose_secret())
-            .json(&request_body)
-            .headers(headers)
-            .eventsource()
-            .map_err(|e| {
-                Error::new(ErrorDetails::InferenceClient {
-                    message: format!(
-                        "Error sending request to Mistral: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                    status_code: None,
-                    provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: Some(raw_request.clone()),
-                    raw_response: None,
-                })
-            })?;
+            request_body,
+            builder,
+        )
+        .await?;
         let stream = stream_mistral(event_source, start_time).peekable();
         Ok((stream, raw_request))
     }
@@ -345,6 +319,7 @@ pub fn stream_mistral(
 ) -> ProviderInferenceResponseStreamInner {
     Box::pin(async_stream::stream! {
         while let Some(ev) = event_source.next().await {
+            let mut last_tool_name = None;
             match ev {
                 Err(e) => {
                     yield Err(convert_stream_error(PROVIDER_TYPE.to_string(), e).await);
@@ -367,7 +342,7 @@ pub fn stream_mistral(
                             }.into());
                         let latency = start_time.elapsed();
                         let stream_message = data.and_then(|d| {
-                            mistral_to_tensorzero_chunk(message.data, d, latency)
+                            mistral_to_tensorzero_chunk(message.data, d, latency, &mut last_tool_name)
                         });
                         yield stream_message;
                     }
@@ -628,7 +603,7 @@ struct MistralResponseWithMetadata<'a> {
     response: MistralResponse,
     raw_response: String,
     latency: Latency,
-    request: serde_json::Value,
+    raw_request: String,
     generic_request: &'a ModelInferenceRequest<'a>,
 }
 
@@ -639,7 +614,7 @@ impl<'a> TryFrom<MistralResponseWithMetadata<'a>> for ProviderInferenceResponse 
             mut response,
             raw_response,
             latency,
-            request: request_body,
+            raw_request,
             generic_request,
         } = value;
         if response.choices.len() != 1 {
@@ -664,7 +639,7 @@ impl<'a> TryFrom<MistralResponseWithMetadata<'a>> for ProviderInferenceResponse 
             .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                 message: "Response has no choices (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
                 provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                raw_request: Some(raw_request.clone()),
                 raw_response: Some(raw_response.clone()),
             }))?;
         let mut content: Vec<ContentBlockOutput> = Vec::new();
@@ -678,14 +653,6 @@ impl<'a> TryFrom<MistralResponseWithMetadata<'a>> for ProviderInferenceResponse 
                 content.push(ContentBlockOutput::ToolCall(tool_call.into()));
             }
         }
-        let raw_request = serde_json::to_string(&request_body).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!(
-                    "Error serializing request body as JSON: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-            })
-        })?;
         let system = generic_request.system.clone();
         let input_messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
@@ -747,6 +714,7 @@ fn mistral_to_tensorzero_chunk(
     raw_message: String,
     mut chunk: MistralChatChunk,
     latency: Duration,
+    last_tool_name: &mut Option<String>,
 ) -> Result<ProviderInferenceResponseChunk, Error> {
     if chunk.choices.len() > 1 {
         return Err(ErrorDetails::InferenceServer {
@@ -776,7 +744,7 @@ fn mistral_to_tensorzero_chunk(
             for tool_call in tool_calls {
                 content.push(ContentBlockChunk::ToolCall(ToolCallChunk {
                     id: tool_call.id,
-                    raw_name: tool_call.function.name,
+                    raw_name: check_new_tool_call_name(tool_call.function.name, last_tool_name),
                     raw_arguments: tool_call.function.arguments,
                 }));
             }
@@ -910,7 +878,7 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
             },
-            request: serde_json::to_value(&request_body).unwrap(),
+            raw_request: raw_request.clone(),
             generic_request: &generic_request,
             raw_response: raw_response.clone(),
         });
@@ -1003,7 +971,7 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(110),
             },
-            request: serde_json::to_value(&request_body).unwrap(),
+            raw_request: raw_request.clone(),
             generic_request: &generic_request,
             raw_response: raw_response.clone(),
         });
@@ -1063,7 +1031,7 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(120),
             },
-            request: serde_json::to_value(&request_body).unwrap(),
+            raw_request: serde_json::to_string(&request_body).unwrap(),
             generic_request: &generic_request,
             raw_response: raw_response.clone(),
         });
@@ -1114,7 +1082,7 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(130),
             },
-            request: serde_json::to_value(&request_body).unwrap(),
+            raw_request: serde_json::to_string(&request_body).unwrap(),
             generic_request: &generic_request,
             raw_response: raw_response.clone(),
         });

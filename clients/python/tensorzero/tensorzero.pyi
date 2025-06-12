@@ -7,6 +7,7 @@ from typing import (
     List,
     Literal,
     Optional,
+    Type,
     Union,
     final,
 )
@@ -27,9 +28,58 @@ from tensorzero import (
     InferenceInput,
     InferenceResponse,
     JsonDatapointInsert,
-    StoredInference,
 )
 from tensorzero.internal import ModelInput, ToolCallConfigDatabaseInsert
+from tensorzero.types import (
+    InferenceFilterTreeNode,
+)
+
+@final
+class ResolvedInputMessage:
+    role: Literal["user", "assistant"]
+    content: List[ContentBlock]
+
+@final
+class ResolvedInput:
+    system: Optional[str | Dict[str, Any]]
+    messages: List[ResolvedInputMessage]
+
+@final
+class StoredInference:
+    Chat: Type["StoredInference"]
+    Json: Type["StoredInference"]
+
+    def __init__(
+        self,
+        type: str,
+        function_name: str,
+        variant_name: str,
+        input: Any,
+        output: Any,
+        episode_id: Any,
+        inference_id: Any,
+        tool_params: Optional[Any] = None,
+        output_schema: Optional[Any] = None,
+    ) -> None: ...
+    def __repr__(self) -> str: ...
+    @property
+    def function_name(self) -> str: ...
+    @property
+    def variant_name(self) -> str: ...
+    @property
+    def input(self) -> ResolvedInput: ...
+    @property
+    def output(self) -> Any: ...
+    @property
+    def episode_id(self) -> Any: ...
+    @property
+    def inference_id(self) -> Any: ...
+    @property
+    def tool_params(self) -> Optional[Any]: ...
+    @property
+    def output_schema(self) -> Optional[Any]: ...
+    @property
+    def type(self) -> str: ...
 
 @final
 class RenderedStoredInference:
@@ -264,6 +314,29 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         :param dataset_name: The name of the dataset to get the datapoint from.
         :param datapoint_id: The ID of the datapoint to get.
         :return: A `Datapoint` instance.
+        """
+
+    def experimental_list_inferences(
+        self,
+        *,
+        function_name: str,
+        variant_name: Optional[str] = None,
+        filters: Optional[InferenceFilterTreeNode] = None,
+        output_source: str = "inference",
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+    ) -> List[StoredInference]:
+        """
+        Query the Clickhouse database for inferences.
+        This function is only available in EmbeddedGateway mode.
+
+        :param function_name: The name of the function to query.
+        :param variant_name: The name of the variant to query. Optional
+        :param filters: A filter tree to apply to the query. Optional
+        :param output_source: The source of the output to query. "inference" or "demonstration"
+        :param limit: The maximum number of inferences to return. Optional
+        :param offset: The offset to start from. Optional
+        :return: A list of `StoredInference` instances.
         """
 
     def experimental_render_inferences(
@@ -527,6 +600,29 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         :return: A `Datapoint` instance.
         """
 
+    async def experimental_list_inferences(
+        self,
+        *,
+        function_name: str,
+        variant_name: Optional[str] = None,
+        filters: Optional[InferenceFilterTreeNode] = None,
+        output_source: str = "inference",
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+    ) -> List[StoredInference]:
+        """
+        Query the Clickhouse database for inferences.
+        This function is only available in EmbeddedGateway mode.
+
+        :param function_name: The name of the function to query.
+        :param variant_name: The name of the variant to query. Optional
+        :param filters: A filter tree to apply to the query. Optional
+        :param output_source: The source of the output to query. "inference" or "demonstration"
+        :param limit: The maximum number of inferences to return. Optional
+        :param offset: The offset to start from. Optional
+        :return: A list of `StoredInference` instances.
+        """
+
     async def experimental_render_inferences(
         self,
         *,
@@ -594,4 +690,7 @@ __all__ = [
     "LocalHttpGateway",
     "_start_http_gateway",
     "RenderedStoredInference",
+    "StoredInference",
+    "ResolvedInput",
+    "ResolvedInputMessage",
 ]

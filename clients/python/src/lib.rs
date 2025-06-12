@@ -25,8 +25,15 @@ use python_helpers::{
     parse_dynamic_evaluation_run_response, parse_feedback_response, parse_inference_chunk,
     parse_inference_response, parse_tool, python_uuid_to_uuid,
 };
-use tensorzero_internal::inference::types::pyo3_helpers::{
-    deserialize_from_pyobj, serialize_to_dict, tensorzero_internal_error, JSON_DUMPS, JSON_LOADS,
+use tensorzero_internal::{
+    clickhouse::ClickhouseFormat,
+    inference::types::{
+        pyo3_helpers::{
+            deserialize_from_pyobj, deserialize_from_stored_inference, serialize_to_dict,
+            tensorzero_internal_error, JSON_DUMPS, JSON_LOADS,
+        },
+        ResolvedInput, ResolvedInputMessage,
+    },
 };
 use tensorzero_internal::{
     endpoints::{
@@ -42,7 +49,8 @@ use tensorzero_rust::{
     err_to_http, observability::LogFormat, CacheParamsOptions, Client, ClientBuilder,
     ClientBuilderMode, ClientInferenceParams, ClientInput, ClientSecretString,
     DynamicEvaluationRunParams, DynamicToolParams, FeedbackParams, InferenceOutput,
-    InferenceParams, InferenceStream, RenderedStoredInference, TensorZeroError, Tool,
+    InferenceParams, InferenceStream, ListInferencesParams, RenderedStoredInference,
+    StoredInference, TensorZeroError, Tool,
 };
 use tokio::sync::Mutex;
 use url::Url;
@@ -65,6 +73,9 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<TensorZeroGateway>()?;
     m.add_class::<LocalHttpGateway>()?;
     m.add_class::<RenderedStoredInference>()?;
+    m.add_class::<StoredInference>()?;
+    m.add_class::<ResolvedInput>()?;
+    m.add_class::<ResolvedInputMessage>()?;
 
     let py_json = PyModule::import(m.py(), "json")?;
     let json_loads = py_json.getattr("loads")?;
@@ -889,6 +900,65 @@ impl TensorZeroGateway {
         }
     }
 
+    /// Query the Clickhouse database for inferences.
+    ///
+    /// This function is only available in EmbeddedGateway mode.
+    ///
+    /// # Arguments
+    ///
+    /// * `function_name` - The name of the function to query.
+    /// * `variant_name` - The name of the variant to query. Optional
+    /// * `filters` - A filter tree to apply to the query. Optional
+    /// * `output_source` - The source of the output to query. "inference" or "demonstration"
+    /// * `limit` - The maximum number of inferences to return. Optional
+    /// * `offset` - The offset to start from. Optional
+    /// * `format` - The format to return the inferences in. For now, only "JSONEachRow" is supported.
+    #[pyo3(signature = (*,
+                        function_name,
+                        variant_name=None,
+                        filters=None,
+                        output_source="inference".to_string(),
+                        limit=None,
+                        offset=None
+    ),
+    text_signature = "(self, *, function_name, variant_name=None, filters=None, output_source='inference', limit=None, offset=None)"
+    )]
+    // The text_signature is a workaround to weird behavior in pyo3 where the default for an option
+    // is written as an ellipsis object.
+    fn experimental_list_inferences(
+        this: PyRef<'_, Self>,
+        function_name: String,
+        variant_name: Option<String>,
+        filters: Option<Bound<'_, PyAny>>,
+        output_source: String,
+        limit: Option<u64>,
+        offset: Option<u64>,
+    ) -> PyResult<Vec<StoredInference>> {
+        let client = this.as_super().client.clone();
+        let filters = filters
+            .as_ref()
+            .map(|x| deserialize_from_pyobj(this.py(), x))
+            .transpose()?;
+        let output_source =
+            output_source
+                .as_str()
+                .try_into()
+                .map_err(|e: tensorzero_internal::error::Error| {
+                    convert_error(this.py(), TensorZeroError::Other { source: e.into() })
+                })?;
+        let params = ListInferencesParams {
+            function_name: &function_name,
+            variant_name: variant_name.as_deref(),
+            filters: filters.as_ref(),
+            output_source,
+            limit,
+            offset,
+            format: ClickhouseFormat::JsonEachRow,
+        };
+        let fut = client.experimental_list_inferences(params);
+        tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))
+    }
+
     /// Render a list of stored inferences into a list of rendered stored inferences.
     /// There are two things that need to happen in this function:
     /// 1. We need to resolve all network resources (e.g. images) in the stored inferences.
@@ -911,7 +981,7 @@ impl TensorZeroGateway {
         let client = this.as_super().client.clone();
         let stored_inferences = stored_inferences
             .iter()
-            .map(|x| deserialize_from_pyobj(this.py(), x))
+            .map(|x| deserialize_from_stored_inference(this.py(), x))
             .collect::<Result<Vec<_>, _>>()?;
         let fut = client.experimental_render_inferences(stored_inferences, variants);
         tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))
@@ -1423,6 +1493,70 @@ impl AsyncTensorZeroGateway {
         })
     }
 
+    /// Query the Clickhouse database for inferences.
+    ///
+    /// This function is only available in EmbeddedGateway mode.
+    ///
+    /// # Arguments
+    ///
+    /// * `function_name` - The name of the function to query.
+    /// * `variant_name` - The name of the variant to query. Optional
+    /// * `filters` - A filter tree to apply to the query. Optional
+    /// * `output_source` - The source of the output to query. "inference" or "demonstration"
+    /// * `limit` - The maximum number of inferences to return. Optional
+    /// * `offset` - The offset to start from. Optional
+    /// * `format` - The format to return the inferences in. For now, only "JSONEachRow" is supported.
+    #[pyo3(signature = (*,
+        function_name,
+        variant_name=None,
+        filters=None,
+        output_source="inference".to_string(),
+        limit=None,
+        offset=None
+    ),
+    text_signature = "(self, *, function_name, variant_name=None, filters=None, output_source='inference', limit=None, offset=None)"
+    )]
+    // The text_signature is a workaround to weird behavior in pyo3 where the default for an option
+    // is written as an ellipsis object.
+    fn experimental_list_inferences<'a>(
+        this: PyRef<'a, Self>,
+        function_name: String,
+        variant_name: Option<String>,
+        filters: Option<Bound<'a, PyAny>>,
+        output_source: String,
+        limit: Option<u64>,
+        offset: Option<u64>,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        let client = this.as_super().client.clone();
+        let filters = filters
+            .as_ref()
+            .map(|x| deserialize_from_pyobj(this.py(), x))
+            .transpose()?;
+        let output_source =
+            output_source
+                .as_str()
+                .try_into()
+                .map_err(|e: tensorzero_internal::error::Error| {
+                    convert_error(this.py(), TensorZeroError::Other { source: e.into() })
+                })?;
+        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
+            let params = ListInferencesParams {
+                function_name: &function_name,
+                variant_name: variant_name.as_deref(),
+                filters: filters.as_ref(),
+                output_source,
+                limit,
+                offset,
+                format: ClickhouseFormat::JsonEachRow,
+            };
+            let res = client.experimental_list_inferences(params).await;
+            Python::with_gil(|py| match res {
+                Ok(stored_inferences) => Ok(PyList::new(py, stored_inferences)?.unbind()),
+                Err(e) => Err(convert_error(py, e)),
+            })
+        })
+    }
+
     /// Render a list of stored inferences into a list of rendered stored inferences.
     /// There are two things that need to happen in this function:
     /// 1. We need to resolve all network resources (e.g. images) in the stored inferences.
@@ -1445,7 +1579,7 @@ impl AsyncTensorZeroGateway {
         let client = this.as_super().client.clone();
         let stored_inferences = stored_inferences
             .iter()
-            .map(|x| deserialize_from_pyobj(this.py(), x))
+            .map(|x| deserialize_from_stored_inference(this.py(), x))
             .collect::<Result<Vec<_>, _>>()?;
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             let res = client

@@ -23,6 +23,7 @@ use tensorzero_internal::{
     function::FunctionConfig,
 };
 use tokio::{sync::Semaphore, task::JoinSet};
+use tracing::{debug, error, info, instrument};
 use url::Url;
 use uuid::Uuid;
 
@@ -78,28 +79,40 @@ pub struct Clients {
     pub clickhouse_client: ClickHouseConnectionInfo,
 }
 
+#[instrument(skip(writer), fields(evaluation_run_id = %evaluation_run_id, evaluation_name = %args.evaluation_name, dataset_name = %args.dataset_name, variant_name = %args.variant_name, concurrency = %args.concurrency))]
 pub async fn run_evaluation(
     args: Args,
     evaluation_run_id: Uuid,
     mut writer: impl Write,
 ) -> Result<()> {
+    info!("Initializing evaluation environment");
     let semaphore = Semaphore::new(args.concurrency);
     let clickhouse_url = std::env::var("TENSORZERO_CLICKHOUSE_URL")
         .map_err(|_| anyhow!("Missing ClickHouse URL at TENSORZERO_CLICKHOUSE_URL"))?;
+    debug!(clickhouse_url = %clickhouse_url, "ClickHouse URL resolved");
 
     // We do not validate credentials here since we just want the evaluator config
     // If we are using an embedded gateway, credentials are validated when that is initialized
+    info!(config_file = ?args.config_file, "Loading configuration");
     let config =
         Config::load_from_path_optional_verify_credentials(&args.config_file, false).await?;
+    debug!("Configuration loaded successfully");
     let evaluation_config = config
         .evaluations
         .get(&args.evaluation_name)
         .ok_or(anyhow!("evaluation not found"))?
         .clone();
+    debug!(evaluation_name = %args.evaluation_name, "Evaluation config found");
+
     let EvaluationConfig::Static(static_evaluation_config) = &*evaluation_config;
     let function_config = config
         .get_function(&static_evaluation_config.function_name)?
         .into_owned();
+    info!(
+        function_name = %static_evaluation_config.function_name,
+        evaluators = ?static_evaluation_config.evaluators.keys().collect::<Vec<_>>(),
+        "Function and evaluators configured"
+    );
     let tensorzero_client = match args.gateway_url {
         Some(gateway_url) => {
             ClientBuilder::new(ClientBuilderMode::HTTPGateway { url: gateway_url })
@@ -120,6 +133,7 @@ pub async fn run_evaluation(
 
     let mut join_set = JoinSet::new();
 
+    info!("Querying dataset");
     let dataset = query_dataset(
         &clients.clickhouse_client,
         &args.dataset_name,
@@ -127,6 +141,7 @@ pub async fn run_evaluation(
         &function_config,
     )
     .await?;
+    info!(dataset_size = dataset.len(), "Dataset loaded successfully");
     let dataset_name = Arc::new(args.dataset_name);
     let variant_name = Arc::new(args.variant_name);
     let evaluation_name = Arc::new(args.evaluation_name);
@@ -184,6 +199,7 @@ pub async fn run_evaluation(
                     inference_cache: args.inference_cache,
                 })
                 .await?;
+            debug!(datapoint_id = %datapoint.id(), evaluations_count = evaluation_result.len(), "Evaluations completed");
 
             Ok::<(Datapoint, InferenceResponse, evaluators::EvaluationResult), anyhow::Error>((
                 Arc::into_inner(datapoint).ok_or_else(|| anyhow!("Failed to get datapoint for datapoint. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/categories/bug-reports."))?,
@@ -317,6 +333,7 @@ struct InferDatapointParams<'a> {
     inference_cache: CacheEnabledMode,
 }
 
+#[instrument(skip(params), fields(datapoint_id = %params.datapoint.id(), function_name = %params.function_name, variant_name = %params.variant_name))]
 async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceResponse> {
     let InferDatapointParams {
         clients,
@@ -331,23 +348,36 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
         inference_cache,
     } = params;
 
+    debug!("Processing tool parameters");
     let dynamic_tool_params = match datapoint.tool_call_config() {
-        Some(tool_params) => get_tool_params_args(tool_params, function_config).await,
-        None => DynamicToolParams::default(),
+        Some(tool_params) => {
+            debug!("Tool parameters found, processing");
+            get_tool_params_args(tool_params, function_config).await
+        }
+        None => {
+            debug!("No tool parameters found");
+            DynamicToolParams::default()
+        }
     };
+    debug!("Processing output schema");
     let output_schema = match (datapoint.output_schema(), function_config) {
         // If the datapoint has an output schema, use it only in the case where it is not the same as the output schema of the function
         (Some(output_schema), FunctionConfig::Json(json_function_config)) => {
             if output_schema == json_function_config.output_schema.value {
+                debug!("Output schema matches function schema, using function default");
                 None
             } else {
+                debug!("Custom output schema provided");
                 Some(output_schema)
             }
         }
         (Some(_), FunctionConfig::Chat(_)) => {
             return Err(anyhow!("Chat function does not support output schema"));
         }
-        (None, _) => None,
+        (None, _) => {
+            debug!("No output schema specified");
+            None
+        }
     };
     let params = ClientInferenceParams {
         function_name: Some(function_name.to_string()),
@@ -385,10 +415,15 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
         extra_body: Default::default(),
         extra_headers: Default::default(),
     };
+    debug!("Making inference request");
     let inference_result = clients.tensorzero_client.inference(params).await?;
     match inference_result {
-        InferenceOutput::NonStreaming(inference_response) => Ok(inference_response),
+        InferenceOutput::NonStreaming(inference_response) => {
+            debug!(inference_id = %inference_response.inference_id(), "Inference completed successfully");
+            Ok(inference_response)
+        }
         InferenceOutput::Streaming(_inference_stream) => {
+            error!("Received streaming inference response when non-streaming was expected");
             bail!("Streaming inference should never happen in evaluations")
         }
     }

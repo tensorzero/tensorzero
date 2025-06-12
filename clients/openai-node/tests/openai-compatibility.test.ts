@@ -85,6 +85,9 @@ describe("OpenAI Compatibility", () => {
       temperature: 0.4,
       // @ts-expect-error - custom TensorZero property
       "tensorzero::episode_id": episodeId,
+      "tensorzero::tags": {
+        foo: "bar",
+      },
     });
 
     // @ts-expect-error - custom TensorZero property
@@ -491,6 +494,7 @@ describe("OpenAI Compatibility", () => {
 
     let previousInferenceId: string | null = null;
     let previousEpisodeId: string | null = null;
+    let nameSeen = false;
 
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i];
@@ -516,7 +520,11 @@ describe("OpenAI Compatibility", () => {
 
         const toolCall = chunk.choices[0].delta.tool_calls![0];
         expect(toolCall.type).toBe("function");
-        expect(toolCall.function?.name).toBe("get_temperature");
+        if (toolCall.function?.name) {
+          expect(nameSeen).toBe(false);
+          expect(toolCall.function.name).toBe("get_temperature");
+          nameSeen = true;
+        }
         expect(toolCall.function?.arguments).toBe(expectedText[i]);
       } else {
         expect(chunk.choices[0].delta.content).toBeUndefined();
@@ -526,6 +534,7 @@ describe("OpenAI Compatibility", () => {
         expect(chunk.choices[0].finish_reason).toBe("tool_calls");
       }
     }
+    expect(nameSeen).toBe(true);
   });
 
   it("should handle JSON streaming", async () => {

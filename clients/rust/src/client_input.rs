@@ -5,7 +5,7 @@ use tensorzero_derive::TensorZeroDeserialize;
 use tensorzero_internal::{
     error::Error,
     inference::types::{File, InputMessageContent, Role, TextKind, Thought},
-    tool::{ToolCall, ToolCallInput, ToolResult},
+    tool::{ToolCallInput, ToolResult},
 };
 
 // Like the normal `Input` type, but with `ClientInputMessage` instead of `InputMessage`.
@@ -58,7 +58,7 @@ impl TryFrom<ClientInputMessageContent> for InputMessageContent {
         Ok(match this {
             ClientInputMessageContent::Text(text) => InputMessageContent::Text(text),
             ClientInputMessageContent::ToolCall(tool_call) => {
-                InputMessageContent::ToolCall(tool_call.try_into()?)
+                InputMessageContent::ToolCall(tool_call)
             }
             ClientInputMessageContent::ToolResult(tool_result) => {
                 InputMessageContent::ToolResult(tool_result)
@@ -128,13 +128,15 @@ pub(super) fn test_client_to_message_content(
         ClientInputMessageContent::ToolCall(ToolCallInput {
             id,
             name,
-            raw_name: _,
+            raw_name,
             arguments,
-            raw_arguments: _,
-        }) => InputMessageContent::ToolCall(ToolCall {
+            raw_arguments,
+        }) => InputMessageContent::ToolCall(ToolCallInput {
             id,
-            name: name.unwrap_or_default(),
-            arguments: arguments.unwrap_or_default().to_string(),
+            name,
+            raw_name,
+            raw_arguments,
+            arguments,
         }),
         ClientInputMessageContent::ToolResult(tool_result) => {
             InputMessageContent::ToolResult(tool_result)

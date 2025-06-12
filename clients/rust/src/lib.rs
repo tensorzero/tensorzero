@@ -34,14 +34,19 @@ mod client_inference_params;
 mod client_input;
 mod git;
 mod stored_inference;
-pub use stored_inference::{
-    RenderedStoredInference, StoredChatInference, StoredInference, StoredJsonInference,
+pub use stored_inference::RenderedStoredInference;
+pub use tensorzero_internal::clickhouse::types::{
+    StoredChatInference, StoredInference, StoredJsonInference,
 };
 pub mod input_handling;
 pub use client_inference_params::{ClientInferenceParams, ClientSecretString};
 pub use client_input::{ClientInput, ClientInputMessage, ClientInputMessageContent};
 
 pub use tensorzero_internal::cache::CacheParamsOptions;
+pub use tensorzero_internal::clickhouse::query_builder::{
+    BooleanMetricNode, FloatComparisonOperator, FloatMetricNode, InferenceFilterTreeNode,
+    InferenceOutputSource, ListInferencesParams,
+};
 pub use tensorzero_internal::endpoints::datasets::{
     ChatInferenceDatapoint, Datapoint, JsonInferenceDatapoint,
 };
@@ -742,6 +747,42 @@ impl Client {
                 .await?)
             }
         }
+    }
+
+    /// Query the Clickhouse database for inferences.
+    ///
+    /// This function is only available in EmbeddedGateway mode.
+    ///
+    /// # Arguments
+    ///
+    /// * `function_name` - The name of the function to query.
+    /// * `variant_name` - The name of the variant to query. Optional
+    /// * `filters` - A filter tree to apply to the query. Optional
+    /// * `output_source` - The source of the output to query. "inference" or "demonstration"
+    /// * `limit` - The maximum number of inferences to return. Optional
+    /// * `offset` - The offset to start from. Optional
+    /// * `format` - The format to return the inferences in. For now, only "JSONEachRow" is supported.
+    pub async fn experimental_list_inferences(
+        &self,
+        params: ListInferencesParams<'_>,
+    ) -> Result<Vec<StoredInference>, TensorZeroError> {
+        // TODO: consider adding a flag that returns the generated sql query
+        let ClientMode::EmbeddedGateway { gateway, .. } = &self.mode else {
+            return Err(TensorZeroError::Other {
+                source: tensorzero_internal::error::Error::new(ErrorDetails::InvalidClientMode {
+                    mode: "Http".to_string(),
+                    message: "This function is only available in EmbeddedGateway mode".to_string(),
+                })
+                .into(),
+            });
+        };
+        let inferences = gateway
+            .state
+            .clickhouse_connection_info
+            .list_inferences(&gateway.state.config, &params)
+            .await
+            .map_err(err_to_http)?;
+        Ok(inferences)
     }
 
     /// There are two things that need to happen in this function:
