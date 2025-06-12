@@ -2319,6 +2319,7 @@ max_tokens = 500
 [functions.dynamic_json.variants.gcp-vertex-gemini-flash-lite-tuned]
 type = "chat_completion"
 model = "gemini-2.0-flash-lite-tuned"
+json_mode = "strict"
 system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
 max_tokens = 100
