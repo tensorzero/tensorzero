@@ -14,7 +14,7 @@ async fn get_providers() -> E2ETestProviders {
     let providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "vllm".to_string(),
-        model_name: "qwen2.5-0.5b-instruct".into(),
+        model_name: "qwen2.5-0.5b-instruct-vllm".into(),
         model_provider_name: "vllm".into(),
         credentials: HashMap::new(),
     }];
@@ -22,7 +22,7 @@ async fn get_providers() -> E2ETestProviders {
     let extra_body_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "vllm-extra-body".to_string(),
-        model_name: "qwen2.5-0.5b-instruct".into(),
+        model_name: "qwen2.5-0.5b-instruct-vllm".into(),
         model_provider_name: "vllm".into(),
         credentials: HashMap::new(),
     }];
@@ -30,7 +30,7 @@ async fn get_providers() -> E2ETestProviders {
     let bad_auth_extra_headers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "vllm-extra-headers".to_string(),
-        model_name: "qwen2.5-0.5b-instruct".into(),
+        model_name: "qwen2.5-0.5b-instruct-vllm".into(),
         model_provider_name: "vllm".into(),
         credentials: HashMap::new(),
     }];
@@ -39,14 +39,14 @@ async fn get_providers() -> E2ETestProviders {
         E2ETestProvider {
             supports_batch_inference: false,
             variant_name: "vllm".to_string(),
-            model_name: "qwen2.5-0.5b-instruct".into(),
+            model_name: "qwen2.5-0.5b-instruct-vllm".into(),
             model_provider_name: "vllm".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
             supports_batch_inference: false,
             variant_name: "vllm-strict".to_string(),
-            model_name: "qwen2.5-0.5b-instruct".into(),
+            model_name: "qwen2.5-0.5b-instruct-vllm".into(),
             model_provider_name: "vllm".into(),
             credentials: HashMap::new(),
         },
@@ -55,7 +55,7 @@ async fn get_providers() -> E2ETestProviders {
     let inference_params_dynamic_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "vllm-dynamic".to_string(),
-        model_name: "qwen2.5-0.5b-instruct-dynamic".into(),
+        model_name: "qwen2.5-0.5b-instruct-vllm-dynamic".into(),
         model_provider_name: "vllm".into(),
         credentials,
     }];
@@ -63,7 +63,7 @@ async fn get_providers() -> E2ETestProviders {
     let tool_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "vllm".to_string(),
-        model_name: "qwen2.5-0.5b-instruct".to_string(),
+        model_name: "qwen2.5-0.5b-instruct-vllm".to_string(),
         model_provider_name: "vllm".to_string(),
         credentials: HashMap::new(),
     }];
