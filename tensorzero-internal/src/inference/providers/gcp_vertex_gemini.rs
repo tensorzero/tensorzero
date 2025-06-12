@@ -27,7 +27,7 @@ use crate::config_parser::{
     GCPBatchConfigCloudStorage, GCPBatchConfigType, GCPProviderTypeConfig, ProviderTypesConfig,
 };
 use crate::endpoints::inference::InferenceCredentials;
-use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
+use crate::error::{warn_discarded_unknown_chunk, DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::providers::helpers::check_new_tool_call_name;
 use crate::inference::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
@@ -1045,7 +1045,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
             builder,
         )
         .await?;
-        let stream = stream_gcp_vertex_gemini(event_source, start_time).peekable();
+        let stream = stream_gcp_vertex_gemini(event_source, start_time, model_provider).peekable();
         Ok((stream, raw_request))
     }
 
@@ -1374,7 +1374,9 @@ impl InferenceProvider for GCPVertexGeminiProvider {
 fn stream_gcp_vertex_gemini(
     mut event_source: EventSource,
     start_time: Instant,
+    model_provider: &ModelProvider,
 ) -> ProviderInferenceResponseStreamInner {
+    let discard_unknown_chunks = model_provider.discard_unknown_chunks;
     Box::pin(async_stream::stream! {
         let mut last_tool_name = None;
         let mut last_tool_idx = None;
@@ -1410,6 +1412,7 @@ fn stream_gcp_vertex_gemini(
                             start_time.elapsed(),
                             &mut last_tool_name,
                             &mut last_tool_idx,
+                            discard_unknown_chunks,
                         )
                     }
                 }
@@ -1880,23 +1883,24 @@ fn content_part_to_tensorzero_chunk(
     part: GCPVertexGeminiResponseContentPart,
     last_tool_name: &mut Option<String>,
     last_tool_idx: &mut Option<u32>,
-) -> Result<ContentBlockChunk, Error> {
+    discard_unknown_chunks: bool,
+) -> Result<Option<ContentBlockChunk>, Error> {
     if part.thought {
         match part.data {
             FlattenUnknown::Normal(GCPVertexGeminiResponseContentPartData::Text(text)) => {
-                return Ok(ContentBlockChunk::Thought(ThoughtChunk {
+                return Ok(Some(ContentBlockChunk::Thought(ThoughtChunk {
                     id: "0".to_string(),
                     text: Some(text),
                     signature: part.thought_signature,
-                }));
+                })));
             }
             // Handle 'thought/thoughtSignature' with no other fields
             FlattenUnknown::Unknown(obj) if obj.as_object().is_some_and(|m| m.is_empty()) => {
-                return Ok(ContentBlockChunk::Thought(ThoughtChunk {
+                return Ok(Some(ContentBlockChunk::Thought(ThoughtChunk {
                     id: "0".to_string(),
                     text: None,
                     signature: part.thought_signature,
-                }));
+                })));
             }
             _ => {
                 return Err(Error::new(ErrorDetails::InferenceServer {
@@ -1911,10 +1915,10 @@ fn content_part_to_tensorzero_chunk(
     }
     match part.data {
         FlattenUnknown::Normal(GCPVertexGeminiResponseContentPartData::Text(text)) => {
-            Ok(ContentBlockChunk::Text(TextChunk {
+            Ok(Some(ContentBlockChunk::Text(TextChunk {
                 text,
                 id: "0".to_string(),
-            }))
+            })))
         }
         FlattenUnknown::Normal(GCPVertexGeminiResponseContentPartData::FunctionCall(
             function_call,
@@ -1937,11 +1941,11 @@ fn content_part_to_tensorzero_chunk(
                     message: "Tool call index is not set in GCP Vertex Gemini. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/discussions/categories/bug-reports".to_string(),
                 })),
             };
-            Ok(ContentBlockChunk::ToolCall(ToolCallChunk {
+            Ok(Some(ContentBlockChunk::ToolCall(ToolCallChunk {
                 raw_name: name,
                 raw_arguments: arguments,
                 id,
-            }))
+            })))
         }
         FlattenUnknown::Normal(GCPVertexGeminiResponseContentPartData::ExecutableCode(_)) => {
             Err(Error::new(ErrorDetails::InferenceServer {
@@ -1953,12 +1957,18 @@ fn content_part_to_tensorzero_chunk(
                 raw_response: Some(serde_json::to_string(&part).unwrap_or_default()),
             }))
         }
-        FlattenUnknown::Unknown(part) => Err(Error::new(ErrorDetails::InferenceServer {
-            message: "Unknown content part in GCP Vertex Gemini response".to_string(),
-            provider_type: PROVIDER_TYPE.to_string(),
-            raw_request: None,
-            raw_response: Some(part.to_string()),
-        })),
+        FlattenUnknown::Unknown(part) => {
+            if discard_unknown_chunks {
+                warn_discarded_unknown_chunk(PROVIDER_TYPE, &part.to_string());
+                return Ok(None);
+            }
+            Err(Error::new(ErrorDetails::InferenceServer {
+                message: "Unknown content part in GCP Vertex Gemini response".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
+                raw_request: None,
+                raw_response: Some(part.to_string()),
+            }))
+        }
     }
 }
 
@@ -2212,6 +2222,7 @@ fn convert_stream_response_with_metadata_to_chunk(
     latency: Duration,
     last_tool_name: &mut Option<String>,
     last_tool_idx: &mut Option<u32>,
+    discard_unknown_chunks: bool,
 ) -> Result<ProviderInferenceResponseChunk, Error> {
     let first_candidate = response.candidates.into_iter().next().ok_or_else(|| {
         Error::new(ErrorDetails::InferenceServer {
@@ -2227,7 +2238,15 @@ fn convert_stream_response_with_metadata_to_chunk(
         Some(content) => content
             .parts
             .into_iter()
-            .map(|part| content_part_to_tensorzero_chunk(part, last_tool_name, last_tool_idx))
+            .flat_map(|part| {
+                content_part_to_tensorzero_chunk(
+                    part,
+                    last_tool_name,
+                    last_tool_idx,
+                    discard_unknown_chunks,
+                )
+                .transpose()
+            })
             .collect::<Result<Vec<ContentBlockChunk>, Error>>()?,
         None => vec![],
     };
@@ -2282,6 +2301,7 @@ mod tests {
     use std::borrow::Cow;
 
     use serde_json::json;
+    use tracing_test::traced_test;
 
     use super::*;
     use crate::inference::providers::test_helpers::{MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL};
@@ -3340,6 +3360,99 @@ mod tests {
     }
 
     #[test]
+    fn test_convert_unknown_content_block_error() {
+        use std::time::Duration;
+
+        // Test with text content
+        let text_part = GCPVertexGeminiResponseContentPart {
+            thought: false,
+            thought_signature: None,
+            data: FlattenUnknown::Unknown(Cow::Owned(json!({"unknown_field": "unknown_value"}))),
+        };
+        let content = GCPVertexGeminiResponseContent {
+            parts: vec![text_part],
+        };
+        let candidate = GCPVertexGeminiResponseCandidate {
+            content: Some(content),
+            finish_reason: Some(GCPVertexGeminiFinishReason::Stop),
+        };
+        let response = GCPVertexGeminiResponse {
+            candidates: vec![candidate],
+            usage_metadata: Some(GCPVertexGeminiUsageMetadata {
+                prompt_token_count: Some(10),
+                candidates_token_count: Some(5),
+            }),
+        };
+        let latency = Duration::from_millis(100);
+        let mut last_tool_name = None;
+
+        let mut last_tool_idx = None;
+        let err = convert_stream_response_with_metadata_to_chunk(
+            "raw_response".to_string(),
+            response,
+            latency,
+            &mut last_tool_name,
+            &mut last_tool_idx,
+            false,
+        )
+        .unwrap_err();
+        assert_eq!(
+            err.get_owned_details(),
+            ErrorDetails::InferenceServer {
+                message: "Unknown content part in GCP Vertex Gemini response".to_string(),
+                provider_type: "gcp_vertex_gemini".to_string(),
+                raw_request: None,
+                raw_response: Some(json!({"unknown_field": "unknown_value"}).to_string()),
+            }
+        );
+    }
+
+    #[test]
+    #[traced_test]
+    fn test_convert_unknown_content_block_warn() {
+        use std::time::Duration;
+
+        // Test with text content
+        let text_part = GCPVertexGeminiResponseContentPart {
+            thought: false,
+            thought_signature: None,
+            data: FlattenUnknown::Unknown(Cow::Owned(json!({"unknown_field": "unknown_value"}))),
+        };
+        let content = GCPVertexGeminiResponseContent {
+            parts: vec![text_part],
+        };
+        let candidate = GCPVertexGeminiResponseCandidate {
+            content: Some(content),
+            finish_reason: Some(GCPVertexGeminiFinishReason::Stop),
+        };
+        let response = GCPVertexGeminiResponse {
+            candidates: vec![candidate],
+            usage_metadata: Some(GCPVertexGeminiUsageMetadata {
+                prompt_token_count: Some(10),
+                candidates_token_count: Some(5),
+            }),
+        };
+        let latency = Duration::from_millis(100);
+        let mut last_tool_name = None;
+
+        let mut last_tool_idx = None;
+        let res = convert_stream_response_with_metadata_to_chunk(
+            "raw_response".to_string(),
+            response,
+            latency,
+            &mut last_tool_name,
+            &mut last_tool_idx,
+            true,
+        )
+        .unwrap();
+        assert_eq!(res.content, []);
+        assert!(
+            logs_contain("Discarding unknown chunk in gcp_vertex_gemini response"),
+            "Missing warning in logs"
+        );
+    }
+
+    #[test]
     fn test_convert_stream_response_with_metadata_to_chunk() {
         use std::time::Duration;
 
@@ -3375,6 +3488,7 @@ mod tests {
             latency,
             &mut last_tool_name,
             &mut last_tool_idx,
+            false,
         );
 
         assert!(result.is_ok());
@@ -3423,6 +3537,7 @@ mod tests {
             latency,
             &mut last_tool_name,
             &mut last_tool_idx,
+            false,
         );
 
         assert!(result.is_ok());
@@ -3468,6 +3583,7 @@ mod tests {
             latency,
             &mut last_tool_name,
             &mut last_tool_idx,
+            false,
         );
 
         assert!(result.is_ok());
@@ -3525,6 +3641,7 @@ mod tests {
             latency,
             &mut last_tool_name,
             &mut last_tool_idx,
+            false,
         );
 
         assert!(result.is_ok());
@@ -3585,6 +3702,7 @@ mod tests {
             latency,
             &mut last_tool_name,
             &mut last_tool_idx,
+            false,
         );
 
         assert!(result.is_ok());
@@ -3614,6 +3732,7 @@ mod tests {
             latency,
             &mut last_tool_name,
             &mut last_tool_idx,
+            false,
         );
 
         assert!(result.is_err());
@@ -3646,6 +3765,7 @@ mod tests {
             latency,
             &mut last_tool_name,
             &mut last_tool_idx,
+            false,
         );
 
         assert!(result.is_ok());
@@ -3668,12 +3788,16 @@ mod tests {
         let mut last_tool_name = None;
         let mut last_tool_idx = None;
 
-        let result =
-            content_part_to_tensorzero_chunk(text_part, &mut last_tool_name, &mut last_tool_idx);
+        let result = content_part_to_tensorzero_chunk(
+            text_part,
+            &mut last_tool_name,
+            &mut last_tool_idx,
+            false,
+        );
         assert!(result.is_ok());
         let chunk = result.unwrap();
         match chunk {
-            ContentBlockChunk::Text(text) => {
+            Some(ContentBlockChunk::Text(text)) => {
                 assert_eq!(text.text, "Hello, world!");
                 assert_eq!(text.id, "0");
             }
@@ -3700,11 +3824,12 @@ mod tests {
             function_call_part,
             &mut last_tool_name,
             &mut last_tool_idx,
+            false,
         );
         assert!(result.is_ok());
         let chunk = result.unwrap();
         match chunk {
-            ContentBlockChunk::ToolCall(tool_call) => {
+            Some(ContentBlockChunk::ToolCall(tool_call)) => {
                 assert_eq!(tool_call.raw_name, Some("get_weather".to_string()));
                 assert_eq!(
                     tool_call.raw_arguments,
@@ -3734,12 +3859,13 @@ mod tests {
             function_call_part2,
             &mut last_tool_name,
             &mut last_tool_idx,
+            false,
         );
         assert!(result.is_ok());
         assert_eq!(last_tool_idx, Some(0));
         let chunk = result.unwrap();
         match chunk {
-            ContentBlockChunk::ToolCall(tool_call) => {
+            Some(ContentBlockChunk::ToolCall(tool_call)) => {
                 assert_eq!(tool_call.raw_name, None); // Should be None for continuation
                 assert_eq!(tool_call.raw_arguments, r#"{"continue":true}"#);
                 assert_eq!(tool_call.id, "0");
@@ -3763,11 +3889,12 @@ mod tests {
             function_call_part3,
             &mut last_tool_name,
             &mut last_tool_idx,
+            false,
         );
         assert!(result.is_ok());
         let chunk = result.unwrap();
         match chunk {
-            ContentBlockChunk::ToolCall(tool_call) => {
+            Some(ContentBlockChunk::ToolCall(tool_call)) => {
                 assert_eq!(tool_call.raw_name, Some("calculate".to_string()));
                 assert_eq!(tool_call.raw_arguments, r#"{"expression":"2+2"}"#);
                 assert_eq!(tool_call.id, "1");
@@ -3789,12 +3916,16 @@ mod tests {
         let mut last_tool_name = None;
         let mut last_tool_idx = None;
 
-        let result =
-            content_part_to_tensorzero_chunk(thought_part, &mut last_tool_name, &mut last_tool_idx);
+        let result = content_part_to_tensorzero_chunk(
+            thought_part,
+            &mut last_tool_name,
+            &mut last_tool_idx,
+            false,
+        );
         assert!(result.is_ok());
         let chunk = result.unwrap();
         match chunk {
-            ContentBlockChunk::Thought(thought) => {
+            Some(ContentBlockChunk::Thought(thought)) => {
                 assert_eq!(
                     thought.text,
                     Some("Let me think about this problem".to_string())
@@ -3820,11 +3951,12 @@ mod tests {
             thought_part_empty,
             &mut last_tool_name,
             &mut last_tool_idx,
+            false,
         );
         assert!(result.is_ok());
         let chunk = result.unwrap();
         match chunk {
-            ContentBlockChunk::Thought(thought) => {
+            Some(ContentBlockChunk::Thought(thought)) => {
                 assert_eq!(thought.text, None);
                 assert_eq!(thought.signature, Some("thinking".to_string()));
                 assert_eq!(thought.id, "0");
@@ -3849,6 +3981,7 @@ mod tests {
             executable_code_part,
             &mut last_tool_name,
             &mut last_tool_idx,
+            false,
         );
         assert!(result.is_err());
         let error = result.unwrap_err();
@@ -3879,6 +4012,7 @@ mod tests {
             thought_with_function_call,
             &mut last_tool_name,
             &mut None,
+            false,
         );
         assert!(result.is_err());
         let error = result.unwrap_err();
@@ -3902,8 +4036,12 @@ mod tests {
         let mut last_tool_name = None;
         let mut last_tool_idx = None;
 
-        let result =
-            content_part_to_tensorzero_chunk(unknown_part, &mut last_tool_name, &mut last_tool_idx);
+        let result = content_part_to_tensorzero_chunk(
+            unknown_part,
+            &mut last_tool_name,
+            &mut last_tool_idx,
+            false,
+        );
         assert!(result.is_err());
         let error = result.unwrap_err();
         let details = error.get_owned_details();

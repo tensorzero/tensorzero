@@ -1061,6 +1061,7 @@ mod tests {
                     extra_body: Default::default(),
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
+                    discard_unknown_chunks: false,
                 },
             )]),
         };
@@ -1169,6 +1170,7 @@ mod tests {
                     extra_body: Default::default(),
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
+                    discard_unknown_chunks: false,
                 },
             )]),
         };
@@ -1227,6 +1229,7 @@ mod tests {
                     extra_body: Default::default(),
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
+                    discard_unknown_chunks: false,
                 },
             )]),
         };
@@ -1349,6 +1352,7 @@ mod tests {
                         extra_body: Default::default(),
                         extra_headers: Default::default(),
                         timeouts: Default::default(),
+                        discard_unknown_chunks: false,
                     },
                 ),
                 (
@@ -1359,6 +1363,7 @@ mod tests {
                         extra_body: Default::default(),
                         extra_headers: Default::default(),
                         timeouts: Default::default(),
+                        discard_unknown_chunks: false,
                     },
                 ),
             ]),
@@ -1457,6 +1462,7 @@ mod tests {
                     extra_body: Default::default(),
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
+                    discard_unknown_chunks: false,
                 },
             )]),
         }));
@@ -1629,6 +1635,7 @@ mod tests {
                         extra_body: Default::default(),
                         extra_headers: Default::default(),
                         timeouts: Default::default(),
+                        discard_unknown_chunks: false,
                     },
                 ),
                 (
@@ -1639,6 +1646,7 @@ mod tests {
                         extra_body: Default::default(),
                         extra_headers: Default::default(),
                         timeouts: Default::default(),
+                        discard_unknown_chunks: false,
                     },
                 ),
             ]),
