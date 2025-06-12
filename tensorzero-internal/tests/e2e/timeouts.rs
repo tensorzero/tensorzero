@@ -472,8 +472,7 @@ timeouts = { non_streaming = { total_ms = 500 }, streaming = { ttft_ms = 500 } }
 
     assert!(
         response.to_string().contains("All variants failed with errors: slow_variant: Model double_timeout timed out due to configured `non_streaming.total_ms` timeout (1.2s)"),
-        "Unexpected error message: {}",
-        response.to_string()
+        "Unexpected error message: {response}"
     );
     // The first two providers should time out, but the third one shouldn't
     // (since the top-level model timeout will trigger first)
