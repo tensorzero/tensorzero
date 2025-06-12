@@ -38,7 +38,7 @@ use crate::inference::types::{
     current_timestamp, ContentBlockChatOutput, ContentBlockChunk, File, FinishReason, Input,
     InputMessage, InputMessageContent, Role, TextKind, Usage,
 };
-use crate::tool::{DynamicToolParams, Tool, ToolCall, ToolCallOutput, ToolChoice, ToolResult};
+use crate::tool::{DynamicToolParams, Tool, ToolCallInput, ToolCallOutput, ToolChoice, ToolResult};
 use crate::variant::JsonMode;
 
 use super::inference::{
@@ -786,12 +786,14 @@ impl From<ChatCompletionToolChoiceOption> for ToolChoice {
     }
 }
 
-impl From<OpenAICompatibleToolCall> for ToolCall {
+impl From<OpenAICompatibleToolCall> for ToolCallInput {
     fn from(tool_call: OpenAICompatibleToolCall) -> Self {
-        ToolCall {
+        ToolCallInput {
             id: tool_call.id,
-            name: tool_call.function.name,
-            arguments: tool_call.function.arguments,
+            raw_name: Some(tool_call.function.name),
+            raw_arguments: Some(tool_call.function.arguments),
+            name: None,
+            arguments: None,
         }
     }
 }
@@ -1331,10 +1333,12 @@ mod tests {
         let expected_text = InputMessageContent::Text(TextKind::Text {
             text: "Hello, world!".to_string(),
         });
-        let expected_tool_call = InputMessageContent::ToolCall(ToolCall {
+        let expected_tool_call = InputMessageContent::ToolCall(ToolCallInput {
             id: "1".to_string(),
-            name: "test_tool".to_string(),
-            arguments: "{}".to_string(),
+            raw_name: Some("test_tool".to_string()),
+            raw_arguments: Some("{}".to_string()),
+            name: None,
+            arguments: None,
         });
 
         assert!(
