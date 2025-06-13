@@ -68,7 +68,6 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
-    // TODOs (#169): Implement a solution for vLLM tool use
     E2ETestProviders {
         simple_inference: providers.clone(),
         extra_body_inference: extra_body_providers,
@@ -77,9 +76,9 @@ async fn get_providers() -> E2ETestProviders {
         inference_params_inference: providers.clone(),
         inference_params_dynamic_credentials: inference_params_dynamic_providers,
         tool_use_inference: tool_providers.clone(),
-        tool_multi_turn_inference: vec![],
-        dynamic_tool_use_inference: vec![],
-        parallel_tool_use_inference: vec![],
+        tool_multi_turn_inference: tool_providers.clone(),
+        dynamic_tool_use_inference: tool_providers.clone(),
+        parallel_tool_use_inference: tool_providers.clone(),
         json_mode_inference: json_providers.clone(),
         json_mode_off_inference: vec![],
         image_inference: vec![],
