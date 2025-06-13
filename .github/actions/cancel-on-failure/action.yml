@@ -7,4 +7,4 @@ runs:
       uses: gacts/run-and-post-run@d803f6920adc9a47eeac4cb6c93dbc2e2890c684
       with:
         post: |
-          gh run cancel ${{ github.run_id }}
+          GH_TOKEN=${{ github.token }} gh run cancel ${{ github.run_id }}
