@@ -1,3 +1,4 @@
+use crate::inference::providers::helpers::borrow_cow;
 use crate::serde_util::{deserialize_json_string, deserialize_optional_json_string};
 use crate::tool::ToolCallInput;
 use derive_builder::Builder;
@@ -475,6 +476,7 @@ pub struct ModelInferenceRequest<'a> {
     pub presence_penalty: Option<f32>,
     pub frequency_penalty: Option<f32>,
     pub seed: Option<u32>,
+    pub stop_sequences: Option<Cow<'a, [String]>>,
     pub stream: bool,
     pub json_mode: ModelInferenceRequestJsonMode,
     pub function_type: FunctionType,
@@ -485,6 +487,12 @@ pub struct ModelInferenceRequest<'a> {
     /// This is used by best_of_n/mixture_of_n to force different sub-variants
     /// to have different cache keys.
     pub extra_cache_key: Option<String>,
+}
+
+impl<'a> ModelInferenceRequest<'a> {
+    pub fn borrow_stop_sequences(&'a self) -> Option<Cow<'a, [String]>> {
+        self.stop_sequences.as_ref().map(borrow_cow)
+    }
 }
 
 /// For use in rendering for optimization purposes
@@ -514,6 +522,7 @@ impl ModelInput {
 #[serde(rename_all = "snake_case")]
 pub enum FinishReason {
     Stop,
+    StopSequence,
     Length,
     ToolCall,
     ContentFilter,

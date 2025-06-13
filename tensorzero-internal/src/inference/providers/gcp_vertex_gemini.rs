@@ -927,6 +927,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
             .credentials
             .get_auth_headers(&self.audience, dynamic_api_keys)
             .await?;
+        tracing::info!("Making request with URL: {}", self.request_url);
         let start_time = Instant::now();
         let builder = http_client.post(&self.request_url).headers(auth_headers);
         let (res, raw_request) = inject_extra_request_data_and_send(
@@ -1712,7 +1713,7 @@ enum GCPVertexGeminiResponseMimeType {
 #[derive(Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct GCPVertexGeminiGenerationConfig<'a> {
-    stop_sequences: Option<Vec<&'a str>>,
+    stop_sequences: Option<Cow<'a, [String]>>,
     temperature: Option<f32>,
     max_output_tokens: Option<u32>,
     top_p: Option<f32>,
@@ -1770,7 +1771,7 @@ impl<'a> GCPVertexGeminiRequest<'a> {
             ModelInferenceRequestJsonMode::Off => (None, None),
         };
         let generation_config = Some(GCPVertexGeminiGenerationConfig {
-            stop_sequences: None,
+            stop_sequences: request.borrow_stop_sequences(),
             temperature: request.temperature,
             max_output_tokens: request.max_tokens,
             seed: request.seed,
@@ -2035,6 +2036,7 @@ fn convert_to_output(
 
 #[derive(Debug, Deserialize, Serialize)]
 struct GCPVertexGeminiResponseContent {
+    #[serde(default)]
     parts: Vec<GCPVertexGeminiResponseContentPart>,
 }
 
@@ -2395,7 +2397,7 @@ mod tests {
     #[test]
     fn test_from_tool_choice() {
         let tool_choice = ToolChoice::Auto;
-        let supports_any_model_name = "gemini-2.5-pro-preview-05-06";
+        let supports_any_model_name = "gemini-2.5-pro-preview-06-05";
         let tool_config = GCPVertexGeminiToolConfig::from((&tool_choice, supports_any_model_name));
         assert_eq!(
             tool_config,
@@ -2563,7 +2565,7 @@ mod tests {
         };
         // JSON schema should be supported for Gemini Pro models
         let result =
-            GCPVertexGeminiRequest::new(&inference_request, "gemini-2.5-pro-preview-05-06");
+            GCPVertexGeminiRequest::new(&inference_request, "gemini-2.5-pro-preview-06-05");
         let request = result.unwrap();
         assert_eq!(request.contents.len(), 3);
         assert_eq!(request.contents[0].role, GCPVertexGeminiRole::User);
@@ -3039,7 +3041,7 @@ mod tests {
             ..Default::default()
         };
         let (tools, tool_choice) =
-            prepare_tools(&request_with_tools, "gemini-2.5-pro-preview-05-06");
+            prepare_tools(&request_with_tools, "gemini-2.5-pro-preview-06-05");
         let tools = tools.unwrap();
         let tool_config = tool_choice.unwrap();
         assert_eq!(

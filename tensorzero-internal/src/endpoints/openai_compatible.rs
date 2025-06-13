@@ -280,6 +280,7 @@ pub struct OpenAICompatibleParams {
     tool_choice: Option<ChatCompletionToolChoiceOption>,
     top_p: Option<f32>,
     parallel_tool_calls: Option<bool>,
+    stop: Option<Vec<String>>,
     #[serde(rename = "tensorzero::variant_name")]
     tensorzero_variant_name: Option<String>,
     #[serde(rename = "tensorzero::dryrun")]
@@ -335,6 +336,7 @@ impl From<FinishReason> for OpenAICompatibleFinishReason {
     fn from(finish_reason: FinishReason) -> Self {
         match finish_reason {
             FinishReason::Stop => OpenAICompatibleFinishReason::Stop,
+            FinishReason::StopSequence => OpenAICompatibleFinishReason::Stop,
             FinishReason::Length => OpenAICompatibleFinishReason::Length,
             FinishReason::ContentFilter => OpenAICompatibleFinishReason::ContentFilter,
             FinishReason::ToolCall => OpenAICompatibleFinishReason::ToolCalls,
@@ -457,6 +459,7 @@ impl Params {
             top_p: openai_compatible_params.top_p,
             presence_penalty: openai_compatible_params.presence_penalty,
             frequency_penalty: openai_compatible_params.frequency_penalty,
+            stop_sequences: openai_compatible_params.stop,
             json_mode,
         };
         let inference_params = InferenceParams {
@@ -1195,6 +1198,7 @@ mod tests {
                 tensorzero_deny_unknown_fields: false,
                 unknown_fields: Default::default(),
                 stream_options: None,
+                stop: None,
             },
         )
         .unwrap();
@@ -1662,6 +1666,7 @@ mod tests {
                 tensorzero_tags: HashMap::new(),
                 unknown_fields: Default::default(),
                 stream_options: None,
+                stop: None,
                 tensorzero_deny_unknown_fields: false,
             },
         )
@@ -1700,6 +1705,7 @@ mod tests {
                 tensorzero_tags: HashMap::new(),
                 unknown_fields: Default::default(),
                 stream_options: None,
+                stop: None,
                 tensorzero_deny_unknown_fields: false,
             },
         )
@@ -1744,6 +1750,7 @@ mod tests {
                 tensorzero_tags: HashMap::new(),
                 unknown_fields: Default::default(),
                 stream_options: None,
+                stop: None,
                 tensorzero_deny_unknown_fields: false,
             },
         )
@@ -1788,6 +1795,7 @@ mod tests {
                 tensorzero_tags: HashMap::new(),
                 unknown_fields: Default::default(),
                 stream_options: None,
+                stop: None,
                 tensorzero_deny_unknown_fields: false,
             },
         )

@@ -1045,6 +1045,8 @@ struct OpenRouterRequest<'a> {
     tool_choice: Option<OpenRouterToolChoice<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     parallel_tool_calls: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stop: Option<Cow<'a, [String]>>,
 }
 
 impl<'a> OpenRouterRequest<'a> {
@@ -1095,6 +1097,7 @@ impl<'a> OpenRouterRequest<'a> {
             tools,
             tool_choice,
             parallel_tool_calls,
+            stop: request.borrow_stop_sequences(),
         })
     }
 }
@@ -1861,6 +1864,7 @@ mod tests {
             tools: None,
             tool_choice: None,
             parallel_tool_calls: None,
+            stop: None,
         };
         let raw_request = serde_json::to_string(&request_body).unwrap();
         let raw_response = "test_response".to_string();
@@ -1958,6 +1962,7 @@ mod tests {
             tools: None,
             tool_choice: None,
             parallel_tool_calls: None,
+            stop: None,
         };
         let raw_request = serde_json::to_string(&request_body).unwrap();
         let result = ProviderInferenceResponse::try_from(OpenRouterResponseWithMetadata {
@@ -2025,6 +2030,7 @@ mod tests {
             tools: None,
             tool_choice: None,
             parallel_tool_calls: None,
+            stop: None,
         };
         let result = ProviderInferenceResponse::try_from(OpenRouterResponseWithMetadata {
             response: invalid_response_no_choices,
@@ -2082,6 +2088,7 @@ mod tests {
             tools: None,
             tool_choice: None,
             parallel_tool_calls: None,
+            stop: None,
         };
         let result = ProviderInferenceResponse::try_from(OpenRouterResponseWithMetadata {
             response: invalid_response_multiple_choices,

@@ -1099,9 +1099,12 @@ pub struct ChatCompletionInferenceParams {
     pub frequency_penalty: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub json_mode: Option<JsonMode>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stop_sequences: Option<Vec<String>>,
 }
 
 impl ChatCompletionInferenceParams {
+    #[expect(clippy::too_many_arguments)]
     pub fn backfill_with_variant_params(
         &mut self,
         temperature: Option<f32>,
@@ -1110,6 +1113,7 @@ impl ChatCompletionInferenceParams {
         top_p: Option<f32>,
         presence_penalty: Option<f32>,
         frequency_penalty: Option<f32>,
+        stop_sequences: Option<Vec<String>>,
     ) {
         if self.temperature.is_none() {
             self.temperature = temperature;
@@ -1128,6 +1132,9 @@ impl ChatCompletionInferenceParams {
         }
         if self.frequency_penalty.is_none() {
             self.frequency_penalty = frequency_penalty;
+        }
+        if self.stop_sequences.is_none() {
+            self.stop_sequences = stop_sequences;
         }
     }
 }

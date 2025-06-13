@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::sync::OnceLock;
 
 use crate::cache::ModelProviderRequest;
@@ -303,6 +304,8 @@ struct HyperbolicRequest<'a> {
     temperature: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     top_p: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stop: Option<Cow<'a, [String]>>,
 }
 
 impl<'a> HyperbolicRequest<'a> {
@@ -318,20 +321,22 @@ impl<'a> HyperbolicRequest<'a> {
             presence_penalty,
             frequency_penalty,
             stream,
+            stop_sequences,
             ..
-        } = *request;
+        } = request;
 
         let messages = prepare_openai_messages(request)?;
         Ok(HyperbolicRequest {
             messages,
             model,
-            frequency_penalty,
-            max_tokens,
-            presence_penalty,
-            seed,
-            stream,
-            temperature,
-            top_p,
+            frequency_penalty: *frequency_penalty,
+            max_tokens: *max_tokens,
+            presence_penalty: *presence_penalty,
+            seed: *seed,
+            stream: *stream,
+            temperature: *temperature,
+            top_p: *top_p,
+            stop: stop_sequences.clone(),
         })
     }
 }

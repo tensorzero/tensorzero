@@ -105,6 +105,10 @@ impl InferenceProvider for AWSBedrockProvider {
         if let Some(top_p) = request.top_p {
             inference_config = inference_config.top_p(top_p);
         }
+        if let Some(stop_sequences) = request.stop_sequences.to_owned() {
+            inference_config =
+                inference_config.set_stop_sequences(Some(stop_sequences.into_owned()));
+        }
         let mut bedrock_request = self
             .client
             .converse()
@@ -232,6 +236,13 @@ impl InferenceProvider for AWSBedrockProvider {
         }
         if let Some(temperature) = request.temperature {
             inference_config = inference_config.temperature(temperature);
+        }
+        if let Some(top_p) = request.top_p {
+            inference_config = inference_config.top_p(top_p);
+        }
+        if let Some(stop_sequences) = request.stop_sequences.to_owned() {
+            inference_config =
+                inference_config.set_stop_sequences(Some(stop_sequences.into_owned()));
         }
 
         let mut bedrock_request = self
@@ -704,7 +715,7 @@ fn aws_stop_reason_to_tensorzero_finish_reason(stop_reason: StopReason) -> Optio
         StopReason::EndTurn => Some(FinishReason::Stop),
         StopReason::GuardrailIntervened => Some(FinishReason::ContentFilter),
         StopReason::MaxTokens => Some(FinishReason::Length),
-        StopReason::StopSequence => Some(FinishReason::Stop),
+        StopReason::StopSequence => Some(FinishReason::StopSequence),
         StopReason::ToolUse => Some(FinishReason::ToolCall),
         _ => Some(FinishReason::Unknown),
     }
