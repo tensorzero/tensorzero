@@ -893,6 +893,7 @@ pub async fn write_completed_batch_inference<'a>(
             episode_id,
             tool_config,
             processing_time: None,
+            ttft_ms: None,
             tags: HashMap::new(),
             // Not currently supported as a batch inference parameter
             extra_body: Default::default(),

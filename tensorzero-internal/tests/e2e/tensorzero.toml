@@ -458,6 +458,32 @@ type = "openrouter"
 model_name = "openai/gpt-4.1-mini"
 api_key_location = "dynamic::openrouter_api_key"
 
+[functions.inference_ttft_chat]
+type = "chat"
+
+[functions.inference_ttft_chat.variants.first_provider_timeout]
+type = "chat_completion"
+model = "first_provider_timeout"
+
+[functions.inference_ttft_json]
+type = "json"
+
+[functions.inference_ttft_json.variants.second_provider_timeout]
+type = "chat_completion"
+model = "first_provider_timeout"
+
+[models.first_provider_timeout]
+routing = ["first_timeout", "second_good"]
+
+[models.first_provider_timeout.providers.first_timeout]
+type = "dummy"
+model_name = "slow"
+timeouts = { non_streaming = { total_ms = 500 }, streaming = { ttft_ms = 500 } }
+
+[models.first_provider_timeout.providers.second_good]
+type = "dummy"
+model_name = "good"
+
 [models.null]
 routing = ["dummy"]
 
