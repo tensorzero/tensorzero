@@ -339,7 +339,7 @@ routing = ["vllm"]
 [models."qwen2.5-0.5b-instruct-vllm".providers.vllm]
 type = "vllm"
 model_name = "Qwen/Qwen2.5-0.5B-Instruct"
-api_base = "https://tensorzero--vllm-inference-vllm-inference.modal.run/v1/"
+api_base = "https://tensorzero--vllm-inference-qwen-vllm-inference.modal.run/v1/"
 
 [models."qwen2.5-0.5b-instruct-vllm-dynamic"]
 routing = ["vllm"]
@@ -347,7 +347,7 @@ routing = ["vllm"]
 [models."qwen2.5-0.5b-instruct-vllm-dynamic".providers.vllm]
 type = "vllm"
 model_name = "Qwen/Qwen2.5-0.5B-Instruct"
-api_base = "https://tensorzero--vllm-inference-vllm-inference.modal.run/v1/"
+api_base = "https://tensorzero--vllm-inference-qwen-vllm-inference.modal.run/v1/"
 
 [models."open-mistral-nemo-2407"]
 routing = ["mistral"]

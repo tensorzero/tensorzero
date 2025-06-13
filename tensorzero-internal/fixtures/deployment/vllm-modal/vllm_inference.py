@@ -15,7 +15,7 @@ hf_cache_vol = modal.Volume.from_name("huggingface-cache", create_if_missing=Tru
 vllm_cache_vol = modal.Volume.from_name("vllm-cache", create_if_missing=True)
 
 N_GPU = 1
-app = modal.App(name="vllm-inference")
+app = modal.App(name="vllm-inference-qwen")
 
 
 @app.function(
