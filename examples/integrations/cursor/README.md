@@ -19,7 +19,7 @@ This example shows how to use the TensorZero Gateway as a proxy between Cursor a
    Grab your auth token and add it to the `.env` file as the value for `NGROK_AUTHTOKEN`.
 4. Run `docker compose up` to stand up ClickHouse, the TensorZero Gateway, the TensorZero UI, Nginx, and ngrok.
    To avoid port conflicts, ClickHouse and TensorZero services that would normally bind to ports `XXXX` bind to `1XXXX` instead (e.g. `3000` → `13000`).
-   - Windows (non-WSL): Fix line endings with the PowerShell command:
+   - If you're using Windows (non-WSL), you might need to fix line endings with the PowerShell command:
      ```powershell
      (Get-Content ./nginx/entrypoint.sh -Raw) -replace "`r`n", "`n" | Set-Content ./nginx/entrypoint.sh -NoNewline -Encoding UTF8
      ```
