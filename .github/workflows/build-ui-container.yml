@@ -25,3 +25,4 @@ jobs:
           retention-days: 1
           if-no-files-found: error
           overwrite: false
+      - uses: ./.github/actions/cancel-on-failure

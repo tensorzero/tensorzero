@@ -111,3 +111,4 @@ jobs:
       - name: Exit if tests failed
         if: steps.e2e_tests.outcome == 'failure'
         run: exit 1
+      - uses: ./.github/actions/cancel-on-failure

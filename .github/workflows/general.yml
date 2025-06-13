@@ -95,6 +95,7 @@ jobs:
       - name: Print e2e logs
         if: always()
         run: cat e2e_logs.txt
+      - uses: ./.github/actions/cancel-on-failure
 
   check-docker-compose:
     permissions:
@@ -122,6 +123,8 @@ jobs:
       - name: Check all docker-compose.yml files
         run: ./ci/check-all-docker-compose.sh
 
+      - uses: ./.github/actions/cancel-on-failure
+
   check-python-client-build:
     uses: ./.github/workflows/python-client-build.yml
 
@@ -136,6 +139,7 @@ jobs:
           save-if: ${{ github.event_name == 'merge_group' }}
       - name: Build Rust
         run: cargo build --workspace
+      - uses: ./.github/actions/cancel-on-failure
 
   validate:
     runs-on: namespace-profile-tensorzero-8x16
@@ -175,6 +179,8 @@ jobs:
 
       - name: Install uv
         run: curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
+
+      - run: intentional-missing-command
 
       - name: Configure Namespace cache for Rust, Python (pip), and pnpm
         uses: namespacelabs/nscloud-cache-action@2f50e7d0f70475e6f59a55ba0f05eec9108e77cc
@@ -351,6 +357,7 @@ jobs:
 
       - name: Compile / validate notebooks
         run: ci/compile-check-notebooks.sh
+      - uses: ./.github/actions/cancel-on-failure
 
   clickhouse-tests:
     # We don't run many tests here, so use a normal runner with Github Actions caching
@@ -441,6 +448,7 @@ jobs:
       - name: Print e2e logs
         if: always()
         run: cat e2e_logs.txt
+      - uses: ./.github/actions/cancel-on-failure
 
   build-gateway-container:
     uses: ./.github/workflows/build-gateway-container.yml

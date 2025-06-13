@@ -79,3 +79,4 @@ jobs:
       - name: Print ClickHouse trace logs
         if: always()
         run: docker exec fixtures-clickhouse-1 cat /var/log/clickhouse-server/clickhouse-server.log
+      - uses: ./.github/actions/cancel-on-failure
