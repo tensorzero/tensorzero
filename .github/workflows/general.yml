@@ -3,6 +3,7 @@ run-name: "General Checks for: ${{ github.event.pull_request.title || github.ref
 
 permissions:
   actions: write
+  contents: read
 
 on:
   merge_group:
