@@ -263,7 +263,7 @@ struct OpenAICompatibleStreamOptions {
     include_usage: bool,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct OpenAICompatibleParams {
     messages: Vec<OpenAICompatibleMessage>,
     model: String,
@@ -296,8 +296,39 @@ pub struct OpenAICompatibleParams {
     tensorzero_tags: HashMap<String, String>,
     #[serde(default, rename = "tensorzero::deny_unknown_fields")]
     tensorzero_deny_unknown_fields: bool,
+    #[serde(default, rename = "tensorzero::credentials")]
+    tensorzero_credentials: InferenceCredentials,
     #[serde(flatten)]
     unknown_fields: HashMap<String, Value>,
+}
+
+// this implementation ignores tensorzero_credentials and unknown_fields
+impl PartialEq for OpenAICompatibleParams {
+    fn eq(&self, other: &Self) -> bool {
+        self.messages == other.messages
+            && self.model == other.model
+            && self.frequency_penalty == other.frequency_penalty
+            && self.max_tokens == other.max_tokens
+            && self.max_completion_tokens == other.max_completion_tokens
+            && self.presence_penalty == other.presence_penalty
+            && self.response_format == other.response_format
+            && self.seed == other.seed
+            && self.stream == other.stream
+            && self.stream_options == other.stream_options
+            && self.temperature == other.temperature
+            && self.tools == other.tools
+            && self.tool_choice == other.tool_choice
+            && self.top_p == other.top_p
+            && self.parallel_tool_calls == other.parallel_tool_calls
+            && self.tensorzero_variant_name == other.tensorzero_variant_name
+            && self.tensorzero_dryrun == other.tensorzero_dryrun
+            && self.tensorzero_episode_id == other.tensorzero_episode_id
+            && self.tensorzero_cache_options == other.tensorzero_cache_options
+            && self.tensorzero_extra_body == other.tensorzero_extra_body
+            && self.tensorzero_extra_headers == other.tensorzero_extra_headers
+            && self.tensorzero_tags == other.tensorzero_tags
+            && self.tensorzero_deny_unknown_fields == other.tensorzero_deny_unknown_fields
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -529,8 +560,7 @@ impl Params {
             dryrun: openai_compatible_params.tensorzero_dryrun.or(header_dryrun),
             dynamic_tool_params,
             output_schema,
-            // OpenAI compatible endpoint does not support dynamic credentials
-            credentials: InferenceCredentials::default(),
+            credentials: openai_compatible_params.tensorzero_credentials,
             cache_options: openai_compatible_params
                 .tensorzero_cache_options
                 .unwrap_or_default(),
@@ -1193,6 +1223,7 @@ mod tests {
                 tensorzero_extra_headers: UnfilteredInferenceExtraHeaders::default(),
                 tensorzero_tags: tensorzero_tags.clone(),
                 tensorzero_deny_unknown_fields: false,
+                tensorzero_credentials: InferenceCredentials::default(),
                 unknown_fields: Default::default(),
                 stream_options: None,
             },
@@ -1660,6 +1691,7 @@ mod tests {
                 tensorzero_extra_body: UnfilteredInferenceExtraBody::default(),
                 tensorzero_extra_headers: UnfilteredInferenceExtraHeaders::default(),
                 tensorzero_tags: HashMap::new(),
+                tensorzero_credentials: InferenceCredentials::default(),
                 unknown_fields: Default::default(),
                 stream_options: None,
                 tensorzero_deny_unknown_fields: false,
@@ -1698,6 +1730,7 @@ mod tests {
                 tensorzero_extra_body: UnfilteredInferenceExtraBody::default(),
                 tensorzero_extra_headers: UnfilteredInferenceExtraHeaders::default(),
                 tensorzero_tags: HashMap::new(),
+                tensorzero_credentials: InferenceCredentials::default(),
                 unknown_fields: Default::default(),
                 stream_options: None,
                 tensorzero_deny_unknown_fields: false,
@@ -1742,6 +1775,7 @@ mod tests {
                 tensorzero_extra_body: UnfilteredInferenceExtraBody::default(),
                 tensorzero_extra_headers: UnfilteredInferenceExtraHeaders::default(),
                 tensorzero_tags: HashMap::new(),
+                tensorzero_credentials: InferenceCredentials::default(),
                 unknown_fields: Default::default(),
                 stream_options: None,
                 tensorzero_deny_unknown_fields: false,
@@ -1786,6 +1820,7 @@ mod tests {
                 tensorzero_extra_body: UnfilteredInferenceExtraBody::default(),
                 tensorzero_extra_headers: UnfilteredInferenceExtraHeaders::default(),
                 tensorzero_tags: HashMap::new(),
+                tensorzero_credentials: InferenceCredentials::default(),
                 unknown_fields: Default::default(),
                 stream_options: None,
                 tensorzero_deny_unknown_fields: false,
