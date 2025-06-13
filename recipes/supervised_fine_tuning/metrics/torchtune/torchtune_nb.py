@@ -202,12 +202,11 @@ import numpy as np
 import pandas as pd
 import toml
 import yaml
-from clickhouse_connect import get_client
 from tensorzero import (
+    BooleanMetricNode,
     ContentBlock,
+    FloatMetricNode,
     RawText,
-    StoredChatInference,
-    StoredJsonInference,
     TensorZeroGateway,
     Text,
     Thought,
@@ -216,9 +215,6 @@ from tensorzero import (
 )
 from tensorzero.internal import OutputMessage
 from tensorzero.util import uuid7
-
-# %%
-TENSORZERO_GATEWAY_URL = "http://localhost:3000"
 
 # %% [markdown]
 # Load the TensorZero configuration file.
@@ -268,106 +264,6 @@ variant = config["functions"][FUNCTION_NAME]["variants"][TEMPLATE_VARIANT_NAME]
 variant
 
 # %% [markdown]
-# Initialize the ClickHouse client.
-#
-
-# %%
-assert "TENSORZERO_CLICKHOUSE_URL" in os.environ, (
-    "TENSORZERO_CLICKHOUSE_URL environment variable not set"
-)
-
-clickhouse_client = get_client(dsn=os.environ["TENSORZERO_CLICKHOUSE_URL"])
-
-# %% [markdown]
-# Determine the ClickHouse table name for the function.
-
-# %%
-inference_table_name = {"chat": "ChatInference", "json": "JsonInference"}.get(
-    function_type
-)
-
-if inference_table_name is None:
-    raise ValueError(f"Unsupported function type: {function_type}")
-
-# %% [markdown]
-# Determine the ClickHouse table name for the metric.
-#
-
-# %%
-feedback_table_name = {
-    "float": "FloatMetricFeedback",
-    "boolean": "BooleanMetricFeedback",
-}.get(metric["type"])
-
-if feedback_table_name is None:
-    raise ValueError(f"Unsupported metric type: {metric['type']}")
-
-# %% [markdown]
-# Determine the correct join key to use for the metric on the inference table.
-#
-
-# %%
-inference_join_key = {
-    "episode": "episode_id",
-    "inference": "id",
-}.get(metric["level"])
-
-if inference_join_key is None:
-    raise ValueError(f"Unsupported metric level: {metric['level']}")
-
-# %% [markdown]
-# Query the inferences and feedback from ClickHouse.
-#
-# If the metric is a float metric, we need to filter the data based on the threshold.
-
-# %%
-assert "optimize" in metric, "Metric is missing the `optimize` field"
-
-threshold = FLOAT_METRIC_THRESHOLD if metric["type"] == "float" else 0.5
-comparison_operator = ">=" if metric["optimize"] == "max" else "<="
-
-inference_col = "tool_params" if function_type == "chat" else "output_schema"
-
-query = f"""
-SELECT
-    i.variant_name,
-    i.input,
-    i.output,
-    f.value,
-    i.episode_id,
-    i.id,
-    i.{inference_col},
-FROM
-    {inference_table_name} i
-JOIN
-    (SELECT
-        target_id,
-        value,
-        ROW_NUMBER() OVER (PARTITION BY target_id ORDER BY timestamp DESC) as rn
-    FROM
-        {feedback_table_name}
-    WHERE
-        metric_name = %(metric_name)s
-        AND value {comparison_operator} %(threshold)s
-    ) f ON i.{inference_join_key} = f.target_id and f.rn = 1
-WHERE
-    i.function_name = %(function_name)s
-LIMIT %(max_samples)s
-"""
-
-params = {
-    "function_name": FUNCTION_NAME,
-    "metric_name": METRIC_NAME,
-    "comparison_operator": comparison_operator,
-    "threshold": threshold,
-    "max_samples": MAX_SAMPLES,
-}
-
-df = clickhouse_client.query_df(query, params)
-
-df.head()
-
-# %% [markdown]
 # Load and render the stored inferences
 
 # %%
@@ -377,44 +273,40 @@ tensorzero_client = TensorZeroGateway.build_embedded(
     timeout=15,
 )
 
+# %% [markdown]
+# Set the metric filter
 
 # %%
-def double_parse_arguments(example_input):
-    for message in example_input["messages"]:
-        for block in message["content"]:
-            if block["type"] == "tool_call":
-                block["arguments"] = json.loads(block["arguments"])
+assert "optimize" in metric, "Metric is missing the `optimize` field"
 
+if metric.get("type") == "float":
+    comparison_operator = ">=" if metric["optimize"] == "max" else "<="
+    metric_node = FloatMetricNode(
+        metric_name=METRIC_NAME,
+        value=FLOAT_METRIC_THRESHOLD,
+        comparison_operator=comparison_operator,
+    )
+elif metric.get("type") == "boolean":
+    metric_node = BooleanMetricNode(
+        metric_name=METRIC_NAME,
+        value=True if metric["optimize"] == "max" else False,
+    )
 
-stored_inferences = []
-for _, row in df.iterrows():
-    input_data = json.loads(row["input"])
-    double_parse_arguments(input_data)
-    output_data = json.loads(row["output"])
-    if function_type == "chat":
-        stored_inferences.append(
-            StoredChatInference(
-                function_name=FUNCTION_NAME,
-                variant_name=row["variant_name"],
-                input=input_data,
-                output=output_data,
-                episode_id=row["episode_id"],
-                inference_id=row["id"],
-                tool_params=json.loads(row["tool_params"]),
-            )
-        )
-    elif function_type == "json":
-        stored_inferences.append(
-            StoredJsonInference(
-                function_name=FUNCTION_NAME,
-                variant_name=row["variant_name"],
-                input=input_data,
-                output=output_data,
-                episode_id=row["episode_id"],
-                inference_id=row["id"],
-                output_schema=json.loads(row["output_schema"]),
-            )
-        )
+metric_node
+
+# %% [markdown]
+# Query the inferences and feedback from ClickHouse.
+
+# %%
+stored_inferences = tensorzero_client.experimental_list_inferences(
+    function_name=FUNCTION_NAME,
+    variant_name=None,
+    filters=metric_node,
+    limit=MAX_SAMPLES,
+)
+
+# %% [markdown]
+# Render the stored inferences
 
 # %%
 rendered_inferences = tensorzero_client.experimental_render_inferences(
@@ -567,7 +459,7 @@ val_df = conversations[conversations["episode_id"].isin(val_episode_ids)]
 
 print(f"Training set size: {len(train_df)}")
 print(f"Validation set size: {len(val_df)}")
-print(f"Actual validation fraction: {len(val_df) / len(df):.2f}")
+print(f"Actual validation fraction: {len(val_df) / len(conversations):.2f}")
 
 # %%
 with tempfile.TemporaryDirectory() as temp_dir:

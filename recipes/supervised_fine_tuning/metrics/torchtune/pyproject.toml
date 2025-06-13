@@ -11,7 +11,7 @@ dependencies = [
     "notebook",
     "numpy",
     "pandas",
-    "tensorzero>=2025.5.9",
+    "tensorzero>=2025.6.1",
     "toml",
     "torchao",
     "torch",
