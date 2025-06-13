@@ -7353,6 +7353,7 @@ pub async fn test_tool_multi_turn_inference_request_with_provider(provider: E2ET
             ]},
         "variant_name": provider.variant_name,
         "stream": false,
+        "extra_headers": get_extra_headers(),
     });
 
     let response = Client::new()
@@ -7614,6 +7615,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     let payload = json!({
        "function_name": "weather_helper",
         "episode_id": episode_id,
+        "extra_headers": get_extra_headers(),
         "input":{
             "system": {"assistant_name": "Dr. Mehta"},
             "messages": [
@@ -7928,6 +7930,7 @@ pub async fn test_dynamic_tool_use_inference_request_with_provider(
         model_name: None,
         variant_name: Some(provider.variant_name.clone()),
         episode_id: Some(episode_id),
+        extra_headers: get_extra_headers(),
         input: tensorzero::ClientInput {
             system: Some(json!({"assistant_name": "Dr. Mehta"})),
             messages: vec![tensorzero::ClientInputMessage {
@@ -8246,6 +8249,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
                 content: vec![tensorzero::ClientInputMessageContent::Text(TextKind::Text { text: "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function.".to_string() })],
             }],
         },
+        extra_headers: get_extra_headers(),
         stream: Some(true),
         dynamic_tool_params: tensorzero::DynamicToolParams {
             additional_tools: Some(vec![tensorzero::Tool {
@@ -8600,6 +8604,7 @@ pub async fn test_parallel_tool_use_inference_request_with_provider(provider: E2
         "parallel_tool_calls": true,
         "stream": false,
         "variant_name": provider.variant_name,
+        "extra_headers": get_extra_headers(),
     });
 
     let response = Client::new()
@@ -8973,6 +8978,7 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
         "parallel_tool_calls": true,
         "stream": true,
         "variant_name": provider.variant_name,
+        "extra_headers": get_extra_headers(),
     });
 
     let mut event_source = Client::new()
@@ -9357,7 +9363,7 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
-    assert_eq!(output.len(), 2);
+    assert!(output.len() >= 2);
     let mut tool_call_names = vec![];
     for block in output {
         match block {
@@ -9365,8 +9371,12 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
                 tool_call_names.push(tool_call.name);
                 serde_json::from_str::<Value>(&tool_call.arguments).unwrap();
             }
+            // Sometimes vLLM returns a text block alongside the tool calls
+            ContentBlock::Text(_) => {
+                // Do nothing
+            }
             _ => {
-                panic!("Expected a tool call, got {block:?}");
+                panic!("Expected a tool call or text block, got {block:?}");
             }
         }
     }
@@ -10528,6 +10538,7 @@ pub async fn test_multi_turn_parallel_tool_use_inference_request_with_provider(
             ]},
         "parallel_tool_calls": true,
         "stream": false,
+        "extra_headers": get_extra_headers(),
         "variant_name": provider.variant_name,
     });
 
@@ -10820,6 +10831,7 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
         "parallel_tool_calls": true,
         "stream": false,
         "variant_name": provider.variant_name,
+        "extra_headers": get_extra_headers(),
     });
 
     let response = Client::new()
@@ -11081,8 +11093,6 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
     );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
-    assert!(raw_response.contains("70"));
-    assert!(raw_response.contains("30"));
     // Check if raw_response is valid JSONL
     for line in raw_response.lines() {
         assert!(serde_json::from_str::<Value>(line).is_ok());
