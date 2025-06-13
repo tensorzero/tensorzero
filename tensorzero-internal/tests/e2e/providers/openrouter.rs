@@ -80,6 +80,14 @@ async fn get_providers() -> E2ETestProviders {
         },
     ];
 
+    let shorthand_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "openrouter-shorthand".to_string(),
+        model_name: "openrouter::openai/gpt-4.1".to_string(),
+        model_provider_name: "openrouter".into(),
+        credentials: HashMap::new(),
+    }];
+
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
         extra_body_inference: extra_body_providers,
@@ -94,7 +102,7 @@ async fn get_providers() -> E2ETestProviders {
         json_mode_inference: json_providers.clone(),
         image_inference: vec![],
         pdf_inference: vec![],
-        shorthand_inference: vec![],
+        shorthand_inference: shorthand_providers,
         json_mode_off_inference: vec![],
     }
 }

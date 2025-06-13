@@ -1,15 +1,11 @@
-import inspect
-import os
 from uuid import UUID
 
 import pytest
-import pytest_asyncio
 from tensorzero import (
     AsyncTensorZeroGateway,
     FileBase64,
     JsonInferenceOutput,
-    StoredChatInference,
-    StoredJsonInference,
+    StoredInference,
     TensorZeroGateway,
     Text,
     Thought,
@@ -21,36 +17,12 @@ from tensorzero import (
 )
 from tensorzero.util import uuid7
 
-TEST_CONFIG_FILE = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)),
-    "../../../tensorzero-internal/tests/e2e/tensorzero.toml",
-)
 
-
-@pytest.fixture
-def sync_client():
-    with TensorZeroGateway.build_embedded(
-        config_file=TEST_CONFIG_FILE,
-        clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero-python-e2e",
-    ) as client:
-        yield client
-
-
-@pytest_asyncio.fixture
-async def async_client():
-    client_fut = AsyncTensorZeroGateway.build_embedded(
-        config_file=TEST_CONFIG_FILE,
-        clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero-python-e2e",
-    )
-    assert inspect.isawaitable(client_fut)
-    async with await client_fut as client:
-        yield client
-
-
-def test_sync_render_inferences_success(sync_client: TensorZeroGateway):
-    rendered_inferences = sync_client.experimental_render_inferences(
+def test_sync_render_inferences_success(embedded_sync_client: TensorZeroGateway):
+    rendered_inferences = embedded_sync_client.experimental_render_inferences(
         stored_inferences=[
-            StoredChatInference(
+            StoredInference(
+                type="chat",
                 function_name="basic_test",
                 variant_name="default",
                 input={
@@ -64,7 +36,7 @@ def test_sync_render_inferences_success(sync_client: TensorZeroGateway):
                                 {
                                     "type": "tool_call",
                                     "id": "123",
-                                    "arguments": {"foo": "bar"},
+                                    "arguments": '{"foo": "bar"}',
                                     "name": "test_tool",
                                 },
                             ],
@@ -87,9 +59,7 @@ def test_sync_render_inferences_success(sync_client: TensorZeroGateway):
                             "content": [
                                 {
                                     "type": "image",
-                                    "image": {
-                                        "mime_type": "image/png",
-                                    },
+                                    "image": {"mime_type": "image/png"},
                                     "storage_path": {
                                         "kind": {
                                             "type": "s3_compatible",
@@ -119,8 +89,10 @@ def test_sync_render_inferences_success(sync_client: TensorZeroGateway):
                     tool_choice="auto",
                     parallel_tool_calls=False,
                 ),
+                output_schema=None,
             ),
-            StoredJsonInference(
+            StoredInference(
+                type="json",
                 function_name="json_success",
                 variant_name="dummy",
                 input={
@@ -131,7 +103,7 @@ def test_sync_render_inferences_success(sync_client: TensorZeroGateway):
                             "content": [
                                 {"type": "text", "value": {"country": "Japan"}}
                             ],
-                        }
+                        },
                     ],
                 },
                 output=JsonInferenceOutput(
@@ -143,6 +115,7 @@ def test_sync_render_inferences_success(sync_client: TensorZeroGateway):
                     "type": "object",
                     "properties": {"answer": {"type": "string"}},
                 },
+                tool_params=None,
             ),
         ],
         variants={"basic_test": "test", "json_success": "test"},
@@ -170,7 +143,7 @@ def test_sync_render_inferences_success(sync_client: TensorZeroGateway):
     assert isinstance(content[2], ToolCall)
     assert content[2].type == "tool_call"
     assert content[2].id == "123"
-    assert content[2].arguments == '{"foo":"bar"}'
+    assert content[2].arguments == '{"foo": "bar"}'
     assert content[2].name == "test_tool"
     message = messages[1]
     assert message.role == "assistant"
@@ -264,12 +237,13 @@ Example Response:
 
 
 def test_sync_render_inferences_nonexistent_function(
-    sync_client: TensorZeroGateway,
+    embedded_sync_client: TensorZeroGateway,
 ):
     """Test that render_inferences drops if the function does not exist at all."""
-    rendered_inferences = sync_client.experimental_render_inferences(
+    rendered_inferences = embedded_sync_client.experimental_render_inferences(
         stored_inferences=[
-            StoredChatInference(
+            StoredInference(
+                type="chat",
                 function_name="non_existent_function",
                 variant_name="default",
                 input={
@@ -289,6 +263,7 @@ def test_sync_render_inferences_nonexistent_function(
                     tool_choice="auto",
                     parallel_tool_calls=False,
                 ),
+                output_schema=None,
             )
         ],
         variants={},
@@ -297,11 +272,14 @@ def test_sync_render_inferences_nonexistent_function(
     assert len(rendered_inferences) == 0
 
 
-def test_sync_render_inferences_unspecified_function(sync_client: TensorZeroGateway):
+def test_sync_render_inferences_unspecified_function(
+    embedded_sync_client: TensorZeroGateway,
+):
     """Test that render_inferences drops if the function is not specified in the variants map."""
-    rendered_inferences = sync_client.experimental_render_inferences(
+    rendered_inferences = embedded_sync_client.experimental_render_inferences(
         stored_inferences=[
-            StoredChatInference(
+            StoredInference(
+                type="chat",
                 function_name="non_existent_function",
                 variant_name="default",
                 input={
@@ -321,6 +299,7 @@ def test_sync_render_inferences_unspecified_function(sync_client: TensorZeroGate
                     tool_choice="auto",
                     parallel_tool_calls=False,
                 ),
+                output_schema=None,
             )
         ],
         variants={},
@@ -329,12 +308,13 @@ def test_sync_render_inferences_unspecified_function(sync_client: TensorZeroGate
     # TODO: test that the warning message is logged (we do this in Rust)
 
 
-def test_sync_render_inferences_no_variant(sync_client: TensorZeroGateway):
+def test_sync_render_inferences_no_variant(embedded_sync_client: TensorZeroGateway):
     """Test that render_inferences drops an example if the variant is not found and logs a warning."""
     with pytest.raises(Exception) as excinfo:
-        sync_client.experimental_render_inferences(
+        embedded_sync_client.experimental_render_inferences(
             stored_inferences=[
-                StoredChatInference(
+                StoredInference(
+                    type="chat",
                     function_name="basic_test",  # This function exists in the config
                     variant_name="non_existent_variant",
                     input={
@@ -354,6 +334,7 @@ def test_sync_render_inferences_no_variant(sync_client: TensorZeroGateway):
                         tool_choice="auto",
                         parallel_tool_calls=False,
                     ),
+                    output_schema=None,
                 )
             ],
             variants={"basic_test": "non_existent_variant"},
@@ -364,12 +345,13 @@ def test_sync_render_inferences_no_variant(sync_client: TensorZeroGateway):
 
 
 def test_sync_render_inferences_missing_variable(
-    sync_client: TensorZeroGateway,
+    embedded_sync_client: TensorZeroGateway,
 ):
     """Test that render_inferences drops an example if a template variable is missing."""
-    rendered_inferences = sync_client.experimental_render_inferences(
+    rendered_inferences = embedded_sync_client.experimental_render_inferences(
         stored_inferences=[
-            StoredChatInference(
+            StoredInference(
+                type="chat",
                 function_name="basic_test",  # Uses assistant_name in system prompt
                 variant_name="default",
                 input={
@@ -389,6 +371,7 @@ def test_sync_render_inferences_missing_variable(
                     tool_choice="auto",
                     parallel_tool_calls=False,
                 ),
+                output_schema=None,
             )
         ],
         variants={"basic_test": "test"},
@@ -398,10 +381,13 @@ def test_sync_render_inferences_missing_variable(
 
 
 @pytest.mark.asyncio
-async def test_async_render_inferences_success(async_client: AsyncTensorZeroGateway):
-    rendered_inferences = await async_client.experimental_render_inferences(
+async def test_async_render_inferences_success(
+    embedded_async_client: AsyncTensorZeroGateway,
+):
+    rendered_inferences = await embedded_async_client.experimental_render_inferences(
         stored_inferences=[
-            StoredChatInference(
+            StoredInference(
+                type="chat",
                 function_name="basic_test",
                 variant_name="default",
                 input={
@@ -415,7 +401,7 @@ async def test_async_render_inferences_success(async_client: AsyncTensorZeroGate
                                 {
                                     "type": "tool_call",
                                     "id": "123",
-                                    "arguments": {"foo": "bar"},
+                                    "arguments": '{"foo": "bar"}',
                                     "name": "test_tool",
                                 },
                             ],
@@ -470,8 +456,10 @@ async def test_async_render_inferences_success(async_client: AsyncTensorZeroGate
                     tool_choice="auto",
                     parallel_tool_calls=False,
                 ),
+                output_schema=None,
             ),
-            StoredJsonInference(
+            StoredInference(
+                type="json",
                 function_name="json_success",
                 variant_name="dummy",
                 input={
@@ -495,6 +483,7 @@ async def test_async_render_inferences_success(async_client: AsyncTensorZeroGate
                     "type": "object",
                     "properties": {"answer": {"type": "string"}},
                 },
+                tool_params=None,
             ),
         ],
         variants={"basic_test": "test", "json_success": "test"},
@@ -522,7 +511,7 @@ async def test_async_render_inferences_success(async_client: AsyncTensorZeroGate
     assert isinstance(content[2], ToolCall)
     assert content[2].type == "tool_call"
     assert content[2].id == "123"
-    assert content[2].arguments == """{"foo":"bar"}"""
+    assert content[2].arguments == """{"foo": "bar"}"""
     assert content[2].name == "test_tool"
     message = messages[1]
     assert message.role == "assistant"
@@ -618,12 +607,13 @@ Example Response:
 
 @pytest.mark.asyncio
 async def test_async_render_inferences_nonexistent_function(
-    async_client: AsyncTensorZeroGateway,
+    embedded_async_client: AsyncTensorZeroGateway,
 ):
     """Test that render_inferences drops if the function does not exist at all."""
-    rendered_inferences = await async_client.experimental_render_inferences(
+    rendered_inferences = await embedded_async_client.experimental_render_inferences(
         stored_inferences=[
-            StoredChatInference(
+            StoredInference(
+                type="chat",
                 function_name="non_existent_function",
                 variant_name="default",
                 input={
@@ -643,6 +633,7 @@ async def test_async_render_inferences_nonexistent_function(
                     tool_choice="auto",
                     parallel_tool_calls=False,
                 ),
+                output_schema=None,
             )
         ],
         variants={},
@@ -653,12 +644,13 @@ async def test_async_render_inferences_nonexistent_function(
 
 @pytest.mark.asyncio
 async def test_async_render_inferences_unspecified_function(
-    async_client: AsyncTensorZeroGateway,
+    embedded_async_client: AsyncTensorZeroGateway,
 ):
     """Test that render_inferences drops if the function is not specified in the variants map."""
-    rendered_inferences = await async_client.experimental_render_inferences(
+    rendered_inferences = await embedded_async_client.experimental_render_inferences(
         stored_inferences=[
-            StoredChatInference(
+            StoredInference(
+                type="chat",
                 function_name="non_existent_function",
                 variant_name="default",
                 input={
@@ -678,6 +670,7 @@ async def test_async_render_inferences_unspecified_function(
                     tool_choice="auto",
                     parallel_tool_calls=False,
                 ),
+                output_schema=None,
             )
         ],
         variants={},
@@ -688,13 +681,14 @@ async def test_async_render_inferences_unspecified_function(
 
 @pytest.mark.asyncio
 async def test_async_render_inferences_no_variant(
-    async_client: AsyncTensorZeroGateway,
+    embedded_async_client: AsyncTensorZeroGateway,
 ):
     """Test that render_inferences drops an example if the variant is not found and logs a warning."""
     with pytest.raises(Exception) as excinfo:
-        await async_client.experimental_render_inferences(
+        await embedded_async_client.experimental_render_inferences(
             stored_inferences=[
-                StoredChatInference(
+                StoredInference(
+                    type="chat",
                     function_name="basic_test",  # This function exists in the config
                     variant_name="non_existent_variant",
                     input={
@@ -714,6 +708,7 @@ async def test_async_render_inferences_no_variant(
                         tool_choice="auto",
                         parallel_tool_calls=False,
                     ),
+                    output_schema=None,
                 )
             ],
             variants={"basic_test": "non_existent_variant"},
@@ -725,12 +720,13 @@ async def test_async_render_inferences_no_variant(
 
 @pytest.mark.asyncio
 async def test_async_render_inferences_missing_variable(
-    async_client: AsyncTensorZeroGateway,
+    embedded_async_client: AsyncTensorZeroGateway,
 ):
     """Test that render_inferences drops an example if a template variable is missing."""
-    rendered_inferences = await async_client.experimental_render_inferences(
+    rendered_inferences = await embedded_async_client.experimental_render_inferences(
         stored_inferences=[
-            StoredChatInference(
+            StoredInference(
+                type="chat",
                 function_name="basic_test",  # Uses assistant_name in system prompt
                 variant_name="default",
                 input={
@@ -750,6 +746,7 @@ async def test_async_render_inferences_missing_variable(
                     tool_choice="auto",
                     parallel_tool_calls=False,
                 ),
+                output_schema=None,
             )
         ],
         variants={"basic_test": "test"},

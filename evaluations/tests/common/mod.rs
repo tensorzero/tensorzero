@@ -4,11 +4,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use tensorzero::{Client, ClientBuilder, ClientBuilderMode};
-use tensorzero_internal::{
-    clickhouse::test_helpers::{get_clickhouse, CLICKHOUSE_URL},
-    endpoints::datasets::{ClickHouseChatInferenceDatapoint, ClickHouseJsonInferenceDatapoint},
+use tensorzero::{
+    ChatInferenceDatapoint, Client, ClientBuilder, ClientBuilderMode, JsonInferenceDatapoint,
 };
+use tensorzero_internal::clickhouse::test_helpers::{get_clickhouse, CLICKHOUSE_URL};
 use uuid::Uuid;
 
 /// Takes a chat fixture as a path to a JSONL file and writes the fixture to the dataset.
@@ -21,10 +20,10 @@ pub async fn write_chat_fixture_to_dataset(
 ) {
     let fixture = std::fs::read_to_string(fixture_path).unwrap();
     let fixture = fixture.trim();
-    let mut datapoints: Vec<ClickHouseChatInferenceDatapoint> = Vec::new();
+    let mut datapoints: Vec<ChatInferenceDatapoint> = Vec::new();
     // Iterate over the lines in the string
     for line in fixture.lines() {
-        let mut datapoint: ClickHouseChatInferenceDatapoint = serde_json::from_str(line).unwrap();
+        let mut datapoint: ChatInferenceDatapoint = serde_json::from_str(line).unwrap();
         datapoint.id = Uuid::now_v7();
         if let Some(dataset_name) = dataset_name_mapping.get(&datapoint.dataset_name) {
             datapoint.dataset_name = dataset_name.to_string();
@@ -45,10 +44,10 @@ pub async fn write_json_fixture_to_dataset(
 ) {
     let fixture = std::fs::read_to_string(fixture_path).unwrap();
     let fixture = fixture.trim();
-    let mut datapoints: Vec<ClickHouseJsonInferenceDatapoint> = Vec::new();
+    let mut datapoints: Vec<JsonInferenceDatapoint> = Vec::new();
     // Iterate over the lines in the string
     for line in fixture.lines() {
-        let mut datapoint: ClickHouseJsonInferenceDatapoint = serde_json::from_str(line).unwrap();
+        let mut datapoint: JsonInferenceDatapoint = serde_json::from_str(line).unwrap();
         datapoint.id = Uuid::now_v7();
         if let Some(dataset_name) = dataset_name_mapping.get(&datapoint.dataset_name) {
             datapoint.dataset_name = dataset_name.to_string();

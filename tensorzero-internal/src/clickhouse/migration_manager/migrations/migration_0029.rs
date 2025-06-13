@@ -38,15 +38,13 @@ impl Migration for Migration0029<'_> {
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         self.clickhouse
-            .run_query_synchronous(
+            .run_query_synchronous_no_params(
                 r#"DROP VIEW IF EXISTS StaticEvaluationHumanFeedbackFloatView;"#.to_string(),
-                None,
             )
             .await?;
         self.clickhouse
-            .run_query_synchronous(
+            .run_query_synchronous_no_params(
                 r#"DROP VIEW IF EXISTS StaticEvaluationHumanFeedbackBooleanView;"#.to_string(),
-                None,
             )
             .await?;
 

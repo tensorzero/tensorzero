@@ -52,6 +52,14 @@ async fn get_providers() -> E2ETestProviders {
         credentials,
     }];
 
+    let shorthand_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "groq-shorthand".to_string(),
+        model_name: "groq::meta-llama/llama-4-scout-17b-16e-instruct".into(),
+        model_provider_name: "groq".into(),
+        credentials: HashMap::new(),
+    }];
+
     let json_providers = vec![
         E2ETestProvider {
             supports_batch_inference: false,
@@ -90,7 +98,7 @@ async fn get_providers() -> E2ETestProviders {
         json_mode_inference: json_providers.clone(),
         image_inference: vec![],
         pdf_inference: vec![],
-        shorthand_inference: vec![],
+        shorthand_inference: shorthand_providers,
         json_mode_off_inference: vec![],
     }
 }

@@ -15,6 +15,7 @@ use tensorzero_internal::evaluations::{
 use tensorzero_internal::inference::types::{
     ContentBlockChatOutput, JsonInferenceOutput, TextKind,
 };
+use tracing::{debug, info, instrument};
 use uuid::Uuid;
 
 use crate::helpers::{check_static_eval_human_feedback, get_cache_options};
@@ -52,6 +53,7 @@ pub struct RunLLMJudgeEvaluatorParams<'a> {
     pub inference_cache: CacheEnabledMode,
 }
 
+#[instrument(skip(params), fields(datapoint_id = %params.datapoint.id(), evaluator_name = %params.evaluator_name))]
 pub async fn run_llm_judge_evaluator(
     params: RunLLMJudgeEvaluatorParams<'_>,
 ) -> Result<Option<LLMJudgeEvaluationResult>> {
@@ -66,6 +68,7 @@ pub async fn run_llm_judge_evaluator(
         input,
         inference_cache,
     } = params;
+    debug!("Checking for existing human feedback");
     if let Some(human_feedback) = check_static_eval_human_feedback(
         &clients.clickhouse_client,
         &get_evaluator_metric_name(evaluation_name, evaluator_name),
@@ -74,18 +77,27 @@ pub async fn run_llm_judge_evaluator(
     )
     .await?
     {
+        info!("Found existing human feedback, using that instead of LLM judge");
         return Ok(Some(LLMJudgeEvaluationResult {
             evaluator_inference_id: human_feedback.evaluator_inference_id,
             value: human_feedback.value,
             human_feedback: true,
         }));
     }
+    debug!("Preparing LLM judge input");
     let judge_input =
         match prepare_llm_judge_input(llm_judge_config, input, inference_response, datapoint)? {
-            Some(input) => input,
-            None => return Ok(None),
+            Some(input) => {
+                debug!("LLM judge input prepared successfully");
+                input
+            }
+            None => {
+                debug!("Cannot prepare LLM judge input, returning None");
+                return Ok(None);
+            }
         };
 
+    debug!("Making LLM judge inference request");
     let params = ClientInferenceParams {
         function_name: Some(get_llm_judge_function_name(evaluation_name, evaluator_name)),
         model_name: None,
@@ -480,6 +492,7 @@ mod tests {
                 role: Role::User,
                 content: vec![ClientInputMessageContent::File(File::Url {
                     url: Url::parse("https://example.com/image.png").unwrap(),
+                    mime_type: None,
                 })],
             }],
         };

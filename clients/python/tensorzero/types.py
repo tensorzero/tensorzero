@@ -85,6 +85,7 @@ class FileBase64(ContentBlock):
 @dataclass
 class ImageUrl(ContentBlock):
     url: str
+    mime_type: Optional[str] = None
     type: str = "image"
 
 
@@ -536,31 +537,46 @@ class TensorZeroTypeEncoder(JSONEncoder):
             super().default(o)
 
 
-@dataclass
-class StoredChatInference:
-    function_name: str
-    variant_name: str
-    input: InferenceInput
-    output: List[ContentBlock]
-    episode_id: UUID
-    inference_id: UUID
-    tool_params: ToolParams
-    type: Literal["chat"] = "chat"
-
-
-@dataclass
-class StoredJsonInference:
-    function_name: str
-    variant_name: str
-    input: InferenceInput
-    output: JsonInferenceOutput
-    episode_id: UUID
-    inference_id: UUID
-    output_schema: Any
-    type: Literal["json"] = "json"
-
-
-StoredInference = Union[StoredChatInference, StoredJsonInference]
-
-
 ToolChoice = Union[Literal["auto", "required", "off"], Dict[Literal["specific"], str]]
+
+
+# Types for the experimental list inferences API
+# These are serialized across the PyO3 boundary
+
+
+@dataclass
+class InferenceFilterTreeNode(ABC, HasTypeField):
+    pass
+
+
+@dataclass
+class FloatMetricNode(InferenceFilterTreeNode):
+    metric_name: str
+    value: float
+    comparison_operator: Literal["<", "<=", "=", ">", ">=", "!="]
+    type: str = "float_metric"
+
+
+@dataclass
+class BooleanMetricNode(InferenceFilterTreeNode):
+    metric_name: str
+    value: bool
+    type: str = "boolean_metric"
+
+
+@dataclass
+class AndNode(InferenceFilterTreeNode):
+    children: List[InferenceFilterTreeNode]
+    type: str = "and"
+
+
+@dataclass
+class OrNode(InferenceFilterTreeNode):
+    children: List[InferenceFilterTreeNode]
+    type: str = "or"
+
+
+@dataclass
+class NotNode(InferenceFilterTreeNode):
+    child: InferenceFilterTreeNode
+    type: str = "not"

@@ -7,8 +7,8 @@ use tensorzero::{
 use tensorzero_internal::{
     inference::types::{
         resolved_input::FileWithPath, Base64File, ContentBlock, ContentBlockChatOutput,
-        ContentBlockOutput, FileKind, JsonInferenceOutput, ResolvedInput, ResolvedInputMessage,
-        ResolvedInputMessageContent,
+        JsonInferenceOutput, RequestMessage, ResolvedInput, ResolvedInputMessage,
+        ResolvedInputMessageContent, Text,
     },
     tool::{ToolCallConfigDatabaseInsert, ToolCallOutput, ToolChoice},
 };
@@ -228,10 +228,10 @@ pub async fn test_render_inferences_normal() {
                         ResolvedInputMessageContent::Text {
                             value: json!("What is this a picture of?"),
                         },
-                        ResolvedInputMessageContent::File(FileWithPath {
+                        ResolvedInputMessageContent::File(Box::new(FileWithPath {
                             file: Base64File {
                                 url: None,
-                                mime_type: FileKind::Png,
+                                mime_type: mime::IMAGE_PNG,
                                 data: None,
                             },
                             storage_path: StoragePath {
@@ -244,7 +244,7 @@ pub async fn test_render_inferences_normal() {
                                 },
                                 path: Path::from("observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"),
                             },
-                        }),
+                        })),
                     ],
                 }],
             },
@@ -314,7 +314,7 @@ pub async fn test_render_inferences_normal() {
 
     // Check the output
     assert_eq!(second_inference.output.len(), 1);
-    let ContentBlockOutput::Text(output_text) = &second_inference.output[0] else {
+    let ContentBlockChatOutput::Text(output_text) = &second_inference.output[0] else {
         panic!("Expected text output");
     };
     assert_eq!(output_text.text, "{}");
@@ -346,11 +346,13 @@ pub async fn test_render_inferences_normal() {
 
     // Check the output
     assert_eq!(third_inference.output.len(), 1);
-    let ContentBlockOutput::ToolCall(tool_call) = &third_inference.output[0] else {
+    let ContentBlockChatOutput::ToolCall(tool_call) = &third_inference.output[0] else {
         panic!("Expected tool call output");
     };
-    assert_eq!(tool_call.name, "get_temperature");
-    assert_eq!(tool_call.arguments, "{\"location\":\"Tokyo\"}");
+    assert_eq!(tool_call.raw_name, "get_temperature");
+    assert_eq!(tool_call.raw_arguments, "{\"location\":\"Tokyo\"}");
+    assert_eq!(tool_call.name, Some("get_temperature".to_string()));
+    assert_eq!(tool_call.arguments, Some(json!({"location": "Tokyo"})));
 
     // Check other fields
     assert!(third_inference.tool_params.is_some());
@@ -394,4 +396,102 @@ pub async fn test_render_inferences_normal() {
     // Check other fields
     assert!(fourth_inference.tool_params.is_some());
     assert!(fourth_inference.output_schema.is_none());
+}
+
+/// Test that the render_inferences function can render a normal chat example, a tool call example, a json example, and an example using images.
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_render_inferences_template_no_schema() {
+    let client = make_embedded_gateway().await;
+
+    let stored_inferences = vec![StoredInference::Chat(StoredChatInference {
+        function_name: "basic_test_template_no_schema".to_string(),
+        variant_name: "test".to_string(),
+        input: ResolvedInput {
+            system: Some("My system message".into()),
+            messages: vec![
+                ResolvedInputMessage {
+                    role: Role::User,
+                    content: vec![
+                        ResolvedInputMessageContent::Text {
+                            value: "First user message".into(),
+                        },
+                        ResolvedInputMessageContent::Text {
+                            value: "Second user message".into(),
+                        },
+                    ],
+                },
+                ResolvedInputMessage {
+                    role: Role::Assistant,
+                    content: vec![
+                        ResolvedInputMessageContent::Text {
+                            value: "First assistant message".into(),
+                        },
+                        ResolvedInputMessageContent::Text {
+                            value: "Second assistant message".into(),
+                        },
+                    ],
+                },
+            ],
+        },
+        output: vec![],
+        episode_id: Uuid::now_v7(),
+        inference_id: Uuid::now_v7(),
+        tool_params: ToolCallConfigDatabaseInsert::default(),
+    })];
+
+    let rendered_inferences = client
+        .experimental_render_inferences(
+            stored_inferences,
+            HashMap::from([(
+                "basic_test_template_no_schema".to_string(),
+                "test".to_string(),
+            )]),
+        )
+        .await
+        .unwrap();
+    assert_eq!(rendered_inferences.len(), 1);
+
+    // Check the first rendered inference
+    let first_inference = &rendered_inferences[0];
+    // Check the input
+    assert_eq!(
+        first_inference.input.system,
+        Some("The system text was `My system message`".to_string())
+    );
+    assert_eq!(first_inference.input.messages.len(), 2);
+
+    assert_eq!(
+        first_inference.input.messages[0],
+        RequestMessage {
+            role: Role::User,
+            content: vec![
+                ContentBlock::Text(Text {
+                    text: "User content: `First user message`".into(),
+                }),
+                ContentBlock::Text(Text {
+                    text: "User content: `Second user message`".into(),
+                })
+            ],
+        }
+    );
+
+    assert_eq!(
+        first_inference.input.messages[1],
+        RequestMessage {
+            role: Role::Assistant,
+            content: vec![
+                ContentBlock::Text(Text {
+                    text: "Assistant content: `First assistant message`".into(),
+                }),
+                ContentBlock::Text(Text {
+                    text: "Assistant content: `Second assistant message`".into(),
+                })
+            ],
+        }
+    );
+
+    // Check other fields
+    assert!(first_inference.output.is_empty());
+    assert!(first_inference.tool_params.is_some());
+    assert!(first_inference.output_schema.is_none());
 }

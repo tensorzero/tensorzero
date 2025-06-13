@@ -18,6 +18,7 @@ use axum::response::sse::{Event, Sse};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use futures::Stream;
+use mime::MediaType;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use tokio_stream::StreamExt;
@@ -32,13 +33,12 @@ use crate::error::{Error, ErrorDetails};
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
+use crate::inference::types::file::filename_to_mime_type;
 use crate::inference::types::{
-    current_timestamp, ContentBlockChatOutput, ContentBlockChunk, File, FileKind, FinishReason,
-    Input, InputMessage, InputMessageContent, Role, TextKind, Usage,
+    current_timestamp, ContentBlockChatOutput, ContentBlockChunk, File, FinishReason, Input,
+    InputMessage, InputMessageContent, Role, TextKind, Usage,
 };
-use crate::tool::{
-    DynamicToolParams, Tool, ToolCall, ToolCallChunk, ToolCallOutput, ToolChoice, ToolResult,
-};
+use crate::tool::{DynamicToolParams, Tool, ToolCallInput, ToolCallOutput, ToolChoice, ToolResult};
 use crate::variant::JsonMode;
 
 use super::inference::{
@@ -58,6 +58,20 @@ pub async fn inference_handler(
     StructuredJson(openai_compatible_params): StructuredJson<OpenAICompatibleParams>,
 ) -> Result<Response<Body>, Error> {
     if !openai_compatible_params.unknown_fields.is_empty() {
+        if openai_compatible_params.tensorzero_deny_unknown_fields {
+            let mut unknown_field_names = openai_compatible_params
+                .unknown_fields
+                .keys()
+                .cloned()
+                .collect::<Vec<_>>();
+
+            unknown_field_names.sort();
+            let unknown_field_names = unknown_field_names.join(", ");
+
+            return Err(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
+                message: format!("`tensorzero::deny_unknown_fields` is set to true, but found unknown fields in the request: [{unknown_field_names}]")
+            }));
+        }
         tracing::warn!(
             "Ignoring unknown fields in OpenAI-compatible request: {:?}",
             openai_compatible_params
@@ -114,6 +128,12 @@ pub struct OpenAICompatibleFunctionCall {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct OpenAICompatibleToolCallDelta {
+    pub name: String,
+    pub arguments: String,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct OpenAICompatibleToolCall {
     /// The ID of the tool call.
     pub id: String,
@@ -132,7 +152,7 @@ pub struct OpenAICompatibleToolCallChunk {
     /// The type of the tool. Currently, only `function` is supported.
     pub r#type: String,
     /// The function that the model called.
-    pub function: OpenAICompatibleFunctionCall,
+    pub function: OpenAICompatibleToolCallDelta,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -272,6 +292,10 @@ pub struct OpenAICompatibleParams {
     tensorzero_extra_body: UnfilteredInferenceExtraBody,
     #[serde(default, rename = "tensorzero::extra_headers")]
     tensorzero_extra_headers: UnfilteredInferenceExtraHeaders,
+    #[serde(default, rename = "tensorzero::tags")]
+    tensorzero_tags: HashMap<String, String>,
+    #[serde(default, rename = "tensorzero::deny_unknown_fields")]
+    tensorzero_deny_unknown_fields: bool,
     #[serde(flatten)]
     unknown_fields: HashMap<String, Value>,
 }
@@ -327,7 +351,7 @@ struct OpenAICompatibleResponse {
     created: u32,
     model: String,
     system_fingerprint: String,
-    service_tier: String,
+    service_tier: Option<String>,
     object: String,
     usage: OpenAICompatibleUsage,
 }
@@ -512,7 +536,7 @@ impl Params {
                 .unwrap_or_default(),
             // For now, we don't support internal inference for OpenAI compatible endpoint
             internal: false,
-            tags: HashMap::new(),
+            tags: openai_compatible_params.tensorzero_tags,
             // OpenAI compatible endpoint does not support 'include_original_response'
             include_original_response: false,
             extra_body: openai_compatible_params.tensorzero_extra_body,
@@ -669,7 +693,7 @@ pub enum TextContent {
     },
 }
 
-fn parse_base64_image_data_url(url: &str) -> Result<(FileKind, &str), Error> {
+fn parse_base64_image_data_url(url: &str) -> Result<(MediaType, &str), Error> {
     let Some(url) = url.strip_prefix("data:") else {
         return Err(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
             message: "Image data URL must start with `data:`".to_string(),
@@ -680,16 +704,11 @@ fn parse_base64_image_data_url(url: &str) -> Result<(FileKind, &str), Error> {
             message: "Image data URL must contain a base64-encoded data part".to_string(),
         }));
     };
-    let image_type = match mime_type {
-        "image/jpeg" => FileKind::Jpeg,
-        "image/png" => FileKind::Png,
-        "image/webp" => FileKind::WebP,
-        _ => {
-            return Err(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
-                message: format!("Unsupported content type `{mime_type}`: - only `image/jpeg`, `image/png``, and `image/webp` image data URLs are supported"),
-            }))
-        }
-    };
+    let image_type: MediaType = mime_type.parse().map_err(|_| {
+        Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
+            message: format!("Unknown content type `{mime_type}`"),
+        })
+    })?;
     Ok((image_type, data))
 }
 
@@ -709,11 +728,11 @@ fn convert_openai_message_content(content: Value) -> Result<Vec<InputMessageCont
                             let (mime_type, data) = parse_base64_image_data_url(&url_str)?;
                             InputMessageContent::File(File::Base64 { mime_type, data: data.to_string() })
                         } else {
-                            InputMessageContent::File(File::Url { url: image_url.url })
+                            InputMessageContent::File(File::Url { url: image_url.url, mime_type: None })
                         }
                     }
                     Ok(OpenAICompatibleContentBlock::File { file }) => {
-                        InputMessageContent::File(File::Base64 { mime_type: file.filename.as_str().try_into()?, data: file.file_data })
+                        InputMessageContent::File(File::Base64 { mime_type: filename_to_mime_type(&file.filename)?, data: file.file_data })
                     }
                     Err(e) => {
                         tracing::warn!(r#"Content block `{val}` was not a valid OpenAI content block. This is deprecated - please use `{{"type": "text", "tensorzero::arguments": {{"custom": "data"}}` to pass arbitrary JSON values to TensorZero: {e}"#);
@@ -767,12 +786,14 @@ impl From<ChatCompletionToolChoiceOption> for ToolChoice {
     }
 }
 
-impl From<OpenAICompatibleToolCall> for ToolCall {
+impl From<OpenAICompatibleToolCall> for ToolCallInput {
     fn from(tool_call: OpenAICompatibleToolCall) -> Self {
-        ToolCall {
+        ToolCallInput {
             id: tool_call.id,
-            name: tool_call.function.name,
-            arguments: tool_call.function.arguments,
+            raw_name: Some(tool_call.function.name),
+            raw_arguments: Some(tool_call.function.arguments),
+            name: None,
+            arguments: None,
         }
     }
 }
@@ -796,7 +817,7 @@ impl From<(InferenceResponse, String)> for OpenAICompatibleResponse {
                     }],
                     created: current_timestamp() as u32,
                     model: format!("{response_model_prefix}{}", response.variant_name),
-                    service_tier: "".to_string(),
+                    service_tier: None,
                     system_fingerprint: "".to_string(),
                     object: "chat.completion".to_string(),
                     usage: response.usage.into(),
@@ -817,7 +838,7 @@ impl From<(InferenceResponse, String)> for OpenAICompatibleResponse {
                 created: current_timestamp() as u32,
                 model: format!("{response_model_prefix}{}", response.variant_name),
                 system_fingerprint: "".to_string(),
-                service_tier: "".to_string(),
+                service_tier: None,
                 object: "chat.completion".to_string(),
                 usage: OpenAICompatibleUsage {
                     prompt_tokens: response.usage.input_tokens,
@@ -897,7 +918,7 @@ struct OpenAICompatibleResponseChunk {
     created: u32,
     model: String,
     system_fingerprint: String,
-    service_tier: String,
+    service_tier: Option<String>,
     object: String,
     usage: Option<OpenAICompatibleUsage>,
 }
@@ -944,7 +965,7 @@ fn convert_inference_response_chunk_to_openai_compatible(
                     },
                 }],
                 created: current_timestamp() as u32,
-                service_tier: "".to_string(),
+                service_tier: None,
                 model: format!("{response_model_prefix}{}", c.variant_name),
                 system_fingerprint: "".to_string(),
                 object: "chat.completion.chunk".to_string(),
@@ -965,7 +986,7 @@ fn convert_inference_response_chunk_to_openai_compatible(
                 },
             }],
             created: current_timestamp() as u32,
-            service_tier: "".to_string(),
+            service_tier: None,
             model: format!("{response_model_prefix}{}", c.variant_name),
             system_fingerprint: "".to_string(),
             object: "chat.completion.chunk".to_string(),
@@ -997,8 +1018,8 @@ fn process_chat_content_chunk(
                     id: if is_new { Some(tool_call.id) } else { None },
                     index: *index,
                     r#type: "function".to_string(),
-                    function: OpenAICompatibleFunctionCall {
-                        name: tool_call.raw_name,
+                    function: OpenAICompatibleToolCallDelta {
+                        name: tool_call.raw_name.unwrap_or_default(),
                         arguments: tool_call.raw_arguments,
                     },
                 });
@@ -1099,7 +1120,7 @@ fn prepare_serialized_openai_compatible_events(
                 model: format!("{response_model_prefix}{variant_name}"),
                 system_fingerprint: "".to_string(),
                 object: "chat.completion.chunk".to_string(),
-                service_tier: "".to_string(),
+                service_tier: None,
                 usage: Some(OpenAICompatibleUsage {
                     prompt_tokens: total_usage.prompt_tokens,
                     completion_tokens: total_usage.completion_tokens,
@@ -1118,19 +1139,6 @@ fn prepare_serialized_openai_compatible_events(
     }
 }
 
-impl From<ToolCallChunk> for OpenAICompatibleToolCall {
-    fn from(tool_call: ToolCallChunk) -> Self {
-        OpenAICompatibleToolCall {
-            id: tool_call.id,
-            r#type: "function".to_string(),
-            function: OpenAICompatibleFunctionCall {
-                name: tool_call.raw_name,
-                arguments: tool_call.raw_arguments,
-            },
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
 
@@ -1141,6 +1149,7 @@ mod tests {
 
     use crate::cache::CacheEnabledMode;
     use crate::inference::types::{Text, TextChunk};
+    use crate::tool::ToolCallChunk;
 
     #[test]
     fn test_try_from_openai_compatible_params() {
@@ -1158,6 +1167,7 @@ mod tests {
         let messages = vec![OpenAICompatibleMessage::User(OpenAICompatibleUserMessage {
             content: Value::String("Hello, world!".to_string()),
         })];
+        let tensorzero_tags = HashMap::from([("test".to_string(), "test".to_string())]);
         let params = Params::try_from_openai(
             headers,
             OpenAICompatibleParams {
@@ -1181,6 +1191,8 @@ mod tests {
                 tensorzero_cache_options: None,
                 tensorzero_extra_body: UnfilteredInferenceExtraBody::default(),
                 tensorzero_extra_headers: UnfilteredInferenceExtraHeaders::default(),
+                tensorzero_tags: tensorzero_tags.clone(),
+                tensorzero_deny_unknown_fields: false,
                 unknown_fields: Default::default(),
                 stream_options: None,
             },
@@ -1203,6 +1215,7 @@ mod tests {
         assert_eq!(params.params.chat_completion.top_p, Some(0.5));
         assert_eq!(params.params.chat_completion.presence_penalty, Some(0.5));
         assert_eq!(params.params.chat_completion.frequency_penalty, Some(0.5));
+        assert_eq!(params.tags, tensorzero_tags);
     }
 
     #[test]
@@ -1320,10 +1333,12 @@ mod tests {
         let expected_text = InputMessageContent::Text(TextKind::Text {
             text: "Hello, world!".to_string(),
         });
-        let expected_tool_call = InputMessageContent::ToolCall(ToolCall {
+        let expected_tool_call = InputMessageContent::ToolCall(ToolCallInput {
             id: "1".to_string(),
-            name: "test_tool".to_string(),
-            arguments: "{}".to_string(),
+            raw_name: Some("test_tool".to_string()),
+            raw_arguments: Some("{}".to_string()),
+            name: None,
+            arguments: None,
         });
 
         assert!(
@@ -1527,7 +1542,7 @@ mod tests {
             }),
             ContentBlockChunk::ToolCall(ToolCallChunk {
                 id: "1".to_string(),
-                raw_name: "test_tool".to_string(),
+                raw_name: Some("test_tool".to_string()),
                 raw_arguments: "{}".to_string(),
             }),
             ContentBlockChunk::Text(TextChunk {
@@ -1541,7 +1556,7 @@ mod tests {
         assert_eq!(tool_calls.len(), 1);
         assert_eq!(tool_calls[0].id, Some("1".to_string()));
         assert_eq!(tool_calls[0].index, 0);
-        assert_eq!(tool_calls[0].function.name, "test_tool");
+        assert_eq!(tool_calls[0].function.name, "test_tool".to_string());
         assert_eq!(tool_calls[0].function.arguments, "{}");
 
         let content: Vec<ContentBlockChunk> = vec![];
@@ -1560,7 +1575,7 @@ mod tests {
             }),
             ContentBlockChunk::ToolCall(ToolCallChunk {
                 id: "123".to_string(),
-                raw_name: "middle_tool".to_string(),
+                raw_name: Some("middle_tool".to_string()),
                 raw_arguments: "{\"key\": \"value\"}".to_string(),
             }),
             ContentBlockChunk::Text(TextChunk {
@@ -1573,7 +1588,7 @@ mod tests {
             }),
             ContentBlockChunk::ToolCall(ToolCallChunk {
                 id: "5".to_string(),
-                raw_name: "last_tool".to_string(),
+                raw_name: Some("last_tool".to_string()),
                 raw_arguments: "{\"key\": \"value\"}".to_string(),
             }),
         ];
@@ -1586,34 +1601,31 @@ mod tests {
         assert_eq!(tool_calls.len(), 2);
         assert_eq!(tool_calls[0].id, Some("123".to_string()));
         assert_eq!(tool_calls[0].index, 0);
-        assert_eq!(tool_calls[0].function.name, "middle_tool");
+        assert_eq!(tool_calls[0].function.name, "middle_tool".to_string());
         assert_eq!(tool_calls[0].function.arguments, "{\"key\": \"value\"}");
         assert_eq!(tool_calls[1].id, Some("5".to_string()));
         assert_eq!(tool_calls[1].index, 1);
-        assert_eq!(tool_calls[1].function.name, "last_tool");
+        assert_eq!(tool_calls[1].function.name, "last_tool".to_string());
         assert_eq!(tool_calls[1].function.arguments, "{\"key\": \"value\"}");
     }
 
     #[test]
     fn test_parse_base64() {
         assert_eq!(
-            (FileKind::Jpeg, "YWJjCg=="),
+            (mime::IMAGE_JPEG, "YWJjCg=="),
             parse_base64_image_data_url("data:image/jpeg;base64,YWJjCg==").unwrap()
         );
         assert_eq!(
-            (FileKind::Png, "YWJjCg=="),
+            (mime::IMAGE_PNG, "YWJjCg=="),
             parse_base64_image_data_url("data:image/png;base64,YWJjCg==").unwrap()
         );
         assert_eq!(
-            (FileKind::WebP, "YWJjCg=="),
+            ("image/webp".parse().unwrap(), "YWJjCg=="),
             parse_base64_image_data_url("data:image/webp;base64,YWJjCg==").unwrap()
         );
-        let err = parse_base64_image_data_url("data:image/svg;base64,YWJjCg==")
-            .unwrap_err()
-            .to_string();
-        assert!(
-            err.contains("Unsupported content type `image/svg`"),
-            "Unexpected error message: {err}"
+        assert_eq!(
+            ("image/svg".parse().unwrap(), "YWJjCg=="),
+            parse_base64_image_data_url("data:image/svg;base64,YWJjCg==").unwrap()
         );
     }
 
@@ -1647,8 +1659,10 @@ mod tests {
                 tensorzero_cache_options: None,
                 tensorzero_extra_body: UnfilteredInferenceExtraBody::default(),
                 tensorzero_extra_headers: UnfilteredInferenceExtraHeaders::default(),
+                tensorzero_tags: HashMap::new(),
                 unknown_fields: Default::default(),
                 stream_options: None,
+                tensorzero_deny_unknown_fields: false,
             },
         )
         .unwrap();
@@ -1683,8 +1697,10 @@ mod tests {
                 }),
                 tensorzero_extra_body: UnfilteredInferenceExtraBody::default(),
                 tensorzero_extra_headers: UnfilteredInferenceExtraHeaders::default(),
+                tensorzero_tags: HashMap::new(),
                 unknown_fields: Default::default(),
                 stream_options: None,
+                tensorzero_deny_unknown_fields: false,
             },
         )
         .unwrap();
@@ -1725,8 +1741,10 @@ mod tests {
                 }),
                 tensorzero_extra_body: UnfilteredInferenceExtraBody::default(),
                 tensorzero_extra_headers: UnfilteredInferenceExtraHeaders::default(),
+                tensorzero_tags: HashMap::new(),
                 unknown_fields: Default::default(),
                 stream_options: None,
+                tensorzero_deny_unknown_fields: false,
             },
         )
         .unwrap();
@@ -1767,8 +1785,10 @@ mod tests {
                 }),
                 tensorzero_extra_body: UnfilteredInferenceExtraBody::default(),
                 tensorzero_extra_headers: UnfilteredInferenceExtraHeaders::default(),
+                tensorzero_tags: HashMap::new(),
                 unknown_fields: Default::default(),
                 stream_options: None,
+                tensorzero_deny_unknown_fields: false,
             },
         )
         .unwrap();
