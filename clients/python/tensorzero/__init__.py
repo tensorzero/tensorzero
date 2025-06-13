@@ -14,9 +14,11 @@ from .tensorzero import (
     _start_http_gateway as _start_http_gateway,
 )
 from .types import (
-    AndNode,
+    AndFilter,
+    AndNode,  # DEPRECATED
     BaseTensorZeroError,
-    BooleanMetricNode,
+    BooleanMetricFilter,
+    BooleanMetricNode,  # DEPRECATED
     ChatDatapointInsert,
     ChatInferenceDatapointInput,  # DEPRECATED
     ChatInferenceResponse,
@@ -29,7 +31,8 @@ from .types import (
     FileBase64,
     FileUrl,
     FinishReason,
-    FloatMetricNode,
+    FloatMetricFilter,
+    FloatMetricNode,  # DEPRECATED
     ImageBase64,
     ImageUrl,
     InferenceChunk,
@@ -40,8 +43,10 @@ from .types import (
     JsonInferenceOutput,
     JsonInferenceResponse,
     Message,
-    NotNode,
-    OrNode,
+    NotFilter,
+    NotNode,  # DEPRECATED
+    OrFilter,
+    OrNode,  # DEPRECATED
     RawText,
     System,
     TensorZeroError,
@@ -61,11 +66,13 @@ from .types import (
 )
 
 __all__ = [
-    "AndNode",
+    "AndFilter",
+    "AndNode",  # DEPRECATED
     "AsyncTensorZeroGateway",
     "BaseTensorZeroError",
     "BaseTensorZeroGateway",
-    "BooleanMetricNode",
+    "BooleanMetricFilter",
+    "BooleanMetricNode",  # DEPRECATED
     "ChatDatapointInsert",
     "ChatInferenceDatapointInput",  # DEPRECATED
     "ChatInferenceResponse",
@@ -78,7 +85,8 @@ __all__ = [
     "FileBase64",
     "FileUrl",
     "FinishReason",
-    "FloatMetricNode",
+    "FloatMetricFilter",
+    "FloatMetricNode",  # DEPRECATED
     "ImageBase64",
     "ImageUrl",
     "InferenceChunk",
@@ -92,8 +100,10 @@ __all__ = [
     "JsonInferenceOutput",
     "JsonInferenceResponse",
     "Message",
-    "NotNode",
-    "OrNode",
+    "NotFilter",
+    "NotNode",  # DEPRECATED
+    "OrFilter",
+    "OrNode",  # DEPRECATED
     "patch_openai_client",
     "RawText",
     "RenderedStoredInference",
