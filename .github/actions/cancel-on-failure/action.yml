@@ -2,8 +2,7 @@ name: 'Cancel on Failure'
 description: 'Cancel the workflow run if this step is reached due to failure'
 runs:
   using: 'composite'
-  post: gh run cancel ${{ github.run_id }}
+  post: 'bash -c "gh run cancel ${{ github.run_id }}"'
   post-if: failure()
   steps:
-    - name: Cancel workflow on failure
-      run: echo "Enabling cancel on failure"
+    - run: echo "Enabling cancel on failure"
