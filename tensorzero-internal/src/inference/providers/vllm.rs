@@ -721,20 +721,20 @@ mod tests {
             ..Default::default()
         };
 
-        let sglang_request = VLLMRequest::new(&model_name, &request_with_tools).unwrap();
+        let vllm_request = VLLMRequest::new(&model_name, &request_with_tools).unwrap();
 
-        let tools = sglang_request.tools.unwrap();
+        let tools = vllm_request.tools.unwrap();
         assert_eq!(tools.len(), 2);
         assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
         assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
         assert_eq!(tools[1].function.name, QUERY_TOOL.name());
         assert_eq!(tools[1].function.parameters, QUERY_TOOL.parameters());
-        let tool_choice = sglang_request.tool_choice.unwrap();
+        let tool_choice = vllm_request.tool_choice.unwrap();
         assert_eq!(
             tool_choice,
             OpenAIToolChoice::String(OpenAIToolChoiceString::Required)
         );
-        let parallel_tool_calls = sglang_request.parallel_tool_calls.unwrap();
+        let parallel_tool_calls = vllm_request.parallel_tool_calls.unwrap();
         assert!(parallel_tool_calls);
         let tool_config = ToolCallConfig {
             tools_available: vec![],
