@@ -1,6 +1,9 @@
 name: General Checks
 run-name: "General Checks for: ${{ github.event.pull_request.title || github.ref }}"
 
+permissions:
+  actions: write
+
 on:
   merge_group:
   pull_request:
