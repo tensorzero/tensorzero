@@ -14,7 +14,7 @@ concurrency:
   # leftover workflow runs when a PR was removed from the merge queue.
   # Otherwise, we use the unique 'github.run_id' field, which will create a new concurrency group,
   # and avoid cancelling any existing workflow runs.
-  group: ${{ (github.event_name == 'merge_group' && 'merge-group-concurrency') || github.run_id }}
+  group: ${{ (github.event_name == 'merge_group' && 'merge-group-general-checks') || github.run_id }}
   cancel-in-progress: true
 
 env:

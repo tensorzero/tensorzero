@@ -5,9 +5,10 @@ on:
   workflow_dispatch:
   merge_group:
 
-# See 'general.yml' for more details.
+# See 'general.yml' for more details. Note that we use a difference concurrency group,
+# so that general.yml and merge-queue.yml can run in parallel.
 concurrency:
-  group: ${{ (github.event_name == 'merge_group' && 'merge-group-concurrency') || github.run_id }}
+  group: ${{ (github.event_name == 'merge_group' && 'merge-group-merge-checks') || github.run_id }}
   cancel-in-progress: true
 
 env:
