@@ -302,35 +302,6 @@ pub struct OpenAICompatibleParams {
     unknown_fields: HashMap<String, Value>,
 }
 
-// this implementation ignores tensorzero_credentials and unknown_fields
-impl PartialEq for OpenAICompatibleParams {
-    fn eq(&self, other: &Self) -> bool {
-        self.messages == other.messages
-            && self.model == other.model
-            && self.frequency_penalty == other.frequency_penalty
-            && self.max_tokens == other.max_tokens
-            && self.max_completion_tokens == other.max_completion_tokens
-            && self.presence_penalty == other.presence_penalty
-            && self.response_format == other.response_format
-            && self.seed == other.seed
-            && self.stream == other.stream
-            && self.stream_options == other.stream_options
-            && self.temperature == other.temperature
-            && self.tools == other.tools
-            && self.tool_choice == other.tool_choice
-            && self.top_p == other.top_p
-            && self.parallel_tool_calls == other.parallel_tool_calls
-            && self.tensorzero_variant_name == other.tensorzero_variant_name
-            && self.tensorzero_dryrun == other.tensorzero_dryrun
-            && self.tensorzero_episode_id == other.tensorzero_episode_id
-            && self.tensorzero_cache_options == other.tensorzero_cache_options
-            && self.tensorzero_extra_body == other.tensorzero_extra_body
-            && self.tensorzero_extra_headers == other.tensorzero_extra_headers
-            && self.tensorzero_tags == other.tensorzero_tags
-            && self.tensorzero_deny_unknown_fields == other.tensorzero_deny_unknown_fields
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Serialize)]
 struct OpenAICompatibleUsage {
     prompt_tokens: u32,
