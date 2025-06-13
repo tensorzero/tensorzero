@@ -19,7 +19,7 @@ jobs:
 
     steps:
       - uses: namespacelabs/nscloud-checkout-action@953fed31a6113cc2347ca69c9d823743c65bc84b
-
+      - uses: ./.github/actions/cancel-on-failure
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
@@ -111,4 +111,3 @@ jobs:
       - name: Exit if tests failed
         if: steps.e2e_tests.outcome == 'failure'
         run: exit 1
-      - uses: ./.github/actions/cancel-on-failure

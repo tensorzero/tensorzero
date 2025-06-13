@@ -9,6 +9,7 @@ jobs:
 
     steps:
       - uses: namespacelabs/nscloud-checkout-action@953fed31a6113cc2347ca69c9d823743c65bc84b
+      - uses: ./.github/actions/cancel-on-failure
 
       - name: Build `ui` container
         run: |
@@ -25,4 +26,3 @@ jobs:
           retention-days: 1
           if-no-files-found: error
           overwrite: false
-      - uses: ./.github/actions/cancel-on-failure

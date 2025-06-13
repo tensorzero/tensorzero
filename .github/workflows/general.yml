@@ -30,6 +30,7 @@ jobs:
             url_secret: CLICKHOUSE_CLOUD_FAST_CHANNEL_URL
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: ./.github/actions/cancel-on-failure
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
         with:
@@ -95,7 +96,6 @@ jobs:
       - name: Print e2e logs
         if: always()
         run: cat e2e_logs.txt
-      - uses: ./.github/actions/cancel-on-failure
 
   check-docker-compose:
     permissions:
@@ -108,6 +108,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: ./.github/actions/cancel-on-failure
 
       # We allow the namespace builder setup to fail on Dependabot PRs and PRs from forks
       # (where the oidc token is not available)
@@ -123,8 +124,6 @@ jobs:
       - name: Check all docker-compose.yml files
         run: ./ci/check-all-docker-compose.sh
 
-      - uses: ./.github/actions/cancel-on-failure
-
   check-python-client-build:
     uses: ./.github/workflows/python-client-build.yml
 
@@ -132,6 +131,7 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: ./.github/actions/cancel-on-failure
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
         with:
@@ -139,7 +139,6 @@ jobs:
           save-if: ${{ github.event_name == 'merge_group' }}
       - name: Build Rust
         run: cargo build --workspace
-      - uses: ./.github/actions/cancel-on-failure
 
   validate:
     runs-on: namespace-profile-tensorzero-8x16
@@ -148,7 +147,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-
+      - uses: ./.github/actions/cancel-on-failure
       # We allow the namespace builder setup to fail on Dependabot PRs and PRs from forks
       # (where the oidc token is not available)
 
@@ -180,7 +179,7 @@ jobs:
       - name: Install uv
         run: curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
 
-      - run: intentional-missing-command
+      - run: intentional-missing-command  
 
       - name: Configure Namespace cache for Rust, Python (pip), and pnpm
         uses: namespacelabs/nscloud-cache-action@2f50e7d0f70475e6f59a55ba0f05eec9108e77cc
@@ -357,7 +356,6 @@ jobs:
 
       - name: Compile / validate notebooks
         run: ci/compile-check-notebooks.sh
-      - uses: ./.github/actions/cancel-on-failure
 
   clickhouse-tests:
     # We don't run many tests here, so use a normal runner with Github Actions caching
@@ -383,6 +381,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: ./.github/actions/cancel-on-failure
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
         with:
@@ -448,7 +447,6 @@ jobs:
       - name: Print e2e logs
         if: always()
         run: cat e2e_logs.txt
-      - uses: ./.github/actions/cancel-on-failure
 
   build-gateway-container:
     uses: ./.github/workflows/build-gateway-container.yml

@@ -13,6 +13,7 @@ jobs:
 
     steps:
       - uses: namespacelabs/nscloud-checkout-action@953fed31a6113cc2347ca69c9d823743c65bc84b
+      - uses: ./.github/actions/cancel-on-failure
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -79,4 +80,3 @@ jobs:
       - name: Print ClickHouse trace logs
         if: always()
         run: docker exec fixtures-clickhouse-1 cat /var/log/clickhouse-server/clickhouse-server.log
-      - uses: ./.github/actions/cancel-on-failure

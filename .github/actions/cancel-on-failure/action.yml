@@ -2,10 +2,5 @@ name: 'Cancel on Failure'
 description: 'Cancel the workflow run if this step is reached due to failure'
 runs:
   using: 'composite'
-  steps:
-    - name: Cancel workflow on failure
-      if: failure()
-      run: gh run cancel ${{ github.run_id }}
-      shell: bash
-      env:
-        GITHUB_TOKEN: ${{ github.token }}
+  post: gh run cancel ${{ github.run_id }}
+  post-if: failure()
