@@ -1063,6 +1063,7 @@ mod tests {
                     timeouts: Default::default(),
                 },
             )]),
+            timeouts: Default::default(),
         };
         let retry_config = Box::leak(Box::new(RetryConfig::default()));
 
@@ -1171,6 +1172,7 @@ mod tests {
                     timeouts: Default::default(),
                 },
             )]),
+            timeouts: Default::default(),
         };
 
         // Create the arguments struct
@@ -1229,6 +1231,7 @@ mod tests {
                     timeouts: Default::default(),
                 },
             )]),
+            timeouts: Default::default(),
         };
 
         // Create the arguments struct
@@ -1362,6 +1365,7 @@ mod tests {
                     },
                 ),
             ]),
+            timeouts: Default::default(),
         };
         let retry_config = Box::leak(Box::new(RetryConfig::default()));
 
@@ -1459,6 +1463,7 @@ mod tests {
                     timeouts: Default::default(),
                 },
             )]),
+            timeouts: Default::default(),
         }));
 
         // Prepare the model inference request
@@ -1642,6 +1647,7 @@ mod tests {
                     },
                 ),
             ]),
+            timeouts: Default::default(),
         }));
         let retry_config = RetryConfig::default();
 

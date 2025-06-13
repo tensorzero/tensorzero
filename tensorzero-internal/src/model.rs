@@ -62,6 +62,7 @@ use serde::Deserialize;
 pub struct ModelConfig {
     pub routing: Vec<Arc<str>>, // [provider name A, provider name B, ...]
     pub providers: HashMap<Arc<str>, ModelProvider>, // provider name => provider config
+    pub timeouts: TimeoutsConfig,
 }
 
 #[derive(Debug, Deserialize)]
@@ -69,6 +70,8 @@ pub struct ModelConfig {
 pub(crate) struct UninitializedModelConfig {
     pub routing: Vec<Arc<str>>, // [provider name A, provider name B, ...]
     pub providers: HashMap<Arc<str>, UninitializedModelProvider>, // provider name => provider config
+    #[serde(default)]
+    pub timeouts: TimeoutsConfig,
 }
 
 impl UninitializedModelConfig {
@@ -103,6 +106,7 @@ impl UninitializedModelConfig {
         Ok(ModelConfig {
             routing: self.routing,
             providers,
+            timeouts: self.timeouts,
         })
     }
 }
@@ -362,68 +366,91 @@ impl ModelConfig {
         model_name: &'request str,
     ) -> Result<ModelInferenceResponse, Error> {
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
-        for provider_name in &self.routing {
-            let request = self.filter_content_blocks(request, model_name, provider_name);
-            let model_provider_request = ModelProviderRequest {
-                request: &request,
-                model_name,
-                provider_name,
-            };
-            let cache_key = model_provider_request.get_cache_key()?;
-            let provider = self
-                .providers
-                .get(model_provider_request.provider_name)
-                .ok_or_else(|| {
-                    Error::new(ErrorDetails::ProviderNotFound {
-                        provider_name: model_provider_request.provider_name.to_string(),
-                    })
-                })?;
+        let run_all_models = async {
+            for provider_name in &self.routing {
+                let request = self.filter_content_blocks(request, model_name, provider_name);
+                let model_provider_request = ModelProviderRequest {
+                    request: &request,
+                    model_name,
+                    provider_name,
+                };
+                let cache_key = model_provider_request.get_cache_key()?;
+                let provider = self
+                    .providers
+                    .get(model_provider_request.provider_name)
+                    .ok_or_else(|| {
+                        Error::new(ErrorDetails::ProviderNotFound {
+                            provider_name: model_provider_request.provider_name.to_string(),
+                        })
+                    })?;
 
-            let response_fut =
-                self.non_streaming_provider_request(model_provider_request, provider, clients);
-            let response = if let Some(timeout) = provider.non_streaming_total_timeout() {
-                tokio::time::timeout(timeout, response_fut)
-                    .await
-                    // Convert the outer `Elapsed` error into a TensorZero error,
-                    // so that it can be handled by the `match response` block below
-                    .unwrap_or_else(|_: Elapsed| {
-                        Err(Error::new(ErrorDetails::ModelProviderTimeout {
-                            provider_name: provider_name.to_string(),
-                            timeout,
-                            streaming: false,
-                        }))
-                    })
-            } else {
-                response_fut.await
-            };
+                let response_fut =
+                    self.non_streaming_provider_request(model_provider_request, provider, clients);
+                let response = if let Some(timeout) = provider.non_streaming_total_timeout() {
+                    tokio::time::timeout(timeout, response_fut)
+                        .await
+                        // Convert the outer `Elapsed` error into a TensorZero error,
+                        // so that it can be handled by the `match response` block below
+                        .unwrap_or_else(|_: Elapsed| {
+                            Err(Error::new(ErrorDetails::ModelProviderTimeout {
+                                provider_name: provider_name.to_string(),
+                                timeout,
+                                streaming: false,
+                            }))
+                        })
+                } else {
+                    response_fut.await
+                };
 
-            match response {
-                Ok(response) => {
-                    // Perform the cache write outside of the `non_streaming_total_timeout` timeout future,
-                    // (in case we ever add a blocking cache write option)
-                    if clients.cache_options.enabled.write() {
-                        let _ = start_cache_write(
-                            clients.clickhouse_connection_info,
-                            cache_key,
-                            NonStreamingCacheData {
-                                blocks: response.output.clone(),
-                            },
-                            &response.raw_request,
-                            &response.raw_response,
-                            &response.usage,
-                            response.finish_reason.as_ref(),
-                        );
+                match response {
+                    Ok(response) => {
+                        // Perform the cache write outside of the `non_streaming_total_timeout` timeout future,
+                        // (in case we ever add a blocking cache write option)
+                        if clients.cache_options.enabled.write() {
+                            let _ = start_cache_write(
+                                clients.clickhouse_connection_info,
+                                cache_key,
+                                NonStreamingCacheData {
+                                    blocks: response.output.clone(),
+                                },
+                                &response.raw_request,
+                                &response.raw_response,
+                                &response.usage,
+                                response.finish_reason.as_ref(),
+                            );
+                        }
+
+                        return Ok(response);
                     }
-
-                    return Ok(response);
-                }
-                Err(error) => {
-                    provider_errors.insert(provider_name.to_string(), error);
+                    Err(error) => {
+                        provider_errors.insert(provider_name.to_string(), error);
+                    }
                 }
             }
+            Err(Error::new(ErrorDetails::ModelProvidersExhausted {
+                provider_errors,
+            }))
+        };
+        // This is the top-level model timeout, which limits the total time taken to run all providers.
+        // Some of the providers may themselves have timeouts, which is fine. Provider timeouts
+        // are treated as just another kind of provider error - a timeout of N ms is equivalent
+        // to a provider taking N ms, and then producing a normal HTTP error.
+        if let Some(timeout) = self.timeouts.non_streaming.total_ms {
+            let timeout = Duration::from_millis(timeout);
+            tokio::time::timeout(timeout, run_all_models)
+                .await
+                // Convert the outer `Elapsed` error into a TensorZero error,
+                // so that it can be handled by the `match response` block below
+                .unwrap_or_else(|_: Elapsed| {
+                    Err(Error::new(ErrorDetails::ModelTimeout {
+                        model_name: model_name.to_string(),
+                        timeout,
+                        streaming: false,
+                    }))
+                })
+        } else {
+            run_all_models.await
         }
-        let err = Error::new(ErrorDetails::ModelProvidersExhausted { provider_errors });
-        Err(err)
     }
 
     #[tracing::instrument(skip_all, fields(model_name = model_name, otel.name = "model_inference", stream = true))]
@@ -434,47 +461,67 @@ impl ModelConfig {
         model_name: &'request str,
     ) -> Result<StreamResponseAndMessages, Error> {
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
-        for provider_name in &self.routing {
-            let request = self.filter_content_blocks(request, model_name, provider_name);
-            let model_provider_request = ModelProviderRequest {
-                request: &request,
-                model_name,
-                provider_name,
-            };
-            let provider = self.providers.get(provider_name).ok_or_else(|| {
-                Error::new(ErrorDetails::ProviderNotFound {
-                    provider_name: provider_name.to_string(),
-                })
-            })?;
-
-            // This future includes a call to `peek_first_chunk`, so applying
-            // `streaming_ttft_timeout` is correct.
-            let response_fut =
-                self.streaming_provider_request(model_provider_request, provider, clients);
-            let response = if let Some(timeout) = provider.streaming_ttft_timeout() {
-                tokio::time::timeout(timeout, response_fut)
-                    .await
-                    .unwrap_or_else(|_: Elapsed| {
-                        Err(Error::new(ErrorDetails::ModelProviderTimeout {
-                            provider_name: provider_name.to_string(),
-                            timeout,
-                            streaming: true,
-                        }))
+        let run_all_models = async {
+            for provider_name in &self.routing {
+                let request = self.filter_content_blocks(request, model_name, provider_name);
+                let model_provider_request = ModelProviderRequest {
+                    request: &request,
+                    model_name,
+                    provider_name,
+                };
+                let provider = self.providers.get(provider_name).ok_or_else(|| {
+                    Error::new(ErrorDetails::ProviderNotFound {
+                        provider_name: provider_name.to_string(),
                     })
-            } else {
-                response_fut.await
-            };
+                })?;
 
-            match response {
-                Ok(response) => return Ok(response),
-                Err(error) => {
-                    provider_errors.insert(provider_name.to_string(), error);
+                // This future includes a call to `peek_first_chunk`, so applying
+                // `streaming_ttft_timeout` is correct.
+                let response_fut =
+                    self.streaming_provider_request(model_provider_request, provider, clients);
+                let response = if let Some(timeout) = provider.streaming_ttft_timeout() {
+                    tokio::time::timeout(timeout, response_fut)
+                        .await
+                        .unwrap_or_else(|_: Elapsed| {
+                            Err(Error::new(ErrorDetails::ModelProviderTimeout {
+                                provider_name: provider_name.to_string(),
+                                timeout,
+                                streaming: true,
+                            }))
+                        })
+                } else {
+                    response_fut.await
+                };
+
+                match response {
+                    Ok(response) => return Ok(response),
+                    Err(error) => {
+                        provider_errors.insert(provider_name.to_string(), error);
+                    }
                 }
             }
+            Err(Error::new(ErrorDetails::ModelProvidersExhausted {
+                provider_errors,
+            }))
+        };
+        // See the corresponding `non_streaming.total_ms` timeout in the `infer`
+        // method above for more details.
+        if let Some(timeout) = self.timeouts.streaming.ttft_ms {
+            let timeout = Duration::from_millis(timeout);
+            tokio::time::timeout(timeout, run_all_models)
+                .await
+                // Convert the outer `Elapsed` error into a TensorZero error,
+                // so that it can be handled by the `match response` block below
+                .unwrap_or_else(|_: Elapsed| {
+                    Err(Error::new(ErrorDetails::ModelTimeout {
+                        model_name: model_name.to_string(),
+                        timeout,
+                        streaming: true,
+                    }))
+                })
+        } else {
+            run_all_models.await
         }
-        Err(Error::new(ErrorDetails::ModelProvidersExhausted {
-            provider_errors,
-        }))
     }
 
     pub async fn start_batch_inference<'request>(
@@ -1693,6 +1740,7 @@ impl ShorthandModelConfig for ModelConfig {
                     timeouts: Default::default(),
                 },
             )]),
+            timeouts: Default::default(),
         })
     }
 
@@ -1794,6 +1842,7 @@ mod tests {
                     timeouts: Default::default(),
                 },
             )]),
+            timeouts: Default::default(),
         };
         let tool_config = ToolCallConfig {
             tools_available: vec![],
@@ -1861,6 +1910,7 @@ mod tests {
                     timeouts: Default::default(),
                 },
             )]),
+            timeouts: Default::default(),
         };
         let response = model_config
             .infer(&request, &clients, model_name)
@@ -1958,6 +2008,7 @@ mod tests {
                     },
                 ),
             ]),
+            timeouts: Default::default(),
         };
 
         let model_name = "test model";
@@ -2024,6 +2075,7 @@ mod tests {
                     timeouts: Default::default(),
                 },
             )]),
+            timeouts: Default::default(),
         };
         let StreamResponseAndMessages {
             response:
@@ -2095,6 +2147,7 @@ mod tests {
                     timeouts: Default::default(),
                 },
             )]),
+            timeouts: Default::default(),
         };
         let response = model_config
             .infer_stream(
@@ -2194,6 +2247,7 @@ mod tests {
                     },
                 ),
             ]),
+            timeouts: Default::default(),
         };
         let StreamResponseAndMessages {
             response:
@@ -2273,6 +2327,7 @@ mod tests {
                     timeouts: Default::default(),
                 },
             )]),
+            timeouts: Default::default(),
         };
         let tool_config = ToolCallConfig {
             tools_available: vec![],
@@ -2380,6 +2435,7 @@ mod tests {
                     timeouts: Default::default(),
                 },
             )]),
+            timeouts: Default::default(),
         };
         let tool_config = ToolCallConfig {
             tools_available: vec![],
@@ -2503,6 +2559,7 @@ mod tests {
                     timeouts: Default::default(),
                 },
             )]),
+            timeouts: Default::default(),
         };
         let model_table: ModelTable = HashMap::from([("claude".into(), anthropic_model_config)])
             .try_into()

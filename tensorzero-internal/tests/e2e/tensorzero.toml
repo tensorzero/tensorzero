@@ -465,6 +465,14 @@ routing = ["dummy"]
 type = "dummy"
 model_name = "null"
 
+[models.slow_model_timeout]
+routing = ["slow_provider"]
+timeouts = { non_streaming = { total_ms = 400 }, streaming = { ttft_ms = 500 } }
+
+[models.slow_model_timeout.providers.slow_provider]
+type = "dummy"
+model_name = "slow"
+
 [models.slow_with_timeout]
 routing = ["slow"]
 
@@ -488,6 +496,18 @@ model_name = "slow_second_chunk"
 # but produces the first chunk with no delay.
 # As a result, this timeout should never be hit.
 streaming = { ttft_ms = 500 }
+
+[models.slow_second_chunk_timeout]
+routing = ["slow"]
+# The 'slow' provider takes 2 seconds to produce the second chunk,
+# but produces the first chunk with no delay.
+# As a result, this timeout should never be hit.
+timeouts = { streaming = { ttft_ms = 500 } }
+
+[models.slow_second_chunk_timeout.providers.slow]
+type = "dummy"
+model_name = "slow_second_chunk"
+
 
 [models.slow]
 routing = ["slow"]
@@ -632,7 +652,18 @@ model_name = "text-embedding-3-small"
 # │                                 FUNCTIONS                                  │
 # └────────────────────────────────────────────────────────────────────────────┘
 
-# Variant timeout tests
+# Timeout tests
+
+[functions.basic_test_model_timeout]
+type = "chat"
+
+[functions.basic_test_model_timeout.variants.slow_variant]
+type = "chat_completion"
+model = "slow_model_timeout"
+
+[functions.basic_test_model_timeout.variants.slow_second_chunk]
+type = "chat_completion"
+model = "slow_second_chunk_timeout"
 
 [functions.basic_test_variant_timeout]
 type = "chat"

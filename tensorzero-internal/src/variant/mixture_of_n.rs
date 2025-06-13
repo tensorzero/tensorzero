@@ -1082,6 +1082,7 @@ mod tests {
                         timeouts: Default::default(),
                     },
                 )]),
+                timeouts: Default::default(),
             },
         )]))
         .expect("Failed to create model table");
@@ -1181,6 +1182,7 @@ mod tests {
                             timeouts: Default::default(),
                         },
                     )]),
+                    timeouts: Default::default(),
                 },
             );
             ModelTable::try_from(map).expect("Failed to create model table")
@@ -1247,6 +1249,7 @@ mod tests {
                             timeouts: Default::default(),
                         },
                     )]),
+                    timeouts: Default::default(),
                 },
             );
             ModelTable::try_from(map).expect("Failed to create model table")
