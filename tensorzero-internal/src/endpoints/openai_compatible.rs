@@ -263,7 +263,7 @@ struct OpenAICompatibleStreamOptions {
     include_usage: bool,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct OpenAICompatibleParams {
     messages: Vec<OpenAICompatibleMessage>,
     model: String,
@@ -297,6 +297,8 @@ pub struct OpenAICompatibleParams {
     tensorzero_tags: HashMap<String, String>,
     #[serde(default, rename = "tensorzero::deny_unknown_fields")]
     tensorzero_deny_unknown_fields: bool,
+    #[serde(default, rename = "tensorzero::credentials")]
+    tensorzero_credentials: InferenceCredentials,
     #[serde(flatten)]
     unknown_fields: HashMap<String, Value>,
 }
@@ -532,8 +534,7 @@ impl Params {
             dryrun: openai_compatible_params.tensorzero_dryrun.or(header_dryrun),
             dynamic_tool_params,
             output_schema,
-            // OpenAI compatible endpoint does not support dynamic credentials
-            credentials: InferenceCredentials::default(),
+            credentials: openai_compatible_params.tensorzero_credentials,
             cache_options: openai_compatible_params
                 .tensorzero_cache_options
                 .unwrap_or_default(),
@@ -1196,6 +1197,7 @@ mod tests {
                 tensorzero_extra_headers: UnfilteredInferenceExtraHeaders::default(),
                 tensorzero_tags: tensorzero_tags.clone(),
                 tensorzero_deny_unknown_fields: false,
+                tensorzero_credentials: InferenceCredentials::default(),
                 unknown_fields: Default::default(),
                 stream_options: None,
                 stop: None,
@@ -1664,6 +1666,7 @@ mod tests {
                 tensorzero_extra_body: UnfilteredInferenceExtraBody::default(),
                 tensorzero_extra_headers: UnfilteredInferenceExtraHeaders::default(),
                 tensorzero_tags: HashMap::new(),
+                tensorzero_credentials: InferenceCredentials::default(),
                 unknown_fields: Default::default(),
                 stream_options: None,
                 stop: None,
@@ -1703,6 +1706,7 @@ mod tests {
                 tensorzero_extra_body: UnfilteredInferenceExtraBody::default(),
                 tensorzero_extra_headers: UnfilteredInferenceExtraHeaders::default(),
                 tensorzero_tags: HashMap::new(),
+                tensorzero_credentials: InferenceCredentials::default(),
                 unknown_fields: Default::default(),
                 stream_options: None,
                 stop: None,
@@ -1748,6 +1752,7 @@ mod tests {
                 tensorzero_extra_body: UnfilteredInferenceExtraBody::default(),
                 tensorzero_extra_headers: UnfilteredInferenceExtraHeaders::default(),
                 tensorzero_tags: HashMap::new(),
+                tensorzero_credentials: InferenceCredentials::default(),
                 unknown_fields: Default::default(),
                 stream_options: None,
                 stop: None,
@@ -1793,6 +1798,7 @@ mod tests {
                 tensorzero_extra_body: UnfilteredInferenceExtraBody::default(),
                 tensorzero_extra_headers: UnfilteredInferenceExtraHeaders::default(),
                 tensorzero_tags: HashMap::new(),
+                tensorzero_credentials: InferenceCredentials::default(),
                 unknown_fields: Default::default(),
                 stream_options: None,
                 stop: None,
