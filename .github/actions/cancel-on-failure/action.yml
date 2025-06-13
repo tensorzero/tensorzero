@@ -4,3 +4,6 @@ runs:
   using: 'composite'
   post: gh run cancel ${{ github.run_id }}
   post-if: failure()
+  steps:
+    - name: Cancel workflow on failure
+      run: echo "Enabling cancel on failure"
