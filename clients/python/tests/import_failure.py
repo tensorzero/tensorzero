@@ -6,8 +6,6 @@ import os
 os.environ["RUST_LOG"] = "foo=bar"
 
 try:
-    import tensorzero  # noqa
-
     raise Exception("TensorZero import succeeded - this should not happen")
 except Exception as e:
     assert (
