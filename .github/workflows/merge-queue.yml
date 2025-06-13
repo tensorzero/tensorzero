@@ -5,6 +5,11 @@ on:
   workflow_dispatch:
   merge_group:
 
+# See 'general.yml' for more details.
+concurrency:
+  group: ${{ (github.event_name == 'merge_group' && 'merge-group-concurrency') || github.run_id }}
+  cancel-in-progress: true
+
 env:
   ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
   AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
