@@ -7,34 +7,34 @@
 **TensorZero is an open-source stack for _industrial-grade LLM applications_:**
 
 - [x] **Gateway**
-  - [x] Access every major LLM API (including self-hosted): 100s of LLMs using a single unified API
-  - [x] Infer with support for streaming, tool use, structured generation (JSON mode), batch, multimodal (VLMs), file inputs, caching, etc.
-  - [x] Define prompt templates and schemas to...
-  - [x] Satisfy extreme throughput and latency needs, thanks to Rust: <1ms p99 latency overhead @ 10k QPS (benchmarks)
+  - [x] Access every major LLM provider (API or self-hosted) through a single unified API
+  - [x] Infer with streaming, tool use, structured generation (JSON mode), batch, multimodal (VLMs), file inputs, caching, etc.
+  - [x] Define prompt templates and schemas to enforce a consistent, typed interface between your application and the LLMs
+  - [x] Satisfy extreme throughput and latency needs, thanks to Rust: <1ms p99 latency overhead at 10k+ QPS
   - [x] Integrate using the TensorZero client, any OpenAI SDK, or our HTTP API &mdash; every programming language supported
   - [x] Ensure high availability with routing, retries, fallbacks, load balancing, granular timeouts, etc.
-  - [ ] Soon: embeddings, real-time voice  
+  - [ ] Soon: embeddings; real-time voice  
 - [x] **Observability**
   - [x] Store inferences and feedback (metrics, human edits, etc.) in your own database
-  - [x] Browse individual inferences or monitor high-level patterns using the TensorZero UI or programmatically
+  - [x] Dive into individual inferences or high-level aggregate patterns using the TensorZero UI or programmatically
   - [x] Build datasets for optimization, evaluations, and other workflows
-  - [x] Replay historical inferences with different prompts, models, inference strategies, etc.
-  - [x] Export OpenTelemery (OTLP) traces to your favorite general-purpose observability tool
+  - [x] Replay historical inferences with new prompts, models, inference strategies, etc.
+  - [x] Export OpenTelemetry (OTLP) traces to your favorite general-purpose observability tool
   - [ ] Soon: AI-assisted debugging and root cause analysis; AI-assisted data labeling
 - [x] **Optimization**
-  - [x] Optimize models with supervised fine-tuning, RLHF, and other techniques
-  - [x] Optimize prompts with automated prompt engineering algorithms like MIPROv2
+  - [x] Optimize your models with supervised fine-tuning, RLHF, and other techniques
+  - [x] Optimize your prompts with automated prompt engineering algorithms like MIPROv2
   - [x] Optimize your inference strategy with dynamic in-context learning, chain of thought, best/mixture-of-N sampling, etc.
   - [x] Enable a feedback loop for your LLMs: a data & learning flywheel turning production data into smarter, faster, and cheaper models
-  - [ ] Soon: programmatic optimization for continual improvements; synthetic data generation
+  - [ ] Soon: programmatic optimization; synthetic data generation
 - [x] **Evaluations**
-  - [x] Evaluate individual inferences using _static evaluations_ powered by heuristics or LLM judges
-  - [x] Evaluate end-to-end workflows (multiple inferences, arbitrary code, etc.) using _dynamic evaluations_
+  - [x] Evaluate individual inferences with _static evaluations_ powered by heuristics or LLM judges (&approx; unit tests for LLMs)
+  - [x] Evaluate end-to-end workflows with _dynamic evaluations_ with complete flexibility (&approx; integration tests for LLMs)
   - [x] Optimize LLM judges just like any other TensorZero function to align them to human preferences
-  - [ ] Soon: more built-in evaluation heuristics and methods; headless evaluations
+  - [ ] Soon: more built-in evaluators; headless evaluations
 - [x] **Experimentation**
   - [x] Ship with confidence with built-in A/B testing for models, prompts, providers, hyperparameters, etc.
-  - [x] Ensure principled experiments (RCTs) in complex workflows, including multi-turn and compound LLM systems
+  - [x] Enforce principled experiments (RCTs) in complex workflows, including multi-turn and compound LLM systems
   - [ ] Soon: multi-armed bandits; AI-managed experiments
 - [x] **& more!**
   - [x] Build simple applications or massive deployments with GitOps-friendly orchestration
