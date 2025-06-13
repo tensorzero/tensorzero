@@ -11,7 +11,7 @@
   - [x] Infer with streaming, tool use, structured generation (JSON mode), batch, multimodal (VLMs), file inputs, caching, etc.
   - [x] Define prompt templates and schemas to enforce a consistent, typed interface between your application and the LLMs
   - [x] Satisfy extreme throughput and latency needs, thanks to Rust: <1ms p99 latency overhead at 10k+ QPS
-  - [x] Integrate using the TensorZero client, any OpenAI SDK, or our HTTP API &mdash; every programming language supported
+  - [x] Integrate using the TensorZero client, any OpenAI SDK (or OpenAI-compatible tool), or our HTTP API &mdash; every programming language supported
   - [x] Ensure high availability with routing, retries, fallbacks, load balancing, granular timeouts, etc.
   - [ ] Soon: embeddings; real-time voice  
 - [x] **Observability**
