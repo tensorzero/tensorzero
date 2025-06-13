@@ -1264,6 +1264,7 @@ mod tests {
                         timeouts: Default::default(),
                     },
                 )]),
+                timeouts: Default::default(),
             },
         )]))
         .expect("Failed to create model table");
@@ -1380,6 +1381,7 @@ mod tests {
                             timeouts: Default::default(),
                         },
                     )]),
+                    timeouts: Default::default(),
                 },
             );
             ModelTable::try_from(map).expect("Failed to create model table")
@@ -1446,6 +1448,7 @@ mod tests {
                             timeouts: Default::default(),
                         },
                     )]),
+                    timeouts: Default::default(),
                 },
             );
             ModelTable::try_from(map).expect("Failed to create model table")
@@ -1530,6 +1533,7 @@ mod tests {
                         timeouts: Default::default(),
                     },
                 )]),
+                timeouts: Default::default(),
             },
         );
         let big_models = ModelTable::try_from(big_models).expect("Failed to create model table");

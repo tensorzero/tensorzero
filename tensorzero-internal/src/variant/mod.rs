@@ -138,6 +138,7 @@ pub struct ModelUsedInfo {
     pub model_name: Arc<str>,
     pub model_provider_name: Arc<str>,
     pub raw_request: String,
+    pub raw_response: Option<String>,
     pub system: Option<String>,
     pub input_messages: Vec<RequestMessage>,
     pub inference_params: InferenceParams,
@@ -677,6 +678,7 @@ async fn infer_model_request_stream<'request>(
         model_name,
         model_provider_name,
         raw_request,
+        raw_response: None,
         inference_params,
         previous_model_inference_results: vec![],
         system,
@@ -1074,6 +1076,7 @@ mod tests {
                     timeouts: Default::default(),
                 },
             )]),
+            timeouts: Default::default(),
         };
         let retry_config = Box::leak(Box::new(RetryConfig::default()));
 
@@ -1182,6 +1185,7 @@ mod tests {
                     timeouts: Default::default(),
                 },
             )]),
+            timeouts: Default::default(),
         };
 
         // Create the arguments struct
@@ -1240,6 +1244,7 @@ mod tests {
                     timeouts: Default::default(),
                 },
             )]),
+            timeouts: Default::default(),
         };
 
         // Create the arguments struct
@@ -1373,6 +1378,7 @@ mod tests {
                     },
                 ),
             ]),
+            timeouts: Default::default(),
         };
         let retry_config = Box::leak(Box::new(RetryConfig::default()));
 
@@ -1470,6 +1476,7 @@ mod tests {
                     timeouts: Default::default(),
                 },
             )]),
+            timeouts: Default::default(),
         }));
 
         // Prepare the model inference request
@@ -1653,6 +1660,7 @@ mod tests {
                     },
                 ),
             ]),
+            timeouts: Default::default(),
         }));
         let retry_config = RetryConfig::default();
 

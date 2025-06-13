@@ -1090,6 +1090,7 @@ mod tests {
                     timeouts: Default::default(),
                 },
             )]),
+            timeouts: Default::default(),
         };
         let json_model_config = ModelConfig {
             routing: vec!["json_provider".into()],
@@ -1103,6 +1104,7 @@ mod tests {
                     timeouts: Default::default(),
                 },
             )]),
+            timeouts: Default::default(),
         };
         let tool_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "tool".into(),
@@ -1120,6 +1122,7 @@ mod tests {
                     timeouts: Default::default(),
                 },
             )]),
+            timeouts: Default::default(),
         };
         let error_model_config = ModelConfig {
             routing: vec!["error".into()],
@@ -1133,6 +1136,7 @@ mod tests {
                     timeouts: Default::default(),
                 },
             )]),
+            timeouts: Default::default(),
         };
         // Test case 1: invalid message (String passed when template required)
         let messages = vec![ResolvedInputMessage {
@@ -1325,6 +1329,7 @@ mod tests {
                     timeouts: Default::default(),
                 },
             )]),
+            timeouts: Default::default(),
         };
         let models = HashMap::from([("good".into(), text_model_config)])
             .try_into()
@@ -1911,6 +1916,7 @@ mod tests {
                     timeouts: Default::default(),
                 },
             )]),
+            timeouts: Default::default(),
         };
         let error_model_config = ModelConfig {
             routing: vec!["error_provider".into()],
@@ -1924,6 +1930,7 @@ mod tests {
                     timeouts: Default::default(),
                 },
             )]),
+            timeouts: Default::default(),
         };
         // Test case 1: Model inference fails because of model issues
         let inference_params = InferenceParams::default();
