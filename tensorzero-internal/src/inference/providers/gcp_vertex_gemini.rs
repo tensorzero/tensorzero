@@ -2397,7 +2397,7 @@ mod tests {
     #[test]
     fn test_from_tool_choice() {
         let tool_choice = ToolChoice::Auto;
-        let supports_any_model_name = "gemini-2.5-pro-preview-05-06";
+        let supports_any_model_name = "gemini-2.5-pro-preview-06-05";
         let tool_config = GCPVertexGeminiToolConfig::from((&tool_choice, supports_any_model_name));
         assert_eq!(
             tool_config,
@@ -2565,7 +2565,7 @@ mod tests {
         };
         // JSON schema should be supported for Gemini Pro models
         let result =
-            GCPVertexGeminiRequest::new(&inference_request, "gemini-2.5-pro-preview-05-06");
+            GCPVertexGeminiRequest::new(&inference_request, "gemini-2.5-pro-preview-06-05");
         let request = result.unwrap();
         assert_eq!(request.contents.len(), 3);
         assert_eq!(request.contents[0].role, GCPVertexGeminiRole::User);
@@ -3041,7 +3041,7 @@ mod tests {
             ..Default::default()
         };
         let (tools, tool_choice) =
-            prepare_tools(&request_with_tools, "gemini-2.5-pro-preview-05-06");
+            prepare_tools(&request_with_tools, "gemini-2.5-pro-preview-06-05");
         let tools = tools.unwrap();
         let tool_config = tool_choice.unwrap();
         assert_eq!(
