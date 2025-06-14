@@ -344,7 +344,7 @@ jobs:
         run: pnpm --filter=tensorzero-ui run lint
 
       - name: Run Prettier
-        run: pnpm --filter=tensorzero-ui run format
+        run: pnpm --filter=tensorzero-ui run format:check
 
       - name: pnpm TypeScript type checking
         run: pnpm --filter=tensorzero-ui run typecheck
