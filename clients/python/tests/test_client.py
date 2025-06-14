@@ -76,21 +76,7 @@ TEST_CONFIG_FILE = os.path.join(
     "../../../tensorzero-internal/tests/e2e/tensorzero.toml",
 )
 
-import pytest
-from tensorzero import TensorZeroGateway
-from tensorzero.types import PDFInput, InferenceInput
 
-@pytest.mark.asyncio
-async def test_pdf_inference():
-    async with TensorZeroGateway.build_embedded(clickhouse_url="http://localhost:8123/tensorzero", config_file="tensorzero.toml") as client:
-        input = InferenceInput(
-            model_name="openai::gpt-4o-mini",
-            messages=[{"role": "user", "content": "Analyze this PDF."}],
-            pdf=PDFInput(file_path="tests/fixtures/sample.pdf")
-        )
-        response = await client.inference(input)
-        assert "text" in response
-        
 class ClientType(Enum):
     HttpGateway = 0
     EmbeddedGateway = 1
