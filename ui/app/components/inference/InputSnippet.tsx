@@ -27,14 +27,7 @@ function renderContentBlock(block: ResolvedInputMessageContent, index: number) {
   switch (block.type) {
     case "text": {
       if (typeof block.value === "object") {
-        return (
-          <TextMessage
-            key={index}
-            label="Text (Arguments)"
-            content={JSON.stringify(block.value, null, 2)}
-            type="structured"
-          />
-        );
+        return <TextMessage key={index} label="Text (Arguments)" content={JSON.stringify(block.value, null, 2)} type="structured" />;
       }
 
       // Try to parse JSON strings
@@ -43,12 +36,7 @@ function renderContentBlock(block: ResolvedInputMessageContent, index: number) {
           const parsedJson = JSON.parse(block.value);
           if (typeof parsedJson === "object") {
             return (
-              <TextMessage
-                key={index}
-                label="Text (Arguments)"
-                content={JSON.stringify(parsedJson, null, 2)}
-                type="structured"
-              />
+              <TextMessage key={index} label="Text (Arguments)" content={JSON.stringify(parsedJson, null, 2)} type="structured" />
             );
           }
         } catch {
@@ -60,14 +48,7 @@ function renderContentBlock(block: ResolvedInputMessageContent, index: number) {
     }
 
     case "raw_text":
-      return (
-        <TextMessage
-          key={index}
-          label="Text (Raw)"
-          content={block.value}
-          type="structured"
-        />
-      );
+      return <TextMessage key={index} label="Text (Raw)" content={block.value} type="structured" />;
 
     case "tool_call":
       return (
