@@ -25,7 +25,7 @@ use crate::variant::chain_of_thought::UninitializedChainOfThoughtConfig;
 use crate::variant::chat_completion::UninitializedChatCompletionConfig;
 use crate::variant::dicl::UninitializedDiclConfig;
 use crate::variant::mixture_of_n::UninitializedMixtureOfNConfig;
-use crate::variant::{Variant, VariantConfig};
+use crate::variant::{Variant, VariantConfig, VariantInfo};
 use std::error::Error as StdError;
 
 tokio::task_local! {
@@ -54,6 +54,33 @@ pub struct Config<'c> {
     pub templates: TemplateConfig<'c>,
     pub object_store_info: Option<ObjectStoreInfo>,
     pub provider_types: ProviderTypesConfig,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct NonStreamingTimeouts {
+    #[serde(default)]
+    /// The total time allowed for the non-streaming request to complete.
+    pub total_ms: Option<u64>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct StreamingTimeouts {
+    #[serde(default)]
+    /// The time allowed for the first token to be produced.
+    pub ttft_ms: Option<u64>,
+}
+
+/// Configures the timeouts for both streaming and non-streaming requests.
+/// This can be attached to various other configs (e.g. variants, models, model providers)
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TimeoutsConfig {
+    #[serde(default)]
+    pub non_streaming: NonStreamingTimeouts,
+    #[serde(default)]
+    pub streaming: StreamingTimeouts,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -290,6 +317,15 @@ impl std::fmt::Display for MetricConfigLevel {
         let serialized = serde_json::to_string(self).map_err(|_| std::fmt::Error)?;
         // Remove the quotes around the string
         write!(f, "{}", serialized.trim_matches('"'))
+    }
+}
+
+impl MetricConfigLevel {
+    pub fn inference_column_name(&self) -> &'static str {
+        match self {
+            MetricConfigLevel::Inference => "id",
+            MetricConfigLevel::Episode => "episode_id",
+        }
     }
 }
 
@@ -734,7 +770,7 @@ enum UninitializedFunctionConfig {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct UninitializedFunctionConfigChat {
-    variants: HashMap<String, UninitializedVariantConfig>, // variant name => variant config
+    variants: HashMap<String, UninitializedVariantInfo>, // variant name => variant config
     system_schema: Option<PathBuf>,
     user_schema: Option<PathBuf>,
     assistant_schema: Option<PathBuf>,
@@ -751,7 +787,7 @@ struct UninitializedFunctionConfigChat {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct UninitializedFunctionConfigJson {
-    variants: HashMap<String, UninitializedVariantConfig>, // variant name => variant config
+    variants: HashMap<String, UninitializedVariantInfo>, // variant name => variant config
     system_schema: Option<PathBuf>,
     user_schema: Option<PathBuf>,
     assistant_schema: Option<PathBuf>,
@@ -784,7 +820,7 @@ impl UninitializedFunctionConfig {
                     .map(|(name, variant)| variant.load(&base_path).map(|v| (name, v)))
                     .collect::<Result<HashMap<_, _>, Error>>()?;
                 for (name, variant) in variants.iter() {
-                    if let VariantConfig::ChatCompletion(chat_config) = variant {
+                    if let VariantConfig::ChatCompletion(chat_config) = &variant.inner {
                         if chat_config.json_mode.is_some() {
                             return Err(ErrorDetails::Config {
                                 message: format!(
@@ -833,7 +869,7 @@ impl UninitializedFunctionConfig {
 
                 for (name, variant) in variants.iter() {
                     let mut warn_variant = None;
-                    match variant {
+                    match &variant.inner {
                         VariantConfig::ChatCompletion(chat_config) => {
                             if chat_config.json_mode.is_none() {
                                 warn_variant = Some(name.clone());
@@ -878,6 +914,15 @@ impl UninitializedFunctionConfig {
     }
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct UninitializedVariantInfo {
+    #[serde(flatten)]
+    pub inner: UninitializedVariantConfig,
+    #[serde(default)]
+    pub timeouts: Option<TimeoutsConfig>,
+}
+
 #[derive(Debug, TensorZeroDeserialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
@@ -894,25 +939,29 @@ pub enum UninitializedVariantConfig {
     ChainOfThought(UninitializedChainOfThoughtConfig),
 }
 
-impl UninitializedVariantConfig {
-    pub fn load<P: AsRef<Path>>(self, base_path: P) -> Result<VariantConfig, Error> {
-        match self {
+impl UninitializedVariantInfo {
+    pub fn load<P: AsRef<Path>>(self, base_path: P) -> Result<VariantInfo, Error> {
+        let inner = match self.inner {
             UninitializedVariantConfig::ChatCompletion(params) => {
-                Ok(VariantConfig::ChatCompletion(params.load(base_path)?))
+                VariantConfig::ChatCompletion(params.load(base_path)?)
             }
             UninitializedVariantConfig::BestOfNSampling(params) => {
-                Ok(VariantConfig::BestOfNSampling(params.load(base_path)?))
+                VariantConfig::BestOfNSampling(params.load(base_path)?)
             }
             UninitializedVariantConfig::Dicl(params) => {
-                Ok(VariantConfig::Dicl(params.load(base_path)?))
+                VariantConfig::Dicl(params.load(base_path)?)
             }
             UninitializedVariantConfig::MixtureOfN(params) => {
-                Ok(VariantConfig::MixtureOfN(params.load(base_path)?))
+                VariantConfig::MixtureOfN(params.load(base_path)?)
             }
             UninitializedVariantConfig::ChainOfThought(params) => {
-                Ok(VariantConfig::ChainOfThought(params.load(base_path)?))
+                VariantConfig::ChainOfThought(params.load(base_path)?)
             }
-        }
+        };
+        Ok(VariantInfo {
+            inner,
+            timeouts: self.timeouts.unwrap_or_default(),
+        })
     }
 }
 
@@ -998,26 +1047,28 @@ mod tests {
             .expect("Failed to load config");
 
         // Check that the JSON mode is set properly on the JSON variants
-        let prompt_a_json_mode = match config
+        let prompt_a_json_mode = match &config
             .functions
             .get("json_with_schemas")
             .unwrap()
             .variants()
             .get("openai_promptA")
             .unwrap()
+            .inner
         {
             VariantConfig::ChatCompletion(chat_config) => &chat_config.json_mode.unwrap(),
             _ => panic!("Expected a chat completion variant"),
         };
         assert_eq!(prompt_a_json_mode, &JsonMode::ImplicitTool);
 
-        let prompt_b_json_mode = match config
+        let prompt_b_json_mode = match &config
             .functions
             .get("json_with_schemas")
             .unwrap()
             .variants()
             .get("openai_promptB")
             .unwrap()
+            .inner
         {
             VariantConfig::ChatCompletion(chat_config) => chat_config.json_mode,
             _ => panic!("Expected a chat completion variant"),
@@ -1044,7 +1095,7 @@ mod tests {
         match &**function {
             FunctionConfig::Chat(chat_config) => {
                 if let Some(variant) = chat_config.variants.get("best_of_n") {
-                    match variant {
+                    match &variant.inner {
                         VariantConfig::BestOfNSampling(best_of_n_config) => {
                             assert!(
                                 best_of_n_config.candidates.len() > 1,
@@ -1072,7 +1123,7 @@ mod tests {
         match &**json_function {
             FunctionConfig::Json(json_config) => {
                 let variant = json_config.variants.get("variant_with_variables").unwrap();
-                match variant {
+                match &variant.inner {
                     VariantConfig::ChatCompletion(chat_config) => {
                         assert_eq!(chat_config.weight, None); // Default weight should be None
                     }
@@ -1103,7 +1154,7 @@ mod tests {
         match &**function {
             FunctionConfig::Json(json_config) => {
                 assert_eq!(json_config.variants.len(), 7);
-                match &json_config.variants["anthropic_promptA"] {
+                match &json_config.variants["anthropic_promptA"].inner {
                     VariantConfig::ChatCompletion(chat_config) => {
                         assert_eq!(chat_config.model, "anthropic::claude-3.5-sonnet".into());
                         assert_eq!(chat_config.weight, Some(1.0));
@@ -1124,7 +1175,7 @@ mod tests {
                     }
                     _ => panic!("Expected a chat completion variant"),
                 }
-                match &json_config.variants["best_of_3"] {
+                match &json_config.variants["best_of_3"].inner {
                     VariantConfig::BestOfNSampling(best_of_n_config) => {
                         assert_eq!(best_of_n_config.candidates.len(), 3);
                         assert_eq!(
@@ -1139,7 +1190,7 @@ mod tests {
                     }
                     _ => panic!("Expected a best of n sampling variant"),
                 }
-                match &json_config.variants["mixture_of_3"] {
+                match &json_config.variants["mixture_of_3"].inner {
                     VariantConfig::MixtureOfN(mixture_of_n_config) => {
                         assert_eq!(mixture_of_n_config.candidates.len(), 3);
                         assert_eq!(
@@ -1154,7 +1205,7 @@ mod tests {
                     }
                     _ => panic!("Expected a mixture of n sampling variant"),
                 }
-                match &json_config.variants["dicl"] {
+                match &json_config.variants["dicl"].inner {
                     VariantConfig::Dicl(dicl_config) => {
                         assert_eq!(
                             dicl_config.system_instructions,
@@ -1166,7 +1217,7 @@ mod tests {
                     }
                     _ => panic!("Expected a Dicl variant"),
                 }
-                match &json_config.variants["dicl_custom_system"] {
+                match &json_config.variants["dicl_custom_system"].inner {
                     VariantConfig::Dicl(dicl_config) => {
                         assert_eq!(
                             dicl_config.system_instructions,
@@ -1680,7 +1731,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             ErrorDetails::Config {
-                message: "`functions.templates_with_variables_chat.variants.variant_with_variables.system_template`: schema is required when template is specified and needs variables".to_string()
+                message: "`functions.templates_with_variables_chat.variants.variant_with_variables.system_template`: template needs variables: [message] but only `system_text` is allowed when template has no schema".to_string()
             }.into()
         );
         let mut sample_config = get_sample_valid_config();
@@ -1693,7 +1744,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             ErrorDetails::Config {
-                message: "`functions.templates_with_variables_json.variants.variant_with_variables.system_template`: schema is required when template is specified and needs variables".to_string()
+                message: "`functions.templates_with_variables_json.variants.variant_with_variables.system_template`: template needs variables: [message] but only `system_text` is allowed when template has no schema".to_string()
             }.into()
         );
     }
@@ -1715,7 +1766,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             ErrorDetails::Config {
-                message: "`functions.templates_with_variables_chat.variants.variant_with_variables.user_template`: schema is required when template is specified and needs variables".to_string()
+                message: "`functions.templates_with_variables_chat.variants.variant_with_variables.user_template`: template needs variables: [message] but only `user_text` is allowed when template has no schema".to_string()
             }.into()
         );
 
@@ -1729,7 +1780,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             ErrorDetails::Config {
-                message: "`functions.templates_with_variables_json.variants.variant_with_variables.user_template`: schema is required when template is specified and needs variables".to_string()
+                message: "`functions.templates_with_variables_json.variants.variant_with_variables.user_template`: template needs variables: [message] but only `user_text` is allowed when template has no schema".to_string()
             }.into()
         );
     }
@@ -1752,7 +1803,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             ErrorDetails::Config {
-                message: "`functions.templates_with_variables_chat.variants.variant_with_variables.assistant_template`: schema is required when template is specified and needs variables".to_string()
+                message: "`functions.templates_with_variables_chat.variants.variant_with_variables.assistant_template`: template needs variables: [message] but only `assistant_text` is allowed when template has no schema".to_string()
             }.into()
         );
         let mut sample_config = get_sample_valid_config();
@@ -1765,7 +1816,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             ErrorDetails::Config {
-                message: "`functions.templates_with_variables_json.variants.variant_with_variables.assistant_template`: schema is required when template is specified and needs variables".to_string()
+                message: "`functions.templates_with_variables_json.variants.variant_with_variables.assistant_template`: template needs variables: [message] but only `assistant_text` is allowed when template has no schema".to_string()
             }.into()
         );
     }
@@ -2841,5 +2892,128 @@ thinking = { type = "enabled", budget_tokens = 1024 }
         Config::load_from_path_optional_verify_credentials(tmpfile.path(), false)
             .await
             .expect("Failed to load config");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_gcp_no_endpoint_and_model() {
+        let config_str = r#"
+        [gateway]
+        bind_address = "0.0.0.0:3000"
+
+
+        [models."my-model"]
+        routing = ["gcp-vertex-gemini"]
+
+        [models.my-model.providers.gcp-vertex-gemini]
+        type = "gcp_vertex_gemini"
+        location = "us-central1"
+        project_id = "test-project"
+        model_id = "gemini-2.0-flash-001"
+        endpoint_id = "4094940393049"
+        "#;
+        let config = toml::from_str(config_str).expect("Failed to parse sample config");
+
+        let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let err = SKIP_CREDENTIAL_VALIDATION
+            .scope((), Config::load_from_toml(config, base_path.clone()))
+            .await
+            .unwrap_err();
+
+        let err_msg = err.to_string();
+        assert!(
+            err_msg
+                .contains("models.my-model.providers.gcp-vertex-gemini: Exactly one of model_id or endpoint_id must be provided"),
+            "Unexpected error message: {err_msg}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_config_invalid_template_no_schema() {
+        let config_str = r#"
+        [functions.no_schema]
+        type = "chat"
+
+        [functions.no_schema.variants.invalid_system_template]
+        type = "chat_completion"
+        model = "dummy::echo_request_messages"
+        system_template = "fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+        "#;
+
+        let config = toml::from_str(config_str).expect("Failed to parse sample config");
+        let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let err = Config::load_from_toml(config, base_path.clone())
+            .await
+            .expect_err("Config should fail to load");
+
+        assert_eq!(err.to_string(), "`functions.no_schema.variants.invalid_system_template.system_template`: template needs variables: [assistant_name] but only `system_text` is allowed when template has no schema");
+    }
+
+    #[tokio::test]
+    async fn deny_bad_timeout_fields() {
+        let config = r#"
+    [models.slow_with_timeout]
+    routing = ["slow"]
+
+    [models.slow_with_timeout.providers.slow]
+    type = "dummy"
+    model = "good"
+    timeouts = { bad_field = 1 }
+    "#;
+        let config = toml::from_str(config).unwrap();
+        let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let err = Config::load_from_toml(config, base_path.clone())
+            .await
+            .expect_err("Config should fail to load");
+
+        assert_eq!(
+            err.to_string(),
+            "models.slow_with_timeout.providers.slow.timeouts.bad_field: unknown field `bad_field`, expected `non_streaming` or `streaming`"
+        );
+    }
+
+    #[tokio::test]
+    async fn deny_bad_timeouts_non_streaming_field() {
+        let config = r#"
+        [models.slow_with_timeout]
+        routing = ["slow"]
+
+        [models.slow_with_timeout.providers.slow]
+        type = "dummy"
+        model = "good"
+        timeouts = { non_streaming = { unknown_field = 1000 } }
+        "#;
+        let config = toml::from_str(config).unwrap();
+        let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let err = Config::load_from_toml(config, base_path.clone())
+            .await
+            .expect_err("Config should fail to load");
+
+        assert_eq!(
+            err.to_string(),
+            "models.slow_with_timeout.providers.slow.timeouts.non_streaming.unknown_field: unknown field `unknown_field`, expected `total_ms`"
+        );
+    }
+
+    #[tokio::test]
+    async fn deny_bad_timeouts_streaming_field() {
+        let config = r#"
+        [models.slow_with_timeout]
+        routing = ["slow"]
+
+        [models.slow_with_timeout.providers.slow]
+        type = "dummy"
+        model = "good"
+        timeouts = { streaming = { unknown_field = 1000 } }
+        "#;
+        let config = toml::from_str(config).unwrap();
+        let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let err = Config::load_from_toml(config, base_path.clone())
+            .await
+            .expect_err("Config should fail to load");
+
+        assert_eq!(
+            err.to_string(),
+            "models.slow_with_timeout.providers.slow.timeouts.streaming.unknown_field: unknown field `unknown_field`, expected `ttft_ms`"
+        );
     }
 }

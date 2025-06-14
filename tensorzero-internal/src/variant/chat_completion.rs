@@ -1,5 +1,6 @@
 use serde::Deserialize;
 use serde_json::Value;
+use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -40,6 +41,7 @@ pub struct ChatCompletionConfig {
     pub presence_penalty: Option<f32>,
     pub frequency_penalty: Option<f32>,
     pub seed: Option<u32>,
+    pub stop_sequences: Option<Vec<String>>,
     pub json_mode: Option<JsonMode>, // Only for JSON functions, not for chat functions
     pub retries: RetryConfig,
     pub extra_body: Option<ExtraBodyConfig>,
@@ -61,6 +63,7 @@ pub struct UninitializedChatCompletionConfig {
     pub presence_penalty: Option<f32>,
     pub frequency_penalty: Option<f32>,
     pub seed: Option<u32>,
+    pub stop_sequences: Option<Vec<String>>,
     #[serde(default)]
     pub json_mode: Option<JsonMode>, // Only for JSON functions, not for chat functions
     #[serde(default)]
@@ -94,6 +97,7 @@ impl LoadableConfig<ChatCompletionConfig> for UninitializedChatCompletionConfig 
             presence_penalty: self.presence_penalty,
             frequency_penalty: self.frequency_penalty,
             seed: self.seed,
+            stop_sequences: self.stop_sequences,
             json_mode: self.json_mode,
             retries: self.retries,
             extra_body: self.extra_body,
@@ -107,6 +111,7 @@ impl ChatCompletionConfig {
         &self,
         templates: &TemplateConfig,
         message: &ResolvedInputMessage,
+        template_schema_info: TemplateSchemaInfo,
     ) -> Result<RequestMessage, Error> {
         let template_path = match message.role {
             Role::User => self.user_template.as_ref(),
@@ -118,13 +123,14 @@ impl ChatCompletionConfig {
                 .ok_or_else(|| Error::new(ErrorDetails::InvalidTemplatePath))
         })
         .transpose()?;
-        prepare_request_message(message, templates, template_path)
+        prepare_request_message(message, templates, template_path, template_schema_info)
     }
 
     pub fn prepare_system_message(
         &self,
         templates: &TemplateConfig,
         system: Option<&Value>,
+        template_schema_info: TemplateSchemaInfo,
     ) -> Result<Option<String>, Error> {
         let template_path = self
             .system_template
@@ -135,7 +141,7 @@ impl ChatCompletionConfig {
                     .ok_or_else(|| Error::new(ErrorDetails::InvalidTemplatePath))
             })
             .transpose()?;
-        prepare_system_message(system, templates, template_path)
+        prepare_system_message(system, templates, template_path, template_schema_info)
     }
 
     fn prepare_request<'a, 'request>(
@@ -149,10 +155,19 @@ impl ChatCompletionConfig {
         let messages = input
             .messages
             .iter()
-            .map(|message| self.prepare_request_message(inference_config.templates, message))
+            .map(|message| {
+                self.prepare_request_message(
+                    inference_config.templates,
+                    message,
+                    function.template_schema_info(),
+                )
+            })
             .collect::<Result<Vec<_>, _>>()?;
-        let system =
-            self.prepare_system_message(inference_config.templates, input.system.as_ref())?;
+        let system = self.prepare_system_message(
+            inference_config.templates,
+            input.system.as_ref(),
+            function.template_schema_info(),
+        )?;
 
         inference_params
             .chat_completion
@@ -163,6 +178,7 @@ impl ChatCompletionConfig {
                 self.top_p,
                 self.presence_penalty,
                 self.frequency_penalty,
+                self.stop_sequences.clone(),
             );
 
         let extra_body = FullExtraBodyConfig {
@@ -204,15 +220,26 @@ pub fn prepare_model_input(
     system_template_name: Option<&str>,
     user_template_name: Option<&str>,
     assistant_template_name: Option<&str>,
+    template_schema_info: TemplateSchemaInfo,
 ) -> Result<ModelInput, Error> {
-    let system = prepare_system_message(system, templates, system_template_name)?;
+    let system = prepare_system_message(
+        system,
+        templates,
+        system_template_name,
+        template_schema_info,
+    )?;
     let mut templated_messages = Vec::with_capacity(messages.len());
     for message in messages.iter() {
         let template_name = match message.role {
             Role::Assistant => assistant_template_name,
             Role::User => user_template_name,
         };
-        templated_messages.push(prepare_request_message(message, templates, template_name)?);
+        templated_messages.push(prepare_request_message(
+            message,
+            templates,
+            template_name,
+            template_schema_info,
+        )?);
     }
     Ok(ModelInput {
         system,
@@ -224,12 +251,21 @@ fn prepare_system_message(
     system: Option<&Value>,
     templates: &TemplateConfig,
     template_name: Option<&str>,
+    template_schema_info: TemplateSchemaInfo,
 ) -> Result<Option<String>, Error> {
     Ok(match template_name {
-        Some(template_path) => Some(templates.template_message(
+        Some(template_path) => {
+            let context = if template_schema_info.has_system_schema {
+                Cow::Borrowed(system.unwrap_or(&Value::Null))
+            } else {
+                Cow::Owned(serde_json::json!({
+                    SYSTEM_TEXT_TEMPLATE_VAR: system.unwrap_or(&Value::Null)
+                }))
+            };
+            Some(templates.template_message(
             template_path,
-            system.unwrap_or(&Value::Null),
-        )?),
+            &context)?)
+        }
         None => {
             match system {
                 None => None,
@@ -250,18 +286,52 @@ fn prepare_request_message(
     message: &ResolvedInputMessage,
     templates: &TemplateConfig,
     template_name: Option<&str>,
+    template_schema_info: TemplateSchemaInfo,
 ) -> Result<RequestMessage, Error> {
     let mut content = Vec::new();
+    // If a schema is provided, then we'll just use the `ResolvedInputMessageContent::Text`
+    // json value as-is when applying the template.
+    // If a schema is not provided, then we create a single variable (based on the template kind),
+    // and set it to the string contents of the 'ResolvedInputMessageContent::Text
+    let template_var = match message.role {
+        Role::User => {
+            if template_schema_info.has_user_schema {
+                None
+            } else {
+                Some(USER_TEXT_TEMPLATE_VAR)
+            }
+        }
+        Role::Assistant => {
+            if template_schema_info.has_assistant_schema {
+                None
+            } else {
+                Some(ASSISTANT_TEXT_TEMPLATE_VAR)
+            }
+        }
+    };
     for block in message.content.iter() {
         match block {
-            ResolvedInputMessageContent::Text { value: text } => {
+            ResolvedInputMessageContent::Text { value } => {
                 let text_content= match template_name {
-                        Some(template_path) => templates.template_message(
-                            template_path,
-                            text,
-                        )?,
-                        None => text.as_str().ok_or_else(|| Error::new(ErrorDetails::InvalidMessage { message: format!("Request message content {} is not a string but there is no variant template for Role {}", text, message.role) }))?.to_string(),
-                    };
+                    Some(template_path) => {
+                        let context =if let Some(template_var) = template_var {
+                            let message_text = value.as_str().ok_or_else(|| {
+                                Error::new(ErrorDetails::InvalidMessage { message: format!("Request message content {} is not a string but template (without schema) is provided for Role {}", value, message.role) })
+                            })?;
+                            Cow::Owned(serde_json::json!({
+                                template_var: message_text
+                            }))
+                        } else {
+                            Cow::Borrowed(value)
+                        };
+                        templates.template_message(
+                        template_path,
+                        &context)?
+                    }
+                    None => value.as_str().ok_or_else(|| {
+                        Error::new(ErrorDetails::InvalidMessage { message: format!("Request message content {} is not a string but there is no variant template for Role {}", value, message.role) })
+                    })?.to_string()
+                };
                 content.push(text_content.into());
             }
             ResolvedInputMessageContent::RawText { value: text } => {
@@ -397,6 +467,7 @@ impl Variant for ChatCompletionConfig {
 
         // Validate the system template matches the system schema (best effort, we cannot check the variables comprehensively)
         validate_template_and_schema(
+            TemplateKind::System,
             function.system_schema(),
             self.system_template.as_ref().map(|t| &t.path),
             templates,
@@ -411,6 +482,7 @@ impl Variant for ChatCompletionConfig {
 
         // Validate the user template matches the user schema (best effort, we cannot check the variables comprehensively)
         validate_template_and_schema(
+            TemplateKind::User,
             function.user_schema(),
             self.user_template.as_ref().map(|t| &t.path),
             templates,
@@ -425,6 +497,7 @@ impl Variant for ChatCompletionConfig {
 
         // Validate the assistant template matches the assistant schema (best effort, we cannot check the variables comprehensively)
         validate_template_and_schema(
+            TemplateKind::Assistant,
             function.assistant_schema(),
             self.assistant_template.as_ref().map(|t| &t.path),
             templates,
@@ -497,7 +570,33 @@ impl Variant for ChatCompletionConfig {
     }
 }
 
+/// Used to determine how to apply templates to input content blocks
+/// If we have a schema, then we forward the 'arguments' object as-is to the template.
+/// If we don't have a schema, then we create a single variable corresponding to the template
+/// kind (e.g. `SYSTEM_TEXT_TEMPLATE_VAR` for a system template), and set this variable the
+/// string contents of the input block.
+#[derive(Copy, Clone, Debug)]
+pub struct TemplateSchemaInfo {
+    pub has_system_schema: bool,
+    pub has_user_schema: bool,
+    pub has_assistant_schema: bool,
+}
+
+/// The template variable names used when applying a template with no schema
+/// Only one of these variables is used per template, based on the `TemplateKind`
+const SYSTEM_TEXT_TEMPLATE_VAR: &str = "system_text";
+const USER_TEXT_TEMPLATE_VAR: &str = "user_text";
+const ASSISTANT_TEXT_TEMPLATE_VAR: &str = "assistant_text";
+
+#[derive(Copy, Clone, Debug)]
+pub enum TemplateKind {
+    System,
+    User,
+    Assistant,
+}
+
 pub fn validate_template_and_schema(
+    kind: TemplateKind,
     schema: Option<&StaticJSONSchema>,
     template: Option<&PathBuf>,
     templates: &TemplateConfig,
@@ -507,11 +606,27 @@ pub fn validate_template_and_schema(
             let template_name = template
                 .to_str()
                 .ok_or_else(|| Error::new(ErrorDetails::InvalidTemplatePath))?;
-            if templates.template_needs_variables(template_name)? {
-                return Err(Error::new(ErrorDetails::Config {
-                    message: "schema is required when template is specified and needs variables"
-                        .to_string(),
-                }));
+            let undeclared_vars = templates.get_undeclared_variables(template_name)?;
+            let allowed_var = match kind {
+                TemplateKind::System => SYSTEM_TEXT_TEMPLATE_VAR,
+                TemplateKind::User => USER_TEXT_TEMPLATE_VAR,
+                TemplateKind::Assistant => ASSISTANT_TEXT_TEMPLATE_VAR,
+            };
+            // When we have no schema, the template can have at most one variable
+            if !undeclared_vars.is_empty() {
+                // If the template has any variables, it must be the one allowed variable (e.g. `system_text`)
+                // based on the template kind
+                let mut undeclared_vars = undeclared_vars.into_iter().collect::<Vec<_>>();
+                if undeclared_vars != [allowed_var.to_string()] {
+                    // Ensure that the error message is deterministic
+                    undeclared_vars.sort();
+                    let undeclared_vars_str = format!("[{}]", undeclared_vars.join(", "));
+                    return Err(Error::new(ErrorDetails::Config {
+                        message:
+                            format!("template needs variables: {undeclared_vars_str} but only `{allowed_var}` is allowed when template has no schema")
+                                .to_string(),
+                    }));
+                }
             }
         }
         (Some(_), None) => {
@@ -576,9 +691,16 @@ mod tests {
             frequency_penalty: None,
             max_tokens: None,
             seed: None,
+            stop_sequences: None,
             retries: RetryConfig::default(),
             extra_body: Default::default(),
             extra_headers: Default::default(),
+        };
+
+        let all_schemas = TemplateSchemaInfo {
+            has_system_schema: true,
+            has_user_schema: true,
+            has_assistant_schema: true,
         };
 
         // Test case 1: Regular user message
@@ -586,7 +708,8 @@ mod tests {
             role: Role::User,
             content: vec!["Hello, how are you?".to_string().into()],
         };
-        let result = chat_completion_config.prepare_request_message(&templates, &input_message);
+        let result =
+            chat_completion_config.prepare_request_message(&templates, &input_message, all_schemas);
         assert!(result.is_ok());
         let prepared_message = result.unwrap();
         match prepared_message {
@@ -604,7 +727,8 @@ mod tests {
             role: Role::Assistant,
             content: vec!["I'm doing well, thank you!".to_string().into()],
         };
-        let result = chat_completion_config.prepare_request_message(&templates, &input_message);
+        let result =
+            chat_completion_config.prepare_request_message(&templates, &input_message, all_schemas);
         assert!(result.is_ok());
         let prepared_message = result.unwrap();
         match prepared_message {
@@ -625,7 +749,7 @@ mod tests {
             content: vec![json!({"invalid": "json"}).into()],
         };
         let result = chat_completion_config
-            .prepare_request_message(&templates, &input_message)
+            .prepare_request_message(&templates, &input_message, all_schemas)
             .unwrap_err();
         assert_eq!(result, ErrorDetails::InvalidMessage { message: "Request message content {\"invalid\":\"json\"} is not a string but there is no variant template for Role user".to_string()}.into());
 
@@ -658,7 +782,8 @@ mod tests {
             role: Role::Assistant,
             content: vec![json!({"reason": "it's against my ethical guidelines"}).into()],
         };
-        let result = chat_completion_config.prepare_request_message(&templates, &input_message);
+        let result =
+            chat_completion_config.prepare_request_message(&templates, &input_message, all_schemas);
         assert!(result.is_ok());
         let prepared_message = result.unwrap();
         match prepared_message {
@@ -679,7 +804,8 @@ mod tests {
             role: Role::User,
             content: vec![json!({"name": "John", "age": 30}).into()],
         };
-        let result = chat_completion_config.prepare_request_message(&templates, &input_message);
+        let result =
+            chat_completion_config.prepare_request_message(&templates, &input_message, all_schemas);
         assert!(result.is_ok());
         let prepared_message = result.unwrap();
         match prepared_message {
@@ -700,7 +826,8 @@ mod tests {
             role: Role::User,
             content: vec![json!({"name": "Alice"}).into()], // Missing "age" field
         };
-        let result = chat_completion_config.prepare_request_message(&templates, &input_message);
+        let result =
+            chat_completion_config.prepare_request_message(&templates, &input_message, all_schemas);
         assert!(result.is_err());
         match result.unwrap_err().get_details() {
             ErrorDetails::MiniJinjaTemplateRender { message, .. } => {
@@ -713,7 +840,8 @@ mod tests {
             role: Role::User,
             content: vec!["This is a plain string".to_string().into()],
         };
-        let result = chat_completion_config.prepare_request_message(&templates, &input_message);
+        let result =
+            chat_completion_config.prepare_request_message(&templates, &input_message, all_schemas);
         assert!(result.is_err());
         match result.unwrap_err().get_details() {
             ErrorDetails::MiniJinjaTemplateRender { message, .. } => {
@@ -750,7 +878,8 @@ mod tests {
             role: Role::Assistant,
             content: vec![Value::Null.into()],
         };
-        let result = chat_completion_config.prepare_request_message(&templates, &input_message);
+        let result =
+            chat_completion_config.prepare_request_message(&templates, &input_message, all_schemas);
         assert!(result.is_ok());
         let prepared_message = result.unwrap();
         match prepared_message {
@@ -771,7 +900,8 @@ mod tests {
             role: Role::User,
             content: vec![Value::Null.into()],
         };
-        let result = chat_completion_config.prepare_request_message(&templates, &input_message);
+        let result =
+            chat_completion_config.prepare_request_message(&templates, &input_message, all_schemas);
         assert!(result.is_ok());
         let prepared_message = result.unwrap();
         match prepared_message {
@@ -792,6 +922,12 @@ mod tests {
     fn test_prepare_system_message() {
         let templates = get_test_template_config();
 
+        let all_schemas = TemplateSchemaInfo {
+            has_system_schema: true,
+            has_user_schema: true,
+            has_assistant_schema: true,
+        };
+
         // Test without templates, string message
         let chat_completion_config = ChatCompletionConfig {
             model: "dummy".into(),
@@ -799,8 +935,11 @@ mod tests {
             ..Default::default()
         };
         let input_message = Value::String("You are a helpful assistant.".to_string());
-        let result =
-            chat_completion_config.prepare_system_message(&templates, Some(&input_message));
+        let result = chat_completion_config.prepare_system_message(
+            &templates,
+            Some(&input_message),
+            all_schemas,
+        );
         assert!(result.is_ok());
         let prepared_message = result.unwrap();
         assert_eq!(
@@ -815,8 +954,11 @@ mod tests {
             ..Default::default()
         };
         let input_message = json!({"message": "You are a helpful assistant."});
-        let result =
-            chat_completion_config.prepare_system_message(&templates, Some(&input_message));
+        let result = chat_completion_config.prepare_system_message(
+            &templates,
+            Some(&input_message),
+            all_schemas,
+        );
         assert!(result.is_err());
         let prepared_message = result.unwrap_err();
         assert_eq!(
@@ -830,7 +972,7 @@ mod tests {
             weight: Some(1.0),
             ..Default::default()
         };
-        let result = chat_completion_config.prepare_system_message(&templates, None);
+        let result = chat_completion_config.prepare_system_message(&templates, None, all_schemas);
         assert!(result.is_ok());
         let prepared_message = result.unwrap();
         assert_eq!(prepared_message, None);
@@ -849,8 +991,11 @@ mod tests {
         };
 
         let input_message = serde_json::json!({"assistant_name": "ChatGPT"});
-        let result =
-            chat_completion_config.prepare_system_message(&templates, Some(&input_message));
+        let result = chat_completion_config.prepare_system_message(
+            &templates,
+            Some(&input_message),
+            all_schemas,
+        );
         assert!(result.is_ok());
         let prepared_message = result.unwrap();
         assert_eq!(
@@ -871,7 +1016,7 @@ mod tests {
             ..Default::default()
         };
 
-        let result = chat_completion_config.prepare_system_message(&templates, None);
+        let result = chat_completion_config.prepare_system_message(&templates, None, all_schemas);
         assert!(result.is_ok());
         let prepared_message = result.unwrap();
         assert_eq!(
@@ -910,11 +1055,12 @@ mod tests {
             }),
             ..Default::default()
         };
+        let schema_any = StaticJSONSchema::from_value(&json!({ "type": "object" })).unwrap();
         let function_config = FunctionConfig::Chat(FunctionConfigChat {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: None,
+            system_schema: Some(schema_any.clone()),
+            user_schema: Some(schema_any.clone()),
+            assistant_schema: Some(schema_any.clone()),
             tools: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
@@ -941,8 +1087,10 @@ mod tests {
                     config: good_provider_config,
                     extra_body: Default::default(),
                     extra_headers: Default::default(),
+                    timeouts: Default::default(),
                 },
             )]),
+            timeouts: Default::default(),
         };
         let json_model_config = ModelConfig {
             routing: vec!["json_provider".into()],
@@ -953,8 +1101,10 @@ mod tests {
                     config: json_provider_config,
                     extra_body: Default::default(),
                     extra_headers: Default::default(),
+                    timeouts: Default::default(),
                 },
             )]),
+            timeouts: Default::default(),
         };
         let tool_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "tool".into(),
@@ -969,8 +1119,10 @@ mod tests {
                     config: tool_provider_config,
                     extra_body: Default::default(),
                     extra_headers: Default::default(),
+                    timeouts: Default::default(),
                 },
             )]),
+            timeouts: Default::default(),
         };
         let error_model_config = ModelConfig {
             routing: vec!["error".into()],
@@ -981,8 +1133,10 @@ mod tests {
                     config: error_provider_config,
                     extra_body: Default::default(),
                     extra_headers: Default::default(),
+                    timeouts: Default::default(),
                 },
             )]),
+            timeouts: Default::default(),
         };
         // Test case 1: invalid message (String passed when template required)
         let messages = vec![ResolvedInputMessage {
@@ -1172,8 +1326,10 @@ mod tests {
                     config: good_provider_config,
                     extra_body: Default::default(),
                     extra_headers: Default::default(),
+                    timeouts: Default::default(),
                 },
             )]),
+            timeouts: Default::default(),
         };
         let models = HashMap::from([("good".into(), text_model_config)])
             .try_into()
@@ -1340,11 +1496,12 @@ mod tests {
         });
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
         let output_schema = StaticJSONSchema::from_value(&output_schema).unwrap();
+        let schema_any = StaticJSONSchema::from_value(&json!({ "type": "object" })).unwrap();
         let json_function_config = FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
-            assistant_schema: None,
-            system_schema: None,
-            user_schema: None,
+            assistant_schema: Some(schema_any.clone()),
+            system_schema: Some(schema_any.clone()),
+            user_schema: Some(schema_any.clone()),
             output_schema,
             implicit_tool_call_config,
             description: None,
@@ -1492,11 +1649,12 @@ mod tests {
             ToolCallConfig::implicit_from_value(&hardcoded_output_schema);
         let hardcoded_output_schema =
             StaticJSONSchema::from_value(&hardcoded_output_schema).unwrap();
+        let schema_any = StaticJSONSchema::from_value(&json!({ "type": "object" })).unwrap();
         let json_function_config = FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
-            assistant_schema: None,
-            system_schema: None,
-            user_schema: None,
+            assistant_schema: Some(schema_any.clone()),
+            system_schema: Some(schema_any.clone()),
+            user_schema: Some(schema_any.clone()),
             output_schema: hardcoded_output_schema,
             implicit_tool_call_config,
             description: None,
@@ -1510,6 +1668,7 @@ mod tests {
                 presence_penalty: Some(0.1),
                 frequency_penalty: Some(0.2),
                 json_mode: None,
+                stop_sequences: None,
             },
         };
         // Will dynamically set "answer" instead of "response"
@@ -1602,11 +1761,12 @@ mod tests {
             ToolCallConfig::implicit_from_value(&hardcoded_output_schema);
         let hardcoded_output_schema =
             StaticJSONSchema::from_value(&hardcoded_output_schema).unwrap();
+        let schema_any = StaticJSONSchema::from_value(&json!({ "type": "object" })).unwrap();
         let json_function_config = FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
-            assistant_schema: None,
-            system_schema: None,
-            user_schema: None,
+            assistant_schema: Some(schema_any.clone()),
+            system_schema: Some(schema_any.clone()),
+            user_schema: Some(schema_any.clone()),
             output_schema: hardcoded_output_schema,
             implicit_tool_call_config,
             description: None,
@@ -1698,6 +1858,7 @@ mod tests {
                         presence_penalty: Some(0.1),
                         frequency_penalty: Some(0.2),
                         json_mode: None,
+                        stop_sequences: None,
                     },
                 };
                 assert_eq!(json_result.inference_params, expected_inference_params);
@@ -1721,11 +1882,12 @@ mod tests {
             },
         };
         let templates = Box::leak(Box::new(get_test_template_config()));
+        let schema_any = StaticJSONSchema::from_value(&json!({ "type": "object" })).unwrap();
         let function_config = Box::leak(Box::new(FunctionConfig::Chat(FunctionConfigChat {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: None,
+            system_schema: Some(schema_any.clone()),
+            user_schema: Some(schema_any.clone()),
+            assistant_schema: Some(schema_any.clone()),
             tools: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
@@ -1751,8 +1913,10 @@ mod tests {
                     config: good_provider_config,
                     extra_body: Default::default(),
                     extra_headers: Default::default(),
+                    timeouts: Default::default(),
                 },
             )]),
+            timeouts: Default::default(),
         };
         let error_model_config = ModelConfig {
             routing: vec!["error_provider".into()],
@@ -1763,8 +1927,10 @@ mod tests {
                     config: error_provider_config,
                     extra_body: Default::default(),
                     extra_headers: Default::default(),
+                    timeouts: Default::default(),
                 },
             )]),
+            timeouts: Default::default(),
         };
         // Test case 1: Model inference fails because of model issues
         let inference_params = InferenceParams::default();
@@ -2006,6 +2172,7 @@ mod tests {
                 presence_penalty: Some(0.1),
                 frequency_penalty: Some(0.2),
                 json_mode: None,
+                stop_sequences: None,
             },
         };
         let model_request = chat_completion_config
@@ -2186,7 +2353,7 @@ mod tests {
     #[test]
     fn test_validate_template_and_schema_both_none() {
         let templates = get_test_template_config();
-        let result = validate_template_and_schema(None, None, &templates);
+        let result = validate_template_and_schema(TemplateKind::System, None, None, &templates);
         assert!(result.is_ok());
     }
 
@@ -2199,7 +2366,12 @@ mod tests {
         )
         .unwrap();
         let template = PathBuf::from("test_validate_template_and_schema_both_some");
-        let result = validate_template_and_schema(Some(&schema), Some(&template), &templates);
+        let result = validate_template_and_schema(
+            TemplateKind::System,
+            Some(&schema),
+            Some(&template),
+            &templates,
+        );
         assert!(result.is_ok());
     }
 
@@ -2207,7 +2379,8 @@ mod tests {
     fn test_validate_template_and_schema_template_no_needs_variables() {
         let templates = get_test_template_config();
         let template = PathBuf::from("system_filled");
-        let result = validate_template_and_schema(None, Some(&template), &templates);
+        let result =
+            validate_template_and_schema(TemplateKind::System, None, Some(&template), &templates);
         assert!(result.is_ok());
     }
 
@@ -2215,13 +2388,15 @@ mod tests {
     fn test_validate_template_and_schema_template_needs_variables() {
         let templates = get_test_template_config(); // Template needing variables
         let template = PathBuf::from("greeting");
-        let err = validate_template_and_schema(None, Some(&template), &templates).unwrap_err();
+        let err =
+            validate_template_and_schema(TemplateKind::System, None, Some(&template), &templates)
+                .unwrap_err();
         let details = err.get_details();
 
         if let ErrorDetails::Config { message } = details {
             assert_eq!(
                 *message,
-                "schema is required when template is specified and needs variables".to_string()
+                "template needs variables: [name] but only `system_text` is allowed when template has no schema".to_string()
             );
         } else {
             panic!("Expected Error::Config");
@@ -2236,7 +2411,9 @@ mod tests {
             PathBuf::new(),
         )
         .unwrap();
-        let err = validate_template_and_schema(Some(&schema), None, &templates).unwrap_err();
+        let err =
+            validate_template_and_schema(TemplateKind::System, Some(&schema), None, &templates)
+                .unwrap_err();
         let details = err.get_details();
 
         if let ErrorDetails::Config { message } = details {

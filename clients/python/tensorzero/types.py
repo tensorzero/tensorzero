@@ -85,6 +85,7 @@ class FileBase64(ContentBlock):
 @dataclass
 class ImageUrl(ContentBlock):
     url: str
+    mime_type: Optional[str] = None
     type: str = "image"
 
 
@@ -536,31 +537,101 @@ class TensorZeroTypeEncoder(JSONEncoder):
             super().default(o)
 
 
-@dataclass
-class StoredChatInference:
-    function_name: str
-    variant_name: str
-    input: InferenceInput
-    output: List[ContentBlock]
-    episode_id: UUID
-    inference_id: UUID
-    tool_params: ToolParams
-    type: Literal["chat"] = "chat"
-
-
-@dataclass
-class StoredJsonInference:
-    function_name: str
-    variant_name: str
-    input: InferenceInput
-    output: JsonInferenceOutput
-    episode_id: UUID
-    inference_id: UUID
-    output_schema: Any
-    type: Literal["json"] = "json"
-
-
-StoredInference = Union[StoredChatInference, StoredJsonInference]
-
-
 ToolChoice = Union[Literal["auto", "required", "off"], Dict[Literal["specific"], str]]
+
+
+# Types for the experimental list inferences API
+# These are serialized across the PyO3 boundary
+
+
+@dataclass
+class InferenceFilterTreeNode(ABC, HasTypeField):
+    pass
+
+
+@dataclass
+class FloatMetricFilter(InferenceFilterTreeNode):
+    metric_name: str
+    value: float
+    comparison_operator: Literal["<", "<=", "=", ">", ">=", "!="]
+    type: str = "float_metric"
+
+
+# CAREFUL: deprecated
+class FloatMetricNode(FloatMetricFilter):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        warnings.warn(
+            "Please use `FloatMetricFilter` instead of `FloatMetricNode`. In a future release, `FloatMetricNode` will be removed.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        super().__init__(*args, **kwargs)
+
+
+@dataclass
+class BooleanMetricFilter(InferenceFilterTreeNode):
+    metric_name: str
+    value: bool
+    type: str = "boolean_metric"
+
+
+# CAREFUL: deprecated
+class BooleanMetricNode(BooleanMetricFilter):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        warnings.warn(
+            "Please use `BooleanMetricFilter` instead of `BooleanMetricNode`. In a future release, `BooleanMetricNode` will be removed.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        super().__init__(*args, **kwargs)
+
+
+@dataclass
+class AndFilter(InferenceFilterTreeNode):
+    children: List[InferenceFilterTreeNode]
+    type: str = "and"
+
+
+# CAREFUL: deprecated
+class AndNode(AndFilter):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        warnings.warn(
+            "Please use `AndFilter` instead of `AndNode`. In a future release, `AndNode` will be removed.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        super().__init__(*args, **kwargs)
+
+
+@dataclass
+class OrFilter(InferenceFilterTreeNode):
+    children: List[InferenceFilterTreeNode]
+    type: str = "or"
+
+
+# CAREFUL: deprecated
+class OrNode(OrFilter):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        warnings.warn(
+            "Please use `OrFilter` instead of `OrNode`. In a future release, `OrNode` will be removed.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        super().__init__(*args, **kwargs)
+
+
+@dataclass
+class NotFilter(InferenceFilterTreeNode):
+    child: InferenceFilterTreeNode
+    type: str = "not"
+
+
+# CAREFUL: deprecated
+class NotNode(NotFilter):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        warnings.warn(
+            "Please use `NotFilter` instead of `NotNode`. In a future release, `NotNode` will be removed.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        super().__init__(*args, **kwargs)

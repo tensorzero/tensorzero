@@ -78,7 +78,10 @@ impl Migration for Migration0013<'_> {
             return Ok(true);
         }
         let query = "SHOW CREATE TABLE InferenceById".to_string();
-        let result = self.clickhouse.run_query_synchronous(query, None).await?;
+        let result = self
+            .clickhouse
+            .run_query_synchronous_no_params(query)
+            .await?;
         if !result.contains("UInt128") {
             return Err(ErrorDetails::ClickHouseMigration {
                 id: "0013".to_string(),
@@ -89,7 +92,10 @@ impl Migration for Migration0013<'_> {
             .into());
         }
         let query = "SHOW CREATE TABLE InferenceByEpisodeId".to_string();
-        let result = self.clickhouse.run_query_synchronous(query, None).await?;
+        let result = self
+            .clickhouse
+            .run_query_synchronous_no_params(query)
+            .await?;
         if !result.contains("UInt128") {
             return Err(ErrorDetails::ClickHouseMigration {
                 id: "0013".to_string(),
@@ -100,7 +106,10 @@ impl Migration for Migration0013<'_> {
             .into());
         }
         let query = "SELECT 1 FROM system.functions WHERE name = 'uint_to_uuid'".to_string();
-        let result = self.clickhouse.run_query_synchronous(query, None).await?;
+        let result = self
+            .clickhouse
+            .run_query_synchronous_no_params(query)
+            .await?;
         if !result.contains("1") {
             return Ok(true);
         }
@@ -123,7 +132,7 @@ impl Migration for Migration0013<'_> {
         let query = "SELECT toUInt32(COUNT())  FROM ChatInference".to_string();
         let chat_count: usize = self
             .clickhouse
-            .run_query_synchronous(query, None)
+            .run_query_synchronous_no_params(query)
             .await?
             .trim()
             .parse()
@@ -136,7 +145,7 @@ impl Migration for Migration0013<'_> {
         let query = "SELECT toUInt32(COUNT())  FROM JsonInference".to_string();
         let json_count: usize = self
             .clickhouse
-            .run_query_synchronous(query, None)
+            .run_query_synchronous_no_params(query)
             .await?
             .trim()
             .parse()
@@ -193,7 +202,7 @@ impl Migration for Migration0013<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
         // Create the `InferenceByEpisodeId` table
         let query = r#"
@@ -210,7 +219,7 @@ impl Migration for Migration0013<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
         // Create the `uint_to_uuid` function
         let query = r#"CREATE FUNCTION IF NOT EXISTS uint_to_uuid AS (x) -> reinterpretAsUUID(
@@ -221,7 +230,7 @@ impl Migration for Migration0013<'_> {
         );"#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // If we are not doing a clean start, we need to add a where clause to the view to only include rows that have been created after the view_timestamp
@@ -247,7 +256,10 @@ impl Migration for Migration0013<'_> {
                 {view_where_clause};
             "#
         );
-        let _ = self.clickhouse.run_query_synchronous(query, None).await?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous_no_params(query)
+            .await?;
 
         // IMPORTANT: The function_type column is now correctly set to 'json'
         let query = format!(
@@ -265,7 +277,10 @@ impl Migration for Migration0013<'_> {
                 {view_where_clause};
             "#
         );
-        let _ = self.clickhouse.run_query_synchronous(query, None).await?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous_no_params(query)
+            .await?;
 
         // Create the materialized view for the `InferenceByEpisodeId` table from ChatInference
         // IMPORTANT: The function_type column is now correctly set to 'chat'
@@ -284,7 +299,10 @@ impl Migration for Migration0013<'_> {
                 {view_where_clause};
             "#
         );
-        let _ = self.clickhouse.run_query_synchronous(query, None).await?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous_no_params(query)
+            .await?;
 
         // Create the materialized view for the `InferenceByEpisodeId` table from JsonInference
         // IMPORTANT: The function_type column is now correctly set to 'json'
@@ -303,7 +321,10 @@ impl Migration for Migration0013<'_> {
                 {view_where_clause};
             "#
         );
-        let _ = self.clickhouse.run_query_synchronous(query, None).await?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous_no_params(query)
+            .await?;
 
         /*
         if !self.clean_start {

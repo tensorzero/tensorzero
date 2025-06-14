@@ -14,7 +14,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "2025.5.9"
+version = "2025.6.2"
 rust-version = "1.85.0"
 license = "Apache-2.0"
 
@@ -27,11 +27,11 @@ reqwest = { version = "0.12.15", features = [
 ], default-features = false }
 serde = { version = "1.0.204", features = ["derive", "rc"] }
 serde_path_to_error = "0.1.17"
-uuid = { version = "1.16.0", features = ["serde", "v7"] }
+uuid = { version = "1.17.0", features = ["serde", "v7"] }
 serde_json = { version = "1.0.134", features = ["preserve_order"] }
 secrecy = { version = "0.10.2", features = ["serde"] }
 tracing-test = { version = "0.2.5", features = ["no-env-filter"] }
-toml = "0.8.22"
+toml = "0.8.23"
 reqwest-eventsource = "0.6.0"
 async-stream = "0.3.5"
 http = "1.3.1"
@@ -42,7 +42,7 @@ pyo3 = { version = "0.24.2", features = ["experimental-async", "abi3-py39"] }
 axum = { version = "0.8", features = ["macros"] }
 anyhow = "1.0.98"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter", "fmt"] }
-clap = { version = "4.5.38", features = ["derive"] }
+clap = { version = "4.5.40", features = ["derive"] }
 futures = "0.3.30"
 lazy_static = { version = "1.5.0" }
 url = "2.5.4"
@@ -51,10 +51,13 @@ object_store = { version = "0.12.1", features = ["serde", "aws", "gcp"] }
 rand = "0.9.1"
 chrono = { version = "0.4.41", features = ["serde"] }
 git2 = { version = "0.20.2", default-features = false }
-tracing-opentelemetry-instrumentation-sdk = { version = "0.28.0", features = [
+tracing-opentelemetry-instrumentation-sdk = { version = "0.29.0", features = [
     "tracing_level_info",
 ] }
-tower-http = { version = "0.6.4", features = ["trace"] }
+tower-http = { version = "0.6.6", features = ["trace"] }
+mime = { git = "https://github.com/hyperium/mime", rev = "1ef137c7358fc64e07c8a640e4e9ba2a784b7f7d", features = [
+    "serde1",
+] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

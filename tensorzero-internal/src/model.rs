@@ -8,6 +8,7 @@ use std::time::Duration;
 use std::{env, fs};
 use strum::VariantNames;
 use tensorzero_derive::TensorZeroDeserialize;
+use tokio::time::error::Elapsed;
 use tracing::{span, Level, Span};
 use tracing_futures::{Instrument, Instrumented};
 use url::Url;
@@ -16,7 +17,7 @@ use crate::cache::{
     cache_lookup, cache_lookup_streaming, start_cache_write, start_cache_write_streaming,
     CacheData, ModelProviderRequest, NonStreamingCacheData, StreamingCacheData,
 };
-use crate::config_parser::{skip_credential_validation, ProviderTypesConfig};
+use crate::config_parser::{skip_credential_validation, ProviderTypesConfig, TimeoutsConfig};
 use crate::endpoints::inference::InferenceClients;
 use crate::inference::providers::aws_sagemaker::AWSSagemakerProvider;
 #[cfg(any(test, feature = "e2e_tests"))]
@@ -47,8 +48,8 @@ use crate::{
             anthropic::AnthropicProvider, aws_bedrock::AWSBedrockProvider, azure::AzureProvider,
             deepseek::DeepSeekProvider, fireworks::FireworksProvider,
             gcp_vertex_anthropic::GCPVertexAnthropicProvider,
-            gcp_vertex_gemini::GCPVertexGeminiProvider, mistral::MistralProvider,
-            openai::OpenAIProvider, openrouter::OpenRouterProvider,
+            gcp_vertex_gemini::GCPVertexGeminiProvider, groq::GroqProvider,
+            mistral::MistralProvider, openai::OpenAIProvider, openrouter::OpenRouterProvider,
             provider_trait::InferenceProvider, together::TogetherProvider, vllm::VLLMProvider,
             xai::XAIProvider,
         },
@@ -61,6 +62,7 @@ use serde::Deserialize;
 pub struct ModelConfig {
     pub routing: Vec<Arc<str>>, // [provider name A, provider name B, ...]
     pub providers: HashMap<Arc<str>, ModelProvider>, // provider name => provider config
+    pub timeouts: TimeoutsConfig,
 }
 
 #[derive(Debug, Deserialize)]
@@ -68,6 +70,8 @@ pub struct ModelConfig {
 pub(crate) struct UninitializedModelConfig {
     pub routing: Vec<Arc<str>>, // [provider name A, provider name B, ...]
     pub providers: HashMap<Arc<str>, UninitializedModelProvider>, // provider name => provider config
+    #[serde(default)]
+    pub timeouts: TimeoutsConfig,
 }
 
 impl UninitializedModelConfig {
@@ -94,6 +98,7 @@ impl UninitializedModelConfig {
                         })?,
                         extra_body: provider.extra_body,
                         extra_headers: provider.extra_headers,
+                        timeouts: provider.timeouts,
                     },
                 ))
             })
@@ -101,6 +106,7 @@ impl UninitializedModelConfig {
         Ok(ModelConfig {
             routing: self.routing,
             providers,
+            timeouts: self.timeouts,
         })
     }
 }
@@ -227,6 +233,131 @@ impl ModelConfig {
             Cow::Borrowed(request)
         }
     }
+
+    /// Performs a non-streaming request to a specific provider, performing a cache lookup if enabled.
+    /// We apply model-provider timeouts to the future produced by this function
+    /// (as we want to apply the timeout to ClickHouse cache lookups)
+    async fn non_streaming_provider_request<'request>(
+        &self,
+        model_provider_request: ModelProviderRequest<'request>,
+        provider: &'request ModelProvider,
+        clients: &'request InferenceClients<'request>,
+    ) -> Result<ModelInferenceResponse, Error> {
+        // TODO: think about how to best handle errors here
+        if clients.cache_options.enabled.read() {
+            let cache_lookup = cache_lookup(
+                clients.clickhouse_connection_info,
+                model_provider_request,
+                clients.cache_options.max_age_s,
+            )
+            .await
+            .ok()
+            .flatten();
+            if let Some(cache_lookup) = cache_lookup {
+                return Ok(cache_lookup);
+            }
+        }
+        let response = provider
+            .infer(
+                model_provider_request,
+                clients.http_client,
+                clients.credentials,
+            )
+            .instrument(span!(
+                Level::INFO,
+                "infer",
+                provider_name = model_provider_request.provider_name
+            ))
+            .await?;
+        // We already checked the cache above (and returned early if it was a hit), so this response was not from the cache
+        Ok(ModelInferenceResponse::new(
+            response,
+            model_provider_request.provider_name.into(),
+            false,
+        ))
+    }
+
+    /// Performs a streaming request to a specific provider, performing a cache lookup if enabled.
+    /// We apply model-provider timeouts to the future produced by this function
+    /// (as we want to apply the timeout to ClickHouse cache lookups).
+    ///
+    /// This function also includes a call to `peek_first_chunk` - this ensure that the
+    /// duration of the returned future includes the time taken to get the first chunk
+    /// from the model provider.
+    async fn streaming_provider_request<'request>(
+        &self,
+        model_provider_request: ModelProviderRequest<'request>,
+        provider: &'request ModelProvider,
+        clients: &'request InferenceClients<'request>,
+    ) -> Result<StreamResponseAndMessages, Error> {
+        // TODO: think about how to best handle errors here
+        if clients.cache_options.enabled.read() {
+            let cache_lookup = cache_lookup_streaming(
+                clients.clickhouse_connection_info,
+                model_provider_request,
+                clients.cache_options.max_age_s,
+            )
+            .await
+            .ok()
+            .flatten();
+            if let Some(cache_lookup) = cache_lookup {
+                return Ok(StreamResponseAndMessages {
+                    response: cache_lookup,
+                    messages: model_provider_request.request.messages.clone(),
+                });
+            }
+        }
+
+        let StreamAndRawRequest {
+            stream,
+            raw_request,
+        } = provider
+            .infer_stream(
+                model_provider_request,
+                clients.http_client,
+                clients.credentials,
+            )
+            .await?;
+
+        // Note - we cache the chunks here so that we store the raw model provider input and response chunks
+        // in the cache. We don't want this logic in `collect_chunks`, which would cause us to cache the result
+        // of higher-level transformations (e.g. dicl)
+        let mut stream = if clients.cache_options.enabled.write() {
+            let span = stream.span().clone();
+            // Note - it's fine to call `stream_with_cache_write` inside of `streaming_provider_request`,
+            // as it doesn't immediately kick off a clickhouse cache write. The cache write only occurs
+            // when the stream finished, so the model provider TTFT timeout will (correctly) not include
+            // the time taken to write to clickhouse.
+            stream_with_cache_write(
+                raw_request.clone(),
+                model_provider_request,
+                clients,
+                stream.into_inner(),
+            )
+            .await?
+            .instrument(span)
+        } else {
+            stream
+        };
+        // Get a single chunk from the stream and make sure it is OK then send to client.
+        // We want to do this here so that we can tell that the request is working.
+        peek_first_chunk(
+            stream.inner_mut(),
+            &raw_request,
+            model_provider_request.provider_name,
+        )
+        .await?;
+        Ok(StreamResponseAndMessages {
+            response: StreamResponse {
+                stream,
+                raw_request,
+                model_provider_name: model_provider_request.provider_name.into(),
+                cached: false,
+            },
+            messages: model_provider_request.request.messages.clone(),
+        })
+    }
+
     #[tracing::instrument(skip_all, fields(model_name = model_name, otel.name = "model_inference", stream = false))]
     pub async fn infer<'request>(
         &self,
@@ -235,74 +366,91 @@ impl ModelConfig {
         model_name: &'request str,
     ) -> Result<ModelInferenceResponse, Error> {
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
-        for provider_name in &self.routing {
-            let request = self.filter_content_blocks(request, model_name, provider_name);
-            let model_provider_request = ModelProviderRequest {
-                request: &request,
-                model_name,
-                provider_name,
-            };
-            let cache_key = model_provider_request.get_cache_key()?;
-            // TODO: think about how to best handle errors here
-            if clients.cache_options.enabled.read() {
-                let cache_lookup = cache_lookup(
-                    clients.clickhouse_connection_info,
-                    model_provider_request,
-                    clients.cache_options.max_age_s,
-                )
-                .await
-                .ok()
-                .flatten();
-                if let Some(cache_lookup) = cache_lookup {
-                    return Ok(cache_lookup);
-                }
-            }
-            let provider = self.providers.get(provider_name).ok_or_else(|| {
-                Error::new(ErrorDetails::ProviderNotFound {
-                    provider_name: provider_name.to_string(),
-                })
-            })?;
-            let response = provider
-                .infer(
-                    model_provider_request,
-                    clients.http_client,
-                    clients.credentials,
-                )
-                .instrument(span!(
-                    Level::INFO,
-                    "infer",
-                    provider_name = &**provider_name
-                ))
-                .await;
+        let run_all_models = async {
+            for provider_name in &self.routing {
+                let request = self.filter_content_blocks(request, model_name, provider_name);
+                let model_provider_request = ModelProviderRequest {
+                    request: &request,
+                    model_name,
+                    provider_name,
+                };
+                let cache_key = model_provider_request.get_cache_key()?;
+                let provider = self
+                    .providers
+                    .get(model_provider_request.provider_name)
+                    .ok_or_else(|| {
+                        Error::new(ErrorDetails::ProviderNotFound {
+                            provider_name: model_provider_request.provider_name.to_string(),
+                        })
+                    })?;
 
-            match response {
-                Ok(response) => {
-                    if clients.cache_options.enabled.write() {
-                        let _ = start_cache_write(
-                            clients.clickhouse_connection_info,
-                            cache_key,
-                            NonStreamingCacheData {
-                                blocks: response.output.clone(),
-                            },
-                            &response.raw_request,
-                            &response.raw_response,
-                            &response.usage,
-                            response.finish_reason.as_ref(),
-                        );
+                let response_fut =
+                    self.non_streaming_provider_request(model_provider_request, provider, clients);
+                let response = if let Some(timeout) = provider.non_streaming_total_timeout() {
+                    tokio::time::timeout(timeout, response_fut)
+                        .await
+                        // Convert the outer `Elapsed` error into a TensorZero error,
+                        // so that it can be handled by the `match response` block below
+                        .unwrap_or_else(|_: Elapsed| {
+                            Err(Error::new(ErrorDetails::ModelProviderTimeout {
+                                provider_name: provider_name.to_string(),
+                                timeout,
+                                streaming: false,
+                            }))
+                        })
+                } else {
+                    response_fut.await
+                };
+
+                match response {
+                    Ok(response) => {
+                        // Perform the cache write outside of the `non_streaming_total_timeout` timeout future,
+                        // (in case we ever add a blocking cache write option)
+                        if clients.cache_options.enabled.write() {
+                            let _ = start_cache_write(
+                                clients.clickhouse_connection_info,
+                                cache_key,
+                                NonStreamingCacheData {
+                                    blocks: response.output.clone(),
+                                },
+                                &response.raw_request,
+                                &response.raw_response,
+                                &response.usage,
+                                response.finish_reason.as_ref(),
+                            );
+                        }
+
+                        return Ok(response);
                     }
-                    // We already checked the cache above (and returned early if it was a hit), so this response was not from the cache
-                    let model_inference_response =
-                        ModelInferenceResponse::new(response, provider_name.clone(), false);
-
-                    return Ok(model_inference_response);
-                }
-                Err(error) => {
-                    provider_errors.insert(provider_name.to_string(), error);
+                    Err(error) => {
+                        provider_errors.insert(provider_name.to_string(), error);
+                    }
                 }
             }
+            Err(Error::new(ErrorDetails::ModelProvidersExhausted {
+                provider_errors,
+            }))
+        };
+        // This is the top-level model timeout, which limits the total time taken to run all providers.
+        // Some of the providers may themselves have timeouts, which is fine. Provider timeouts
+        // are treated as just another kind of provider error - a timeout of N ms is equivalent
+        // to a provider taking N ms, and then producing a normal HTTP error.
+        if let Some(timeout) = self.timeouts.non_streaming.total_ms {
+            let timeout = Duration::from_millis(timeout);
+            tokio::time::timeout(timeout, run_all_models)
+                .await
+                // Convert the outer `Elapsed` error into a TensorZero error,
+                // so that it can be handled by the `match response` block below
+                .unwrap_or_else(|_: Elapsed| {
+                    Err(Error::new(ErrorDetails::ModelTimeout {
+                        model_name: model_name.to_string(),
+                        timeout,
+                        streaming: false,
+                    }))
+                })
+        } else {
+            run_all_models.await
         }
-        let err = Error::new(ErrorDetails::ModelProvidersExhausted { provider_errors });
-        Err(err)
     }
 
     #[tracing::instrument(skip_all, fields(model_name = model_name, otel.name = "model_inference", stream = true))]
@@ -311,82 +459,69 @@ impl ModelConfig {
         request: &'request ModelInferenceRequest<'request>,
         clients: &'request InferenceClients<'request>,
         model_name: &'request str,
-    ) -> Result<(StreamResponse, Vec<RequestMessage>), Error> {
+    ) -> Result<StreamResponseAndMessages, Error> {
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
-        for provider_name in &self.routing {
-            let request = self.filter_content_blocks(request, model_name, provider_name);
-            let model_provider_request = ModelProviderRequest {
-                request: &request,
-                model_name,
-                provider_name,
-            };
-            // TODO: think about how to best handle errors here
-            if clients.cache_options.enabled.read() {
-                let cache_lookup = cache_lookup_streaming(
-                    clients.clickhouse_connection_info,
-                    model_provider_request,
-                    clients.cache_options.max_age_s,
-                )
-                .await
-                .ok()
-                .flatten();
-                if let Some(cache_lookup) = cache_lookup {
-                    return Ok((cache_lookup, request.messages.clone()));
-                }
-            }
+        let run_all_models = async {
+            for provider_name in &self.routing {
+                let request = self.filter_content_blocks(request, model_name, provider_name);
+                let model_provider_request = ModelProviderRequest {
+                    request: &request,
+                    model_name,
+                    provider_name,
+                };
+                let provider = self.providers.get(provider_name).ok_or_else(|| {
+                    Error::new(ErrorDetails::ProviderNotFound {
+                        provider_name: provider_name.to_string(),
+                    })
+                })?;
 
-            let provider = self.providers.get(provider_name).ok_or_else(|| {
-                Error::new(ErrorDetails::ProviderNotFound {
-                    provider_name: provider_name.to_string(),
-                })
-            })?;
-            let response = provider
-                .infer_stream(
-                    model_provider_request,
-                    clients.http_client,
-                    clients.credentials,
-                )
-                .await;
-            match response {
-                Ok(response) => {
-                    let (stream, raw_request) = response;
-                    // Note - we cache the chunks here so that we store the raw model provider input and response chunks
-                    // in the cache. We don't want this logic in `collect_chunks`, which would cause us to cache the result
-                    // of higher-level transformations (e.g. dicl)
-                    let mut stream = if clients.cache_options.enabled.write() {
-                        let span = stream.span().clone();
-                        stream_with_cache_write(
-                            raw_request.clone(),
-                            model_provider_request,
-                            clients,
-                            stream.into_inner(),
-                        )
-                        .await?
-                        .instrument(span)
-                    } else {
-                        stream
-                    };
-                    // Get a single chunk from the stream and make sure it is OK then send to client.
-                    // We want to do this here so that we can tell that the request is working.
-                    peek_first_chunk(stream.inner_mut(), &raw_request, provider_name).await?;
-                    return Ok((
-                        StreamResponse {
-                            stream,
-                            raw_request,
-                            model_provider_name: provider_name.clone(),
-                            cached: false,
-                        },
-                        request.messages.clone(),
-                    ));
-                }
-                Err(error) => {
-                    provider_errors.insert(provider_name.to_string(), error);
+                // This future includes a call to `peek_first_chunk`, so applying
+                // `streaming_ttft_timeout` is correct.
+                let response_fut =
+                    self.streaming_provider_request(model_provider_request, provider, clients);
+                let response = if let Some(timeout) = provider.streaming_ttft_timeout() {
+                    tokio::time::timeout(timeout, response_fut)
+                        .await
+                        .unwrap_or_else(|_: Elapsed| {
+                            Err(Error::new(ErrorDetails::ModelProviderTimeout {
+                                provider_name: provider_name.to_string(),
+                                timeout,
+                                streaming: true,
+                            }))
+                        })
+                } else {
+                    response_fut.await
+                };
+
+                match response {
+                    Ok(response) => return Ok(response),
+                    Err(error) => {
+                        provider_errors.insert(provider_name.to_string(), error);
+                    }
                 }
             }
+            Err(Error::new(ErrorDetails::ModelProvidersExhausted {
+                provider_errors,
+            }))
+        };
+        // See the corresponding `non_streaming.total_ms` timeout in the `infer`
+        // method above for more details.
+        if let Some(timeout) = self.timeouts.streaming.ttft_ms {
+            let timeout = Duration::from_millis(timeout);
+            tokio::time::timeout(timeout, run_all_models)
+                .await
+                // Convert the outer `Elapsed` error into a TensorZero error,
+                // so that it can be handled by the `match response` block below
+                .unwrap_or_else(|_: Elapsed| {
+                    Err(Error::new(ErrorDetails::ModelTimeout {
+                        model_name: model_name.to_string(),
+                        timeout,
+                        streaming: true,
+                    }))
+                })
+        } else {
+            run_all_models.await
         }
-        Err(Error::new(ErrorDetails::ModelProvidersExhausted {
-            provider_errors,
-        }))
     }
 
     pub async fn start_batch_inference<'request>(
@@ -487,6 +622,7 @@ pub(crate) struct UninitializedModelProvider {
     pub config: UninitializedProviderConfig,
     pub extra_body: Option<ExtraBodyConfig>,
     pub extra_headers: Option<ExtraHeadersConfig>,
+    pub timeouts: Option<TimeoutsConfig>,
 }
 
 #[derive(Debug)]
@@ -495,9 +631,22 @@ pub struct ModelProvider {
     pub config: ProviderConfig,
     pub extra_headers: Option<ExtraHeadersConfig>,
     pub extra_body: Option<ExtraBodyConfig>,
+    pub timeouts: Option<TimeoutsConfig>,
 }
 
 impl ModelProvider {
+    fn non_streaming_total_timeout(&self) -> Option<Duration> {
+        Some(Duration::from_millis(
+            self.timeouts.as_ref()?.non_streaming.total_ms?,
+        ))
+    }
+
+    fn streaming_ttft_timeout(&self) -> Option<Duration> {
+        Some(Duration::from_millis(
+            self.timeouts.as_ref()?.streaming.ttft_ms?,
+        ))
+    }
+
     /// The name to report in the OTEL `gen_ai.system` attribute
     fn genai_system_name(&self) -> &'static str {
         match &self.config {
@@ -509,6 +658,7 @@ impl ModelProvider {
             ProviderConfig::GCPVertexAnthropic(_) => "gcp_vertex_anthropic",
             ProviderConfig::GCPVertexGemini(_) => "gcp_vertex_gemini",
             ProviderConfig::GoogleAIStudioGemini(_) => "google_ai_studio_gemini",
+            ProviderConfig::Groq(_) => "groq",
             ProviderConfig::Hyperbolic(_) => "hyperbolic",
             ProviderConfig::Mistral(_) => "mistral",
             ProviderConfig::OpenAI(_) => "openai",
@@ -534,8 +684,9 @@ impl ModelProvider {
             ProviderConfig::Azure(provider) => Some(provider.deployment_id()),
             ProviderConfig::Fireworks(provider) => Some(provider.model_name()),
             ProviderConfig::GCPVertexAnthropic(provider) => Some(provider.model_id()),
-            ProviderConfig::GCPVertexGemini(provider) => Some(provider.model_id()),
+            ProviderConfig::GCPVertexGemini(provider) => Some(provider.model_or_endpoint_id()),
             ProviderConfig::GoogleAIStudioGemini(provider) => Some(provider.model_name()),
+            ProviderConfig::Groq(provider) => Some(provider.model_name()),
             ProviderConfig::Hyperbolic(provider) => Some(provider.model_name()),
             ProviderConfig::Mistral(provider) => Some(provider.model_name()),
             ProviderConfig::OpenAI(provider) => Some(provider.model_name()),
@@ -581,6 +732,7 @@ pub enum ProviderConfig {
     GCPVertexAnthropic(GCPVertexAnthropicProvider),
     GCPVertexGemini(GCPVertexGeminiProvider),
     GoogleAIStudioGemini(GoogleAIStudioGeminiProvider),
+    Groq(GroqProvider),
     Hyperbolic(HyperbolicProvider),
     Mistral(MistralProvider),
     OpenAI(OpenAIProvider),
@@ -648,7 +800,8 @@ pub(super) enum UninitializedProviderConfig {
     #[strum(serialize = "gcp_vertex_gemini")]
     #[serde(rename = "gcp_vertex_gemini")]
     GCPVertexGemini {
-        model_id: String,
+        model_id: Option<String>,
+        endpoint_id: Option<String>,
         location: String,
         project_id: String,
         credential_location: Option<CredentialLocation>,
@@ -656,6 +809,12 @@ pub(super) enum UninitializedProviderConfig {
     #[strum(serialize = "google_ai_studio_gemini")]
     #[serde(rename = "google_ai_studio_gemini")]
     GoogleAIStudioGemini {
+        model_name: String,
+        api_key_location: Option<CredentialLocation>,
+    },
+    #[strum(serialize = "groq")]
+    #[serde(rename = "groq")]
+    Groq {
         model_name: String,
         api_key_location: Option<CredentialLocation>,
     },
@@ -682,7 +841,6 @@ pub(super) enum UninitializedProviderConfig {
     },
     OpenRouter {
         model_name: String,
-        api_base: Option<Url>,
         api_key_location: Option<CredentialLocation>,
     },
     Together {
@@ -821,6 +979,7 @@ impl UninitializedProviderConfig {
             })?),
             UninitializedProviderConfig::GCPVertexGemini {
                 model_id,
+                endpoint_id,
                 location,
                 project_id,
                 credential_location: api_key_location,
@@ -828,6 +987,7 @@ impl UninitializedProviderConfig {
                 tokio::runtime::Handle::current().block_on(async {
                     GCPVertexGeminiProvider::new(
                         model_id,
+                        endpoint_id,
                         location,
                         project_id,
                         api_key_location,
@@ -843,6 +1003,10 @@ impl UninitializedProviderConfig {
                 model_name,
                 api_key_location,
             )?),
+            UninitializedProviderConfig::Groq {
+                model_name,
+                api_key_location,
+            } => ProviderConfig::Groq(GroqProvider::new(model_name, api_key_location)?),
             UninitializedProviderConfig::Hyperbolic {
                 model_name,
                 api_key_location,
@@ -860,13 +1024,8 @@ impl UninitializedProviderConfig {
             }
             UninitializedProviderConfig::OpenRouter {
                 model_name,
-                api_base,
                 api_key_location,
-            } => ProviderConfig::OpenRouter(OpenRouterProvider::new(
-                model_name,
-                api_base,
-                api_key_location,
-            )?),
+            } => ProviderConfig::OpenRouter(OpenRouterProvider::new(model_name, api_key_location)?),
             UninitializedProviderConfig::Together {
                 model_name,
                 api_key_location,
@@ -909,6 +1068,16 @@ impl UninitializedProviderConfig {
     }
 }
 
+struct StreamAndRawRequest {
+    stream: tracing_futures::Instrumented<PeekableProviderInferenceResponseStream>,
+    raw_request: String,
+}
+
+pub struct StreamResponseAndMessages {
+    pub response: StreamResponse,
+    pub messages: Vec<RequestMessage>,
+}
+
 impl ModelProvider {
     #[tracing::instrument(skip_all, fields(provider_name = &*self.name, otel.name = "model_provider_inference",
         gen_ai.operation.name = "chat",
@@ -943,6 +1112,7 @@ impl ModelProvider {
             ProviderConfig::GCPVertexGemini(provider) => {
                 provider.infer(request, client, api_keys, self).await
             }
+            ProviderConfig::Groq(provider) => provider.infer(request, client, api_keys, self).await,
             ProviderConfig::GoogleAIStudioGemini(provider) => {
                 provider.infer(request, client, api_keys, self).await
             }
@@ -987,13 +1157,7 @@ impl ModelProvider {
         request: ModelProviderRequest<'_>,
         client: &Client,
         api_keys: &InferenceCredentials,
-    ) -> Result<
-        (
-            tracing_futures::Instrumented<PeekableProviderInferenceResponseStream>,
-            String,
-        ),
-        Error,
-    > {
+    ) -> Result<StreamAndRawRequest, Error> {
         let (stream, raw_request) = match &self.config {
             ProviderConfig::Anthropic(provider) => {
                 provider.infer_stream(request, client, api_keys, self).await
@@ -1017,6 +1181,9 @@ impl ModelProvider {
                 provider.infer_stream(request, client, api_keys, self).await
             }
             ProviderConfig::GoogleAIStudioGemini(provider) => {
+                provider.infer_stream(request, client, api_keys, self).await
+            }
+            ProviderConfig::Groq(provider) => {
                 provider.infer_stream(request, client, api_keys, self).await
             }
             ProviderConfig::Hyperbolic(provider) => {
@@ -1059,7 +1226,10 @@ impl ModelProvider {
         // This will cause the span to be entered every time the stream is polled,
         // extending the lifetime of the span in OpenTelemetry to include the entire
         // duration of the response stream.
-        Ok((stream.instrument(Span::current()), raw_request))
+        Ok(StreamAndRawRequest {
+            stream: stream.instrument(Span::current()),
+            raw_request,
+        })
     }
 
     async fn start_batch_inference<'a>(
@@ -1105,6 +1275,11 @@ impl ModelProvider {
                     .await
             }
             ProviderConfig::GoogleAIStudioGemini(provider) => {
+                provider
+                    .start_batch_inference(requests, client, api_keys)
+                    .await
+            }
+            ProviderConfig::Groq(provider) => {
                 provider
                     .start_batch_inference(requests, client, api_keys)
                     .await
@@ -1211,6 +1386,11 @@ impl ModelProvider {
                     .await
             }
             ProviderConfig::GoogleAIStudioGemini(provider) => {
+                provider
+                    .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
+                    .await
+            }
+            ProviderConfig::Groq(provider) => {
                 provider
                     .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
                     .await
@@ -1495,6 +1675,7 @@ const SHORTHAND_MODEL_PREFIXES: &[&str] = &[
     "gcp_vertex_gemini::",
     "gcp_vertex_anthropic::",
     "hyperbolic::",
+    "groq::",
     "mistral::",
     "openai::",
     "openrouter::",
@@ -1527,9 +1708,11 @@ impl ShorthandModelConfig for ModelConfig {
             "gcp_vertex_anthropic" => ProviderConfig::GCPVertexAnthropic(
                 GCPVertexAnthropicProvider::new_shorthand(model_name).await?,
             ),
+            "groq" => ProviderConfig::Groq(GroqProvider::new(model_name, None)?),
             "hyperbolic" => ProviderConfig::Hyperbolic(HyperbolicProvider::new(model_name, None)?),
             "mistral" => ProviderConfig::Mistral(MistralProvider::new(model_name, None)?),
             "openai" => ProviderConfig::OpenAI(OpenAIProvider::new(model_name, None, None)?),
+            "openrouter" => ProviderConfig::OpenRouter(OpenRouterProvider::new(model_name, None)?),
             "together" => ProviderConfig::Together(TogetherProvider::new(
                 model_name,
                 None,
@@ -1554,8 +1737,10 @@ impl ShorthandModelConfig for ModelConfig {
                     config: provider_config,
                     extra_body: Default::default(),
                     extra_headers: Default::default(),
+                    timeouts: Default::default(),
                 },
             )]),
+            timeouts: Default::default(),
         })
     }
 
@@ -1654,8 +1839,10 @@ mod tests {
                     config: good_provider_config,
                     extra_body: Default::default(),
                     extra_headers: Default::default(),
+                    timeouts: Default::default(),
                 },
             )]),
+            timeouts: Default::default(),
         };
         let tool_config = ToolCallConfig {
             tools_available: vec![],
@@ -1720,8 +1907,10 @@ mod tests {
                     config: bad_provider_config,
                     extra_body: Default::default(),
                     extra_headers: Default::default(),
+                    timeouts: Default::default(),
                 },
             )]),
+            timeouts: Default::default(),
         };
         let response = model_config
             .infer(&request, &clients, model_name)
@@ -1805,6 +1994,7 @@ mod tests {
                         config: bad_provider_config,
                         extra_body: Default::default(),
                         extra_headers: Default::default(),
+                        timeouts: Default::default(),
                     },
                 ),
                 (
@@ -1814,9 +2004,11 @@ mod tests {
                         config: good_provider_config,
                         extra_body: Default::default(),
                         extra_headers: Default::default(),
+                        timeouts: Default::default(),
                     },
                 ),
             ]),
+            timeouts: Default::default(),
         };
 
         let model_name = "test model";
@@ -1880,18 +2072,21 @@ mod tests {
                     config: good_provider_config,
                     extra_body: Default::default(),
                     extra_headers: Default::default(),
+                    timeouts: Default::default(),
                 },
             )]),
+            timeouts: Default::default(),
         };
-        let (
-            StreamResponse {
-                mut stream,
-                raw_request,
-                model_provider_name,
-                cached: _,
-            },
-            _input,
-        ) = model_config
+        let StreamResponseAndMessages {
+            response:
+                StreamResponse {
+                    mut stream,
+                    raw_request,
+                    model_provider_name,
+                    cached: _,
+                },
+            messages: _input,
+        } = model_config
             .infer_stream(
                 &request,
                 &InferenceClients {
@@ -1949,8 +2144,10 @@ mod tests {
                     config: bad_provider_config,
                     extra_body: Default::default(),
                     extra_headers: Default::default(),
+                    timeouts: Default::default(),
                 },
             )]),
+            timeouts: Default::default(),
         };
         let response = model_config
             .infer_stream(
@@ -2036,6 +2233,7 @@ mod tests {
                         config: bad_provider_config,
                         extra_body: Default::default(),
                         extra_headers: Default::default(),
+                        timeouts: Default::default(),
                     },
                 ),
                 (
@@ -2045,19 +2243,22 @@ mod tests {
                         config: good_provider_config,
                         extra_body: Default::default(),
                         extra_headers: Default::default(),
+                        timeouts: Default::default(),
                     },
                 ),
             ]),
+            timeouts: Default::default(),
         };
-        let (
-            StreamResponse {
-                mut stream,
-                raw_request,
-                model_provider_name,
-                cached: _,
-            },
-            _input,
-        ) = model_config
+        let StreamResponseAndMessages {
+            response:
+                StreamResponse {
+                    mut stream,
+                    raw_request,
+                    model_provider_name,
+                    cached: _,
+                },
+            messages: _,
+        } = model_config
             .infer_stream(
                 &request,
                 &InferenceClients {
@@ -2123,8 +2324,10 @@ mod tests {
                     config: provider_config,
                     extra_body: Default::default(),
                     extra_headers: Default::default(),
+                    timeouts: Default::default(),
                 },
             )]),
+            timeouts: Default::default(),
         };
         let tool_config = ToolCallConfig {
             tools_available: vec![],
@@ -2229,8 +2432,10 @@ mod tests {
                     config: provider_config,
                     extra_body: Default::default(),
                     extra_headers: Default::default(),
+                    timeouts: Default::default(),
                 },
             )]),
+            timeouts: Default::default(),
         };
         let tool_config = ToolCallConfig {
             tools_available: vec![],
@@ -2351,8 +2556,10 @@ mod tests {
                     config: anthropic_provider_config,
                     extra_body: Default::default(),
                     extra_headers: Default::default(),
+                    timeouts: Default::default(),
                 },
             )]),
+            timeouts: Default::default(),
         };
         let model_table: ModelTable = HashMap::from([("claude".into(), anthropic_model_config)])
             .try_into()

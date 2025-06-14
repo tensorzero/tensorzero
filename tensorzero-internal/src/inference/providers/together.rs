@@ -2,8 +2,7 @@ use std::{borrow::Cow, sync::OnceLock, time::Duration};
 
 use futures::StreamExt;
 use lazy_static::lazy_static;
-use reqwest::StatusCode;
-use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
+use reqwest_eventsource::{Event, EventSource};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -12,6 +11,9 @@ use url::Url;
 
 use crate::cache::ModelProviderRequest;
 use crate::error::DisplayOrDebugGateway;
+use crate::inference::providers::helpers::{
+    inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
+};
 use crate::inference::types::{
     FinishReason, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
@@ -30,7 +32,6 @@ use crate::{
     tool::{ToolCall, ToolCallChunk},
 };
 
-use super::helpers::inject_extra_request_data;
 use super::helpers_thinking_block::{process_think_blocks, ThinkingState};
 use super::{
     openai::{
@@ -147,44 +148,32 @@ impl InferenceProvider for TogetherProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let mut request_body =
-            serde_json::to_value(TogetherRequest::new(&self.model_name, request)?).map_err(
-                |e| {
-                    Error::new(ErrorDetails::Serialization {
-                        message: format!(
-                            "Error serializing Together request: {}",
-                            DisplayOrDebugGateway::new(e)
-                        ),
-                    })
-                },
-            )?;
-        let headers = inject_extra_request_data(
+        let request_body = serde_json::to_value(TogetherRequest::new(&self.model_name, request)?)
+            .map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!(
+                    "Error serializing Together request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
+            })
+        })?;
+        let request_url = get_chat_url(&TOGETHER_API_BASE)?;
+        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let start_time = Instant::now();
+        let request_builder = http_client
+            .post(request_url)
+            .bearer_auth(api_key.expose_secret());
+
+        let (res, raw_request) = inject_extra_request_data_and_send(
+            PROVIDER_TYPE,
             &request.extra_body,
             &request.extra_headers,
             model_provider,
             model_name,
-            &mut request_body,
-        )?;
-        let request_url = get_chat_url(&TOGETHER_API_BASE)?;
-        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
-        let start_time = Instant::now();
-        let res = http_client
-            .post(request_url)
-            .header("Content-Type", "application/json")
-            .bearer_auth(api_key.expose_secret())
-            .json(&request_body)
-            .headers(headers)
-            .send()
-            .await
-            .map_err(|e| {
-                Error::new(ErrorDetails::InferenceClient {
-                    status_code: Some(e.status().unwrap_or(StatusCode::INTERNAL_SERVER_ERROR)),
-                    message: format!("{}", DisplayOrDebugGateway::new(e)),
-                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
-                    raw_response: None,
-                    provider_type: PROVIDER_TYPE.to_string(),
-                })
-            })?;
+            request_body,
+            request_builder,
+        )
+        .await?;
         if res.status().is_success() {
             let raw_response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
@@ -192,7 +181,7 @@ impl InferenceProvider for TogetherProvider {
                         "Error parsing text response: {}",
                         DisplayOrDebugGateway::new(e)
                     ),
-                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_request: Some(raw_request.clone()),
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
@@ -204,7 +193,7 @@ impl InferenceProvider for TogetherProvider {
                         "Error parsing JSON response: {}",
                         DisplayOrDebugGateway::new(e)
                     ),
-                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_request: Some(raw_request.clone()),
                     raw_response: Some(raw_response.clone()),
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
@@ -216,7 +205,7 @@ impl InferenceProvider for TogetherProvider {
                 latency: Latency::NonStreaming {
                     response_time: start_time.elapsed(),
                 },
-                request: request_body,
+                raw_request: raw_request.clone(),
                 generic_request: request,
                 parse_think_blocks: self.parse_think_blocks,
             }
@@ -229,13 +218,13 @@ impl InferenceProvider for TogetherProvider {
                         "Error parsing error response: {}",
                         DisplayOrDebugGateway::new(e)
                     ),
-                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_request: Some(raw_request.clone()),
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
             Err(handle_openai_error(
-                &serde_json::to_string(&request_body).unwrap_or_default(),
+                &raw_request,
                 status,
                 &raw_response,
                 PROVIDER_TYPE,
@@ -254,25 +243,8 @@ impl InferenceProvider for TogetherProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let mut request_body =
-            serde_json::to_value(TogetherRequest::new(&self.model_name, request)?).map_err(
-                |e| {
-                    Error::new(ErrorDetails::Serialization {
-                        message: format!(
-                            "Error serializing request: {}",
-                            DisplayOrDebugGateway::new(e)
-                        ),
-                    })
-                },
-            )?;
-        let headers = inject_extra_request_data(
-            &request.extra_body,
-            &request.extra_headers,
-            model_provider,
-            model_name,
-            &mut request_body,
-        )?;
-        let raw_request = serde_json::to_string(&request_body).map_err(|e| {
+        let request_body = serde_json::to_value(TogetherRequest::new(&self.model_name, request)?)
+            .map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!(
                     "Error serializing request: {}",
@@ -283,25 +255,19 @@ impl InferenceProvider for TogetherProvider {
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let request_url = get_chat_url(&TOGETHER_API_BASE)?;
         let start_time = Instant::now();
-        let event_source = http_client
+        let request_builder = http_client
             .post(request_url)
-            .header("Content-Type", "application/json")
-            .bearer_auth(api_key.expose_secret())
-            .json(&request_body)
-            .headers(headers)
-            .eventsource()
-            .map_err(|e| {
-                Error::new(ErrorDetails::InferenceClient {
-                    message: format!(
-                        "Error sending request to Together: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                    status_code: None,
-                    raw_request: Some(raw_request.clone()),
-                    raw_response: None,
-                    provider_type: PROVIDER_TYPE.to_string(),
-                })
-            })?;
+            .bearer_auth(api_key.expose_secret());
+        let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
+            PROVIDER_TYPE,
+            &request.extra_body,
+            &request.extra_headers,
+            model_provider,
+            model_name,
+            request_body,
+            request_builder,
+        )
+        .await?;
         let stream = stream_together(event_source, start_time, self.parse_think_blocks).peekable();
         Ok((stream, raw_request))
     }
@@ -372,6 +338,8 @@ struct TogetherRequest<'a> {
     tool_choice: Option<OpenAIToolChoice<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     parallel_tool_calls: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stop: Option<Cow<'a, [String]>>,
 }
 
 impl<'a> TogetherRequest<'a> {
@@ -414,6 +382,7 @@ impl<'a> TogetherRequest<'a> {
             tools,
             tool_choice,
             parallel_tool_calls,
+            stop: request.borrow_stop_sequences(),
         })
     }
 }
@@ -517,7 +486,7 @@ struct TogetherResponseWithMetadata<'a> {
     response: TogetherResponse,
     latency: Latency,
     raw_response: String,
-    request: serde_json::Value,
+    raw_request: String,
     generic_request: &'a ModelInferenceRequest<'a>,
     parse_think_blocks: bool,
 }
@@ -529,7 +498,7 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
             mut response,
             latency,
             raw_response,
-            request: request_body,
+            raw_request,
             generic_request,
             parse_think_blocks,
         } = value;
@@ -539,7 +508,7 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
                     "Response has invalid number of choices: {}. Expected 1.",
                     response.choices.len()
                 ),
-                raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                raw_request: Some(raw_request.clone()),
                 raw_response: Some(raw_response.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
             }
@@ -556,7 +525,7 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
             .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                 message: "Response has no choices (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
                 provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                raw_request: Some(raw_request.clone()),
                 raw_response: Some(raw_response.clone()),
             }))?;
         let mut content: Vec<ContentBlockOutput> = Vec::new();
@@ -578,14 +547,6 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
                 content.push(ContentBlockOutput::ToolCall(tool_call.into()));
             }
         }
-        let raw_request = serde_json::to_string(&request_body).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!(
-                    "Error serializing request body as JSON: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-            })
-        })?;
         let system = generic_request.system.clone();
         let input_messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
@@ -611,7 +572,6 @@ fn stream_together(
     parse_think_blocks: bool,
 ) -> ProviderInferenceResponseStreamInner {
     let mut tool_call_ids = Vec::new();
-    let mut tool_call_names = Vec::new();
     let mut thinking_state = ThinkingState::Normal;
     Box::pin(async_stream::stream! {
         while let Some(ev) = event_source.next().await {
@@ -645,7 +605,7 @@ fn stream_together(
 
                         let latency = start_time.elapsed();
                         let stream_message = data.and_then(|d| {
-                            together_to_tensorzero_chunk(message.data, d, latency, &mut tool_call_ids, &mut tool_call_names, &mut thinking_state, parse_think_blocks)
+                            together_to_tensorzero_chunk(message.data, d, latency, &mut tool_call_ids, &mut thinking_state, parse_think_blocks)
                         });
                         yield stream_message;
                     }
@@ -667,7 +627,6 @@ fn together_to_tensorzero_chunk(
     mut chunk: TogetherChatChunk,
     latency: Duration,
     tool_call_ids: &mut Vec<String>,
-    tool_call_names: &mut Vec<String>,
     thinking_state: &mut ThinkingState,
     parse_think_blocks: bool,
 ) -> Result<ProviderInferenceResponseChunk, Error> {
@@ -734,26 +693,10 @@ fn together_to_tensorzero_chunk(
                             .clone()
                     }
                 };
-                let name = match tool_call.function.name {
-                    Some(name) => {
-                        tool_call_names.push(name.clone());
-                        name
-                    }
-                    None => {
-                        tool_call_names
-                            .get(index as usize)
-                            .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
-                                message: "Tool call index out of bounds (meaning we haven't seen this many names in the stream)".to_string(),
-                                raw_request: None,
-                                raw_response: None,
-                                provider_type: PROVIDER_TYPE.to_string(),
-                            }))?
-                            .clone()
-                    }
-                };
+
                 content.push(ContentBlockChunk::ToolCall(ToolCallChunk {
                     id,
-                    raw_name: name,
+                    raw_name: tool_call.function.name,
                     raw_arguments: tool_call.function.arguments.unwrap_or_default(),
                 }));
             }
@@ -952,8 +895,8 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_secs(0),
             },
-            request: serde_json::to_value(
-                TogetherRequest::new("test-model", &generic_request).unwrap(),
+            raw_request: serde_json::to_string(
+                &TogetherRequest::new("test-model", &generic_request).unwrap(),
             )
             .unwrap(),
             generic_request: &generic_request,
@@ -999,8 +942,8 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_secs(0),
             },
-            request: serde_json::to_value(
-                TogetherRequest::new("test-model", &generic_request).unwrap(),
+            raw_request: serde_json::to_string(
+                &TogetherRequest::new("test-model", &generic_request).unwrap(),
             )
             .unwrap(),
             generic_request: &generic_request,
@@ -1044,8 +987,8 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_secs(0),
             },
-            request: serde_json::to_value(
-                TogetherRequest::new("test-model", &generic_request).unwrap(),
+            raw_request: serde_json::to_string(
+                &TogetherRequest::new("test-model", &generic_request).unwrap(),
             )
             .unwrap(),
             generic_request: &generic_request,
@@ -1116,8 +1059,8 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_secs(0),
             },
-            request: serde_json::to_value(
-                TogetherRequest::new("test-model", &generic_request).unwrap(),
+            raw_request: serde_json::to_string(
+                &TogetherRequest::new("test-model", &generic_request).unwrap(),
             )
             .unwrap(),
             generic_request: &generic_request,
@@ -1155,8 +1098,8 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_secs(0),
             },
-            request: serde_json::to_value(
-                TogetherRequest::new("test-model", &generic_request).unwrap(),
+            raw_request: serde_json::to_string(
+                &TogetherRequest::new("test-model", &generic_request).unwrap(),
             )
             .unwrap(),
             generic_request: &generic_request,
@@ -1194,7 +1137,6 @@ mod tests {
         };
 
         let mut tool_call_ids = Vec::new();
-        let mut tool_call_names = Vec::new();
         let mut thinking_state = ThinkingState::Normal;
 
         // With parsing enabled
@@ -1203,7 +1145,6 @@ mod tests {
             chunk.clone(),
             Duration::from_millis(100),
             &mut tool_call_ids,
-            &mut tool_call_names,
             &mut thinking_state,
             true,
         )
@@ -1231,7 +1172,6 @@ mod tests {
             chunk,
             Duration::from_millis(100),
             &mut tool_call_ids,
-            &mut tool_call_names,
             &mut thinking_state,
             true,
         )
@@ -1264,7 +1204,6 @@ mod tests {
             chunk,
             Duration::from_millis(100),
             &mut tool_call_ids,
-            &mut tool_call_names,
             &mut thinking_state,
             true,
         )
@@ -1292,7 +1231,6 @@ mod tests {
             chunk,
             Duration::from_millis(100),
             &mut tool_call_ids,
-            &mut tool_call_names,
             &mut thinking_state,
             true,
         )
@@ -1322,14 +1260,12 @@ mod tests {
             usage: None,
         };
         let mut tool_call_ids = vec!["id1".to_string()];
-        let mut tool_call_names = vec!["name1".to_string()];
         let mut thinking_state = ThinkingState::Normal;
         let message = together_to_tensorzero_chunk(
             "my_raw_chunk".to_string(),
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
-            &mut tool_call_names,
             &mut thinking_state,
             true,
         )
@@ -1365,7 +1301,6 @@ mod tests {
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
-            &mut tool_call_names,
             &mut thinking_state,
             true,
         )
@@ -1374,7 +1309,7 @@ mod tests {
             message.content,
             vec![ContentBlockChunk::ToolCall(ToolCallChunk {
                 id: "id1".to_string(),
-                raw_name: "name1".to_string(),
+                raw_name: None,
                 raw_arguments: "{\"hello\":\"world\"}".to_string(),
             })]
         );
@@ -1402,7 +1337,6 @@ mod tests {
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
-            &mut tool_call_names,
             &mut thinking_state,
             true,
         )
@@ -1440,7 +1374,6 @@ mod tests {
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
-            &mut tool_call_names,
             &mut thinking_state,
             true,
         )
@@ -1449,16 +1382,12 @@ mod tests {
             message.content,
             vec![ContentBlockChunk::ToolCall(ToolCallChunk {
                 id: "id2".to_string(),
-                raw_name: "name2".to_string(),
+                raw_name: Some("name2".to_string()),
                 raw_arguments: "{\"hello\":\"world\"}".to_string(),
             })]
         );
         // Check that the lists were updated
         assert_eq!(tool_call_ids, vec!["id1".to_string(), "id2".to_string()]);
-        assert_eq!(
-            tool_call_names,
-            vec!["name1".to_string(), "name2".to_string()]
-        );
 
         // Check a chunk with no choices and only usage
         let chunk = TogetherChatChunk {
@@ -1474,7 +1403,6 @@ mod tests {
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
-            &mut tool_call_names,
             &mut thinking_state,
             true,
         )
@@ -1504,7 +1432,6 @@ mod tests {
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
-            &mut tool_call_names,
             &mut thinking_state,
             true,
         )
@@ -1528,7 +1455,6 @@ mod tests {
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
-            &mut tool_call_names,
             &mut thinking_state,
             true,
         )
@@ -1559,7 +1485,6 @@ mod tests {
             chunk.clone(),
             Duration::from_millis(50),
             &mut tool_call_ids,
-            &mut tool_call_names,
             &mut thinking_state,
             true,
         )
@@ -1581,14 +1506,12 @@ mod tests {
             usage: None,
         };
         let mut tool_call_ids = vec![];
-        let mut tool_call_names = vec![];
         let mut thinking_state = ThinkingState::Normal;
         let message = together_to_tensorzero_chunk(
             "my_raw_chunk".to_string(),
             chunk,
             Duration::from_millis(50),
             &mut tool_call_ids,
-            &mut tool_call_names,
             &mut thinking_state,
             false,
         )

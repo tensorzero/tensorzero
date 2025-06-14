@@ -25,7 +25,7 @@ use tensorzero_internal::{
             DUMMY_STREAMING_TOOL_RESPONSE, DUMMY_TOOL_RESPONSE,
         },
         types::{
-            ContentBlock, ContentBlockOutput, File, FileKind, RequestMessage, ResolvedInput,
+            ContentBlock, ContentBlockOutput, File, RequestMessage, ResolvedInput,
             ResolvedInputMessageContent, Role, Text, TextKind,
         },
     },
@@ -1709,48 +1709,6 @@ async fn e2e_test_inference_original_response_non_stream() {
 }
 
 #[tokio::test]
-async fn e2e_test_inference_original_response_stream() {
-    let payload = json!({
-        "function_name": "basic_test",
-        "episode_id": Uuid::now_v7(),
-        "input": {
-            "system": {"assistant_name": "AskJeeves"},
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "Hello, world!"
-                }
-            ]
-        },
-        "stream": true,
-        "include_original_response": true,
-    });
-
-    let response = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .send()
-        .await
-        .unwrap();
-
-    let status = response.status();
-    let response_json = response.json::<Value>().await.unwrap();
-    assert_eq!(
-        status,
-        StatusCode::BAD_REQUEST,
-        "Expected bad request: {response_json}"
-    );
-
-    assert_eq!(
-        response_json,
-        serde_json::json!({
-            "error": "Cannot set both `include_original_response` and `stream` to `true`",
-        })
-    );
-    // Don't both checking ClickHouse, as we do that in lots of other tests.
-}
-
-#[tokio::test]
 async fn test_gateway_template_no_fs_access() {
     // We use an embedded client so that we can control the number of
     // requests to the flaky judge.
@@ -2110,7 +2068,6 @@ async fn e2e_test_tool_call_streaming() {
     }
     let mut inference_id = None;
     let mut id: Option<String> = None;
-    let mut name: Option<String> = None;
 
     for (i, chunk) in chunks.iter().enumerate() {
         let chunk_json: Value = serde_json::from_str(chunk).unwrap();
@@ -2132,11 +2089,18 @@ async fn e2e_test_tool_call_streaming() {
             } else {
                 assert_eq!(id, Some(new_id.to_string()));
             }
-            let new_name = content_block.get("raw_name").unwrap().as_str().unwrap();
             if i == 0 {
-                name = Some(new_name.to_string());
+                assert!(content_block.get("raw_name").is_some());
             } else {
-                assert_eq!(name, Some(new_name.to_string()));
+                assert!(
+                    content_block
+                        .get("raw_name")
+                        .unwrap()
+                        .as_str()
+                        .unwrap()
+                        .is_empty(),
+                    "Expected empty raw_name in non-first block, got {content_block:#?}",
+                );
             }
         } else {
             assert!(chunk_json
@@ -2213,6 +2177,220 @@ async fn e2e_test_tool_call_streaming() {
     // Check the variant name
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, "variant");
+    // Check the tool_params
+    let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
+    let tool_params: Value = serde_json::from_str(tool_params).unwrap();
+    let tools_available = tool_params
+        .get("tools_available")
+        .unwrap()
+        .as_array()
+        .unwrap();
+    assert!(tools_available.len() == 1);
+    assert!(
+        tools_available
+            .first()
+            .unwrap()
+            .get("name")
+            .unwrap()
+            .as_str()
+            .unwrap()
+            == "get_temperature"
+    );
+    assert!(tool_params.get("tool_choice").unwrap().as_str().unwrap() == "auto");
+    assert_eq!(
+        tool_params.get("parallel_tool_calls").unwrap(),
+        &Value::Null
+    );
+    // Check the ModelInference Table
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+    let id = result.get("id").unwrap().as_str().unwrap();
+    let _ = Uuid::parse_str(id).unwrap();
+    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
+    assert_eq!(inference_id_result, inference_id);
+
+    let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
+    assert_eq!(input_tokens, 10);
+    let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
+    assert_eq!(output_tokens, 5);
+    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+    assert!(response_time_ms > 0);
+    assert!(result.get("ttft_ms").unwrap().as_u64().unwrap() > 50);
+    result.get("raw_response").unwrap().as_str().unwrap();
+    assert_eq!(
+        result.get("raw_request").unwrap().as_str().unwrap(),
+        DUMMY_RAW_REQUEST
+    );
+
+    let system = result.get("system").unwrap().as_str().unwrap();
+    assert_eq!(
+        system,
+        "You are a helpful and friendly assistant named AskJeeves.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with the tool call. Use the \"get_temperature\" tool.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit.\")."
+    );
+    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
+    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    assert_eq!(input_messages.len(), 1);
+    assert_eq!(
+        input_messages[0],
+        RequestMessage {
+            role: Role::User,
+            content: vec!["Hi I'm visiting Brooklyn from Brazil. What's the weather?"
+                .to_string()
+                .into()],
+        }
+    );
+    let output = result.get("output").unwrap().as_str().unwrap();
+    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(
+        output,
+        vec![ContentBlock::ToolCall(ToolCall {
+            name: "get_temperature".to_string(),
+            arguments: "{\"location\":\"Brooklyn\",\"units\":\"celsius\"}".to_string(),
+            id: "0".to_string(),
+        })]
+    );
+}
+
+#[tokio::test]
+async fn e2e_test_tool_call_streaming_split_tool_name() {
+    let episode_id = Uuid::now_v7();
+
+    let payload = json!({
+        "function_name": "weather_helper",
+        "episode_id": episode_id,
+        "input":{
+            "system": {"assistant_name": "AskJeeves"},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Hi I'm visiting Brooklyn from Brazil. What's the weather?"
+                }
+            ]},
+        "stream": true,
+        "variant_name": "split_tool_name",
+    });
+    let mut event_source = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .eventsource()
+        .unwrap();
+    let mut chunks = vec![];
+    while let Some(event) = event_source.next().await {
+        let event = event.unwrap();
+        match event {
+            Event::Open => continue,
+            Event::Message(message) => {
+                if message.data == "[DONE]" {
+                    break;
+                }
+                chunks.push(message.data);
+            }
+        }
+    }
+    let mut inference_id = None;
+    let mut id: Option<String> = None;
+    let mut accumulated_tool_name = String::new();
+
+    for (i, chunk) in chunks.iter().enumerate() {
+        let chunk_json: Value = serde_json::from_str(chunk).unwrap();
+        if i < DUMMY_STREAMING_TOOL_RESPONSE.len() {
+            let content = chunk_json.get("content").unwrap().as_array().unwrap();
+            assert_eq!(content.len(), 1);
+            let content_block = content.first().unwrap();
+            let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
+            assert_eq!(content_block_type, "tool_call");
+            let new_arguments = content_block
+                .get("raw_arguments")
+                .unwrap()
+                .as_str()
+                .unwrap();
+            assert_eq!(new_arguments, DUMMY_STREAMING_TOOL_RESPONSE[i]);
+            let new_id = content_block.get("id").unwrap().as_str().unwrap();
+            if i == 0 {
+                id = Some(new_id.to_string());
+            } else {
+                assert_eq!(id, Some(new_id.to_string()));
+            }
+            let raw_name = content_block.get("raw_name").unwrap().as_str().unwrap();
+            accumulated_tool_name.push_str(raw_name);
+        } else {
+            assert!(chunk_json
+                .get("content")
+                .unwrap()
+                .as_array()
+                .unwrap()
+                .is_empty());
+            let usage = chunk_json.get("usage").unwrap().as_object().unwrap();
+            let input_tokens = usage.get("input_tokens").unwrap().as_u64().unwrap();
+            let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
+            assert_eq!(input_tokens, 10);
+            assert_eq!(output_tokens, 5);
+            inference_id = Some(
+                Uuid::parse_str(chunk_json.get("inference_id").unwrap().as_str().unwrap()).unwrap(),
+            );
+        }
+    }
+    let inference_id = inference_id.unwrap();
+    assert_eq!(accumulated_tool_name, "get_temperature");
+    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Check ClickHouse
+    let clickhouse = get_clickhouse().await;
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+    let id = result.get("id").unwrap().as_str().unwrap();
+    let id_uuid = Uuid::parse_str(id).unwrap();
+    assert_eq!(id_uuid, inference_id);
+    let input: Value =
+        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+    let correct_input: Value = json!(
+        {
+            "system": {
+                "assistant_name": "AskJeeves"
+            },
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "value": "Hi I'm visiting Brooklyn from Brazil. What's the weather?"}]
+                }
+            ]
+        }
+    );
+    assert_eq!(input, correct_input);
+    // Check that content blocks are correct
+    let content_blocks = result.get("output").unwrap().as_str().unwrap();
+    let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
+    assert_eq!(content_blocks.len(), 1);
+    let content_block = content_blocks.first().unwrap();
+    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
+    assert_eq!(content_block_type, "tool_call");
+    // Check that the tool call is correctly returned
+    let raw_arguments = content_block
+        .get("raw_arguments")
+        .unwrap()
+        .as_str()
+        .unwrap();
+    let raw_arguments: Value = serde_json::from_str(raw_arguments).unwrap();
+    assert_eq!(raw_arguments, *DUMMY_TOOL_RESPONSE);
+    let id = content_block.get("id").unwrap().as_str().unwrap();
+    assert_eq!(id, "0");
+    let raw_name = content_block.get("raw_name").unwrap().as_str().unwrap();
+    assert_eq!(raw_name, "get_temperature");
+    let name = content_block.get("name").unwrap().as_str().unwrap();
+    assert_eq!(name, "get_temperature");
+    let arguments = content_block.get("arguments").unwrap();
+    assert_eq!(arguments, &*DUMMY_TOOL_RESPONSE,);
+    // Check that episode_id is here and correct
+    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
+    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
+    assert_eq!(retrieved_episode_id, episode_id);
+    // Check the variant name
+    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
+    assert_eq!(variant_name, "split_tool_name");
     // Check the tool_params
     let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
     let tool_params: Value = serde_json::from_str(tool_params).unwrap();
@@ -2852,7 +3030,7 @@ async fn test_image_inference_without_object_store() {
                             text: "Describe the contents of the image".to_string(),
                         }),
                         ClientInputMessageContent::File(File::Base64 {
-                            mime_type: FileKind::Png,
+                            mime_type: mime::IMAGE_PNG,
                             data: BASE64_STANDARD.encode(FERRIS_PNG),
                         }),
                     ],

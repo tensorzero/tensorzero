@@ -3,6 +3,7 @@
 use std::cell::Cell;
 use std::future::Future;
 use std::sync::Arc;
+use std::time::Duration;
 
 use paste::paste;
 use reqwest::Client;
@@ -44,12 +45,14 @@ impl Drop for DeleteDbOnDrop {
             Handle::current().block_on(async move {
                 if allow_db_missing {
                     client
-                        .run_query_synchronous(format!("DROP DATABASE IF EXISTS {database}"), None)
+                        .run_query_synchronous_no_params(format!(
+                            "DROP DATABASE IF EXISTS {database}"
+                        ))
                         .await
                         .unwrap();
                 } else {
                     client
-                        .run_query_synchronous(format!("DROP DATABASE {database}"), None)
+                        .run_query_synchronous_no_params(format!("DROP DATABASE {database}"))
                         .await
                         .unwrap();
                 }
@@ -77,9 +80,15 @@ fn get_clean_clickhouse(allow_db_missing: bool) -> (ClickHouseConnectionInfo, De
     let clickhouse = ClickHouseConnectionInfo::Production {
         database_url: SecretString::from(clickhouse_url.to_string()),
         database: database.clone(),
-        // This works around an issue with ClickHouse Cloud where long-lived connections
+        // This is a hack to work around an issue with ClickHouse Cloud where long-lived connections
         // are abruptly closed by the server.
-        client: Client::builder().pool_max_idle_per_host(0).build().unwrap(),
+        // If it occurs again, re-enable this line.
+        // client: Client::builder().pool_max_idle_per_host(0).build().unwrap(),
+        // See https://github.com/ClickHouse/clickhouse-rs/blob/abf7448e54261c586be849c48291b9321f506b2f/src/http_client.rs#L45
+        client: Client::builder()
+            .pool_idle_timeout(Duration::from_secs(3))
+            .build()
+            .unwrap(),
     };
     (
         clickhouse.clone(),
@@ -147,7 +156,7 @@ const MANIFEST_PATH: &str = env!("CARGO_MANIFEST_DIR");
 
 async fn count_table_rows(clickhouse: &ClickHouseConnectionInfo, table: &str) -> u64 {
     clickhouse
-        .run_query_synchronous(format!("SELECT count(*) FROM {table}"), None)
+        .run_query_synchronous_no_params(format!("SELECT count(*) FROM {table}"))
         .await
         .unwrap()
         .trim()
@@ -157,7 +166,8 @@ async fn count_table_rows(clickhouse: &ClickHouseConnectionInfo, table: &str) ->
 
 async fn insert_large_fixtures(clickhouse: &ClickHouseConnectionInfo) {
     // Insert data so that we test the migration re-creates the tables properly.
-    let s3_fixtures_path: String = format!("{MANIFEST_PATH}/../ui/fixtures/s3-fixtures");
+    let s3_fixtures_path = format!("{MANIFEST_PATH}/../ui/fixtures/s3-fixtures");
+    let s3_fixtures_path = &s3_fixtures_path;
 
     let ClickHouseConnectionInfo::Production {
         database_url,
@@ -177,7 +187,7 @@ async fn insert_large_fixtures(clickhouse: &ClickHouseConnectionInfo) {
     let password = url.password().unwrap_or("");
 
     // We use our latest fixtures - new columns will get ignored when inserting.
-    for (file, table) in [
+    let insert_futures = [
         ("large_chat_inference_v2.parquet", "ChatInference"),
         ("large_json_inference_v2.parquet", "JsonInference"),
         (
@@ -200,7 +210,9 @@ async fn insert_large_fixtures(clickhouse: &ClickHouseConnectionInfo) {
         ),
         ("large_chat_float_feedback.parquet", "FloatMetricFeedback"),
         ("large_json_float_feedback.parquet", "FloatMetricFeedback"),
-    ] {
+    ]
+    .into_iter()
+    .map(|(file, table)| async move {
         let mut command = tokio::process::Command::new("docker");
         command.args([
             "run",
@@ -228,7 +240,9 @@ async fn insert_large_fixtures(clickhouse: &ClickHouseConnectionInfo) {
             command.spawn().unwrap().wait().await.unwrap().success(),
             "Failed to insert {table}"
         );
-    }
+    });
+
+    futures::future::join_all(insert_futures).await;
 }
 
 async fn run_migration_0009_with_data<R: Future<Output = bool>, F: FnOnce() -> R>(
@@ -327,9 +341,8 @@ async fn run_migration_0020_with_data<R: Future<Output = bool>, F: FnOnce() -> R
     );
 
     let sample_chat_row = clickhouse
-        .run_query_synchronous(
+        .run_query_synchronous_no_params(
             "SELECT toUInt128(id) as id_uint, toUInt128(episode_id) as episode_id_uint FROM ChatInference LIMIT 1 FORMAT JSONEachRow".to_string(),
-            None,
         )
         .await
         .unwrap();
@@ -341,9 +354,8 @@ async fn run_migration_0020_with_data<R: Future<Output = bool>, F: FnOnce() -> R
     println!("Querying for sample chat by id: {sample_chat_id}");
 
     let matching_chat_by_id = clickhouse
-        .run_query_synchronous(
+        .run_query_synchronous_no_params(
             format!("SELECT id_uint, toUInt128(episode_id) as episode_id_uint FROM InferenceById FINAL WHERE function_type = 'chat' AND id_uint = '{sample_chat_id}' LIMIT 1 FORMAT JSONEachRow"),
-            None,
         )
         .await
         .unwrap();
@@ -360,9 +372,8 @@ async fn run_migration_0020_with_data<R: Future<Output = bool>, F: FnOnce() -> R
     );
 
     let matching_chat_by_episode_id = clickhouse
-        .run_query_synchronous(
+        .run_query_synchronous_no_params(
             format!("SELECT * FROM InferenceByEpisodeId FINAL WHERE function_type = 'chat' AND episode_id_uint = '{sample_chat_episode_id}' LIMIT 1 FORMAT JSONEachRow"),
-            None,
         )
         .await
         .unwrap();
@@ -377,9 +388,8 @@ async fn run_migration_0020_with_data<R: Future<Output = bool>, F: FnOnce() -> R
     );
 
     let sample_json_row = clickhouse
-        .run_query_synchronous(
+        .run_query_synchronous_no_params(
             "SELECT toUInt128(id) as id_uint, toUInt128(episode_id) as episode_id_uint FROM JsonInference LIMIT 1 FORMAT JSONEachRow".to_string(),
-            None,
         )
         .await
         .unwrap();
@@ -389,9 +399,8 @@ async fn run_migration_0020_with_data<R: Future<Output = bool>, F: FnOnce() -> R
     let sample_json_episode_id = sample_json_row_json["episode_id_uint"].as_str().unwrap();
 
     let matching_json_by_id = clickhouse
-        .run_query_synchronous(
+        .run_query_synchronous_no_params(
             format!("SELECT id_uint, toUInt128(episode_id) as episode_id_uint FROM InferenceById FINAL WHERE function_type = 'json' AND id_uint = '{sample_json_id}' LIMIT 1 FORMAT JSONEachRow"),
-            None,
         )
         .await
         .unwrap();
@@ -406,9 +415,8 @@ async fn run_migration_0020_with_data<R: Future<Output = bool>, F: FnOnce() -> R
     );
 
     let matching_json_by_episode_id = clickhouse
-        .run_query_synchronous(
+        .run_query_synchronous_no_params(
             format!("SELECT * FROM InferenceByEpisodeId FINAL WHERE function_type = 'json' AND episode_id_uint = '{sample_json_episode_id}' LIMIT 1 FORMAT JSONEachRow"),
-            None,
         )
         .await
         .unwrap();
@@ -436,7 +444,7 @@ async fn run_rollback_instructions(
         }
         println!("Running rollback instruction: {line}");
         clickhouse
-            .run_query_synchronous(line.to_string(), None)
+            .run_query_synchronous_no_params(line.to_string())
             .await
             .unwrap();
     }
@@ -481,7 +489,7 @@ async fn test_rollback_helper(migration_num: usize, logs_contain: fn(&str) -> bo
 invoke_all_separate_tests!(
     test_rollback_helper,
     test_rollback_up_to_migration_index_,
-    [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]
+    [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
 );
 
 #[tokio::test(flavor = "multi_thread")]
@@ -645,7 +653,7 @@ async fn test_clickhouse_migration_manager() {
         // will throw an error if it doesn't.
         // This must be an array literal, so that the macro can generate a function
         // for each element in the array.
-        [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]
+        [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
     );
     run_all(&migrations).await;
 }
@@ -750,7 +758,7 @@ async fn test_migration_0013_old_table() {
         ORDER BY id;
     "#;
     let _ = clickhouse
-        .run_query_synchronous(query.to_string(), None)
+        .run_query_synchronous_no_params(query.to_string())
         .await
         .unwrap();
     let err = migration_manager::run_migration(
@@ -822,7 +830,7 @@ async fn test_migration_0013_data_no_table() {
         VALUES (generateUUIDv7(), 'test_function', 'test_variant', generateUUIDv7(), 'input', 'output', 'output_schema', 'params', 100)
     "#;
     let _ = clickhouse
-        .run_query_synchronous(query.to_string(), None)
+        .run_query_synchronous_no_params(query.to_string())
         .await
         .unwrap();
     let err = migration_manager::run_migration(

@@ -42,7 +42,7 @@ use crate::jsonschema_util::DynamicJSONSchema;
 use crate::model::ModelTable;
 use crate::tool::{DynamicToolParams, ToolCallConfig, ToolChoice};
 use crate::variant::chat_completion::ChatCompletionConfig;
-use crate::variant::{InferenceConfig, JsonMode, Variant, VariantConfig};
+use crate::variant::{InferenceConfig, JsonMode, Variant, VariantConfig, VariantInfo};
 
 use super::dynamic_evaluation_run::validate_inference_episode_id_and_apply_dynamic_evaluation_run;
 use super::validate_tags;
@@ -120,6 +120,7 @@ struct InferenceMetadata {
     pub model_name: Arc<str>,
     pub model_provider_name: Arc<str>,
     pub raw_request: String,
+    pub raw_response: Option<String>,
     pub system: Option<String>,
     pub input_messages: Vec<RequestMessage>,
     pub previous_model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
@@ -129,6 +130,7 @@ struct InferenceMetadata {
     pub cached: bool,
     pub extra_body: UnfilteredInferenceExtraBody,
     pub extra_headers: UnfilteredInferenceExtraHeaders,
+    pub include_original_response: bool,
 }
 
 pub type InferenceCredentials = HashMap<String, SecretString>;
@@ -219,14 +221,6 @@ pub async fn inference(
     span.record("inference_id", inference_id.to_string());
     validate_tags(&params.tags, params.internal)?;
 
-    if params.include_original_response && params.stream.unwrap_or(false) {
-        return Err(ErrorDetails::InvalidRequest {
-            message: "Cannot set both `include_original_response` and `stream` to `true`"
-                .to_string(),
-        }
-        .into());
-    }
-
     // Retrieve or generate the episode ID
     let episode_id = params.episode_id.unwrap_or(Uuid::now_v7());
     let mut params = params;
@@ -278,7 +272,7 @@ pub async fn inference(
         candidate_variant_names.retain(|name| {
             if let Some(variant) = function.variants().get(*name) {
                 // Retain 'None' and positive-weight variants, discarding zero-weight variants
-                variant.weight().is_none_or(|w| w > 0.0)
+                variant.inner.weight().is_none_or(|w| w > 0.0)
             } else {
                 // Keep missing variants - later code will error if we try to use them
                 true
@@ -399,6 +393,7 @@ pub async fn inference(
                 model_name: model_used_info.model_name,
                 model_provider_name: model_used_info.model_provider_name,
                 raw_request: model_used_info.raw_request,
+                raw_response: model_used_info.raw_response,
                 system: model_used_info.system,
                 input_messages: model_used_info.input_messages,
                 previous_model_inference_results: model_used_info.previous_model_inference_results,
@@ -408,6 +403,7 @@ pub async fn inference(
                 cached: model_used_info.cached,
                 extra_body,
                 extra_headers,
+                include_original_response: params.include_original_response,
             };
 
             let stream = create_stream(
@@ -531,10 +527,13 @@ fn find_function(params: &Params, config: &Config) -> Result<(Arc<FunctionConfig
                 Arc::new(FunctionConfig::Chat(FunctionConfigChat {
                     variants: [(
                         model_name.clone(),
-                        VariantConfig::ChatCompletion(ChatCompletionConfig {
-                            model: (&**model_name).into(),
-                            ..Default::default()
-                        }),
+                        VariantInfo {
+                            timeouts: Default::default(),
+                            inner: VariantConfig::ChatCompletion(ChatCompletionConfig {
+                                model: (&**model_name).into(),
+                                ..Default::default()
+                            }),
+                        },
                     )]
                     .into_iter()
                     .collect(),
@@ -600,6 +599,7 @@ fn create_stream(
                 model_name,
                 model_provider_name,
                 raw_request,
+                raw_response,
                 system,
                 input_messages,
                 previous_model_inference_results,
@@ -609,6 +609,7 @@ fn create_stream(
                 cached,
                 extra_body,
                 extra_headers,
+                include_original_response: _,
             } = metadata;
 
             let config = config.clone();
@@ -625,6 +626,7 @@ fn create_stream(
                     model_name,
                     model_provider_name,
                     raw_request,
+                    raw_response,
                     inference_params,
                     function_name: &function_name,
                     variant_name: &variant_name,
@@ -685,6 +687,7 @@ fn prepare_response_chunk(
         metadata.episode_id,
         metadata.variant_name.clone(),
         metadata.cached,
+        metadata.include_original_response,
     )
 }
 
@@ -786,11 +789,12 @@ async fn write_inference(
     if config.gateway.observability.enabled.unwrap_or(true) {
         for message in &input.messages {
             for content_block in &message.content {
-                if let ResolvedInputMessageContent::File(FileWithPath {
-                    file: raw,
-                    storage_path,
-                }) = content_block
-                {
+                if let ResolvedInputMessageContent::File(file) = content_block {
+                    let FileWithPath {
+                        file: raw,
+                        storage_path,
+                    } = &**file;
+
                     futures.push(Box::pin(async {
                         if let Err(e) =
                             write_file(&config.object_store_info, raw, storage_path).await
@@ -960,6 +964,8 @@ pub struct ChatInferenceResponseChunk {
     pub usage: Option<Usage>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub finish_reason: Option<FinishReason>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub original_chunk: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -972,6 +978,8 @@ pub struct JsonInferenceResponseChunk {
     pub usage: Option<Usage>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub finish_reason: Option<FinishReason>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub original_chunk: Option<String>,
 }
 
 const ZERO_USAGE: Usage = Usage {
@@ -986,6 +994,7 @@ impl InferenceResponseChunk {
         episode_id: Uuid,
         variant_name: String,
         cached: bool,
+        include_original_response: bool,
     ) -> Option<Self> {
         Some(match inference_result {
             InferenceResultChunk::Chat(result) => {
@@ -1002,6 +1011,7 @@ impl InferenceResponseChunk {
                         result.usage
                     },
                     finish_reason: result.finish_reason,
+                    original_chunk: include_original_response.then_some(result.raw_response),
                 })
             }
             InferenceResultChunk::Json(result) => {
@@ -1021,6 +1031,7 @@ impl InferenceResponseChunk {
                         result.usage
                     },
                     finish_reason: result.finish_reason,
+                    original_chunk: include_original_response.then_some(result.raw_response),
                 })
             }
         })
@@ -1088,9 +1099,12 @@ pub struct ChatCompletionInferenceParams {
     pub frequency_penalty: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub json_mode: Option<JsonMode>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stop_sequences: Option<Vec<String>>,
 }
 
 impl ChatCompletionInferenceParams {
+    #[expect(clippy::too_many_arguments)]
     pub fn backfill_with_variant_params(
         &mut self,
         temperature: Option<f32>,
@@ -1099,6 +1113,7 @@ impl ChatCompletionInferenceParams {
         top_p: Option<f32>,
         presence_penalty: Option<f32>,
         frequency_penalty: Option<f32>,
+        stop_sequences: Option<Vec<String>>,
     ) {
         if self.temperature.is_none() {
             self.temperature = temperature;
@@ -1118,6 +1133,9 @@ impl ChatCompletionInferenceParams {
         if self.frequency_penalty.is_none() {
             self.frequency_penalty = frequency_penalty;
         }
+        if self.stop_sequences.is_none() {
+            self.stop_sequences = stop_sequences;
+        }
     }
 }
 
@@ -1130,7 +1148,7 @@ mod tests {
     use uuid::Uuid;
 
     use crate::inference::types::{
-        ChatInferenceResultChunk, ContentBlockChunk, File, FileKind, InputMessageContent,
+        ChatInferenceResultChunk, ContentBlockChunk, File, InputMessageContent,
         JsonInferenceResultChunk, Role, TextChunk,
     };
 
@@ -1165,6 +1183,7 @@ mod tests {
             model_name: "test_model".into(),
             model_provider_name: "test_provider".into(),
             raw_request: raw_request.clone(),
+            raw_response: None,
             system: None,
             input_messages: vec![],
             previous_model_inference_results: vec![],
@@ -1174,6 +1193,7 @@ mod tests {
             cached: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
+            include_original_response: false,
         };
 
         let result = prepare_response_chunk(&inference_metadata, chunk).unwrap();
@@ -1216,6 +1236,7 @@ mod tests {
             model_name: "test_model".into(),
             model_provider_name: "test_provider".into(),
             raw_request: raw_request.clone(),
+            raw_response: None,
             system: None,
             input_messages: vec![],
             previous_model_inference_results: vec![],
@@ -1225,6 +1246,7 @@ mod tests {
             cached: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
+            include_original_response: false,
         };
 
         let result = prepare_response_chunk(&inference_metadata, chunk).unwrap();
@@ -1358,6 +1380,7 @@ mod tests {
             input_with_url.messages[0].content[0],
             InputMessageContent::File(File::Url {
                 url: "https://example.com/file.txt".parse().unwrap(),
+                mime_type: None,
             })
         );
 
@@ -1383,7 +1406,7 @@ mod tests {
         assert_eq!(
             input_with_base64.messages[0].content[0],
             InputMessageContent::File(File::Base64 {
-                mime_type: FileKind::Png,
+                mime_type: mime::IMAGE_PNG,
                 data: "fake_base64_data".to_string(),
             })
         );

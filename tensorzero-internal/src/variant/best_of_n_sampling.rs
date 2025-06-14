@@ -23,6 +23,7 @@ use crate::inference::types::{ContentBlockOutput, ResolvedInput};
 use crate::jsonschema_util::StaticJSONSchema;
 use crate::model::ModelTable;
 use crate::tool::{ImplicitToolConfig, ToolCallConfig, ToolChoice, ToolConfig};
+use crate::variant::chat_completion::TemplateSchemaInfo;
 use crate::{
     endpoints::inference::InferenceParams,
     error::Error,
@@ -125,6 +126,7 @@ impl Variant for BestOfNSamplingConfig {
             inference_config,
             clients,
             candidate_inference_results,
+            function,
         )
         .await
     }
@@ -312,6 +314,7 @@ impl BestOfNSamplingConfig {
         inference_config: &'request InferenceConfig<'a, 'request>,
         clients: &'request InferenceClients<'request>,
         candidates: Vec<InferenceResult>,
+        function: &'a FunctionConfig,
     ) -> Result<InferenceResult, Error> {
         if candidates.is_empty() {
             return Err(ErrorDetails::Inference {
@@ -336,6 +339,7 @@ impl BestOfNSamplingConfig {
             inference_config,
             clients,
             &candidates,
+            function,
         )
         .await
         {
@@ -403,12 +407,15 @@ async fn inner_select_best_candidate<'a, 'request>(
     inference_config: &'request InferenceConfig<'a, 'request>,
     clients: &'request InferenceClients<'request>,
     candidates: &[InferenceResult],
+    function: &'a FunctionConfig,
 ) -> Result<(Option<usize>, Option<ModelInferenceResponseWithMetadata>), Error> {
+    let mut inference_params = InferenceParams::default();
     let (inference_request, skipped_indices) = evaluator.prepare_request(
         input,
         inference_config,
         candidates,
-        &mut InferenceParams::default(),
+        &mut inference_params,
+        function,
     )?;
     if skipped_indices.len() == candidates.len() {
         return Err(ErrorDetails::Inference {
@@ -516,8 +523,11 @@ impl EvaluatorConfig {
         templates: &TemplateConfig,
         system: Option<&Value>,
         max_index: usize,
+        template_schema_info: TemplateSchemaInfo,
     ) -> Result<String, Error> {
-        let inner_system_message = self.inner.prepare_system_message(templates, system)?;
+        let inner_system_message =
+            self.inner
+                .prepare_system_message(templates, system, template_schema_info)?;
         let template_context = match inner_system_message {
             Some(inner_system_message) => {
                 json!({"inner_system_message": inner_system_message, "max_index": max_index})
@@ -613,13 +623,14 @@ impl EvaluatorConfig {
     /// # Errors
     ///
     /// Returns an `Error` if any of the candidate outputs fail to serialize or if templating fails.
-    fn prepare_request(
+    fn prepare_request<'a>(
         &self,
         input: &ResolvedInput,
         inference_config: &InferenceConfig<'_, '_>,
         candidates: &[InferenceResult],
         inference_params: &mut InferenceParams,
-    ) -> Result<(ModelInferenceRequest, Vec<usize>), Error> {
+        function: &FunctionConfig,
+    ) -> Result<(ModelInferenceRequest<'a>, Vec<usize>), Error> {
         // Do this before we prepare the system message so we can use the correct max index in the system message
         let (candidate_message, skipped_indices) =
             self.prepare_candidate_message(inference_config.templates, candidates)?;
@@ -637,13 +648,17 @@ impl EvaluatorConfig {
             inference_config.templates,
             input.system.as_ref(),
             max_index,
+            function.template_schema_info(),
         )?);
         let messages = input
             .messages
             .iter()
             .map(|message| {
-                self.inner
-                    .prepare_request_message(inference_config.templates, message)
+                self.inner.prepare_request_message(
+                    inference_config.templates,
+                    message,
+                    function.template_schema_info(),
+                )
             })
             .chain(std::iter::once(Ok(candidate_message)))
             .collect::<Result<Vec<_>, _>>()?;
@@ -656,6 +671,7 @@ impl EvaluatorConfig {
                 self.inner.top_p,
                 self.inner.presence_penalty,
                 self.inner.frequency_penalty,
+                self.inner.stop_sequences.clone(),
             );
         let json_mode = inference_params
             .chat_completion
@@ -693,6 +709,11 @@ impl EvaluatorConfig {
                 top_p: inference_params.chat_completion.top_p,
                 presence_penalty: inference_params.chat_completion.presence_penalty,
                 frequency_penalty: inference_params.chat_completion.frequency_penalty,
+                stop_sequences: inference_params
+                    .chat_completion
+                    .stop_sequences
+                    .clone()
+                    .map(Cow::Owned),
                 stream: false,
                 json_mode: json_mode.into(),
                 function_type: FunctionType::Json,
@@ -735,12 +756,14 @@ mod tests {
         cache::{CacheEnabledMode, CacheOptions},
         clickhouse::ClickHouseConnectionInfo,
         endpoints::inference::{InferenceCredentials, InferenceIds},
+        function::FunctionConfigChat,
         inference::{
             providers::dummy::DummyProvider,
             types::{ChatInferenceResult, FinishReason, JsonInferenceResult, Latency},
         },
         minijinja_util::tests::get_test_template_config,
         model::{ModelConfig, ModelProvider, ProviderConfig},
+        variant::{VariantConfig, VariantInfo},
     };
 
     use super::*;
@@ -759,6 +782,11 @@ mod tests {
     #[test]
     fn test_prepare_system_message() {
         let templates = get_test_template_config();
+        let all_schemas = TemplateSchemaInfo {
+            has_system_schema: true,
+            has_user_schema: true,
+            has_assistant_schema: true,
+        };
 
         // Test without templates, string message
         let evaluator_config = EvaluatorConfig {
@@ -770,8 +798,12 @@ mod tests {
         };
         let input_message = Value::String("You are a helpful assistant.".to_string());
         let max_index = 2;
-        let result =
-            evaluator_config.prepare_system_message(&templates, Some(&input_message), max_index);
+        let result = evaluator_config.prepare_system_message(
+            &templates,
+            Some(&input_message),
+            max_index,
+            all_schemas,
+        );
         let prepared_message = result.unwrap();
         let expected_message = templates
             .template_message(
@@ -791,8 +823,12 @@ mod tests {
         };
         let input_message = json!({"message": "You are a helpful assistant."});
         let max_index = 3;
-        let result =
-            evaluator_config.prepare_system_message(&templates, Some(&input_message), max_index);
+        let result = evaluator_config.prepare_system_message(
+            &templates,
+            Some(&input_message),
+            max_index,
+            all_schemas,
+        );
         assert!(result.is_err());
         let prepared_message = result.unwrap_err();
         assert_eq!(
@@ -809,7 +845,8 @@ mod tests {
             },
         };
         let max_index = 5;
-        let result = evaluator_config.prepare_system_message(&templates, None, max_index);
+        let result =
+            evaluator_config.prepare_system_message(&templates, None, max_index, all_schemas);
         let expected_message = templates
             .template_message(
                 "t0:best_of_n_evaluator_system",
@@ -837,8 +874,12 @@ mod tests {
 
         let max_index = 6;
         let input_message = serde_json::json!({"assistant_name": "ChatGPT"});
-        let result =
-            evaluator_config.prepare_system_message(&templates, Some(&input_message), max_index);
+        let result = evaluator_config.prepare_system_message(
+            &templates,
+            Some(&input_message),
+            max_index,
+            all_schemas,
+        );
         assert!(result.is_ok());
         let prepared_message = result.unwrap();
         let inner_system_message = templates
@@ -871,7 +912,8 @@ mod tests {
         };
 
         let max_index = 10;
-        let result = evaluator_config.prepare_system_message(&templates, None, max_index);
+        let result =
+            evaluator_config.prepare_system_message(&templates, None, max_index, all_schemas);
         assert!(result.is_ok());
         let prepared_message = result.unwrap();
         let inner_system_message = templates
@@ -1219,11 +1261,30 @@ mod tests {
                         }),
                         extra_body: Default::default(),
                         extra_headers: Default::default(),
+                        timeouts: Default::default(),
                     },
                 )]),
+                timeouts: Default::default(),
             },
         )]))
         .expect("Failed to create model table");
+        let function = FunctionConfig::Chat(FunctionConfigChat {
+            variants: HashMap::from([(
+                "best_of_n_1".into(),
+                VariantInfo {
+                    inner: VariantConfig::BestOfNSampling(BestOfNSamplingConfig {
+                        candidates: vec![],
+                        weight: None,
+                        timeout_s: 0.0,
+                        evaluator: EvaluatorConfig {
+                            inner: Default::default(),
+                        },
+                    }),
+                    timeouts: Default::default(),
+                },
+            )]),
+            ..Default::default()
+        });
         let client = Client::new();
         let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
         let api_keys = InferenceCredentials::default();
@@ -1262,6 +1323,7 @@ mod tests {
                 &inference_config,
                 &inference_clients,
                 candidates.clone(),
+                &function,
             )
             .await
             .expect("Failed to select best candidate");
@@ -1316,8 +1378,10 @@ mod tests {
                             }),
                             extra_body: Default::default(),
                             extra_headers: Default::default(),
+                            timeouts: Default::default(),
                         },
                     )]),
+                    timeouts: Default::default(),
                 },
             );
             ModelTable::try_from(map).expect("Failed to create model table")
@@ -1334,6 +1398,7 @@ mod tests {
                 &inference_config,
                 &inference_clients,
                 candidates.clone(),
+                &function,
             )
             .await;
 
@@ -1380,8 +1445,10 @@ mod tests {
                             }),
                             extra_body: Default::default(),
                             extra_headers: Default::default(),
+                            timeouts: Default::default(),
                         },
                     )]),
+                    timeouts: Default::default(),
                 },
             );
             ModelTable::try_from(map).expect("Failed to create model table")
@@ -1398,6 +1465,7 @@ mod tests {
                 &inference_config,
                 &inference_clients,
                 candidates.clone(),
+                &function,
             )
             .await;
 
@@ -1421,6 +1489,7 @@ mod tests {
                 &inference_config,
                 &inference_clients,
                 empty_candidates.clone(),
+                &function,
             )
             .await;
         let err = result.unwrap_err();
@@ -1461,8 +1530,10 @@ mod tests {
                         }),
                         extra_body: Default::default(),
                         extra_headers: Default::default(),
+                        timeouts: Default::default(),
                     },
                 )]),
+                timeouts: Default::default(),
             },
         );
         let big_models = ModelTable::try_from(big_models).expect("Failed to create model table");
@@ -1474,6 +1545,7 @@ mod tests {
                 &inference_config,
                 &inference_clients,
                 candidates.clone(),
+                &function,
             )
             .await;
         // we gracefully handle the error and return a random candidate

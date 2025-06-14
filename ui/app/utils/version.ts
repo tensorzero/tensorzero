@@ -5,4 +5,4 @@
  * It serves as the single source of truth for version information.
  */
 
-export const VERSION = "2025.5.9";
+export const VERSION = "2025.6.2";

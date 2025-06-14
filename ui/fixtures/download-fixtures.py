@@ -1,12 +1,15 @@
 # /// script
 # dependencies = [
 #   "requests",
+#   "parquet-tools",
 # ]
 # ///
 
 import concurrent.futures
 import hashlib
 import os
+import subprocess
+import time
 from pathlib import Path
 
 import requests
@@ -66,21 +69,32 @@ def get_remote_etag(filename):
 
 def download_file(filename, remote_etag):
     """Download file from R2 bucket."""
-    url = f"{R2_BUCKET}/{filename}"
-    response = requests.get(url, stream=True)
-    response.raise_for_status()
+    RETRIES = 3
+    for i in range(RETRIES):
+        try:
+            url = f"{R2_BUCKET}/{filename}"
+            response = requests.get(url, stream=True)
+            response.raise_for_status()
 
-    local_file = S3_FIXTURES_DIR / filename
+            local_file = S3_FIXTURES_DIR / filename
 
-    with open(local_file, "wb") as f:
-        for chunk in response.iter_content(chunk_size=8192):
-            f.write(chunk)
+            with open(local_file, "wb") as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    f.write(chunk)
 
-    local_etag = calculate_etag(local_file)
-    if local_etag != remote_etag:
-        raise Exception(
-            f"ETag mismatch after downloading: {local_etag} != {remote_etag}"
-        )
+            local_etag = calculate_etag(local_file)
+            if local_etag != remote_etag:
+                raise Exception(
+                    f"ETag mismatch after downloading: {local_etag} != {remote_etag}"
+                )
+            return
+        except Exception as e:
+            print(
+                f"Error downloading `{filename}` (attempt {i + 1} of {RETRIES}): {e}",
+                flush=True,
+            )
+            time.sleep(1)
+    raise Exception(f"Failed to download `{filename}` after {RETRIES} attempts")
 
 
 def main():
@@ -92,27 +106,33 @@ def main():
         remote_etag = get_remote_etag(fixture)
 
         if not local_file.exists():
-            print(f"Downloading {fixture} (file doesn't exist locally)")
+            print(f"Downloading {fixture} (file doesn't exist locally)", flush=True)
             download_file(fixture, remote_etag)
             return
 
         local_etag = calculate_etag(local_file)
 
         if local_etag != remote_etag:
-            print(f"Downloading {fixture} (ETag mismatch)")
-            print(f"Local ETag: {local_etag}")
-            print(f"Remote ETag: {remote_etag}")
+            print(f"Downloading {fixture} (ETag mismatch)", flush=True)
+            print(f"Local ETag: {local_etag}", flush=True)
+            print(f"Remote ETag: {remote_etag}", flush=True)
             download_file(fixture, remote_etag)
         else:
-            print(f"Skipping {fixture} (up to date)")
+            print(f"Skipping {fixture} (up to date)", flush=True)
 
     # Use ThreadPoolExecutor to download files in parallel
     with concurrent.futures.ThreadPoolExecutor() as executor:
-        executor.map(process_fixture, FIXTURES)
+        # Loop over the results to propagate exceptions
+        for result in executor.map(process_fixture, FIXTURES):
+            assert result is None
 
     for fixture in FIXTURES:
-        print(f"Fixture {fixture}:")
-        os.system(f"parquet-tools inspect {S3_FIXTURES_DIR / fixture}")
+        print(f"Fixture {fixture}:", flush=True)
+        subprocess.run(
+            ["parquet-tools", "inspect", S3_FIXTURES_DIR / fixture],
+            check=True,
+            stderr=subprocess.STDOUT,
+        )
 
 
 if __name__ == "__main__":

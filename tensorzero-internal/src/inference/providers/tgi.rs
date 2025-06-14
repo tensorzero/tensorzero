@@ -12,17 +12,17 @@
 /// Our implementation currently allows you to use a tool in TGI (nonstreaming), but YMMV.
 use futures::{Stream, StreamExt, TryStreamExt};
 use reqwest::StatusCode;
-use reqwest_eventsource::{Event, RequestBuilderExt};
+use reqwest_eventsource::Event;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::borrow::Cow;
 use std::pin::Pin;
 use std::sync::OnceLock;
 use std::time::Duration;
 use tokio::time::Instant;
 use url::Url;
 
-use super::helpers::inject_extra_request_data;
 use super::openai::{
     convert_stream_error, get_chat_url, prepare_openai_messages, prepare_openai_tools,
     OpenAIRequestMessage, OpenAITool, OpenAIToolChoice, OpenAIToolType, StreamOptions,
@@ -32,6 +32,9 @@ use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::DisplayOrDebugGateway;
 use crate::error::{Error, ErrorDetails};
+use crate::inference::providers::helpers::{
+    inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
+};
 use crate::inference::providers::openai::check_api_base_suffix;
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::{
@@ -193,45 +196,27 @@ impl InferenceProvider for TGIProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let mut request_body = self.make_body(model_provider_request)?;
-        let headers = inject_extra_request_data(
-            &model_provider_request.request.extra_body,
-            &model_provider_request.request.extra_headers,
-            model_provider,
-            model_provider_request.model_name,
-            &mut request_body,
-        )?;
+        let request_body = self.make_body(model_provider_request)?;
         let request_url = get_chat_url(&self.api_base)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
 
-        let mut request_builder = http_client
-            .post(request_url)
-            .header("Content-Type", "application/json");
+        let mut request_builder = http_client.post(request_url);
 
         if let Some(api_key) = api_key {
             request_builder = request_builder.bearer_auth(api_key.expose_secret());
         }
 
-        let raw_request = request_body.to_string();
-
-        let res = request_builder
-            .body(raw_request.clone())
-            .headers(headers)
-            .send()
-            .await
-            .map_err(|e| {
-                Error::new(ErrorDetails::InferenceClient {
-                    status_code: e.status(),
-                    message: format!(
-                        "Error sending request to TGI: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: serde_json::to_string(&request_body).ok(),
-                    raw_response: None,
-                })
-            })?;
+        let (res, raw_request) = inject_extra_request_data_and_send(
+            PROVIDER_TYPE,
+            &model_provider_request.request.extra_body,
+            &model_provider_request.request.extra_headers,
+            model_provider,
+            model_provider_request.model_name,
+            request_body,
+            request_builder,
+        )
+        .await?;
 
         if res.status().is_success() {
             let raw_response = res.text().await.map_err(|e| {
@@ -284,8 +269,8 @@ impl InferenceProvider for TGIProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let mut request_body = serde_json::to_value(TGIRequest::new(PROVIDER_NAME, request)?)
-            .map_err(|e| {
+        let request_body =
+            serde_json::to_value(TGIRequest::new(PROVIDER_NAME, request)?).map_err(|e| {
                 Error::new(ErrorDetails::Serialization {
                     message: format!(
                         "Error serializing TGI request: {}",
@@ -293,13 +278,7 @@ impl InferenceProvider for TGIProvider {
                     ),
                 })
             })?;
-        let headers = inject_extra_request_data(
-            &request.extra_body,
-            &request.extra_headers,
-            model_provider,
-            model_name,
-            &mut request_body,
-        )?;
+
         // TGI integration does not support tools in streaming mode
         if request_body.get("tools").is_some() {
             return Err(ErrorDetails::InvalidTool {
@@ -307,14 +286,6 @@ impl InferenceProvider for TGIProvider {
             }
             .into());
         }
-        let raw_request = serde_json::to_string(&request_body).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!(
-                    "Error serializing request: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-            })
-        })?;
         let request_url = get_chat_url(&self.api_base)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
@@ -322,22 +293,16 @@ impl InferenceProvider for TGIProvider {
         if let Some(api_key) = api_key {
             request_builder = request_builder.bearer_auth(api_key.expose_secret());
         }
-        let event_source = request_builder
-            .json(&request_body)
-            .headers(headers)
-            .eventsource()
-            .map_err(|e| {
-                Error::new(ErrorDetails::InferenceClient {
-                    message: format!(
-                        "Error sending request to OpenAI: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                    status_code: None,
-                    provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: Some(raw_request.clone()),
-                    raw_response: None,
-                })
-            })?;
+        let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
+            PROVIDER_TYPE,
+            &request.extra_body,
+            &request.extra_headers,
+            model_provider,
+            model_name,
+            request_body,
+            request_builder,
+        )
+        .await?;
 
         let stream = stream_tgi(
             event_source.map_err(TensorZeroEventError::EventSource),
@@ -449,6 +414,8 @@ struct TGIRequest<'a> {
     tool_choice: Option<OpenAIToolChoice<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     parallel_tool_calls: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stop: Option<Cow<'a, [String]>>,
 }
 
 impl<'a> TGIRequest<'a> {
@@ -488,6 +455,7 @@ impl<'a> TGIRequest<'a> {
             tools,
             tool_choice,
             parallel_tool_calls,
+            stop: request.borrow_stop_sequences(),
         })
     }
 }
@@ -650,6 +618,7 @@ struct TGIResponseMessage {
 #[serde(rename_all = "snake_case")]
 pub(super) enum TGIFinishReason {
     Stop,
+    StopSequence,
     Length,
     ContentFilter,
     ToolCalls,
@@ -662,6 +631,7 @@ impl From<TGIFinishReason> for FinishReason {
     fn from(finish_reason: TGIFinishReason) -> Self {
         match finish_reason {
             TGIFinishReason::Stop => FinishReason::Stop,
+            TGIFinishReason::StopSequence => FinishReason::StopSequence,
             TGIFinishReason::Length => FinishReason::Length,
             TGIFinishReason::ContentFilter => FinishReason::ContentFilter,
             TGIFinishReason::ToolCalls => FinishReason::ToolCall,

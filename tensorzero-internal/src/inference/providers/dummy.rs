@@ -21,9 +21,7 @@ use crate::inference::types::{
     ContentBlockOutput, Latency, ModelInferenceRequest, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponse, ProviderInferenceResponseChunk, Usage,
 };
-use crate::inference::types::{
-    ContentBlock, FileKind, FinishReason, ProviderInferenceResponseStreamInner,
-};
+use crate::inference::types::{ContentBlock, FinishReason, ProviderInferenceResponseStreamInner};
 use crate::inference::types::{Text, TextChunk, Thought, ThoughtChunk};
 use crate::model::{CredentialLocation, ModelProvider};
 use crate::tool::{ToolCall, ToolCallChunk};
@@ -365,7 +363,7 @@ impl InferenceProvider for DummyProvider {
                     .collect();
                 let mut found_pdf = false;
                 for file in &files {
-                    if file.file.mime_type == FileKind::Pdf {
+                    if file.file.mime_type == mime::APPLICATION_PDF {
                         found_pdf = true;
                     }
                 }
@@ -528,7 +526,7 @@ impl InferenceProvider for DummyProvider {
         let created = current_timestamp();
 
         let (content_chunks, is_tool_call) = match self.model_name.as_str() {
-            "tool" => (DUMMY_STREAMING_TOOL_RESPONSE.to_vec(), true),
+            "tool" | "tool_split_name" => (DUMMY_STREAMING_TOOL_RESPONSE.to_vec(), true),
             "reasoner" => (DUMMY_STREAMING_RESPONSE.to_vec(), false),
             _ => (DUMMY_STREAMING_RESPONSE.to_vec(), false),
         };
@@ -539,9 +537,14 @@ impl InferenceProvider for DummyProvider {
             true => Some(FinishReason::ToolCall),
             false => Some(FinishReason::Stop),
         };
+        let split_tool_name = self.model_name == "tool_split_name";
+        let slow_second_chunk = self.model_name == "slow_second_chunk";
         let stream: ProviderInferenceResponseStreamInner = Box::pin(
             tokio_stream::iter(content_chunks.into_iter().enumerate())
-                .map(move |(i, chunk)| {
+                .then(move |(i, chunk)| async move {
+                    if slow_second_chunk && i == 1 {
+                        tokio::time::sleep(Duration::from_secs(2)).await;
+                    }
                     if err_in_stream && i == 3 {
                         return Err(Error::new(ErrorDetails::InferenceClient {
                             message: "Dummy error in stream".to_string(),
@@ -551,12 +554,26 @@ impl InferenceProvider for DummyProvider {
                             provider_type: PROVIDER_TYPE.to_string(),
                         }));
                     }
+                    // We want to simulate the tool name being in the first chunk, but not in the subsequent chunks.
+                    let tool_name = if i == 0 && !split_tool_name {
+                        Some("get_temperature".to_string())
+                    } else if split_tool_name {
+                        if i == 0 {
+                            Some("get_temp".to_string())
+                        } else if i == 1 {
+                            Some("erature".to_string())
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    };
                     Ok(ProviderInferenceResponseChunk {
                         created,
                         content: vec![if is_tool_call {
                             ContentBlockChunk::ToolCall(ToolCallChunk {
                                 id: "0".to_string(),
-                                raw_name: "get_temperature".to_string(),
+                                raw_name: tool_name,
                                 raw_arguments: chunk.to_string(),
                             })
                         } else {

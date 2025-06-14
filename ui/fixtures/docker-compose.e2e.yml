@@ -24,7 +24,7 @@ services:
   # so that we use the mock server for SFT jobs
   mock-inference-provider:
     build:
-      context: ../..
+      context: ../../
       dockerfile: tensorzero-internal/tests/mock-inference-provider/Dockerfile
     environment:
       RUST_LOG: debug
@@ -66,7 +66,7 @@ services:
           "--spider",
           "http://localhost:3000/health",
         ]
-      start_period: 1s
+      start_period: 30s
       start_interval: 1s
       timeout: 1s
 
@@ -77,19 +77,21 @@ services:
       - .:/fixtures
       - ~/.aws:/root/.aws
     environment:
-      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
-      CLICKHOUSE_HOST: clickhouse
-      CLICKHOUSE_PASSWORD: chpassword
-      CLICKHOUSE_USER: chuser
+      - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
+      - CLICKHOUSE_HOST=clickhouse
+      - CLICKHOUSE_PASSWORD=chpassword
+      - CLICKHOUSE_USER=chuser
+      - TENSORZERO_SKIP_LARGE_FIXTURES
     depends_on:
       gateway:
         condition: service_healthy
     command:
-      ["bash", "-c", "cd /fixtures && ./load_fixtures.sh && sleep infinity"]
+      ["bash", "-c", "cd /fixtures && ./load_fixtures.sh"]
     # Added healthcheck to wait for the marker file created by the script
     healthcheck:
-      test: ["CMD", "test", "-f", "/tmp/load_complete.marker"]
+      test: ["CMD", "test", "-f", "/load_complete.marker"]
       interval: 5s
       timeout: 1s
       retries: 48 # Retry for up to 4 minutes
-      start_period: 5s # Give the script time to start
+      start_interval: 1s
+      start_period: 300s # Give the script time to start

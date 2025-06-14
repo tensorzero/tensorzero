@@ -26,7 +26,7 @@ use crate::{
 };
 
 use crate::config_parser::LoadableConfig;
-use crate::variant::chat_completion::UninitializedChatCompletionConfig;
+use crate::variant::chat_completion::{TemplateSchemaInfo, UninitializedChatCompletionConfig};
 
 use super::{
     infer_model_request, prepare_model_inference_request, InferModelRequestArgs, InferenceConfig,
@@ -361,12 +361,13 @@ async fn inner_fuse_candidates<'a, 'request>(
     clients: &'request InferenceClients<'request>,
     candidates: &[InferenceResult],
 ) -> Result<InferenceResult, Error> {
+    let mut inference_params = InferenceParams::default();
     let (inference_request, included_indices) = fuser.prepare_request(
         input,
         function,
         inference_config,
         candidates,
-        &mut InferenceParams::default(),
+        &mut inference_params,
     )?;
     if included_indices.is_empty() {
         return Err(ErrorDetails::Inference {
@@ -404,8 +405,11 @@ impl FuserConfig {
         templates: &TemplateConfig,
         system: Option<&Value>,
         max_index: usize,
+        template_schema_info: TemplateSchemaInfo,
     ) -> Result<String, Error> {
-        let inner_system_message = self.inner.prepare_system_message(templates, system)?;
+        let inner_system_message =
+            self.inner
+                .prepare_system_message(templates, system, template_schema_info)?;
         let template_context = match inner_system_message {
             Some(inner_system_message) => {
                 json!({"inner_system_message": inner_system_message, "max_index": max_index})
@@ -505,7 +509,7 @@ impl FuserConfig {
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'a, 'request>,
         candidates: &[InferenceResult],
-        inference_params: &mut InferenceParams,
+        inference_params: &'request mut InferenceParams,
     ) -> Result<(ModelInferenceRequest<'request>, Vec<usize>), Error>
     where
         'a: 'request,
@@ -518,13 +522,17 @@ impl FuserConfig {
             inference_config.templates,
             input.system.as_ref(),
             max_index,
+            function.template_schema_info(),
         )?);
         let messages = input
             .messages
             .iter()
             .map(|message| {
-                self.inner
-                    .prepare_request_message(inference_config.templates, message)
+                self.inner.prepare_request_message(
+                    inference_config.templates,
+                    message,
+                    function.template_schema_info(),
+                )
             })
             .chain(std::iter::once(Ok(candidate_message)))
             .collect::<Result<Vec<_>, _>>()?;
@@ -537,6 +545,7 @@ impl FuserConfig {
                 self.inner.top_p,
                 self.inner.presence_penalty,
                 self.inner.frequency_penalty,
+                self.inner.stop_sequences.clone(),
             );
 
         if !inference_config.extra_body.is_empty() {
@@ -604,6 +613,12 @@ mod tests {
     fn test_prepare_system_message() {
         let templates = get_test_template_config();
 
+        let all_schemas = TemplateSchemaInfo {
+            has_system_schema: true,
+            has_user_schema: true,
+            has_assistant_schema: true,
+        };
+
         // Test without templates, string message
         let fuser_config = FuserConfig {
             inner: ChatCompletionConfig {
@@ -614,8 +629,12 @@ mod tests {
         };
         let input_message = Value::String("You are a helpful assistant.".to_string());
         let max_index = 2;
-        let result =
-            fuser_config.prepare_system_message(&templates, Some(&input_message), max_index);
+        let result = fuser_config.prepare_system_message(
+            &templates,
+            Some(&input_message),
+            max_index,
+            all_schemas,
+        );
         let prepared_message = result.unwrap();
         let expected_message = templates
             .template_message(
@@ -635,8 +654,12 @@ mod tests {
         };
         let input_message = json!({"message": "You are a helpful assistant."});
         let max_index = 3;
-        let result =
-            fuser_config.prepare_system_message(&templates, Some(&input_message), max_index);
+        let result = fuser_config.prepare_system_message(
+            &templates,
+            Some(&input_message),
+            max_index,
+            all_schemas,
+        );
         assert!(result.is_err());
         let prepared_message = result.unwrap_err();
         assert_eq!(
@@ -653,7 +676,7 @@ mod tests {
             },
         };
         let max_index = 5;
-        let result = fuser_config.prepare_system_message(&templates, None, max_index);
+        let result = fuser_config.prepare_system_message(&templates, None, max_index, all_schemas);
         let expected_message = templates
             .template_message(
                 "t0:mixture_of_n_fuser_system",
@@ -681,8 +704,12 @@ mod tests {
 
         let max_index = 6;
         let input_message = serde_json::json!({"assistant_name": "ChatGPT"});
-        let result =
-            fuser_config.prepare_system_message(&templates, Some(&input_message), max_index);
+        let result = fuser_config.prepare_system_message(
+            &templates,
+            Some(&input_message),
+            max_index,
+            all_schemas,
+        );
         assert!(result.is_ok());
         let prepared_message = result.unwrap();
         let inner_system_message = templates
@@ -715,7 +742,7 @@ mod tests {
         };
 
         let max_index = 10;
-        let result = fuser_config.prepare_system_message(&templates, None, max_index);
+        let result = fuser_config.prepare_system_message(&templates, None, max_index, all_schemas);
         assert!(result.is_ok());
         let prepared_message = result.unwrap();
         let inner_system_message = templates
@@ -1054,8 +1081,10 @@ mod tests {
                         }),
                         extra_body: Default::default(),
                         extra_headers: Default::default(),
+                        timeouts: Default::default(),
                     },
                 )]),
+                timeouts: Default::default(),
             },
         )]))
         .expect("Failed to create model table");
@@ -1152,8 +1181,10 @@ mod tests {
                             }),
                             extra_body: Default::default(),
                             extra_headers: Default::default(),
+                            timeouts: Default::default(),
                         },
                     )]),
+                    timeouts: Default::default(),
                 },
             );
             ModelTable::try_from(map).expect("Failed to create model table")
@@ -1217,8 +1248,10 @@ mod tests {
                             }),
                             extra_body: Default::default(),
                             extra_headers: Default::default(),
+                            timeouts: Default::default(),
                         },
                     )]),
+                    timeouts: Default::default(),
                 },
             );
             ModelTable::try_from(map).expect("Failed to create model table")

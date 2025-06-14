@@ -2,6 +2,8 @@
 
 # TensorZero
 
+<p><picture><img src="https://www.tensorzero.com/github-trending-badge.svg" alt="#1 Repository Of The Day"></picture></p>
+
 **TensorZero creates a feedback loop for optimizing LLM applications — turning production data into smarter, faster, and cheaper models.**
 
 1. Integrate our model gateway

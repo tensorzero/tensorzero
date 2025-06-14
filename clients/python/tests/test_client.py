@@ -89,7 +89,8 @@ class ClientType(Enum):
 async def async_client(request: FixtureRequest):
     if request.param == ClientType.HttpGateway:
         client_fut = AsyncTensorZeroGateway.build_http(
-            gateway_url="http://localhost:3000"
+            gateway_url="http://localhost:3000",
+            verbose_errors=True,
         )
         assert inspect.isawaitable(client_fut)
         async with await client_fut as client:
@@ -725,8 +726,11 @@ async def test_async_tool_call_streaming(async_client: AsyncTensorZeroGateway):
         if i + 1 < len(chunks):
             assert len(chunk.content) == 1
             assert isinstance(chunk.content[0], ToolCallChunk)
+            if i == 0:
+                assert chunk.content[0].raw_name == "get_temperature"
+            else:
+                assert chunk.content[0].raw_name == ""
             assert chunk.content[0].type == "tool_call"
-            assert chunk.content[0].raw_name == "get_temperature"
             assert chunk.content[0].id == "0"
             assert chunk.content[0].raw_arguments == expected_text[i]
         else:
@@ -1019,7 +1023,8 @@ async def test_async_error():
 def sync_client(request: FixtureRequest):
     if request.param == ClientType.HttpGateway:
         with TensorZeroGateway.build_http(
-            gateway_url="http://localhost:3000"
+            gateway_url="http://localhost:3000",
+            verbose_errors=True,
         ) as client:
             yield client
     else:
@@ -1324,6 +1329,52 @@ def test_file_inference_base64(sync_client: TensorZeroGateway):
             "storage_path": {
                 "kind": {"type": "disabled"},
                 "path": "observability/files/3e127d9a726f6be0fd81d73ccea97d96ec99419f59650e01d49183cd3be999ef.pdf",
+            },
+        }
+    ]
+
+
+def test_image_inference_url_wrong_mime_type(sync_client: TensorZeroGateway):
+    input = {
+        "system": "You are a helpful assistant named Alfred Pennyworth.",
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    ImageUrl(
+                        url="https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
+                        mime_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    )
+                ],
+            }
+        ],
+    }
+    input_copy = deepcopy(input)
+    result = sync_client.inference(
+        model_name="dummy::extract_images",
+        input=input,
+        episode_id=uuid7(),  # This would not typically be done but this partially verifies that uuid7 is using a correct implementation
+        # because the gateway validates some of the properties needed
+    )
+    assert isinstance(result, ChatInferenceResponse)
+    assert input == input_copy, "Input should not be modified by the client"
+    assert result.variant_name == "dummy::extract_images"
+    assert isinstance(result, ChatInferenceResponse)
+    content = result.content
+    assert len(content) == 1
+    assert content[0].type == "text"
+    assert isinstance(content[0], Text)
+    assert content[0].text is not None
+    json_content = json.loads(content[0].text)
+    assert json_content == [
+        {
+            "file": {
+                "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
+                "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            },
+            "storage_path": {
+                "kind": {"type": "disabled"},
+                "path": "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.docx",
             },
         }
     ]
@@ -1664,7 +1715,10 @@ def test_sync_tool_call_streaming(sync_client: TensorZeroGateway):
             assert len(chunk.content) == 1
             assert isinstance(chunk.content[0], ToolCallChunk)
             assert chunk.content[0].type == "tool_call"
-            assert chunk.content[0].raw_name == "get_temperature"
+            if i == 0:
+                assert chunk.content[0].raw_name == "get_temperature"
+            else:
+                assert chunk.content[0].raw_name == ""
             assert chunk.content[0].id == "0"
             assert chunk.content[0].raw_arguments == expected_text[i]
         else:
@@ -2028,7 +2082,7 @@ def test_sync_basic_inference_with_content_block_plain_dict(
                             "type": "tool_call",
                             "id": "1",
                             "name": "test",
-                            "arguments": json.dumps({"arg": "value"}),
+                            "arguments": {"arg": "value"},
                         },
                         {
                             "type": "tool_result",

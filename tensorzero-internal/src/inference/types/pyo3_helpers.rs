@@ -4,9 +4,13 @@ use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::types::{IntoPyDict, PyDict};
 use pyo3::{intern, prelude::*};
 use pyo3::{sync::GILOnceCell, types::PyModule, Bound, Py, PyAny, PyErr, PyResult, Python};
+use serde_json::Value;
 use uuid::Uuid;
 
-use super::{ContentBlock, ContentBlockOutput};
+use crate::clickhouse::types::StoredInference;
+use crate::inference::types::{ContentBlockChatOutput, ResolvedInputMessageContent};
+
+use super::ContentBlock;
 
 pub static JSON_LOADS: GILOnceCell<Py<PyAny>> = GILOnceCell::new();
 pub static JSON_DUMPS: GILOnceCell<Py<PyAny>> = GILOnceCell::new();
@@ -32,6 +36,14 @@ fn import_text_content_block(py: Python<'_>) -> PyResult<&Py<PyAny>> {
     TEXT_CONTENT_BLOCK.get_or_try_init::<_, PyErr>(py, || {
         let self_module = PyModule::import(py, "tensorzero.types")?;
         Ok(self_module.getattr("Text")?.unbind())
+    })
+}
+
+fn import_raw_text_content_block(py: Python<'_>) -> PyResult<&Py<PyAny>> {
+    static RAW_TEXT_CONTENT_BLOCK: GILOnceCell<Py<PyAny>> = GILOnceCell::new();
+    RAW_TEXT_CONTENT_BLOCK.get_or_try_init::<_, PyErr>(py, || {
+        let self_module = PyModule::import(py, "tensorzero.types")?;
+        Ok(self_module.getattr("RawText")?.unbind())
     })
 }
 
@@ -133,33 +145,108 @@ pub fn content_block_to_python(
     }
 }
 
-pub fn content_block_output_to_python(
+pub fn content_block_chat_output_to_python(
     py: Python<'_>,
-    content_block_output: &ContentBlockOutput,
+    content_block_chat_output: ContentBlockChatOutput,
 ) -> PyResult<Py<PyAny>> {
-    match content_block_output {
-        ContentBlockOutput::Text(text) => {
+    match content_block_chat_output {
+        ContentBlockChatOutput::Text(text) => {
             let text_content_block = import_text_content_block(py)?;
-            text_content_block.call1(py, (text.text.clone(),))
+            text_content_block.call1(py, (text.text,))
         }
-        ContentBlockOutput::ToolCall(tool_call) => {
+        ContentBlockChatOutput::ToolCall(tool_call) => {
             let tool_call_content_block = import_tool_call_content_block(py)?;
             tool_call_content_block.call1(
                 py,
                 (
-                    tool_call.id.clone(),
-                    tool_call.arguments.clone(),
-                    tool_call.name.clone(),
-                    tool_call.arguments.clone(),
-                    tool_call.name.clone(),
+                    tool_call.id,
+                    tool_call.raw_arguments,
+                    tool_call.raw_name,
+                    serialize_to_dict(py, tool_call.arguments)?,
+                    tool_call.name,
                 ),
             )
         }
-        ContentBlockOutput::Thought(thought) => {
+        ContentBlockChatOutput::Thought(thought) => {
             let thought_content_block = import_thought_content_block(py)?;
-            thought_content_block.call1(py, (thought.text.clone(),))
+            thought_content_block.call1(py, (thought.text,))
         }
-        ContentBlockOutput::Unknown {
+        ContentBlockChatOutput::Unknown {
+            data,
+            model_provider_name,
+        } => {
+            let unknown_content_block = import_unknown_content_block(py)?;
+            let serialized_data = serialize_to_dict(py, data)?;
+            unknown_content_block.call1(py, (serialized_data, model_provider_name))
+        }
+    }
+}
+
+pub fn resolved_input_message_content_to_python(
+    py: Python<'_>,
+    content: ResolvedInputMessageContent,
+) -> PyResult<Py<PyAny>> {
+    match content {
+        ResolvedInputMessageContent::Text { value } => {
+            let text_content_block = import_text_content_block(py)?;
+            match value {
+                Value::String(s) => {
+                    let kwargs = [(intern!(py, "text"), s)].into_py_dict(py)?;
+                    text_content_block.call(py, (), Some(&kwargs))
+                }
+                _ => {
+                    let value = serialize_to_dict(py, value)?;
+                    let kwargs = [(intern!(py, "arguments"), value)].into_py_dict(py)?;
+                    text_content_block.call(py, (), Some(&kwargs))
+                }
+            }
+        }
+        ResolvedInputMessageContent::ToolCall(tool_call) => {
+            let tool_call_content_block = import_tool_call_content_block(py)?;
+            let parsed_arguments_py = JSON_LOADS
+                .get(py)
+                .ok_or_else(|| {
+                    PyRuntimeError::new_err(
+                        "TensorZero: JSON_LOADS was not initialized. This should never happen",
+                    )
+                })?
+                .call1(py, (tool_call.arguments.clone().into_pyobject(py)?,))
+                .ok();
+            tool_call_content_block.call1(
+                py,
+                (
+                    tool_call.id,
+                    tool_call.arguments,
+                    tool_call.name.clone(),
+                    parsed_arguments_py,
+                    tool_call.name,
+                ),
+            )
+        }
+        ResolvedInputMessageContent::ToolResult(tool_result) => {
+            let tool_result_content_block = import_tool_result_content_block(py)?;
+            tool_result_content_block
+                .call1(py, (tool_result.name, tool_result.result, tool_result.id))
+        }
+        ResolvedInputMessageContent::Thought(thought) => {
+            let thought_content_block = import_thought_content_block(py)?;
+            thought_content_block.call1(py, (thought.text,))
+        }
+        ResolvedInputMessageContent::RawText { value } => {
+            let raw_text_content_block = import_raw_text_content_block(py)?;
+            raw_text_content_block.call1(py, (value,))
+        }
+        ResolvedInputMessageContent::File(file) => {
+            let file_content_block = import_file_content_block(py)?;
+            file_content_block.call1(
+                py,
+                (
+                    file.file.data.clone().unwrap_or("".to_string()),
+                    file.file.mime_type.to_string(),
+                ),
+            )
+        }
+        ResolvedInputMessageContent::Unknown {
             data,
             model_provider_name,
         } => {
@@ -185,7 +272,27 @@ pub fn serialize_to_dict<T: serde::ser::Serialize>(py: Python<'_>, val: T) -> Py
         .call1(py, (json_str.into_pyobject(py)?,))
 }
 
-// Converts a Python dictionary/list to json with `json.dumps`,
+/// In the `render_inferences` function, we need to be able to accept both
+/// StoredInference objects passed in from the output of the `list_inferences` function
+/// and arbitrary Python objects that match the serialization pattern of the `StoredInference`
+/// type.
+/// This is necessary since developers might construct data for rendering by hand.
+/// In order to support this, we first check if the object is a `StoredInference` object.
+/// If it is, we return it directly.
+/// If it is not, we assume it is a Python object that matches the serialization pattern of the
+/// `StoredInference` type and deserialize it (and throw an error if it doesn't match).
+pub fn deserialize_from_stored_inference<'a>(
+    py: Python<'a>,
+    obj: &Bound<'a, PyAny>,
+) -> PyResult<StoredInference> {
+    if obj.is_instance_of::<StoredInference>() {
+        obj.extract()
+    } else {
+        deserialize_from_pyobj(py, obj)
+    }
+}
+
+/// Converts a Python dictionary/list to json with `json.dumps`,
 /// then deserializes to a Rust type via serde
 pub fn deserialize_from_pyobj<'a, T: serde::de::DeserializeOwned>(
     py: Python<'a>,

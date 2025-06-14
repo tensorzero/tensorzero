@@ -6,12 +6,19 @@ import httpx
 from .client import AsyncTensorZeroGateway, BaseTensorZeroGateway, TensorZeroGateway
 from .tensorzero import (
     RenderedStoredInference,
+    ResolvedInput,
+    ResolvedInputMessage,
+    StoredInference,
 )
 from .tensorzero import (
     _start_http_gateway as _start_http_gateway,
 )
 from .types import (
+    AndFilter,
+    AndNode,  # DEPRECATED
     BaseTensorZeroError,
+    BooleanMetricFilter,
+    BooleanMetricNode,  # DEPRECATED
     ChatDatapointInsert,
     ChatInferenceDatapointInput,  # DEPRECATED
     ChatInferenceResponse,
@@ -24,6 +31,8 @@ from .types import (
     FileBase64,
     FileUrl,
     FinishReason,
+    FloatMetricFilter,
+    FloatMetricNode,  # DEPRECATED
     ImageBase64,
     ImageUrl,
     InferenceChunk,
@@ -34,10 +43,11 @@ from .types import (
     JsonInferenceOutput,
     JsonInferenceResponse,
     Message,
+    NotFilter,
+    NotNode,  # DEPRECATED
+    OrFilter,
+    OrNode,  # DEPRECATED
     RawText,
-    StoredChatInference,
-    StoredInference,
-    StoredJsonInference,
     System,
     TensorZeroError,
     TensorZeroInternalError,
@@ -56,12 +66,15 @@ from .types import (
 )
 
 __all__ = [
+    "AndFilter",
+    "AndNode",  # DEPRECATED
     "AsyncTensorZeroGateway",
     "BaseTensorZeroError",
     "BaseTensorZeroGateway",
+    "BooleanMetricFilter",
+    "BooleanMetricNode",  # DEPRECATED
     "ChatDatapointInsert",
     "ChatInferenceDatapointInput",  # DEPRECATED
-    "StoredChatInference",
     "ChatInferenceResponse",
     "ContentBlock",
     "Datapoint",
@@ -72,18 +85,25 @@ __all__ = [
     "FileBase64",
     "FileUrl",
     "FinishReason",
+    "FloatMetricFilter",
+    "FloatMetricNode",  # DEPRECATED
     "ImageBase64",
     "ImageUrl",
     "InferenceChunk",
+    "ResolvedInput",
+    "ResolvedInputMessage",
     "StoredInference",
     "InferenceInput",
     "InferenceResponse",
     "JsonDatapointInsert",
     "JsonInferenceDatapointInput",  # DEPRECATED
     "JsonInferenceOutput",
-    "StoredJsonInference",
     "JsonInferenceResponse",
     "Message",
+    "NotFilter",
+    "NotNode",  # DEPRECATED
+    "OrFilter",
+    "OrNode",  # DEPRECATED
     "patch_openai_client",
     "RawText",
     "RenderedStoredInference",
