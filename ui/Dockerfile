@@ -6,14 +6,6 @@ COPY --from=ghcr.io/astral-sh/uv:0.6.6 /uv /uvx /bin/
 
 RUN npm install -g pnpm
 
-# ========== cargo-chef-planner ==========
-FROM lukemathwalker/cargo-chef:latest-rust-1 AS chef
-WORKDIR /app
-
-FROM chef AS planner
-COPY . .
-RUN cargo chef prepare --recipe-path recipe.json
-
 # ========== development-dependencies-env ==========
 
 FROM base AS development-dependencies-env
@@ -46,17 +38,20 @@ RUN wasm-pack build --features console_error_panic_hook
 
 # ========== evaluations-build-env ==========
 
-FROM chef AS evaluations-build-env
+FROM rust:latest AS evaluations-build-env
 
 RUN apt-get update && apt-get install -y clang libc++-dev && rm -rf /var/lib/apt/lists/*
-WORKDIR /tensorzero
-COPY --from=planner /app/recipe.json recipe.json
-RUN cargo chef cook --release -p evaluations --recipe-path recipe.json
+
 COPY . /tensorzero
+
+WORKDIR /tensorzero
 
 ARG CARGO_BUILD_FLAGS=""
 
-RUN cargo build --release -p evaluations $CARGO_BUILD_FLAGS && \
+RUN --mount=type=cache,id=tensorzero-evaluations-release,sharing=shared,target=/usr/local/cargo/registry \
+    --mount=type=cache,id=tensorzero-evaluations-release,sharing=shared,target=/usr/local/cargo/git \
+    --mount=type=cache,id=tensorzero-evaluations-release,sharing=shared,target=/sccache \
+    cargo build --release -p evaluations $CARGO_BUILD_FLAGS && \
     cp -r /tensorzero/target/release /release
 
 
