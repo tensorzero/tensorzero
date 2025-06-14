@@ -74,7 +74,7 @@ Take what you need, adopt incrementally, and complement with other tools.
 <table>
   <tr>
     <td width="30%" valign="top"><b>What is TensorZero?</b></td>
-    <td width="70%" valign="top">TensorZero is an open-source stack industrial-grade LLM applications. It unifies an LLM gateway, observability, optimization, evaluations, and experimentation.</td>
+    <td width="70%" valign="top">TensorZero is an open-source stack for industrial-grade LLM applications. It unifies an LLM gateway, observability, optimization, evaluations, and experimentation.</td>
   </tr>
   <tr>
     <td width="30%" valign="top"><b>How is TensorZero different from other LLM frameworks?</b></td>
