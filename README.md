@@ -74,19 +74,19 @@ Take what you need, adopt incrementally, and complement with other tools.
 <table>
   <tr>
     <td width="30%" valign="top"><b>What is TensorZero?</b></td>
-    <td width="70%" valign="top">TensorZero is an open-source framework for building production-grade LLM applications. It unifies an LLM gateway, observability, optimization, evaluations, and experimentation.</td>
+    <td width="70%" valign="top">TensorZero is an open-source stack industrial-grade LLM applications. It unifies an LLM gateway, observability, optimization, evaluations, and experimentation.</td>
   </tr>
   <tr>
     <td width="30%" valign="top"><b>How is TensorZero different from other LLM frameworks?</b></td>
     <td width="70%" valign="top">
       1. TensorZero enables you to optimize complex LLM applications based on production metrics and human feedback.<br>
-      2. TensorZero supports the needs of industrial-scale LLM applications: low latency, high throughput, type safety, self-hosted, GitOps, customizability, etc.<br>
+      2. TensorZero supports the needs of industrial-grade LLM applications: low latency, high throughput, type safety, self-hosted, GitOps, customizability, etc.<br>
       3. TensorZero unifies the entire LLMOps stack, creating compounding benefits. For example, LLM evaluations can be used for fine-tuning models alongside AI judges.
     </td>
   </tr>
   <tr>
     <td width="30%" valign="top"><b>Can I use TensorZero with ___?</b></td>
-    <td width="70%" valign="top">Yes. Every major programming language is supported. You can use TensorZero with our Python client, any OpenAI SDK, or our HTTP API.</td>
+    <td width="70%" valign="top">Yes. Every major programming language is supported. You can use TensorZero with our Python client, any OpenAI SDK or OpenAI-compatible client, or our HTTP API.</td>
   </tr>
   <tr>
     <td width="30%" valign="top"><b>Is TensorZero production-ready?</b></td>
