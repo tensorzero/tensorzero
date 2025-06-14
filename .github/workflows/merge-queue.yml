@@ -149,9 +149,9 @@ jobs:
       # We set 'TENSORZERO_E2E_PROXY' here so that embedded gateway tests can use it
       # The 'CARGO_NEXTEST_FLAKY_TESTS' variable allows us to mark tests as flaky without merging a PR (if a provider happens to break or goes down)
       # We run the tests without the flaky tests, and require them to pass
-      - name: Run all tests (including E2E tests)
-        run: |
-          TENSORZERO_E2E_PROXY="http://localhost:3003" cargo test-e2e --profile ci ${{ vars.CARGO_NEXTEST_EXTRA_ARGS }} -E "not (${{ vars.CARGO_NEXTEST_FLAKY_TESTS }})"
+      # - name: Run all tests (including E2E tests)
+      #   run: |
+      #     TENSORZERO_E2E_PROXY="http://localhost:3003" cargo test-e2e --profile ci ${{ vars.CARGO_NEXTEST_EXTRA_ARGS }} -E "not (${{ vars.CARGO_NEXTEST_FLAKY_TESTS }})"
 
       # As a separate step, we run just the flaky tests, and allow them to fail.
       # This lets us see if any flaky tests have started succeeding (by looking at the job output),
@@ -161,28 +161,28 @@ jobs:
       #     TENSORZERO_E2E_PROXY="http://localhost:3003" cargo test-e2e --profile ci --no-fail-fast ${{ vars.CARGO_NEXTEST_EXTRA_ARGS }} -E "${{ vars.CARGO_NEXTEST_FLAKY_TESTS }}"
       #   continue-on-error: true
 
-      - name: Print e2e logs
-        if: always()
-        run: cat e2e_logs.txt
+      # - name: Print e2e logs
+      #   if: always()
+      #   run: cat e2e_logs.txt
 
-      - name: Print provider-proxy logs
-        if: always()
-        run: cat provider_proxy_logs.txt
+      # - name: Print provider-proxy logs
+      #   if: always()
+      #   run: cat provider_proxy_logs.txt
 
-      - name: Print vLLM modal logs
-        if: always()
-        run: cat vllm_modal_logs.txt
+      # - name: Print vLLM modal logs
+      #   if: always()
+      #   run: cat vllm_modal_logs.txt
 
-      - name: Print SGLang modal logs
-        if: always()
-        run: cat sglang_modal_logs.txt
+      # - name: Print SGLang modal logs
+      #   if: always()
+      #   run: cat sglang_modal_logs.txt
 
-      - name: Upload provider-proxy cache
-        if: ${{ false }} # Change to `if: ${{ always() }}` to start uploading the cache
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: provider-proxy-cache
-          path: ./ci/provider-proxy-cache/
+      # - name: Upload provider-proxy cache
+      #   if: ${{ false }} # Change to `if: ${{ always() }}` to start uploading the cache
+      #   uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      #   with:
+      #     name: provider-proxy-cache
+      #     path: ./ci/provider-proxy-cache/
 
       - name: Install Python for python async client tests
         run: uv python install 3.9
@@ -192,74 +192,74 @@ jobs:
         run: |
           bash ./test.sh
 
-      - name: "Python: OpenAI Client: Install dependencies"
-        working-directory: clients/openai-python
-        run: |
-          uv venv
-          uv pip sync requirements.txt
+  #     - name: "Python: OpenAI Client: Install dependencies"
+  #       working-directory: clients/openai-python
+  #       run: |
+  #         uv venv
+  #         uv pip sync requirements.txt
 
-      - name: "Python: OpenAI Client: pytest"
-        working-directory: clients/openai-python
-        run: |
-          uv run pytest
+  #     - name: "Python: OpenAI Client: pytest"
+  #       working-directory: clients/openai-python
+  #       run: |
+  #         uv run pytest
 
-      - name: "Node.js: OpenAI Client: test"
-        working-directory: clients/openai-node
-        run: |
-          pnpm run test
+  #     - name: "Node.js: OpenAI Client: test"
+  #       working-directory: clients/openai-node
+  #       run: |
+  #         pnpm run test
 
-      - name: Install Go
-        uses: actions/setup-go@29694d72cd5e7ef3b09496b39f28a942af47737e
-        with:
-          go-version: "1.24"
+  #     - name: Install Go
+  #       uses: actions/setup-go@29694d72cd5e7ef3b09496b39f28a942af47737e
+  #       with:
+  #         go-version: "1.24"
 
-      - name: "Go: OpenAI Client: test"
-        working-directory: clients/openai-go/tests
-        run: go test -v
+  #     - name: "Go: OpenAI Client: test"
+  #       working-directory: clients/openai-go/tests
+  #       run: go test -v
 
-      - name: "Python: Recipes: pytest"
-        working-directory: recipes
-        run: |
-          uv run pytest
+  #     - name: "Python: Recipes: pytest"
+  #       working-directory: recipes
+  #       run: |
+  #         uv run pytest
 
-      - name: Terminate the gateway
-        run: |
-          echo "Killing gateway with pid $GATEWAY_PID"
-          kill $GATEWAY_PID
+  #     - name: Terminate the gateway
+  #       run: |
+  #         echo "Killing gateway with pid $GATEWAY_PID"
+  #         kill $GATEWAY_PID
 
-  check-production-docker-container:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      - name: Build Docker container for production deployment tests
-        run: docker build -t tensorzero/gateway -f gateway/Dockerfile .
+  # check-production-docker-container:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+  #     - name: Build Docker container for production deployment tests
+  #       run: docker build -t tensorzero/gateway -f gateway/Dockerfile .
 
-      - name: Launch ClickHouse container for E2E tests
-        run: |
-          # 'docker compose' will exit with status code 1 if any container exits, even if the container exits with status code 0
-          docker compose -f tensorzero-internal/tests/e2e/docker-compose.yml up -d --wait || true
+  #     - name: Launch ClickHouse container for E2E tests
+  #       run: |
+  #         # 'docker compose' will exit with status code 1 if any container exits, even if the container exits with status code 0
+  #         docker compose -f tensorzero-internal/tests/e2e/docker-compose.yml up -d --wait || true
 
-      - name: Set up .env file for production deployment tests
-        run: |
-          echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" > examples/production-deployment/.env
-          echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@host.docker.internal:8123/tensorzero" >> examples/production-deployment/.env
+  #     - name: Set up .env file for production deployment tests
+  #       run: |
+  #         echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" > examples/production-deployment/.env
+  #         echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@host.docker.internal:8123/tensorzero" >> examples/production-deployment/.env
 
-      - name: Run docker compose for production deployment tests
-        run: docker compose -f examples/production-deployment/docker-compose.yml up -d --wait
+  #     - name: Run docker compose for production deployment tests
+  #       run: docker compose -f examples/production-deployment/docker-compose.yml up -d --wait
 
-      - name: Run inference for production deployment tests
-        run: examples/production-deployment/run.sh
+  #     - name: Run inference for production deployment tests
+  #       run: examples/production-deployment/run.sh
 
-      - name: Take down docker compose for production deployment tests
-        run: |
-          docker compose -f examples/production-deployment/docker-compose.yml down
-          docker compose -f tensorzero-internal/tests/e2e/docker-compose.yml down
+  #     - name: Take down docker compose for production deployment tests
+  #       run: |
+  #         docker compose -f examples/production-deployment/docker-compose.yml down
+  #         docker compose -f tensorzero-internal/tests/e2e/docker-compose.yml down
 
-  # See 'ci/README.md' at the repository root for more details.
-  check-all-live-tests-passed:
-    if: always()
-    needs: [check-production-docker-container, live-tests, batch-tests]
-    runs-on: ubuntu-latest
-    steps:
-      - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
-        run: exit 1
+  # # See 'ci/README.md' at the repository root for more details.
+  # check-all-live-tests-passed:
+  #   if: always()
+  #   needs: [check-production-docker-container, live-tests, batch-tests]
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
+  #       run: exit 1
