@@ -54,7 +54,7 @@ impl Migration for Migration0011<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Add the `cached` column to ModelInference
@@ -63,17 +63,16 @@ impl Migration for Migration0011<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         Ok(())
     }
 
     fn rollback_instructions(&self) -> String {
-        "\
-            -- Drop the table\n\
-            DROP TABLE IF EXISTS ModelInferenceCache;\n\
-            -- Drop the `cached` column from ModelInference
+        "/* Drop the table */\
+            DROP TABLE IF EXISTS ModelInferenceCache;
+            /* Drop the `cached` column from ModelInference */\
             ALTER TABLE ModelInference DROP COLUMN cached;
             "
         .to_string()

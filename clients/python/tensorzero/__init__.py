@@ -4,9 +4,21 @@ from importlib.metadata import version
 import httpx
 
 from .client import AsyncTensorZeroGateway, BaseTensorZeroGateway, TensorZeroGateway
-from .tensorzero import _start_http_gateway as _start_http_gateway
+from .tensorzero import (
+    RenderedStoredInference,
+    ResolvedInput,
+    ResolvedInputMessage,
+    StoredInference,
+)
+from .tensorzero import (
+    _start_http_gateway as _start_http_gateway,
+)
 from .types import (
+    AndFilter,
+    AndNode,  # DEPRECATED
     BaseTensorZeroError,
+    BooleanMetricFilter,
+    BooleanMetricNode,  # DEPRECATED
     ChatDatapointInsert,
     ChatInferenceDatapointInput,  # DEPRECATED
     ChatInferenceResponse,
@@ -16,7 +28,11 @@ from .types import (
     DynamicEvaluationRunResponse,
     ExtraBody,
     FeedbackResponse,
+    FileBase64,
+    FileUrl,
     FinishReason,
+    FloatMetricFilter,
+    FloatMetricNode,  # DEPRECATED
     ImageBase64,
     ImageUrl,
     InferenceChunk,
@@ -27,23 +43,36 @@ from .types import (
     JsonInferenceOutput,
     JsonInferenceResponse,
     Message,
+    NotFilter,
+    NotNode,  # DEPRECATED
+    OrFilter,
+    OrNode,  # DEPRECATED
     RawText,
     System,
     TensorZeroError,
     TensorZeroInternalError,
     Text,
     TextChunk,
+    Thought,
     ThoughtChunk,
+    Tool,
     ToolCall,
     ToolCallChunk,
+    ToolChoice,
+    ToolParams,
     ToolResult,
+    UnknownContentBlock,
     Usage,
 )
 
 __all__ = [
+    "AndFilter",
+    "AndNode",  # DEPRECATED
     "AsyncTensorZeroGateway",
     "BaseTensorZeroError",
     "BaseTensorZeroGateway",
+    "BooleanMetricFilter",
+    "BooleanMetricNode",  # DEPRECATED
     "ChatDatapointInsert",
     "ChatInferenceDatapointInput",  # DEPRECATED
     "ChatInferenceResponse",
@@ -53,10 +82,17 @@ __all__ = [
     "DynamicEvaluationRunResponse",
     "ExtraBody",
     "FeedbackResponse",
+    "FileBase64",
+    "FileUrl",
     "FinishReason",
+    "FloatMetricFilter",
+    "FloatMetricNode",  # DEPRECATED
     "ImageBase64",
     "ImageUrl",
     "InferenceChunk",
+    "ResolvedInput",
+    "ResolvedInputMessage",
+    "StoredInference",
     "InferenceInput",
     "InferenceResponse",
     "JsonDatapointInsert",
@@ -64,18 +100,28 @@ __all__ = [
     "JsonInferenceOutput",
     "JsonInferenceResponse",
     "Message",
+    "NotFilter",
+    "NotNode",  # DEPRECATED
+    "OrFilter",
+    "OrNode",  # DEPRECATED
     "patch_openai_client",
     "RawText",
+    "RenderedStoredInference",
     "System",
     "TensorZeroError",
     "TensorZeroGateway",
     "TensorZeroInternalError",
     "Text",
     "TextChunk",
+    "Thought",
     "ThoughtChunk",
+    "Tool",
+    "ToolChoice",
+    "ToolParams",
     "ToolCall",
     "ToolCallChunk",
     "ToolResult",
+    "UnknownContentBlock",
     "Usage",
 ]
 

@@ -88,7 +88,10 @@ impl Migration for Migration0001<'_> {
             ) ENGINE = MergeTree()
             ORDER BY id;
         "#;
-        let _ = self.clickhouse.run_query_synchronous(query.to_string()).await?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous(query.to_string())
+            .await?;
         // Create the materialized view for the `InferencesById` table from ChatInference
         // If we are not doing a clean start, we need to add a where clause to the view to only include rows that have been created after the view_timestamp
         let view_where_clause = if !self.clean_start {
@@ -181,15 +184,12 @@ impl Migration for Migration0001<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        "\
-            -- Drop the materialized views\n\
-            DROP VIEW IF EXISTS ChatInferenceByIdView;\n\
-            DROP VIEW IF EXISTS JsonInferenceByIdView;\n\
-            \n\
-            -- Drop the table\n\
-            DROP TABLE IF EXISTS InferenceById;\n\
-            "
-        .to_string()
+        "/* Drop the materialized views */\
+            DROP VIEW IF EXISTS ChatInferenceByIdView;
+            DROP VIEW IF EXISTS JsonInferenceByIdView;
+            /* Drop the table */\
+            DROP TABLE IF EXISTS InferenceById;"
+            .to_string()
     }
 
     /// Check if the migration has succeeded (i.e. it should not be applied again)

@@ -1,3 +1,4 @@
+use crate::serde_util::{deserialize_json_string, deserialize_optional_json_string};
 use crate::{
     endpoints::{
         batch_inference::{BatchEpisodeIdInput, BatchOutputSchemas},
@@ -156,34 +157,6 @@ pub struct BatchRequestRow<'a> {
     pub function_name: Cow<'a, str>,
     pub variant_name: Cow<'a, str>,
     pub errors: Vec<Value>,
-}
-
-pub fn deserialize_json_string<'de, D, T>(deserializer: D) -> Result<T, D::Error>
-where
-    D: serde::Deserializer<'de>,
-    T: serde::de::DeserializeOwned,
-{
-    let json_str = String::deserialize(deserializer)?;
-    serde_json::from_str(&json_str).map_err(serde::de::Error::custom)
-}
-
-pub fn deserialize_optional_json_string<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-    T: serde::de::DeserializeOwned,
-{
-    let opt_json_str: Option<String> = Option::deserialize(deserializer)?;
-    match opt_json_str {
-        Some(json_str) => {
-            if json_str.is_empty() {
-                return Ok(None);
-            }
-            serde_json::from_str(&json_str)
-                .map(Some)
-                .map_err(serde::de::Error::custom)
-        }
-        None => Ok(None),
-    }
 }
 
 #[derive(Debug)]
@@ -353,6 +326,8 @@ pub struct BatchChatCompletionInferenceParams {
     pub presence_penalty: Option<Vec<Option<f32>>>,
     #[serde(default)]
     pub frequency_penalty: Option<Vec<Option<f32>>>,
+    #[serde(default)]
+    pub stop_sequences: Option<Vec<Vec<String>>>,
 }
 
 pub struct BatchInferenceParamsWithSize(pub BatchInferenceParams, pub usize);
@@ -388,6 +363,7 @@ impl TryFrom<BatchChatCompletionParamsWithSize> for Vec<ChatCompletionInferenceP
             top_p,
             presence_penalty,
             frequency_penalty,
+            stop_sequences,
         } = params;
         // Verify all provided Vecs have the same length
         if let Some(temperature) = &temperature {
@@ -475,6 +451,7 @@ impl TryFrom<BatchChatCompletionParamsWithSize> for Vec<ChatCompletionInferenceP
         let top_p = top_p.unwrap_or_default();
         let presence_penalty = presence_penalty.unwrap_or_default();
         let frequency_penalty = frequency_penalty.unwrap_or_default();
+        let stop_sequences = stop_sequences.unwrap_or_default();
 
         // Create iterators that take ownership
         let mut temperature_iter = temperature.into_iter();
@@ -483,6 +460,7 @@ impl TryFrom<BatchChatCompletionParamsWithSize> for Vec<ChatCompletionInferenceP
         let mut top_p_iter = top_p.into_iter();
         let mut presence_penalty_iter = presence_penalty.into_iter();
         let mut frequency_penalty_iter = frequency_penalty.into_iter();
+        let mut stop_sequences_iter = stop_sequences.into_iter();
 
         // Build params using the iterators
         let mut all_inference_params = Vec::with_capacity(num_inferences);
@@ -494,6 +472,7 @@ impl TryFrom<BatchChatCompletionParamsWithSize> for Vec<ChatCompletionInferenceP
                 top_p: top_p_iter.next().unwrap_or(None),
                 presence_penalty: presence_penalty_iter.next().unwrap_or(None),
                 frequency_penalty: frequency_penalty_iter.next().unwrap_or(None),
+                stop_sequences: stop_sequences_iter.next(),
                 json_mode: None,
             });
         }
@@ -623,6 +602,7 @@ mod tests {
                     top_p: None,
                     presence_penalty: Some(vec![Some(0.5), Some(0.6), Some(0.7)]),
                     frequency_penalty: Some(vec![Some(0.5), Some(0.6), Some(0.7)]),
+                    stop_sequences: None,
                 },
             },
             3,
@@ -689,6 +669,7 @@ mod tests {
                     top_p: None,
                     presence_penalty: Some(vec![Some(0.5)]), // Too short
                     frequency_penalty: Some(vec![Some(0.5), Some(0.6), Some(0.7), Some(0.8)]), // Too long
+                    stop_sequences: None,
                 },
             },
             3,
@@ -713,6 +694,7 @@ mod tests {
                     top_p: None,
                     presence_penalty: Some(vec![Some(0.5), Some(0.6), Some(0.7)]),
                     frequency_penalty: Some(vec![Some(0.5), Some(0.6), Some(0.7)]),
+                    stop_sequences: None,
                 },
             },
             4, // Wrong size - arrays are length 3 but size is 4

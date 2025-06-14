@@ -2,6 +2,8 @@
 
 # TensorZero
 
+<p><picture><img src="https://www.tensorzero.com/github-trending-badge.svg" alt="#1 Repository Of The Day"></picture></p>
+
 **TensorZero creates a feedback loop for optimizing LLM applications — turning production data into smarter, faster, and cheaper models.**
 
 1. Integrate our model gateway
@@ -347,7 +349,7 @@ Optimize your prompts programmatically using research-driven optimization techni
     <td width="50%" align="center" valign="middle"><img src="https://github.com/user-attachments/assets/d81a7c37-382f-4c46-840f-e6c2593301db" alt="MIPROv2 diagram"></td>
     <td width="50%" align="center" valign="middle">
       TensorZero comes with several optimization recipes, but you can also easily create your own.
-      This example shows to optimize a TensorZero function using an arbitrary tool — here, DSPy, a popular library for automated prompt engineering.
+      This example shows how to optimize a TensorZero function using an arbitrary tool — here, DSPy, a popular library for automated prompt engineering.
     </td>
   </tr>
 </table>

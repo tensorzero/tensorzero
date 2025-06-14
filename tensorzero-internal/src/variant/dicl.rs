@@ -48,6 +48,7 @@ pub struct DiclConfig {
     pub system_instructions: String,
     pub temperature: Option<f32>,
     pub top_p: Option<f32>,
+    pub stop_sequences: Option<Vec<String>>,
     pub presence_penalty: Option<f32>,
     pub frequency_penalty: Option<f32>,
     pub max_tokens: Option<u32>,
@@ -69,6 +70,7 @@ pub struct UninitializedDiclConfig {
     pub system_instructions: Option<PathBuf>,
     pub temperature: Option<f32>,
     pub top_p: Option<f32>,
+    pub stop_sequences: Option<Vec<String>>,
     pub presence_penalty: Option<f32>,
     pub frequency_penalty: Option<f32>,
     pub max_tokens: Option<u32>,
@@ -121,7 +123,7 @@ impl Variant for DiclConfig {
             &mut inference_params,
         )?;
 
-        let model_config = models.models.get(&self.model)?.ok_or_else(|| {
+        let model_config = models.models.get(&self.model).await?.ok_or_else(|| {
             Error::new(ErrorDetails::UnknownModel {
                 name: self.model.to_string(),
             })
@@ -186,7 +188,7 @@ impl Variant for DiclConfig {
             &mut inference_params,
         )?;
 
-        let model_config = models.models.get(&self.model)?.ok_or_else(|| {
+        let model_config = models.models.get(&self.model).await?.ok_or_else(|| {
             Error::new(ErrorDetails::UnknownModel {
                 name: self.model.to_string(),
             })
@@ -211,12 +213,12 @@ impl Variant for DiclConfig {
         Ok((inference_result_stream, model_used_info))
     }
 
-    fn validate(
+    async fn validate(
         &self,
         _function: &FunctionConfig,
         models: &mut ModelTable,
         embedding_models: &EmbeddingModelTable,
-        _templates: &TemplateConfig,
+        _templates: &TemplateConfig<'_>,
         function_name: &str,
         variant_name: &str,
     ) -> Result<(), Error> {
@@ -237,7 +239,7 @@ impl Variant for DiclConfig {
         // Validate that the generation model and embedding model are valid
         models.validate(&self.model)?;
         let embedding_model = embedding_models
-            .get(&self.embedding_model)?
+            .get(&self.embedding_model).await?
             .ok_or_else(|| Error::new(ErrorDetails::Config {
                 message: format!(
                     "`functions.{function_name}.variants.{variant_name}`: `embedding_model` must be a valid embedding model name"
@@ -320,7 +322,8 @@ impl DiclConfig {
         })?;
 
         let embedding_model = embedding_models
-            .get(&self.embedding_model)?
+            .get(&self.embedding_model)
+            .await?
             .ok_or_else(|| {
                 Error::new(ErrorDetails::Inference {
                     message: format!("Embedding model {} not found", self.embedding_model),
@@ -363,7 +366,7 @@ impl DiclConfig {
         // Run the query on the ClickHouse database to find nearest neighbors
         let result = clients
             .clickhouse_connection_info
-            .run_query_synchronous(query, None)
+            .run_query_synchronous_no_params(query)
             .await?;
 
         // Parse each line into RawExample (since we will have some serialized JSON strings inside it)
@@ -470,7 +473,7 @@ impl DiclConfig {
             for content in &message.content {
                 match content {
                     // We cannot meaningfully embed images into dicl inputs, so reject the request.
-                    ResolvedInputMessageContent::Image(..) => {
+                    ResolvedInputMessageContent::File(..) => {
                         return Err(Error::new(ErrorDetails::UnsupportedContentBlockType {
                             content_block_type: "image".to_string(),
                             provider_type: "dicl".to_string(),
@@ -508,6 +511,7 @@ impl DiclConfig {
                 self.top_p,
                 self.presence_penalty,
                 self.frequency_penalty,
+                self.stop_sequences.clone(),
             );
         if !inference_config.extra_body.is_empty() {
             return Err(ErrorDetails::InvalidRequest {
@@ -559,7 +563,7 @@ fn parse_raw_examples(
 
         for messages in &input.messages {
             for content in &messages.content {
-                if let ResolvedInputMessageContent::Image(_) = content {
+                if let ResolvedInputMessageContent::File(_) = content {
                     return Err(Error::new(ErrorDetails::Serialization {
                         message: "Failed to deserialize raw_example - images are not supported in dynamic in-context learning".to_string(),
                     }));
@@ -634,6 +638,7 @@ impl LoadableConfig<DiclConfig> for UninitializedDiclConfig {
             seed: self.seed,
             json_mode: self.json_mode,
             retries: self.retries,
+            stop_sequences: self.stop_sequences,
             extra_body: self.extra_body,
             extra_headers: self.extra_headers,
         })
@@ -646,9 +651,9 @@ mod tests {
     use crate::{
         function::{FunctionConfigChat, FunctionConfigJson},
         inference::types::{
-            resolved_input::ImageWithPath,
+            resolved_input::FileWithPath,
             storage::{StorageKind, StoragePath},
-            Base64Image, ImageKind, ResolvedInputMessage, ResolvedInputMessageContent, Role, Text,
+            Base64File, ResolvedInputMessage, ResolvedInputMessageContent, Role, Text,
         },
         tool::{ToolCall, ToolCallOutput},
     };
@@ -830,17 +835,17 @@ mod tests {
                             ResolvedInputMessageContent::Text {
                                 value: json!("What is the name of the capital city of Japan?"),
                             },
-                            ResolvedInputMessageContent::Image(ImageWithPath {
-                                image: Base64Image {
+                            ResolvedInputMessageContent::File(Box::new(FileWithPath {
+                                file: Base64File {
                                     url: None,
-                                    mime_type: ImageKind::Png,
+                                    mime_type: mime::IMAGE_PNG,
                                     data: Some("ABC".to_string()),
                                 },
                                 storage_path: StoragePath {
                                     kind: StorageKind::Disabled,
                                     path: Default::default(),
                                 },
-                            }),
+                            })),
                         ],
                     }],
                 })

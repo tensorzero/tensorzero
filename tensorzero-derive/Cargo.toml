@@ -1,7 +1,9 @@
 [package]
 name = "tensorzero-derive"
 version = "0.1.0"
+rust-version.workspace = true
 edition = "2021"
+license.workspace = true
 
 [lib]
 proc-macro = true

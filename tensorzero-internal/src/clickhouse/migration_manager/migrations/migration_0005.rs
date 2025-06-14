@@ -63,7 +63,7 @@ impl Migration for Migration0005<'_> {
                       AND name = 'tags'
                 )"#
             );
-            match self.clickhouse.run_query_synchronous(query, None).await {
+            match self.clickhouse.run_query_synchronous_no_params(query).await {
                 Err(e) => {
                     return Err(ErrorDetails::ClickHouseMigration {
                         id: "0005".to_string(),
@@ -105,7 +105,7 @@ impl Migration for Migration0005<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Add a column `tags` to the `BooleanMetricFeedback` table
@@ -114,7 +114,7 @@ impl Migration for Migration0005<'_> {
             ADD COLUMN IF NOT EXISTS tags Map(String, String) DEFAULT map();"#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Add a column `tags` to the `JsonInference` table
@@ -123,7 +123,7 @@ impl Migration for Migration0005<'_> {
             ADD COLUMN IF NOT EXISTS tags Map(String, String) DEFAULT map();"#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // In the following few queries we create the materialized views that map the tags from the original tables to the new `InferenceTag` table
@@ -144,7 +144,7 @@ impl Migration for Migration0005<'_> {
             "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Create the materialized view for the `InferenceTag` table from JsonInference
@@ -162,23 +162,20 @@ impl Migration for Migration0005<'_> {
             "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
         Ok(())
     }
 
     fn rollback_instructions(&self) -> String {
-        "\
-            -- Drop the materialized views\n\
-            DROP VIEW IF EXISTS ChatInferenceTagView;\n\
-            DROP VIEW IF EXISTS JsonInferenceTagView;\n\
-            \n
-            -- Drop the `InferenceTag` table\n\
-            DROP TABLE IF EXISTS InferenceTag;\n\
-            \n\
-            -- Drop the `tags` column from the original inference tables\n\
-            ALTER TABLE ChatInference DROP COLUMN tags;\n\
-            ALTER TABLE JsonInference DROP COLUMN tags;\n\
+        "/* Drop the materialized views */\
+            DROP VIEW IF EXISTS ChatInferenceTagView;
+            DROP VIEW IF EXISTS JsonInferenceTagView;
+            /* Drop the `InferenceTag` table */\
+            DROP TABLE IF EXISTS InferenceTag;
+            /* Drop the `tags` column from the original inference tables */\
+            ALTER TABLE ChatInference DROP COLUMN tags;
+            ALTER TABLE JsonInference DROP COLUMN tags;
         "
         .to_string()
     }

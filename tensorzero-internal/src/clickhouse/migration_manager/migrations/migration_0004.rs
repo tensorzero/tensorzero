@@ -42,7 +42,7 @@ impl Migration for Migration0004<'_> {
         );
         let response = self
             .clickhouse
-            .run_query_synchronous(query, None)
+            .run_query_synchronous_no_params(query)
             .await
             .map_err(|e| {
                 Error::new(ErrorDetails::ClickHouseMigration {
@@ -71,17 +71,15 @@ impl Migration for Migration0004<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         Ok(())
     }
 
     fn rollback_instructions(&self) -> String {
-        "\
-            -- Drop the columns\n\
-            ALTER TABLE ModelInference DROP COLUMN system, DROP COLUMN input_messages, DROP COLUMN output;\n\
-        "
+        "/* Drop the columns */\
+            ALTER TABLE ModelInference DROP COLUMN system, DROP COLUMN input_messages, DROP COLUMN output;"
         .to_string()
     }
 

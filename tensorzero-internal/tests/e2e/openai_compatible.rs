@@ -3,11 +3,17 @@
 use std::collections::HashSet;
 
 use axum::{extract::State, http::HeaderMap};
+use http::{HeaderName, HeaderValue};
+use http_body_util::BodyExt;
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
+use tracing_test::traced_test;
 use uuid::Uuid;
 
-use crate::{common::get_gateway_endpoint, providers::common::make_embedded_gateway_no_config};
+use crate::{
+    common::get_gateway_endpoint,
+    providers::common::{make_embedded_gateway, make_embedded_gateway_no_config},
+};
 use tensorzero_internal::{
     clickhouse::test_helpers::{
         get_clickhouse, select_chat_inference_clickhouse, select_json_inference_clickhouse,
@@ -16,49 +22,63 @@ use tensorzero_internal::{
     gateway_util::StructuredJson,
 };
 
-#[tokio::test]
-async fn test_openai_compatible_route() {
-    // Test that both the old and new formats work.
-    test_openai_compatible_route_with_function_name_asmodel(
+#[tokio::test(flavor = "multi_thread")]
+async fn test_openai_compatible_route_new_format() {
+    test_openai_compatible_route_with_function_name_as_model(
         "tensorzero::function_name::basic_test_no_system_schema",
-    )
-    .await;
-    test_openai_compatible_route_with_function_name_asmodel(
-        "tensorzero::basic_test_no_system_schema",
     )
     .await;
 }
 
-async fn test_openai_compatible_route_with_function_name_asmodel(model: &str) {
-    let client = Client::new();
+#[tokio::test(flavor = "multi_thread")]
+#[traced_test]
+async fn test_openai_compatible_route_old_format() {
+    test_openai_compatible_route_with_function_name_as_model(
+        "tensorzero::basic_test_no_system_schema",
+    )
+    .await;
+    assert!(logs_contain(
+        "Please set the `model` parameter to `tensorzero::function_name::your_function` instead of `tensorzero::your_function.`"
+    ));
+}
+
+async fn test_openai_compatible_route_with_function_name_as_model(model: &str) {
+    let client = make_embedded_gateway().await;
+    let state = client.get_app_state_data().unwrap().clone();
     let episode_id = Uuid::now_v7();
 
-    let payload = json!({
-        "model": model,
-        "messages": [
-            {
-                "role": "system",
-                "content": "TensorBot"
-            },
-            {
-                "role": "user",
-                "content": "What is the capital of Japan?"
-            }
-        ],
-        "stream": false,
-    });
-
-    let response = client
-        .post(get_gateway_endpoint("/openai/v1/chat/completions"))
-        .header("episode_id", episode_id.to_string())
-        .json(&payload)
-        .send()
-        .await
-        .unwrap();
+    let response = tensorzero_internal::endpoints::openai_compatible::inference_handler(
+        State(state),
+        HeaderMap::default(),
+        StructuredJson(
+            serde_json::from_value(serde_json::json!({
+                "model": model,
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": "TensorBot"
+                    },
+                    {
+                        "role": "user",
+                        "content": "What is the capital of Japan?"
+                    }
+                ],
+                "stream": false,
+                "tensorzero::tags": {
+                    "foo": "bar"
+                },
+                "tensorzero::episode_id": episode_id.to_string(),
+            }))
+            .unwrap(),
+        ),
+    )
+    .await
+    .unwrap();
 
     // Check Response is OK, then fields in order
     assert_eq!(response.status(), StatusCode::OK);
-    let response_json = response.json::<Value>().await.unwrap();
+    let response_json = response.into_body().collect().await.unwrap().to_bytes();
+    let response_json: Value = serde_json::from_slice(&response_json).unwrap();
     println!("response: {response_json:?}");
     let choices = response_json.get("choices").unwrap().as_array().unwrap();
     assert!(choices.len() == 1);
@@ -111,6 +131,9 @@ async fn test_openai_compatible_route_with_function_name_asmodel(model: &str) {
         ]
     });
     assert_eq!(input, correct_input);
+    let tags = result.get("tags").unwrap().as_object().unwrap();
+    assert_eq!(tags.get("foo").unwrap().as_str().unwrap(), "bar");
+    assert_eq!(tags.len(), 1);
     let content_blocks = result.get("output").unwrap().as_str().unwrap();
     // Check that content_blocks is a list of blocks length 1
     let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
@@ -319,12 +342,12 @@ async fn test_openai_compatible_route_with_default_function(
                 "content": "What is the capital of Japan?"
             }
         ],
+        "tensorzero::episode_id": episode_id.to_string(),
         "stream": false,
     });
 
     let response = client
         .post(get_gateway_endpoint("/openai/v1/chat/completions"))
-        .header("episode_id", episode_id.to_string())
         .json(&payload)
         .send()
         .await
@@ -445,11 +468,11 @@ async fn test_openai_compatible_route_bad_model_name() {
             }
         ],
         "stream": false,
+        "tensorzero::episode_id": episode_id.to_string(),
     });
 
     let response = client
         .post(get_gateway_endpoint("/openai/v1/chat/completions"))
-        .header("episode_id", episode_id.to_string())
         .json(&payload)
         .send()
         .await
@@ -482,12 +505,12 @@ async fn test_openai_compatible_route_with_json_mode_on() {
             }
         ],
         "stream": false,
-        "response_format":{"type":"json_object"}
+        "response_format":{"type":"json_object"},
+        "tensorzero::episode_id": episode_id.to_string(),
     });
 
     let response = client
         .post(get_gateway_endpoint("/openai/v1/chat/completions"))
-        .header("episode_id", episode_id.to_string())
         .json(&payload)
         .send()
         .await
@@ -616,12 +639,12 @@ async fn test_openai_compatible_route_with_json_schema() {
             }
         ],
         "stream": false,
+        "tensorzero::episode_id": episode_id.to_string(),
         "response_format":{"type":"json_schema", "json_schema":{"name":"test", "strict":true, "schema":{}}}
     });
 
     let response = client
         .post(get_gateway_endpoint("/openai/v1/chat/completions"))
-        .header("episode_id", episode_id.to_string())
         .json(&payload)
         .send()
         .await
@@ -777,13 +800,13 @@ async fn test_openai_compatible_streaming_tool_call() {
                 }
             }
         ],
-        "tool_choice": "auto"
+        "tool_choice": "auto",
+        "tensorzero::episode_id": episode_id.to_string(),
     });
 
     let mut response = client
         .post(get_gateway_endpoint("/openai/v1/chat/completions"))
         .header("Content-Type", "application/json")
-        .header("X-Episode-Id", episode_id.to_string())
         .json(&body)
         .eventsource()
         .unwrap();
@@ -855,7 +878,50 @@ async fn test_openai_compatible_streaming_tool_call() {
 }
 
 #[tokio::test]
-#[tracing_test::traced_test]
+#[traced_test]
+async fn test_openai_compatible_warn_headers() {
+    let client = make_embedded_gateway_no_config().await;
+    let state = client.get_app_state_data().unwrap().clone();
+    let episode_id = Uuid::now_v7();
+    let _ = tensorzero_internal::endpoints::openai_compatible::inference_handler(
+        State(state),
+        HeaderMap::from_iter(vec![
+            (
+                HeaderName::from_static("episode_id"),
+                HeaderValue::from_str(&episode_id.to_string()).unwrap(),
+            ),
+            (
+                HeaderName::from_static("variant_name"),
+                HeaderValue::from_str("test").unwrap(),
+            ),
+            (
+                HeaderName::from_static("dryrun"),
+                HeaderValue::from_str("true").unwrap(),
+            ),
+        ]),
+        StructuredJson(
+            serde_json::from_value(serde_json::json!({
+                "messages": [],
+                "model": "tensorzero::model_name::dummy::good",
+            }))
+            .unwrap(),
+        ),
+    )
+    .await;
+
+    assert!(logs_contain(
+        "Deprecation Warning: Please use the `tensorzero::episode_id` field instead of the `episode_id` header."
+    ));
+    assert!(logs_contain(
+        "Deprecation Warning: Please use the `tensorzero::variant_name` field instead of the `variant_name` header."
+    ));
+    assert!(logs_contain(
+        "Deprecation Warning: Please use the `tensorzero::dryrun` field instead of the `dryrun` header."
+    ));
+}
+
+#[tokio::test]
+#[traced_test]
 async fn test_openai_compatible_warn_unknown_fields() {
     let client = make_embedded_gateway_no_config().await;
     let state = client.get_app_state_data().unwrap().clone();
@@ -880,6 +946,32 @@ async fn test_openai_compatible_warn_unknown_fields() {
 }
 
 #[tokio::test]
+async fn test_openai_compatible_deny_unknown_fields() {
+    let client = make_embedded_gateway_no_config().await;
+    let state = client.get_app_state_data().unwrap().clone();
+    let err = tensorzero_internal::endpoints::openai_compatible::inference_handler(
+        State(state),
+        HeaderMap::default(),
+        StructuredJson(
+            serde_json::from_value(serde_json::json!({
+                "messages": [],
+                "model": "tensorzero::model_name::dummy::good",
+                "tensorzero::deny_unknown_fields": true,
+                "my_fake_param": "fake_value",
+                "my_other_fake_param": "fake_value_2"
+            }))
+            .unwrap(),
+        ),
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(
+        err.to_string(),
+        "Invalid request to OpenAI-compatible endpoint: `tensorzero::deny_unknown_fields` is set to true, but found unknown fields in the request: [my_fake_param, my_other_fake_param]"
+    );
+}
+
+#[tokio::test]
 async fn test_openai_compatible_streaming() {
     use futures::StreamExt;
     use reqwest_eventsource::{Event, RequestBuilderExt};
@@ -894,13 +986,13 @@ async fn test_openai_compatible_streaming() {
                 "role": "user",
                 "content": "What's the reason for why we use AC not DC?"
             }
-        ]
+        ],
+        "tensorzero::episode_id": episode_id.to_string(),
     });
 
     let mut response = client
         .post(get_gateway_endpoint("/openai/v1/chat/completions"))
         .header("Content-Type", "application/json")
-        .header("X-Episode-Id", episode_id.to_string())
         .json(&body)
         .eventsource()
         .unwrap();
@@ -946,7 +1038,7 @@ async fn test_openai_compatible_streaming() {
                 .as_str()
                 .unwrap();
         }
-        assert_eq!(parsed_chunk["service_tier"].as_str().unwrap(), "");
+        assert!(parsed_chunk["service_tier"].is_null());
         assert!(parsed_chunk["choices"][0]["logprobs"].is_null());
         if let Some(finish_reason) = parsed_chunk["choices"][0]["delta"]["finish_reason"].as_str() {
             assert_eq!(finish_reason, "stop");
@@ -956,4 +1048,47 @@ async fn test_openai_compatible_streaming() {
         let response_model = parsed_chunk.get("model").unwrap().as_str().unwrap();
         assert_eq!(response_model, "tensorzero::model_name::openai::gpt-4o");
     }
+}
+
+// Test using 'stop' parameter in the openai-compatible endpoint
+#[tokio::test]
+async fn test_openai_compatible_stop_sequence() {
+    let client = Client::new();
+
+    let payload = json!({
+        "model": "tensorzero::model_name::anthropic::claude-3-7-sonnet-20250219",
+        "messages": [
+            {
+                "role": "user",
+                "content": "Output 'Hello' followed by either 'zero' or 'one'. Do not output anything else"
+            }
+        ],
+        "stop": ["zero", "one"],
+        "stream": false,
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/openai/v1/chat/completions"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    let response_json = response.json::<Value>().await.unwrap();
+
+    println!("API response: {response_json}");
+    let finish_reason = response_json["choices"][0]["finish_reason"]
+        .as_str()
+        .unwrap();
+    assert_eq!(finish_reason, "stop");
+    let output = response_json["choices"][0]["message"]["content"]
+        .as_str()
+        .unwrap();
+    assert!(output.contains("Hello"), "Unexpected output: {output}");
+    assert!(
+        !output.contains("zero") && !output.contains("one"),
+        "Unexpected output: {output}"
+    );
+
+    // We don't bother checking ClickHouse, as we do that in lots of other tests
 }

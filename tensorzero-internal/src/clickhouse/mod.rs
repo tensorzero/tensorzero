@@ -6,16 +6,23 @@ use serde::Deserialize;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::RwLock;
 use tokio::sync::RwLockWriteGuard;
 use url::Url;
 
 pub mod migration_manager;
+pub mod query_builder;
 #[cfg(any(test, feature = "e2e_tests"))]
 pub mod test_helpers;
+pub mod types;
 
+use crate::clickhouse::types::StoredInference;
+use crate::config_parser::Config;
 use crate::error::DisplayOrDebugGateway;
 use crate::error::{Error, ErrorDetails};
+use query_builder::generate_list_inferences_sql;
+use query_builder::ListInferencesParams;
 
 #[derive(Debug, Clone)]
 pub enum ClickHouseConnectionInfo {
@@ -167,13 +174,7 @@ impl ClickHouseConnectionInfo {
                 ping_url.set_path("/ping");
                 ping_url.set_query(None);
 
-                let timeout = if cfg!(feature = "e2e_tests") {
-                    // Set a long timeout to try to debug batch tests
-                    std::time::Duration::from_secs(60)
-                } else {
-                    // If ClickHouse is healthy, it should respond within 1000ms
-                    std::time::Duration::from_millis(1000)
-                };
+                let timeout = Duration::from_secs(180);
 
                 match client.get(ping_url).timeout(timeout).send().await {
                     Ok(response) if response.status().is_success() => Ok(()),
@@ -201,7 +202,7 @@ impl ClickHouseConnectionInfo {
     pub async fn run_query_synchronous(
         &self,
         query: String,
-        parameters: Option<&HashMap<&str, &str>>,
+        parameters: &HashMap<&str, &str>,
     ) -> Result<String, Error> {
         match self {
             Self::Disabled => Ok("".to_string()),
@@ -213,13 +214,11 @@ impl ClickHouseConnectionInfo {
             } => {
                 let mut database_url = Url::parse(database_url.expose_secret()).map_err(|e| Error::new(ErrorDetails::ClickHouseQuery { message: format!("Error parsing ClickHouse URL: {e}. This should never happen. Please submit a bug report at https://github.com/tensorzero/tensorzero/issues/new") }))?;
                 // Add query parameters if provided
-                if let Some(params) = parameters {
-                    for (key, value) in params {
-                        let param_key = format!("param_{key}");
-                        database_url
-                            .query_pairs_mut()
-                            .append_pair(&param_key, value);
-                    }
+                for (key, value) in parameters {
+                    let param_key = format!("param_{key}");
+                    database_url
+                        .query_pairs_mut()
+                        .append_pair(&param_key, value);
                 }
                 database_url
                     .query_pairs_mut()
@@ -253,6 +252,10 @@ impl ClickHouseConnectionInfo {
                 }
             }
         }
+    }
+
+    pub async fn run_query_synchronous_no_params(&self, query: String) -> Result<String, Error> {
+        self.run_query_synchronous(query, &HashMap::default()).await
     }
 
     /// Sometimes you might want to treat the data you're sending as a table if you're going
@@ -402,6 +405,31 @@ impl ClickHouseConnectionInfo {
             }
         }
     }
+
+    pub async fn list_inferences(
+        &self,
+        config: &Config<'_>,
+        opts: &ListInferencesParams<'_>,
+    ) -> Result<Vec<StoredInference>, Error> {
+        let (sql, params) = generate_list_inferences_sql(config, opts)?;
+        let params_map = params
+            .iter()
+            .map(|p| (p.name.as_str(), p.value.as_str()))
+            .collect();
+        let response = self.run_query_synchronous(sql, &params_map).await?;
+        let inferences = response
+            .trim()
+            .lines()
+            .map(|line| {
+                serde_json::from_str::<StoredInference>(line).map_err(|e| {
+                    Error::new(ErrorDetails::ClickHouseQuery {
+                        message: format!("Failed to deserialize response: {e:?}"),
+                    })
+                })
+            })
+            .collect::<Result<Vec<StoredInference>, Error>>()?;
+        Ok(inferences)
+    }
 }
 
 /// ClickHouse uses backslashes to escape quotes and all other special sequences in strings.
@@ -546,14 +574,6 @@ fn validate_clickhouse_url_get_db_name(url: &Url) -> Result<Option<String>, Erro
         .into());
     }
 
-    // Validate the port
-    if url.port().is_none() {
-        return Err(ErrorDetails::Config {
-            message: "Missing port in ClickHouse URL".to_string(),
-        }
-        .into());
-    }
-
     // Validate that none of the query strings have key "database"
     if url.query_pairs().any(|(key, _)| key == "database") {
         return Err(ErrorDetails::Config {
@@ -617,6 +637,14 @@ where
     s.parse::<u64>().map_err(serde::de::Error::custom)
 }
 
+/// The format of the data that will be returned from / sent to ClickHouse.
+/// Currently only used in the query builder.
+/// TODO: use across the codebase.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ClickhouseFormat {
+    JsonEachRow,
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -660,15 +688,15 @@ mod tests {
         let result = validate_clickhouse_url_get_db_name(&database_url).unwrap();
         assert_eq!(result, Some("database".to_string()));
 
-        let database_url = Url::parse("http://localhost/").unwrap();
-        let err = validate_clickhouse_url_get_db_name(&database_url).unwrap_err();
-        assert_eq!(
-            err,
-            ErrorDetails::Config {
-                message: "Missing port in ClickHouse URL".to_string(),
-            }
-            .into()
-        );
+        let database_url = Url::parse("https://localhost:443/").unwrap();
+        assert!(validate_clickhouse_url_get_db_name(&database_url)
+            .unwrap()
+            .is_none());
+
+        let database_url = Url::parse("http://default:password@clickhouse.cloud.io:443").unwrap();
+        assert!(validate_clickhouse_url_get_db_name(&database_url)
+            .unwrap()
+            .is_none());
 
         let database_url = Url::parse("http://localhost:8123").unwrap();
         assert!(validate_clickhouse_url_get_db_name(&database_url).is_ok());

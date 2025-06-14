@@ -460,7 +460,7 @@ pub async fn get_batch_request(
                     FORMAT JSONEachRow
                 "#
             );
-            let response = clickhouse.run_query_synchronous(query, None).await?;
+            let response = clickhouse.run_query_synchronous_no_params(query).await?;
             if response.is_empty() {
                 return Err(ErrorDetails::BatchNotFound { id: *batch_id }.into());
             }
@@ -491,7 +491,7 @@ pub async fn get_batch_request(
                     FORMAT JSONEachRow
                 "#,
             );
-            let response = clickhouse.run_query_synchronous(query, None).await?;
+            let response = clickhouse.run_query_synchronous_no_params(query).await?;
             if response.is_empty() {
                 return Err(ErrorDetails::BatchNotFound { id: *inference_id }.into());
             }
@@ -520,7 +520,8 @@ async fn poll_batch_inference(
     // Retrieve the relevant model provider
     // Call model.poll_batch_inference on it
     let model_config = models
-        .get(batch_request.model_name.as_ref())?
+        .get(batch_request.model_name.as_ref())
+        .await?
         .ok_or_else(|| {
             Error::new(ErrorDetails::InvalidModel {
                 model_name: batch_request.model_name.to_string(),
@@ -946,7 +947,7 @@ pub async fn get_batch_inferences(
         inference_ids.iter().map(|id| format!("'{id}'")).join(",")
     );
     let response = clickhouse_connection_info
-        .run_query_synchronous(query, None)
+        .run_query_synchronous_no_params(query)
         .await?;
     let rows = response
         .lines()
@@ -1001,7 +1002,7 @@ pub async fn get_completed_batch_inference_response(
                     batch_id, batch_request.function_name, batch_request.variant_name
                 );
                 let response = clickhouse_connection_info
-                    .run_query_synchronous(query, None)
+                    .run_query_synchronous_no_params(query)
                     .await?;
                 let mut inference_responses = Vec::new();
                 for row in response.lines() {
@@ -1051,7 +1052,7 @@ pub async fn get_completed_batch_inference_response(
                     batch_request.variant_name
                 );
                 let response = clickhouse_connection_info
-                    .run_query_synchronous(query, None)
+                    .run_query_synchronous_no_params(query)
                     .await?;
                 if response.is_empty() {
                     return Err(ErrorDetails::InferenceNotFound {
@@ -1100,7 +1101,7 @@ pub async fn get_completed_batch_inference_response(
                     path_params.batch_id, batch_request.function_name, batch_request.variant_name
                 );
                 let response = clickhouse_connection_info
-                    .run_query_synchronous(query, None)
+                    .run_query_synchronous_no_params(query)
                     .await?;
                 let mut inference_responses = Vec::new();
                 for row in response.lines() {
@@ -1150,7 +1151,7 @@ pub async fn get_completed_batch_inference_response(
                     batch_request.variant_name
                 );
                 let response = clickhouse_connection_info
-                    .run_query_synchronous(query, None)
+                    .run_query_synchronous_no_params(query)
                     .await?;
                 if response.is_empty() {
                     return Err(ErrorDetails::InferenceNotFound {

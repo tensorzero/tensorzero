@@ -14,6 +14,13 @@ jobs:
   clickhouse-tests-cloud:
     if: github.event_name == 'merge_group'
     runs-on: ubuntu-latest
+    # Note - a concurrency group only allows at most one job to be pending at a time - additional
+    # pending jobs will cause existing pending jobs to be cancelled.
+    # This setting required a merge group concurrency limit of at most 2 - if it's any higher,
+    # jobs will get cancelled, causing spurious failures in the merge queue.
+    concurrency:
+      group: clickhouse-tests-cloud-${{ matrix.cloud_instance.release_channel }}
+      cancel-in-progress: false
     strategy:
       matrix:
         cloud_instance:
@@ -27,7 +34,8 @@ jobs:
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
         with:
           cache-provider: "buildjet"
-          save-if: ${{ github.event_name == 'merge_group' }}
+          shared-key: "build-gateway-cache"
+          save-if: false
       - name: Install cargo-nextest
         uses: taiki-e/install-action@37bdc826eaedac215f638a96472df572feab0f9b
         with:
@@ -148,13 +156,22 @@ jobs:
         uses: namespacelabs/nscloud-setup-buildx-action@84ca8c58fdf372d6a4750476cd09b7b96ee778ca
         continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
+      # We deliberately install our MSRV here (rather than 'stable') to ensure that everything compiles with that version
+      - name: Install Rust 1.85.0
+        run: |
+          rustup install 1.85.0 --component clippy,rustfmt
+          rustup default 1.85.0
+
       - name: Print Rust version
         run: rustc --version
 
+      - name: Setup Node.js
+        uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
+        with:
+          node-version: "22.9.0"
+
       - name: Install pnpm
         uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda
-        with:
-          version: 10
 
       - name: Install uv
         run: curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
@@ -166,6 +183,9 @@ jobs:
             pnpm
             rust
             uv
+
+      - name: Install JS dependencies
+        run: pnpm install --frozen-lockfile
 
       - name: check‑case‑conflict
         run: uv run --with pre-commit pre-commit run check-case-conflict --all-files
@@ -245,7 +265,7 @@ jobs:
           cargo hack clippy --all-targets --each-feature -- -D warnings
 
       - name: Run cargo-deny
-        run: cargo deny check advisories bans
+        run: cargo deny check
 
       - name: Test (Rust)
         run: |
@@ -288,24 +308,15 @@ jobs:
           uv pip install pyright==1.1.394
           uv run pyright
 
-      - name: "Node.js: OpenAI Client: Install dependencies"
-        working-directory: clients/openai-node
-        run: |
-          pnpm install
-
       - name: "Node.js: Run prettier"
-        working-directory: clients/openai-node
-        run: pnpm run format
+        run: pnpm --filter=openai-node run format
 
       - name: "Node.js: OpenAI Client: typecheck"
-        working-directory: clients/openai-node
-        run: |
-          pnpm run typecheck
+        run: pnpm --filter=openai-node run typecheck
 
       - name: "Node.js: OpenAI Client: lint"
         working-directory: clients/openai-node
-        run: |
-          pnpm run lint
+        run: pnpm --filter=openai-node run lint
 
       - name: "Python: Recipes: Install dependencies"
         working-directory: recipes
@@ -318,11 +329,6 @@ jobs:
         run: |
           uv run pyright
 
-      - name: Setup Node.js
-        uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
-        with:
-          node-version: "22.9.0"
-
       - name: Install wasm-pack
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
@@ -334,21 +340,14 @@ jobs:
         working-directory: ui/app/utils/minijinja
         run: wasm-pack test --node --features console_error_panic_hook
 
-      - name: Install dependencies
-        working-directory: ui
-        run: pnpm install --frozen-lockfile
-
       - name: Run ESLint
-        working-directory: ui
-        run: pnpm run lint
+        run: pnpm --filter=tensorzero-ui run lint
 
       - name: Run Prettier
-        working-directory: ui
-        run: pnpm run format
+        run: pnpm --filter=tensorzero-ui run format
 
       - name: pnpm TypeScript type checking
-        working-directory: ui
-        run: pnpm run typecheck
+        run: pnpm --filter=tensorzero-ui run typecheck
 
       - name: Compile / validate notebooks
         run: ci/compile-check-notebooks.sh
@@ -381,15 +380,14 @@ jobs:
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
         with:
           cache-provider: "buildjet"
-          save-if: ${{ github.event_name == 'merge_group' }}
+          shared-key: "build-gateway-cache"
+          save-if: false
       - run: df -h
       # ClickHouse intermittently runs out of disk space on the `ubuntu-latest` runner
       # I'm using the commands from https://carlosbecker.com/posts/github-actions-disk-space/ to try to get more disk space
       - name: "Free up disk space"
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
-          sudo docker image prune --all --force
-          sudo docker builder prune -a
       - run: df -h
       - name: Install cargo-nextest
         uses: taiki-e/install-action@37bdc826eaedac215f638a96472df572feab0f9b
@@ -444,111 +442,22 @@ jobs:
         if: always()
         run: cat e2e_logs.txt
 
+  build-gateway-container:
+    uses: ./.github/workflows/build-gateway-container.yml
+
+  build-ui-container:
+    uses: ./.github/workflows/build-ui-container.yml
+
   ui-tests:
     uses: ./.github/workflows/ui-tests.yml
+    needs: build-gateway-container
 
   ui-tests-e2e:
-    runs-on: namespace-profile-tensorzero-8x16
-    # We currently only run this job when we have secrets available, since we need to use an S3 object_store
-    # In the future, we might want to fix this so that it can run in PR CI for external (forked) PRs
-    # For now, it just runs in the merge queue and on prs from the main repo
-    if: ${{ (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') || github.event_name == 'merge_group' }}
-    permissions:
-      # Permission to checkout the repository
-      contents: read
-      # Permission to fetch GitHub OIDC token authentication
-      id-token: write
-    strategy:
-      matrix:
-        feature_flag:
-          - behavior: node-optimization-server
-            enable_python: 0
-          - behavior: python-optimization-server
-            enable_python: 1
-    steps:
-      - uses: actions/checkout@v4
-
-      # We allow the namespace builder setup to fail on Dependabot PRs and PRs from forks
-      # (where the oidc token is not available)
-
-      - name: Install uv
-        run: curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22.9.0"
-
-      - name: Install dependencies
-        working-directory: ui
-        run: pnpm install --frozen-lockfile
-
-      - name: Cache s3-fixtures
-        uses: namespacelabs/nscloud-cache-action@v1
-        with:
-          path: |
-            ./ui/fixtures/s3-fixtures
-
-      - name: Build ui container
-        # Enable feedback in the UI for this job so the playwright tests can use it
-        run: docker buildx build -f ui/Dockerfile . -t tensorzero/ui
-
-      - name: Start services for ui e2e tests
-        working-directory: ui
-        run: |
-          echo "OPENAI_BASE_URL=http://mock-inference-provider:3030/openai/" >> fixtures/.env
-          echo "FIREWORKS_BASE_URL=http://mock-inference-provider:3030/fireworks/" >> fixtures/.env
-          echo "OPENAI_API_KEY=not_used" >> fixtures/.env
-          echo "FIREWORKS_API_KEY=not_used" >> fixtures/.env
-          echo "FIREWORKS_ACCOUNT_ID=fake_fireworks_account" >> fixtures/.env
-          echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures" >> fixtures/.env
-          echo "TENSORZERO_GATEWAY_URL=http://gateway:3000" >> fixtures/.env
-          echo "AWS_REGION=us-east-1" >> fixtures/.env
-          echo "S3_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" >> fixtures/.env
-          echo "S3_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> fixtures/.env
-          echo "TENSORZERO_UI_FF_ENABLE_PYTHON=${{ matrix.feature_flag.enable_python }}" >> fixtures/.env
-          docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml rm
-          docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml up --wait --build --force-recreate
-
-      - name: Install playwright dependencies
-        working-directory: ui
-        run: pnpm exec playwright install --with-deps chromium
-
-      - name: Run ui e2e tests
-        working-directory: ui
-        env:
-          TENSORZERO_CI: 1
-        run: TENSORZERO_UI_FF_ENABLE_PYTHON=${{ matrix.feature_flag.enable_python }} pnpm test-e2e
-        continue-on-error: true
-        id: e2e_tests
-
-      - name: Print ui tests logs
-        if: always()
-        working-directory: ui
-        run: docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml logs -t
-
-      - name: Upload Playwright artifacts
-        if: steps.e2e_tests.outcome == 'failure'
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-report
-          path: |
-            ui/playwright-report/
-            ui/test-results/
-          retention-days: 7
-
-      - name: Exit if tests failed
-        if: steps.e2e_tests.outcome == 'failure'
-        run: exit 1
-
-      - name: Take down ui tests
-        working-directory: ui
-        run: docker compose -f fixtures/docker-compose.yml down
+    uses: ./.github/workflows/ui-tests-e2e.yml
+    needs: [build-gateway-container, build-ui-container]
+    secrets:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
   # See 'ci/README.md' at the repository root for more details.
   check-all-general-jobs-passed:

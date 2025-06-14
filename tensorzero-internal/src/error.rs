@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::time::Duration;
 
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Json, Response};
@@ -190,6 +191,13 @@ pub enum ErrorDetails {
         raw_request: Option<String>,
         raw_response: Option<String>,
     },
+    InvalidClientMode {
+        mode: String,
+        message: String,
+    },
+    InvalidInferenceOutputSource {
+        source: String,
+    },
     ObjectStoreWrite {
         message: String,
         path: StoragePath,
@@ -199,6 +207,21 @@ pub enum ErrorDetails {
     },
     InferenceTimeout {
         variant_name: String,
+    },
+    VariantTimeout {
+        variant_name: Option<String>,
+        timeout: Duration,
+        streaming: bool,
+    },
+    ModelTimeout {
+        model_name: String,
+        timeout: Duration,
+        streaming: bool,
+    },
+    ModelProviderTimeout {
+        provider_name: String,
+        timeout: Duration,
+        streaming: bool,
     },
     InputValidation {
         source: Box<Error>,
@@ -229,6 +252,9 @@ pub enum ErrorDetails {
     InvalidFunctionVariants {
         message: String,
     },
+    InvalidMetricName {
+        metric_name: String,
+    },
     InvalidMessage {
         message: String,
     },
@@ -252,6 +278,10 @@ pub enum ErrorDetails {
     InvalidTool {
         message: String,
     },
+    InvalidVariantForOptimization {
+        function_name: String,
+        variant_name: String,
+    },
     InvalidUuid {
         raw_uuid: String,
     },
@@ -265,6 +295,9 @@ pub enum ErrorDetails {
         messages: Vec<String>,
         data: Box<Value>,
         schema: Box<Value>,
+    },
+    MissingFunctionInVariants {
+        function_name: String,
     },
     MiniJinjaEnvironment {
         message: String,
@@ -282,6 +315,9 @@ pub enum ErrorDetails {
     },
     MissingBatchInferenceResponse {
         inference_id: Option<Uuid>,
+    },
+    MissingFileExtension {
+        file_name: String,
     },
     ModelProvidersExhausted {
         provider_errors: HashMap<String, Error>,
@@ -362,6 +398,9 @@ pub enum ErrorDetails {
     UuidInFuture {
         raw_uuid: String,
     },
+    UnsupportedFileExtension {
+        extension: String,
+    },
     RouteNotFound {
         path: String,
         method: String,
@@ -400,16 +439,23 @@ impl ErrorDetails {
             ErrorDetails::InferenceNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::InferenceServer { .. } => tracing::Level::ERROR,
             ErrorDetails::InferenceTimeout { .. } => tracing::Level::WARN,
+            ErrorDetails::ModelProviderTimeout { .. } => tracing::Level::WARN,
+            ErrorDetails::ModelTimeout { .. } => tracing::Level::WARN,
+            ErrorDetails::VariantTimeout { .. } => tracing::Level::WARN,
             ErrorDetails::InputValidation { .. } => tracing::Level::WARN,
             ErrorDetails::InternalError { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidBaseUrl { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidBatchParams { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidCandidate { .. } => tracing::Level::ERROR,
+            ErrorDetails::InvalidClientMode { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidDiclConfig { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidDatasetName { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidDynamicEvaluationRun { .. } => tracing::Level::ERROR,
+            ErrorDetails::InvalidInferenceOutputSource { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidTensorzeroUuid { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidFunctionVariants { .. } => tracing::Level::ERROR,
+            ErrorDetails::InvalidVariantForOptimization { .. } => tracing::Level::WARN,
+            ErrorDetails::InvalidMetricName { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidMessage { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidModel { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidModelProvider { .. } => tracing::Level::ERROR,
@@ -426,7 +472,9 @@ impl ErrorDetails {
             ErrorDetails::MiniJinjaTemplate { .. } => tracing::Level::ERROR,
             ErrorDetails::MiniJinjaTemplateMissing { .. } => tracing::Level::ERROR,
             ErrorDetails::MiniJinjaTemplateRender { .. } => tracing::Level::ERROR,
+            ErrorDetails::MissingFunctionInVariants { .. } => tracing::Level::ERROR,
             ErrorDetails::MissingBatchInferenceResponse { .. } => tracing::Level::WARN,
+            ErrorDetails::MissingFileExtension { .. } => tracing::Level::WARN,
             ErrorDetails::ModelProvidersExhausted { .. } => tracing::Level::ERROR,
             ErrorDetails::ModelValidation { .. } => tracing::Level::ERROR,
             ErrorDetails::Observability { .. } => tracing::Level::ERROR,
@@ -444,6 +492,7 @@ impl ErrorDetails {
             ErrorDetails::UnknownTool { .. } => tracing::Level::ERROR,
             ErrorDetails::UnknownVariant { .. } => tracing::Level::WARN,
             ErrorDetails::UnknownMetric { .. } => tracing::Level::WARN,
+            ErrorDetails::UnsupportedFileExtension { .. } => tracing::Level::WARN,
             ErrorDetails::UnsupportedModelProviderForBatchInference { .. } => tracing::Level::WARN,
             ErrorDetails::UnsupportedVariantForBatchInference { .. } => tracing::Level::WARN,
             ErrorDetails::UnsupportedVariantForFunctionType { .. } => tracing::Level::ERROR,
@@ -485,6 +534,10 @@ impl ErrorDetails {
             ErrorDetails::InferenceNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::InferenceServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InferenceTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
+            ErrorDetails::ModelProviderTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
+            ErrorDetails::ModelTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
+            ErrorDetails::VariantTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
+            ErrorDetails::InvalidClientMode { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidTensorzeroUuid { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidUuid { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InputValidation { .. } => StatusCode::BAD_REQUEST,
@@ -497,7 +550,9 @@ impl ErrorDetails {
             ErrorDetails::InvalidDatasetName { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidDynamicEvaluationRun { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidFunctionVariants { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::InvalidInferenceOutputSource { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidMessage { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::InvalidMetricName { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidModel { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidModelProvider { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidOpenAICompatibleRequest { .. } => StatusCode::BAD_REQUEST,
@@ -505,6 +560,7 @@ impl ErrorDetails {
             ErrorDetails::InvalidRequest { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidTemplatePath => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidTool { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::InvalidVariantForOptimization { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::JsonRequest { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::JsonSchema { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::JsonSchemaValidation { .. } => StatusCode::BAD_REQUEST,
@@ -512,7 +568,9 @@ impl ErrorDetails {
             ErrorDetails::MiniJinjaTemplate { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::MiniJinjaTemplateMissing { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::MiniJinjaTemplateRender { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::MissingBatchInferenceResponse { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::MissingBatchInferenceResponse { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::MissingFunctionInVariants { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::MissingFileExtension { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::ModelProvidersExhausted { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ModelValidation { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::Observability { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -530,6 +588,7 @@ impl ErrorDetails {
             ErrorDetails::UnknownTool { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::UnknownVariant { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::UnknownMetric { .. } => StatusCode::NOT_FOUND,
+            ErrorDetails::UnsupportedFileExtension { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::UnsupportedModelProviderForBatchInference { .. } => {
                 StatusCode::INTERNAL_SERVER_ERROR
             }
@@ -570,6 +629,50 @@ impl std::fmt::Display for ErrorDetails {
                         .collect::<Vec<_>>()
                         .join("\n")
                 )
+            }
+            ErrorDetails::ModelProviderTimeout {
+                provider_name,
+                timeout,
+                streaming,
+            } => {
+                if *streaming {
+                    write!(
+                        f,
+                        "Model provider {provider_name} timed out due to configured `streaming.ttft_ms` timeout ({timeout:?})"
+                    )
+                } else {
+                    write!(
+                        f,
+                        "Model provider {provider_name} timed out due to configured `non_streaming.total_ms` timeout ({timeout:?})"
+                    )
+                }
+            }
+            ErrorDetails::ModelTimeout {
+                model_name,
+                timeout,
+                streaming,
+            } => {
+                if *streaming {
+                    write!(f, "Model {model_name} timed out due to configured `streaming.ttft_ms` timeout ({timeout:?})")
+                } else {
+                    write!(f, "Model {model_name} timed out due to configured `non_streaming.total_ms` timeout ({timeout:?})")
+                }
+            }
+            ErrorDetails::VariantTimeout {
+                variant_name,
+                timeout,
+                streaming,
+            } => {
+                let variant_description = if let Some(variant_name) = variant_name {
+                    format!("Variant `{variant_name}`")
+                } else {
+                    "Unknown variant".to_string()
+                };
+                if *streaming {
+                    write!(f, "{variant_description} timed out due to configured `streaming.ttft_ms` timeout ({timeout:?})")
+                } else {
+                    write!(f, "{variant_description} timed out due to configured `non_streaming.total_ms` timeout ({timeout:?})")
+                }
             }
             ErrorDetails::ObjectStoreWrite { message, path } => {
                 write!(
@@ -742,6 +845,9 @@ impl std::fmt::Display for ErrorDetails {
                     "Invalid candidate variant as a component of variant {variant_name}: {message}"
                 )
             }
+            ErrorDetails::InvalidClientMode { mode, message } => {
+                write!(f, "Invalid client mode: {mode}. {message}")
+            }
             ErrorDetails::InvalidDiclConfig { message } => {
                 write!(f, "Invalid dynamic in-context learning config: {message}. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new")
             }
@@ -757,6 +863,12 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::InvalidFunctionVariants { message } => write!(f, "{message}"),
             ErrorDetails::InvalidTensorzeroUuid { message, kind } => {
                 write!(f, "Invalid {kind} ID: {message}")
+            }
+            ErrorDetails::InvalidInferenceOutputSource { source } => {
+                write!(f, "Invalid inference output source: {source}. Should be one of: \"inference\" or \"demonstration\".")
+            }
+            ErrorDetails::InvalidMetricName { metric_name } => {
+                write!(f, "Invalid metric name: {metric_name}")
             }
             ErrorDetails::InvalidMessage { message } => write!(f, "{message}"),
             ErrorDetails::InvalidModel { model_name } => {
@@ -783,6 +895,12 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::InvalidTool { message } => write!(f, "{message}"),
             ErrorDetails::InvalidUuid { raw_uuid } => {
                 write!(f, "Failed to parse UUID as v7: {raw_uuid}")
+            }
+            ErrorDetails::InvalidVariantForOptimization {
+                function_name,
+                variant_name,
+            } => {
+                write!(f, "Invalid variant for optimization: {variant_name} for function: {function_name}")
             }
             ErrorDetails::JsonRequest { message } => write!(f, "{message}"),
             ErrorDetails::JsonSchema { message } => write!(f, "{message}"),
@@ -831,6 +949,15 @@ impl std::fmt::Display for ErrorDetails {
                 ),
                 None => write!(f, "Missing batch inference response"),
             },
+            ErrorDetails::MissingFunctionInVariants { function_name } => {
+                write!(f, "Missing function in variants: {function_name}")
+            }
+            ErrorDetails::MissingFileExtension { file_name } => {
+                write!(
+                    f,
+                    "Could not determine file extension for file: {file_name}"
+                )
+            }
             ErrorDetails::ModelProvidersExhausted { provider_errors } => {
                 write!(
                     f,
@@ -883,6 +1010,9 @@ impl std::fmt::Display for ErrorDetails {
                     f,
                     "Unsupported model provider for batch inference: {provider_type}"
                 )
+            }
+            ErrorDetails::UnsupportedFileExtension { extension } => {
+                write!(f, "Unsupported file extension: {extension}")
             }
             ErrorDetails::UnsupportedVariantForBatchInference { variant_name } => {
                 match variant_name {

@@ -43,7 +43,7 @@ impl Migration for Migration0015<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Alter the `output_tokens` column of `ModelInference` to be a nullable column
@@ -53,19 +53,16 @@ impl Migration for Migration0015<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         Ok(())
     }
 
     fn rollback_instructions(&self) -> String {
-        "\
-            -- Change the columns back to non-nullable types\n\
-            ALTER TABLE ModelInference
-            MODIFY COLUMN input_tokens UInt32;\n\
-            ALTER TABLE ModelInference
-            MODIFY COLUMN output_tokens UInt32;\n\
+        "/* Change the columns back to non-nullable types */\
+            ALTER TABLE ModelInference MODIFY COLUMN input_tokens UInt32;
+            ALTER TABLE ModelInference MODIFY COLUMN output_tokens UInt32;
             "
         .to_string()
     }
