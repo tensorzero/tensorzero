@@ -8,18 +8,7 @@ from uuid import UUID
 
 import httpx
 from typing_extensions import NotRequired, TypedDict
-from pydantic import BaseModel
-from typing import Optional, Dict
 
-class PDFInput(BaseModel):
-    file_path: Optional[str] = None
-    base64_content: Optional[str] = None
-    metadata: Dict[str, str] = {}
-
-class InferenceInput(BaseModel):
-    model_name: str
-    messages: list[dict]
-    pdf: Optional[PDFInput] = None
 
 @dataclass
 class Usage:
