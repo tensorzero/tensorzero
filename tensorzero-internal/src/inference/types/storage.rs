@@ -3,7 +3,9 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::error::{Error, ErrorDetails};
 
-use super::{Base64Image, ImageKind};
+use super::{file::mime_type_to_ext, Base64File};
+#[cfg(feature = "pyo3")]
+use pyo3::prelude::*;
 
 /// Configuration for the object storage backend
 /// Currently, we only support S3-compatible object storage and local filesystem storage
@@ -46,26 +48,28 @@ impl StorageKind {
     fn prefix(&self) -> &str {
         ""
     }
-    pub fn image_path(self, image: &Base64Image) -> Result<StoragePath, Error> {
+    pub fn file_path(self, image: &Base64File) -> Result<StoragePath, Error> {
         let hash = blake3::hash(
             image
                 .data
                 .as_ref()
                 .ok_or_else(|| {
                     Error::new(ErrorDetails::InternalError {
-                        message: "Image data should have been present in `StorageKind.image_path`"
+                        message: "Image data should have been present in `StorageKind.file_path`"
                             .to_string(),
                     })
                 })?
                 .as_bytes(),
         );
-        let suffix = match image.mime_type {
-            ImageKind::Jpeg => "jpg",
-            ImageKind::Png => "png",
-            ImageKind::WebP => "webp",
-        };
+        // This is a best-effort attempt to get a suffix in the object-store path, to make things
+        // nicer for people browsing the object store.
+        // None of our code depends on this file extension being correct, as we store the original
+        // mime-type in our database, and use it in the ui when rendering a preview of the file.
+        let suffix = mime_type_to_ext(&image.mime_type)?
+            .map(|s| format!(".{s}"))
+            .unwrap_or_default();
         let path = Path::parse(format!(
-            "{}observability/images/{hash}.{suffix}",
+            "{}observability/files/{hash}{suffix}",
             self.prefix()
         ))
         .map_err(|e| {
@@ -78,6 +82,7 @@ impl StorageKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct StoragePath {
     pub kind: StorageKind,
     #[serde(
@@ -85,6 +90,21 @@ pub struct StoragePath {
         deserialize_with = "deserialize_storage_path"
     )]
     pub path: object_store::path::Path,
+}
+
+impl std::fmt::Display for StoragePath {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl StoragePath {
+    pub fn __repr__(&self) -> String {
+        self.to_string()
+    }
 }
 
 fn serialize_storage_path<S: Serializer>(

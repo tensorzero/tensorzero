@@ -1,7 +1,8 @@
 use futures::StreamExt;
 use lazy_static::lazy_static;
+use mime::MediaType;
 use reqwest::StatusCode;
-use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
+use reqwest_eventsource::{Event, EventSource};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -14,16 +15,19 @@ use url::Url;
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
+use crate::inference::providers::helpers::{
+    inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
+};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
-use crate::inference::types::resolved_input::ImageWithPath;
+use crate::inference::types::resolved_input::FileWithPath;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk, FinishReason,
     FunctionType, Latency, ModelInferenceRequestJsonMode, Role, Text,
 };
 use crate::inference::types::{
-    ContentBlockOutput, FlattenUnknown, ImageKind, ModelInferenceRequest,
+    ContentBlockOutput, FlattenUnknown, ModelInferenceRequest,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
     ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStreamInner, RequestMessage, TextChunk, Thought, ThoughtChunk, Usage,
@@ -34,7 +38,7 @@ use crate::model::{
 };
 use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice, ToolConfig};
 
-use super::helpers::{inject_extra_request_data, peek_first_chunk};
+use super::helpers::peek_first_chunk;
 use super::openai::convert_stream_error;
 
 lazy_static! {
@@ -140,7 +144,7 @@ impl InferenceProvider for AnthropicProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let mut request_body =
+        let request_body =
             serde_json::to_value(AnthropicRequestBody::new(&self.model_name, request)?).map_err(
                 |e| {
                     Error::new(ErrorDetails::Serialization {
@@ -151,33 +155,23 @@ impl InferenceProvider for AnthropicProvider {
                     })
                 },
             )?;
-        let headers = inject_extra_request_data(
+        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let start_time = Instant::now();
+        let builder = http_client
+            .post(ANTHROPIC_BASE_URL.as_ref())
+            .header("anthropic-version", ANTHROPIC_API_VERSION)
+            .header("x-api-key", api_key.expose_secret());
+
+        let (res, raw_request) = inject_extra_request_data_and_send(
+            PROVIDER_TYPE,
             &request.extra_body,
             &request.extra_headers,
             model_provider,
             tensorzero_model_name,
-            &mut request_body,
-        )?;
-        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
-        let start_time = Instant::now();
-        let res = http_client
-            .post(ANTHROPIC_BASE_URL.as_ref())
-            .header("anthropic-version", ANTHROPIC_API_VERSION)
-            .header("x-api-key", api_key.expose_secret())
-            .header("content-type", "application/json")
-            .headers(headers)
-            .json(&request_body)
-            .send()
-            .await
-            .map_err(|e| {
-                Error::new(ErrorDetails::InferenceClient {
-                    status_code: e.status(),
-                    message: format!("Error sending request: {}", DisplayOrDebugGateway::new(e)),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
-                    raw_response: None,
-                })
-            })?;
+            request_body,
+            builder,
+        )
+        .await?;
         let latency = Latency::NonStreaming {
             response_time: start_time.elapsed(),
         };
@@ -189,7 +183,7 @@ impl InferenceProvider for AnthropicProvider {
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 })
             })?;
@@ -201,7 +195,7 @@ impl InferenceProvider for AnthropicProvider {
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_request: Some(raw_request.clone()),
                     raw_response: Some(raw_response.clone()),
                 })
             })?;
@@ -209,7 +203,8 @@ impl InferenceProvider for AnthropicProvider {
             let response_with_latency = AnthropicResponseWithMetadata {
                 response,
                 latency,
-                request: request_body,
+                raw_request,
+                generic_request: request,
                 input_messages: request.messages.clone(),
                 function_type: &request.function_type,
                 json_mode: &request.json_mode,
@@ -224,7 +219,7 @@ impl InferenceProvider for AnthropicProvider {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing response: {}", DisplayOrDebugGateway::new(e)),
                     provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 })
             })?;
@@ -232,15 +227,11 @@ impl InferenceProvider for AnthropicProvider {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing response: {}", DisplayOrDebugGateway::new(e)),
                     provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_request: Some(raw_request.clone()),
                     raw_response: Some(response_text),
                 })
             })?;
-            handle_anthropic_error(
-                response_code,
-                error_body.error,
-                serde_json::to_string(&request_body).unwrap_or_default(),
-            )
+            handle_anthropic_error(response_code, error_body.error, raw_request)
         }
     }
 
@@ -256,7 +247,7 @@ impl InferenceProvider for AnthropicProvider {
         api_key: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let mut request_body =
+        let request_body =
             serde_json::to_value(AnthropicRequestBody::new(&self.model_name, request)?).map_err(
                 |e| {
                     Error::new(ErrorDetails::Serialization {
@@ -267,40 +258,23 @@ impl InferenceProvider for AnthropicProvider {
                     })
                 },
             )?;
-        let headers = inject_extra_request_data(
+        let start_time = Instant::now();
+        let api_key = self.credentials.get_api_key(api_key)?;
+        let builder = http_client
+            .post(ANTHROPIC_BASE_URL.as_ref())
+            .header("anthropic-version", ANTHROPIC_API_VERSION)
+            .header("x-api-key", api_key.expose_secret());
+
+        let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
+            PROVIDER_TYPE,
             &request.extra_body,
             &request.extra_headers,
             model_provider,
             model_name,
-            &mut request_body,
-        )?;
-        let raw_request = serde_json::to_string(&request_body).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!(
-                    "Error serializing request body as JSON: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-            })
-        })?;
-        let start_time = Instant::now();
-        let api_key = self.credentials.get_api_key(api_key)?;
-        let event_source = http_client
-            .post(ANTHROPIC_BASE_URL.as_ref())
-            .header("anthropic-version", ANTHROPIC_API_VERSION)
-            .header("content-type", "application/json")
-            .header("x-api-key", api_key.expose_secret())
-            .headers(headers)
-            .json(&request_body)
-            .eventsource()
-            .map_err(|e| {
-                Error::new(ErrorDetails::InferenceClient {
-                    message: format!("Error sending request: {}", DisplayOrDebugGateway::new(e)),
-                    status_code: None,
-                    provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: Some(raw_request.clone()),
-                    raw_response: None,
-                })
-            })?;
+            request_body,
+            builder,
+        )
+        .await?;
         let mut stream = stream_anthropic(event_source, start_time).peekable();
         let chunk = peek_first_chunk(&mut stream, &raw_request, PROVIDER_TYPE).await?;
         if matches!(
@@ -373,6 +347,7 @@ fn stream_anthropic(
 
                         let response = data.and_then(|data| {
                             anthropic_to_tensorzero_stream_message(
+                                message.data,
                                 data,
                                 start_time.elapsed(),
                                 &mut current_tool_id,
@@ -484,7 +459,10 @@ enum AnthropicMessageContent<'a> {
         text: &'a str,
     },
     Image {
-        source: AnthropicImageSource,
+        source: AnthropicDocumentSource,
+    },
+    Document {
+        source: AnthropicDocumentSource,
     },
     ToolResult {
         tool_use_id: &'a str,
@@ -501,17 +479,19 @@ enum AnthropicMessageContent<'a> {
     },
 }
 
+/// This is used by Anthropic for both images and documents -
+/// the only different is the outer `AnthropicMessageContent`
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub struct AnthropicImageSource {
-    pub r#type: AnthropicImageType,
-    pub media_type: ImageKind,
+pub struct AnthropicDocumentSource {
+    pub r#type: AnthropicDocumentType,
+    pub media_type: MediaType,
     pub data: String,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub enum AnthropicImageType {
+pub enum AnthropicDocumentType {
     Base64,
 }
 
@@ -564,18 +544,26 @@ impl<'a> TryFrom<&'a ContentBlock> for Option<FlattenUnknown<'a, AnthropicMessag
                     }],
                 },
             ))),
-            ContentBlock::Image(ImageWithPath {
-                image,
-                storage_path: _,
-            }) => Ok(Some(FlattenUnknown::Normal(
-                AnthropicMessageContent::Image {
-                    source: AnthropicImageSource {
-                        r#type: AnthropicImageType::Base64,
-                        media_type: image.mime_type,
-                        data: image.data()?.clone(),
-                    },
-                },
-            ))),
+            ContentBlock::File(file) => {
+                let FileWithPath {
+                    file,
+                    storage_path: _,
+                } = &**file;
+                let document = AnthropicDocumentSource {
+                    r#type: AnthropicDocumentType::Base64,
+                    media_type: file.mime_type.clone(),
+                    data: file.data()?.clone(),
+                };
+                if file.mime_type.type_() == mime::IMAGE {
+                    Ok(Some(FlattenUnknown::Normal(
+                        AnthropicMessageContent::Image { source: document },
+                    )))
+                } else {
+                    Ok(Some(FlattenUnknown::Normal(
+                        AnthropicMessageContent::Document { source: document },
+                    )))
+                }
+            }
             ContentBlock::Thought(thought) => Ok(Some(FlattenUnknown::Normal(
                 AnthropicMessageContent::Thinking {
                     thinking: &thought.text,
@@ -631,6 +619,8 @@ struct AnthropicRequestBody<'a> {
     temperature: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     top_p: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stop_sequences: Option<Cow<'a, [String]>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_choice: Option<AnthropicToolChoice<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -698,6 +688,7 @@ impl<'a> AnthropicRequestBody<'a> {
             top_p: request.top_p,
             tool_choice,
             tools,
+            stop_sequences: request.borrow_stop_sequences(),
         })
     }
 }
@@ -911,7 +902,7 @@ impl From<AnthropicStopReason> for FinishReason {
         match value {
             AnthropicStopReason::EndTurn => FinishReason::Stop,
             AnthropicStopReason::MaxTokens => FinishReason::Length,
-            AnthropicStopReason::StopSequence => FinishReason::Stop,
+            AnthropicStopReason::StopSequence => FinishReason::StopSequence,
             AnthropicStopReason::ToolUse => FinishReason::ToolCall,
             AnthropicStopReason::Unknown => FinishReason::Unknown,
         }
@@ -923,7 +914,8 @@ struct AnthropicResponseWithMetadata<'a> {
     response: AnthropicResponse,
     raw_response: String,
     latency: Latency,
-    request: serde_json::Value,
+    raw_request: String,
+    generic_request: &'a ModelInferenceRequest<'a>,
     input_messages: Vec<RequestMessage>,
     function_type: &'a FunctionType,
     json_mode: &'a ModelInferenceRequestJsonMode,
@@ -938,23 +930,14 @@ impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceRespons
             response,
             raw_response,
             latency,
-            request: request_body,
+            raw_request,
+            generic_request,
             input_messages,
             function_type,
             json_mode,
             model_name,
             provider_name,
         } = value;
-
-        let raw_request = serde_json::to_string(&request_body).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!(
-                    "Error serializing request body as JSON: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-            })
-        })?;
-
         let output: Vec<ContentBlockOutput> = response
             .content
             .into_iter()
@@ -973,10 +956,7 @@ impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceRespons
         Ok(ProviderInferenceResponse::new(
             ProviderInferenceResponseArgs {
                 output: content,
-                system: request_body
-                    .get("system")
-                    .and_then(|s| s.as_str())
-                    .map(|s| s.to_owned()),
+                system: generic_request.system.clone(),
                 input_messages,
                 raw_request,
                 raw_response,
@@ -1090,19 +1070,12 @@ enum AnthropicStreamMessage {
 /// There is no need to do the same bookkeeping for TextDelta chunks since they come with an index (which we use as an ID for a text chunk).
 /// See the Anthropic [docs](https://docs.anthropic.com/en/api/messages-streaming) on streaming messages for details on the types of events and their semantics.
 fn anthropic_to_tensorzero_stream_message(
+    raw_message: String,
     message: AnthropicStreamMessage,
     message_latency: Duration,
     current_tool_id: &mut Option<String>,
     current_tool_name: &mut Option<String>,
 ) -> Result<Option<ProviderInferenceResponseChunk>, Error> {
-    let raw_message = serde_json::to_string(&message).map_err(|e| {
-        Error::new(ErrorDetails::Serialization {
-            message: format!(
-                "Error serializing stream message from Anthropic: {}",
-                DisplayOrDebugGateway::new(e)
-            ),
-        })
-    })?;
     match message {
         AnthropicStreamMessage::ContentBlockDelta { delta, index } => match delta {
             AnthropicMessageBlock::TextDelta { text } => {
@@ -1123,12 +1096,7 @@ fn anthropic_to_tensorzero_stream_message(
                     // This is necessary because the ToolCallChunk must always contain the tool name and ID
                     // even though Anthropic only sends the tool ID and name in the ToolUse chunk and not InputJSONDelta
                     vec![ContentBlockChunk::ToolCall(ToolCallChunk {
-                        raw_name: current_tool_name.clone().ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
-                            message: "Got InputJsonDelta chunk from Anthropic without current tool name being set by a ToolUse".to_string(),
-                            provider_type: PROVIDER_TYPE.to_string(),
-                            raw_request: None,
-                            raw_response: None,
-                        }))?,
+                        raw_name: None,
                         id: current_tool_id.clone().ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                             message: "Got InputJsonDelta chunk from Anthropic without current tool id being set by a ToolUse".to_string(),
                             provider_type: PROVIDER_TYPE.to_string(),
@@ -1201,7 +1169,7 @@ fn anthropic_to_tensorzero_stream_message(
                 Ok(Some(ProviderInferenceResponseChunk::new(
                     vec![ContentBlockChunk::ToolCall(ToolCallChunk {
                         id,
-                        raw_name: name,
+                        raw_name: Some(name),
                         // As far as I can tell this is always {} so we ignore
                         raw_arguments: "".to_string(),
                     })],
@@ -1553,6 +1521,7 @@ mod tests {
                 top_p: None,
                 tool_choice: None,
                 tools: None,
+                stop_sequences: None,
             }
         );
 
@@ -1603,6 +1572,7 @@ mod tests {
                 top_p: None,
                 tool_choice: None,
                 tools: None,
+                stop_sequences: None,
             }
         );
 
@@ -1657,6 +1627,7 @@ mod tests {
                 top_p: None,
                 tool_choice: None,
                 tools: None,
+                stop_sequences: None,
             }
         );
 
@@ -2013,6 +1984,27 @@ mod tests {
                 output_tokens: 50,
             },
         };
+        let generic_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["test_user".to_string().into()],
+            }],
+            system: None,
+            temperature: Some(0.5),
+            max_tokens: Some(100),
+            seed: Some(69),
+            top_p: Some(0.9),
+            presence_penalty: Some(0.1),
+            frequency_penalty: Some(0.2),
+            stream: false,
+            json_mode: ModelInferenceRequestJsonMode::On,
+            tool_config: None,
+            function_type: FunctionType::Chat,
+            output_schema: None,
+            extra_body: Default::default(),
+            ..Default::default()
+        };
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
         };
@@ -2026,6 +2018,7 @@ mod tests {
             temperature: None,
             tool_choice: None,
             tools: None,
+            stop_sequences: None,
         };
         let raw_response = "{\"foo\": \"bar\"}".to_string();
         let input_messages = vec![RequestMessage {
@@ -2037,7 +2030,8 @@ mod tests {
             response: anthropic_response_body.clone(),
             raw_response: raw_response.clone(),
             latency: latency.clone(),
-            request: serde_json::to_value(&request_body).unwrap(),
+            raw_request: raw_request.clone(),
+            generic_request: &generic_request,
             input_messages: input_messages.clone(),
             function_type: &FunctionType::Chat,
             json_mode: &ModelInferenceRequestJsonMode::Off,
@@ -2087,6 +2081,7 @@ mod tests {
             top_p: Some(0.5),
             tool_choice: None,
             tools: None,
+            stop_sequences: None,
         };
         let input_messages = vec![RequestMessage {
             role: Role::Assistant,
@@ -2097,7 +2092,8 @@ mod tests {
             response: anthropic_response_body.clone(),
             raw_response: raw_response.clone(),
             latency: latency.clone(),
-            request: serde_json::to_value(&request_body).unwrap(),
+            raw_request: raw_request.clone(),
+            generic_request: &generic_request,
             input_messages: input_messages.clone(),
             function_type: &FunctionType::Chat,
             json_mode: &ModelInferenceRequestJsonMode::Off,
@@ -2160,6 +2156,7 @@ mod tests {
             top_p: Some(0.5),
             tool_choice: None,
             tools: None,
+            stop_sequences: None,
         };
         let input_messages = vec![RequestMessage {
             role: Role::User,
@@ -2170,7 +2167,8 @@ mod tests {
             response: anthropic_response_body.clone(),
             raw_response: raw_response.clone(),
             latency: latency.clone(),
-            request: serde_json::to_value(&request_body).unwrap(),
+            raw_request: raw_request.clone(),
+            generic_request: &generic_request,
             input_messages: input_messages.clone(),
             function_type: &FunctionType::Chat,
             json_mode: &ModelInferenceRequestJsonMode::Off,
@@ -2217,6 +2215,7 @@ mod tests {
         };
         let latency = Duration::from_millis(100);
         let result = anthropic_to_tensorzero_stream_message(
+            "my_raw_chunk".to_string(),
             content_block_delta,
             latency,
             &mut current_tool_id,
@@ -2245,6 +2244,7 @@ mod tests {
         };
         let latency = Duration::from_millis(100);
         let result = anthropic_to_tensorzero_stream_message(
+            "my_raw_chunk".to_string(),
             content_block_delta,
             latency,
             &mut current_tool_id,
@@ -2254,7 +2254,7 @@ mod tests {
         assert_eq!(
             details,
             ErrorDetails::InferenceServer {
-                message: "Got InputJsonDelta chunk from Anthropic without current tool name being set by a ToolUse".to_string(),
+                message: "Got InputJsonDelta chunk from Anthropic without current tool id being set by a ToolUse".to_string(),
                 raw_request: None,
                 raw_response: None,
                 provider_type: PROVIDER_TYPE.to_string(),
@@ -2272,6 +2272,7 @@ mod tests {
         };
         let latency = Duration::from_millis(100);
         let result = anthropic_to_tensorzero_stream_message(
+            "my_raw_chunk".to_string(),
             content_block_delta,
             latency,
             &mut current_tool_id,
@@ -2282,7 +2283,7 @@ mod tests {
         match &chunk.content[0] {
             ContentBlockChunk::ToolCall(tool_call) => {
                 assert_eq!(tool_call.id, "tool_id".to_string());
-                assert_eq!(tool_call.raw_name, "tool_name".to_string());
+                assert_eq!(tool_call.raw_name, None); // We don't add the tool name if it isn't in the contentBlockDelta
                 assert_eq!(tool_call.raw_arguments, "aaaa: bbbbb".to_string());
             }
             _ => panic!("Expected a tool call content block"),
@@ -2302,6 +2303,7 @@ mod tests {
         };
         let latency = Duration::from_millis(110);
         let result = anthropic_to_tensorzero_stream_message(
+            "my_raw_chunk".to_string(),
             content_block_start,
             latency,
             &mut current_tool_id,
@@ -2312,7 +2314,7 @@ mod tests {
         match &chunk.content[0] {
             ContentBlockChunk::ToolCall(tool_call) => {
                 assert_eq!(tool_call.id, "tool1".to_string());
-                assert_eq!(tool_call.raw_name, "calculator".to_string());
+                assert_eq!(tool_call.raw_name, Some("calculator".to_string()));
                 assert_eq!(tool_call.raw_arguments, "".to_string());
             }
             _ => panic!("Expected a tool call content block"),
@@ -2332,6 +2334,7 @@ mod tests {
         };
         let latency = Duration::from_millis(120);
         let result = anthropic_to_tensorzero_stream_message(
+            "my_raw_chunk".to_string(),
             content_block_start,
             latency,
             &mut current_tool_id,
@@ -2359,6 +2362,7 @@ mod tests {
         };
         let latency = Duration::from_millis(130);
         let result = anthropic_to_tensorzero_stream_message(
+            "my_raw_chunk".to_string(),
             content_block_start,
             latency,
             &mut current_tool_id,
@@ -2381,6 +2385,7 @@ mod tests {
         let content_block_stop = AnthropicStreamMessage::ContentBlockStop { index: 2 };
         let latency = Duration::from_millis(120);
         let result = anthropic_to_tensorzero_stream_message(
+            "my_raw_chunk".to_string(),
             content_block_stop,
             latency,
             &mut current_tool_id,
@@ -2395,6 +2400,7 @@ mod tests {
         };
         let latency = Duration::from_millis(130);
         let result = anthropic_to_tensorzero_stream_message(
+            "my_raw_chunk".to_string(),
             error_message,
             latency,
             &mut current_tool_id,
@@ -2421,6 +2427,7 @@ mod tests {
         };
         let latency = Duration::from_millis(140);
         let result = anthropic_to_tensorzero_stream_message(
+            "my_raw_chunk".to_string(),
             message_delta,
             latency,
             &mut current_tool_id,
@@ -2442,6 +2449,7 @@ mod tests {
         };
         let latency = Duration::from_millis(150);
         let result = anthropic_to_tensorzero_stream_message(
+            "my_raw_chunk".to_string(),
             message_start,
             latency,
             &mut current_tool_id,
@@ -2460,6 +2468,7 @@ mod tests {
         let message_stop = AnthropicStreamMessage::MessageStop;
         let latency = Duration::from_millis(160);
         let result = anthropic_to_tensorzero_stream_message(
+            "my_raw_chunk".to_string(),
             message_stop,
             latency,
             &mut current_tool_id,
@@ -2472,6 +2481,7 @@ mod tests {
         let ping = AnthropicStreamMessage::Ping {};
         let latency = Duration::from_millis(170);
         let result = anthropic_to_tensorzero_stream_message(
+            "my_raw_chunk".to_string(),
             ping,
             latency,
             &mut current_tool_id,
@@ -2674,7 +2684,7 @@ mod tests {
             finish_reason: None,
             content: vec![ContentBlockChunk::ToolCall(ToolCallChunk {
                 id: "1".to_string(),
-                raw_name: "test_tool".to_string(),
+                raw_name: Some("test_tool".to_string()),
                 raw_arguments: "{}".to_string(),
             })],
         };

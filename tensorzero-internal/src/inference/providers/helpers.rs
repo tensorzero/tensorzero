@@ -1,8 +1,13 @@
-use std::{collections::HashMap, pin::Pin};
+use std::{
+    borrow::{Borrow, Cow},
+    collections::HashMap,
+    pin::Pin,
+};
 
 use axum::http;
 use bytes::Bytes;
 use futures::{stream::Peekable, Stream};
+use reqwest_eventsource::{EventSource, RequestBuilderExt};
 use serde::de::DeserializeOwned;
 use serde_json::{map::Entry, Map, Value};
 use uuid::Uuid;
@@ -94,6 +99,95 @@ pub async fn parse_jsonl_batch_file<T: DeserializeOwned, E: std::error::Error>(
     })
 }
 
+/// Injects extra headers/body fields into a request builder, and sends the request.
+/// This is used when implementing non-streaming inference for a model provider,
+/// and is responsible for actually submitting the HTTP request.
+pub async fn inject_extra_request_data_and_send(
+    provider_type: &str,
+    config: &FullExtraBodyConfig,
+    extra_headers_config: &FullExtraHeadersConfig,
+    model_provider_data: impl Into<ModelProviderRequestInfo>,
+    model_name: &str,
+    mut body: serde_json::Value,
+    builder: reqwest::RequestBuilder,
+) -> Result<(reqwest::Response, String), Error> {
+    let headers = inject_extra_request_data(
+        config,
+        extra_headers_config,
+        model_provider_data,
+        model_name,
+        &mut body,
+    )?;
+    let raw_request = body.to_string();
+    // Apply the headers as the very last step, so that they can overwrite all
+    // other headers (including things like `Authorization` and `Content-Type`)
+    Ok((
+        builder
+            .body(raw_request.clone())
+            .header("content-type", "application/json")
+            .headers(headers)
+            .send()
+            .await
+            .map_err(|e| {
+                Error::new(ErrorDetails::InferenceClient {
+                    status_code: e.status(),
+                    message: format!("Error sending request: {}", DisplayOrDebugGateway::new(e)),
+                    provider_type: provider_type.to_string(),
+                    raw_request: Some(raw_request.clone()),
+                    raw_response: None,
+                })
+            })?,
+        raw_request,
+    ))
+}
+
+/// Like `inject_extra_request_data_and_send`, but for streaming requests
+/// Produces an `EventSource` instead of a `Response`.
+pub async fn inject_extra_request_data_and_send_eventsource(
+    provider_type: &str,
+    config: &FullExtraBodyConfig,
+    extra_headers_config: &FullExtraHeadersConfig,
+    model_provider_data: impl Into<ModelProviderRequestInfo>,
+    model_name: &str,
+    mut body: serde_json::Value,
+    builder: reqwest::RequestBuilder,
+) -> Result<(EventSource, String), Error> {
+    let headers = inject_extra_request_data(
+        config,
+        extra_headers_config,
+        model_provider_data,
+        model_name,
+        &mut body,
+    )?;
+    let raw_request = body.to_string();
+    // Apply the headers as the very last step, so that they can overwrite all
+    // other headers (including things like `Authorization` and `Content-Type`)
+    Ok((
+        builder
+            .body(raw_request.clone())
+            .header("content-type", "application/json")
+            .headers(headers)
+            .eventsource()
+            .map_err(|e| {
+                Error::new(ErrorDetails::InferenceClient {
+                    message: format!("Error sending request: {}", DisplayOrDebugGateway::new(e)),
+                    status_code: None,
+                    provider_type: provider_type.to_string(),
+                    raw_request: Some(raw_request.clone()),
+                    raw_response: None,
+                })
+            })?,
+        raw_request,
+    ))
+}
+
+/// A helper method to inject extra_body fields into a request, and
+/// construct the `HeaderMap` for the applicable extra_headers.
+///
+/// You should almost always use
+/// `inject_extra_request_data_and_send` and `inject_extra_request_data_and_send_eventsource`
+/// instead of calling this directly. The one exception is for providers which use
+/// external SDK crates (e.g. aws), which may not have a `reqwest` builder available.
 #[must_use = "Extra headers must be inserted into request builder"]
 pub fn inject_extra_request_data(
     config: &FullExtraBodyConfig,
@@ -377,6 +471,40 @@ pub async fn peek_first_chunk<
             Err(Error::new(ErrorDetails::InternalError {
                 message: "Stream produced error after we peeked non-error (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string()
              }))
+        }
+    }
+}
+
+/// Turns a reference to a Cow into a `Cow::Borrowed`, without cloning
+pub fn borrow_cow<'a, T: ToOwned + ?Sized>(cow: &'a Cow<'a, T>) -> Cow<'a, T> {
+    match cow {
+        Cow::Borrowed(x) => Cow::Borrowed(x),
+        Cow::Owned(x) => Cow::Borrowed(x.borrow()),
+    }
+}
+
+/// For providers that return the tool call name in every chunk, we only want to send the name when it changes.
+/// Gemini & Mistral do this.
+/// If the tool call name changes, we return the new name.
+/// We also update the last_tool_name to the new name.
+/// If the tool call name does not change, we return None.
+/// We do not update the last_tool_name in this case.
+pub(crate) fn check_new_tool_call_name(
+    new_name: String,
+    last_tool_name: &mut Option<String>,
+) -> Option<String> {
+    match last_tool_name {
+        None => {
+            *last_tool_name = Some(new_name.to_string());
+            Some(new_name)
+        }
+        Some(last_tool_name) => {
+            if last_tool_name == &new_name {
+                // If the previous tool name was the same as the old name, we can just return None as it will have already been sent
+                return None;
+            }
+            *last_tool_name = new_name.clone();
+            Some(new_name)
         }
     }
 }
@@ -923,6 +1051,27 @@ mod tests {
         assert!(
             err.contains("TensorZero doesn't support pointing an index (0) if its container doesn't exist. We'd love to hear about your use case (& help)! Please open a GitHub Discussion: https://github.com/tensorzero/tensorzero/discussions/new` with pointer: `/new-key/0`"),
             "Unexpected error message: {err:?}"
+        );
+    }
+
+    #[test]
+    fn test_check_new_tool_call_name() {
+        let mut last_tool_name = None;
+        assert_eq!(
+            check_new_tool_call_name("get_temperature".to_string(), &mut last_tool_name),
+            Some("get_temperature".to_string())
+        );
+        assert_eq!(
+            check_new_tool_call_name("get_temperature".to_string(), &mut last_tool_name),
+            None
+        );
+        assert_eq!(
+            check_new_tool_call_name("get_humidity".to_string(), &mut last_tool_name),
+            Some("get_humidity".to_string())
+        );
+        assert_eq!(
+            check_new_tool_call_name("get_temperature".to_string(), &mut last_tool_name),
+            Some("get_temperature".to_string())
         );
     }
 }

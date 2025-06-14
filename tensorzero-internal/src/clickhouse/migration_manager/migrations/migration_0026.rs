@@ -87,7 +87,7 @@ impl Migration for Migration0026<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         let query = r#"
@@ -99,7 +99,7 @@ impl Migration for Migration0026<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         let query = r#"
@@ -117,7 +117,7 @@ impl Migration for Migration0026<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         let query = r#"
@@ -130,17 +130,16 @@ impl Migration for Migration0026<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
         Ok(())
     }
 
     fn rollback_instructions(&self) -> String {
-        "\
-        -- Drop the materialized views\n\
-        DROP VIEW IF EXISTS DynamicEvaluationRunEpisodeByRunIdView;\n\
-        DROP VIEW IF EXISTS DynamicEvaluationRunByProjectNameView;\n\
-        -- Drop the tables\n\
+        "/* Drop the materialized views */\
+        DROP VIEW IF EXISTS DynamicEvaluationRunEpisodeByRunIdView;
+        DROP VIEW IF EXISTS DynamicEvaluationRunByProjectNameView;
+        /* Drop the tables */\
         DROP TABLE IF EXISTS DynamicEvaluationRunEpisodeByRunId;\n\
         DROP TABLE IF EXISTS DynamicEvaluationRunByProjectName;
         "

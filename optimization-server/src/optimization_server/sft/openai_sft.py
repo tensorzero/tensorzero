@@ -234,9 +234,15 @@ def content_block_to_openai_message(
             "tool_call_id": content["id"],
             "content": content["result"],
         }
-    elif content["type"] == "image":
-        mime_type = content["image"]["mime_type"]
-        data = content["image"]["data"]
+    elif content["type"] == "file" or content["type"] == "image":
+        content_block = (
+            content["image"] if content["type"] == "image" else content["file"]
+        )
+        mime_type = content_block["mime_type"]
+        data = content_block["data"]
+
+        if not mime_type.startswith("image/"):
+            raise ValidationError(f"Unsupported file mime type: {mime_type}")
 
         if role != "user":
             raise ValidationError(f"Image content must be user role, found: {role}")

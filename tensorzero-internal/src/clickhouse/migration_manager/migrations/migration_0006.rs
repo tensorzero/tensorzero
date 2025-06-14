@@ -70,7 +70,7 @@ impl Migration for Migration0006<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Create the `BatchRequest` table
@@ -90,7 +90,7 @@ impl Migration for Migration0006<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Create the BatchIdByInferenceId table
@@ -104,7 +104,7 @@ impl Migration for Migration0006<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Create the materialized view for the BatchIdByInferenceId table
@@ -119,7 +119,7 @@ impl Migration for Migration0006<'_> {
             "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
         Ok(())
     }
@@ -131,14 +131,12 @@ impl Migration for Migration0006<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        "\
-            -- Drop the materialized views\n\
-            DROP VIEW IF EXISTS BatchIdByInferenceIdView;\n\
-            \n\
-            -- Drop the tables\n\
-            DROP TABLE IF EXISTS BatchIdByInferenceId;\n\
-            DROP TABLE IF EXISTS BatchRequest;\n\
-            DROP TABLE IF EXISTS BatchModelInference;\n\
+        "/* Drop the materialized views */\
+            DROP VIEW IF EXISTS BatchIdByInferenceIdView;
+            /* Drop the tables */\
+            DROP TABLE IF EXISTS BatchIdByInferenceId;
+            DROP TABLE IF EXISTS BatchRequest;
+            DROP TABLE IF EXISTS BatchModelInference;
         "
         .to_string()
     }

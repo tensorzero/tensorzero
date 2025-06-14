@@ -38,15 +38,13 @@ impl Migration for Migration0029<'_> {
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         self.clickhouse
-            .run_query_synchronous(
+            .run_query_synchronous_no_params(
                 r#"DROP VIEW IF EXISTS StaticEvaluationHumanFeedbackFloatView;"#.to_string(),
-                None,
             )
             .await?;
         self.clickhouse
-            .run_query_synchronous(
+            .run_query_synchronous_no_params(
                 r#"DROP VIEW IF EXISTS StaticEvaluationHumanFeedbackBooleanView;"#.to_string(),
-                None,
             )
             .await?;
 
@@ -54,7 +52,8 @@ impl Migration for Migration0029<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        r#"no action required"#.to_string()
+        // We include 'SELECT 1' so that our test code can run these rollback instructions
+        r#"/* no action required */ SELECT 1;"#.to_string()
     }
 
     async fn has_succeeded(&self) -> Result<bool, Error> {

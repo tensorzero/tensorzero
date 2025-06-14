@@ -40,6 +40,14 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
+    let pdf_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "anthropic".to_string(),
+        model_name: "anthropic::claude-3-5-sonnet-20241022".into(),
+        model_provider_name: "anthropic".into(),
+        credentials: HashMap::new(),
+    }];
+
     let extra_body_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "anthropic-extra-body".to_string(),
@@ -118,7 +126,7 @@ async fn get_providers() -> E2ETestProviders {
         json_mode_inference: json_providers.clone(),
         json_mode_off_inference: json_mode_off_providers.clone(),
         image_inference: image_providers,
-
+        pdf_inference: pdf_providers,
         shorthand_inference: shorthand_providers.clone(),
     }
 }
@@ -821,23 +829,22 @@ async fn test_streaming_thinking() {
         serde_json::from_str(clickhouse_content_blocks).unwrap();
     println!("Got content blocks: {clickhouse_content_blocks:?}");
     // We should reconstruct thee blocks - a thought block, tool call, and text block
-    // Note that we currently always store the tool call first in ClickHouse
     assert_eq!(clickhouse_content_blocks.len(), 3);
-    assert_eq!(clickhouse_content_blocks[0]["type"], "tool_call");
-    assert_eq!(clickhouse_content_blocks[1]["type"], "thought");
-    assert_eq!(clickhouse_content_blocks[2]["type"], "text");
+    assert_eq!(clickhouse_content_blocks[0]["type"], "thought");
+    assert_eq!(clickhouse_content_blocks[1]["type"], "text");
+    assert_eq!(clickhouse_content_blocks[2]["type"], "tool_call");
 
-    assert_eq!(clickhouse_content_blocks[1]["text"], content_blocks["0"]);
+    assert_eq!(clickhouse_content_blocks[0]["text"], content_blocks["0"]);
     assert_eq!(
-        clickhouse_content_blocks[1]["signature"],
+        clickhouse_content_blocks[0]["signature"],
         content_block_signatures["0"]
     );
-    assert_eq!(clickhouse_content_blocks[2]["text"], content_blocks["1"]);
+    assert_eq!(clickhouse_content_blocks[1]["text"], content_blocks["1"]);
 
-    let tool_call_id = clickhouse_content_blocks[0]["id"].as_str().unwrap();
+    let tool_call_id = clickhouse_content_blocks[2]["id"].as_str().unwrap();
 
     assert_eq!(
-        clickhouse_content_blocks[0]["raw_arguments"],
+        clickhouse_content_blocks[2]["raw_arguments"],
         content_blocks[tool_call_id]
     );
 

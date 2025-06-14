@@ -127,12 +127,12 @@ impl Variant for ChainOfThoughtConfig {
         .into())
     }
 
-    fn validate(
+    async fn validate(
         &self,
         function: &FunctionConfig,
         models: &mut ModelTable,
         embedding_models: &EmbeddingModelTable,
-        templates: &TemplateConfig,
+        templates: &TemplateConfig<'_>,
         function_name: &str,
         variant_name: &str,
     ) -> Result<(), Error> {
@@ -145,14 +145,16 @@ impl Variant for ChainOfThoughtConfig {
             }
             .into());
         }
-        self.inner.validate(
-            function,
-            models,
-            embedding_models,
-            templates,
-            function_name,
-            variant_name,
-        )
+        self.inner
+            .validate(
+                function,
+                models,
+                embedding_models,
+                templates,
+                function_name,
+                variant_name,
+            )
+            .await
     }
 
     fn get_all_template_paths(&self) -> Vec<&PathWithContents> {

@@ -57,18 +57,17 @@ impl Migration for Migration0017<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         Ok(())
     }
 
     fn rollback_instructions(&self) -> String {
-        "\
-            -- Drop the columns\n\
-            ALTER TABLE ModelInferenceCache\n\
-            DROP COLUMN IF EXISTS input_tokens,\n\
-            DROP COLUMN IF EXISTS output_tokens;\n\
+        "/* Drop the columns */\
+            ALTER TABLE ModelInferenceCache \
+            DROP COLUMN IF EXISTS input_tokens,\
+            DROP COLUMN IF EXISTS output_tokens;\
             "
         .to_string()
     }

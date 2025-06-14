@@ -545,7 +545,10 @@ async fn get_latest_batch_inference(
             FORMAT JSONEachRow
         "#
     );
-    let response = clickhouse.run_query_synchronous(query, None).await.unwrap();
+    let response = clickhouse
+        .run_query_synchronous_no_params(query)
+        .await
+        .unwrap();
     if response.is_empty() {
         return None;
     }
@@ -560,7 +563,10 @@ async fn get_all_batch_inferences(
     let query = format!(
         "SELECT * FROM BatchModelInference WHERE batch_id = '{batch_id}' FORMAT JSONEachRow",
     );
-    let response = clickhouse.run_query_synchronous(query, None).await.unwrap();
+    let response = clickhouse
+        .run_query_synchronous_no_params(query)
+        .await
+        .unwrap();
     let rows = response
         .lines()
         .filter(|line| !line.is_empty())
@@ -658,7 +664,7 @@ pub async fn test_start_simple_image_batch_inference_request_with_provider(
                     ]
                 },
             ]}],
-        "tags": [{"foo": "bar", "test_type": "batch_simple_image", "variant_name": provider.variant_name}],
+        "tags": [{"foo": "bar", "test_type": "batch_simple_image_v2", "variant_name": provider.variant_name}],
     });
 
     let response = Client::new()
@@ -734,14 +740,14 @@ pub async fn test_start_simple_image_batch_inference_request_with_provider(
                 "content": [
                     {"type": "text", "value": "What kind of animal is in this image?"},
                     {
-                        "type": "image",
-                        "image": {
+                        "type": "file",
+                        "file": {
                             "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
                             "mime_type": "image/png",
                         },
                         "storage_path": {
                             "kind": {"type": "disabled"},
-                            "path": "observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"
+                            "path": "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"
                         }
                     }
                 ]
@@ -759,7 +765,7 @@ pub async fn test_start_simple_image_batch_inference_request_with_provider(
         "What kind of animal is in this image?".to_string().into()
     );
     assert!(
-        matches!(input_messages[0].content[1], ContentBlock::Image(_)),
+        matches!(input_messages[0].content[1], ContentBlock::File(_)),
         "Unexpected input: {input_messages:?}"
     );
     assert_eq!(input_messages[0].content.len(), 2);
@@ -827,7 +833,7 @@ pub async fn test_poll_existing_simple_image_batch_inference_request_with_provid
         "pending",
         Some(HashMap::from([(
             "test_type".to_string(),
-            "batch_simple_image".to_string(),
+            "batch_simple_image_v2".to_string(),
         )])),
     )
     .await;
@@ -909,7 +915,7 @@ pub async fn test_poll_completed_simple_image_batch_inference_request_with_provi
         &provider.variant_name,
         Some(HashMap::from([(
             "test_type".to_string(),
-            "batch_simple_image".to_string(),
+            "batch_simple_image_v2".to_string(),
         )])),
     )
     .await;

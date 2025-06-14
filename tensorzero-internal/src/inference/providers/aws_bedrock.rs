@@ -105,6 +105,10 @@ impl InferenceProvider for AWSBedrockProvider {
         if let Some(top_p) = request.top_p {
             inference_config = inference_config.top_p(top_p);
         }
+        if let Some(stop_sequences) = request.stop_sequences.to_owned() {
+            inference_config =
+                inference_config.set_stop_sequences(Some(stop_sequences.into_owned()));
+        }
         let mut bedrock_request = self
             .client
             .converse()
@@ -233,6 +237,13 @@ impl InferenceProvider for AWSBedrockProvider {
         if let Some(temperature) = request.temperature {
             inference_config = inference_config.temperature(temperature);
         }
+        if let Some(top_p) = request.top_p {
+            inference_config = inference_config.top_p(top_p);
+        }
+        if let Some(stop_sequences) = request.stop_sequences.to_owned() {
+            inference_config =
+                inference_config.set_stop_sequences(Some(stop_sequences.into_owned()));
+        }
 
         let mut bedrock_request = self
             .client
@@ -353,7 +364,6 @@ fn stream_bedrock(
 ) -> ProviderInferenceResponseStreamInner {
     Box::pin(async_stream::stream! {
         let mut current_tool_id : Option<String> = None;
-        let mut current_tool_name: Option<String> = None;
 
         loop {
             let ev = stream.stream.recv().await;
@@ -374,7 +384,7 @@ fn stream_bedrock(
                         // NOTE: AWS Bedrock returns usage (ConverseStreamMetadataEvent) AFTER MessageStop.
 
                         // Convert the event to a tensorzero stream message
-                        let stream_message = bedrock_to_tensorzero_stream_message(output, start_time.elapsed(), &mut current_tool_id, &mut current_tool_name);
+                        let stream_message = bedrock_to_tensorzero_stream_message(output, start_time.elapsed(), &mut current_tool_id);
 
                         match stream_message {
                             Ok(None) => {},
@@ -392,7 +402,6 @@ fn bedrock_to_tensorzero_stream_message(
     output: ConverseStreamOutputType,
     message_latency: Duration,
     current_tool_id: &mut Option<String>,
-    current_tool_name: &mut Option<String>,
 ) -> Result<Option<ProviderInferenceResponseChunk>, Error> {
     match output {
         ConverseStreamOutputType::ContentBlockDelta(message) => {
@@ -416,12 +425,7 @@ fn bedrock_to_tensorzero_stream_message(
                             // This is necessary because the ToolCallChunk must always contain the tool name and ID
                             // even though AWS Bedrock only sends the tool ID and name in the ToolUse chunk and not InputJSONDelta
                             vec![ContentBlockChunk::ToolCall(ToolCallChunk {
-                                raw_name: current_tool_name.clone().ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
-                                    message: "Got InputJsonDelta chunk from AWS Bedrock without current tool name being set by a ToolUse".to_string(),
-                                    provider_type: PROVIDER_TYPE.to_string(),
-                                    raw_request: None,
-                                    raw_response: None,
-                                }))?,
+                                raw_name: None,
                                 id: current_tool_id.clone().ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                                     message: "Got InputJsonDelta chunk from AWS Bedrock without current tool id being set by a ToolUse".to_string(),
                                     provider_type: PROVIDER_TYPE.to_string(),
@@ -455,11 +459,10 @@ fn bedrock_to_tensorzero_stream_message(
                 Some(ContentBlockStart::ToolUse(tool_use)) => {
                     // This is a new tool call, update the ID for future chunks
                     *current_tool_id = Some(tool_use.tool_use_id.clone());
-                    *current_tool_name = Some(tool_use.name.clone());
                     Ok(Some(ProviderInferenceResponseChunk::new(
                         vec![ContentBlockChunk::ToolCall(ToolCallChunk {
                             id: tool_use.tool_use_id,
-                            raw_name: tool_use.name,
+                            raw_name: Some(tool_use.name),
                             raw_arguments: "".to_string(),
                         })],
                         None,
@@ -611,7 +614,7 @@ impl TryFrom<&ContentBlock> for Option<BedrockContentBlock> {
 
                 Ok(Some(BedrockContentBlock::ToolResult(tool_result_block)))
             }
-            ContentBlock::Image(_) => Err(Error::new(ErrorDetails::UnsupportedContentBlockType {
+            ContentBlock::File(_) => Err(Error::new(ErrorDetails::UnsupportedContentBlockType {
                 content_block_type: "image".to_string(),
                 provider_type: PROVIDER_TYPE.to_string(),
             })),
@@ -712,7 +715,7 @@ fn aws_stop_reason_to_tensorzero_finish_reason(stop_reason: StopReason) -> Optio
         StopReason::EndTurn => Some(FinishReason::Stop),
         StopReason::GuardrailIntervened => Some(FinishReason::ContentFilter),
         StopReason::MaxTokens => Some(FinishReason::Length),
-        StopReason::StopSequence => Some(FinishReason::Stop),
+        StopReason::StopSequence => Some(FinishReason::StopSequence),
         StopReason::ToolUse => Some(FinishReason::ToolCall),
         _ => Some(FinishReason::Unknown),
     }

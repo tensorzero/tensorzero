@@ -72,7 +72,7 @@ impl Migration for Migration0003<'_> {
                       AND name = 'tags'
                 )"#
             );
-            match self.clickhouse.run_query_synchronous(query, None).await {
+            match self.clickhouse.run_query_synchronous_no_params(query).await {
                 Err(e) => {
                     return Err(ErrorDetails::ClickHouseMigration {
                         id: "0003".to_string(),
@@ -119,7 +119,7 @@ impl Migration for Migration0003<'_> {
         "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Add a column `tags` to the `BooleanMetricFeedback` table
@@ -128,7 +128,7 @@ impl Migration for Migration0003<'_> {
             ADD COLUMN IF NOT EXISTS tags Map(String, String) DEFAULT map();"#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Add a column `tags` to the `CommentFeedback` table
@@ -137,7 +137,7 @@ impl Migration for Migration0003<'_> {
             ADD COLUMN IF NOT EXISTS tags Map(String, String) DEFAULT map();"#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Add a column `tags` to the `DemonstrationFeedback` table
@@ -146,7 +146,7 @@ impl Migration for Migration0003<'_> {
             ADD COLUMN IF NOT EXISTS tags Map(String, String) DEFAULT map();"#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Add a column `tags` to the `FloatMetricFeedback` table
@@ -155,7 +155,7 @@ impl Migration for Migration0003<'_> {
             ADD COLUMN IF NOT EXISTS tags Map(String, String) DEFAULT map();"#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // In the following few queries we create the materialized views that map the tags from the original tables to the new `FeedbackTag` table
@@ -176,7 +176,7 @@ impl Migration for Migration0003<'_> {
             "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Create the materialized view for the `FeedbackTag` table from CommentFeedback
@@ -194,7 +194,7 @@ impl Migration for Migration0003<'_> {
             "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Create the materialized view for the `FeedbackTag` table from DemonstrationFeedback
@@ -212,7 +212,7 @@ impl Migration for Migration0003<'_> {
             "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         // Create the materialized view for the `FeedbackTag` table from FloatMetricFeedback
@@ -230,30 +230,26 @@ impl Migration for Migration0003<'_> {
             "#;
         let _ = self
             .clickhouse
-            .run_query_synchronous(query.to_string(), None)
+            .run_query_synchronous_no_params(query.to_string())
             .await?;
 
         Ok(())
     }
 
     fn rollback_instructions(&self) -> String {
-        "\
-            -- Drop the materialized views\n\
-            DROP VIEW IF EXISTS BooleanMetricFeedbackTagView;\n\
-            DROP VIEW IF EXISTS CommentFeedbackTagView;\n\
-            DROP VIEW IF EXISTS DemonstrationFeedbackTagView;\n\
-            DROP VIEW IF EXISTS FloatMetricFeedbackTagView;\n\
-            \n\
-            -- Drop the table\n\
-            DROP TABLE IF EXISTS FeedbackTag;\n\
-            \n\
-            -- Drop the columns\n\
-            ALTER TABLE BooleanMetricFeedback DROP COLUMN tags;\n\
-            ALTER TABLE CommentFeedback DROP COLUMN tags;\n\
-            ALTER TABLE DemonstrationFeedback DROP COLUMN tags;\n\
-            ALTER TABLE FloatMetricFeedback DROP COLUMN tags;\n\
-        "
-        .to_string()
+        "/* Drop the materialized views */\
+            DROP VIEW IF EXISTS BooleanMetricFeedbackTagView;
+            DROP VIEW IF EXISTS CommentFeedbackTagView;
+            DROP VIEW IF EXISTS DemonstrationFeedbackTagView;
+            DROP VIEW IF EXISTS FloatMetricFeedbackTagView;
+            /* Drop the table */\
+            DROP TABLE IF EXISTS FeedbackTag;
+            /* Drop the columns */\
+            ALTER TABLE BooleanMetricFeedback DROP COLUMN tags;
+            ALTER TABLE CommentFeedback DROP COLUMN tags;
+            ALTER TABLE DemonstrationFeedback DROP COLUMN tags;
+            ALTER TABLE FloatMetricFeedback DROP COLUMN tags;"
+            .to_string()
     }
 
     /// Check if the migration has succeeded (i.e. it should not be applied again)
