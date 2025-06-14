@@ -1,6 +1,5 @@
 services:
   ui:
-    image: tensorzero/ui:${TENSORZERO_UI_TAG:-latest}
     build:
       context: ../..
       dockerfile: ui/Dockerfile

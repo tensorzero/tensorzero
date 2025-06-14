@@ -60,8 +60,6 @@ jobs:
       - name: Configure Namespace-powered Buildx
         uses: namespacelabs/nscloud-setup-buildx-action@84ca8c58fdf372d6a4750476cd09b7b96ee778ca
 
-      - uses: dtolnay/rust-toolchain@stable
-
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
         with:
           cache-provider: "buildjet"

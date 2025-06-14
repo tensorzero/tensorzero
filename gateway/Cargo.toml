@@ -1,9 +1,7 @@
 [package]
 name = "gateway"
 version.workspace = true
-rust-version.workspace = true
 edition = "2021"
-license.workspace = true
 
 [dependencies]
 tensorzero-internal = { path = "../tensorzero-internal" }

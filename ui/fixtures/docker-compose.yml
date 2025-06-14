@@ -19,7 +19,6 @@ services:
       timeout: 1s
 
   gateway:
-    image: tensorzero/gateway:${TENSORZERO_GATEWAY_TAG:-latest}
     build:
       context: ../..
       dockerfile: gateway/Dockerfile

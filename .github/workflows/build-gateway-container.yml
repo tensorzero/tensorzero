@@ -12,10 +12,10 @@ jobs:
 
       - name: Build `gateway` container
         run: |
-          docker build -f gateway/Dockerfile . -t tensorzero/gateway:sha-${{ github.sha }}
+          docker build -f gateway/Dockerfile . -t tensorzero/gateway
 
       - name: Save `gateway` container
-        run: docker save tensorzero/gateway:sha-${{ github.sha }} > gateway-container.tar
+        run: docker save tensorzero/gateway > gateway-container.tar
 
       - name: Upload `gateway` container as an artifact
         uses: namespace-actions/upload-artifact@9a78c62e083914789d908952f9773e42744b9f68

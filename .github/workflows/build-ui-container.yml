@@ -12,10 +12,10 @@ jobs:
 
       - name: Build `ui` container
         run: |
-          docker build -f ui/Dockerfile . -t tensorzero/ui:sha-${{ github.sha }}
+          docker build -f ui/Dockerfile . -t tensorzero/ui
 
       - name: Save `ui` container
-        run: docker save tensorzero/ui:sha-${{ github.sha }} > ui-container.tar
+        run: docker save tensorzero/ui > ui-container.tar
 
       - name: Upload `ui` container as an artifact
         uses: namespace-actions/upload-artifact@9a78c62e083914789d908952f9773e42744b9f68
