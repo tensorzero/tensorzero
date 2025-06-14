@@ -33,8 +33,6 @@ It provides a **data & learning flywheel for LLMs** by unifying:
   <br>
   <b><a href="https://www.tensorzero.com/docs/quickstart" target="_blank">Quick Start (5min)</a></b>
   ·
-  <b><a href="https://www.tensorzero.com/docs/gateway/tutorial" target="_blank">Comprehensive Tutorial</a></b>
-  ·
   <b><a href="https://www.tensorzero.com/docs/gateway/deployment" target="_blank">Deployment Guide</a></b>
   ·
   <b><a href="https://www.tensorzero.com/docs/gateway/api-reference" target="_blank">API Reference</a></b>
@@ -130,7 +128,7 @@ It provides a **data & learning flywheel for LLMs** by unifying:
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/retries-fallbacks">Retries & Fallbacks</a></b></li>
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/inference-time-optimizations">Inference-Time Optimizations</a></b></li>
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/prompt-templates-schemas">Prompt Templates & Schemas</a></b></li>
-        <li><b><a href="https://www.tensorzero.com/docs/gateway/tutorial#experimentation">Experimentation (A/B Testing)</a></b></li>
+        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/experimentation/">Experimentation (A/B Testing)</a></b></li>
         <li><b><a href="https://www.tensorzero.com/docs/gateway/configuration-reference">Configuration-as-Code (GitOps)</a></b></li>
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/batch-inference">Batch Inference</a></b></li>
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/multimodal-inference">Multimodal Inference (VLMs)</a></b></li>
@@ -441,7 +439,6 @@ Read more about our **[Vision & Roadmap](https://www.tensorzero.com/docs/vision-
 
 **Start building today.**
 The **[Quick Start](https://www.tensorzero.com/docs/quickstart)** shows it's easy to set up an LLM application with TensorZero.
-If you want to dive deeper, the **[Tutorial](https://www.tensorzero.com/docs/gateway/tutorial)** teaches how to build a simple chatbot, an email copilot, a weather RAG system, and a structured data extraction pipeline.
 
 **Questions?**
 Ask us on **[Slack](https://www.tensorzero.com/slack)** or **[Discord](https://www.tensorzero.com/discord)**.
