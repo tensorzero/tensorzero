@@ -138,6 +138,7 @@ pub struct ModelUsedInfo {
     pub model_name: Arc<str>,
     pub model_provider_name: Arc<str>,
     pub raw_request: String,
+    pub raw_response: Option<String>,
     pub system: Option<String>,
     pub input_messages: Vec<RequestMessage>,
     pub inference_params: InferenceParams,
@@ -547,6 +548,11 @@ where
                 json_mode: json_mode.unwrap_or(JsonMode::Off).into(),
                 function_type: FunctionType::Chat,
                 output_schema: inference_config.dynamic_output_schema.map(|v| &v.value),
+                stop_sequences: inference_params
+                    .chat_completion
+                    .stop_sequences
+                    .clone()
+                    .map(Cow::Owned),
                 extra_body,
                 extra_headers,
                 extra_cache_key: inference_config.extra_cache_key.clone(),
@@ -583,6 +589,11 @@ where
                 json_mode: json_mode.unwrap_or(JsonMode::Strict).into(),
                 function_type: FunctionType::Json,
                 output_schema,
+                stop_sequences: inference_params
+                    .chat_completion
+                    .stop_sequences
+                    .clone()
+                    .map(Cow::Owned),
                 extra_body,
                 extra_headers,
                 extra_cache_key: inference_config.extra_cache_key.clone(),
@@ -667,6 +678,7 @@ async fn infer_model_request_stream<'request>(
         model_name,
         model_provider_name,
         raw_request,
+        raw_response: None,
         inference_params,
         previous_model_inference_results: vec![],
         system,
@@ -784,6 +796,7 @@ mod tests {
                 frequency_penalty: Some(0.0),
                 seed: Some(42),
                 json_mode: None,
+                stop_sequences: None,
             },
         };
 
@@ -1063,6 +1076,7 @@ mod tests {
                     timeouts: Default::default(),
                 },
             )]),
+            timeouts: Default::default(),
         };
         let retry_config = Box::leak(Box::new(RetryConfig::default()));
 
@@ -1171,6 +1185,7 @@ mod tests {
                     timeouts: Default::default(),
                 },
             )]),
+            timeouts: Default::default(),
         };
 
         // Create the arguments struct
@@ -1229,6 +1244,7 @@ mod tests {
                     timeouts: Default::default(),
                 },
             )]),
+            timeouts: Default::default(),
         };
 
         // Create the arguments struct
@@ -1362,6 +1378,7 @@ mod tests {
                     },
                 ),
             ]),
+            timeouts: Default::default(),
         };
         let retry_config = Box::leak(Box::new(RetryConfig::default()));
 
@@ -1459,6 +1476,7 @@ mod tests {
                     timeouts: Default::default(),
                 },
             )]),
+            timeouts: Default::default(),
         }));
 
         // Prepare the model inference request
@@ -1642,6 +1660,7 @@ mod tests {
                     },
                 ),
             ]),
+            timeouts: Default::default(),
         }));
         let retry_config = RetryConfig::default();
 

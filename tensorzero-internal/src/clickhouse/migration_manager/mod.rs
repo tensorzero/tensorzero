@@ -28,10 +28,11 @@ use migrations::migration_0026::Migration0026;
 use migrations::migration_0027::Migration0027;
 use migrations::migration_0028::Migration0028;
 use migrations::migration_0029::Migration0029;
+use migrations::migration_0030::Migration0030;
 
 /// This must match the number of migrations returned by `make_all_migrations` - the tests
 /// will panic if they don't match.
-pub const NUM_MIGRATIONS: usize = 23;
+pub const NUM_MIGRATIONS: usize = 24;
 
 /// Constructs (but does not run) a vector of all our database migrations.
 /// This is the single source of truth for all migration - it's used during startup to migrate
@@ -76,6 +77,7 @@ pub fn make_all_migrations<'a>(
         Box::new(Migration0027 { clickhouse }),
         Box::new(Migration0028 { clickhouse }),
         Box::new(Migration0029 { clickhouse }),
+        Box::new(Migration0030 { clickhouse }),
     ];
     assert_eq!(
         migrations.len(),

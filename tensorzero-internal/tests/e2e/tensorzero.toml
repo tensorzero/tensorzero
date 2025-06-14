@@ -209,14 +209,18 @@ location = "us-central1"
 project_id = "tensorzero-public"
 credential_location = "sdk"
 
-[models."gemini-2.5-pro-preview-05-06"]
+[models."gemini-2.5-pro-preview-06-05"]
 routing = ["gcp_vertex_gemini"]
 
-[models."gemini-2.5-pro-preview-05-06".providers.gcp_vertex_gemini]
+[models."gemini-2.5-pro-preview-06-05".providers.gcp_vertex_gemini]
 type = "gcp_vertex_gemini"
-model_id = "gemini-2.5-pro-preview-05-06"
+model_id = "gemini-2.5-pro-preview-06-05"
 location = "global"
 project_id = "tensorzero-public"
+# Set the thinking budget to the minimum value.
+# This speeds up our tests, saves us some tokens, and prevents the model from
+# hitting our token limit
+extra_body = [{ pointer = "/generationConfig/thinkingConfig/thinkingBudget", value = 128 }]
 
 
 [models."gemini-2.0-flash-lite"]
@@ -257,15 +261,23 @@ routing = ["google_ai_studio_gemini"]
 
 [models."gemini-2.5-pro".providers.google_ai_studio_gemini]
 type = "google_ai_studio_gemini"
-model_name = "gemini-2.5-pro-preview-05-06"
+model_name = "gemini-2.5-pro-preview-06-05"
+# Set the thinking budget to the minimum value.
+# This speeds up our tests, saves us some tokens, and prevents the model from
+# hitting our token limit
+extra_body = [{ pointer = "/generationConfig/thinkingConfig/thinkingBudget", value = 128 }]
 
 [models."gemini-2.5-pro-dynamic"]
 routing = ["google_ai_studio_gemini"]
 
 [models."gemini-2.5-pro-dynamic".providers.google_ai_studio_gemini]
 type = "google_ai_studio_gemini"
-model_name = "gemini-2.5-pro-preview-05-06"
+model_name = "gemini-2.5-pro-preview-06-05"
 api_key_location = "dynamic::google_ai_studio_api_key"
+# Set the thinking budget to the minimum value.
+# This speeds up our tests, saves us some tokens, and prevents the model from
+# hitting our token limit
+extra_body = [{ pointer = "/generationConfig/thinkingConfig/thinkingBudget", value = 128 }]
 
 [models."llama3.3-70b-instruct-fireworks"]
 routing = ["fireworks"]
@@ -333,21 +345,21 @@ type = "sglang"
 model_name = "Qwen/Qwen2.5-1.5B-Instruct"
 api_base = "https://tensorzero--sglang-inference-sglang-inference.modal.run/v1/"
 
-[models."smol-lm-instruct-vllm"]
+[models."qwen2.5-0.5b-instruct-vllm"]
 routing = ["vllm"]
 
-[models."smol-lm-instruct-vllm".providers.vllm]
+[models."qwen2.5-0.5b-instruct-vllm".providers.vllm]
 type = "vllm"
-model_name = "HuggingFaceTB/SmolLM-1.7B-Instruct"
-api_base = "https://tensorzero--vllm-inference-vllm-inference.modal.run/v1/"
+model_name = "Qwen/Qwen2.5-0.5B-Instruct"
+api_base = "https://tensorzero--vllm-inference-qwen-vllm-inference.modal.run/v1/"
 
-[models."smol-lm-instruct-vllm-dynamic"]
+[models."qwen2.5-0.5b-instruct-vllm-dynamic"]
 routing = ["vllm"]
 
-[models."smol-lm-instruct-vllm-dynamic".providers.vllm]
+[models."qwen2.5-0.5b-instruct-vllm-dynamic".providers.vllm]
 type = "vllm"
-model_name = "HuggingFaceTB/SmolLM-1.7B-Instruct"
-api_base = "https://tensorzero--vllm-inference-vllm-inference.modal.run/v1/"
+model_name = "Qwen/Qwen2.5-0.5B-Instruct"
+api_base = "https://tensorzero--vllm-inference-qwen-vllm-inference.modal.run/v1/"
 
 [models."open-mistral-nemo-2407"]
 routing = ["mistral"]
@@ -465,6 +477,14 @@ routing = ["dummy"]
 type = "dummy"
 model_name = "null"
 
+[models.slow_model_timeout]
+routing = ["slow_provider"]
+timeouts = { non_streaming = { total_ms = 400 }, streaming = { ttft_ms = 500 } }
+
+[models.slow_model_timeout.providers.slow_provider]
+type = "dummy"
+model_name = "slow"
+
 [models.slow_with_timeout]
 routing = ["slow"]
 
@@ -488,6 +508,18 @@ model_name = "slow_second_chunk"
 # but produces the first chunk with no delay.
 # As a result, this timeout should never be hit.
 streaming = { ttft_ms = 500 }
+
+[models.slow_second_chunk_timeout]
+routing = ["slow"]
+# The 'slow' provider takes 2 seconds to produce the second chunk,
+# but produces the first chunk with no delay.
+# As a result, this timeout should never be hit.
+timeouts = { streaming = { ttft_ms = 500 } }
+
+[models.slow_second_chunk_timeout.providers.slow]
+type = "dummy"
+model_name = "slow_second_chunk"
+
 
 [models.slow]
 routing = ["slow"]
@@ -632,7 +664,18 @@ model_name = "text-embedding-3-small"
 # │                                 FUNCTIONS                                  │
 # └────────────────────────────────────────────────────────────────────────────┘
 
-# Variant timeout tests
+# Timeout tests
+
+[functions.basic_test_model_timeout]
+type = "chat"
+
+[functions.basic_test_model_timeout.variants.slow_variant]
+type = "chat_completion"
+model = "slow_model_timeout"
+
+[functions.basic_test_model_timeout.variants.slow_second_chunk]
+type = "chat_completion"
+model = "slow_second_chunk_timeout"
 
 [functions.basic_test_variant_timeout]
 type = "chat"
@@ -951,7 +994,7 @@ extra_headers = [{ name = "Authorization", value = "invalid_gcp_vertex_auth" }]
 
 [functions.basic_test.variants.gcp-vertex-gemini-pro]
 type = "chat_completion"
-model = "gemini-2.5-pro-preview-05-06"
+model = "gemini-2.5-pro-preview-06-05"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 500
 
@@ -1289,27 +1332,27 @@ extra_body = [{ pointer = "/temperature", value = 0.123 }]
 
 [functions.basic_test.variants.vllm]
 type = "chat_completion"
-model = "smol-lm-instruct-vllm"
+model = "qwen2.5-0.5b-instruct-vllm"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
 [functions.basic_test.variants.vllm-extra-body]
 type = "chat_completion"
-model = "smol-lm-instruct-vllm"
+model = "qwen2.5-0.5b-instruct-vllm"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 extra_body = [{ pointer = "/temperature", value = 0.123 }]
 
 [functions.basic_test.variants.vllm-extra-headers]
 type = "chat_completion"
-model = "smol-lm-instruct-vllm"
+model = "qwen2.5-0.5b-instruct-vllm"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 extra_headers = [{ name = "Authorization", value = "invalid_vllm_auth" }]
 
 [functions.basic_test.variants.vllm-dynamic]
 type = "chat_completion"
-model = "smol-lm-instruct-vllm-dynamic"
+model = "qwen2.5-0.5b-instruct-vllm-dynamic"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
@@ -1684,7 +1727,7 @@ max_tokens = 100
 
 [functions.json_success.variants.gcp-vertex-gemini-pro]
 type = "chat_completion"
-model = "gemini-2.5-pro-preview-05-06"
+model = "gemini-2.5-pro-preview-06-05"
 system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "on"
@@ -1692,7 +1735,7 @@ max_tokens = 500
 
 [functions.json_success.variants.gcp-vertex-gemini-pro-implicit]
 type = "chat_completion"
-model = "gemini-2.5-pro-preview-05-06"
+model = "gemini-2.5-pro-preview-06-05"
 system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "implicit_tool"
@@ -1934,7 +1977,7 @@ json_mode = "strict"
 
 [functions.json_success.variants.vllm]
 type = "chat_completion"
-model = "smol-lm-instruct-vllm"
+model = "qwen2.5-0.5b-instruct-vllm"
 system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "on"
@@ -1942,7 +1985,7 @@ max_tokens = 100
 
 [functions.json_success.variants.vllm-strict]
 type = "chat_completion"
-model = "smol-lm-instruct-vllm"
+model = "qwen2.5-0.5b-instruct-vllm"
 system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 max_tokens = 100
@@ -2072,7 +2115,7 @@ max_tokens = 100
 
 [functions.json_success.variants.gcp_vertex_gemini_pro_json_mode_off]
 type = "chat_completion"
-model = "gemini-2.5-pro-preview-05-06"
+model = "gemini-2.5-pro-preview-06-05"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "off"
@@ -2096,7 +2139,7 @@ max_tokens = 100
 
 [functions.json_success.variants.google_ai_studio_gemini_pro_002_json_mode_off]
 type = "chat_completion"
-model = "gemini-2.5-pro-preview-05-06"
+model = "gemini-2.5-pro-preview-06-05"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "off"
@@ -2152,7 +2195,7 @@ max_tokens = 100
 
 [functions.json_success.variants.vllm_json_mode_off]
 type = "chat_completion"
-model = "smol-lm-instruct-vllm"
+model = "qwen2.5-0.5b-instruct-vllm"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "off"
@@ -2302,7 +2345,7 @@ max_tokens = 100
 
 [functions.dynamic_json.variants.gcp-vertex-gemini-pro]
 type = "chat_completion"
-model = "gemini-2.5-pro-preview-05-06"
+model = "gemini-2.5-pro-preview-06-05"
 system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
 json_mode = "on"
@@ -2310,7 +2353,7 @@ max_tokens = 500
 
 [functions.dynamic_json.variants.gcp-vertex-gemini-pro-implicit]
 type = "chat_completion"
-model = "gemini-2.5-pro-preview-05-06"
+model = "gemini-2.5-pro-preview-06-05"
 system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
 json_mode = "implicit_tool"
@@ -2319,6 +2362,7 @@ max_tokens = 500
 [functions.dynamic_json.variants.gcp-vertex-gemini-flash-lite-tuned]
 type = "chat_completion"
 model = "gemini-2.0-flash-lite-tuned"
+json_mode = "strict"
 system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
 max_tokens = 100
@@ -2553,7 +2597,7 @@ max_tokens = 100
 
 [functions.dynamic_json.variants.vllm]
 type = "chat_completion"
-model = "smol-lm-instruct-vllm"
+model = "qwen2.5-0.5b-instruct-vllm"
 system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
 json_mode = "on"
@@ -2561,7 +2605,7 @@ max_tokens = 100
 
 [functions.dynamic_json.variants.vllm-strict]
 type = "chat_completion"
-model = "smol-lm-instruct-vllm"
+model = "qwen2.5-0.5b-instruct-vllm"
 system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
 max_tokens = 100
@@ -2569,7 +2613,7 @@ json_mode = "strict"
 
 [functions.dynamic_json.variants.vllm-implicit]
 type = "chat_completion"
-model = "smol-lm-instruct-vllm"
+model = "qwen2.5-0.5b-instruct-vllm"
 system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
 json_mode = "implicit_tool"
@@ -2783,7 +2827,7 @@ max_tokens = 100
 
 [functions.weather_helper.variants.gcp-vertex-gemini-pro]
 type = "chat_completion"
-model = "gemini-2.5-pro-preview-05-06"
+model = "gemini-2.5-pro-preview-06-05"
 system_template = "../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
 max_tokens = 500
 
@@ -2853,6 +2897,12 @@ model = "Qwen/Qwen2.5-1.5B-Instruct"
 system_template = "../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
 max_tokens = 100
 
+[functions.weather_helper.variants.vllm]
+type = "chat_completion"
+model = "qwen2.5-0.5b-instruct-vllm"
+system_template = "../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
+max_tokens = 100
+
 [functions.weather_helper.variants.xai]
 type = "chat_completion"
 model = "grok_2_1212"
@@ -2903,6 +2953,13 @@ type = "chat_completion"
 weight = 1
 model = "llama3.1-405b-instruct-turbo-together"
 system_template = "../../fixtures/config/functions/weather_helper_parallel/prompt/system_template.minijinja"
+
+[functions.weather_helper_parallel.variants.vllm]
+type = "chat_completion"
+weight = 1
+model = "qwen2.5-0.5b-instruct-vllm"
+system_template = "../../fixtures/config/functions/weather_helper_parallel/prompt/system_template.minijinja"
+
 
 [functions.required_tool]
 type = "chat"

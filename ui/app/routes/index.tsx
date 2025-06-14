@@ -14,7 +14,7 @@ import {
   Documentation,
   Dataset,
   GridCheck,
-  DynamicEvaluation,
+  SequenceChecks,
 } from "~/components/icons/Icons";
 import {
   countInferencesByFunction,
@@ -192,7 +192,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               />
               <DirectoryCard
                 source="/dynamic_evaluations"
-                icon={DynamicEvaluation}
+                icon={SequenceChecks}
                 title="Dynamic Evaluations"
                 description={`${numDynamicEvaluationRunProjects} projects, ${numDynamicEvaluationRuns} runs`}
               />

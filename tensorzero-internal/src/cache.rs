@@ -481,6 +481,7 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
+            stop_sequences: None,
         };
         let model_provider_request = ModelProviderRequest {
             request: &model_inference_request,
@@ -506,6 +507,7 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
+            stop_sequences: None,
         };
         let model_provider_request = ModelProviderRequest {
             request: &model_inference_request,
@@ -533,6 +535,7 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
+            stop_sequences: None,
         };
         let model_provider_request = ModelProviderRequest {
             request: &streaming_model_inference_request,

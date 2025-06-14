@@ -550,33 +550,88 @@ class InferenceFilterTreeNode(ABC, HasTypeField):
 
 
 @dataclass
-class FloatMetricNode(InferenceFilterTreeNode):
+class FloatMetricFilter(InferenceFilterTreeNode):
     metric_name: str
     value: float
     comparison_operator: Literal["<", "<=", "=", ">", ">=", "!="]
     type: str = "float_metric"
 
 
+# CAREFUL: deprecated
+class FloatMetricNode(FloatMetricFilter):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        warnings.warn(
+            "Please use `FloatMetricFilter` instead of `FloatMetricNode`. In a future release, `FloatMetricNode` will be removed.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        super().__init__(*args, **kwargs)
+
+
 @dataclass
-class BooleanMetricNode(InferenceFilterTreeNode):
+class BooleanMetricFilter(InferenceFilterTreeNode):
     metric_name: str
     value: bool
     type: str = "boolean_metric"
 
 
+# CAREFUL: deprecated
+class BooleanMetricNode(BooleanMetricFilter):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        warnings.warn(
+            "Please use `BooleanMetricFilter` instead of `BooleanMetricNode`. In a future release, `BooleanMetricNode` will be removed.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        super().__init__(*args, **kwargs)
+
+
 @dataclass
-class AndNode(InferenceFilterTreeNode):
+class AndFilter(InferenceFilterTreeNode):
     children: List[InferenceFilterTreeNode]
     type: str = "and"
 
 
+# CAREFUL: deprecated
+class AndNode(AndFilter):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        warnings.warn(
+            "Please use `AndFilter` instead of `AndNode`. In a future release, `AndNode` will be removed.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        super().__init__(*args, **kwargs)
+
+
 @dataclass
-class OrNode(InferenceFilterTreeNode):
+class OrFilter(InferenceFilterTreeNode):
     children: List[InferenceFilterTreeNode]
     type: str = "or"
 
 
+# CAREFUL: deprecated
+class OrNode(OrFilter):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        warnings.warn(
+            "Please use `OrFilter` instead of `OrNode`. In a future release, `OrNode` will be removed.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        super().__init__(*args, **kwargs)
+
+
 @dataclass
-class NotNode(InferenceFilterTreeNode):
+class NotFilter(InferenceFilterTreeNode):
     child: InferenceFilterTreeNode
     type: str = "not"
+
+
+# CAREFUL: deprecated
+class NotNode(NotFilter):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        warnings.warn(
+            "Please use `NotFilter` instead of `NotNode`. In a future release, `NotNode` will be removed.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        super().__init__(*args, **kwargs)

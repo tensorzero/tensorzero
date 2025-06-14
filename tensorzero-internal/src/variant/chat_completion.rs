@@ -41,6 +41,7 @@ pub struct ChatCompletionConfig {
     pub presence_penalty: Option<f32>,
     pub frequency_penalty: Option<f32>,
     pub seed: Option<u32>,
+    pub stop_sequences: Option<Vec<String>>,
     pub json_mode: Option<JsonMode>, // Only for JSON functions, not for chat functions
     pub retries: RetryConfig,
     pub extra_body: Option<ExtraBodyConfig>,
@@ -62,6 +63,7 @@ pub struct UninitializedChatCompletionConfig {
     pub presence_penalty: Option<f32>,
     pub frequency_penalty: Option<f32>,
     pub seed: Option<u32>,
+    pub stop_sequences: Option<Vec<String>>,
     #[serde(default)]
     pub json_mode: Option<JsonMode>, // Only for JSON functions, not for chat functions
     #[serde(default)]
@@ -95,6 +97,7 @@ impl LoadableConfig<ChatCompletionConfig> for UninitializedChatCompletionConfig 
             presence_penalty: self.presence_penalty,
             frequency_penalty: self.frequency_penalty,
             seed: self.seed,
+            stop_sequences: self.stop_sequences,
             json_mode: self.json_mode,
             retries: self.retries,
             extra_body: self.extra_body,
@@ -175,6 +178,7 @@ impl ChatCompletionConfig {
                 self.top_p,
                 self.presence_penalty,
                 self.frequency_penalty,
+                self.stop_sequences.clone(),
             );
 
         let extra_body = FullExtraBodyConfig {
@@ -687,6 +691,7 @@ mod tests {
             frequency_penalty: None,
             max_tokens: None,
             seed: None,
+            stop_sequences: None,
             retries: RetryConfig::default(),
             extra_body: Default::default(),
             extra_headers: Default::default(),
@@ -1085,6 +1090,7 @@ mod tests {
                     timeouts: Default::default(),
                 },
             )]),
+            timeouts: Default::default(),
         };
         let json_model_config = ModelConfig {
             routing: vec!["json_provider".into()],
@@ -1098,6 +1104,7 @@ mod tests {
                     timeouts: Default::default(),
                 },
             )]),
+            timeouts: Default::default(),
         };
         let tool_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "tool".into(),
@@ -1115,6 +1122,7 @@ mod tests {
                     timeouts: Default::default(),
                 },
             )]),
+            timeouts: Default::default(),
         };
         let error_model_config = ModelConfig {
             routing: vec!["error".into()],
@@ -1128,6 +1136,7 @@ mod tests {
                     timeouts: Default::default(),
                 },
             )]),
+            timeouts: Default::default(),
         };
         // Test case 1: invalid message (String passed when template required)
         let messages = vec![ResolvedInputMessage {
@@ -1320,6 +1329,7 @@ mod tests {
                     timeouts: Default::default(),
                 },
             )]),
+            timeouts: Default::default(),
         };
         let models = HashMap::from([("good".into(), text_model_config)])
             .try_into()
@@ -1658,6 +1668,7 @@ mod tests {
                 presence_penalty: Some(0.1),
                 frequency_penalty: Some(0.2),
                 json_mode: None,
+                stop_sequences: None,
             },
         };
         // Will dynamically set "answer" instead of "response"
@@ -1847,6 +1858,7 @@ mod tests {
                         presence_penalty: Some(0.1),
                         frequency_penalty: Some(0.2),
                         json_mode: None,
+                        stop_sequences: None,
                     },
                 };
                 assert_eq!(json_result.inference_params, expected_inference_params);
@@ -1904,6 +1916,7 @@ mod tests {
                     timeouts: Default::default(),
                 },
             )]),
+            timeouts: Default::default(),
         };
         let error_model_config = ModelConfig {
             routing: vec!["error_provider".into()],
@@ -1917,6 +1930,7 @@ mod tests {
                     timeouts: Default::default(),
                 },
             )]),
+            timeouts: Default::default(),
         };
         // Test case 1: Model inference fails because of model issues
         let inference_params = InferenceParams::default();
@@ -2158,6 +2172,7 @@ mod tests {
                 presence_penalty: Some(0.1),
                 frequency_penalty: Some(0.2),
                 json_mode: None,
+                stop_sequences: None,
             },
         };
         let model_request = chat_completion_config
