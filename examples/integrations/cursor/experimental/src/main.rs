@@ -44,6 +44,8 @@ struct Cli {
     path: String,
     #[clap(long, default_value = "http://localhost:6900")]
     gateway_url: Url,
+    #[clap(long, default_value = None)]
+    user: Option<String>,
 }
 
 #[tokio::main]
@@ -88,7 +90,7 @@ async fn main() -> Result<()> {
 
     let clickhouse_url = std::env::var("CURSORZERO_CLICKHOUSE_URL")?;
     let clickhouse = ClickHouseConnectionInfo::new(&clickhouse_url).await?;
-    let inferences = get_inferences_in_time_range(&clickhouse, commit_interval).await?;
+    let inferences = get_inferences_in_time_range(&clickhouse, commit_interval, args.user).await?;
     let inferences_by_id: HashMap<Uuid, &InferenceInfo> =
         inferences.iter().map(|i| (i.id, i)).collect();
     let mut inference_trees: HashMap<Uuid, Vec<TreeInfo>> = HashMap::new();
