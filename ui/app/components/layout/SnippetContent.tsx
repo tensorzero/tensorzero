@@ -115,9 +115,11 @@ export function TextMessage({
         icon={<AlignLeft className="text-fg-muted h-3 w-3" />}
       />
       {type === "structured" ? (
-        <pre className="w-full whitespace-pre-wrap break-words font-mono text-sm">{content}</pre>
+        <pre className="w-full font-mono text-sm break-words whitespace-pre-wrap">
+          {content}
+        </pre>
       ) : (
-        <span className="w-full text-fg-primary text-sm">{content}</span>
+        <span className="text-fg-primary w-full text-sm">{content}</span>
       )}
     </div>
   );
