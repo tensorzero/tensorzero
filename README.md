@@ -1,4 +1,4 @@
-<img src="https://github.com/user-attachments/assets/47d67430-386d-4675-82ad-d4734d3262d9" width=128 height=128>
+<p><picture><img src="https://github.com/user-attachments/assets/47d67430-386d-4675-82ad-d4734d3262d9" alt="TensorZero Logo" width=128 height=128></picture></p>
 
 # TensorZero
 
