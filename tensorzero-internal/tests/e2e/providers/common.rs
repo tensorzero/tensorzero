@@ -622,6 +622,18 @@ model = "gcp_vertex_gemini::projects/tensorzero-public/locations/us-central1/pub
 [functions.pdf_test.variants.anthropic]
 type = "chat_completion"
 model = "anthropic::claude-3-5-sonnet-20241022"
+
+[functions.pdf_test.variants.aws-bedrock]
+type = "chat_completion"
+model = "claude-3-haiku-20240307-aws-bedrock"
+
+[models.claude-3-haiku-20240307-aws-bedrock]
+routing = ["aws_bedrock"]
+
+[models.claude-3-haiku-20240307-aws-bedrock.providers.aws_bedrock]
+type = "aws_bedrock"
+model_id = "us.anthropic.claude-3-haiku-20240307-v1:0"
+region = "us-east-1"
 "#;
 
 pub static FERRIS_PNG: &[u8] = include_bytes!("./ferris.png");
@@ -668,6 +680,18 @@ type = "gcp_vertex_anthropic"
 model_id = "claude-3-haiku@20240307"
 location = "us-central1"
 project_id = "tensorzero-public"
+
+[functions.image_test.variants.aws-bedrock]
+type = "chat_completion"
+model = "claude-3-haiku-20240307-aws-bedrock"
+
+[models.claude-3-haiku-20240307-aws-bedrock]
+routing = ["aws_bedrock"]
+
+[models.claude-3-haiku-20240307-aws-bedrock.providers.aws_bedrock]
+type = "aws_bedrock"
+model_id = "us.anthropic.claude-3-haiku-20240307-v1:0"
+region = "us-east-1"
 "#;
 
 pub async fn test_image_url_inference_with_provider_filesystem(provider: E2ETestProvider) {
