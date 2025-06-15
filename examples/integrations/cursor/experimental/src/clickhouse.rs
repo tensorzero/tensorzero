@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use anyhow::Result;
 use chrono::Utc;
@@ -32,7 +33,7 @@ pub async fn get_inferences_in_time_range(
     clickhouse: &ClickHouseConnectionInfo,
     commit_interval: CommitInterval,
     user: Option<String>,
-) -> Result<Vec<InferenceInfo>> {
+) -> Result<Vec<Arc<InferenceInfo>>> {
     // If start_time is None, set to 1 day ago
     let lower_bound = get_min_uuidv7(
         commit_interval
@@ -81,11 +82,14 @@ pub async fn get_inferences_in_time_range(
         .run_query_synchronous(query.to_string(), &parameters)
         .await?;
 
-    let inferences: Vec<InferenceInfo> = results
+    let inferences: Vec<Arc<InferenceInfo>> = results
         .lines()
         .filter(|line| !line.trim().is_empty())
         .map(serde_json::from_str::<InferenceInfo>)
-        .collect::<Result<_, _>>()?;
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .map(Arc::new)
+        .collect();
 
     Ok(inferences)
 }

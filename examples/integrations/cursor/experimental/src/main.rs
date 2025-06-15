@@ -31,6 +31,7 @@ use cursorzero::{
 use git2::Repository;
 use rayon::prelude::*;
 use serde_json::json;
+use std::sync::Arc;
 use tensorzero::{ClientBuilder, ClientBuilderMode, FeedbackParams};
 use tensorzero_internal::clickhouse::ClickHouseConnectionInfo;
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
@@ -63,36 +64,38 @@ async fn main() -> Result<()> {
     let commit = get_last_commit_from_repo(&repo)?;
     let commit_interval = get_commit_timestamp_and_parent_timestamp(&commit)?;
     let diffs = get_diff_by_file(&repo, &commit)?;
-    let client = ClientBuilder::new(ClientBuilderMode::HTTPGateway {
-        url: args.gateway_url,
-    })
-    .build()
-    .await?;
-    let diff_trees: HashMap<PathBuf, Vec<TreeInfo>> = diffs
-        .into_par_iter()
-        .map(|(file, diffs)| {
-            let tree_infos = diffs
-                .into_par_iter()
-                .filter_map(|diff| {
-                    let ext = file.extension().and_then(|ext| ext.to_str())?;
-                    let tree = parse_hunk(&diff.content, ext).ok()?;
-                    Some(TreeInfo {
-                        path: file.clone(),
-                        tree,
-                        src: diff.content.into(),
-                    })
-                })
-                .collect::<Vec<_>>();
-            (file, tree_infos)
+    let client = Arc::new(
+        ClientBuilder::new(ClientBuilderMode::HTTPGateway {
+            url: args.gateway_url,
         })
-        .collect();
+        .build()
+        .await?,
+    );
+    // Compute the tree-sitter trees for each diff.
+    let diff_trees: Arc<HashMap<PathBuf, Vec<TreeInfo>>> = Arc::new(
+        diffs
+            .into_par_iter()
+            .map(|(file, diffs)| {
+                let tree_infos = diffs
+                    .into_par_iter()
+                    .filter_map(|diff| {
+                        let ext = file.extension().and_then(|ext| ext.to_str())?;
+                        let tree = parse_hunk(&diff.content, ext).ok()?;
+                        Some(TreeInfo {
+                            path: file.clone(),
+                            tree,
+                            src: diff.content.into(),
+                        })
+                    })
+                    .collect::<Vec<_>>();
+                (file, tree_infos)
+            })
+            .collect(),
+    );
 
     let clickhouse_url = std::env::var("CURSORZERO_CLICKHOUSE_URL")?;
     let clickhouse = ClickHouseConnectionInfo::new(&clickhouse_url).await?;
     let inferences = get_inferences_in_time_range(&clickhouse, commit_interval, args.user).await?;
-    let inferences_by_id: HashMap<Uuid, &InferenceInfo> =
-        inferences.iter().map(|i| (i.id, i)).collect();
-    let mut inference_trees: HashMap<Uuid, Vec<TreeInfo>> = HashMap::new();
     let inference_results: Vec<_> = inferences
         .par_iter()
         .filter_map(|inference| {
@@ -121,133 +124,165 @@ async fn main() -> Result<()> {
                 })
                 .collect();
             if tree_infos.is_empty() {
+                tracing::warn!("Inference {} has no trees, skipping", inference.id);
                 None
             } else {
-                Some((inference.id, tree_infos))
+                Some((inference.id, tree_infos, inference.clone()))
             }
         })
         .collect();
 
-    for (inference_id, tree_infos) in inference_results {
-        inference_trees
-            .entry(inference_id)
-            .or_default()
-            .extend(tree_infos);
-    }
-    // Map all the InferenceTreeInfo to NormalizedInferenceTreeInfo by figuring out the paths from the repo root
-    let mut normalized_inference_trees: HashMap<Uuid, Vec<NormalizedInferenceTreeInfo>> =
-        HashMap::new();
-    for (inference_id, inference_tree_info) in inference_trees {
-        for tree_info in inference_tree_info {
-            let paths = find_paths_in_repo(&repo, &tree_info.path)?;
-            normalized_inference_trees
-                .entry(inference_id)
-                .or_default()
-                .push(NormalizedInferenceTreeInfo {
-                    paths,
-                    tree: tree_info.tree,
-                    src: tree_info.src,
-                });
-        }
-    }
-    let mut num_feedbacks_sent = 0;
-    for (inference_id, inference_tree_info) in normalized_inference_trees {
-        for tree_info in inference_tree_info {
-            // Get all the diff trees for the paths in this NormalizedInferenceTreeInfo
-            let mut inference_diff_trees = Vec::new();
-            for path in tree_info.paths {
-                let Some(trees) = diff_trees.get(&path) else {
-                    continue;
-                };
-                inference_diff_trees.extend(trees);
-            }
-            let min_teds: Vec<TedInfo> = inference_diff_trees
-                .par_iter()
-                .map(|diff_tree| {
-                    // TODO(optimization): do all the DFS once for each tree (maybe lazily) and memoize the results.
-                    // TODO(optimization): skip all checks here or in the inner loop where the tree size difference is larger than the minimum TED
-                    // already found.
-                    minimum_ted(
-                        &tree_info.tree.root_node(),
-                        &tree_info.src,
-                        &diff_tree.tree.root_node(),
-                        &diff_tree.src,
-                    )
+    // Grab all the trees for each inference and normalize the paths to the repo root.
+    // We will want the inference ID mapping to the parsed inference trees as well as the raw inference info.
+    #[expect(clippy::type_complexity)]
+    let normalized_inference_trees: Result<
+        HashMap<Uuid, (Vec<NormalizedInferenceTreeInfo>, Arc<InferenceInfo>)>,
+    > = inference_results
+        .into_iter()
+        .map(|(inference_id, tree_infos, inference)| {
+            let normalized_tree_infos: Result<Vec<_>> = tree_infos
+                .into_iter()
+                .map(|tree_info| {
+                    let paths = find_paths_in_repo(&repo, &tree_info.path)?;
+                    // There could be zero or more paths in the repo for a given path suffix.
+                    Ok(NormalizedInferenceTreeInfo {
+                        paths,
+                        tree: tree_info.tree,
+                        src: tree_info.src,
+                    })
                 })
                 .collect();
 
-            // Compute the average TED ratio for each diff tree
-            let sum_teds = min_teds.iter().map(|m| m.min_ted).sum::<u64>();
-            let sum_sizes = min_teds.iter().map(|m| m.size).sum::<usize>();
-            if sum_sizes == 0 {
-                // This should never happen if there were any trees in the inference.
-                tracing::warn!("No trees found for inference {inference_id}, skipping feedbacks");
-                continue;
-            }
-            let average_ted_ratio = sum_teds as f64 / sum_sizes as f64;
+            Ok((inference_id, (normalized_tree_infos?, inference)))
+        })
+        .collect();
 
-            // Send the average TED ratio to TensorZero as feedback.
-            client
-                .feedback(FeedbackParams {
-                    inference_id: Some(inference_id),
-                    metric_name: "average_ted_ratio".to_string(),
-                    value: json!(average_ted_ratio),
-                    tags: HashMap::new(),
-                    episode_id: None,
-                    internal: false,
-                    dryrun: None,
-                })
-                .await?;
-            // Send the total tree size to TensorZero as feedback.
-            client
-                .feedback(FeedbackParams {
-                    inference_id: Some(inference_id),
-                    metric_name: "total_tree_size".to_string(),
-                    value: json!(sum_sizes),
-                    tags: HashMap::new(),
-                    episode_id: None,
-                    internal: false,
-                    dryrun: None,
-                })
-                .await?;
-            // Send the number of code blocks to TensorZero as feedback.
-            client
-                .feedback(FeedbackParams {
-                    inference_id: Some(inference_id),
-                    metric_name: "num_code_blocks".to_string(),
-                    value: json!(inference_diff_trees.len()),
-                    tags: HashMap::new(),
-                    episode_id: None,
-                    internal: false,
-                    dryrun: None,
-                })
-                .await?;
+    let normalized_inference_trees = normalized_inference_trees?;
 
-            let original_inference = inferences_by_id.get(&inference_id).ok_or_else(|| {
-                anyhow::anyhow!("Inference not found in inferences_by_id: {inference_id}")
-            })?;
-            let demonstration = generate_demonstration(
-                original_inference,
-                &min_teds,
-                inference_diff_trees.as_slice(),
-            )?;
-            client
-                .feedback(FeedbackParams {
-                    inference_id: Some(inference_id),
-                    metric_name: "demonstration".to_string(),
-                    value: serde_json::Value::String(demonstration),
-                    tags: HashMap::new(),
-                    episode_id: None,
-                    internal: false,
-                    dryrun: None,
+    // Run TED calculations and send feedbacks in parallel.
+    // Each will run independently so an error will only affect the inference that caused it.
+    let feedback_results: Vec<Result<u32>> = normalized_inference_trees
+        .into_par_iter()
+        .flat_map(|(inference_id, (inference_tree_info, inference_info))| {
+            let diff_trees = diff_trees.clone();
+            let client = client.clone();
+            inference_tree_info.into_par_iter().map(move |tree_info| {
+                tokio::task::block_in_place(|| {
+                    tokio::runtime::Handle::current().block_on(process_tree_info(
+                        tree_info,
+                        inference_id,
+                        &inference_info,
+                        &diff_trees,
+                        &client,
+                    ))
                 })
-                .await?;
-            num_feedbacks_sent += 1;
-        }
-    }
+            })
+        })
+        .collect();
+
+    let num_feedbacks_sent: u32 = feedback_results
+        .into_iter()
+        .collect::<Result<Vec<u32>>>()?
+        .into_iter()
+        .sum();
     #[expect(clippy::print_stdout)]
     {
         println!("Number of feedbacks sent: {num_feedbacks_sent}");
     }
     Ok(())
+}
+
+/// Processes a single tree info by computing TED metrics and sending feedback to TensorZero.
+/// Returns the number of feedbacks sent (1 if successful, 0 if skipped).
+async fn process_tree_info(
+    tree_info: NormalizedInferenceTreeInfo,
+    inference_id: Uuid,
+    inference_info: &InferenceInfo,
+    diff_trees: &HashMap<PathBuf, Vec<TreeInfo>>,
+    client: &tensorzero::Client,
+) -> Result<u32> {
+    // Get all the diff trees for the paths in this NormalizedInferenceTreeInfo
+    let mut inference_diff_trees = Vec::new();
+    for path in tree_info.paths {
+        let Some(trees) = diff_trees.get(&path) else {
+            continue;
+        };
+        inference_diff_trees.extend(trees);
+    }
+    let min_teds: Vec<TedInfo> = inference_diff_trees
+        .par_iter()
+        .map(|diff_tree| {
+            // TODO(optimization): do all the DFS once for each tree (maybe lazily) and memoize the results.
+            // TODO(optimization): skip all checks here or in the inner loop where the tree size difference is larger than the minimum TED
+            // already found.
+            minimum_ted(
+                &tree_info.tree.root_node(),
+                &tree_info.src,
+                &diff_tree.tree.root_node(),
+                &diff_tree.src,
+            )
+        })
+        .collect();
+
+    // Compute the average TED ratio for each diff tree
+    let sum_teds = min_teds.iter().map(|m| m.min_ted).sum::<u64>();
+    let sum_sizes = min_teds.iter().map(|m| m.size).sum::<usize>();
+    if sum_sizes == 0 {
+        // This should never happen if there were any trees in the inference.
+        tracing::warn!("No trees found for inference {inference_id}, skipping feedbacks");
+        return Ok(0);
+    }
+    let average_ted_ratio = sum_teds as f64 / sum_sizes as f64;
+
+    // Send the average TED ratio to TensorZero as feedback.
+    client
+        .feedback(FeedbackParams {
+            inference_id: Some(inference_id),
+            metric_name: "average_ted_ratio".to_string(),
+            value: json!(average_ted_ratio),
+            tags: HashMap::new(),
+            episode_id: None,
+            internal: false,
+            dryrun: None,
+        })
+        .await?;
+    // Send the total tree size to TensorZero as feedback.
+    client
+        .feedback(FeedbackParams {
+            inference_id: Some(inference_id),
+            metric_name: "total_tree_size".to_string(),
+            value: json!(sum_sizes),
+            tags: HashMap::new(),
+            episode_id: None,
+            internal: false,
+            dryrun: None,
+        })
+        .await?;
+    // Send the number of code blocks to TensorZero as feedback.
+    client
+        .feedback(FeedbackParams {
+            inference_id: Some(inference_id),
+            metric_name: "num_code_blocks".to_string(),
+            value: json!(inference_diff_trees.len()),
+            tags: HashMap::new(),
+            episode_id: None,
+            internal: false,
+            dryrun: None,
+        })
+        .await?;
+
+    let demonstration =
+        generate_demonstration(inference_info, &min_teds, inference_diff_trees.as_slice())?;
+    client
+        .feedback(FeedbackParams {
+            inference_id: Some(inference_id),
+            metric_name: "demonstration".to_string(),
+            value: serde_json::Value::String(demonstration),
+            tags: HashMap::new(),
+            episode_id: None,
+            internal: false,
+            dryrun: None,
+        })
+        .await?;
+    Ok(1)
 }
