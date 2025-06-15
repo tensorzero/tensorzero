@@ -44,7 +44,7 @@ export function AdvancedParametersAccordion({
       value={isOpen ? "advanced-parameters" : undefined}
       onValueChange={(value) => setIsOpen(value === "advanced-parameters")}
     >
-      <AccordionItem value="advanced-parameters">
+      <AccordionItem value="advanced-parameters" className="border-none">
         <AccordionTrigger className="hover:no-underline">
           <div className="flex items-center gap-1">
             <span>Advanced Parameters</span>

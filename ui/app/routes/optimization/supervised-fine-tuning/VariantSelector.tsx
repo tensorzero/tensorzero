@@ -27,9 +27,9 @@ export function VariantSelector({
       control={control}
       name="variant"
       render={({ field }) => (
-        <FormItem>
+        <FormItem className="w-full flex flex-col gap-1">
           <FormLabel>Prompt</FormLabel>
-          <div className="grid gap-x-8 gap-y-2 md:grid-cols-2">
+          <div className="w-full flex flex-row gap-2">
             <Select
               onValueChange={field.onChange}
               defaultValue={field.value}
