@@ -99,6 +99,7 @@ impl UninitializedModelConfig {
                         extra_body: provider.extra_body,
                         extra_headers: provider.extra_headers,
                         timeouts: provider.timeouts,
+                        discard_unknown_chunks: provider.discard_unknown_chunks,
                     },
                 ))
             })
@@ -623,6 +624,13 @@ pub(crate) struct UninitializedModelProvider {
     pub extra_body: Option<ExtraBodyConfig>,
     pub extra_headers: Option<ExtraHeadersConfig>,
     pub timeouts: Option<TimeoutsConfig>,
+    /// If `true`, we emit a warning and discard chunks that we don't recognize
+    /// (on a best-effort, per-provider basis).
+    /// By default, we produce an error in the stream
+    /// We can't meaningfully return unknown chunks to the user, as we don't
+    /// know how to correctly merge them.
+    #[serde(default)]
+    pub discard_unknown_chunks: bool,
 }
 
 #[derive(Debug)]
@@ -632,6 +640,8 @@ pub struct ModelProvider {
     pub extra_headers: Option<ExtraHeadersConfig>,
     pub extra_body: Option<ExtraBodyConfig>,
     pub timeouts: Option<TimeoutsConfig>,
+    /// See `UninitializedModelProvider.discard_unknown_chunks`.
+    pub discard_unknown_chunks: bool,
 }
 
 impl ModelProvider {
@@ -1738,6 +1748,7 @@ impl ShorthandModelConfig for ModelConfig {
                     extra_body: Default::default(),
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
+                    discard_unknown_chunks: false,
                 },
             )]),
             timeouts: Default::default(),
@@ -1840,6 +1851,7 @@ mod tests {
                     extra_body: Default::default(),
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
+                    discard_unknown_chunks: false,
                 },
             )]),
             timeouts: Default::default(),
@@ -1908,6 +1920,7 @@ mod tests {
                     extra_body: Default::default(),
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
+                    discard_unknown_chunks: false,
                 },
             )]),
             timeouts: Default::default(),
@@ -1995,6 +2008,7 @@ mod tests {
                         extra_body: Default::default(),
                         extra_headers: Default::default(),
                         timeouts: Default::default(),
+                        discard_unknown_chunks: false,
                     },
                 ),
                 (
@@ -2005,6 +2019,7 @@ mod tests {
                         extra_body: Default::default(),
                         extra_headers: Default::default(),
                         timeouts: Default::default(),
+                        discard_unknown_chunks: false,
                     },
                 ),
             ]),
@@ -2073,6 +2088,7 @@ mod tests {
                     extra_body: Default::default(),
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
+                    discard_unknown_chunks: false,
                 },
             )]),
             timeouts: Default::default(),
@@ -2145,6 +2161,7 @@ mod tests {
                     extra_body: Default::default(),
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
+                    discard_unknown_chunks: false,
                 },
             )]),
             timeouts: Default::default(),
@@ -2234,6 +2251,7 @@ mod tests {
                         extra_body: Default::default(),
                         extra_headers: Default::default(),
                         timeouts: Default::default(),
+                        discard_unknown_chunks: false,
                     },
                 ),
                 (
@@ -2244,6 +2262,7 @@ mod tests {
                         extra_body: Default::default(),
                         extra_headers: Default::default(),
                         timeouts: Default::default(),
+                        discard_unknown_chunks: false,
                     },
                 ),
             ]),
@@ -2325,6 +2344,7 @@ mod tests {
                     extra_body: Default::default(),
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
+                    discard_unknown_chunks: false,
                 },
             )]),
             timeouts: Default::default(),
@@ -2433,6 +2453,7 @@ mod tests {
                     extra_body: Default::default(),
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
+                    discard_unknown_chunks: false,
                 },
             )]),
             timeouts: Default::default(),
@@ -2557,6 +2578,7 @@ mod tests {
                     extra_body: Default::default(),
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
+                    discard_unknown_chunks: false,
                 },
             )]),
             timeouts: Default::default(),
