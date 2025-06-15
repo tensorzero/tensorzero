@@ -12,6 +12,7 @@ use std::{cmp, collections::HashMap};
 
 mod matrix;
 use crate::ted::matrix::Matrix;
+use rayon::prelude::*;
 use tree_sitter::{Node, TreeCursor};
 
 #[derive(Debug)]
@@ -55,21 +56,27 @@ pub fn minimum_ted(
     debug_assert!(!haystack_post.is_empty(), "haystack must have ≥1 node");
     // Construct the needle tree
     let needle_tree = Tree::new_from_postorder(&needle_post, &needle_subtree_start, 0);
-    // Iterate over the haystack and create the subtree ending at each index
-    let mut min_ted = u64::MAX;
-    let mut min_tree = None;
-    for (end, &start) in haystack_subtree_start.iter().enumerate() {
-        let haystack_tree = Tree::new_from_postorder(
-            &haystack_post[start..=end],
-            &haystack_subtree_start[start..=end],
-            start,
-        );
-        let ted = haystack_tree.tree_edit_distance(&needle_tree);
-        if ted < min_ted {
-            min_ted = ted;
-            min_tree = Some(&haystack_post[end]);
-        }
-    }
+    // Iterate over the haystack and create the subtree ending at each index (parallelized)
+    let result = haystack_subtree_start
+        .par_iter()
+        .enumerate()
+        .map(|(end, &start)| {
+            let haystack_tree = Tree::new_from_postorder(
+                &haystack_post[start..=end],
+                &haystack_subtree_start[start..=end],
+                start,
+            );
+            let ted = haystack_tree.tree_edit_distance(&needle_tree);
+            (ted, end)
+        })
+        .min_by_key(|(ted, _)| *ted);
+
+    let (min_ted, min_end) = result.unwrap_or((u64::MAX, 0));
+    let min_tree = if min_ted == u64::MAX {
+        None
+    } else {
+        Some(&haystack_post[min_end])
+    };
     let needle_size = needle_post.len();
     TedInfo {
         min_ted,
