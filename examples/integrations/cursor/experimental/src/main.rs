@@ -17,7 +17,8 @@ use std::{collections::HashMap, path::PathBuf};
 use anyhow::Result;
 use clap::Parser;
 use cursorzero::clickhouse::InferenceInfo;
-use cursorzero::ted::minimum_ted;
+use cursorzero::ted::{minimum_ted, TedInfo};
+use cursorzero::util::{generate_demonstration, NormalizedInferenceTreeInfo, TreeInfo};
 use cursorzero::{
     clickhouse::get_inferences_in_time_range,
     cursor::parse_cursor_output,
@@ -32,9 +33,7 @@ use rayon::prelude::*;
 use serde_json::json;
 use tensorzero::{ClientBuilder, ClientBuilderMode, FeedbackParams};
 use tensorzero_internal::clickhouse::ClickHouseConnectionInfo;
-use tensorzero_internal::inference::types::ContentBlockChatOutput;
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
-use tree_sitter::Tree;
 use url::Url;
 use uuid::Uuid;
 
@@ -135,7 +134,7 @@ async fn main() -> Result<()> {
             .or_default()
             .extend(tree_infos);
     }
-    // Map all the InferenceTreeInfo to NormalizedInferenceTreeInfo
+    // Map all the InferenceTreeInfo to NormalizedInferenceTreeInfo by figuring out the paths from the repo root
     let mut normalized_inference_trees: HashMap<Uuid, Vec<NormalizedInferenceTreeInfo>> =
         HashMap::new();
     for (inference_id, inference_tree_info) in inference_trees {
@@ -155,18 +154,18 @@ async fn main() -> Result<()> {
     for (inference_id, inference_tree_info) in normalized_inference_trees {
         for tree_info in inference_tree_info {
             // Get all the diff trees for the paths in this NormalizedInferenceTreeInfo
-            let mut all_diff_trees = Vec::new();
+            let mut inference_diff_trees = Vec::new();
             for path in tree_info.paths {
                 let Some(trees) = diff_trees.get(&path) else {
                     continue;
                 };
-                all_diff_trees.extend(trees);
+                inference_diff_trees.extend(trees);
             }
-            let best_ted_info = all_diff_trees
+            let min_teds: Vec<TedInfo> = inference_diff_trees
                 .par_iter()
                 .map(|diff_tree| {
-                    // TODO: do all the DFS once for each tree (maybe lazily) and memoize the results.
-                    // TODO: skip all checks here or in the inner loop where the tree size difference is larger than the minimum TED
+                    // TODO(optimization): do all the DFS once for each tree (maybe lazily) and memoize the results.
+                    // TODO(optimization): skip all checks here or in the inner loop where the tree size difference is larger than the minimum TED
                     // already found.
                     minimum_ted(
                         &tree_info.tree.root_node(),
@@ -175,80 +174,74 @@ async fn main() -> Result<()> {
                         &diff_tree.src,
                     )
                 })
-                .min_by_key(|ted| ted.min_ted);
-            let Some(best_ted_info) = best_ted_info.as_ref() else {
+                .collect();
+
+            // Compute the average TED ratio for each diff tree
+            let sum_teds = min_teds.iter().map(|m| m.min_ted).sum::<u64>();
+            let sum_sizes = min_teds.iter().map(|m| m.size).sum::<usize>();
+            if sum_sizes == 0 {
+                // This should never happen if there were any trees in the inference.
+                tracing::warn!("No trees found for inference {inference_id}, skipping feedbacks");
                 continue;
-            };
-            // Send the minimum TED to TensorZero as feedback.
-            client
-                .feedback(FeedbackParams {
-                    inference_id: Some(inference_id),
-                    metric_name: "min_ted".to_string(),
-                    value: json!(best_ted_info.min_ted),
-                    tags: HashMap::new(),
-                    episode_id: None,
-                    internal: false,
-                    dryrun: None,
-                })
-                .await?;
-            client
-                .feedback(FeedbackParams {
-                    inference_id: Some(inference_id),
-                    metric_name: "ted_ratio".to_string(),
-                    value: json!(best_ted_info.ted_ratio),
-                    tags: HashMap::new(),
-                    episode_id: None,
-                    internal: false,
-                    dryrun: None,
-                })
-                .await?;
-
-            if let Some(min_ted_source) = &best_ted_info.min_ted_source {
-                client
-                    .feedback(FeedbackParams {
-                        inference_id: Some(inference_id),
-                        metric_name: "demonstration".to_string(),
-                        value: serde_json::Value::String(min_ted_source.clone()),
-                        tags: HashMap::from_iter([(
-                            "cursorzero_demonstration_kind".to_string(),
-                            "raw".to_string(),
-                        )]),
-                        episode_id: None,
-                        internal: false,
-                        dryrun: None,
-                    })
-                    .await?;
-
-                let original_inference = inferences_by_id.get(&inference_id).ok_or_else(|| {
-                    anyhow::anyhow!("Inference not found in inferences_by_id: {inference_id}")
-                })?;
-                let output_text = match original_inference.output.as_slice() {
-                    [ContentBlockChatOutput::Text(t)] => &t.text,
-                    _ => {
-                        return Err(anyhow::anyhow!("Output is not a single text block"));
-                    }
-                };
-
-                // Inside of the original cursor response, replace the old tree with the closest tree we found in the git diff.
-                // This produces a demonstration with the proper context (e.g. the '// Start of Selection' comment).
-                let updated_cursor_output =
-                    output_text.replace(&String::from_utf8(tree_info.src)?, min_ted_source);
-
-                client
-                    .feedback(FeedbackParams {
-                        inference_id: Some(inference_id),
-                        metric_name: "demonstration".to_string(),
-                        value: serde_json::Value::String(updated_cursor_output),
-                        tags: HashMap::from_iter([(
-                            "cursorzero_demonstration_kind".to_string(),
-                            "replaced".to_string(),
-                        )]),
-                        episode_id: None,
-                        internal: false,
-                        dryrun: None,
-                    })
-                    .await?;
             }
+            let average_ted_ratio = sum_teds as f64 / sum_sizes as f64;
+
+            // Send the average TED ratio to TensorZero as feedback.
+            client
+                .feedback(FeedbackParams {
+                    inference_id: Some(inference_id),
+                    metric_name: "average_ted_ratio".to_string(),
+                    value: json!(average_ted_ratio),
+                    tags: HashMap::new(),
+                    episode_id: None,
+                    internal: false,
+                    dryrun: None,
+                })
+                .await?;
+            // Send the total tree size to TensorZero as feedback.
+            client
+                .feedback(FeedbackParams {
+                    inference_id: Some(inference_id),
+                    metric_name: "total_tree_size".to_string(),
+                    value: json!(sum_sizes),
+                    tags: HashMap::new(),
+                    episode_id: None,
+                    internal: false,
+                    dryrun: None,
+                })
+                .await?;
+            // Send the number of code blocks to TensorZero as feedback.
+            client
+                .feedback(FeedbackParams {
+                    inference_id: Some(inference_id),
+                    metric_name: "num_code_blocks".to_string(),
+                    value: json!(inference_diff_trees.len()),
+                    tags: HashMap::new(),
+                    episode_id: None,
+                    internal: false,
+                    dryrun: None,
+                })
+                .await?;
+
+            let original_inference = inferences_by_id.get(&inference_id).ok_or_else(|| {
+                anyhow::anyhow!("Inference not found in inferences_by_id: {inference_id}")
+            })?;
+            let demonstration = generate_demonstration(
+                original_inference,
+                &min_teds,
+                inference_diff_trees.as_slice(),
+            )?;
+            client
+                .feedback(FeedbackParams {
+                    inference_id: Some(inference_id),
+                    metric_name: "demonstration".to_string(),
+                    value: serde_json::Value::String(demonstration),
+                    tags: HashMap::new(),
+                    episode_id: None,
+                    internal: false,
+                    dryrun: None,
+                })
+                .await?;
             num_feedbacks_sent += 1;
         }
     }
@@ -257,18 +250,4 @@ async fn main() -> Result<()> {
         println!("Number of feedbacks sent: {num_feedbacks_sent}");
     }
     Ok(())
-}
-
-#[derive(Debug)]
-struct TreeInfo {
-    path: PathBuf, // VSCode workspace relative path for inferences, git-relative path for diffs
-    tree: Tree,
-    src: Vec<u8>,
-}
-
-#[derive(Debug)]
-struct NormalizedInferenceTreeInfo {
-    paths: Vec<PathBuf>, // git-relative paths that might be the right path for this inference
-    tree: Tree,
-    src: Vec<u8>,
 }
