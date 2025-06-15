@@ -64,13 +64,11 @@ async fn main() -> Result<()> {
     let commit = get_last_commit_from_repo(&repo)?;
     let commit_interval = get_commit_timestamp_and_parent_timestamp(&commit)?;
     let diffs = get_diff_by_file(&repo, &commit)?;
-    let client = Arc::new(
-        ClientBuilder::new(ClientBuilderMode::HTTPGateway {
-            url: args.gateway_url,
-        })
-        .build()
-        .await?,
-    );
+    let client = ClientBuilder::new(ClientBuilderMode::HTTPGateway {
+        url: args.gateway_url,
+    })
+    .build()
+    .await?;
     // Compute the tree-sitter trees for each diff.
     let diff_trees: Arc<HashMap<PathBuf, Vec<TreeInfo>>> = Arc::new(
         diffs
@@ -161,46 +159,56 @@ async fn main() -> Result<()> {
 
     // Run TED calculations and send feedbacks in parallel.
     // Each will run independently so an error will only affect the inference that caused it.
-    let feedback_results: Vec<Result<u32>> = normalized_inference_trees
+    let feedback_results: Vec<Result<Vec<FeedbackParams>>> = normalized_inference_trees
         .into_par_iter()
         .flat_map(|(inference_id, (inference_tree_info, inference_info))| {
             let diff_trees = diff_trees.clone();
-            let client = client.clone();
             inference_tree_info.into_par_iter().map(move |tree_info| {
-                tokio::task::block_in_place(|| {
-                    tokio::runtime::Handle::current().block_on(process_tree_info(
-                        tree_info,
-                        inference_id,
-                        &inference_info,
-                        &diff_trees,
-                        &client,
-                    ))
-                })
+                process_tree_info(tree_info, inference_id, &inference_info, &diff_trees)
             })
         })
         .collect();
+    let mut all_feedback_params = Vec::new();
+    let mut inferences_with_feedback: usize = 0;
+    for feedback_result in feedback_results {
+        match feedback_result {
+            Ok(feedbacks) => {
+                all_feedback_params.extend(feedbacks);
+                inferences_with_feedback += 1;
+            }
+            Err(e) => tracing::error!("Failed to process inference, skipping: {e}"),
+        }
+    }
+    // Send all the feedbacks in parallel using futures::future::join_all
+    use futures::future::join_all;
+    let feedback_futures = all_feedback_params
+        .into_iter()
+        .map(|feedback_params| client.feedback(feedback_params));
+    let feedback_results = join_all(feedback_futures).await;
+    let mut num_feedbacks_sent: usize = 0;
+    for feedback_result in feedback_results {
+        match feedback_result {
+            Ok(_) => num_feedbacks_sent += 1,
+            Err(e) => tracing::error!("Failed to send feedback: {e}"),
+        }
+    }
 
-    let num_feedbacks_sent: u32 = feedback_results
-        .into_iter()
-        .collect::<Result<Vec<u32>>>()?
-        .into_iter()
-        .sum();
     #[expect(clippy::print_stdout)]
     {
         println!("Number of feedbacks sent: {num_feedbacks_sent}");
+        println!("Number of inferences with feedback: {inferences_with_feedback}");
     }
     Ok(())
 }
 
 /// Processes a single tree info by computing TED metrics and sending feedback to TensorZero.
 /// Returns the number of feedbacks sent (1 if successful, 0 if skipped).
-async fn process_tree_info(
+fn process_tree_info(
     tree_info: NormalizedInferenceTreeInfo,
     inference_id: Uuid,
     inference_info: &InferenceInfo,
     diff_trees: &HashMap<PathBuf, Vec<TreeInfo>>,
-    client: &tensorzero::Client,
-) -> Result<u32> {
+) -> Result<Vec<FeedbackParams>> {
     // Get all the diff trees for the paths in this NormalizedInferenceTreeInfo
     let mut inference_diff_trees = Vec::new();
     for path in tree_info.paths {
@@ -230,13 +238,11 @@ async fn process_tree_info(
     if sum_sizes == 0 {
         // This should never happen if there were any trees in the inference.
         tracing::warn!("No trees found for inference {inference_id}, skipping feedbacks");
-        return Ok(0);
+        return Ok(vec![]);
     }
     let average_ted_ratio = sum_teds as f64 / sum_sizes as f64;
-
-    // Send the average TED ratio to TensorZero as feedback.
-    client
-        .feedback(FeedbackParams {
+    let mut feedbacks = vec![
+        FeedbackParams {
             inference_id: Some(inference_id),
             metric_name: "average_ted_ratio".to_string(),
             value: json!(average_ted_ratio),
@@ -244,23 +250,8 @@ async fn process_tree_info(
             episode_id: None,
             internal: false,
             dryrun: None,
-        })
-        .await?;
-    // Send the total tree size to TensorZero as feedback.
-    client
-        .feedback(FeedbackParams {
-            inference_id: Some(inference_id),
-            metric_name: "total_tree_size".to_string(),
-            value: json!(sum_sizes),
-            tags: HashMap::new(),
-            episode_id: None,
-            internal: false,
-            dryrun: None,
-        })
-        .await?;
-    // Send the number of code blocks to TensorZero as feedback.
-    client
-        .feedback(FeedbackParams {
+        },
+        FeedbackParams {
             inference_id: Some(inference_id),
             metric_name: "num_code_blocks".to_string(),
             value: json!(inference_diff_trees.len()),
@@ -268,21 +259,28 @@ async fn process_tree_info(
             episode_id: None,
             internal: false,
             dryrun: None,
-        })
-        .await?;
-
+        },
+    ];
     let demonstration =
-        generate_demonstration(inference_info, &min_teds, inference_diff_trees.as_slice())?;
-    client
-        .feedback(FeedbackParams {
-            inference_id: Some(inference_id),
-            metric_name: "demonstration".to_string(),
-            value: serde_json::Value::String(demonstration),
-            tags: HashMap::new(),
-            episode_id: None,
-            internal: false,
-            dryrun: None,
-        })
-        .await?;
-    Ok(1)
+        generate_demonstration(inference_info, &min_teds, inference_diff_trees.as_slice());
+    match demonstration {
+        Ok(demonstration) => {
+            feedbacks.push(FeedbackParams {
+                inference_id: Some(inference_id),
+                metric_name: "demonstration".to_string(),
+                value: serde_json::Value::String(demonstration),
+                tags: HashMap::new(),
+                episode_id: None,
+                internal: false,
+                dryrun: None,
+            });
+        }
+        Err(e) => {
+            tracing::warn!(
+                "Failed to generate demonstration for inference {inference_id}, skipping: {e}"
+            );
+        }
+    }
+
+    Ok(feedbacks)
 }

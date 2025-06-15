@@ -1199,6 +1199,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "clap",
+ "futures",
  "git2",
  "rayon",
  "regex",
