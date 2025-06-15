@@ -74,7 +74,7 @@ pub async fn get_inferences_in_time_range(
         "#
     .to_string();
     query.push_str(&user_where_clause);
-    query.push_str("FORMAT JSONEachRow");
+    query.push_str(" FORMAT JSONEachRow");
 
     // Pass the owned query string and the map of string slices
     let results = clickhouse

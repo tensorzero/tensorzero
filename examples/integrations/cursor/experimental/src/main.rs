@@ -43,7 +43,7 @@ struct Cli {
     path: String,
     #[clap(long, default_value = "http://localhost:6900")]
     gateway_url: Url,
-    #[clap(long, default_value = None)]
+    #[clap(long)]
     user: Option<String>,
 }
 
