@@ -7,7 +7,7 @@ use pyo3::{sync::GILOnceCell, types::PyModule, Bound, Py, PyAny, PyErr, PyResult
 use serde_json::Value;
 use uuid::Uuid;
 
-use crate::clickhouse::types::StoredInference;
+use crate::stored_inference::StoredInference;
 use crate::inference::types::{ContentBlockChatOutput, ResolvedInputMessageContent};
 
 use super::ContentBlock;

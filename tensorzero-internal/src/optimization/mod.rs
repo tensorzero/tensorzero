@@ -1,4 +1,5 @@
 use crate::optimization::openai_sft::{OpenAISFTConfig, OpenAISFTJobHandle};
+use crate::stored_inference::RenderedStoredInference;
 
 mod openai_sft;
 
