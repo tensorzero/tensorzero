@@ -345,10 +345,10 @@ jobs:
         run: wasm-pack test --node --features console_error_panic_hook
 
       - name: Run ESLint
-        run: pnpm --filter=tensorzero-ui run lint
+        run: pnpm --filter=tensorzero-ui run lint:check
 
       - name: Run Prettier
-        run: pnpm --filter=tensorzero-ui run format
+        run: pnpm --filter=tensorzero-ui run format:check
 
       - name: pnpm TypeScript type checking
         run: pnpm --filter=tensorzero-ui run typecheck
