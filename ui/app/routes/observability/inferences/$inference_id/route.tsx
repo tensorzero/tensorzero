@@ -43,6 +43,7 @@ import { useToast } from "~/hooks/use-toast";
 import {
   prepareInferenceActionRequest,
   useInferenceActionFetcher,
+  type VariantResponseInfo,
 } from "~/routes/api/tensorzero/inference.utils";
 import { ActionBar } from "~/components/layout/ActionBar";
 import { TryWithVariantButton } from "~/components/inference/TryWithVariantButton";
@@ -52,6 +53,7 @@ import { HumanFeedbackModal } from "~/components/feedback/HumanFeedbackModal";
 import { HumanFeedbackForm } from "~/components/feedback/HumanFeedbackForm";
 import { isServerRequestError } from "~/utils/common";
 import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
+import { DemonstrationFeedbackButton } from "~/components/feedback/DemonstrationFeedbackButton";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { inference_id } = params;
@@ -263,6 +265,25 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
     }
   }, [addToDatasetFetcher.data, addToDatasetFetcher.state, navigate]);
 
+  const demonstrationFeedbackFetcher = useFetcher<typeof action>();
+  const demonstrationFeedbackFormError =
+    demonstrationFeedbackFetcher.state === "idle"
+      ? (demonstrationFeedbackFetcher.data?.error ?? null)
+      : null;
+  useEffect(() => {
+    const currentState = demonstrationFeedbackFetcher.state;
+    const data = demonstrationFeedbackFetcher.data;
+    if (currentState === "idle" && data?.redirectTo) {
+      navigate(data.redirectTo);
+      setOpenModal(null);
+      setSelectedVariant(null);
+    }
+  }, [
+    demonstrationFeedbackFetcher.data,
+    demonstrationFeedbackFetcher.state,
+    navigate,
+  ]);
+
   const handleAddToDataset = (
     dataset: string,
     output: "inherit" | "demonstration" | "none",
@@ -447,7 +468,30 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
           inferenceUsage={getTotalInferenceUsage(model_inferences)}
           selectedVariant={selectedVariant}
           source={variantSource}
-        />
+        >
+          {variantInferenceFetcher.data?.info && (
+            <demonstrationFeedbackFetcher.Form method="post">
+              <input type="hidden" name="_action" value="addFeedback" />
+              <input type="hidden" name="metricName" value="demonstration" />
+              <input type="hidden" name="inferenceId" value={inference.id} />
+              <input
+                type="hidden"
+                name="value"
+                value={JSON.stringify(
+                  prepareDemonstrationFromVariantOutput(
+                    variantInferenceFetcher.data.info,
+                  ),
+                )}
+              />
+              <DemonstrationFeedbackButton
+                isSubmitting={
+                  demonstrationFeedbackFetcher.state === "submitting"
+                }
+                submissionError={demonstrationFeedbackFormError}
+              />
+            </demonstrationFeedbackFetcher.Form>
+          )}
+        </VariantResponseModal>
       )}
       <Toaster />
     </PageLayout>
@@ -514,4 +558,20 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
       </div>
     </div>
   );
+}
+
+function prepareDemonstrationFromVariantOutput(
+  variantOutput: VariantResponseInfo,
+) {
+  const output = variantOutput.output;
+  // output can either be a JsonInferenceOutput or a ContentBlockOutput[] (or undefined)
+  // if it is a JsonInferenceOutput, we need to take the Parsed field and throw if it is missing
+  // if it is a ContentBlockOutput[], we can return as is
+  if (Array.isArray(output)) {
+    return output;
+  } else if (output && "parsed" in output) {
+    return output.parsed;
+  } else {
+    throw new Error("Invalid variant output");
+  }
 }
