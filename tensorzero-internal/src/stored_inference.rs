@@ -1,17 +1,11 @@
 use std::collections::HashMap;
 
 #[cfg(feature = "pyo3")]
-use pyo3::prelude::*;
-#[cfg(feature = "pyo3")]
-use pyo3::types::{PyAny, PyList};
-use serde::Serialize;
-use serde_json::Value;
-#[cfg(feature = "pyo3")]
-use tensorzero_internal::inference::types::pyo3_helpers::{
+use crate::inference::types::pyo3_helpers::{
     content_block_chat_output_to_python, serialize_to_dict, uuid_to_python,
 };
-use tensorzero_internal::inference::types::Text;
-use tensorzero_internal::{
+use crate::inference::types::Text;
+use crate::{
     clickhouse::types::StoredInference,
     config_parser::Config,
     error::{Error, ErrorDetails},
@@ -19,6 +13,12 @@ use tensorzero_internal::{
     tool::ToolCallConfigDatabaseInsert,
     variant::{chat_completion::prepare_model_input, VariantConfig},
 };
+#[cfg(feature = "pyo3")]
+use pyo3::prelude::*;
+#[cfg(feature = "pyo3")]
+use pyo3::types::{PyAny, PyList};
+use serde::Serialize;
+use serde_json::Value;
 use uuid::Uuid;
 
 /// Represents an inference that has been prepared for fine-tuning.
