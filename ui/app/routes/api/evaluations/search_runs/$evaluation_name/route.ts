@@ -1,7 +1,7 @@
 import { searchEvaluationRuns } from "~/utils/clickhouse/evaluations.server";
 import { getConfig } from "~/utils/config/index.server";
 import type { Route } from "./+types/route";
-import { abortableTimeout } from "~/utils/common";
+import { abortableTimeout } from "@tensorzero/common";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);

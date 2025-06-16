@@ -50,7 +50,8 @@ import { AddToDatasetButton } from "./AddToDatasetButton";
 import { HumanFeedbackButton } from "~/components/feedback/HumanFeedbackButton";
 import { HumanFeedbackModal } from "~/components/feedback/HumanFeedbackModal";
 import { HumanFeedbackForm } from "~/components/feedback/HumanFeedbackForm";
-import { isServerRequestError, JSONParseError } from "~/utils/common";
+import { isServerRequestError } from "~/utils/common";
+import { JSONParseError } from "@tensorzero/common/errors";
 import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
 import { processJson } from "~/utils/syntax-highlighting.server";
 

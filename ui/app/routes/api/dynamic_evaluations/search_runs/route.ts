@@ -1,7 +1,7 @@
 import { searchDynamicEvaluationRuns } from "~/utils/clickhouse/dynamic_evaluations.server";
 import { dynamicEvaluationRunSchema } from "~/utils/clickhouse/dynamic_evaluations";
 import type { Route } from "./+types/route";
-import { abortableTimeout } from "~/utils/common";
+import { abortableTimeout } from "@tensorzero/common";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);

@@ -1,5 +1,5 @@
 import { codeToHtml } from "shiki";
-import { JSONParseError } from "./common";
+import { JSONParseError } from "@tensorzero/common/errors";
 
 export type SupportedLanguage = "json";
 
