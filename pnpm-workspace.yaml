@@ -1,4 +1,5 @@
 packages:
   - "ui"
   - "clients/*"
+  - "packages/*"
   - "examples/**/*"
