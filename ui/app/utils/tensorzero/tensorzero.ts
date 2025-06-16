@@ -6,7 +6,7 @@ import { z } from "zod";
 import {
   contentBlockOutputSchema,
   type StoragePath,
-} from "./clickhouse/common";
+} from "../clickhouse/common";
 
 /**
  * JSON types.
