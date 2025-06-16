@@ -618,7 +618,7 @@ enum GeminiResponseMimeType {
 #[derive(Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct GeminiGenerationConfig<'a> {
-    stop_sequences: Option<Vec<&'a str>>,
+    stop_sequences: Option<Cow<'a, [String]>>,
     temperature: Option<f32>,
     top_p: Option<f32>,
     presence_penalty: Option<f32>,
@@ -673,7 +673,7 @@ impl<'a> GeminiRequest<'a> {
             ModelInferenceRequestJsonMode::Off => (None, None),
         };
         let generation_config = Some(GeminiGenerationConfig {
-            stop_sequences: None,
+            stop_sequences: request.borrow_stop_sequences(),
             temperature: request.temperature,
             max_output_tokens: request.max_tokens,
             top_p: request.top_p,

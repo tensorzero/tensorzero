@@ -614,6 +614,8 @@ struct GCPVertexAnthropicRequestBody<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    stop_sequences: Option<Cow<'a, [String]>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     top_p: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_choice: Option<GCPVertexAnthropicToolChoice<'a>>,
@@ -674,6 +676,7 @@ impl<'a> GCPVertexAnthropicRequestBody<'a> {
             system,
             temperature: request.temperature,
             top_p: request.top_p,
+            stop_sequences: request.borrow_stop_sequences(),
             tool_choice,
             tools,
         })
@@ -1394,6 +1397,7 @@ mod tests {
                 top_p: None,
                 tool_choice: None,
                 tools: None,
+                stop_sequences: None,
             }
         );
 
@@ -1459,6 +1463,7 @@ mod tests {
                 top_p: Some(0.9),
                 tool_choice: None,
                 tools: None,
+                stop_sequences: None,
             }
         );
 
@@ -1525,6 +1530,7 @@ mod tests {
                     description: Some(WEATHER_TOOL.description()),
                     input_schema: WEATHER_TOOL.parameters(),
                 }]),
+                stop_sequences: None,
             }
         );
     }
@@ -1926,6 +1932,7 @@ mod tests {
             top_p: None,
             tool_choice: None,
             tools: None,
+            stop_sequences: None,
         };
         let raw_request = serde_json::to_string(&request_body).unwrap();
         let raw_response = "test response".to_string();
@@ -2019,6 +2026,7 @@ mod tests {
             top_p: None,
             tool_choice: None,
             tools: None,
+            stop_sequences: None,
         };
         let raw_request = serde_json::to_string(&request_body).unwrap();
         let body_with_latency = GCPVertexAnthropicResponseWithMetadata {
@@ -2111,6 +2119,7 @@ mod tests {
             top_p: None,
             tool_choice: None,
             tools: None,
+            stop_sequences: None,
         };
         let raw_request = serde_json::to_string(&request_body).unwrap();
         let body_with_latency = GCPVertexAnthropicResponseWithMetadata {

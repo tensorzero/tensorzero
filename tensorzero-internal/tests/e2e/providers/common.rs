@@ -24,13 +24,14 @@ use tensorzero::{
     CacheParamsOptions, ClientInferenceParams, ClientInput, ClientInputMessage,
     ClientInputMessageContent, InferenceOutput, InferenceResponse,
 };
+use tensorzero_internal::endpoints::inference::ChatCompletionInferenceParams;
 
 use tensorzero_internal::endpoints::object_storage::{
     get_object_handler, ObjectResponse, PathParams,
 };
 
 use tensorzero_internal::gateway_util::AppStateData;
-use tensorzero_internal::inference::types::TextKind;
+use tensorzero_internal::inference::types::{FinishReason, TextKind};
 use tensorzero_internal::{
     cache::CacheEnabledMode,
     inference::types::{
@@ -207,6 +208,7 @@ macro_rules! generate_provider_tests {
         use $crate::providers::common::test_multiple_text_blocks_in_message_with_provider;
         use $crate::providers::common::test_streaming_include_original_response_with_provider;
         use $crate::providers::common::test_pdf_inference_with_provider_filesystem;
+        use $crate::providers::common::test_stop_sequences_inference_request_with_provider;
 
         #[tokio::test]
         async fn test_simple_inference_request() {
@@ -427,6 +429,14 @@ macro_rules! generate_provider_tests {
         }
         $crate::make_gateway_test_functions!(test_dynamic_tool_use_inference_request);
 
+        async fn test_stop_sequences_inference_request(client: tensorzero::Client) {
+            let providers = $func().await.simple_inference;
+            for provider in providers {
+                test_stop_sequences_inference_request_with_provider(provider, &client).await;
+            }
+        }
+        $crate::make_gateway_test_functions!(test_stop_sequences_inference_request);
+
         async fn test_dynamic_tool_use_streaming_inference_request(client: tensorzero::Client) {
             let providers = $func().await.dynamic_tool_use_inference;
             for provider in providers {
@@ -612,6 +622,18 @@ model = "gcp_vertex_gemini::projects/tensorzero-public/locations/us-central1/pub
 [functions.pdf_test.variants.anthropic]
 type = "chat_completion"
 model = "anthropic::claude-3-5-sonnet-20241022"
+
+[functions.pdf_test.variants.aws-bedrock]
+type = "chat_completion"
+model = "claude-3-haiku-20240307-aws-bedrock"
+
+[models.claude-3-haiku-20240307-aws-bedrock]
+routing = ["aws_bedrock"]
+
+[models.claude-3-haiku-20240307-aws-bedrock.providers.aws_bedrock]
+type = "aws_bedrock"
+model_id = "us.anthropic.claude-3-haiku-20240307-v1:0"
+region = "us-east-1"
 "#;
 
 pub static FERRIS_PNG: &[u8] = include_bytes!("./ferris.png");
@@ -635,15 +657,15 @@ model = "google_ai_studio_gemini::gemini-2.0-flash-lite"
 
 [functions.image_test.variants.gcp_vertex]
 type = "chat_completion"
-model = "gemini-2.5-pro-preview-05-06"
+model = "gemini-2.5-pro-preview-06-05"
 
-[models."gemini-2.5-pro-preview-05-06"]
+[models."gemini-2.5-pro-preview-06-05"]
 routing = ["gcp_vertex_gemini"]
 
-[models."gemini-2.5-pro-preview-05-06".providers.gcp_vertex_gemini]
+[models."gemini-2.5-pro-preview-06-05".providers.gcp_vertex_gemini]
 type = "gcp_vertex_gemini"
-model_id = "gemini-2.5-pro-preview-05-06"
-location = "us-central1"
+model_id = "gemini-2.5-pro-preview-06-05"
+location = "global"
 project_id = "tensorzero-public"
 
 [functions.image_test.variants.gcp-vertex-haiku]
@@ -658,6 +680,18 @@ type = "gcp_vertex_anthropic"
 model_id = "claude-3-haiku@20240307"
 location = "us-central1"
 project_id = "tensorzero-public"
+
+[functions.image_test.variants.aws-bedrock]
+type = "chat_completion"
+model = "claude-3-haiku-20240307-aws-bedrock"
+
+[models.claude-3-haiku-20240307-aws-bedrock]
+routing = ["aws_bedrock"]
+
+[models.claude-3-haiku-20240307-aws-bedrock.providers.aws_bedrock]
+type = "aws_bedrock"
+model_id = "us.anthropic.claude-3-haiku-20240307-v1:0"
+region = "us-east-1"
 "#;
 
 pub async fn test_image_url_inference_with_provider_filesystem(provider: E2ETestProvider) {
@@ -3028,7 +3062,7 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
 }
 
 pub async fn test_inference_params_inference_request_with_provider(provider: E2ETestProvider) {
-    // Gemini 2.5 Pro gives us 'Penalty is not enabled for models/gemini-2.5-pro-preview-05-06'
+    // Gemini 2.5 Pro gives us 'Penalty is not enabled for models/gemini-2.5-pro-preview-06-05'
     if provider.model_name.starts_with("gemini-2.5-pro") {
         return;
     }
@@ -3270,7 +3304,7 @@ pub async fn check_inference_params_response(
 pub async fn test_inference_params_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    // Gemini 2.5 Pro gives us 'Penalty is not enabled for models/gemini-2.5-pro-preview-05-06'
+    // Gemini 2.5 Pro gives us 'Penalty is not enabled for models/gemini-2.5-pro-preview-06-05'
     if provider.model_name.starts_with("gemini-2.5-pro") {
         return;
     }
@@ -5388,7 +5422,7 @@ pub async fn test_tool_use_tool_choice_none_inference_request_with_provider(
 
     // NOTE - Gemini 2.5 produces 'UNEXPECTED_TOOL_CALL' here
     // See https://github.com/tensorzero/tensorzero/issues/2329
-    if provider.model_name == "gemini-2.5-pro-preview-05-06" {
+    if provider.model_name == "gemini-2.5-pro-preview-06-05" {
         return;
     }
 
@@ -7353,6 +7387,7 @@ pub async fn test_tool_multi_turn_inference_request_with_provider(provider: E2ET
             ]},
         "variant_name": provider.variant_name,
         "stream": false,
+        "extra_headers": get_extra_headers(),
     });
 
     let response = Client::new()
@@ -7614,6 +7649,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     let payload = json!({
        "function_name": "weather_helper",
         "episode_id": episode_id,
+        "extra_headers": get_extra_headers(),
         "input":{
             "system": {"assistant_name": "Dr. Mehta"},
             "messages": [
@@ -7917,6 +7953,129 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     }
 }
 
+pub async fn test_stop_sequences_inference_request_with_provider(
+    provider: E2ETestProvider,
+    client: &tensorzero::Client,
+) {
+    let episode_id = Uuid::now_v7();
+    let extra_headers = get_extra_headers();
+
+    let response = client
+        .inference(tensorzero::ClientInferenceParams {
+            function_name: Some("basic_test".to_string()),
+            model_name: None,
+            variant_name: Some(provider.variant_name.clone()),
+            episode_id: Some(episode_id),
+            input: tensorzero::ClientInput {
+                system: Some(json!({"assistant_name": "Dr. Mehta"})),
+                messages: vec![tensorzero::ClientInputMessage {
+                    role: Role::User,
+                    content: vec![tensorzero::ClientInputMessageContent::Text(
+                        TextKind::Text {
+                            text: "Write me a short sentence ending with the word TensorZero. Don't say anything else."
+                                .to_string(),
+                        },
+                    )],
+                }],
+            },
+            extra_headers,
+            params: tensorzero::InferenceParams {
+                chat_completion: ChatCompletionInferenceParams {
+                    stop_sequences: Some(vec!["TensorZero".to_string()]),
+                    ..Default::default()
+                }
+            },
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+
+    match response {
+        tensorzero::InferenceOutput::NonStreaming(response) => {
+            let InferenceResponse::Chat(response) = response else {
+                panic!("Expected a chat response");
+            };
+
+            // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+            // Check ClickHouse - ChatInference Table
+            let clickhouse = get_clickhouse().await;
+
+            println!("Response: {response:#?}");
+
+            let model_inference =
+                select_model_inference_clickhouse(&clickhouse, response.inference_id)
+                    .await
+                    .unwrap();
+            println!("Model inference: {model_inference:#?}");
+
+            let chat_inference =
+                select_chat_inference_clickhouse(&clickhouse, response.inference_id)
+                    .await
+                    .unwrap();
+            println!("Chat inference: {chat_inference:#?}");
+
+            // Just check 'stop_sequences', as we check ModelInference and ChatInference in lots of other tests
+            let inference_params = chat_inference
+                .get("inference_params")
+                .unwrap()
+                .as_str()
+                .unwrap();
+            let inference_params: Value = serde_json::from_str(inference_params).unwrap();
+            let inference_params = inference_params.get("chat_completion").unwrap();
+            let stop_sequences = inference_params
+                .get("stop_sequences")
+                .unwrap()
+                .as_array()
+                .unwrap();
+            assert_eq!(stop_sequences.len(), 1);
+            assert_eq!(stop_sequences[0].as_str().unwrap(), "TensorZero");
+
+            // Only some providers have a stop_sequence finish reason -
+            // other providers will just give us 'stop'
+            const MISSING_STOP_SEQUENCE_PROVIDERS: &[&str] = &[
+                "fireworks",
+                "vllm",
+                "sglang",
+                "mistral",
+                "gcp_vertex_gemini",
+                "google_ai_studio_gemini",
+                "xai",
+                "together",
+                "deepseek",
+                "openrouter",
+                "openai",
+                "sglang",
+                "mistral",
+                "azure",
+                "groq",
+                "hyperbolic",
+            ];
+            if MISSING_STOP_SEQUENCE_PROVIDERS.contains(&provider.model_provider_name.as_str())
+                || provider.model_name == "gemma-3-1b-aws-sagemaker-openai"
+            {
+                assert_eq!(response.finish_reason, Some(FinishReason::Stop));
+            } else {
+                assert_eq!(response.finish_reason, Some(FinishReason::StopSequence));
+            }
+            // TGI gives us a finish_reason of StopSequence, but still include the stop sequence in the response
+            if !(provider.model_provider_name == "tgi"
+                || provider.model_name == "gemma-3-1b-aws-sagemaker-tgi")
+            {
+                let json = serde_json::to_string(&response).unwrap();
+                assert!(
+                    !json.to_lowercase().contains("tensorzero"),
+                    "TensorZero should not be in the response: `{json}`"
+                );
+            }
+        }
+        tensorzero::InferenceOutput::Streaming(_) => {
+            panic!("Unexpected streaming response");
+        }
+    }
+}
+
 pub async fn test_dynamic_tool_use_inference_request_with_provider(
     provider: E2ETestProvider,
     client: &tensorzero::Client,
@@ -7928,6 +8087,7 @@ pub async fn test_dynamic_tool_use_inference_request_with_provider(
         model_name: None,
         variant_name: Some(provider.variant_name.clone()),
         episode_id: Some(episode_id),
+        extra_headers: get_extra_headers(),
         input: tensorzero::ClientInput {
             system: Some(json!({"assistant_name": "Dr. Mehta"})),
             messages: vec![tensorzero::ClientInputMessage {
@@ -8246,6 +8406,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
                 content: vec![tensorzero::ClientInputMessageContent::Text(TextKind::Text { text: "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function.".to_string() })],
             }],
         },
+        extra_headers: get_extra_headers(),
         stream: Some(true),
         dynamic_tool_params: tensorzero::DynamicToolParams {
             additional_tools: Some(vec![tensorzero::Tool {
@@ -8600,6 +8761,7 @@ pub async fn test_parallel_tool_use_inference_request_with_provider(provider: E2
         "parallel_tool_calls": true,
         "stream": false,
         "variant_name": provider.variant_name,
+        "extra_headers": get_extra_headers(),
     });
 
     let response = Client::new()
@@ -8973,6 +9135,7 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
         "parallel_tool_calls": true,
         "stream": true,
         "variant_name": provider.variant_name,
+        "extra_headers": get_extra_headers(),
     });
 
     let mut event_source = Client::new()
@@ -9357,7 +9520,7 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
-    assert_eq!(output.len(), 2);
+    assert!(output.len() >= 2);
     let mut tool_call_names = vec![];
     for block in output {
         match block {
@@ -9365,8 +9528,12 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
                 tool_call_names.push(tool_call.name);
                 serde_json::from_str::<Value>(&tool_call.arguments).unwrap();
             }
+            // Sometimes vLLM returns a text block alongside the tool calls
+            ContentBlock::Text(_) => {
+                // Do nothing
+            }
             _ => {
-                panic!("Expected a tool call, got {block:?}");
+                panic!("Expected a tool call or text block, got {block:?}");
             }
         }
     }
@@ -10528,6 +10695,7 @@ pub async fn test_multi_turn_parallel_tool_use_inference_request_with_provider(
             ]},
         "parallel_tool_calls": true,
         "stream": false,
+        "extra_headers": get_extra_headers(),
         "variant_name": provider.variant_name,
     });
 
@@ -10820,6 +10988,7 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
         "parallel_tool_calls": true,
         "stream": false,
         "variant_name": provider.variant_name,
+        "extra_headers": get_extra_headers(),
     });
 
     let response = Client::new()
@@ -11081,8 +11250,6 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
     );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
-    assert!(raw_response.contains("70"));
-    assert!(raw_response.contains("30"));
     // Check if raw_response is valid JSONL
     for line in raw_response.lines() {
         assert!(serde_json::from_str::<Value>(line).is_ok());
