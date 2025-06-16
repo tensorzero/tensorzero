@@ -47,7 +47,7 @@ test.describe("Custom user agent", () => {
     // Expect redirect
     await page.waitForURL("/optimization/supervised-fine-tuning/*?backend=*");
 
-    let regex = /\?backend=nodejs$/;
+    const regex = /\?backend=nodejs$/;
 
     // Verify that we used the correct fine-tuning backend
     expect(page.url()).toEqual(expect.stringMatching(regex));
@@ -113,7 +113,7 @@ model_name = "mock-inference-finetune-1234"
     // Expect redirect
     await page.waitForURL("/optimization/supervised-fine-tuning/*?backend=*");
 
-    let regex = /\?backend=nodejs$/;
+    const regex = /\?backend=nodejs$/;
 
     // Verify that we used the correct fine-tuning backend
     expect(page.url()).toEqual(expect.stringMatching(regex));
@@ -151,9 +151,7 @@ model_name = "mock-inference-finetune-1234"
   }) => {
     // TODO - implement this in either the Node or (future) Rust backend,
     // and re-enable this test.
-    if (true) {
-      return;
-    }
+    return;
     await page.goto("/optimization/supervised-fine-tuning");
     await page
       .getByRole("combobox")
@@ -181,7 +179,7 @@ model_name = "mock-inference-finetune-1234"
     // Expect redirect
     await page.waitForURL("/optimization/supervised-fine-tuning/*?backend=*");
 
-    let regex = /\?backend=nodejs$/;
+    const regex = /\?backend=nodejs$/;
 
     // Verify that we used the correct fine-tuning backend
     expect(page.url()).toEqual(expect.stringMatching(regex));
@@ -243,7 +241,7 @@ model_name = "mock-inference-finetune-1234"
     // Expect redirect
     await page.waitForURL("/optimization/supervised-fine-tuning/*?backend=*");
 
-    let regex = /\?backend=nodejs$/;
+    const regex = /\?backend=nodejs$/;
 
     // Verify that we used the correct fine-tuning backend
     expect(page.url()).toEqual(expect.stringMatching(regex));
