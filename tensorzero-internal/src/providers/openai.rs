@@ -21,7 +21,6 @@ use crate::cache::ModelProviderRequest;
 use crate::embeddings::{EmbeddingProvider, EmbeddingProviderResponse, EmbeddingRequest};
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
-use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::batch::{
     ProviderBatchInferenceOutput, ProviderBatchInferenceResponse,
@@ -38,15 +37,17 @@ use crate::inference::types::{
 use crate::inference::types::{
     FinishReason, ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner,
 };
+use crate::inference::InferenceProvider;
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
-use crate::inference::providers::helpers::{
+use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
 
 use super::helpers::{parse_jsonl_batch_file, JsonlBatchFileInfo};
-use super::provider_trait::{TensorZeroEventError, WrappedProvider};
+use crate::inference::TensorZeroEventError;
+use crate::inference::WrappedProvider;
 
 lazy_static! {
     static ref OPENAI_DEFAULT_BASE_URL: Url = {
@@ -2203,10 +2204,10 @@ mod tests {
     use std::borrow::Cow;
     use tracing_test::traced_test;
 
-    use crate::inference::providers::test_helpers::{
+    use crate::inference::types::{FunctionType, RequestMessage};
+    use crate::providers::test_helpers::{
         MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL, WEATHER_TOOL_CONFIG,
     };
-    use crate::inference::types::{FunctionType, RequestMessage};
     use crate::tool::ToolCallConfig;
 
     use super::*;

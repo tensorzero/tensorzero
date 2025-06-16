@@ -1,70 +1,53 @@
 use futures::{Stream, StreamExt, TryStreamExt};
-use lazy_static::lazy_static;
 use reqwest::StatusCode;
 use reqwest_eventsource::Event;
 use secrecy::{ExposeSecret, SecretString};
 use serde::de::IntoDeserializer;
 use serde::{Deserialize, Deserializer, Serialize};
-use serde_json::{json, Value};
+use serde_json::Value;
 use std::borrow::Cow;
 use std::sync::OnceLock;
 use std::time::Duration;
 use tokio::time::Instant;
-use tracing::instrument;
-use url::Url;
-#[cfg(test)]
-use uuid::Uuid;
 
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
-use crate::inference::providers::provider_trait::InferenceProvider;
-use crate::inference::types::batch::StartBatchProviderInferenceResponse;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
-use crate::inference::types::file::require_image;
 use crate::inference::types::resolved_input::FileWithPath;
 use crate::inference::types::{
-    ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
-    ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
-    ProviderInferenceResponse, ProviderInferenceResponseChunk, RequestMessage, Role, Text,
-    TextChunk, Usage,
+    batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk,
+    ContentBlockOutput, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
+    PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
+    ProviderInferenceResponseChunk, RequestMessage, Role, Text, TextChunk, Usage,
 };
 use crate::inference::types::{
     FinishReason, ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner,
 };
+use crate::inference::{InferenceProvider, TensorZeroEventError};
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
-use crate::inference::providers::helpers::{
+use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
 
-use super::provider_trait::TensorZeroEventError;
-
-lazy_static! {
-    static ref OPENROUTER_DEFAULT_BASE_URL: Url = {
-        #[expect(clippy::expect_used)]
-        Url::parse("https://openrouter.ai/api/v1")
-            .expect("Failed to parse OPENROUTER_DEFAULT_BASE_URL")
-    };
-}
-
 fn default_api_key_location() -> CredentialLocation {
-    CredentialLocation::Env("OPENROUTER_API_KEY".to_string())
+    CredentialLocation::Env("GROQ_API_KEY".to_string())
 }
 
-const PROVIDER_NAME: &str = "OpenRouter";
-const PROVIDER_TYPE: &str = "openrouter";
+const PROVIDER_NAME: &str = "Groq";
+const PROVIDER_TYPE: &str = "groq";
 
 #[derive(Debug)]
-pub struct OpenRouterProvider {
+pub struct GroqProvider {
     model_name: String,
-    credentials: OpenRouterCredentials,
+    credentials: GroqCredentials,
 }
 
-static DEFAULT_CREDENTIALS: OnceLock<OpenRouterCredentials> = OnceLock::new();
+static DEFAULT_CREDENTIALS: OnceLock<GroqCredentials> = OnceLock::new();
 
-impl OpenRouterProvider {
+impl GroqProvider {
     pub fn new(
         model_name: String,
         api_key_location: Option<CredentialLocation>,
@@ -75,7 +58,7 @@ impl OpenRouterProvider {
             PROVIDER_TYPE,
             &DEFAULT_CREDENTIALS,
         )?;
-        Ok(OpenRouterProvider {
+        Ok(GroqProvider {
             model_name,
             credentials,
         })
@@ -87,36 +70,36 @@ impl OpenRouterProvider {
 }
 
 #[derive(Clone, Debug)]
-pub enum OpenRouterCredentials {
+pub enum GroqCredentials {
     Static(SecretString),
     Dynamic(String),
     None,
 }
 
-impl TryFrom<Credential> for OpenRouterCredentials {
+impl TryFrom<Credential> for GroqCredentials {
     type Error = Error;
 
     fn try_from(credentials: Credential) -> Result<Self, Error> {
         match credentials {
-            Credential::Static(key) => Ok(OpenRouterCredentials::Static(key)),
-            Credential::Dynamic(key_name) => Ok(OpenRouterCredentials::Dynamic(key_name)),
-            Credential::None => Ok(OpenRouterCredentials::None),
-            Credential::Missing => Ok(OpenRouterCredentials::None),
+            Credential::Static(key) => Ok(GroqCredentials::Static(key)),
+            Credential::Dynamic(key_name) => Ok(GroqCredentials::Dynamic(key_name)),
+            Credential::None => Ok(GroqCredentials::None),
+            Credential::Missing => Ok(GroqCredentials::None),
             _ => Err(Error::new(ErrorDetails::Config {
-                message: "Invalid api_key_location for OpenRouter provider".to_string(),
+                message: "Invalid api_key_location for Groq provider".to_string(),
             })),
         }
     }
 }
 
-impl OpenRouterCredentials {
+impl GroqCredentials {
     pub fn get_api_key<'a>(
         &'a self,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<Option<&'a SecretString>, Error> {
         match self {
-            OpenRouterCredentials::Static(api_key) => Ok(Some(api_key)),
-            OpenRouterCredentials::Dynamic(key_name) => {
+            GroqCredentials::Static(api_key) => Ok(Some(api_key)),
+            GroqCredentials::Dynamic(key_name) => {
                 Some(dynamic_api_keys.get(key_name).ok_or_else(|| {
                     ErrorDetails::ApiKeyMissing {
                         provider_name: PROVIDER_NAME.to_string(),
@@ -125,12 +108,12 @@ impl OpenRouterCredentials {
                 }))
                 .transpose()
             }
-            OpenRouterCredentials::None => Ok(None),
+            GroqCredentials::None => Ok(None),
         }
     }
 }
 
-impl InferenceProvider for OpenRouterProvider {
+impl InferenceProvider for GroqProvider {
     async fn infer<'a>(
         &'a self,
         request: ModelProviderRequest<'a>,
@@ -138,22 +121,23 @@ impl InferenceProvider for OpenRouterProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_url = get_chat_url(&OPENROUTER_DEFAULT_BASE_URL)?;
+        let request_url = "https://api.groq.com/openai/v1/chat/completions".to_string();
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
-        let request_body_obj = OpenRouterRequest::new(&self.model_name, request.request)?;
-        let request_body = serde_json::to_value(request_body_obj).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!(
-                    "Error serializing request: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-            })
-        })?;
-        let mut request_builder = http_client
-            .post(request_url)
-            .header("X-Title", "TensorZero")
-            .header("HTTP-Referer", "https://www.tensorzero.com/");
+
+        let request_body =
+            serde_json::to_value(GroqRequest::new(&self.model_name, request.request)?).map_err(
+                |e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!(
+                            "Error serializing Groq request: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
+                    })
+                },
+            )?;
+
+        let mut request_builder = http_client.post(request_url);
 
         if let Some(api_key) = api_key {
             request_builder = request_builder.bearer_auth(api_key.expose_secret());
@@ -198,7 +182,7 @@ impl InferenceProvider for OpenRouterProvider {
             let latency = Latency::NonStreaming {
                 response_time: start_time.elapsed(),
             };
-            Ok(OpenRouterResponseWithMetadata {
+            Ok(GroqResponseWithMetadata {
                 response,
                 raw_response,
                 latency,
@@ -207,8 +191,7 @@ impl InferenceProvider for OpenRouterProvider {
             }
             .try_into()?)
         } else {
-            Err(handle_openrouter_error(
-                &raw_request.clone(),
+            Err(handle_groq_error(
                 res.status(),
                 &res.text().await.map_err(|e| {
                     Error::new(ErrorDetails::InferenceServer {
@@ -237,26 +220,22 @@ impl InferenceProvider for OpenRouterProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let request_body = serde_json::to_value(OpenRouterRequest::new(&self.model_name, request)?)
+        let request_body = serde_json::to_value(GroqRequest::new(&self.model_name, request)?)
             .map_err(|e| {
                 Error::new(ErrorDetails::Serialization {
                     message: format!(
-                        "Error serializing OpenRouter request: {}",
+                        "Error serializing Groq request: {}",
                         DisplayOrDebugGateway::new(e)
                     ),
                 })
             })?;
-        let request_url = get_chat_url(&OPENROUTER_DEFAULT_BASE_URL)?;
+        let request_url = "https://api.groq.com/openai/v1/chat/completions".to_string();
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
-        let mut request_builder = http_client
-            .post(request_url)
-            .header("X-Title", "TensorZero")
-            .header("HTTP-Referer", "https://www.tensorzero.com/");
+        let mut request_builder = http_client.post(request_url);
         if let Some(api_key) = api_key {
             request_builder = request_builder.bearer_auth(api_key.expose_secret());
         }
-
         let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
             PROVIDER_TYPE,
             &request.extra_body,
@@ -268,7 +247,7 @@ impl InferenceProvider for OpenRouterProvider {
         )
         .await?;
 
-        let stream = stream_openrouter(
+        let stream = stream_groq(
             PROVIDER_TYPE.to_string(),
             event_source.map_err(TensorZeroEventError::EventSource),
             start_time,
@@ -301,7 +280,6 @@ impl InferenceProvider for OpenRouterProvider {
         .into())
     }
 }
-
 pub async fn convert_stream_error(provider_type: String, e: reqwest_eventsource::Error) -> Error {
     let message = e.to_string();
     let mut raw_response = None;
@@ -317,7 +295,7 @@ pub async fn convert_stream_error(provider_type: String, e: reqwest_eventsource:
     .into()
 }
 
-pub fn stream_openrouter(
+pub fn stream_groq(
     provider_type: String,
     event_source: impl Stream<Item = Result<Event, TensorZeroEventError>> + Send + 'static,
     start_time: Instant,
@@ -343,11 +321,11 @@ pub fn stream_openrouter(
                         if message.data == "[DONE]" {
                             break;
                         }
-                        let data: Result<OpenRouterChatChunk, Error> =
+                        let data: Result<GroqChatChunk, Error> =
                             serde_json::from_str(&message.data).map_err(|e| Error::new(ErrorDetails::InferenceServer {
                                 message: format!(
                                     "Error parsing chunk. Error: {e}",
-                                ),
+                                    ),
                                 raw_request: None,
                                 raw_response: Some(message.data.clone()),
                                 provider_type: provider_type.clone(),
@@ -355,7 +333,7 @@ pub fn stream_openrouter(
 
                         let latency = start_time.elapsed();
                         let stream_message = data.and_then(|d| {
-                            openrouter_to_tensorzero_chunk(message.data, d, latency, &mut tool_call_ids)
+                            groq_to_tensorzero_chunk(d, latency, &mut tool_call_ids)
                         });
                         yield stream_message;
                     }
@@ -365,39 +343,7 @@ pub fn stream_openrouter(
     })
 }
 
-pub(super) fn get_chat_url(base_url: &Url) -> Result<Url, Error> {
-    let mut url = base_url.clone();
-    if !url.path().ends_with('/') {
-        url.set_path(&format!("{}/", url.path()));
-    }
-    url.join("chat/completions").map_err(|e| {
-        Error::new(ErrorDetails::InvalidBaseUrl {
-            message: e.to_string(),
-        })
-    })
-}
-
-// Functions only needed for tests
-#[cfg(test)]
-fn get_file_url(base_url: &Url, file_id: Option<&str>) -> Result<Url, Error> {
-    let mut url = base_url.clone();
-    if !url.path().ends_with('/') {
-        url.set_path(&format!("{}/", url.path()));
-    }
-    let path = if let Some(id) = file_id {
-        format!("files/{id}/content")
-    } else {
-        "files".to_string()
-    };
-    url.join(&path).map_err(|e| {
-        Error::new(ErrorDetails::InvalidBaseUrl {
-            message: e.to_string(),
-        })
-    })
-}
-
-pub(super) fn handle_openrouter_error(
-    raw_request: &str,
+pub(super) fn handle_groq_error(
     response_code: StatusCode,
     response_body: &str,
     provider_type: &str,
@@ -409,14 +355,14 @@ pub(super) fn handle_openrouter_error(
         | StatusCode::TOO_MANY_REQUESTS => ErrorDetails::InferenceClient {
             status_code: Some(response_code),
             message: response_body.to_string(),
-            raw_request: Some(raw_request.to_string()),
+            raw_request: None,
             raw_response: Some(response_body.to_string()),
             provider_type: provider_type.to_string(),
         }
         .into(),
         _ => ErrorDetails::InferenceServer {
             message: response_body.to_string(),
-            raw_request: Some(raw_request.to_string()),
+            raw_request: None,
             raw_response: Some(response_body.to_string()),
             provider_type: provider_type.to_string(),
         }
@@ -425,18 +371,18 @@ pub(super) fn handle_openrouter_error(
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub(super) struct OpenRouterSystemRequestMessage<'a> {
+pub(super) struct GroqSystemRequestMessage<'a> {
     pub content: Cow<'a, str>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub(super) struct OpenRouterUserRequestMessage<'a> {
+pub(super) struct GroqUserRequestMessage<'a> {
     #[serde(serialize_with = "serialize_text_content_vec")]
-    pub(super) content: Vec<OpenRouterContentBlock<'a>>,
+    pub(super) content: Vec<GroqContentBlock<'a>>,
 }
 
 fn serialize_text_content_vec<S>(
-    content: &Vec<OpenRouterContentBlock<'_>>,
+    content: &Vec<GroqContentBlock<'_>>,
     serializer: S,
 ) -> Result<S::Ok, S::Error>
 where
@@ -444,7 +390,7 @@ where
 {
     // If we have a single text block, serialize it as a string
     // to stay compatible with older providers which may not support content blocks
-    if let [OpenRouterContentBlock::Text { text }] = &content.as_slice() {
+    if let [GroqContentBlock::Text { text }] = &content.as_slice() {
         text.serialize(serializer)
     } else {
         content.serialize(serializer)
@@ -452,7 +398,7 @@ where
 }
 
 fn serialize_optional_text_content_vec<S>(
-    content: &Option<Vec<OpenRouterContentBlock<'_>>>,
+    content: &Option<Vec<GroqContentBlock<'_>>>,
     serializer: S,
 ) -> Result<S::Ok, S::Error>
 where
@@ -465,13 +411,13 @@ where
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum OpenRouterContentBlock<'a> {
+pub enum GroqContentBlock<'a> {
     Text { text: Cow<'a, str> },
-    ImageUrl { image_url: OpenRouterImageUrl },
+    ImageUrl { image_url: GroqImageUrl },
     Unknown { data: Cow<'a, Value> },
 }
 
-impl Serialize for OpenRouterContentBlock<'_> {
+impl Serialize for GroqContentBlock<'_> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -480,43 +426,43 @@ impl Serialize for OpenRouterContentBlock<'_> {
         #[serde(tag = "type", rename_all = "snake_case")]
         enum Helper<'a> {
             Text { text: &'a str },
-            ImageUrl { image_url: &'a OpenRouterImageUrl },
+            ImageUrl { image_url: &'a GroqImageUrl },
         }
         match self {
-            OpenRouterContentBlock::Text { text } => Helper::Text { text }.serialize(serializer),
-            OpenRouterContentBlock::ImageUrl { image_url } => {
+            GroqContentBlock::Text { text } => Helper::Text { text }.serialize(serializer),
+            GroqContentBlock::ImageUrl { image_url } => {
                 Helper::ImageUrl { image_url }.serialize(serializer)
             }
-            OpenRouterContentBlock::Unknown { data } => data.serialize(serializer),
+            GroqContentBlock::Unknown { data } => data.serialize(serializer),
         }
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub struct OpenRouterImageUrl {
+pub struct GroqImageUrl {
     pub url: String,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct OpenRouterRequestFunctionCall<'a> {
+pub struct GroqRequestFunctionCall<'a> {
     pub name: &'a str,
     pub arguments: &'a str,
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq, Deserialize)]
-pub struct OpenRouterRequestToolCall<'a> {
+pub struct GroqRequestToolCall<'a> {
     pub id: &'a str,
-    pub r#type: OpenRouterToolType,
-    pub function: OpenRouterRequestFunctionCall<'a>,
+    pub r#type: GroqToolType,
+    pub function: GroqRequestFunctionCall<'a>,
 }
 
-impl<'a> From<&'a ToolCall> for OpenRouterRequestToolCall<'a> {
+impl<'a> From<&'a ToolCall> for GroqRequestToolCall<'a> {
     fn from(tool_call: &'a ToolCall) -> Self {
-        OpenRouterRequestToolCall {
+        GroqRequestToolCall {
             id: &tool_call.id,
-            r#type: OpenRouterToolType::Function,
-            function: OpenRouterRequestFunctionCall {
+            r#type: GroqToolType::Function,
+            function: GroqRequestFunctionCall {
                 name: &tool_call.name,
                 arguments: &tool_call.arguments,
             },
@@ -525,18 +471,18 @@ impl<'a> From<&'a ToolCall> for OpenRouterRequestToolCall<'a> {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub(super) struct OpenRouterAssistantRequestMessage<'a> {
+pub(super) struct GroqAssistantRequestMessage<'a> {
     #[serde(
         skip_serializing_if = "Option::is_none",
         serialize_with = "serialize_optional_text_content_vec"
     )]
-    pub content: Option<Vec<OpenRouterContentBlock<'a>>>,
+    pub content: Option<Vec<GroqContentBlock<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub tool_calls: Option<Vec<OpenRouterRequestToolCall<'a>>>,
+    pub tool_calls: Option<Vec<GroqRequestToolCall<'a>>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub(super) struct OpenRouterToolRequestMessage<'a> {
+pub(super) struct GroqToolRequestMessage<'a> {
     pub content: &'a str,
     pub tool_call_id: &'a str,
 }
@@ -544,66 +490,63 @@ pub(super) struct OpenRouterToolRequestMessage<'a> {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(tag = "role")]
 #[serde(rename_all = "lowercase")]
-pub(super) enum OpenRouterRequestMessage<'a> {
-    System(OpenRouterSystemRequestMessage<'a>),
-    User(OpenRouterUserRequestMessage<'a>),
-    Assistant(OpenRouterAssistantRequestMessage<'a>),
-    Tool(OpenRouterToolRequestMessage<'a>),
+pub(super) enum GroqRequestMessage<'a> {
+    System(GroqSystemRequestMessage<'a>),
+    User(GroqUserRequestMessage<'a>),
+    Assistant(GroqAssistantRequestMessage<'a>),
+    Tool(GroqToolRequestMessage<'a>),
 }
 
-impl OpenRouterRequestMessage<'_> {
+impl GroqRequestMessage<'_> {
     pub fn content_contains_case_insensitive(&self, value: &str) -> bool {
         match self {
-            OpenRouterRequestMessage::System(msg) => msg.content.to_lowercase().contains(value),
-            OpenRouterRequestMessage::User(msg) => msg.content.iter().any(|c| match c {
-                OpenRouterContentBlock::Text { text } => text.to_lowercase().contains(value),
-                OpenRouterContentBlock::ImageUrl { .. } => false,
+            GroqRequestMessage::System(msg) => msg.content.to_lowercase().contains(value),
+            GroqRequestMessage::User(msg) => msg.content.iter().any(|c| match c {
+                GroqContentBlock::Text { text } => text.to_lowercase().contains(value),
+                GroqContentBlock::ImageUrl { .. } => false,
                 // Don't inspect the contents of 'unknown' blocks
-                OpenRouterContentBlock::Unknown { data: _ } => false,
+                GroqContentBlock::Unknown { data: _ } => false,
             }),
-            OpenRouterRequestMessage::Assistant(msg) => {
+            GroqRequestMessage::Assistant(msg) => {
                 if let Some(content) = &msg.content {
                     content.iter().any(|c| match c {
-                        OpenRouterContentBlock::Text { text } => {
-                            text.to_lowercase().contains(value)
-                        }
-                        OpenRouterContentBlock::ImageUrl { .. } => false,
+                        GroqContentBlock::Text { text } => text.to_lowercase().contains(value),
+                        GroqContentBlock::ImageUrl { .. } => false,
                         // Don't inspect the contents of 'unknown' blocks
-                        OpenRouterContentBlock::Unknown { data: _ } => false,
+                        GroqContentBlock::Unknown { data: _ } => false,
                     })
                 } else {
                     false
                 }
             }
-            OpenRouterRequestMessage::Tool(msg) => msg.content.to_lowercase().contains(value),
+            GroqRequestMessage::Tool(msg) => msg.content.to_lowercase().contains(value),
         }
     }
 }
 
-pub(super) fn prepare_openrouter_messages<'a>(
+pub(super) fn prepare_groq_messages<'a>(
     request: &'a ModelInferenceRequest<'_>,
-) -> Result<Vec<OpenRouterRequestMessage<'a>>, Error> {
+) -> Result<Vec<GroqRequestMessage<'a>>, Error> {
     let mut messages = Vec::with_capacity(request.messages.len());
     for message in request.messages.iter() {
-        messages.extend(tensorzero_to_openrouter_messages(message)?);
+        messages.extend(tensorzero_to_groq_messages(message)?);
     }
-    if let Some(system_msg) = tensorzero_to_openrouter_system_message(
-        request.system.as_deref(),
-        &request.json_mode,
-        &messages,
-    ) {
+    if let Some(system_msg) =
+        tensorzero_to_groq_system_message(request.system.as_deref(), &request.json_mode, &messages)
+    {
         messages.insert(0, system_msg);
     }
     Ok(messages)
 }
 
 /// If there are no tools passed or the tools are empty, return None for both tools and tool_choice
-/// Otherwise convert the tool choice and tools to OpenRouter format
-pub(super) fn prepare_openrouter_tools<'a>(
+/// Otherwise convert the tool choice and tools to Groq format
+/// NOTE: parallel tool calls are unreliable, and specific tool choice doesn't work
+pub(super) fn prepare_groq_tools<'a>(
     request: &'a ModelInferenceRequest,
 ) -> (
-    Option<Vec<OpenRouterTool<'a>>>,
-    Option<OpenRouterToolChoice<'a>>,
+    Option<Vec<GroqTool<'a>>>,
+    Option<GroqToolChoice<'a>>,
     Option<bool>,
 ) {
     match &request.tool_config {
@@ -626,17 +569,14 @@ pub(super) fn prepare_openrouter_tools<'a>(
     }
 }
 
-/// This function is complicated only by the fact that OpenRouter and Azure require
-/// different instructions depending on the json mode and the content of the messages.
-///
 /// If ModelInferenceRequestJsonMode::On and the system message or instructions does not contain "JSON"
 /// the request will return an error.
 /// So, we need to format the instructions to include "Respond using JSON." if it doesn't already.
-pub(super) fn tensorzero_to_openrouter_system_message<'a>(
+pub(super) fn tensorzero_to_groq_system_message<'a>(
     system: Option<&'a str>,
     json_mode: &ModelInferenceRequestJsonMode,
-    messages: &[OpenRouterRequestMessage<'a>],
-) -> Option<OpenRouterRequestMessage<'a>> {
+    messages: &[GroqRequestMessage<'a>],
+) -> Option<GroqRequestMessage<'a>> {
     match system {
         Some(system) => {
             match json_mode {
@@ -646,47 +586,47 @@ pub(super) fn tensorzero_to_openrouter_system_message<'a>(
                         .any(|msg| msg.content_contains_case_insensitive("json"))
                         || system.to_lowercase().contains("json")
                     {
-                        OpenRouterRequestMessage::System(OpenRouterSystemRequestMessage {
+                        GroqRequestMessage::System(GroqSystemRequestMessage {
                             content: Cow::Borrowed(system),
                         })
                     } else {
                         let formatted_instructions = format!("Respond using JSON.\n\n{system}");
-                        OpenRouterRequestMessage::System(OpenRouterSystemRequestMessage {
+                        GroqRequestMessage::System(GroqSystemRequestMessage {
                             content: Cow::Owned(formatted_instructions),
                         })
                     }
                 }
 
                 // If JSON mode is either off or strict, we don't need to do anything special
-                _ => OpenRouterRequestMessage::System(OpenRouterSystemRequestMessage {
+                _ => GroqRequestMessage::System(GroqSystemRequestMessage {
                     content: Cow::Borrowed(system),
                 }),
             }
             .into()
         }
         None => match *json_mode {
-            ModelInferenceRequestJsonMode::On => Some(OpenRouterRequestMessage::System(
-                OpenRouterSystemRequestMessage {
+            ModelInferenceRequestJsonMode::On => {
+                Some(GroqRequestMessage::System(GroqSystemRequestMessage {
                     content: Cow::Owned("Respond using JSON.".to_string()),
-                },
-            )),
+                }))
+            }
             _ => None,
         },
     }
 }
 
-pub(super) fn tensorzero_to_openrouter_messages(
+pub(super) fn tensorzero_to_groq_messages(
     message: &RequestMessage,
-) -> Result<Vec<OpenRouterRequestMessage<'_>>, Error> {
+) -> Result<Vec<GroqRequestMessage<'_>>, Error> {
     match message.role {
-        Role::User => tensorzero_to_openrouter_user_messages(&message.content),
-        Role::Assistant => tensorzero_to_openrouter_assistant_messages(&message.content),
+        Role::User => tensorzero_to_groq_user_messages(&message.content),
+        Role::Assistant => tensorzero_to_groq_assistant_messages(&message.content),
     }
 }
 
-fn tensorzero_to_openrouter_user_messages(
+fn tensorzero_to_groq_user_messages(
     content_blocks: &[ContentBlock],
-) -> Result<Vec<OpenRouterRequestMessage<'_>>, Error> {
+) -> Result<Vec<GroqRequestMessage<'_>>, Error> {
     // We need to separate the tool result messages from the user content blocks.
 
     let mut messages = Vec::new();
@@ -695,7 +635,7 @@ fn tensorzero_to_openrouter_user_messages(
     for block in content_blocks.iter() {
         match block {
             ContentBlock::Text(Text { text }) => {
-                user_content_blocks.push(OpenRouterContentBlock::Text {
+                user_content_blocks.push(GroqContentBlock::Text {
                     text: Cow::Borrowed(text),
                 });
             }
@@ -705,21 +645,18 @@ fn tensorzero_to_openrouter_user_messages(
                 }));
             }
             ContentBlock::ToolResult(tool_result) => {
-                messages.push(OpenRouterRequestMessage::Tool(
-                    OpenRouterToolRequestMessage {
-                        content: &tool_result.result,
-                        tool_call_id: &tool_result.id,
-                    },
-                ));
+                messages.push(GroqRequestMessage::Tool(GroqToolRequestMessage {
+                    content: &tool_result.result,
+                    tool_call_id: &tool_result.id,
+                }));
             }
             ContentBlock::File(file) => {
                 let FileWithPath {
                     file,
                     storage_path: _,
                 } = &**file;
-                require_image(&file.mime_type, PROVIDER_TYPE)?;
-                user_content_blocks.push(OpenRouterContentBlock::ImageUrl {
-                    image_url: OpenRouterImageUrl {
+                user_content_blocks.push(GroqContentBlock::ImageUrl {
+                    image_url: GroqImageUrl {
                         // This will only produce an error if we pass in a bad
                         // `Base64Image` (with missing image data)
                         url: format!("data:{};base64,{}", file.mime_type, file.data()?),
@@ -727,21 +664,21 @@ fn tensorzero_to_openrouter_user_messages(
                 });
             }
             ContentBlock::Thought(_) => {
-                // OpenRouter doesn't support thought blocks.
+                // Groq doesn't support thought blocks.
                 // This can only happen if the thought block was generated by another model provider.
                 // At this point, we can either convert the thought blocks to text or drop them.
-                // We chose to drop them, because it's more consistent with the behavior that OpenRouter expects.
+                // We chose to drop them, because it's more consistent with the behavior that Groq expects.
 
                 // TODO (#1361): test that this warning is logged when we drop thought blocks
                 tracing::warn!(
-                    "Dropping `thought` content block from user message. OpenRouter does not support them."
+                    "Dropping `thought` content block from user message. Groq does not support them."
                 );
             }
             ContentBlock::Unknown {
                 data,
                 model_provider_name: _,
             } => {
-                user_content_blocks.push(OpenRouterContentBlock::Unknown {
+                user_content_blocks.push(GroqContentBlock::Unknown {
                     data: Cow::Borrowed(data),
                 });
             }
@@ -750,19 +687,17 @@ fn tensorzero_to_openrouter_user_messages(
 
     // If there are any user content blocks, combine them into a single user message.
     if !user_content_blocks.is_empty() {
-        messages.push(OpenRouterRequestMessage::User(
-            OpenRouterUserRequestMessage {
-                content: user_content_blocks,
-            },
-        ));
+        messages.push(GroqRequestMessage::User(GroqUserRequestMessage {
+            content: user_content_blocks,
+        }));
     }
 
     Ok(messages)
 }
 
-fn tensorzero_to_openrouter_assistant_messages(
+fn tensorzero_to_groq_assistant_messages(
     content_blocks: &[ContentBlock],
-) -> Result<Vec<OpenRouterRequestMessage<'_>>, Error> {
+) -> Result<Vec<GroqRequestMessage<'_>>, Error> {
     // We need to separate the tool result messages from the assistant content blocks.
     let mut assistant_content_blocks = Vec::new();
     let mut assistant_tool_calls = Vec::new();
@@ -770,15 +705,15 @@ fn tensorzero_to_openrouter_assistant_messages(
     for block in content_blocks.iter() {
         match block {
             ContentBlock::Text(Text { text }) => {
-                assistant_content_blocks.push(OpenRouterContentBlock::Text {
+                assistant_content_blocks.push(GroqContentBlock::Text {
                     text: Cow::Borrowed(text),
                 });
             }
             ContentBlock::ToolCall(tool_call) => {
-                let tool_call = OpenRouterRequestToolCall {
+                let tool_call = GroqRequestToolCall {
                     id: &tool_call.id,
-                    r#type: OpenRouterToolType::Function,
-                    function: OpenRouterRequestFunctionCall {
+                    r#type: GroqToolType::Function,
+                    function: GroqRequestFunctionCall {
                         name: &tool_call.name,
                         arguments: &tool_call.arguments,
                     },
@@ -796,31 +731,30 @@ fn tensorzero_to_openrouter_assistant_messages(
                     file,
                     storage_path: _,
                 } = &**file;
-                require_image(&file.mime_type, PROVIDER_TYPE)?;
-                assistant_content_blocks.push(OpenRouterContentBlock::ImageUrl {
-                    image_url: OpenRouterImageUrl {
+                assistant_content_blocks.push(GroqContentBlock::ImageUrl {
+                    image_url: GroqImageUrl {
                         // This will only produce an error if we pass in a bad
-                        // `Base64File` (with missing image data)
+                        // `Base64Image` (with missing image data)
                         url: format!("data:{};base64,{}", file.mime_type, file.data()?),
                     },
                 });
             }
             ContentBlock::Thought(_) => {
-                // OpenRouter doesn't support thought blocks.
+                // Groq doesn't support thought blocks.
                 // This can only happen if the thought block was generated by another model provider.
                 // At this point, we can either convert the thought blocks to text or drop them.
-                // We chose to drop them, because it's more consistent with the behavior that OpenRouter expects.
+                // We chose to drop them, because it's more consistent with the behavior that Groq expects.
 
                 // TODO (#1361): test that this warning is logged when we drop thought blocks
                 tracing::warn!(
-                    "Dropping `thought` content block from assistant message. OpenRouter does not support them."
+                    "Dropping `thought` content block from assistant message. Groq does not support them."
                 );
             }
             ContentBlock::Unknown {
                 data,
                 model_provider_name: _,
             } => {
-                assistant_content_blocks.push(OpenRouterContentBlock::Unknown {
+                assistant_content_blocks.push(GroqContentBlock::Unknown {
                     data: Cow::Borrowed(data),
                 });
             }
@@ -837,7 +771,7 @@ fn tensorzero_to_openrouter_assistant_messages(
         _ => Some(assistant_tool_calls),
     };
 
-    let message = OpenRouterRequestMessage::Assistant(OpenRouterAssistantRequestMessage {
+    let message = GroqRequestMessage::Assistant(GroqAssistantRequestMessage {
         content,
         tool_calls,
     });
@@ -848,48 +782,36 @@ fn tensorzero_to_openrouter_assistant_messages(
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "type")]
-enum OpenRouterResponseFormat {
+enum GroqResponseFormat<'a> {
     #[default]
     Text,
-    JsonObject,
-    JsonSchema {
-        json_schema: Value,
+    JsonObject {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        schema: Option<&'a Value>, // the desired JSON schema
     },
 }
 
-impl OpenRouterResponseFormat {
-    fn new(
-        json_mode: &ModelInferenceRequestJsonMode,
-        output_schema: Option<&Value>,
-        model: &str,
-    ) -> Option<Self> {
-        if model.contains("3.5") && *json_mode == ModelInferenceRequestJsonMode::Strict {
-            return Some(OpenRouterResponseFormat::JsonObject);
-        }
-
+impl<'a> GroqResponseFormat<'a> {
+    fn new(json_mode: &ModelInferenceRequestJsonMode, output_schema: Option<&'a Value>) -> Self {
         match json_mode {
-            ModelInferenceRequestJsonMode::On => Some(OpenRouterResponseFormat::JsonObject),
-            // For now, we never explicitly send `OpenRouterResponseFormat::Text`
-            ModelInferenceRequestJsonMode::Off => None,
-            ModelInferenceRequestJsonMode::Strict => match output_schema {
-                Some(schema) => {
-                    let json_schema = json!({"name": "response", "strict": true, "schema": schema});
-                    Some(OpenRouterResponseFormat::JsonSchema { json_schema })
+            ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict => {
+                GroqResponseFormat::JsonObject {
+                    schema: output_schema,
                 }
-                None => Some(OpenRouterResponseFormat::JsonObject),
-            },
+            }
+            ModelInferenceRequestJsonMode::Off => GroqResponseFormat::Text,
         }
     }
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
-pub enum OpenRouterToolType {
+pub enum GroqToolType {
     Function,
 }
 
 #[derive(Debug, PartialEq, Serialize)]
-pub(super) struct OpenRouterFunction<'a> {
+pub(super) struct GroqFunction<'a> {
     pub(super) name: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) description: Option<&'a str>,
@@ -897,17 +819,17 @@ pub(super) struct OpenRouterFunction<'a> {
 }
 
 #[derive(Debug, PartialEq, Serialize)]
-pub(super) struct OpenRouterTool<'a> {
-    pub(super) r#type: OpenRouterToolType,
-    pub(super) function: OpenRouterFunction<'a>,
+pub(super) struct GroqTool<'a> {
+    pub(super) r#type: GroqToolType,
+    pub(super) function: GroqFunction<'a>,
     pub(super) strict: bool,
 }
 
-impl<'a> From<&'a ToolConfig> for OpenRouterTool<'a> {
+impl<'a> From<&'a ToolConfig> for GroqTool<'a> {
     fn from(tool: &'a ToolConfig) -> Self {
-        OpenRouterTool {
-            r#type: OpenRouterToolType::Function,
-            function: OpenRouterFunction {
+        GroqTool {
+            r#type: GroqToolType::Function,
+            function: GroqFunction {
                 name: tool.name(),
                 description: Some(tool.description()),
                 parameters: tool.parameters(),
@@ -917,58 +839,16 @@ impl<'a> From<&'a ToolConfig> for OpenRouterTool<'a> {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-struct OpenRouterBatchParams<'a> {
-    file_id: Cow<'a, str>,
-    batch_id: Cow<'a, str>,
-}
-
-impl<'a> OpenRouterBatchParams<'a> {
-    #[instrument(name = "OpenRouterBatchParams::from_ref", skip_all, fields(%value))]
-    fn from_ref(value: &'a Value) -> Result<Self, Error> {
-        let file_id = value
-            .get("file_id")
-            .ok_or_else(|| {
-                Error::new(ErrorDetails::InvalidBatchParams {
-                    message: "Missing file_id in batch params".to_string(),
-                })
-            })?
-            .as_str()
-            .ok_or_else(|| {
-                Error::new(ErrorDetails::InvalidBatchParams {
-                    message: "file_id must be a string".to_string(),
-                })
-            })?;
-        let batch_id = value
-            .get("batch_id")
-            .ok_or_else(|| {
-                Error::new(ErrorDetails::InvalidBatchParams {
-                    message: "Missing batch_id in batch params".to_string(),
-                })
-            })?
-            .as_str()
-            .ok_or_else(|| {
-                Error::new(ErrorDetails::InvalidBatchParams {
-                    message: "batch_id must be a string".to_string(),
-                })
-            })?;
-        Ok(Self {
-            file_id: Cow::Borrowed(file_id),
-            batch_id: Cow::Borrowed(batch_id),
-        })
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(untagged)]
-pub(super) enum OpenRouterToolChoice<'a> {
-    String(OpenRouterToolChoiceString),
+pub(super) enum GroqToolChoice<'a> {
+    String(GroqToolChoiceString),
     Specific(SpecificToolChoice<'a>),
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
-pub(super) enum OpenRouterToolChoiceString {
+pub(super) enum GroqToolChoiceString {
     None,
     Auto,
     Required,
@@ -976,7 +856,7 @@ pub(super) enum OpenRouterToolChoiceString {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub(super) struct SpecificToolChoice<'a> {
-    pub(super) r#type: OpenRouterToolType,
+    pub(super) r#type: GroqToolType,
     pub(super) function: SpecificToolFunction<'a>,
 }
 
@@ -985,22 +865,20 @@ pub(super) struct SpecificToolFunction<'a> {
     pub(super) name: &'a str,
 }
 
-impl Default for OpenRouterToolChoice<'_> {
+impl Default for GroqToolChoice<'_> {
     fn default() -> Self {
-        OpenRouterToolChoice::String(OpenRouterToolChoiceString::None)
+        GroqToolChoice::String(GroqToolChoiceString::None)
     }
 }
 
-impl<'a> From<&'a ToolChoice> for OpenRouterToolChoice<'a> {
+impl<'a> From<&'a ToolChoice> for GroqToolChoice<'a> {
     fn from(tool_choice: &'a ToolChoice) -> Self {
         match tool_choice {
-            ToolChoice::None => OpenRouterToolChoice::String(OpenRouterToolChoiceString::None),
-            ToolChoice::Auto => OpenRouterToolChoice::String(OpenRouterToolChoiceString::Auto),
-            ToolChoice::Required => {
-                OpenRouterToolChoice::String(OpenRouterToolChoiceString::Required)
-            }
-            ToolChoice::Specific(tool_name) => OpenRouterToolChoice::Specific(SpecificToolChoice {
-                r#type: OpenRouterToolType::Function,
+            ToolChoice::None => GroqToolChoice::String(GroqToolChoiceString::None),
+            ToolChoice::Auto => GroqToolChoice::String(GroqToolChoiceString::Auto),
+            ToolChoice::Required => GroqToolChoice::String(GroqToolChoiceString::Required),
+            ToolChoice::Specific(tool_name) => GroqToolChoice::Specific(SpecificToolChoice {
+                r#type: GroqToolType::Function,
                 function: SpecificToolFunction { name: tool_name },
             }),
         }
@@ -1012,15 +890,15 @@ pub(super) struct StreamOptions {
     pub(super) include_usage: bool,
 }
 
-/// This struct defines the supported parameters for the OpenRouter API
-/// See the [OpenRouter API documentation](https://platform.openrouter.com/docs/api-reference/chat/create)
+/// This struct defines the supported parameters for the Groq API
+/// See the [Groq API documentation](https://platform.groq.com/docs/api-reference/chat/create)
 /// for more details.
 /// We are not handling logprobs, top_logprobs, n,
 /// presence_penalty, seed, service_tier, stop, user,
 /// or the deprecated function_call and functions arguments.
 #[derive(Debug, Serialize)]
-struct OpenRouterRequest<'a> {
-    messages: Vec<OpenRouterRequestMessage<'a>>,
+struct GroqRequest<'a> {
+    messages: Vec<GroqRequestMessage<'a>>,
     model: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
@@ -1038,42 +916,44 @@ struct OpenRouterRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     stream_options: Option<StreamOptions>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    response_format: Option<OpenRouterResponseFormat>,
+    response_format: Option<GroqResponseFormat<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tools: Option<Vec<OpenRouterTool<'a>>>,
+    tools: Option<Vec<GroqTool<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tool_choice: Option<OpenRouterToolChoice<'a>>,
+    tool_choice: Option<GroqToolChoice<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     parallel_tool_calls: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     stop: Option<Cow<'a, [String]>>,
 }
 
-impl<'a> OpenRouterRequest<'a> {
+impl<'a> GroqRequest<'a> {
     pub fn new(
         model: &'a str,
         request: &'a ModelInferenceRequest<'_>,
-    ) -> Result<OpenRouterRequest<'a>, Error> {
-        let response_format =
-            OpenRouterResponseFormat::new(&request.json_mode, request.output_schema, model);
+    ) -> Result<GroqRequest<'a>, Error> {
+        let response_format = Some(GroqResponseFormat::new(
+            &request.json_mode,
+            request.output_schema,
+        ));
         let stream_options = match request.stream {
             true => Some(StreamOptions {
                 include_usage: true,
             }),
             false => None,
         };
-        let mut messages = prepare_openrouter_messages(request)?;
+        let mut messages = prepare_groq_messages(request)?;
 
-        let (tools, tool_choice, mut parallel_tool_calls) = prepare_openrouter_tools(request);
+        let (tools, tool_choice, mut parallel_tool_calls) = prepare_groq_tools(request);
         if model.to_lowercase().starts_with("o1") && parallel_tool_calls == Some(false) {
             parallel_tool_calls = None;
         }
 
         if model.to_lowercase().starts_with("o1-mini") {
-            if let Some(OpenRouterRequestMessage::System(_)) = messages.first() {
-                if let OpenRouterRequestMessage::System(system_msg) = messages.remove(0) {
-                    let user_msg = OpenRouterRequestMessage::User(OpenRouterUserRequestMessage {
-                        content: vec![OpenRouterContentBlock::Text {
+            if let Some(GroqRequestMessage::System(_)) = messages.first() {
+                if let GroqRequestMessage::System(system_msg) = messages.remove(0) {
+                    let user_msg = GroqRequestMessage::User(GroqUserRequestMessage {
+                        content: vec![GroqContentBlock::Text {
                             text: system_msg.content,
                         }],
                     });
@@ -1082,7 +962,7 @@ impl<'a> OpenRouterRequest<'a> {
             }
         }
 
-        Ok(OpenRouterRequest {
+        Ok(GroqRequest {
             messages,
             model,
             temperature: request.temperature,
@@ -1103,15 +983,15 @@ impl<'a> OpenRouterRequest<'a> {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub(super) struct OpenRouterUsage {
+pub(super) struct GroqUsage {
     pub prompt_tokens: u32,
     #[serde(default)]
     pub completion_tokens: u32,
     pub total_tokens: u32,
 }
 
-impl From<OpenRouterUsage> for Usage {
-    fn from(usage: OpenRouterUsage) -> Self {
+impl From<GroqUsage> for Usage {
+    fn from(usage: GroqUsage) -> Self {
         Usage {
             input_tokens: usage.prompt_tokens,
             output_tokens: usage.completion_tokens,
@@ -1120,39 +1000,39 @@ impl From<OpenRouterUsage> for Usage {
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq, Deserialize)]
-struct OpenRouterResponseFunctionCall {
+struct GroqResponseFunctionCall {
     name: String,
     arguments: String,
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq, Deserialize)]
-pub(super) struct OpenRouterResponseToolCall {
+pub(super) struct GroqResponseToolCall {
     id: String,
-    r#type: OpenRouterToolType,
-    function: OpenRouterResponseFunctionCall,
+    r#type: GroqToolType,
+    function: GroqResponseFunctionCall,
 }
 
-impl From<OpenRouterResponseToolCall> for ToolCall {
-    fn from(openrouter_tool_call: OpenRouterResponseToolCall) -> Self {
+impl From<GroqResponseToolCall> for ToolCall {
+    fn from(groq_tool_call: GroqResponseToolCall) -> Self {
         ToolCall {
-            id: openrouter_tool_call.id,
-            name: openrouter_tool_call.function.name,
-            arguments: openrouter_tool_call.function.arguments,
+            id: groq_tool_call.id,
+            name: groq_tool_call.function.name,
+            arguments: groq_tool_call.function.arguments,
         }
     }
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub(super) struct OpenRouterResponseMessage {
+pub(super) struct GroqResponseMessage {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) tool_calls: Option<Vec<OpenRouterResponseToolCall>>,
+    pub(super) tool_calls: Option<Vec<GroqResponseToolCall>>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
-pub(super) enum OpenRouterFinishReason {
+pub(super) enum GroqFinishReason {
     Stop,
     Length,
     ContentFilter,
@@ -1162,46 +1042,46 @@ pub(super) enum OpenRouterFinishReason {
     Unknown,
 }
 
-impl From<OpenRouterFinishReason> for FinishReason {
-    fn from(finish_reason: OpenRouterFinishReason) -> Self {
+impl From<GroqFinishReason> for FinishReason {
+    fn from(finish_reason: GroqFinishReason) -> Self {
         match finish_reason {
-            OpenRouterFinishReason::Stop => FinishReason::Stop,
-            OpenRouterFinishReason::Length => FinishReason::Length,
-            OpenRouterFinishReason::ContentFilter => FinishReason::ContentFilter,
-            OpenRouterFinishReason::ToolCalls => FinishReason::ToolCall,
-            OpenRouterFinishReason::FunctionCall => FinishReason::ToolCall,
-            OpenRouterFinishReason::Unknown => FinishReason::Unknown,
+            GroqFinishReason::Stop => FinishReason::Stop,
+            GroqFinishReason::Length => FinishReason::Length,
+            GroqFinishReason::ContentFilter => FinishReason::ContentFilter,
+            GroqFinishReason::ToolCalls => FinishReason::ToolCall,
+            GroqFinishReason::FunctionCall => FinishReason::ToolCall,
+            GroqFinishReason::Unknown => FinishReason::Unknown,
         }
     }
 }
 
 // Leaving out logprobs and finish_reason for now
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub(super) struct OpenRouterResponseChoice {
+pub(super) struct GroqResponseChoice {
     pub(super) index: u8,
-    pub(super) message: OpenRouterResponseMessage,
-    pub(super) finish_reason: OpenRouterFinishReason,
+    pub(super) message: GroqResponseMessage,
+    pub(super) finish_reason: GroqFinishReason,
 }
 
 // Leaving out id, created, model, service_tier, system_fingerprint, object for now
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub(super) struct OpenRouterResponse {
-    pub(super) choices: Vec<OpenRouterResponseChoice>,
-    pub(super) usage: OpenRouterUsage,
+pub(super) struct GroqResponse {
+    pub(super) choices: Vec<GroqResponseChoice>,
+    pub(super) usage: GroqUsage,
 }
 
-struct OpenRouterResponseWithMetadata<'a> {
-    response: OpenRouterResponse,
+struct GroqResponseWithMetadata<'a> {
+    response: GroqResponse,
     latency: Latency,
     raw_request: String,
     generic_request: &'a ModelInferenceRequest<'a>,
     raw_response: String,
 }
 
-impl<'a> TryFrom<OpenRouterResponseWithMetadata<'a>> for ProviderInferenceResponse {
+impl<'a> TryFrom<GroqResponseWithMetadata<'a>> for ProviderInferenceResponse {
     type Error = Error;
-    fn try_from(value: OpenRouterResponseWithMetadata<'a>) -> Result<Self, Self::Error> {
-        let OpenRouterResponseWithMetadata {
+    fn try_from(value: GroqResponseWithMetadata<'a>) -> Result<Self, Self::Error> {
+        let GroqResponseWithMetadata {
             mut response,
             latency,
             raw_request,
@@ -1220,7 +1100,7 @@ impl<'a> TryFrom<OpenRouterResponseWithMetadata<'a>> for ProviderInferenceRespon
             }
             .into());
         }
-        let OpenRouterResponseChoice {
+        let GroqResponseChoice {
             message,
             finish_reason,
             ..
@@ -1261,7 +1141,7 @@ impl<'a> TryFrom<OpenRouterResponseWithMetadata<'a>> for ProviderInferenceRespon
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct OpenRouterFunctionCallChunk {
+struct GroqFunctionCallChunk {
     #[serde(skip_serializing_if = "Option::is_none")]
     name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1269,22 +1149,22 @@ struct OpenRouterFunctionCallChunk {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct OpenRouterToolCallChunk {
+struct GroqToolCallChunk {
     index: u8,
     #[serde(skip_serializing_if = "Option::is_none")]
     id: Option<String>,
     // NOTE: these are externally tagged enums, for now we're gonna just keep this hardcoded as there's only one option
     // If we were to do this better, we would need to check the `type` field
-    function: OpenRouterFunctionCallChunk,
+    function: GroqFunctionCallChunk,
 }
 
 // This doesn't include role
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct OpenRouterDelta {
+struct GroqDelta {
     #[serde(skip_serializing_if = "Option::is_none")]
     content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tool_calls: Option<Vec<OpenRouterToolCallChunk>>,
+    tool_calls: Option<Vec<GroqToolCallChunk>>,
 }
 
 // Custom deserializer function for empty string to None
@@ -1310,27 +1190,37 @@ where
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct OpenRouterChatChunkChoice {
-    delta: OpenRouterDelta,
+struct GroqChatChunkChoice {
+    delta: GroqDelta,
     #[serde(default)]
     #[serde(deserialize_with = "empty_string_as_none")]
-    finish_reason: Option<OpenRouterFinishReason>,
+    finish_reason: Option<GroqFinishReason>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct OpenRouterChatChunk {
-    choices: Vec<OpenRouterChatChunkChoice>,
+struct GroqChatChunk {
+    choices: Vec<GroqChatChunkChoice>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    usage: Option<OpenRouterUsage>,
+    usage: Option<GroqUsage>,
 }
 
-/// Maps an OpenRouter chunk to a TensorZero chunk for streaming inferences
-fn openrouter_to_tensorzero_chunk(
-    raw_message: String,
-    mut chunk: OpenRouterChatChunk,
+/// Maps an Groq chunk to a TensorZero chunk for streaming inferences
+fn groq_to_tensorzero_chunk(
+    mut chunk: GroqChatChunk,
     latency: Duration,
     tool_call_ids: &mut Vec<String>,
 ) -> Result<ProviderInferenceResponseChunk, Error> {
+    let raw_message = serde_json::to_string(&chunk).map_err(|e| {
+        Error::new(ErrorDetails::InferenceServer {
+            message: format!(
+                "Error parsing response from Groq: {}",
+                DisplayOrDebugGateway::new(e)
+            ),
+            raw_request: None,
+            raw_response: Some(serde_json::to_string(&chunk).unwrap_or_default()),
+            provider_type: PROVIDER_TYPE.to_string(),
+        })
+    })?;
     if chunk.choices.len() > 1 {
         return Err(ErrorDetails::InferenceServer {
             message: "Response has invalid number of choices: {}. Expected 1.".to_string(),
@@ -1391,7 +1281,6 @@ fn openrouter_to_tensorzero_chunk(
         finish_reason,
     ))
 }
-
 #[cfg(test)]
 mod tests {
 
@@ -1400,11 +1289,9 @@ mod tests {
     use serde_json::json;
 
     use crate::{
-        inference::{
-            providers::test_helpers::{
-                MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL, WEATHER_TOOL_CONFIG,
-            },
-            types::{FunctionType, RequestMessage},
+        inference::types::{FunctionType, RequestMessage},
+        providers::test_helpers::{
+            MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL, WEATHER_TOOL_CONFIG,
         },
         tool::ToolCallConfig,
     };
@@ -1412,38 +1299,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_get_chat_url() {
-        // Test with custom base URL
-        let custom_base = "https://custom.openrouter.com/api/";
-        let custom_url = get_chat_url(&Url::parse(custom_base).unwrap()).unwrap();
-        assert_eq!(
-            custom_url.as_str(),
-            "https://custom.openrouter.com/api/chat/completions"
-        );
-
-        // Test with URL without trailing slash
-        let unjoinable_url = get_chat_url(&Url::parse("https://example.com").unwrap());
-        assert!(unjoinable_url.is_ok());
-        assert_eq!(
-            unjoinable_url.unwrap().as_str(),
-            "https://example.com/chat/completions"
-        );
-        // Test with URL that can't be joined
-        let unjoinable_url = get_chat_url(&Url::parse("https://example.com/foo").unwrap());
-        assert!(unjoinable_url.is_ok());
-        assert_eq!(
-            unjoinable_url.unwrap().as_str(),
-            "https://example.com/foo/chat/completions"
-        );
-    }
-
-    #[test]
-    fn test_handle_openrouter_error() {
+    fn test_handle_groq_error() {
         use reqwest::StatusCode;
 
         // Test unauthorized error
-        let unauthorized = handle_openrouter_error(
-            "Request Body",
+        let unauthorized = handle_groq_error(
             StatusCode::UNAUTHORIZED,
             "Unauthorized access",
             PROVIDER_TYPE,
@@ -1461,17 +1321,12 @@ mod tests {
             assert_eq!(message, "Unauthorized access");
             assert_eq!(*status_code, Some(StatusCode::UNAUTHORIZED));
             assert_eq!(provider, PROVIDER_TYPE);
-            assert_eq!(*raw_request, Some("Request Body".to_string()));
+            assert_eq!(*raw_request, None);
             assert_eq!(*raw_response, Some("Unauthorized access".to_string()));
         }
 
         // Test forbidden error
-        let forbidden = handle_openrouter_error(
-            "Request Body",
-            StatusCode::FORBIDDEN,
-            "Forbidden access",
-            PROVIDER_TYPE,
-        );
+        let forbidden = handle_groq_error(StatusCode::FORBIDDEN, "Forbidden access", PROVIDER_TYPE);
         let details = forbidden.get_details();
         assert!(matches!(details, ErrorDetails::InferenceClient { .. }));
         if let ErrorDetails::InferenceClient {
@@ -1485,13 +1340,12 @@ mod tests {
             assert_eq!(message, "Forbidden access");
             assert_eq!(*status_code, Some(StatusCode::FORBIDDEN));
             assert_eq!(provider, PROVIDER_TYPE);
-            assert_eq!(*raw_request, Some("Request Body".to_string()));
+            assert_eq!(*raw_request, None);
             assert_eq!(*raw_response, Some("Forbidden access".to_string()));
         }
 
         // Test rate limit error
-        let rate_limit = handle_openrouter_error(
-            "Request Body",
+        let rate_limit = handle_groq_error(
             StatusCode::TOO_MANY_REQUESTS,
             "Rate limit exceeded",
             PROVIDER_TYPE,
@@ -1509,13 +1363,12 @@ mod tests {
             assert_eq!(message, "Rate limit exceeded");
             assert_eq!(*status_code, Some(StatusCode::TOO_MANY_REQUESTS));
             assert_eq!(provider, PROVIDER_TYPE);
-            assert_eq!(*raw_request, Some("Request Body".to_string()));
+            assert_eq!(*raw_request, None);
             assert_eq!(*raw_response, Some("Rate limit exceeded".to_string()));
         }
 
         // Test server error
-        let server_error = handle_openrouter_error(
-            "Request Body",
+        let server_error = handle_groq_error(
             StatusCode::INTERNAL_SERVER_ERROR,
             "Server error",
             PROVIDER_TYPE,
@@ -1531,16 +1384,16 @@ mod tests {
         {
             assert_eq!(message, "Server error");
             assert_eq!(provider, PROVIDER_TYPE);
-            assert_eq!(*raw_request, Some("Request Body".to_string()));
+            assert_eq!(*raw_request, None);
             assert_eq!(*raw_response, Some("Server error".to_string()));
         }
     }
 
     #[test]
-    fn test_openrouter_request_new() {
+    fn test_groq_request_new() {
         // Test basic request
         let basic_request = ModelInferenceRequest {
-            inference_id: Uuid::now_v7(),
+            inference_id: uuid::Uuid::now_v7(),
             messages: vec![
                 RequestMessage {
                     role: Role::User,
@@ -1567,25 +1420,29 @@ mod tests {
             ..Default::default()
         };
 
-        let openrouter_request = OpenRouterRequest::new("gpt-3.5-turbo", &basic_request).unwrap();
+        let groq_request =
+            GroqRequest::new("meta-llama/llama-4-scout-17b-16e-instruct", &basic_request).unwrap();
 
-        assert_eq!(openrouter_request.model, "gpt-3.5-turbo");
-        assert_eq!(openrouter_request.messages.len(), 2);
-        assert_eq!(openrouter_request.temperature, Some(0.7));
-        assert_eq!(openrouter_request.max_completion_tokens, Some(100));
-        assert_eq!(openrouter_request.seed, Some(69));
-        assert_eq!(openrouter_request.top_p, Some(0.9));
-        assert_eq!(openrouter_request.presence_penalty, Some(0.1));
-        assert_eq!(openrouter_request.frequency_penalty, Some(0.2));
-        assert!(openrouter_request.stream);
-        assert_eq!(openrouter_request.response_format, None);
-        assert!(openrouter_request.tools.is_none());
-        assert_eq!(openrouter_request.tool_choice, None);
-        assert!(openrouter_request.parallel_tool_calls.is_none());
+        assert_eq!(
+            groq_request.model,
+            "meta-llama/llama-4-scout-17b-16e-instruct"
+        );
+        assert_eq!(groq_request.messages.len(), 2);
+        assert_eq!(groq_request.temperature, Some(0.7));
+        assert_eq!(groq_request.max_completion_tokens, Some(100));
+        assert_eq!(groq_request.seed, Some(69));
+        assert_eq!(groq_request.top_p, Some(0.9));
+        assert_eq!(groq_request.presence_penalty, Some(0.1));
+        assert_eq!(groq_request.frequency_penalty, Some(0.2));
+        assert!(groq_request.stream);
+        assert_eq!(groq_request.response_format, Some(GroqResponseFormat::Text));
+        assert!(groq_request.tools.is_none());
+        assert_eq!(groq_request.tool_choice, None);
+        assert!(groq_request.parallel_tool_calls.is_none());
 
         // Test request with tools and JSON mode
         let request_with_tools = ModelInferenceRequest {
-            inference_id: Uuid::now_v7(),
+            inference_id: uuid::Uuid::now_v7(),
             messages: vec![RequestMessage {
                 role: Role::User,
                 content: vec!["What's the weather?".to_string().into()],
@@ -1606,29 +1463,36 @@ mod tests {
             ..Default::default()
         };
 
-        let openrouter_request = OpenRouterRequest::new("gpt-4", &request_with_tools).unwrap();
+        let groq_request = GroqRequest::new(
+            "meta-llama/llama-4-scout-17b-16e-instruct",
+            &request_with_tools,
+        )
+        .unwrap();
 
-        assert_eq!(openrouter_request.model, "gpt-4");
-        assert_eq!(openrouter_request.messages.len(), 2); // We'll add a system message containing Json to fit OpenRouter requirements
-        assert_eq!(openrouter_request.temperature, None);
-        assert_eq!(openrouter_request.max_completion_tokens, None);
-        assert_eq!(openrouter_request.seed, None);
-        assert_eq!(openrouter_request.top_p, None);
-        assert_eq!(openrouter_request.presence_penalty, None);
-        assert_eq!(openrouter_request.frequency_penalty, None);
-        assert!(!openrouter_request.stream);
         assert_eq!(
-            openrouter_request.response_format,
-            Some(OpenRouterResponseFormat::JsonObject)
+            groq_request.model,
+            "meta-llama/llama-4-scout-17b-16e-instruct"
         );
-        assert!(openrouter_request.tools.is_some());
-        let tools = openrouter_request.tools.as_ref().unwrap();
+        assert_eq!(groq_request.messages.len(), 2); // We'll add a system message containing Json to fit Groq requirements
+        assert_eq!(groq_request.temperature, None);
+        assert_eq!(groq_request.max_completion_tokens, None);
+        assert_eq!(groq_request.seed, None);
+        assert_eq!(groq_request.top_p, None);
+        assert_eq!(groq_request.presence_penalty, None);
+        assert_eq!(groq_request.frequency_penalty, None);
+        assert!(!groq_request.stream);
+        assert_eq!(
+            groq_request.response_format,
+            Some(GroqResponseFormat::JsonObject { schema: None })
+        );
+        assert!(groq_request.tools.is_some());
+        let tools = groq_request.tools.as_ref().unwrap();
         assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
         assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
         assert_eq!(
-            openrouter_request.tool_choice,
-            Some(OpenRouterToolChoice::Specific(SpecificToolChoice {
-                r#type: OpenRouterToolType::Function,
+            groq_request.tool_choice,
+            Some(GroqToolChoice::Specific(SpecificToolChoice {
+                r#type: GroqToolType::Function,
                 function: SpecificToolFunction {
                     name: WEATHER_TOOL.name(),
                 }
@@ -1637,7 +1501,7 @@ mod tests {
 
         // Test request with strict JSON mode with no output schema
         let request_with_tools = ModelInferenceRequest {
-            inference_id: Uuid::now_v7(),
+            inference_id: uuid::Uuid::now_v7(),
             messages: vec![RequestMessage {
                 role: Role::User,
                 content: vec!["What's the weather?".to_string().into()],
@@ -1658,27 +1522,34 @@ mod tests {
             ..Default::default()
         };
 
-        let openrouter_request = OpenRouterRequest::new("gpt-4", &request_with_tools).unwrap();
+        let groq_request = GroqRequest::new(
+            "meta-llama/llama-4-scout-17b-16e-instruct",
+            &request_with_tools,
+        )
+        .unwrap();
 
-        assert_eq!(openrouter_request.model, "gpt-4");
-        assert_eq!(openrouter_request.messages.len(), 1);
-        assert_eq!(openrouter_request.temperature, None);
-        assert_eq!(openrouter_request.max_completion_tokens, None);
-        assert_eq!(openrouter_request.seed, None);
-        assert!(!openrouter_request.stream);
-        assert_eq!(openrouter_request.top_p, None);
-        assert_eq!(openrouter_request.presence_penalty, None);
-        assert_eq!(openrouter_request.frequency_penalty, None);
+        assert_eq!(
+            groq_request.model,
+            "meta-llama/llama-4-scout-17b-16e-instruct"
+        );
+        assert_eq!(groq_request.messages.len(), 1);
+        assert_eq!(groq_request.temperature, None);
+        assert_eq!(groq_request.max_completion_tokens, None);
+        assert_eq!(groq_request.seed, None);
+        assert!(!groq_request.stream);
+        assert_eq!(groq_request.top_p, None);
+        assert_eq!(groq_request.presence_penalty, None);
+        assert_eq!(groq_request.frequency_penalty, None);
         // Resolves to normal JSON mode since no schema is provided (this shouldn't really happen in practice)
         assert_eq!(
-            openrouter_request.response_format,
-            Some(OpenRouterResponseFormat::JsonObject)
+            groq_request.response_format,
+            Some(GroqResponseFormat::JsonObject { schema: None })
         );
 
         // Test request with strict JSON mode with an output schema
         let output_schema = json!({});
         let request_with_tools = ModelInferenceRequest {
-            inference_id: Uuid::now_v7(),
+            inference_id: uuid::Uuid::now_v7(),
             messages: vec![RequestMessage {
                 role: Role::User,
                 content: vec!["What's the weather?".to_string().into()],
@@ -1699,136 +1570,53 @@ mod tests {
             ..Default::default()
         };
 
-        let openrouter_request = OpenRouterRequest::new("gpt-4", &request_with_tools).unwrap();
+        let groq_request = GroqRequest::new(
+            "meta-llama/llama-4-scout-17b-16e-instruct",
+            &request_with_tools,
+        )
+        .unwrap();
 
-        assert_eq!(openrouter_request.model, "gpt-4");
-        assert_eq!(openrouter_request.messages.len(), 1);
-        assert_eq!(openrouter_request.temperature, None);
-        assert_eq!(openrouter_request.max_completion_tokens, None);
-        assert_eq!(openrouter_request.seed, None);
-        assert!(!openrouter_request.stream);
-        assert_eq!(openrouter_request.top_p, None);
-        assert_eq!(openrouter_request.presence_penalty, None);
-        assert_eq!(openrouter_request.frequency_penalty, None);
-        let expected_schema = serde_json::json!({"name": "response", "strict": true, "schema": {}});
         assert_eq!(
-            openrouter_request.response_format,
-            Some(OpenRouterResponseFormat::JsonSchema {
-                json_schema: expected_schema,
+            groq_request.model,
+            "meta-llama/llama-4-scout-17b-16e-instruct"
+        );
+        assert_eq!(groq_request.messages.len(), 1);
+        assert_eq!(groq_request.temperature, None);
+        assert_eq!(groq_request.max_completion_tokens, None);
+        assert_eq!(groq_request.seed, None);
+        assert!(!groq_request.stream);
+        assert_eq!(groq_request.top_p, None);
+        assert_eq!(groq_request.presence_penalty, None);
+        assert_eq!(groq_request.frequency_penalty, None);
+        let expected_schema = serde_json::json!({});
+        assert_eq!(
+            groq_request.response_format,
+            Some(GroqResponseFormat::JsonObject {
+                schema: Some(&expected_schema),
             })
         );
     }
 
     #[test]
-    fn test_openrouter_new_request_o1() {
-        let request = ModelInferenceRequest {
-            inference_id: Uuid::now_v7(),
-            messages: vec![RequestMessage {
-                role: Role::User,
-                content: vec!["Hello".to_string().into()],
-            }],
-            system: None,
-            temperature: Some(0.5),
-            top_p: Some(0.9),
-            presence_penalty: Some(0.1),
-            frequency_penalty: Some(0.2),
-            max_tokens: Some(100),
-            seed: Some(69),
-            stream: false,
-            json_mode: ModelInferenceRequestJsonMode::Off,
-            tool_config: None,
-            function_type: FunctionType::Chat,
-            output_schema: None,
-            extra_body: Default::default(),
-            ..Default::default()
-        };
-
-        let openrouter_request = OpenRouterRequest::new("o1-preview", &request).unwrap();
-
-        assert_eq!(openrouter_request.model, "o1-preview");
-        assert_eq!(openrouter_request.messages.len(), 1);
-        assert!(!openrouter_request.stream);
-        assert_eq!(openrouter_request.response_format, None);
-        assert_eq!(openrouter_request.temperature, Some(0.5));
-        assert_eq!(openrouter_request.max_completion_tokens, Some(100));
-        assert_eq!(openrouter_request.seed, Some(69));
-        assert_eq!(openrouter_request.top_p, Some(0.9));
-        assert_eq!(openrouter_request.presence_penalty, Some(0.1));
-        assert_eq!(openrouter_request.frequency_penalty, Some(0.2));
-        assert!(openrouter_request.tools.is_none());
-
-        // Test case: System message is converted to User message
-        let request_with_system = ModelInferenceRequest {
-            inference_id: Uuid::now_v7(),
-            messages: vec![RequestMessage {
-                role: Role::User,
-                content: vec!["Hello".to_string().into()],
-            }],
-            system: Some("This is the system message".to_string()),
-            temperature: Some(0.5),
-            top_p: Some(0.9),
-            presence_penalty: Some(0.1),
-            frequency_penalty: Some(0.2),
-            max_tokens: Some(100),
-            seed: Some(69),
-            stream: false,
-            json_mode: ModelInferenceRequestJsonMode::Off,
-            tool_config: None,
-            function_type: FunctionType::Chat,
-            output_schema: None,
-            extra_body: Default::default(),
-            ..Default::default()
-        };
-
-        let openrouter_request_with_system =
-            OpenRouterRequest::new("o1-mini", &request_with_system).unwrap();
-
-        // Check that the system message was converted to a user message
-        assert_eq!(openrouter_request_with_system.messages.len(), 2);
-        assert!(
-            matches!(
-                openrouter_request_with_system.messages[0],
-                OpenRouterRequestMessage::User(ref msg) if msg.content == [OpenRouterContentBlock::Text { text: "This is the system message".into() }]
-            ),
-            "Unexpected messages: {:?}",
-            openrouter_request_with_system.messages
-        );
-
-        assert_eq!(openrouter_request_with_system.model, "o1-mini");
-        assert!(!openrouter_request_with_system.stream);
-        assert_eq!(openrouter_request_with_system.response_format, None);
-        assert_eq!(openrouter_request_with_system.temperature, Some(0.5));
-        assert_eq!(
-            openrouter_request_with_system.max_completion_tokens,
-            Some(100)
-        );
-        assert_eq!(openrouter_request_with_system.seed, Some(69));
-        assert!(openrouter_request_with_system.tools.is_none());
-        assert_eq!(openrouter_request_with_system.top_p, Some(0.9));
-        assert_eq!(openrouter_request_with_system.presence_penalty, Some(0.1));
-        assert_eq!(openrouter_request_with_system.frequency_penalty, Some(0.2));
-    }
-
-    #[test]
-    fn test_try_from_openrouter_response() {
+    fn test_try_from_groq_response() {
         // Test case 1: Valid response with content
-        let valid_response = OpenRouterResponse {
-            choices: vec![OpenRouterResponseChoice {
+        let valid_response = GroqResponse {
+            choices: vec![GroqResponseChoice {
                 index: 0,
-                message: OpenRouterResponseMessage {
+                message: GroqResponseMessage {
                     content: Some("Hello, world!".to_string()),
                     tool_calls: None,
                 },
-                finish_reason: OpenRouterFinishReason::Stop,
+                finish_reason: GroqFinishReason::Stop,
             }],
-            usage: OpenRouterUsage {
+            usage: GroqUsage {
                 prompt_tokens: 10,
                 completion_tokens: 20,
                 total_tokens: 30,
             },
         };
         let generic_request = ModelInferenceRequest {
-            inference_id: Uuid::now_v7(),
+            inference_id: uuid::Uuid::now_v7(),
             messages: vec![RequestMessage {
                 role: Role::User,
                 content: vec!["test_user".to_string().into()],
@@ -1849,9 +1637,9 @@ mod tests {
             ..Default::default()
         };
 
-        let request_body = OpenRouterRequest {
+        let request_body = GroqRequest {
             messages: vec![],
-            model: "gpt-3.5-turbo",
+            model: "meta-llama/llama-4-scout-17b-16e-instruct",
             temperature: Some(0.5),
             top_p: Some(0.5),
             presence_penalty: Some(0.5),
@@ -1859,7 +1647,7 @@ mod tests {
             max_completion_tokens: Some(100),
             seed: Some(69),
             stream: false,
-            response_format: Some(OpenRouterResponseFormat::Text),
+            response_format: Some(GroqResponseFormat::Text),
             stream_options: None,
             tools: None,
             tool_choice: None,
@@ -1868,7 +1656,7 @@ mod tests {
         };
         let raw_request = serde_json::to_string(&request_body).unwrap();
         let raw_response = "test_response".to_string();
-        let result = ProviderInferenceResponse::try_from(OpenRouterResponseWithMetadata {
+        let result = ProviderInferenceResponse::try_from(GroqResponseWithMetadata {
             response: valid_response,
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
@@ -1903,30 +1691,30 @@ mod tests {
             }]
         );
         // Test case 2: Valid response with tool calls
-        let valid_response_with_tools = OpenRouterResponse {
-            choices: vec![OpenRouterResponseChoice {
+        let valid_response_with_tools = GroqResponse {
+            choices: vec![GroqResponseChoice {
                 index: 0,
-                finish_reason: OpenRouterFinishReason::ToolCalls,
-                message: OpenRouterResponseMessage {
+                finish_reason: GroqFinishReason::ToolCalls,
+                message: GroqResponseMessage {
                     content: None,
-                    tool_calls: Some(vec![OpenRouterResponseToolCall {
+                    tool_calls: Some(vec![GroqResponseToolCall {
                         id: "call1".to_string(),
-                        r#type: OpenRouterToolType::Function,
-                        function: OpenRouterResponseFunctionCall {
+                        r#type: GroqToolType::Function,
+                        function: GroqResponseFunctionCall {
                             name: "test_function".to_string(),
                             arguments: "{}".to_string(),
                         },
                     }]),
                 },
             }],
-            usage: OpenRouterUsage {
+            usage: GroqUsage {
                 prompt_tokens: 15,
                 completion_tokens: 25,
                 total_tokens: 40,
             },
         };
         let generic_request = ModelInferenceRequest {
-            inference_id: Uuid::now_v7(),
+            inference_id: uuid::Uuid::now_v7(),
             messages: vec![RequestMessage {
                 role: Role::Assistant,
                 content: vec!["test_assistant".to_string().into()],
@@ -1947,9 +1735,9 @@ mod tests {
             ..Default::default()
         };
 
-        let request_body = OpenRouterRequest {
+        let request_body = GroqRequest {
             messages: vec![],
-            model: "gpt-3.5-turbo",
+            model: "meta-llama/llama-4-scout-17b-16e-instruct",
             temperature: Some(0.5),
             top_p: Some(0.5),
             presence_penalty: Some(0.5),
@@ -1957,7 +1745,7 @@ mod tests {
             max_completion_tokens: Some(100),
             seed: Some(69),
             stream: false,
-            response_format: Some(OpenRouterResponseFormat::Text),
+            response_format: Some(GroqResponseFormat::Text),
             stream_options: None,
             tools: None,
             tool_choice: None,
@@ -1965,7 +1753,7 @@ mod tests {
             stop: None,
         };
         let raw_request = serde_json::to_string(&request_body).unwrap();
-        let result = ProviderInferenceResponse::try_from(OpenRouterResponseWithMetadata {
+        let result = ProviderInferenceResponse::try_from(GroqResponseWithMetadata {
             response: valid_response_with_tools,
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(110),
@@ -2007,17 +1795,17 @@ mod tests {
             }]
         );
         // Test case 3: Invalid response with no choices
-        let invalid_response_no_choices = OpenRouterResponse {
+        let invalid_response_no_choices = GroqResponse {
             choices: vec![],
-            usage: OpenRouterUsage {
+            usage: GroqUsage {
                 prompt_tokens: 5,
                 completion_tokens: 0,
                 total_tokens: 5,
             },
         };
-        let request_body = OpenRouterRequest {
+        let request_body = GroqRequest {
             messages: vec![],
-            model: "gpt-3.5-turbo",
+            model: "meta-llama/llama-4-scout-17b-16e-instruct",
             temperature: Some(0.5),
             top_p: Some(0.9),
             presence_penalty: Some(0.1),
@@ -2025,14 +1813,14 @@ mod tests {
             max_completion_tokens: Some(100),
             seed: Some(69),
             stream: false,
-            response_format: Some(OpenRouterResponseFormat::Text),
+            response_format: Some(GroqResponseFormat::Text),
             stream_options: None,
             tools: None,
             tool_choice: None,
             parallel_tool_calls: None,
             stop: None,
         };
-        let result = ProviderInferenceResponse::try_from(OpenRouterResponseWithMetadata {
+        let result = ProviderInferenceResponse::try_from(GroqResponseWithMetadata {
             response: invalid_response_no_choices,
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(120),
@@ -2047,35 +1835,35 @@ mod tests {
         assert!(matches!(details, ErrorDetails::InferenceServer { .. }));
 
         // Test case 4: Invalid response with multiple choices
-        let invalid_response_multiple_choices = OpenRouterResponse {
+        let invalid_response_multiple_choices = GroqResponse {
             choices: vec![
-                OpenRouterResponseChoice {
+                GroqResponseChoice {
                     index: 0,
-                    message: OpenRouterResponseMessage {
+                    message: GroqResponseMessage {
                         content: Some("Choice 1".to_string()),
                         tool_calls: None,
                     },
-                    finish_reason: OpenRouterFinishReason::Stop,
+                    finish_reason: GroqFinishReason::Stop,
                 },
-                OpenRouterResponseChoice {
+                GroqResponseChoice {
                     index: 1,
-                    finish_reason: OpenRouterFinishReason::Stop,
-                    message: OpenRouterResponseMessage {
+                    finish_reason: GroqFinishReason::Stop,
+                    message: GroqResponseMessage {
                         content: Some("Choice 2".to_string()),
                         tool_calls: None,
                     },
                 },
             ],
-            usage: OpenRouterUsage {
+            usage: GroqUsage {
                 prompt_tokens: 10,
                 completion_tokens: 10,
                 total_tokens: 20,
             },
         };
 
-        let request_body = OpenRouterRequest {
+        let request_body = GroqRequest {
             messages: vec![],
-            model: "gpt-3.5-turbo",
+            model: "meta-llama/llama-4-scout-17b-16e-instruct",
             temperature: Some(0.5),
             top_p: Some(0.9),
             presence_penalty: Some(0.1),
@@ -2083,14 +1871,14 @@ mod tests {
             max_completion_tokens: Some(100),
             seed: Some(69),
             stream: false,
-            response_format: Some(OpenRouterResponseFormat::Text),
+            response_format: Some(GroqResponseFormat::Text),
             stream_options: None,
             tools: None,
             tool_choice: None,
             parallel_tool_calls: None,
             stop: None,
         };
-        let result = ProviderInferenceResponse::try_from(OpenRouterResponseWithMetadata {
+        let result = ProviderInferenceResponse::try_from(GroqResponseWithMetadata {
             response: invalid_response_multiple_choices,
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(130),
@@ -2106,9 +1894,9 @@ mod tests {
     }
 
     #[test]
-    fn test_prepare_openrouter_tools() {
+    fn test_prepare_groq_tools() {
         let request_with_tools = ModelInferenceRequest {
-            inference_id: Uuid::now_v7(),
+            inference_id: uuid::Uuid::now_v7(),
             messages: vec![RequestMessage {
                 role: Role::User,
                 content: vec!["What's the weather?".to_string().into()],
@@ -2128,8 +1916,7 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let (tools, tool_choice, parallel_tool_calls) =
-            prepare_openrouter_tools(&request_with_tools);
+        let (tools, tool_choice, parallel_tool_calls) = prepare_groq_tools(&request_with_tools);
         let tools = tools.unwrap();
         assert_eq!(tools.len(), 2);
         assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
@@ -2139,7 +1926,7 @@ mod tests {
         let tool_choice = tool_choice.unwrap();
         assert_eq!(
             tool_choice,
-            OpenRouterToolChoice::String(OpenRouterToolChoiceString::Required)
+            GroqToolChoice::String(GroqToolChoiceString::Required)
         );
         let parallel_tool_calls = parallel_tool_calls.unwrap();
         assert!(parallel_tool_calls);
@@ -2151,7 +1938,7 @@ mod tests {
 
         // Test no tools but a tool choice and make sure tool choice output is None
         let request_without_tools = ModelInferenceRequest {
-            inference_id: Uuid::now_v7(),
+            inference_id: uuid::Uuid::now_v7(),
             messages: vec![RequestMessage {
                 role: Role::User,
                 content: vec!["What's the weather?".to_string().into()],
@@ -2171,23 +1958,22 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let (tools, tool_choice, parallel_tool_calls) =
-            prepare_openrouter_tools(&request_without_tools);
+        let (tools, tool_choice, parallel_tool_calls) = prepare_groq_tools(&request_without_tools);
         assert!(tools.is_none());
         assert!(tool_choice.is_none());
         assert!(parallel_tool_calls.is_none());
     }
 
     #[test]
-    fn test_tensorzero_to_openrouter_messages() {
+    fn test_tensorzero_to_groq_messages() {
         let content_blocks = vec!["Hello".to_string().into()];
-        let openrouter_messages = tensorzero_to_openrouter_user_messages(&content_blocks).unwrap();
-        assert_eq!(openrouter_messages.len(), 1);
-        match &openrouter_messages[0] {
-            OpenRouterRequestMessage::User(content) => {
+        let groq_messages = tensorzero_to_groq_user_messages(&content_blocks).unwrap();
+        assert_eq!(groq_messages.len(), 1);
+        match &groq_messages[0] {
+            GroqRequestMessage::User(content) => {
                 assert_eq!(
                     content.content,
-                    &[OpenRouterContentBlock::Text {
+                    &[GroqContentBlock::Text {
                         text: "Hello".into()
                     }]
                 );
@@ -2200,17 +1986,17 @@ mod tests {
             "Hello".to_string().into(),
             "How are you?".to_string().into(),
         ];
-        let openrouter_messages = tensorzero_to_openrouter_user_messages(&content_blocks).unwrap();
-        assert_eq!(openrouter_messages.len(), 1);
-        match &openrouter_messages[0] {
-            OpenRouterRequestMessage::User(content) => {
+        let groq_messages = tensorzero_to_groq_user_messages(&content_blocks).unwrap();
+        assert_eq!(groq_messages.len(), 1);
+        match &groq_messages[0] {
+            GroqRequestMessage::User(content) => {
                 assert_eq!(
                     content.content,
                     vec![
-                        OpenRouterContentBlock::Text {
+                        GroqContentBlock::Text {
                             text: "Hello".into()
                         },
-                        OpenRouterContentBlock::Text {
+                        GroqContentBlock::Text {
                             text: "How are you?".into()
                         }
                     ]
@@ -2220,7 +2006,7 @@ mod tests {
         }
 
         // User message with one string and one tool call block
-        // Since user messages in OpenRouter land can't contain tool calls (nor should they honestly),
+        // Since user messages in Groq land can't contain tool calls (nor should they honestly),
         // We split the tool call out into a separate assistant message
         let tool_block = ContentBlock::ToolCall(ToolCall {
             id: "call1".to_string(),
@@ -2228,14 +2014,13 @@ mod tests {
             arguments: "{}".to_string(),
         });
         let content_blocks = vec!["Hello".to_string().into(), tool_block];
-        let openrouter_messages =
-            tensorzero_to_openrouter_assistant_messages(&content_blocks).unwrap();
-        assert_eq!(openrouter_messages.len(), 1);
-        match &openrouter_messages[0] {
-            OpenRouterRequestMessage::Assistant(content) => {
+        let groq_messages = tensorzero_to_groq_assistant_messages(&content_blocks).unwrap();
+        assert_eq!(groq_messages.len(), 1);
+        match &groq_messages[0] {
+            GroqRequestMessage::Assistant(content) => {
                 assert_eq!(
                     content.content,
-                    Some(vec![OpenRouterContentBlock::Text {
+                    Some(vec![GroqContentBlock::Text {
                         text: "Hello".into()
                     }])
                 );
@@ -2250,25 +2035,21 @@ mod tests {
     }
 
     #[test]
-    fn test_openrouter_to_tensorzero_chunk() {
-        let chunk = OpenRouterChatChunk {
-            choices: vec![OpenRouterChatChunkChoice {
-                delta: OpenRouterDelta {
+    fn test_groq_to_tensorzero_chunk() {
+        let chunk = GroqChatChunk {
+            choices: vec![GroqChatChunkChoice {
+                delta: GroqDelta {
                     content: Some("Hello".to_string()),
                     tool_calls: None,
                 },
-                finish_reason: Some(OpenRouterFinishReason::Stop),
+                finish_reason: Some(GroqFinishReason::Stop),
             }],
             usage: None,
         };
         let mut tool_call_ids = vec!["id1".to_string()];
-        let message = openrouter_to_tensorzero_chunk(
-            "my_raw_chunk".to_string(),
-            chunk.clone(),
-            Duration::from_millis(50),
-            &mut tool_call_ids,
-        )
-        .unwrap();
+        let message =
+            groq_to_tensorzero_chunk(chunk.clone(), Duration::from_millis(50), &mut tool_call_ids)
+                .unwrap();
         assert_eq!(
             message.content,
             vec![ContentBlockChunk::Text(TextChunk {
@@ -2278,15 +2059,15 @@ mod tests {
         );
         assert_eq!(message.finish_reason, Some(FinishReason::Stop));
         // Test what an intermediate tool chunk should look like
-        let chunk = OpenRouterChatChunk {
-            choices: vec![OpenRouterChatChunkChoice {
-                finish_reason: Some(OpenRouterFinishReason::ToolCalls),
-                delta: OpenRouterDelta {
+        let chunk = GroqChatChunk {
+            choices: vec![GroqChatChunkChoice {
+                finish_reason: Some(GroqFinishReason::ToolCalls),
+                delta: GroqDelta {
                     content: None,
-                    tool_calls: Some(vec![OpenRouterToolCallChunk {
+                    tool_calls: Some(vec![GroqToolCallChunk {
                         index: 0,
                         id: None,
-                        function: OpenRouterFunctionCallChunk {
+                        function: GroqFunctionCallChunk {
                             name: None,
                             arguments: Some("{\"hello\":\"world\"}".to_string()),
                         },
@@ -2295,13 +2076,9 @@ mod tests {
             }],
             usage: None,
         };
-        let message = openrouter_to_tensorzero_chunk(
-            "my_raw_chunk".to_string(),
-            chunk.clone(),
-            Duration::from_millis(50),
-            &mut tool_call_ids,
-        )
-        .unwrap();
+        let message =
+            groq_to_tensorzero_chunk(chunk.clone(), Duration::from_millis(50), &mut tool_call_ids)
+                .unwrap();
         assert_eq!(
             message.content,
             vec![ContentBlockChunk::ToolCall(ToolCallChunk {
@@ -2312,15 +2089,15 @@ mod tests {
         );
         assert_eq!(message.finish_reason, Some(FinishReason::ToolCall));
         // Test what a bad tool chunk would do (new ID but no names)
-        let chunk = OpenRouterChatChunk {
-            choices: vec![OpenRouterChatChunkChoice {
+        let chunk = GroqChatChunk {
+            choices: vec![GroqChatChunkChoice {
                 finish_reason: None,
-                delta: OpenRouterDelta {
+                delta: GroqDelta {
                     content: None,
-                    tool_calls: Some(vec![OpenRouterToolCallChunk {
+                    tool_calls: Some(vec![GroqToolCallChunk {
                         index: 1,
                         id: None,
-                        function: OpenRouterFunctionCallChunk {
+                        function: GroqFunctionCallChunk {
                             name: None,
                             arguments: Some("{\"hello\":\"world\"}".to_string()),
                         },
@@ -2329,13 +2106,9 @@ mod tests {
             }],
             usage: None,
         };
-        let error = openrouter_to_tensorzero_chunk(
-            "my_raw_chunk".to_string(),
-            chunk.clone(),
-            Duration::from_millis(50),
-            &mut tool_call_ids,
-        )
-        .unwrap_err();
+        let error =
+            groq_to_tensorzero_chunk(chunk.clone(), Duration::from_millis(50), &mut tool_call_ids)
+                .unwrap_err();
         let details = error.get_details();
         assert_eq!(
             *details,
@@ -2347,15 +2120,15 @@ mod tests {
             }
         );
         // Test a correct new tool chunk
-        let chunk = OpenRouterChatChunk {
-            choices: vec![OpenRouterChatChunkChoice {
-                finish_reason: Some(OpenRouterFinishReason::Stop),
-                delta: OpenRouterDelta {
+        let chunk = GroqChatChunk {
+            choices: vec![GroqChatChunkChoice {
+                finish_reason: Some(GroqFinishReason::Stop),
+                delta: GroqDelta {
                     content: None,
-                    tool_calls: Some(vec![OpenRouterToolCallChunk {
+                    tool_calls: Some(vec![GroqToolCallChunk {
                         index: 1,
                         id: Some("id2".to_string()),
-                        function: OpenRouterFunctionCallChunk {
+                        function: GroqFunctionCallChunk {
                             name: Some("name2".to_string()),
                             arguments: Some("{\"hello\":\"world\"}".to_string()),
                         },
@@ -2364,13 +2137,9 @@ mod tests {
             }],
             usage: None,
         };
-        let message = openrouter_to_tensorzero_chunk(
-            "my_raw_chunk".to_string(),
-            chunk.clone(),
-            Duration::from_millis(50),
-            &mut tool_call_ids,
-        )
-        .unwrap();
+        let message =
+            groq_to_tensorzero_chunk(chunk.clone(), Duration::from_millis(50), &mut tool_call_ids)
+                .unwrap();
         assert_eq!(
             message.content,
             vec![ContentBlockChunk::ToolCall(ToolCallChunk {
@@ -2385,21 +2154,17 @@ mod tests {
 
         // Check a chunk with no choices and only usage
         // Test a correct new tool chunk
-        let chunk = OpenRouterChatChunk {
+        let chunk = GroqChatChunk {
             choices: vec![],
-            usage: Some(OpenRouterUsage {
+            usage: Some(GroqUsage {
                 prompt_tokens: 10,
                 completion_tokens: 20,
                 total_tokens: 30,
             }),
         };
-        let message = openrouter_to_tensorzero_chunk(
-            "my_raw_chunk".to_string(),
-            chunk.clone(),
-            Duration::from_millis(50),
-            &mut tool_call_ids,
-        )
-        .unwrap();
+        let message =
+            groq_to_tensorzero_chunk(chunk.clone(), Duration::from_millis(50), &mut tool_call_ids)
+                .unwrap();
         assert_eq!(message.content, vec![]);
         assert_eq!(
             message.usage,
@@ -2411,333 +2176,243 @@ mod tests {
     }
 
     #[test]
-    fn test_new_openrouter_response_format() {
+    fn test_new_groq_response_format() {
         // Test JSON mode On
         let json_mode = ModelInferenceRequestJsonMode::On;
         let output_schema = None;
-        let format = OpenRouterResponseFormat::new(&json_mode, output_schema, "gpt-4o");
-        assert_eq!(format, Some(OpenRouterResponseFormat::JsonObject));
+        let format = GroqResponseFormat::new(&json_mode, output_schema);
+        assert_eq!(format, GroqResponseFormat::JsonObject { schema: None });
 
         // Test JSON mode Off
         let json_mode = ModelInferenceRequestJsonMode::Off;
-        let format = OpenRouterResponseFormat::new(&json_mode, output_schema, "gpt-4o");
-        assert_eq!(format, None);
+        let format = GroqResponseFormat::new(&json_mode, output_schema);
+        assert_eq!(format, GroqResponseFormat::Text);
 
         // Test JSON mode Strict with no schema
         let json_mode = ModelInferenceRequestJsonMode::Strict;
-        let format = OpenRouterResponseFormat::new(&json_mode, output_schema, "gpt-4o");
-        assert_eq!(format, Some(OpenRouterResponseFormat::JsonObject));
+        let format = GroqResponseFormat::new(&json_mode, output_schema);
+        assert_eq!(format, GroqResponseFormat::JsonObject { schema: None });
 
         // Test JSON mode Strict with schema
         let json_mode = ModelInferenceRequestJsonMode::Strict;
-        let schema = serde_json::json!({
+        let json_schema = serde_json::json!({
             "type": "object",
             "properties": {
                 "foo": {"type": "string"}
             }
         });
-        let output_schema = Some(&schema);
-        let format = OpenRouterResponseFormat::new(&json_mode, output_schema, "gpt-4o");
-        match format {
-            Some(OpenRouterResponseFormat::JsonSchema { json_schema }) => {
-                assert_eq!(json_schema["schema"], schema);
-                assert_eq!(json_schema["name"], "response");
-                assert_eq!(json_schema["strict"], true);
-            }
-            _ => panic!("Expected JsonSchema format"),
-        }
-
-        // Test JSON mode Strict with schema but gpt-3.5
-        let json_mode = ModelInferenceRequestJsonMode::Strict;
-        let schema = serde_json::json!({
-            "type": "object",
-            "properties": {
-                "foo": {"type": "string"}
-            }
-        });
-        let output_schema = Some(&schema);
-        let format = OpenRouterResponseFormat::new(&json_mode, output_schema, "gpt-3.5-turbo");
-        assert_eq!(format, Some(OpenRouterResponseFormat::JsonObject));
-    }
-
-    #[test]
-    fn test_openrouter_api_base() {
+        let output_schema = Some(&json_schema);
+        let format = GroqResponseFormat::new(&json_mode, output_schema);
         assert_eq!(
-            OPENROUTER_DEFAULT_BASE_URL.as_str(),
-            "https://openrouter.ai/api/v1"
+            format,
+            GroqResponseFormat::JsonObject {
+                schema: output_schema
+            }
         );
     }
 
     #[test]
-    fn test_tensorzero_to_openrouter_system_message() {
+    fn test_tensorzero_to_groq_system_message() {
         // Test Case 1: system is None, json_mode is Off
         let system = None;
         let json_mode = ModelInferenceRequestJsonMode::Off;
-        let messages: Vec<OpenRouterRequestMessage> = vec![];
-        let result = tensorzero_to_openrouter_system_message(system, &json_mode, &messages);
+        let messages: Vec<GroqRequestMessage> = vec![];
+        let result = tensorzero_to_groq_system_message(system, &json_mode, &messages);
         assert_eq!(result, None);
 
         // Test Case 2: system is Some, json_mode is On, messages contain "json"
         let system = Some("System instructions");
         let json_mode = ModelInferenceRequestJsonMode::On;
         let messages = vec![
-            OpenRouterRequestMessage::User(OpenRouterUserRequestMessage {
-                content: vec![OpenRouterContentBlock::Text {
+            GroqRequestMessage::User(GroqUserRequestMessage {
+                content: vec![GroqContentBlock::Text {
                     text: "Please respond in JSON format.".into(),
                 }],
             }),
-            OpenRouterRequestMessage::Assistant(OpenRouterAssistantRequestMessage {
-                content: Some(vec![OpenRouterContentBlock::Text {
+            GroqRequestMessage::Assistant(GroqAssistantRequestMessage {
+                content: Some(vec![GroqContentBlock::Text {
                     text: "Sure, here is the data.".into(),
                 }]),
                 tool_calls: None,
             }),
         ];
-        let expected = Some(OpenRouterRequestMessage::System(
-            OpenRouterSystemRequestMessage {
-                content: Cow::Borrowed("System instructions"),
-            },
-        ));
-        let result = tensorzero_to_openrouter_system_message(system, &json_mode, &messages);
+        let expected = Some(GroqRequestMessage::System(GroqSystemRequestMessage {
+            content: Cow::Borrowed("System instructions"),
+        }));
+        let result = tensorzero_to_groq_system_message(system, &json_mode, &messages);
         assert_eq!(result, expected);
 
         // Test Case 3: system is Some, json_mode is On, messages do not contain "json"
         let system = Some("System instructions");
         let json_mode = ModelInferenceRequestJsonMode::On;
         let messages = vec![
-            OpenRouterRequestMessage::User(OpenRouterUserRequestMessage {
-                content: vec![OpenRouterContentBlock::Text {
+            GroqRequestMessage::User(GroqUserRequestMessage {
+                content: vec![GroqContentBlock::Text {
                     text: "Hello, how are you?".into(),
                 }],
             }),
-            OpenRouterRequestMessage::Assistant(OpenRouterAssistantRequestMessage {
-                content: Some(vec![OpenRouterContentBlock::Text {
+            GroqRequestMessage::Assistant(GroqAssistantRequestMessage {
+                content: Some(vec![GroqContentBlock::Text {
                     text: "I am fine, thank you!".into(),
                 }]),
                 tool_calls: None,
             }),
         ];
         let expected_content = "Respond using JSON.\n\nSystem instructions".to_string();
-        let expected = Some(OpenRouterRequestMessage::System(
-            OpenRouterSystemRequestMessage {
-                content: Cow::Owned(expected_content),
-            },
-        ));
-        let result = tensorzero_to_openrouter_system_message(system, &json_mode, &messages);
+        let expected = Some(GroqRequestMessage::System(GroqSystemRequestMessage {
+            content: Cow::Owned(expected_content),
+        }));
+        let result = tensorzero_to_groq_system_message(system, &json_mode, &messages);
         assert_eq!(result, expected);
 
         // Test Case 4: system is Some, json_mode is Off
         let system = Some("System instructions");
         let json_mode = ModelInferenceRequestJsonMode::Off;
         let messages = vec![
-            OpenRouterRequestMessage::User(OpenRouterUserRequestMessage {
-                content: vec![OpenRouterContentBlock::Text {
+            GroqRequestMessage::User(GroqUserRequestMessage {
+                content: vec![GroqContentBlock::Text {
                     text: "Hello, how are you?".into(),
                 }],
             }),
-            OpenRouterRequestMessage::Assistant(OpenRouterAssistantRequestMessage {
-                content: Some(vec![OpenRouterContentBlock::Text {
+            GroqRequestMessage::Assistant(GroqAssistantRequestMessage {
+                content: Some(vec![GroqContentBlock::Text {
                     text: "I am fine, thank you!".into(),
                 }]),
                 tool_calls: None,
             }),
         ];
-        let expected = Some(OpenRouterRequestMessage::System(
-            OpenRouterSystemRequestMessage {
-                content: Cow::Borrowed("System instructions"),
-            },
-        ));
-        let result = tensorzero_to_openrouter_system_message(system, &json_mode, &messages);
+        let expected = Some(GroqRequestMessage::System(GroqSystemRequestMessage {
+            content: Cow::Borrowed("System instructions"),
+        }));
+        let result = tensorzero_to_groq_system_message(system, &json_mode, &messages);
         assert_eq!(result, expected);
 
         // Test Case 5: system is Some, json_mode is Strict
         let system = Some("System instructions");
         let json_mode = ModelInferenceRequestJsonMode::Strict;
         let messages = vec![
-            OpenRouterRequestMessage::User(OpenRouterUserRequestMessage {
-                content: vec![OpenRouterContentBlock::Text {
+            GroqRequestMessage::User(GroqUserRequestMessage {
+                content: vec![GroqContentBlock::Text {
                     text: "Hello, how are you?".into(),
                 }],
             }),
-            OpenRouterRequestMessage::Assistant(OpenRouterAssistantRequestMessage {
-                content: Some(vec![OpenRouterContentBlock::Text {
+            GroqRequestMessage::Assistant(GroqAssistantRequestMessage {
+                content: Some(vec![GroqContentBlock::Text {
                     text: "I am fine, thank you!".into(),
                 }]),
                 tool_calls: None,
             }),
         ];
-        let expected = Some(OpenRouterRequestMessage::System(
-            OpenRouterSystemRequestMessage {
-                content: Cow::Borrowed("System instructions"),
-            },
-        ));
-        let result = tensorzero_to_openrouter_system_message(system, &json_mode, &messages);
+        let expected = Some(GroqRequestMessage::System(GroqSystemRequestMessage {
+            content: Cow::Borrowed("System instructions"),
+        }));
+        let result = tensorzero_to_groq_system_message(system, &json_mode, &messages);
         assert_eq!(result, expected);
 
         // Test Case 6: system contains "json", json_mode is On
         let system = Some("Respond using JSON.\n\nSystem instructions");
         let json_mode = ModelInferenceRequestJsonMode::On;
-        let messages = vec![OpenRouterRequestMessage::User(
-            OpenRouterUserRequestMessage {
-                content: vec![OpenRouterContentBlock::Text {
-                    text: "Hello, how are you?".into(),
-                }],
-            },
-        )];
-        let expected = Some(OpenRouterRequestMessage::System(
-            OpenRouterSystemRequestMessage {
-                content: Cow::Borrowed("Respond using JSON.\n\nSystem instructions"),
-            },
-        ));
-        let result = tensorzero_to_openrouter_system_message(system, &json_mode, &messages);
+        let messages = vec![GroqRequestMessage::User(GroqUserRequestMessage {
+            content: vec![GroqContentBlock::Text {
+                text: "Hello, how are you?".into(),
+            }],
+        })];
+        let expected = Some(GroqRequestMessage::System(GroqSystemRequestMessage {
+            content: Cow::Borrowed("Respond using JSON.\n\nSystem instructions"),
+        }));
+        let result = tensorzero_to_groq_system_message(system, &json_mode, &messages);
         assert_eq!(result, expected);
 
         // Test Case 7: system is None, json_mode is On
         let system = None;
         let json_mode = ModelInferenceRequestJsonMode::On;
         let messages = vec![
-            OpenRouterRequestMessage::User(OpenRouterUserRequestMessage {
-                content: vec![OpenRouterContentBlock::Text {
+            GroqRequestMessage::User(GroqUserRequestMessage {
+                content: vec![GroqContentBlock::Text {
                     text: "Tell me a joke.".into(),
                 }],
             }),
-            OpenRouterRequestMessage::Assistant(OpenRouterAssistantRequestMessage {
-                content: Some(vec![OpenRouterContentBlock::Text {
+            GroqRequestMessage::Assistant(GroqAssistantRequestMessage {
+                content: Some(vec![GroqContentBlock::Text {
                     text: "Sure, here's one for you.".into(),
                 }]),
                 tool_calls: None,
             }),
         ];
-        let expected = Some(OpenRouterRequestMessage::System(
-            OpenRouterSystemRequestMessage {
-                content: Cow::Owned("Respond using JSON.".to_string()),
-            },
-        ));
-        let result = tensorzero_to_openrouter_system_message(system, &json_mode, &messages);
+        let expected = Some(GroqRequestMessage::System(GroqSystemRequestMessage {
+            content: Cow::Owned("Respond using JSON.".to_string()),
+        }));
+        let result = tensorzero_to_groq_system_message(system, &json_mode, &messages);
         assert_eq!(result, expected);
 
         // Test Case 8: system is None, json_mode is Strict
         let system = None;
         let json_mode = ModelInferenceRequestJsonMode::Strict;
         let messages = vec![
-            OpenRouterRequestMessage::User(OpenRouterUserRequestMessage {
-                content: vec![OpenRouterContentBlock::Text {
+            GroqRequestMessage::User(GroqUserRequestMessage {
+                content: vec![GroqContentBlock::Text {
                     text: "Provide a summary of the news.".into(),
                 }],
             }),
-            OpenRouterRequestMessage::Assistant(OpenRouterAssistantRequestMessage {
-                content: Some(vec![OpenRouterContentBlock::Text {
+            GroqRequestMessage::Assistant(GroqAssistantRequestMessage {
+                content: Some(vec![GroqContentBlock::Text {
                     text: "Here's the summary.".into(),
                 }]),
                 tool_calls: None,
             }),
         ];
 
-        let result = tensorzero_to_openrouter_system_message(system, &json_mode, &messages);
+        let result = tensorzero_to_groq_system_message(system, &json_mode, &messages);
         assert!(result.is_none());
 
         // Test Case 9: system is None, json_mode is On, with empty messages
         let system = None;
         let json_mode = ModelInferenceRequestJsonMode::On;
-        let messages: Vec<OpenRouterRequestMessage> = vec![];
-        let expected = Some(OpenRouterRequestMessage::System(
-            OpenRouterSystemRequestMessage {
-                content: Cow::Owned("Respond using JSON.".to_string()),
-            },
-        ));
-        let result = tensorzero_to_openrouter_system_message(system, &json_mode, &messages);
+        let messages: Vec<GroqRequestMessage> = vec![];
+        let expected = Some(GroqRequestMessage::System(GroqSystemRequestMessage {
+            content: Cow::Owned("Respond using JSON.".to_string()),
+        }));
+        let result = tensorzero_to_groq_system_message(system, &json_mode, &messages);
         assert_eq!(result, expected);
 
         // Test Case 10: system is None, json_mode is Off, with messages containing "json"
         let system = None;
         let json_mode = ModelInferenceRequestJsonMode::Off;
-        let messages = vec![OpenRouterRequestMessage::User(
-            OpenRouterUserRequestMessage {
-                content: vec![OpenRouterContentBlock::Text {
-                    text: "Please include JSON in your response.".into(),
-                }],
-            },
-        )];
+        let messages = vec![GroqRequestMessage::User(GroqUserRequestMessage {
+            content: vec![GroqContentBlock::Text {
+                text: "Please include JSON in your response.".into(),
+            }],
+        })];
         let expected = None;
-        let result = tensorzero_to_openrouter_system_message(system, &json_mode, &messages);
+        let result = tensorzero_to_groq_system_message(system, &json_mode, &messages);
         assert_eq!(result, expected);
     }
 
     #[test]
-    fn test_create_file_url() {
-        use url::Url;
-
-        // Test Case 1: Base URL without trailing slash
-        let base_url = Url::parse("https://openrouter.ai/api/v1").unwrap();
-        let file_id = Some("file123");
-        let result = get_file_url(&base_url, file_id).unwrap();
-        assert_eq!(
-            result.as_str(),
-            "https://openrouter.ai/api/v1/files/file123/content"
-        );
-
-        // Test Case 2: Base URL with trailing slash
-        let base_url = Url::parse("https://openrouter.ai/api/v1/").unwrap();
-        let file_id = Some("file456");
-        let result = get_file_url(&base_url, file_id).unwrap();
-        assert_eq!(
-            result.as_str(),
-            "https://openrouter.ai/api/v1/files/file456/content"
-        );
-
-        // Test Case 3: Base URL with custom domain
-        let base_url = Url::parse("https://custom-openrouter.example.com").unwrap();
-        let file_id = Some("file789");
-        let result = get_file_url(&base_url, file_id).unwrap();
-        assert_eq!(
-            result.as_str(),
-            "https://custom-openrouter.example.com/files/file789/content"
-        );
-
-        // Test Case 4: Base URL without trailing slash, no file ID
-        let base_url = Url::parse("https://openrouter.ai/api/v1").unwrap();
-        let result = get_file_url(&base_url, None).unwrap();
-        assert_eq!(result.as_str(), "https://openrouter.ai/api/v1/files");
-
-        // Test Case 5: Base URL with trailing slash, no file ID
-        let base_url = Url::parse("https://openrouter.ai/api/v1/").unwrap();
-        let result = get_file_url(&base_url, None).unwrap();
-        assert_eq!(result.as_str(), "https://openrouter.ai/api/v1/files");
-
-        // Test Case 6: Custom domain base URL, no file ID
-        let base_url = Url::parse("https://custom-openrouter.example.com").unwrap();
-        let result = get_file_url(&base_url, None).unwrap();
-        assert_eq!(
-            result.as_str(),
-            "https://custom-openrouter.example.com/files"
-        );
-    }
-
-    #[test]
-    fn test_try_from_openrouter_credentials() {
+    fn test_try_from_groq_credentials() {
         // Test Static credentials
         let generic = Credential::Static(SecretString::from("test_key"));
-        let creds = OpenRouterCredentials::try_from(generic).unwrap();
-        assert!(matches!(creds, OpenRouterCredentials::Static(_)));
+        let creds = GroqCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, GroqCredentials::Static(_)));
 
         // Test Dynamic credentials
         let generic = Credential::Dynamic("key_name".to_string());
-        let creds = OpenRouterCredentials::try_from(generic).unwrap();
-        assert!(matches!(creds, OpenRouterCredentials::Dynamic(_)));
+        let creds = GroqCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, GroqCredentials::Dynamic(_)));
 
         // Test None credentials
         let generic = Credential::None;
-        let creds = OpenRouterCredentials::try_from(generic).unwrap();
-        assert!(matches!(creds, OpenRouterCredentials::None));
+        let creds = GroqCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, GroqCredentials::None));
 
         // Test Missing credentials
         let generic = Credential::Missing;
-        let creds = OpenRouterCredentials::try_from(generic).unwrap();
-        assert!(matches!(creds, OpenRouterCredentials::None));
+        let creds = GroqCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, GroqCredentials::None));
 
         // Test invalid credential type
         let generic = Credential::FileContents(SecretString::from("test"));
-        let result = OpenRouterCredentials::try_from(generic);
+        let result = GroqCredentials::try_from(generic);
         assert!(result.is_err());
         assert!(matches!(
             result.unwrap_err().get_owned_details(),
@@ -2748,8 +2423,8 @@ mod tests {
     #[test]
     fn test_serialize_user_messages() {
         // Test that a single message is serialized as 'content: string'
-        let message = OpenRouterUserRequestMessage {
-            content: vec![OpenRouterContentBlock::Text {
+        let message = GroqUserRequestMessage {
+            content: vec![GroqContentBlock::Text {
                 text: "My single message".into(),
             }],
         };
@@ -2757,12 +2432,12 @@ mod tests {
         assert_eq!(serialized, r#"{"content":"My single message"}"#);
 
         // Test that a multiple messages are serialized as an array of content blocks
-        let message = OpenRouterUserRequestMessage {
+        let message = GroqUserRequestMessage {
             content: vec![
-                OpenRouterContentBlock::Text {
+                GroqContentBlock::Text {
                     text: "My first message".into(),
                 },
-                OpenRouterContentBlock::Text {
+                GroqContentBlock::Text {
                     text: "My second message".into(),
                 },
             ],

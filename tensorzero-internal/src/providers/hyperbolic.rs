@@ -1,59 +1,56 @@
 use std::borrow::Cow;
 use std::sync::OnceLock;
 
+use crate::cache::ModelProviderRequest;
+use crate::endpoints::inference::InferenceCredentials;
+use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
+use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
+use crate::inference::types::{
+    batch::StartBatchProviderInferenceResponse, Latency, ModelInferenceRequest,
+    PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
+};
+use crate::inference::types::{ContentBlockOutput, ProviderInferenceResponseArgs};
+use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
+use crate::providers::helpers::{
+    inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
+};
 use futures::{StreamExt, TryStreamExt};
 use lazy_static::lazy_static;
 use secrecy::{ExposeSecret, SecretString};
 use serde::Serialize;
-use serde_json::{json, Value};
 use tokio::time::Instant;
 use url::Url;
 
-use crate::cache::ModelProviderRequest;
-use crate::endpoints::inference::InferenceCredentials;
-use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
-use crate::inference::providers::helpers::{
-    inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
-};
-use crate::inference::providers::provider_trait::InferenceProvider;
-use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
-use crate::inference::types::{
-    batch::StartBatchProviderInferenceResponse, ContentBlockOutput, Latency, ModelInferenceRequest,
-    ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
-    ProviderInferenceResponse, ProviderInferenceResponseArgs,
-};
-use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
-
 use super::openai::{
-    get_chat_url, handle_openai_error, prepare_openai_messages, prepare_openai_tools,
-    stream_openai, OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, OpenAITool,
-    OpenAIToolChoice, StreamOptions,
+    get_chat_url, handle_openai_error, prepare_openai_messages, stream_openai,
+    OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice,
 };
-use super::provider_trait::TensorZeroEventError;
+use crate::inference::{InferenceProvider, TensorZeroEventError};
 
 lazy_static! {
-    static ref XAI_DEFAULT_BASE_URL: Url = {
+    static ref HYPERBOLIC_DEFAULT_BASE_URL: Url = {
         #[expect(clippy::expect_used)]
-        Url::parse("https://api.x.ai/v1").expect("Failed to parse XAI_DEFAULT_BASE_URL")
+        Url::parse("https://api.hyperbolic.xyz/v1/")
+            .expect("Failed to parse HYPERBOLIC_DEFAULT_BASE_URL")
     };
 }
 
-fn default_api_key_location() -> CredentialLocation {
-    CredentialLocation::Env("XAI_API_KEY".to_string())
+pub fn default_api_key_location() -> CredentialLocation {
+    CredentialLocation::Env("HYPERBOLIC_API_KEY".to_string())
 }
 
-const PROVIDER_NAME: &str = "xAI";
-const PROVIDER_TYPE: &str = "xai";
+const PROVIDER_NAME: &str = "Hyperbolic";
+const PROVIDER_TYPE: &str = "hyperbolic";
 
 #[derive(Debug)]
-pub struct XAIProvider {
+pub struct HyperbolicProvider {
     model_name: String,
-    credentials: XAICredentials,
+    credentials: HyperbolicCredentials,
 }
 
-static DEFAULT_CREDENTIALS: OnceLock<XAICredentials> = OnceLock::new();
+static DEFAULT_CREDENTIALS: OnceLock<HyperbolicCredentials> = OnceLock::new();
 
-impl XAIProvider {
+impl HyperbolicProvider {
     pub fn new(
         model_name: String,
         api_key_location: Option<CredentialLocation>,
@@ -64,8 +61,7 @@ impl XAIProvider {
             PROVIDER_TYPE,
             &DEFAULT_CREDENTIALS,
         )?;
-
-        Ok(XAIProvider {
+        Ok(HyperbolicProvider {
             model_name,
             credentials,
         })
@@ -77,50 +73,50 @@ impl XAIProvider {
 }
 
 #[derive(Clone, Debug)]
-pub enum XAICredentials {
+pub enum HyperbolicCredentials {
     Static(SecretString),
     Dynamic(String),
     None,
 }
 
-impl TryFrom<Credential> for XAICredentials {
+impl TryFrom<Credential> for HyperbolicCredentials {
     type Error = Error;
 
     fn try_from(credentials: Credential) -> Result<Self, Error> {
         match credentials {
-            Credential::Static(key) => Ok(XAICredentials::Static(key)),
-            Credential::Dynamic(key_name) => Ok(XAICredentials::Dynamic(key_name)),
-            Credential::None => Ok(XAICredentials::None),
-            Credential::Missing => Ok(XAICredentials::None),
+            Credential::Static(key) => Ok(HyperbolicCredentials::Static(key)),
+            Credential::Dynamic(key_name) => Ok(HyperbolicCredentials::Dynamic(key_name)),
+            Credential::Missing => Ok(HyperbolicCredentials::None),
             _ => Err(Error::new(ErrorDetails::Config {
-                message: "Invalid api_key_location for xAI provider".to_string(),
+                message: "Invalid api_key_location for Hyperbolic provider".to_string(),
             })),
         }
     }
 }
 
-impl XAICredentials {
-    pub fn get_api_key<'a>(
+impl HyperbolicCredentials {
+    fn get_api_key<'a>(
         &'a self,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<&'a SecretString, Error> {
         match self {
-            XAICredentials::Static(api_key) => Ok(api_key),
-            XAICredentials::Dynamic(key_name) => dynamic_api_keys.get(key_name).ok_or_else(|| {
-                ErrorDetails::ApiKeyMissing {
-                    provider_name: PROVIDER_NAME.to_string(),
-                }
-                .into()
-            }),
-            XAICredentials::None => Err(ErrorDetails::ApiKeyMissing {
-                provider_name: PROVIDER_NAME.to_string(),
+            HyperbolicCredentials::Static(api_key) => Ok(api_key),
+            HyperbolicCredentials::Dynamic(key_name) => {
+                dynamic_api_keys.get(key_name).ok_or_else(|| {
+                    ErrorDetails::ApiKeyMissing {
+                        provider_name: PROVIDER_NAME.to_string(),
+                    }
+                    .into()
+                })
             }
-            .into()),
+            HyperbolicCredentials::None => Err(ErrorDetails::ApiKeyMissing {
+                provider_name: PROVIDER_NAME.to_string(),
+            })?,
         }
     }
 }
 
-impl InferenceProvider for XAIProvider {
+impl InferenceProvider for HyperbolicProvider {
     async fn infer<'a>(
         &'a self,
         ModelProviderRequest {
@@ -132,16 +128,16 @@ impl InferenceProvider for XAIProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_body = serde_json::to_value(XAIRequest::new(&self.model_name, request)?)
+        let request_body = serde_json::to_value(HyperbolicRequest::new(&self.model_name, request)?)
             .map_err(|e| {
                 Error::new(ErrorDetails::Serialization {
                     message: format!(
-                        "Error serializing xAI request: {}",
+                        "Error serializing Hyperbolic request: {}",
                         DisplayOrDebugGateway::new(e)
                     ),
                 })
             })?;
-        let request_url = get_chat_url(&XAI_DEFAULT_BASE_URL)?;
+        let request_url = get_chat_url(&HYPERBOLIC_DEFAULT_BASE_URL)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let request_builder = http_client
@@ -178,41 +174,38 @@ impl InferenceProvider for XAIProvider {
                         "Error parsing JSON response: {}",
                         DisplayOrDebugGateway::new(e)
                     ),
+                    provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(raw_request.clone()),
                     raw_response: Some(raw_response.clone()),
-                    provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
 
             let latency = Latency::NonStreaming {
                 response_time: start_time.elapsed(),
             };
-            Ok(XAIResponseWithMetadata {
+            Ok(HyperbolicResponseWithMetadata {
                 response,
-                raw_response,
                 latency,
+                raw_response,
                 raw_request,
                 generic_request: request,
             }
             .try_into()?)
         } else {
-            let status = res.status();
-
-            let response = res.text().await.map_err(|e| {
-                Error::new(ErrorDetails::InferenceServer {
-                    message: format!(
-                        "Error parsing error response: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                    raw_request: Some(raw_request.clone()),
-                    raw_response: None,
-                    provider_type: PROVIDER_TYPE.to_string(),
-                })
-            })?;
             Err(handle_openai_error(
                 &raw_request,
-                status,
-                &response,
+                res.status(),
+                &res.text().await.map_err(|e| {
+                    Error::new(ErrorDetails::InferenceServer {
+                        message: format!(
+                            "Error parsing error response: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
+                        raw_request: Some(raw_request.clone()),
+                        raw_response: None,
+                        provider_type: PROVIDER_TYPE.to_string(),
+                    })
+                })?,
                 PROVIDER_TYPE,
             ))
         }
@@ -229,17 +222,16 @@ impl InferenceProvider for XAIProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let request_body = serde_json::to_value(XAIRequest::new(&self.model_name, request)?)
+        let request_body = serde_json::to_value(HyperbolicRequest::new(&self.model_name, request)?)
             .map_err(|e| {
                 Error::new(ErrorDetails::Serialization {
                     message: format!(
-                        "Error serializing xAI request: {}",
+                        "Error serializing Hyperbolic request: {}",
                         DisplayOrDebugGateway::new(e)
                     ),
                 })
             })?;
-
-        let request_url = get_chat_url(&XAI_DEFAULT_BASE_URL)?;
+        let request_url = get_chat_url(&HYPERBOLIC_DEFAULT_BASE_URL)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let request_builder = http_client
@@ -273,7 +265,7 @@ impl InferenceProvider for XAIProvider {
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<StartBatchProviderInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
-            provider_type: "xAI".to_string(),
+            provider_type: "Hyperbolic".to_string(),
         }
         .into())
     }
@@ -291,47 +283,36 @@ impl InferenceProvider for XAIProvider {
     }
 }
 
-/// This struct defines the supported parameters for the xAI API
-/// See the [xAI API documentation](https://docs.x.ai/api/endpoints#chat-completions)
+/// This struct defines the supported parameters for the Hyperbolic text generation API
+/// See the [API documentation](https://docs.hyperbolic.xyz/docs/rest-api)
 /// for more details.
-/// We are not handling logprobs, top_logprobs, n,
-/// logit_bias, seed, service_tier, stop, user or response_format.
-/// or the deprecated function_call and functions arguments.
+/// We are not handling logit_bias, logprobs, toplogprobs, n, stop, user, top_k, min_p, and repetition_penalty.
 #[derive(Debug, Serialize)]
-struct XAIRequest<'a> {
+struct HyperbolicRequest<'a> {
     messages: Vec<OpenAIRequestMessage<'a>>,
     model: &'a str,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    temperature: Option<f32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    max_tokens: Option<u32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    seed: Option<u32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    top_p: Option<f32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    presence_penalty: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     frequency_penalty: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    response_format: Option<XAIResponseFormat>,
+    max_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    presence_penalty: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    seed: Option<u32>,
     stream: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    stream_options: Option<StreamOptions>,
+    temperature: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tools: Option<Vec<OpenAITool<'a>>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tool_choice: Option<OpenAIToolChoice<'a>>,
+    top_p: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     stop: Option<Cow<'a, [String]>>,
 }
 
-impl<'a> XAIRequest<'a> {
+impl<'a> HyperbolicRequest<'a> {
     pub fn new(
         model: &'a str,
         request: &'a ModelInferenceRequest<'_>,
-    ) -> Result<XAIRequest<'a>, Error> {
+    ) -> Result<HyperbolicRequest<'a>, Error> {
         let ModelInferenceRequest {
             temperature,
             max_tokens,
@@ -340,73 +321,27 @@ impl<'a> XAIRequest<'a> {
             presence_penalty,
             frequency_penalty,
             stream,
+            stop_sequences,
             ..
-        } = *request;
-
-        let stream_options = match request.stream {
-            true => Some(StreamOptions {
-                include_usage: true,
-            }),
-            false => None,
-        };
-
-        let response_format = XAIResponseFormat::new(&request.json_mode, request.output_schema);
+        } = request;
 
         let messages = prepare_openai_messages(request)?;
-
-        let (tools, tool_choice, _) = prepare_openai_tools(request);
-        Ok(XAIRequest {
+        Ok(HyperbolicRequest {
             messages,
             model,
-            temperature,
-            max_tokens,
-            seed,
-            top_p,
-            response_format,
-            presence_penalty,
-            frequency_penalty,
-            stream,
-            stream_options,
-            tools,
-            tool_choice,
-            stop: request.borrow_stop_sequences(),
+            frequency_penalty: *frequency_penalty,
+            max_tokens: *max_tokens,
+            presence_penalty: *presence_penalty,
+            seed: *seed,
+            stream: *stream,
+            temperature: *temperature,
+            top_p: *top_p,
+            stop: stop_sequences.clone(),
         })
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-#[serde(tag = "type")]
-enum XAIResponseFormat {
-    #[default]
-    Text,
-    JsonObject,
-    JsonSchema {
-        json_schema: Value,
-    },
-}
-
-impl XAIResponseFormat {
-    fn new(
-        json_mode: &ModelInferenceRequestJsonMode,
-        output_schema: Option<&Value>,
-    ) -> Option<Self> {
-        match json_mode {
-            ModelInferenceRequestJsonMode::On => Some(XAIResponseFormat::JsonObject),
-            // For now, we never explicitly send `XAIResponseFormat::Text`
-            ModelInferenceRequestJsonMode::Off => None,
-            ModelInferenceRequestJsonMode::Strict => match output_schema {
-                Some(schema) => {
-                    let json_schema = json!({"name": "response", "strict": true, "schema": schema});
-                    Some(XAIResponseFormat::JsonSchema { json_schema })
-                }
-                None => Some(XAIResponseFormat::JsonObject),
-            },
-        }
-    }
-}
-
-struct XAIResponseWithMetadata<'a> {
+struct HyperbolicResponseWithMetadata<'a> {
     response: OpenAIResponse,
     raw_response: String,
     latency: Latency,
@@ -414,15 +349,15 @@ struct XAIResponseWithMetadata<'a> {
     generic_request: &'a ModelInferenceRequest<'a>,
 }
 
-impl<'a> TryFrom<XAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
+impl<'a> TryFrom<HyperbolicResponseWithMetadata<'a>> for ProviderInferenceResponse {
     type Error = Error;
-    fn try_from(value: XAIResponseWithMetadata<'a>) -> Result<Self, Self::Error> {
-        let XAIResponseWithMetadata {
+    fn try_from(value: HyperbolicResponseWithMetadata<'a>) -> Result<Self, Self::Error> {
+        let HyperbolicResponseWithMetadata {
             mut response,
             latency,
+            raw_response,
             raw_request,
             generic_request,
-            raw_response,
         } = value;
 
         if response.choices.len() != 1 {
@@ -488,17 +423,16 @@ mod tests {
 
     use super::*;
 
-    use crate::inference::providers::openai::{
-        OpenAIFinishReason, OpenAIResponseChoice, OpenAIResponseMessage, OpenAIToolType,
-        OpenAIUsage, SpecificToolChoice, SpecificToolFunction,
-    };
-    use crate::inference::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
     use crate::inference::types::{
-        FinishReason, FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role,
+        FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role,
     };
+    use crate::providers::openai::{
+        OpenAIFinishReason, OpenAIResponseChoice, OpenAIResponseMessage, OpenAIUsage,
+    };
+    use crate::providers::test_helpers::WEATHER_TOOL_CONFIG;
 
     #[test]
-    fn test_xai_request_new() {
+    fn test_hyperbolic_request_new() {
         let request_with_tools = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
@@ -521,106 +455,45 @@ mod tests {
             ..Default::default()
         };
 
-        let xai_request = XAIRequest::new("grok-beta", &request_with_tools)
-            .expect("failed to create xAI Request during test");
+        let hyperbolic_request =
+            HyperbolicRequest::new("meta-llama/Meta-Llama-3-70B-Instruct", &request_with_tools)
+                .expect("failed to create Hyperbolic Request during test");
 
-        assert_eq!(xai_request.messages.len(), 1);
-        assert_eq!(xai_request.temperature, Some(0.5));
-        assert_eq!(xai_request.max_tokens, Some(100));
-        assert!(!xai_request.stream);
-        assert_eq!(xai_request.seed, Some(69));
-        assert!(xai_request.tools.is_some());
-        let tools = xai_request.tools.as_ref().unwrap();
-        assert_eq!(tools.len(), 1);
+        assert_eq!(hyperbolic_request.messages.len(), 1);
+        assert_eq!(hyperbolic_request.temperature, Some(0.5));
+        assert_eq!(hyperbolic_request.max_tokens, Some(100));
+        assert!(!hyperbolic_request.stream);
+        assert_eq!(hyperbolic_request.seed, Some(69));
+    }
 
-        assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
-        assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
+    #[test]
+    fn test_hyperbolic_api_base() {
         assert_eq!(
-            xai_request.tool_choice,
-            Some(OpenAIToolChoice::Specific(SpecificToolChoice {
-                r#type: OpenAIToolType::Function,
-                function: SpecificToolFunction {
-                    name: WEATHER_TOOL.name(),
-                }
-            }))
-        );
-
-        let request_with_tools = ModelInferenceRequest {
-            inference_id: Uuid::now_v7(),
-            messages: vec![RequestMessage {
-                role: Role::User,
-                content: vec!["What's the weather?".to_string().into()],
-            }],
-            system: None,
-            temperature: Some(0.5),
-            top_p: Some(0.9),
-            presence_penalty: Some(0.1),
-            frequency_penalty: Some(0.2),
-            max_tokens: Some(100),
-            stream: false,
-            seed: Some(69),
-            json_mode: ModelInferenceRequestJsonMode::On,
-            tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
-            function_type: FunctionType::Json,
-            output_schema: None,
-            extra_body: Default::default(),
-            ..Default::default()
-        };
-
-        let xai_request = XAIRequest::new("grok-beta", &request_with_tools)
-            .expect("failed to create xAI Request");
-
-        assert_eq!(xai_request.messages.len(), 2);
-        assert_eq!(xai_request.temperature, Some(0.5));
-        assert_eq!(xai_request.max_tokens, Some(100));
-        assert_eq!(xai_request.top_p, Some(0.9));
-        assert_eq!(xai_request.presence_penalty, Some(0.1));
-        assert_eq!(xai_request.frequency_penalty, Some(0.2));
-        assert!(!xai_request.stream);
-        assert_eq!(xai_request.seed, Some(69));
-
-        assert!(xai_request.tools.is_some());
-        let tools = xai_request.tools.as_ref().unwrap();
-        assert_eq!(tools.len(), 1);
-
-        assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
-        assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
-        assert_eq!(
-            xai_request.tool_choice,
-            Some(OpenAIToolChoice::Specific(SpecificToolChoice {
-                r#type: OpenAIToolType::Function,
-                function: SpecificToolFunction {
-                    name: WEATHER_TOOL.name(),
-                }
-            }))
+            HYPERBOLIC_DEFAULT_BASE_URL.as_str(),
+            "https://api.hyperbolic.xyz/v1/"
         );
     }
 
     #[test]
-    fn test_xai_api_base() {
-        assert_eq!(XAI_DEFAULT_BASE_URL.as_str(), "https://api.x.ai/v1");
-    }
-
-    #[test]
-    fn test_credential_to_xai_credentials() {
+    fn test_credential_to_hyperbolic_credentials() {
         // Test Static credential
         let generic = Credential::Static(SecretString::from("test_key"));
-        let creds: XAICredentials = XAICredentials::try_from(generic).unwrap();
-        assert!(matches!(creds, XAICredentials::Static(_)));
+        let creds = HyperbolicCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, HyperbolicCredentials::Static(_)));
 
         // Test Dynamic credential
         let generic = Credential::Dynamic("key_name".to_string());
-        let creds = XAICredentials::try_from(generic).unwrap();
-        assert!(matches!(creds, XAICredentials::Dynamic(_)));
+        let creds = HyperbolicCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, HyperbolicCredentials::Dynamic(_)));
 
         // Test Missing credential
         let generic = Credential::Missing;
-        let creds = XAICredentials::try_from(generic).unwrap();
-        assert!(matches!(creds, XAICredentials::None));
+        let creds = HyperbolicCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, HyperbolicCredentials::None));
 
         // Test invalid type
         let generic = Credential::FileContents(SecretString::from("test"));
-        let result = XAICredentials::try_from(generic);
+        let result = HyperbolicCredentials::try_from(generic);
         assert!(result.is_err());
         assert!(matches!(
             result.unwrap_err().get_owned_details(),
@@ -628,15 +501,15 @@ mod tests {
         ));
     }
     #[test]
-    fn test_xai_response_with_metadata_try_into() {
+    fn test_hyperbolic_response_with_metadata_try_into() {
         let valid_response = OpenAIResponse {
             choices: vec![OpenAIResponseChoice {
                 index: 0,
+                finish_reason: OpenAIFinishReason::Stop,
                 message: OpenAIResponseMessage {
                     content: Some("Hello, world!".to_string()),
                     tool_calls: None,
                 },
-                finish_reason: OpenAIFinishReason::Stop,
             }],
             usage: OpenAIUsage {
                 prompt_tokens: 10,
@@ -665,27 +538,26 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let xai_response_with_metadata = XAIResponseWithMetadata {
+        let hyperbolic_response_with_metadata = HyperbolicResponseWithMetadata {
             response: valid_response,
             raw_response: "test_response".to_string(),
             latency: Latency::NonStreaming {
                 response_time: Duration::from_secs(0),
             },
             raw_request: serde_json::to_string(
-                &XAIRequest::new("grok-beta", &generic_request).unwrap(),
+                &HyperbolicRequest::new("test-model", &generic_request).unwrap(),
             )
             .unwrap(),
             generic_request: &generic_request,
         };
         let inference_response: ProviderInferenceResponse =
-            xai_response_with_metadata.try_into().unwrap();
+            hyperbolic_response_with_metadata.try_into().unwrap();
 
         assert_eq!(inference_response.output.len(), 1);
         assert_eq!(
             inference_response.output[0],
             "Hello, world!".to_string().into()
         );
-        assert_eq!(inference_response.finish_reason, Some(FinishReason::Stop));
         assert_eq!(inference_response.raw_response, "test_response");
         assert_eq!(inference_response.usage.input_tokens, 10);
         assert_eq!(inference_response.usage.output_tokens, 20);

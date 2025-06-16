@@ -27,16 +27,10 @@ use super::openai::{
     convert_stream_error, get_chat_url, prepare_openai_messages, prepare_openai_tools,
     OpenAIRequestMessage, OpenAITool, OpenAIToolChoice, OpenAIToolType, StreamOptions,
 };
-use super::provider_trait::{TensorZeroEventError, WrappedProvider};
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::DisplayOrDebugGateway;
 use crate::error::{Error, ErrorDetails};
-use crate::inference::providers::helpers::{
-    inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
-};
-use crate::inference::providers::openai::check_api_base_suffix;
-use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::{
     BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse,
 };
@@ -46,7 +40,14 @@ use crate::inference::types::{
     ProviderInferenceResponse, ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStreamInner, TextChunk, Usage,
 };
+use crate::inference::InferenceProvider;
+use crate::inference::TensorZeroEventError;
+use crate::inference::WrappedProvider;
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
+use crate::providers::helpers::{
+    inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
+};
+use crate::providers::openai::check_api_base_suffix;
 use crate::tool::ToolCall;
 
 const PROVIDER_NAME: &str = "TGI";
@@ -755,12 +756,12 @@ mod tests {
     use tracing_test::traced_test;
     use uuid::Uuid;
 
-    use crate::inference::{
+    use crate::{
+        inference::types::{FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role},
         providers::{
             openai::{OpenAIToolType, SpecificToolChoice, SpecificToolFunction},
             test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG},
         },
-        types::{FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role},
     };
 
     use super::*;
