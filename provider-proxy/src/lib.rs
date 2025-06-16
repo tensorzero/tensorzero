@@ -319,7 +319,7 @@ fn is_openrouter_request(uri: &http::Uri) -> bool {
 pub async fn run_server(args: Args, server_started: oneshot::Sender<SocketAddr>) {
     use tracing_subscriber::EnvFilter;
 
-    #[allow(clippy::print_stderr)]
+    #[expect(clippy::print_stderr)]
     let _ = tracing_subscriber::fmt()
         .with_env_filter(
             EnvFilter::builder()
