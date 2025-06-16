@@ -52,7 +52,7 @@ import { HumanFeedbackModal } from "~/components/feedback/HumanFeedbackModal";
 import { HumanFeedbackForm } from "~/components/feedback/HumanFeedbackForm";
 import { isServerRequestError, JSONParseError } from "~/utils/common";
 import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
-import { processJson } from "~/utils/syntax-hightlighting.server";
+import { processJson } from "~/utils/syntax-highlighting.server";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { inference_id } = params;
