@@ -10,8 +10,8 @@ use crate::{
     providers::openai::{
         default_api_key_location,
         optimization::{
-            OpenAIFineTuningJob, OpenAIFineTuningMethod, OpenAIFineTuningRequest,
-            OpenAISupervisedRow, SupervisedHyperparameters,
+            convert_to_optimizer_status, OpenAIFineTuningJob, OpenAIFineTuningMethod,
+            OpenAIFineTuningRequest, OpenAISupervisedRow, SupervisedHyperparameters,
         },
         upload_openai_file, OpenAICredentials, DEFAULT_CREDENTIALS, OPENAI_DEFAULT_BASE_URL,
         PROVIDER_TYPE,
@@ -234,7 +234,7 @@ impl Optimizer for OpenAISFTConfig {
                 provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
-        Ok(job.into())
+        convert_to_optimizer_status(job, &self.credentials)
     }
 }
 

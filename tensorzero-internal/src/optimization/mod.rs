@@ -4,10 +4,12 @@ use serde_json::Value;
 
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::Error;
+use crate::model::ModelConfig;
 use crate::optimization::openai_sft::{
     OpenAISFTConfig, OpenAISFTJobHandle, UninitializedOpenAISFTConfig,
 };
 use crate::stored_inference::RenderedStoredInference;
+use crate::variant::VariantConfig;
 
 mod openai_sft;
 
@@ -20,6 +22,11 @@ pub enum OptimizerJobHandle {
     OpenAISFT(OpenAISFTJobHandle),
 }
 
+pub enum OptimizerOutput {
+    Variant(Box<VariantConfig>),
+    Model(ModelConfig),
+}
+
 pub enum OptimizerStatus {
     Pending {
         message: String,
@@ -27,8 +34,7 @@ pub enum OptimizerStatus {
         trained_tokens: Option<u64>,
         error: Option<Value>,
     },
-    // This should actually contain a variant config
-    Completed,
+    Completed(OptimizerOutput),
     Failed,
 }
 

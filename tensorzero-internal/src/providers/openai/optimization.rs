@@ -4,9 +4,14 @@ use serde_json::Value;
 use std::collections::HashMap;
 
 use crate::{
-    error::Error,
-    optimization::OptimizerStatus,
-    providers::openai::{prepare_openai_messages, OpenAIFileID, OpenAIRequestMessage, OpenAITool},
+    config_parser::TimeoutsConfig,
+    error::{Error, ErrorDetails},
+    model::{ModelConfig, ModelProvider, ProviderConfig},
+    optimization::{OptimizerOutput, OptimizerStatus},
+    providers::openai::{
+        prepare_openai_messages, OpenAICredentials, OpenAIFileID, OpenAIProvider,
+        OpenAIRequestMessage, OpenAITool,
+    },
     stored_inference::RenderedStoredInference,
 };
 
@@ -186,35 +191,59 @@ pub struct OpenAIFineTuningJob {
     pub status: OpenAIFineTuningJobStatus,
 }
 
-impl From<OpenAIFineTuningJob> for OptimizerStatus {
-    fn from(job: OpenAIFineTuningJob) -> Self {
-        let estimated_finish = job
-            .estimated_finish
-            .and_then(|unix_timestamp| DateTime::from_timestamp(unix_timestamp as i64, 0));
-        match job.status {
-            OpenAIFineTuningJobStatus::ValidatingFiles => OptimizerStatus::Pending {
-                message: "Validating files".to_string(),
-                estimated_finish,
-                trained_tokens: job.trained_tokens,
-                error: job.error,
-            },
-            OpenAIFineTuningJobStatus::Queued => OptimizerStatus::Pending {
-                message: "Queued".to_string(),
-                estimated_finish,
-                trained_tokens: job.trained_tokens,
-                error: job.error,
-            },
-            OpenAIFineTuningJobStatus::Running => OptimizerStatus::Pending {
-                message: "Running".to_string(),
-                estimated_finish,
-                trained_tokens: job.trained_tokens,
-                error: job.error,
-            },
-            OpenAIFineTuningJobStatus::Succeeded => OptimizerStatus::Completed,
-            OpenAIFineTuningJobStatus::Failed => OptimizerStatus::Failed,
-            OpenAIFineTuningJobStatus::Cancelled => OptimizerStatus::Failed,
+pub fn convert_to_optimizer_status(
+    job: OpenAIFineTuningJob,
+    credentials: &OpenAICredentials,
+) -> Result<OptimizerStatus, Error> {
+    let estimated_finish = job
+        .estimated_finish
+        .and_then(|unix_timestamp| DateTime::from_timestamp(unix_timestamp as i64, 0));
+    Ok(match job.status {
+        OpenAIFineTuningJobStatus::ValidatingFiles => OptimizerStatus::Pending {
+            message: "Validating files".to_string(),
+            estimated_finish,
+            trained_tokens: job.trained_tokens,
+            error: job.error,
+        },
+        OpenAIFineTuningJobStatus::Queued => OptimizerStatus::Pending {
+            message: "Queued".to_string(),
+            estimated_finish,
+            trained_tokens: job.trained_tokens,
+            error: job.error,
+        },
+        OpenAIFineTuningJobStatus::Running => OptimizerStatus::Pending {
+            message: "Running".to_string(),
+            estimated_finish,
+            trained_tokens: job.trained_tokens,
+            error: job.error,
+        },
+        OpenAIFineTuningJobStatus::Succeeded => {
+            let model_name = job.fine_tuned_model.ok_or_else(|| {
+                Error::new(ErrorDetails::OptimizationResponse {
+                    message: "No fine-tuned model name in Succeeded response".to_string(),
+                    provider_type: super::PROVIDER_TYPE.to_string(),
+                })
+            })?;
+            let model_provider = ModelProvider {
+                name: model_name.clone().into(),
+                config: ProviderConfig::OpenAI(OpenAIProvider {
+                    model_name: model_name.clone(),
+                    api_base: None,
+                    credentials: credentials.clone(),
+                }),
+                extra_headers: None,
+                extra_body: None,
+                timeouts: None,
+            };
+            OptimizerStatus::Completed(OptimizerOutput::Model(ModelConfig {
+                routing: vec![model_name.clone().into()],
+                providers: HashMap::from([(model_name.clone().into(), model_provider)]),
+                timeouts: TimeoutsConfig::default(),
+            }))
         }
-    }
+        OpenAIFineTuningJobStatus::Failed => OptimizerStatus::Failed,
+        OpenAIFineTuningJobStatus::Cancelled => OptimizerStatus::Failed,
+    })
 }
 
 #[derive(Debug, Deserialize)]

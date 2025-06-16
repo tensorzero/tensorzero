@@ -332,6 +332,10 @@ pub enum ErrorDetails {
         message: String,
         raw_output: String,
     },
+    OptimizationResponse {
+        message: String,
+        provider_type: String,
+    },
     OutputValidation {
         source: Box<Error>,
     },
@@ -483,6 +487,7 @@ impl ErrorDetails {
             ErrorDetails::Observability { .. } => tracing::Level::ERROR,
             ErrorDetails::OutputParsing { .. } => tracing::Level::WARN,
             ErrorDetails::OutputValidation { .. } => tracing::Level::WARN,
+            ErrorDetails::OptimizationResponse { .. } => tracing::Level::ERROR,
             ErrorDetails::ProviderNotFound { .. } => tracing::Level::ERROR,
             ErrorDetails::Serialization { .. } => tracing::Level::ERROR,
             ErrorDetails::StreamError { .. } => tracing::Level::ERROR,
@@ -578,6 +583,7 @@ impl ErrorDetails {
             ErrorDetails::ModelProvidersExhausted { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ModelValidation { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::Observability { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::OptimizationResponse { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::OutputParsing { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::OutputValidation { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ProviderNotFound { .. } => StatusCode::NOT_FOUND,
@@ -979,6 +985,15 @@ impl std::fmt::Display for ErrorDetails {
             }
             ErrorDetails::Observability { message } => {
                 write!(f, "{message}")
+            }
+            ErrorDetails::OptimizationResponse {
+                message,
+                provider_type,
+            } => {
+                write!(
+                    f,
+                    "Error from {provider_type} optimization response: {message}"
+                )
             }
             ErrorDetails::OutputParsing {
                 raw_output,

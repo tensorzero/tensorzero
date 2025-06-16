@@ -17,6 +17,10 @@ name = "e2e"
 path = "tests/e2e/tests.rs"
 required-features = ["e2e_tests"]
 
+[[test]]
+name = "optimization"
+path = "tests/optimization/tests.rs"
+
 [lints]
 workspace = true
 
