@@ -52,7 +52,7 @@ pub trait Optimizer {
     async fn poll(
         &self,
         client: &reqwest::Client,
-        job_handle: Self::JobHandle,
+        job_handle: &Self::JobHandle,
         credentials: &InferenceCredentials,
     ) -> Result<OptimizerStatus, Error>;
 }
@@ -77,7 +77,7 @@ impl Optimizer for OptimizerConfig {
     async fn poll(
         &self,
         client: &reqwest::Client,
-        job_handle: OptimizerJobHandle,
+        job_handle: &OptimizerJobHandle,
         credentials: &InferenceCredentials,
     ) -> Result<OptimizerStatus, Error> {
         match (self, job_handle) {

@@ -187,7 +187,7 @@ impl Optimizer for OpenAISFTConfig {
     async fn poll(
         &self,
         client: &reqwest::Client,
-        job_handle: Self::JobHandle,
+        job_handle: &Self::JobHandle,
         credentials: &InferenceCredentials,
     ) -> Result<OptimizerStatus, Error> {
         let url = get_fine_tuning_url(
