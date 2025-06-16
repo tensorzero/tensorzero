@@ -43,6 +43,8 @@ pub struct UninitializedOpenAISFTConfig {
     n_epochs: Option<usize>,
     credentials: Option<CredentialLocation>,
     api_base: Option<Url>,
+    seed: Option<u64>,
+    suffix: Option<String>,
 }
 
 impl UninitializedOpenAISFTConfig {
@@ -125,11 +127,14 @@ impl Optimizer for OpenAISFTConfig {
                 }),
             },
             seed: self.seed,
-            suffix: self.suffix,
+            suffix: self.suffix.clone(),
             metadata: None,
         };
 
-        let url = get_fine_tuning_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
+        let url = get_fine_tuning_url(
+            self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL),
+            None,
+        )?;
         let mut request = client.post(url);
         if let Some(api_key) = api_key {
             request = request.bearer_auth(api_key.expose_secret());
@@ -179,16 +184,65 @@ impl Optimizer for OpenAISFTConfig {
         job_handle: Self::JobHandle,
         credentials: &InferenceCredentials,
     ) -> Result<OptimizerStatus, Error> {
+        let url = get_fine_tuning_url(
+            self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL),
+            Some(&job_handle.job_id),
+        )?;
+        let mut request = client.get(url);
+        let api_key = self.credentials.get_api_key(credentials)?;
+        if let Some(api_key) = api_key {
+            request = request.bearer_auth(api_key.expose_secret());
+        }
+        let res = request.send().await.map_err(|e| {
+            Error::new(ErrorDetails::InferenceClient {
+                status_code: e.status(),
+                message: format!(
+                    "Error sending request to OpenAI: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
+                provider_type: PROVIDER_TYPE.to_string(),
+                raw_request: None,
+                raw_response: None,
+            })
+        })?;
+        let raw_response = res.text().await.map_err(|e| {
+            Error::new(ErrorDetails::InferenceClient {
+                status_code: e.status(),
+                message: format!(
+                    "Error sending request to OpenAI: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
+                provider_type: PROVIDER_TYPE.to_string(),
+                raw_request: None,
+                raw_response: None,
+            })
+        })?;
+        let job: OpenAIFineTuningJob = serde_json::from_str(&raw_response).map_err(|e| {
+            Error::new(ErrorDetails::InferenceServer {
+                message: format!(
+                    "Error parsing JSON response: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
+                raw_request: None,
+                raw_response: Some(raw_response.clone()),
+                provider_type: PROVIDER_TYPE.to_string(),
+            })
+        })?;
         todo!()
     }
 }
 
-fn get_fine_tuning_url(base_url: &Url) -> Result<Url, Error> {
+fn get_fine_tuning_url(base_url: &Url, job_id: Option<&str>) -> Result<Url, Error> {
     let mut url = base_url.clone();
     if !url.path().ends_with('/') {
         url.set_path(&format!("{}/", url.path()));
     }
-    url.join("fine_tuning").map_err(|e| {
+    let path = if let Some(id) = job_id {
+        format!("fine_tuning/jobs/{id}")
+    } else {
+        "fine_tuning".to_string()
+    };
+    url.join(&path).map_err(|e| {
         Error::new(ErrorDetails::InvalidBaseUrl {
             message: e.to_string(),
         })

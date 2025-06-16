@@ -1,4 +1,6 @@
+use chrono::{DateTime, Utc};
 use serde::Deserialize;
+use serde_json::Value;
 
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::Error;
@@ -20,7 +22,13 @@ pub enum OptimizerJobHandle {
 }
 
 pub enum OptimizerStatus {
-    Pending,
+    Pending {
+        message: String,
+        estimated_finish: Option<DateTime<Utc>>,
+        trained_tokens: Option<u64>,
+        error: Option<Value>,
+    },
+    // This should actually contain a variant config
     Completed,
     Failed,
 }
