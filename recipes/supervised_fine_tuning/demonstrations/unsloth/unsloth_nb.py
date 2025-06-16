@@ -108,7 +108,6 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 import pandas as pd
 import toml
-from clickhouse_connect import get_client
 from datasets import Dataset
 from tensorzero import (
     ContentBlock,
@@ -157,71 +156,9 @@ assert TEMPLATE_VARIANT_NAME in config["functions"][FUNCTION_NAME]["variants"], 
     f"No variant named `{TEMPLATE_VARIANT_NAME}` found in function `{FUNCTION_NAME}`"
 )
 
-function_type = config["functions"][FUNCTION_NAME]["type"]
 variant = config["functions"][FUNCTION_NAME]["variants"][TEMPLATE_VARIANT_NAME]
 
 variant
-
-# %% [markdown]
-# Initialize the ClickHouse client.
-#
-
-# %%
-assert "TENSORZERO_CLICKHOUSE_URL" in os.environ, (
-    "TENSORZERO_CLICKHOUSE_URL environment variable not set"
-)
-
-clickhouse_client = get_client(dsn=os.environ["TENSORZERO_CLICKHOUSE_URL"])
-
-# %% [markdown]
-# Determine the ClickHouse table name for the function.
-
-# %%
-inference_table_name = {"chat": "ChatInference", "json": "JsonInference"}.get(
-    function_type
-)
-
-if inference_table_name is None:
-    raise ValueError(f"Unsupported function type: {function_type}")
-
-# %% [markdown]
-# Query the inferences and feedback from ClickHouse.
-
-# %%
-inference_col = "tool_params" if function_type == "chat" else "output_schema"
-
-query = f"""
-SELECT
-    i.variant_name,
-    i.input,
-    i.output,
-    f.value,
-    i.episode_id,
-    i.id,
-    i.{inference_col},
-FROM
-    {inference_table_name} i
-JOIN
-    (SELECT
-        inference_id,
-        value,
-        ROW_NUMBER() OVER (PARTITION BY inference_id ORDER BY timestamp DESC) as rn
-    FROM
-        DemonstrationFeedback
-    ) f ON i.id = f.inference_id AND f.rn = 1
-WHERE
-    i.function_name = %(function_name)s
-LIMIT %(max_samples)s
-"""
-
-params = {
-    "function_name": FUNCTION_NAME,
-    "max_samples": MAX_SAMPLES,
-}
-
-df = clickhouse_client.query_df(query, params)
-
-df.head()
 
 # %% [markdown]
 # Load and render the stored inferences
@@ -419,7 +356,7 @@ eval_dataset = Dataset.from_pandas(val_df.drop("episode_id", axis=1))
 
 print(f"Training set size: {len(train_df)}")
 print(f"Validation set size: {len(val_df)}")
-print(f"Actual validation fraction: {len(val_df) / len(df):.2f}")
+print(f"Actual validation fraction: {len(val_df) / len(conversations):.2f}")
 
 # %% [markdown]
 # Set LoRA parameters
