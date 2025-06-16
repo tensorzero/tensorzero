@@ -1333,7 +1333,7 @@ mod tests {
         let expected_id = inference_id1;
         let expected_usage = Usage {
             input_tokens: 35,
-            output_tokens: 55,
+            output_tokens: 46,
         };
         let expected_content = vec!["Candidate answer 1".to_string().into()];
         match selected {
