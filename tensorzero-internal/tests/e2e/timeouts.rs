@@ -11,7 +11,8 @@ use tensorzero::{
 };
 use tensorzero_internal::{
     clickhouse::test_helpers::{
-        get_clickhouse, select_model_inference_clickhouse, select_model_inferences_clickhouse,
+        get_clickhouse, select_chat_inference_clickhouse, select_json_inference_clickhouse,
+        select_model_inference_clickhouse, select_model_inferences_clickhouse,
     },
     inference::types::TextKind,
 };
