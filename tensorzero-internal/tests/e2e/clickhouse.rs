@@ -489,7 +489,7 @@ async fn test_rollback_helper(migration_num: usize, logs_contain: fn(&str) -> bo
 invoke_all_separate_tests!(
     test_rollback_helper,
     test_rollback_up_to_migration_index_,
-    [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
+    [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]
 );
 
 #[tokio::test(flavor = "multi_thread")]

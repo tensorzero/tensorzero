@@ -33,7 +33,7 @@ use migrations::migration_0030::Migration0030;
 
 /// This must match the number of migrations returned by `make_all_migrations` - the tests
 /// will panic if they don't match.
-pub const NUM_MIGRATIONS: usize = 24;
+pub const NUM_MIGRATIONS: usize = 25;
 
 /// Constructs (but does not run) a vector of all our database migrations.
 /// This is the single source of truth for all migration - it's used during startup to migrate
