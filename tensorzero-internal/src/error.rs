@@ -372,6 +372,9 @@ pub enum ErrorDetails {
     UnknownVariant {
         name: String,
     },
+    UnknownOptimizer {
+        name: String,
+    },
     UnknownMetric {
         name: String,
     },
@@ -492,6 +495,7 @@ impl ErrorDetails {
             ErrorDetails::UnknownTool { .. } => tracing::Level::ERROR,
             ErrorDetails::UnknownVariant { .. } => tracing::Level::WARN,
             ErrorDetails::UnknownMetric { .. } => tracing::Level::WARN,
+            ErrorDetails::UnknownOptimizer { .. } => tracing::Level::WARN,
             ErrorDetails::UnsupportedFileExtension { .. } => tracing::Level::WARN,
             ErrorDetails::UnsupportedModelProviderForBatchInference { .. } => tracing::Level::WARN,
             ErrorDetails::UnsupportedVariantForBatchInference { .. } => tracing::Level::WARN,
@@ -588,6 +592,7 @@ impl ErrorDetails {
             ErrorDetails::UnknownTool { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::UnknownVariant { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::UnknownMetric { .. } => StatusCode::NOT_FOUND,
+            ErrorDetails::UnknownOptimizer { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::UnsupportedFileExtension { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::UnsupportedModelProviderForBatchInference { .. } => {
                 StatusCode::INTERNAL_SERVER_ERROR
@@ -1005,6 +1010,9 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::UnknownTool { name } => write!(f, "Unknown tool: {name}"),
             ErrorDetails::UnknownVariant { name } => write!(f, "Unknown variant: {name}"),
             ErrorDetails::UnknownMetric { name } => write!(f, "Unknown metric: {name}"),
+            ErrorDetails::UnknownOptimizer { name } => {
+                write!(f, "Unknown optimizer: {name}")
+            }
             ErrorDetails::UnsupportedModelProviderForBatchInference { provider_type } => {
                 write!(
                     f,

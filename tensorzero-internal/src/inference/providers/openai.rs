@@ -368,10 +368,6 @@ impl InferenceProvider for OpenAIProvider {
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<StartBatchProviderInferenceResponse, Error> {
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
-        let request_url = get_file_url(
-            self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL),
-            None,
-        )?;
         let mut batch_requests = Vec::with_capacity(requests.len());
         for request in requests {
             batch_requests.push(
@@ -387,74 +383,14 @@ impl InferenceProvider for OpenAIProvider {
                 message: e.to_string(),
             })
         })?;
-        let mut jsonl_data = Vec::new();
-        for item in batch_requests {
-            serde_json::to_writer(&mut jsonl_data, &item).map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: format!(
-                        "Error serializing request: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                })
-            })?;
-            jsonl_data.write_all(b"\n").map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: format!("Error writing to JSONL: {}", DisplayOrDebugGateway::new(e)),
-                })
-            })?;
-        }
-        // Create the multipart form
-        let form = Form::new().text("purpose", "batch").part(
-            "file",
-            Part::bytes(jsonl_data)
-                .file_name("data.jsonl")
-                .mime_str("application/json")
-                .map_err(|e| {
-                    Error::new(ErrorDetails::Serialization {
-                        message: format!(
-                            "Error setting MIME type: {}",
-                            DisplayOrDebugGateway::new(e)
-                        ),
-                    })
-                })?,
-        );
-        let mut request_builder = client.post(request_url);
-        if let Some(api_key) = api_key {
-            request_builder = request_builder.bearer_auth(api_key.expose_secret());
-        }
-        // Actually upload the file to OpenAI
-        let res = request_builder.multipart(form).send().await.map_err(|e| {
-            Error::new(ErrorDetails::InferenceClient {
-                status_code: e.status(),
-                message: format!(
-                    "Error sending request to OpenAI: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-                provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: None,
-                raw_response: None,
-            })
-        })?;
-        let text = res.text().await.map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
-                message: format!(
-                    "Error retrieving text response: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-                provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: None,
-                raw_response: None,
-            })
-        })?;
-        let response: OpenAIFileResponse = serde_json::from_str(&text).map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
-                message: format!("Error parsing JSON response: {e}, text: {text}"),
-                raw_request: None,
-                raw_response: Some(text.clone()),
-                provider_type: PROVIDER_TYPE.to_string(),
-            })
-        })?;
-        let file_id = response.id;
+        let file_id = upload_openai_file(
+            &batch_requests,
+            client,
+            api_key,
+            self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL),
+            "batch".to_string(),
+        )
+        .await?;
         let batch_request = OpenAIBatchRequest::new(&file_id);
         let raw_request = serde_json::to_string(&batch_request).map_err(|_| Error::new(ErrorDetails::Serialization { message: "Error serializing OpenAI batch request. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string() }))?;
         let request_url =
@@ -929,14 +865,84 @@ pub(super) fn handle_openai_error(
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub(super) struct OpenAISystemRequestMessage<'a> {
+pub struct OpenAISystemRequestMessage<'a> {
     pub content: Cow<'a, str>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub(super) struct OpenAIUserRequestMessage<'a> {
+pub struct OpenAIUserRequestMessage<'a> {
     #[serde(serialize_with = "serialize_text_content_vec")]
-    pub(super) content: Vec<OpenAIContentBlock<'a>>,
+    pub content: Vec<OpenAIContentBlock<'a>>,
+}
+
+pub type OpenAIFileID = String;
+
+pub async fn upload_openai_file<T>(
+    items: &[T],
+    client: &reqwest::Client,
+    api_key: Option<&SecretString>,
+    api_base: &Url,
+    purpose: String,
+) -> Result<OpenAIFileID, Error>
+where
+    T: Serialize,
+{
+    let mut jsonl_data = Vec::with_capacity(items.len());
+    for item in items {
+        serde_json::to_writer(&mut jsonl_data, item).map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!("Error writing to JSONL: {}", DisplayOrDebugGateway::new(e)),
+            })
+        })?;
+    }
+    let form = Form::new().text("purpose", purpose).part(
+        "file",
+        Part::bytes(jsonl_data)
+            .file_name("data.jsonl")
+            .mime_str("application/json")
+            .map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!("Error setting MIME type: {}", DisplayOrDebugGateway::new(e)),
+                })
+            })?,
+    );
+    let request_url = get_file_url(api_base, None)?;
+    let mut request_builder = client.post(request_url);
+    if let Some(api_key) = api_key {
+        request_builder = request_builder.bearer_auth(api_key.expose_secret());
+    }
+    let res = request_builder.multipart(form).send().await.map_err(|e| {
+        Error::new(ErrorDetails::InferenceClient {
+            status_code: e.status(),
+            message: format!(
+                "Error sending request to OpenAI: {}",
+                DisplayOrDebugGateway::new(e)
+            ),
+            provider_type: PROVIDER_TYPE.to_string(),
+            raw_request: None,
+            raw_response: None,
+        })
+    })?;
+    let text = res.text().await.map_err(|e| {
+        Error::new(ErrorDetails::InferenceServer {
+            message: format!(
+                "Error retrieving text response: {}",
+                DisplayOrDebugGateway::new(e)
+            ),
+            provider_type: PROVIDER_TYPE.to_string(),
+            raw_request: None,
+            raw_response: None,
+        })
+    })?;
+    let response: OpenAIFileResponse = serde_json::from_str(&text).map_err(|e| {
+        Error::new(ErrorDetails::InferenceServer {
+            message: format!("Error parsing JSON response: {e}, text: {text}"),
+            raw_request: None,
+            raw_response: Some(text.clone()),
+            provider_type: PROVIDER_TYPE.to_string(),
+        })
+    })?;
+    Ok(response.id)
 }
 
 fn serialize_text_content_vec<S>(
@@ -1038,7 +1044,7 @@ impl<'a> From<&'a ToolCall> for OpenAIRequestToolCall<'a> {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub(super) struct OpenAIAssistantRequestMessage<'a> {
+pub struct OpenAIAssistantRequestMessage<'a> {
     #[serde(
         skip_serializing_if = "Option::is_none",
         serialize_with = "serialize_optional_text_content_vec"
@@ -1049,7 +1055,7 @@ pub(super) struct OpenAIAssistantRequestMessage<'a> {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub(super) struct OpenAIToolRequestMessage<'a> {
+pub struct OpenAIToolRequestMessage<'a> {
     pub content: &'a str,
     pub tool_call_id: &'a str,
 }
@@ -1057,7 +1063,7 @@ pub(super) struct OpenAIToolRequestMessage<'a> {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(tag = "role")]
 #[serde(rename_all = "lowercase")]
-pub(super) enum OpenAIRequestMessage<'a> {
+pub enum OpenAIRequestMessage<'a> {
     System(OpenAISystemRequestMessage<'a>),
     User(OpenAIUserRequestMessage<'a>),
     Assistant(OpenAIAssistantRequestMessage<'a>),
@@ -1416,18 +1422,18 @@ pub enum OpenAIToolType {
 }
 
 #[derive(Debug, PartialEq, Serialize)]
-pub(super) struct OpenAIFunction<'a> {
-    pub(super) name: &'a str,
+pub struct OpenAIFunction<'a> {
+    pub name: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) description: Option<&'a str>,
+    pub description: Option<&'a str>,
     pub parameters: &'a Value,
 }
 
 #[derive(Debug, PartialEq, Serialize)]
-pub(super) struct OpenAITool<'a> {
-    pub(super) r#type: OpenAIToolType,
-    pub(super) function: OpenAIFunction<'a>,
-    pub(super) strict: bool,
+pub struct OpenAITool<'a> {
+    pub r#type: OpenAIToolType,
+    pub function: OpenAIFunction<'a>,
+    pub strict: bool,
 }
 
 impl<'a> From<&'a ToolConfig> for OpenAITool<'a> {

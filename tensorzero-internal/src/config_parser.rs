@@ -19,6 +19,7 @@ use crate::jsonschema_util::StaticJSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::{ModelConfig, ModelTable, UninitializedModelConfig};
 use crate::model_table::{CowNoClone, ShorthandModelConfig};
+use crate::optimization::OptimizerConfig;
 use crate::tool::{create_implicit_tool_call_config, StaticToolConfig, ToolChoice};
 use crate::variant::best_of_n_sampling::UninitializedBestOfNSamplingConfig;
 use crate::variant::chain_of_thought::UninitializedChainOfThoughtConfig;
@@ -54,6 +55,7 @@ pub struct Config<'c> {
     pub templates: TemplateConfig<'c>,
     pub object_store_info: Option<ObjectStoreInfo>,
     pub provider_types: ProviderTypesConfig,
+    pub optimizers: HashMap<String, OptimizerConfig>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -440,6 +442,7 @@ impl<'c> Config<'c> {
             templates,
             object_store_info,
             provider_types: uninitialized_config.provider_types,
+            optimizers: uninitialized_config.optimizers,
         };
 
         // Initialize the templates
@@ -637,6 +640,14 @@ impl<'c> Config<'c> {
         })
     }
 
+    pub fn get_optimizer(&self, optimizer_name: &str) -> Result<&OptimizerConfig, Error> {
+        self.optimizers.get(optimizer_name).ok_or_else(|| {
+            Error::new(ErrorDetails::UnknownOptimizer {
+                name: optimizer_name.to_string(),
+            })
+        })
+    }
+
     /// Get a model by name
     pub async fn get_model<'a>(
         &'a self,
@@ -702,6 +713,8 @@ struct UninitializedConfig {
     pub evaluations: HashMap<String, UninitializedEvaluationConfig>, // evaluation name => evaluation
     #[serde(default)]
     pub provider_types: ProviderTypesConfig, // global configuration for all model providers of a particular type
+    #[serde(default)]
+    pub optimizers: HashMap<String, OptimizerConfig>, // optimizer name => optimizer config
     pub object_storage: Option<StorageKind>,
 }
 
