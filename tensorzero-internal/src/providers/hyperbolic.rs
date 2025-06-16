@@ -4,9 +4,6 @@ use std::sync::OnceLock;
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
-use crate::inference::providers::helpers::{
-    inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
-};
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, Latency, ModelInferenceRequest,
@@ -14,6 +11,9 @@ use crate::inference::types::{
 };
 use crate::inference::types::{ContentBlockOutput, ProviderInferenceResponseArgs};
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
+use crate::providers::helpers::{
+    inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
+};
 use futures::{StreamExt, TryStreamExt};
 use lazy_static::lazy_static;
 use secrecy::{ExposeSecret, SecretString};
@@ -25,7 +25,7 @@ use super::openai::{
     get_chat_url, handle_openai_error, prepare_openai_messages, stream_openai,
     OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice,
 };
-use super::provider_trait::{InferenceProvider, TensorZeroEventError};
+use crate::inference::{InferenceProvider, TensorZeroEventError};
 
 lazy_static! {
     static ref HYPERBOLIC_DEFAULT_BASE_URL: Url = {
@@ -423,13 +423,13 @@ mod tests {
 
     use super::*;
 
-    use crate::inference::providers::openai::{
-        OpenAIFinishReason, OpenAIResponseChoice, OpenAIResponseMessage, OpenAIUsage,
-    };
-    use crate::inference::providers::test_helpers::WEATHER_TOOL_CONFIG;
     use crate::inference::types::{
         FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role,
     };
+    use crate::providers::openai::{
+        OpenAIFinishReason, OpenAIResponseChoice, OpenAIResponseMessage, OpenAIUsage,
+    };
+    use crate::providers::test_helpers::WEATHER_TOOL_CONFIG;
 
     #[test]
     fn test_hyperbolic_request_new() {

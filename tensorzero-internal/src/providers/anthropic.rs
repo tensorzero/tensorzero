@@ -1257,9 +1257,9 @@ mod tests {
     use std::borrow::Cow;
 
     use super::*;
-    use crate::inference::providers::test_helpers::WEATHER_TOOL_CONFIG;
     use crate::inference::types::{FunctionType, ModelInferenceRequestJsonMode};
     use crate::jsonschema_util::DynamicJSONSchema;
+    use crate::providers::test_helpers::WEATHER_TOOL_CONFIG;
     use crate::tool::{DynamicToolConfig, ToolConfig, ToolResult};
     use serde_json::json;
     use uuid::Uuid;

@@ -13,7 +13,6 @@ use tokio::time::Instant;
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
-use crate::inference::providers::provider_trait::{InferenceProvider, TensorZeroEventError};
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::resolved_input::FileWithPath;
 use crate::inference::types::{
@@ -25,10 +24,11 @@ use crate::inference::types::{
 use crate::inference::types::{
     FinishReason, ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner,
 };
+use crate::inference::{InferenceProvider, TensorZeroEventError};
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
-use crate::inference::providers::helpers::{
+use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
 
@@ -1289,11 +1289,9 @@ mod tests {
     use serde_json::json;
 
     use crate::{
-        inference::{
-            providers::test_helpers::{
-                MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL, WEATHER_TOOL_CONFIG,
-            },
-            types::{FunctionType, RequestMessage},
+        inference::types::{FunctionType, RequestMessage},
+        providers::test_helpers::{
+            MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL, WEATHER_TOOL_CONFIG,
         },
         tool::ToolCallConfig,
     };

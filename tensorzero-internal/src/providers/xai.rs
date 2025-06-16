@@ -12,24 +12,24 @@ use url::Url;
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
-use crate::inference::providers::helpers::{
-    inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
-};
-use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlockOutput, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponse, ProviderInferenceResponseArgs,
 };
+use crate::inference::InferenceProvider;
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
+use crate::providers::helpers::{
+    inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
+};
 
 use super::openai::{
     get_chat_url, handle_openai_error, prepare_openai_messages, prepare_openai_tools,
     stream_openai, OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, OpenAITool,
     OpenAIToolChoice, StreamOptions,
 };
-use super::provider_trait::TensorZeroEventError;
+use crate::inference::TensorZeroEventError;
 
 lazy_static! {
     static ref XAI_DEFAULT_BASE_URL: Url = {
@@ -488,14 +488,14 @@ mod tests {
 
     use super::*;
 
-    use crate::inference::providers::openai::{
-        OpenAIFinishReason, OpenAIResponseChoice, OpenAIResponseMessage, OpenAIToolType,
-        OpenAIUsage, SpecificToolChoice, SpecificToolFunction,
-    };
-    use crate::inference::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
     use crate::inference::types::{
         FinishReason, FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role,
     };
+    use crate::providers::openai::{
+        OpenAIFinishReason, OpenAIResponseChoice, OpenAIResponseMessage, OpenAIToolType,
+        OpenAIUsage, SpecificToolChoice, SpecificToolFunction,
+    };
+    use crate::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
 
     #[test]
     fn test_xai_request_new() {

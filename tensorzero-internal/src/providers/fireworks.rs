@@ -761,10 +761,10 @@ mod tests {
 
     use super::*;
 
-    use crate::inference::providers::openai::{OpenAIToolType, OpenAIUsage};
-    use crate::inference::providers::openai::{SpecificToolChoice, SpecificToolFunction};
-    use crate::inference::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
     use crate::inference::types::{FunctionType, RequestMessage, Role, Usage};
+    use crate::providers::openai::{OpenAIToolType, OpenAIUsage};
+    use crate::providers::openai::{SpecificToolChoice, SpecificToolFunction};
+    use crate::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
 
     #[test]
     fn test_fireworks_response_with_thinking_blocks() {

@@ -20,6 +20,7 @@ pub use resolved_input::{ResolvedInput, ResolvedInputMessage, ResolvedInputMessa
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{Map, Value};
 use serde_untagged::UntaggedEnumVisitor;
+use std::borrow::Borrow;
 use std::{
     borrow::Cow,
     collections::HashMap,
@@ -1889,9 +1890,9 @@ fn borrow_cow<'a, T: ToOwned + ?Sized>(cow: &'a Cow<'a, T>) -> Cow<'a, T> {
 mod tests {
     use super::*;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
-    use crate::inference::providers::test_helpers::get_temperature_tool_config;
     use crate::jsonschema_util::StaticJSONSchema;
     use crate::minijinja_util::TemplateConfig;
+    use crate::providers::test_helpers::get_temperature_tool_config;
     use crate::tool::ToolConfig;
     use crate::tool::{DynamicToolConfig, ToolChoice};
     use serde_json::json;

@@ -18,7 +18,6 @@ use uuid::Uuid;
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
-use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::StartBatchProviderInferenceResponse;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::file::require_image;
@@ -32,14 +31,15 @@ use crate::inference::types::{
 use crate::inference::types::{
     FinishReason, ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner,
 };
+use crate::inference::InferenceProvider;
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
-use crate::inference::providers::helpers::{
+use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
 
-use super::provider_trait::TensorZeroEventError;
+use crate::inference::TensorZeroEventError;
 
 lazy_static! {
     static ref OPENROUTER_DEFAULT_BASE_URL: Url = {
@@ -1400,11 +1400,9 @@ mod tests {
     use serde_json::json;
 
     use crate::{
-        inference::{
-            providers::test_helpers::{
-                MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL, WEATHER_TOOL_CONFIG,
-            },
-            types::{FunctionType, RequestMessage},
+        inference::types::{FunctionType, RequestMessage},
+        providers::test_helpers::{
+            MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL, WEATHER_TOOL_CONFIG,
         },
         tool::ToolCallConfig,
     };

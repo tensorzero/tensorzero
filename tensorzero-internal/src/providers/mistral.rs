@@ -14,10 +14,6 @@ use crate::{
     endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
     inference::{
-        providers::helpers::check_new_tool_call_name,
-        providers::helpers::{
-            inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
-        },
         types::{
             batch::{
                 BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse,
@@ -27,17 +23,19 @@ use crate::{
             ProviderInferenceResponse, ProviderInferenceResponseArgs,
             ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, TextChunk, Usage,
         },
+        InferenceProvider,
     },
     model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider},
+    providers::helpers::{
+        check_new_tool_call_name, inject_extra_request_data_and_send,
+        inject_extra_request_data_and_send_eventsource,
+    },
     tool::{ToolCall, ToolCallChunk, ToolChoice},
 };
 
-use super::{
-    openai::{
-        convert_stream_error, get_chat_url, tensorzero_to_openai_messages, OpenAIFunction,
-        OpenAIRequestMessage, OpenAISystemRequestMessage, OpenAITool, OpenAIToolType,
-    },
-    provider_trait::InferenceProvider,
+use super::openai::{
+    convert_stream_error, get_chat_url, tensorzero_to_openai_messages, OpenAIFunction,
+    OpenAIRequestMessage, OpenAISystemRequestMessage, OpenAITool, OpenAIToolType,
 };
 
 lazy_static! {
@@ -772,8 +770,8 @@ mod tests {
 
     use super::*;
 
-    use crate::inference::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
     use crate::inference::types::{FunctionType, RequestMessage, Role};
+    use crate::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
 
     #[test]
     fn test_mistral_request_new() {

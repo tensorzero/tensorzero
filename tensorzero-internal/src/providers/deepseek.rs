@@ -752,14 +752,14 @@ mod tests {
     use std::time::Duration;
     use uuid::Uuid;
 
-    use crate::inference::providers::openai::{
-        OpenAIRequestFunctionCall, OpenAIRequestToolCall, OpenAIToolRequestMessage, OpenAIToolType,
-        OpenAIUsage, SpecificToolChoice, SpecificToolFunction,
-    };
-    use crate::inference::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
     use crate::inference::types::{
         FinishReason, FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role,
     };
+    use crate::providers::openai::{
+        OpenAIRequestFunctionCall, OpenAIRequestToolCall, OpenAIToolRequestMessage, OpenAIToolType,
+        OpenAIUsage, SpecificToolChoice, SpecificToolFunction,
+    };
+    use crate::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
 
     #[test]
     fn test_deepseek_request_new() {
