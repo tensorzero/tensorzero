@@ -1,9 +1,17 @@
 use std::collections::HashMap;
+use uuid::Uuid;
 
-use tensorzero::RenderedStoredInference;
-use tensorzero_internal::optimization::{
-    Optimizer, OptimizerConfig, OptimizerOutput, OptimizerStatus,
+use tensorzero::{RenderedStoredInference, Role};
+use tensorzero_internal::{
+    cache::CacheOptions,
+    clickhouse::ClickHouseConnectionInfo,
+    endpoints::inference::InferenceClients,
+    inference::types::{ContentBlock, FunctionType, ModelInferenceRequest, RequestMessage, Text},
+    optimization::{Optimizer, OptimizerConfig, OptimizerOutput, OptimizerStatus},
+    variant::JsonMode,
 };
+
+mod openai_sft;
 
 pub trait OptimizationTestCase {
     fn supports_image_data(&self) -> bool;
@@ -35,6 +43,44 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
     let OptimizerStatus::Completed(OptimizerOutput::Model(model_config)) = status else {
         panic!("Expected model config");
     };
+    let system = "You are a helpful assistant named Dr. M.M. Patel.".to_string();
+    let messages = vec![RequestMessage {
+        role: Role::User,
+        content: vec![ContentBlock::Text(Text {
+            text: "What is the capital of France?".to_string(),
+        })],
+    }];
+    let request = ModelInferenceRequest {
+        system: Some(system),
+        messages,
+        inference_id: Uuid::now_v7(),
+        tool_config: None,
+        temperature: None,
+        top_p: None,
+        max_tokens: None,
+        presence_penalty: None,
+        frequency_penalty: None,
+        seed: None,
+        stop_sequences: None,
+        stream: false,
+        json_mode: JsonMode::Off.into(),
+        function_type: FunctionType::Chat,
+        output_schema: None,
+        extra_body: Default::default(),
+        extra_headers: Default::default(),
+        extra_cache_key: None,
+    };
+    let clients = InferenceClients {
+        http_client: &client,
+        clickhouse_connection_info: &ClickHouseConnectionInfo::Disabled,
+        credentials: &HashMap::new(),
+        cache_options: &CacheOptions::default(),
+    };
+    let response = model_config
+        .infer(&request, &clients, "test")
+        .await
+        .unwrap();
+    println!("{:?}", response);
 }
 
 fn get_examples(
@@ -42,4 +88,20 @@ fn get_examples(
     num_examples: usize,
 ) -> Vec<RenderedStoredInference> {
     todo!()
+}
+
+/// Generates a `#[tokio::test] async fn $fn_name() { run_test_case(&$constructor).await; }`
+#[macro_export]
+macro_rules! optimization_test_case {
+    // $fn_name  = the name of the generated test function
+    // $constructor = an expression which yields your impl of OptimizationTestCase
+    ($fn_name:ident, $constructor:expr) => {
+        ::paste::paste! {
+            #[tokio::test]
+            async fn [<test_optimization_ $fn_name>]() {
+                // you might need to import run_test_case
+                crate::run_test_case(&$constructor).await;
+            }
+        }
+    };
 }

@@ -62,7 +62,7 @@ impl From<(CacheParamsOptions, bool)> for CacheOptions {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct CacheOptions {
     pub max_age_s: Option<u32>,
     pub enabled: CacheEnabledMode,
