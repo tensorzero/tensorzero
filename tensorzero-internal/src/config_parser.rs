@@ -19,7 +19,7 @@ use crate::jsonschema_util::StaticJSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::{ModelConfig, ModelTable, UninitializedModelConfig};
 use crate::model_table::{CowNoClone, ShorthandModelConfig};
-use crate::optimization::OptimizerConfig;
+use crate::optimization::{OptimizerConfig, UninitializedOptimizerConfig};
 use crate::tool::{create_implicit_tool_call_config, StaticToolConfig, ToolChoice};
 use crate::variant::best_of_n_sampling::UninitializedBestOfNSamplingConfig;
 use crate::variant::chain_of_thought::UninitializedChainOfThoughtConfig;
@@ -422,6 +422,11 @@ impl<'c> Config<'c> {
             .collect::<Result<HashMap<_, _>, _>>()?;
 
         let object_store_info = ObjectStoreInfo::new(uninitialized_config.object_storage)?;
+        let optimizers = uninitialized_config
+            .optimizers
+            .into_iter()
+            .map(|(name, config)| config.load().map(|c| (name, c)))
+            .collect::<Result<HashMap<_, _>, _>>()?;
 
         let mut config = Config {
             gateway: uninitialized_config.gateway,
@@ -442,7 +447,7 @@ impl<'c> Config<'c> {
             templates,
             object_store_info,
             provider_types: uninitialized_config.provider_types,
-            optimizers: uninitialized_config.optimizers,
+            optimizers,
         };
 
         // Initialize the templates
@@ -714,7 +719,7 @@ struct UninitializedConfig {
     #[serde(default)]
     pub provider_types: ProviderTypesConfig, // global configuration for all model providers of a particular type
     #[serde(default)]
-    pub optimizers: HashMap<String, OptimizerConfig>, // optimizer name => optimizer config
+    pub optimizers: HashMap<String, UninitializedOptimizerConfig>, // optimizer name => optimizer config
     pub object_storage: Option<StorageKind>,
 }
 

@@ -49,18 +49,18 @@ use super::helpers::{parse_jsonl_batch_file, JsonlBatchFileInfo};
 use super::provider_trait::{TensorZeroEventError, WrappedProvider};
 
 lazy_static! {
-    static ref OPENAI_DEFAULT_BASE_URL: Url = {
+    pub static ref OPENAI_DEFAULT_BASE_URL: Url = {
         #[expect(clippy::expect_used)]
         Url::parse("https://api.openai.com/v1/").expect("Failed to parse OPENAI_DEFAULT_BASE_URL")
     };
 }
 
-fn default_api_key_location() -> CredentialLocation {
+pub fn default_api_key_location() -> CredentialLocation {
     CredentialLocation::Env("OPENAI_API_KEY".to_string())
 }
 
 const PROVIDER_NAME: &str = "OpenAI";
-const PROVIDER_TYPE: &str = "openai";
+pub const PROVIDER_TYPE: &str = "openai";
 
 #[derive(Debug)]
 pub struct OpenAIProvider {
@@ -69,7 +69,7 @@ pub struct OpenAIProvider {
     credentials: OpenAICredentials,
 }
 
-static DEFAULT_CREDENTIALS: OnceLock<OpenAICredentials> = OnceLock::new();
+pub static DEFAULT_CREDENTIALS: OnceLock<OpenAICredentials> = OnceLock::new();
 
 impl OpenAIProvider {
     pub fn new(
