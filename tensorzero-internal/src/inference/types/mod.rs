@@ -1,4 +1,3 @@
-use crate::inference::providers::helpers::borrow_cow;
 use crate::serde_util::{deserialize_json_string, deserialize_optional_json_string};
 use crate::tool::ToolCallInput;
 use derive_builder::Builder;
@@ -1875,6 +1874,14 @@ fn handle_textual_content_block<F, A>(
                 blocks.insert(key, create_block(text));
             }
         }
+    }
+}
+
+/// Turns a reference to a Cow into a `Cow::Borrowed`, without cloning
+fn borrow_cow<'a, T: ToOwned + ?Sized>(cow: &'a Cow<'a, T>) -> Cow<'a, T> {
+    match cow {
+        Cow::Borrowed(x) => Cow::Borrowed(x),
+        Cow::Owned(x) => Cow::Borrowed(x.borrow()),
     }
 }
 

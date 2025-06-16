@@ -8,13 +8,12 @@ use std::time::Duration;
 use tokio::time::Instant;
 use url::Url;
 
+use super::helpers::{
+    inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
+};
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
-use crate::inference::providers::helpers::{
-    inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
-};
-use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, Latency, ModelInferenceRequest,
@@ -27,6 +26,7 @@ use crate::inference::types::{
 use crate::inference::types::{
     PeekableProviderInferenceResponseStream, ProviderInferenceResponseChunk,
 };
+use crate::inference::InferenceProvider;
 use crate::model::{Credential, CredentialLocation, ModelProvider};
 use crate::tool::ToolCallChunk;
 

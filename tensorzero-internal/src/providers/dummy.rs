@@ -8,7 +8,7 @@ use serde_json::{json, Value};
 use tokio_stream::StreamExt;
 use uuid::Uuid;
 
-use super::provider_trait::InferenceProvider;
+use crate::inference::InferenceProvider;
 
 use crate::cache::ModelProviderRequest;
 use crate::embeddings::{EmbeddingProvider, EmbeddingProviderResponse, EmbeddingRequest};

@@ -1,223 +1,173 @@
+use futures::StreamExt;
+use lazy_static::lazy_static;
+use mime::MediaType;
+use reqwest::StatusCode;
+use reqwest_eventsource::{Event, EventSource};
+use secrecy::{ExposeSecret, SecretString};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::borrow::Cow;
 use std::sync::OnceLock;
 use std::time::Duration;
-
-use futures::StreamExt;
-use reqwest::StatusCode;
-use reqwest_eventsource::{Event, EventSource};
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use tokio::time::Instant;
+use url::Url;
 
 use crate::cache::ModelProviderRequest;
-use crate::config_parser::skip_credential_validation;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
-use crate::inference::providers::helpers::{
-    inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
-};
-use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
-use crate::inference::types::file::require_image;
 use crate::inference::types::resolved_input::FileWithPath;
 use crate::inference::types::{
-    batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk, FunctionType,
-    Latency, ModelInferenceRequestJsonMode, Role, Text, TextChunk,
+    batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk, FinishReason,
+    FunctionType, Latency, ModelInferenceRequestJsonMode, Role, Text,
 };
 use crate::inference::types::{
     ContentBlockOutput, FlattenUnknown, ModelInferenceRequest,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
     ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
-    ProviderInferenceResponseStreamInner, RequestMessage, Usage,
+    ProviderInferenceResponseStreamInner, RequestMessage, TextChunk, Thought, ThoughtChunk, Usage,
 };
-use crate::model::{build_creds_caching_default_with_fn, CredentialLocation};
-use crate::model::{fully_qualified_name, ModelProvider};
-use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
+use crate::inference::InferenceProvider;
+use crate::model::{
+    build_creds_caching_default, fully_qualified_name, Credential, CredentialLocation,
+    ModelProvider,
+};
+use crate::providers::helpers::{
+    inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
+};
+use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice, ToolConfig};
 
-use super::anthropic::{
-    prefill_json_chunk_response, prefill_json_response, AnthropicDocumentSource,
-    AnthropicDocumentType, AnthropicMessageDelta, AnthropicStopReason,
-};
-use super::gcp_vertex_gemini::{
-    default_api_key_location, parse_shorthand_url, GCPVertexCredentials, ShorthandUrl,
-};
 use super::helpers::peek_first_chunk;
 use super::openai::convert_stream_error;
 
-/// Implements a subset of the GCP Vertex Gemini API as documented [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/generateContent) for non-streaming
-/// and [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/streamGenerateContent) for streaming
-#[expect(unused)]
-const PROVIDER_NAME: &str = "GCP Vertex Anthropic";
-const PROVIDER_TYPE: &str = "gcp_vertex_anthropic";
+lazy_static! {
+    static ref ANTHROPIC_BASE_URL: Url = {
+        #[expect(clippy::expect_used)]
+        Url::parse("https://api.anthropic.com/v1/messages")
+            .expect("Failed to parse ANTHROPIC_BASE_URL")
+    };
+}
+const ANTHROPIC_API_VERSION: &str = "2023-06-01";
+const PROVIDER_NAME: &str = "Anthropic";
+const PROVIDER_TYPE: &str = "anthropic";
+
+fn default_api_key_location() -> CredentialLocation {
+    CredentialLocation::Env("ANTHROPIC_API_KEY".to_string())
+}
 
 #[derive(Debug)]
-pub struct GCPVertexAnthropicProvider {
-    model_id: String,
-    request_url: String,
-    streaming_request_url: String,
-    audience: String,
-    credentials: GCPVertexCredentials,
+pub struct AnthropicProvider {
+    model_name: String,
+    credentials: AnthropicCredentials,
 }
 
-static DEFAULT_CREDENTIALS: OnceLock<GCPVertexCredentials> = OnceLock::new();
+static DEFAULT_CREDENTIALS: OnceLock<AnthropicCredentials> = OnceLock::new();
 
-pub async fn make_gcp_sdk_credentials(
-    // This is only used in test mode
-    #[cfg_attr(not(any(test, feature = "e2e_tests")), expect(unused_variables))]
-    provider_type: &str,
-) -> Result<GCPVertexCredentials, Error> {
-    let creds_result = google_cloud_auth::credentials::Builder::default().build();
-
-    let handle_err = |e| {
-        if skip_credential_validation() {
-            #[cfg(any(test, feature = "e2e_tests"))]
-            {
-                tracing::warn!(
-                    "Failed to get GCP SDK credentials for a model provider of type `{provider_type}`, so the associated tests will likely fail: {e}",
-                );
-            }
-            Ok(GCPVertexCredentials::None)
-        } else {
-            Err(Error::new(ErrorDetails::GCPCredentials {
-                message: format!(
-                    "Failed to create GCP Vertex credentials from SDK: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-            }))
-        }
-    };
-
-    let creds = match creds_result {
-        Ok(creds) => creds,
-        Err(e) => {
-            return handle_err(e);
-        }
-    };
-    // Test that the credentials are valid by getting headers
-    match creds.headers(http::Extensions::default()).await {
-        Ok(_) => Ok(GCPVertexCredentials::Sdk(creds)),
-        Err(e) => handle_err(e),
-    }
-}
-
-impl GCPVertexAnthropicProvider {
-    // Constructs a provider from a shorthand string of the form:
-    // * 'projects/<project_id>/locations/<location>/publishers/anthropic/models/XXX'
-    // * 'projects/<project_id>/locations/<location>/endpoints/XXX'
-    //
-    // This is *not* a full url - we append ':generateContent' or ':streamGenerateContent' to the end of the path as needed.
-    pub async fn new_shorthand(project_url_path: String) -> Result<Self, Error> {
-        let credentials = build_creds_caching_default_with_fn(
-            None,
+impl AnthropicProvider {
+    pub fn new(
+        model_name: String,
+        api_key_location: Option<CredentialLocation>,
+    ) -> Result<Self, Error> {
+        let credentials = build_creds_caching_default(
+            api_key_location,
             default_api_key_location(),
             PROVIDER_TYPE,
             &DEFAULT_CREDENTIALS,
-            |creds| GCPVertexCredentials::try_from((creds, PROVIDER_TYPE)),
         )?;
-
-        // We only support model urls with the publisher 'anthropic'
-        let shorthand_url = parse_shorthand_url(&project_url_path, "anthropic")?;
-        let (location, model_id) = match shorthand_url {
-            ShorthandUrl::Publisher { location, model_id } => (location, model_id.to_string()),
-            ShorthandUrl::Endpoint {
-                location,
-                endpoint_id,
-            } => (location, format!("endpoints/{endpoint_id}")),
-        };
-
-        let request_url = format!(
-            "https://{location}-aiplatform.googleapis.com/v1/{project_url_path}:rawPredict"
-        );
-        let streaming_request_url = format!(
-            "https://{location}-aiplatform.googleapis.com/v1/{project_url_path}:streamRawPredict"
-        );
-        let audience = format!("https://{location}-aiplatform.googleapis.com/");
-
-        Ok(GCPVertexAnthropicProvider {
-            request_url,
-            streaming_request_url,
-            audience,
-            credentials,
-            model_id,
-        })
-    }
-
-    pub async fn new(
-        model_id: String,
-        location: String,
-        project_id: String,
-        api_key_location: Option<CredentialLocation>,
-    ) -> Result<Self, Error> {
-        let default_location = default_api_key_location();
-        let cred_location = api_key_location.as_ref().unwrap_or(&default_location);
-
-        let credentials = if matches!(cred_location, CredentialLocation::Sdk) {
-            make_gcp_sdk_credentials(PROVIDER_TYPE).await?
-        } else {
-            build_creds_caching_default_with_fn(
-                api_key_location,
-                default_api_key_location(),
-                PROVIDER_TYPE,
-                &DEFAULT_CREDENTIALS,
-                |creds| GCPVertexCredentials::try_from((creds, PROVIDER_TYPE)),
-            )?
-        };
-        let request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/anthropic/models/{model_id}:rawPredict");
-        let streaming_request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/anthropic/models/{model_id}:streamRawPredict");
-        let audience = format!("https://{location}-aiplatform.googleapis.com/");
-
-        Ok(GCPVertexAnthropicProvider {
-            model_id,
-            request_url,
-            streaming_request_url,
-            audience,
+        Ok(AnthropicProvider {
+            model_name,
             credentials,
         })
     }
 
-    pub fn model_id(&self) -> &str {
-        &self.model_id
+    pub fn model_name(&self) -> &str {
+        &self.model_name
     }
 }
 
-const ANTHROPIC_API_VERSION: &str = "vertex-2023-10-16";
+#[derive(Clone, Debug, Deserialize)]
+pub enum AnthropicCredentials {
+    Static(SecretString),
+    Dynamic(String),
+    None,
+}
 
-impl InferenceProvider for GCPVertexAnthropicProvider {
+impl TryFrom<Credential> for AnthropicCredentials {
+    type Error = Error;
+
+    fn try_from(credentials: Credential) -> Result<Self, Error> {
+        match credentials {
+            Credential::Static(key) => Ok(AnthropicCredentials::Static(key)),
+            Credential::Dynamic(key_name) => Ok(AnthropicCredentials::Dynamic(key_name)),
+            Credential::Missing => Ok(AnthropicCredentials::None),
+            _ => Err(Error::new(ErrorDetails::Config {
+                message: "Invalid api_key_location for Anthropic provider".to_string(),
+            })),
+        }
+    }
+}
+
+impl AnthropicCredentials {
+    fn get_api_key<'a>(
+        &'a self,
+        dynamic_api_keys: &'a InferenceCredentials,
+    ) -> Result<&'a SecretString, Error> {
+        match self {
+            AnthropicCredentials::Static(api_key) => Ok(api_key),
+            AnthropicCredentials::Dynamic(key_name) => {
+                dynamic_api_keys.get(key_name).ok_or_else(|| {
+                    ErrorDetails::ApiKeyMissing {
+                        provider_name: PROVIDER_NAME.to_string(),
+                    }
+                    .into()
+                })
+            }
+            AnthropicCredentials::None => Err(ErrorDetails::ApiKeyMissing {
+                provider_name: PROVIDER_NAME.to_string(),
+            }
+            .into()),
+        }
+    }
+}
+
+impl InferenceProvider for AnthropicProvider {
     /// Anthropic non-streaming API request
     async fn infer<'a>(
         &'a self,
         ModelProviderRequest {
             request,
-            provider_name,
-            model_name,
+            provider_name: _,
+            model_name: tensorzero_model_name,
         }: ModelProviderRequest<'a>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_body = serde_json::to_value(GCPVertexAnthropicRequestBody::new(request)?)
-            .map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: format!(
-                        "Error serializing GCP Vertex Anthropic request: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                })
-            })?;
-        let auth_headers = self
-            .credentials
-            .get_auth_headers(&self.audience, dynamic_api_keys)
-            .await?;
+        let request_body =
+            serde_json::to_value(AnthropicRequestBody::new(&self.model_name, request)?).map_err(
+                |e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!(
+                            "Error serializing Anthropic request: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
+                    })
+                },
+            )?;
+        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
-        let builder = http_client.post(&self.request_url).headers(auth_headers);
+        let builder = http_client
+            .post(ANTHROPIC_BASE_URL.as_ref())
+            .header("anthropic-version", ANTHROPIC_API_VERSION)
+            .header("x-api-key", api_key.expose_secret());
 
         let (res, raw_request) = inject_extra_request_data_and_send(
             PROVIDER_TYPE,
             &request.extra_body,
             &request.extra_headers,
             model_provider,
-            model_name,
+            tensorzero_model_name,
             request_body,
             builder,
         )
@@ -240,36 +190,48 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
 
             let response = serde_json::from_str(&raw_response).map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing JSON response: {e}: {raw_response}"),
+                    message: format!(
+                        "Error parsing JSON response: {}: {raw_response}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(raw_request.clone()),
                     raw_response: Some(raw_response.clone()),
                 })
             })?;
 
-            let response_with_latency = GCPVertexAnthropicResponseWithMetadata {
+            let response_with_latency = AnthropicResponseWithMetadata {
                 response,
-                raw_response,
                 latency,
                 raw_request,
+                generic_request: request,
+                input_messages: request.messages.clone(),
                 function_type: &request.function_type,
                 json_mode: &request.json_mode,
-                generic_request: request,
-                model_name,
-                provider_name,
+                raw_response,
+                model_name: tensorzero_model_name,
+                provider_name: &model_provider.name,
             };
             Ok(response_with_latency.try_into()?)
         } else {
             let response_code = res.status();
-            let error_body = res.json::<GCPVertexAnthropicError>().await.map_err(|e| {
+            let response_text = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing response: {e:?}"),
+                    message: format!("Error parsing response: {}", DisplayOrDebugGateway::new(e)),
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 })
             })?;
-            handle_anthropic_error(response_code, error_body.error)
+            let error_body: AnthropicError = serde_json::from_str(&response_text).map_err(|e| {
+                Error::new(ErrorDetails::InferenceServer {
+                    message: format!("Error parsing response: {}", DisplayOrDebugGateway::new(e)),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(raw_request.clone()),
+                    raw_response: Some(response_text),
+                })
+            })?;
+            handle_anthropic_error(response_code, error_body.error, raw_request)
         }
     }
 
@@ -282,26 +244,27 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
             model_name,
         }: ModelProviderRequest<'a>,
         http_client: &'a reqwest::Client,
-        dynamic_api_keys: &'a InferenceCredentials,
+        api_key: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let request_body = serde_json::to_value(GCPVertexAnthropicRequestBody::new(request)?)
-            .map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: format!(
-                        "Error serializing GCP Vertex Anthropic request: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                })
-            })?;
-        let auth_headers = self
-            .credentials
-            .get_auth_headers(&self.audience, dynamic_api_keys)
-            .await?;
+        let request_body =
+            serde_json::to_value(AnthropicRequestBody::new(&self.model_name, request)?).map_err(
+                |e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!(
+                            "Error serializing Anthropic request: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
+                    })
+                },
+            )?;
         let start_time = Instant::now();
+        let api_key = self.credentials.get_api_key(api_key)?;
         let builder = http_client
-            .post(&self.streaming_request_url)
-            .headers(auth_headers);
+            .post(ANTHROPIC_BASE_URL.as_ref())
+            .header("anthropic-version", ANTHROPIC_API_VERSION)
+            .header("x-api-key", api_key.expose_secret());
+
         let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
             PROVIDER_TYPE,
             &request.extra_body,
@@ -331,7 +294,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<StartBatchProviderInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
-            provider_type: "GCP Vertex Anthropic".to_string(),
+            provider_type: "Anthropic".to_string(),
         }
         .into())
     }
@@ -358,6 +321,7 @@ fn stream_anthropic(
 ) -> ProviderInferenceResponseStreamInner {
     Box::pin(async_stream::stream! {
         let mut current_tool_id : Option<String> = None;
+        let mut current_tool_name: Option<String> = None;
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
@@ -366,7 +330,7 @@ fn stream_anthropic(
                 Ok(event) => match event {
                     Event::Open => continue,
                     Event::Message(message) => {
-                        let data: Result<GCPVertexAnthropicStreamMessage, Error> =
+                        let data: Result<AnthropicStreamMessage, Error> =
                             serde_json::from_str(&message.data).map_err(|e| Error::new(ErrorDetails::InferenceServer {
                                 message: format!(
                                     "Error parsing message: {}, Data: {}",
@@ -374,10 +338,10 @@ fn stream_anthropic(
                                 ),
                                 provider_type: PROVIDER_TYPE.to_string(),
                                 raw_request: None,
-                                raw_response: None,
+                                raw_response: Some(message.data.clone()),
                             }));
                         // Anthropic streaming API docs specify that this is the last message
-                        if let Ok(GCPVertexAnthropicStreamMessage::MessageStop) = data {
+                        if let Ok(AnthropicStreamMessage::MessageStop) = data {
                             break;
                         }
 
@@ -387,6 +351,7 @@ fn stream_anthropic(
                                 data,
                                 start_time.elapsed(),
                                 &mut current_tool_id,
+                                &mut current_tool_name,
                             )
                         });
 
@@ -408,16 +373,16 @@ fn stream_anthropic(
 #[serde(rename_all = "lowercase")]
 /// Anthropic doesn't handle the system message in this way
 /// It's a field of the POST body instead
-enum GCPVertexAnthropicRole {
+enum AnthropicRole {
     User,
     Assistant,
 }
 
-impl From<Role> for GCPVertexAnthropicRole {
+impl From<Role> for AnthropicRole {
     fn from(role: Role) -> Self {
         match role {
-            Role::User => GCPVertexAnthropicRole::User,
-            Role::Assistant => GCPVertexAnthropicRole::Assistant,
+            Role::User => AnthropicRole::User,
+            Role::Assistant => AnthropicRole::Assistant,
         }
     }
 }
@@ -427,42 +392,57 @@ impl From<Role> for GCPVertexAnthropicRole {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
-enum GCPVertexAnthropicToolChoice<'a> {
-    Auto,
-    Any,
-    Tool { name: &'a str },
+enum AnthropicToolChoice<'a> {
+    Auto {
+        disable_parallel_tool_use: Option<bool>,
+    },
+    Any {
+        disable_parallel_tool_use: Option<bool>,
+    },
+    Tool {
+        name: &'a str,
+        disable_parallel_tool_use: Option<bool>,
+    },
 }
 
-// We map our ToolChoice enum to the Anthropic one that serializes properly
-impl<'a> TryFrom<&'a ToolChoice> for GCPVertexAnthropicToolChoice<'a> {
+// We map our ToolCallConfig struct to the AnthropicToolChoice that serializes properly
+impl<'a> TryFrom<&'a ToolCallConfig> for AnthropicToolChoice<'a> {
     type Error = Error;
-    fn try_from(tool_choice: &'a ToolChoice) -> Result<Self, Error> {
+
+    fn try_from(tool_call_config: &'a ToolCallConfig) -> Result<Self, Error> {
+        let disable_parallel_tool_use = Some(tool_call_config.parallel_tool_calls == Some(false));
+        let tool_choice = &tool_call_config.tool_choice;
+
         match tool_choice {
-            ToolChoice::Auto => Ok(GCPVertexAnthropicToolChoice::Auto),
-            ToolChoice::Required => Ok(GCPVertexAnthropicToolChoice::Any),
-            ToolChoice::Specific(name) => Ok(GCPVertexAnthropicToolChoice::Tool { name }),
-            // Workaround for Anthropic API limitation: they don't support explicitly specifying "none"
-            // for tool choice. Instead, we return Auto but the request construction will ensure
-            // that no tools are sent in the request payload. This achieves the same effect
-            // as explicitly telling the model not to use tools, since without any tools
-            // being provided, the model cannot make tool calls.
-            ToolChoice::None => Ok(GCPVertexAnthropicToolChoice::Auto),
+            ToolChoice::Auto => Ok(AnthropicToolChoice::Auto {
+                disable_parallel_tool_use,
+            }),
+            ToolChoice::Required => Ok(AnthropicToolChoice::Any {
+                disable_parallel_tool_use,
+            }),
+            ToolChoice::Specific(name) => Ok(AnthropicToolChoice::Tool {
+                name,
+                disable_parallel_tool_use,
+            }),
+            ToolChoice::None => Ok(AnthropicToolChoice::Auto {
+                disable_parallel_tool_use,
+            }),
         }
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-struct GCPVertexAnthropicTool<'a> {
+struct AnthropicTool<'a> {
     name: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     description: Option<&'a str>,
     input_schema: &'a Value,
 }
 
-impl<'a> From<&'a ToolConfig> for GCPVertexAnthropicTool<'a> {
+impl<'a> From<&'a ToolConfig> for AnthropicTool<'a> {
     fn from(value: &'a ToolConfig) -> Self {
         // In case we add more tool types in the future, the compiler will complain here.
-        GCPVertexAnthropicTool {
+        AnthropicTool {
             name: value.name(),
             description: Some(value.description()),
             input_schema: value.parameters(),
@@ -473,16 +453,24 @@ impl<'a> From<&'a ToolConfig> for GCPVertexAnthropicTool<'a> {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
-enum GCPVertexAnthropicMessageContent<'a> {
+// NB: Anthropic also supports Image blocks here but we won't for now
+enum AnthropicMessageContent<'a> {
     Text {
         text: &'a str,
     },
     Image {
         source: AnthropicDocumentSource,
     },
+    Document {
+        source: AnthropicDocumentSource,
+    },
     ToolResult {
         tool_use_id: &'a str,
-        content: Vec<GCPVertexAnthropicMessageContent<'a>>,
+        content: Vec<AnthropicMessageContent<'a>>,
+    },
+    Thinking {
+        thinking: &'a str,
+        signature: Option<&'a str>,
     },
     ToolUse {
         id: &'a str,
@@ -491,15 +479,29 @@ enum GCPVertexAnthropicMessageContent<'a> {
     },
 }
 
-impl<'a> TryFrom<&'a ContentBlock>
-    for Option<FlattenUnknown<'a, GCPVertexAnthropicMessageContent<'a>>>
-{
+/// This is used by Anthropic for both images and documents -
+/// the only different is the outer `AnthropicMessageContent`
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub struct AnthropicDocumentSource {
+    pub r#type: AnthropicDocumentType,
+    pub media_type: MediaType,
+    pub data: String,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AnthropicDocumentType {
+    Base64,
+}
+
+impl<'a> TryFrom<&'a ContentBlock> for Option<FlattenUnknown<'a, AnthropicMessageContent<'a>>> {
     type Error = Error;
 
     fn try_from(block: &'a ContentBlock) -> Result<Self, Self::Error> {
         match block {
             ContentBlock::Text(Text { text }) => Ok(Some(FlattenUnknown::Normal(
-                GCPVertexAnthropicMessageContent::Text { text },
+                AnthropicMessageContent::Text { text },
             ))),
             ContentBlock::ToolCall(tool_call) => {
                 // Convert the tool call arguments from String to JSON Value (Anthropic expects an object)
@@ -517,18 +519,17 @@ impl<'a> TryFrom<&'a ContentBlock>
                 })?;
 
                 if !input.is_object() {
-                    return Err(ErrorDetails::InferenceClient {
+                    return Err(Error::new(ErrorDetails::InferenceClient {
                         status_code: Some(StatusCode::BAD_REQUEST),
                         message: "Tool call arguments must be a JSON object".to_string(),
                         provider_type: PROVIDER_TYPE.to_string(),
                         raw_request: None,
                         raw_response: Some(tool_call.arguments.clone()),
-                    }
-                    .into());
+                    }));
                 }
 
                 Ok(Some(FlattenUnknown::Normal(
-                    GCPVertexAnthropicMessageContent::ToolUse {
+                    AnthropicMessageContent::ToolUse {
                         id: &tool_call.id,
                         name: &tool_call.name,
                         input,
@@ -536,9 +537,9 @@ impl<'a> TryFrom<&'a ContentBlock>
                 )))
             }
             ContentBlock::ToolResult(tool_result) => Ok(Some(FlattenUnknown::Normal(
-                GCPVertexAnthropicMessageContent::ToolResult {
+                AnthropicMessageContent::ToolResult {
                     tool_use_id: &tool_result.id,
-                    content: vec![GCPVertexAnthropicMessageContent::Text {
+                    content: vec![AnthropicMessageContent::Text {
                         text: &tool_result.result,
                     }],
                 },
@@ -548,23 +549,27 @@ impl<'a> TryFrom<&'a ContentBlock>
                     file,
                     storage_path: _,
                 } = &**file;
-                require_image(&file.mime_type, PROVIDER_TYPE)?;
-                Ok(Some(FlattenUnknown::Normal(
-                    GCPVertexAnthropicMessageContent::Image {
-                        source: AnthropicDocumentSource {
-                            r#type: AnthropicDocumentType::Base64,
-                            media_type: file.mime_type.clone(),
-                            data: file.data()?.clone(),
-                        },
-                    },
-                )))
+                let document = AnthropicDocumentSource {
+                    r#type: AnthropicDocumentType::Base64,
+                    media_type: file.mime_type.clone(),
+                    data: file.data()?.clone(),
+                };
+                if file.mime_type.type_() == mime::IMAGE {
+                    Ok(Some(FlattenUnknown::Normal(
+                        AnthropicMessageContent::Image { source: document },
+                    )))
+                } else {
+                    Ok(Some(FlattenUnknown::Normal(
+                        AnthropicMessageContent::Document { source: document },
+                    )))
+                }
             }
-            // We don't support thought blocks being passed in from a request.
-            // These are only possible to be passed in in the scenario where the
-            // output of a chat completion is used as an input to another model inference,
-            // i.e. a judge or something.
-            // We don't think the thoughts should be passed in in this case.
-            ContentBlock::Thought(_thought) => Ok(None),
+            ContentBlock::Thought(thought) => Ok(Some(FlattenUnknown::Normal(
+                AnthropicMessageContent::Thinking {
+                    thinking: &thought.text,
+                    signature: thought.signature.as_deref(),
+                },
+            ))),
             ContentBlock::Unknown {
                 data,
                 model_provider_name: _,
@@ -574,27 +579,26 @@ impl<'a> TryFrom<&'a ContentBlock>
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-struct GCPVertexAnthropicMessage<'a> {
-    role: GCPVertexAnthropicRole,
-    content: Vec<FlattenUnknown<'a, GCPVertexAnthropicMessageContent<'a>>>,
+struct AnthropicMessage<'a> {
+    role: AnthropicRole,
+    content: Vec<FlattenUnknown<'a, AnthropicMessageContent<'a>>>,
 }
 
-impl<'a> TryFrom<&'a RequestMessage> for GCPVertexAnthropicMessage<'a> {
+impl<'a> TryFrom<&'a RequestMessage> for AnthropicMessage<'a> {
     type Error = Error;
-
     fn try_from(
         inference_message: &'a RequestMessage,
-    ) -> Result<GCPVertexAnthropicMessage<'a>, Self::Error> {
-        let content: Vec<FlattenUnknown<GCPVertexAnthropicMessageContent>> = inference_message
+    ) -> Result<AnthropicMessage<'a>, Self::Error> {
+        let content: Vec<FlattenUnknown<AnthropicMessageContent>> = inference_message
             .content
             .iter()
             .map(|block| block.try_into())
-            .collect::<Result<Vec<Option<FlattenUnknown<GCPVertexAnthropicMessageContent>>>, _>>()?
+            .collect::<Result<Vec<Option<FlattenUnknown<AnthropicMessageContent>>>, _>>()?
             .into_iter()
             .flatten()
             .collect();
 
-        Ok(GCPVertexAnthropicMessage {
+        Ok(AnthropicMessage {
             role: inference_message.role.into(),
             content,
         })
@@ -602,9 +606,9 @@ impl<'a> TryFrom<&'a RequestMessage> for GCPVertexAnthropicMessage<'a> {
 }
 
 #[derive(Debug, PartialEq, Serialize)]
-struct GCPVertexAnthropicRequestBody<'a> {
-    anthropic_version: &'static str,
-    messages: Vec<GCPVertexAnthropicMessage<'a>>,
+struct AnthropicRequestBody<'a> {
+    model: &'a str,
+    messages: Vec<AnthropicMessage<'a>>,
     max_tokens: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
     stream: Option<bool>,
@@ -614,17 +618,20 @@ struct GCPVertexAnthropicRequestBody<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    stop_sequences: Option<Cow<'a, [String]>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     top_p: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tool_choice: Option<GCPVertexAnthropicToolChoice<'a>>,
+    stop_sequences: Option<Cow<'a, [String]>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tools: Option<Vec<GCPVertexAnthropicTool<'a>>>,
+    tool_choice: Option<AnthropicToolChoice<'a>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tools: Option<Vec<AnthropicTool<'a>>>,
 }
 
-impl<'a> GCPVertexAnthropicRequestBody<'a> {
-    fn new(request: &'a ModelInferenceRequest) -> Result<GCPVertexAnthropicRequestBody<'a>, Error> {
+impl<'a> AnthropicRequestBody<'a> {
+    fn new(
+        model_name: &'a str,
+        request: &'a ModelInferenceRequest,
+    ) -> Result<AnthropicRequestBody<'a>, Error> {
         if request.messages.is_empty() {
             return Err(ErrorDetails::InvalidRequest {
                 message: "Anthropic requires at least one message".to_string(),
@@ -632,21 +639,23 @@ impl<'a> GCPVertexAnthropicRequestBody<'a> {
             .into());
         }
         let system = request.system.as_deref();
-        let request_messages: Vec<GCPVertexAnthropicMessage> = request
+        let request_messages: Vec<AnthropicMessage> = request
             .messages
             .iter()
-            .map(GCPVertexAnthropicMessage::try_from)
+            .map(AnthropicMessage::try_from)
             .collect::<Result<Vec<_>, _>>()?;
-        let mut messages = prepare_messages(request_messages)?;
-        if matches!(
+        let messages = prepare_messages(request_messages)?;
+        let messages = if matches!(
             request.json_mode,
             ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict
         ) && matches!(request.function_type, FunctionType::Json)
         {
-            prefill_json_message(&mut messages)
-        }
+            prefill_json_message(messages)
+        } else {
+            messages
+        };
 
-        // Workaround for GCP Vertex AI Anthropic API limitation: they don't support explicitly specifying "none"
+        // Workaround for Anthropic API limitation: they don't support explicitly specifying "none"
         // for tool choice. When ToolChoice::None is specified, we don't send any tools in the
         // request payload to achieve the same effect.
         let tools = request.tool_config.as_ref().and_then(|c| {
@@ -661,128 +670,147 @@ impl<'a> GCPVertexAnthropicRequestBody<'a> {
                 )
             }
         });
+
         // `tool_choice` should only be set if tools are set and non-empty
-        let tool_choice: Option<GCPVertexAnthropicToolChoice> = tools
+        let tool_choice: Option<AnthropicToolChoice> = tools
             .as_ref()
             .filter(|t| !t.is_empty())
             .and(request.tool_config.as_ref())
-            .and_then(|c| (&c.tool_choice).try_into().ok());
+            .and_then(|c| c.as_ref().try_into().ok());
         // NOTE: Anthropic does not support seed
-        Ok(GCPVertexAnthropicRequestBody {
-            anthropic_version: ANTHROPIC_API_VERSION,
+        Ok(AnthropicRequestBody {
+            model: model_name,
             messages,
             max_tokens: request.max_tokens.unwrap_or(4096),
             stream: Some(request.stream),
             system,
             temperature: request.temperature,
             top_p: request.top_p,
-            stop_sequences: request.borrow_stop_sequences(),
             tool_choice,
             tools,
+            stop_sequences: request.borrow_stop_sequences(),
         })
     }
 }
 
-/// Anthropic API doesn't support consecutive messages from the same role.
-/// This function consolidates messages from the same role into a single message
-/// so as to satisfy the API.
-/// It also makes modifications to the messages to make Anthropic happy.
-/// For example, it will prepend a default User message if the first message is an Assistant message.
-/// It will also append a default User message if the last message is an Assistant message.
-fn prepare_messages(
-    messages: Vec<GCPVertexAnthropicMessage>,
-) -> Result<Vec<GCPVertexAnthropicMessage>, Error> {
-    let mut consolidated_messages: Vec<GCPVertexAnthropicMessage> = Vec::new();
-    let mut last_role: Option<GCPVertexAnthropicRole> = None;
-    for message in messages {
-        let this_role = message.role.clone();
-        match last_role {
-            Some(role) => {
-                if role == this_role {
-                    let mut last_message =
-                        consolidated_messages.pop().ok_or_else(|| Error::new(ErrorDetails::InvalidRequest {
-                            message: "Last message is missing (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new"
-                                .to_string(),
-                        }))?;
-                    last_message.content.extend(message.content);
-                    consolidated_messages.push(last_message);
-                } else {
-                    consolidated_messages.push(message);
-                }
-            }
-            None => {
-                consolidated_messages.push(message);
-            }
-        }
-        last_role = Some(this_role)
-    }
+/// Modifies the message array to satisfy Anthropic API requirements by:
+/// - Prepending a default User message with "[listening]" if the first message is not from a User
+/// - Appending a default User message with "[listening]" if the last message is from an Assistant
+fn prepare_messages(mut messages: Vec<AnthropicMessage>) -> Result<Vec<AnthropicMessage>, Error> {
     // Anthropic also requires that there is at least one message and it is a User message.
     // If it's not we will prepend a default User message.
-    match consolidated_messages.first() {
-        Some(&GCPVertexAnthropicMessage {
-            role: GCPVertexAnthropicRole::User,
+    match messages.first() {
+        Some(&AnthropicMessage {
+            role: AnthropicRole::User,
             ..
         }) => {}
         _ => {
-            consolidated_messages.insert(
+            messages.insert(
                 0,
-                GCPVertexAnthropicMessage {
-                    role: GCPVertexAnthropicRole::User,
-                    content: vec![FlattenUnknown::Normal(
-                        GCPVertexAnthropicMessageContent::Text {
-                            text: "[listening]",
-                        },
-                    )],
+                AnthropicMessage {
+                    role: AnthropicRole::User,
+                    content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
+                        text: "[listening]",
+                    })],
                 },
             );
         }
     }
+
     // Anthropic will continue any assistant messages passed in.
     // Since we don't want to do that, we'll append a default User message in the case that the last message was
     // an assistant message
-    if let Some(last_message) = consolidated_messages.last() {
-        if last_message.role == GCPVertexAnthropicRole::Assistant {
-            consolidated_messages.push(GCPVertexAnthropicMessage {
-                role: GCPVertexAnthropicRole::User,
-                content: vec![FlattenUnknown::Normal(
-                    GCPVertexAnthropicMessageContent::Text {
-                        text: "[listening]",
-                    },
-                )],
+    if let Some(last_message) = messages.last() {
+        if last_message.role == AnthropicRole::Assistant {
+            messages.push(AnthropicMessage {
+                role: AnthropicRole::User,
+                content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
+                    text: "[listening]",
+                })],
             });
         }
     }
-    Ok(consolidated_messages)
+    Ok(messages)
 }
 
-fn prefill_json_message(messages: &mut Vec<GCPVertexAnthropicMessage>) {
+fn prefill_json_message(messages: Vec<AnthropicMessage>) -> Vec<AnthropicMessage> {
+    let mut messages = messages;
     // Add a JSON-prefill message for Anthropic's JSON mode
-    messages.push(GCPVertexAnthropicMessage {
-        role: GCPVertexAnthropicRole::Assistant,
-        content: vec![FlattenUnknown::Normal(
-            GCPVertexAnthropicMessageContent::Text {
-                text: "Here is the JSON requested:\n{",
-            },
-        )],
+    messages.push(AnthropicMessage {
+        role: AnthropicRole::Assistant,
+        content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
+            text: "Here is the JSON requested:\n{",
+        })],
     });
+    messages
+}
+
+pub(crate) fn prefill_json_response(
+    content: Vec<ContentBlockOutput>,
+) -> Result<Vec<ContentBlockOutput>, Error> {
+    // Check if the content is a single text block
+    if content.len() == 1 {
+        if let ContentBlockOutput::Text(text) = &content[0] {
+            // If it's a single text block, add a "{" to the beginning
+            return Ok(vec![ContentBlockOutput::Text(Text {
+                text: format!("{{{}", text.text.trim()),
+            })]);
+        }
+    }
+    // If it's not a single text block, return content as-is but log an error
+    Error::new(ErrorDetails::OutputParsing {
+        message: "Expected a single text block in the response from Anthropic".to_string(),
+        raw_output: serde_json::to_string(&content).map_err(|e| Error::new(ErrorDetails::Inference {
+            message: format!("Error serializing content as JSON: {}. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new", DisplayOrDebugGateway::new(e)),
+        }))?,
+    });
+    Ok(content)
+}
+
+pub(crate) fn prefill_json_chunk_response(chunk: &mut ProviderInferenceResponseChunk) {
+    if chunk.content.is_empty() {
+        chunk.content = vec![ContentBlockChunk::Text(TextChunk {
+            text: "{".to_string(),
+            id: "0".to_string(),
+        })];
+    } else if chunk.content.len() == 1 {
+        if let ContentBlockChunk::Text(TextChunk { text, .. }) = &chunk.content[0] {
+            // Add a "{" to the beginning of the text
+            chunk.content = vec![ContentBlockChunk::Text(TextChunk {
+                text: format!("{{{}", text.trim_start()),
+                id: "0".to_string(),
+            })];
+        }
+    } else {
+        Error::new(ErrorDetails::OutputParsing {
+            message: "Expected a single text block in the response from Anthropic".to_string(),
+            raw_output: serde_json::to_string(&chunk.content).map_err(|e| Error::new(ErrorDetails::Inference {
+                message: format!("Error serializing content as JSON: {}. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new", DisplayOrDebugGateway::new(e)),
+            })).unwrap_or_default()
+        });
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
-struct GCPVertexAnthropicError {
-    error: GCPVertexAnthropicErrorBody,
+struct AnthropicError {
+    error: AnthropicErrorBody,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct GCPVertexAnthropicErrorBody {
+struct AnthropicErrorBody {
     r#type: String,
     message: String,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum GCPVertexAnthropicContentBlock {
+pub enum AnthropicContentBlock {
     Text {
         text: String,
+    },
+    Thinking {
+        thinking: String,
+        signature: String,
     },
     ToolUse {
         id: String,
@@ -794,39 +822,49 @@ pub enum GCPVertexAnthropicContentBlock {
 fn convert_to_output(
     model_name: &str,
     provider_name: &str,
-    block: FlattenUnknown<'static, GCPVertexAnthropicContentBlock>,
+    block: FlattenUnknown<'static, AnthropicContentBlock>,
 ) -> Result<ContentBlockOutput, Error> {
     match block {
-        FlattenUnknown::Normal(GCPVertexAnthropicContentBlock::Text { text }) => Ok(text.into()),
-        FlattenUnknown::Normal(GCPVertexAnthropicContentBlock::ToolUse { id, name, input }) => {
+        FlattenUnknown::Normal(AnthropicContentBlock::Text { text }) => Ok(text.into()),
+        FlattenUnknown::Normal(AnthropicContentBlock::ToolUse { id, name, input }) => {
             Ok(ContentBlockOutput::ToolCall(ToolCall {
                 id,
                 name,
                 arguments: serde_json::to_string(&input).map_err(|e| {
-                    Error::new(ErrorDetails::Serialization {
+                    Error::new(ErrorDetails::InferenceServer {
                         message: format!(
                             "Error parsing input for tool call: {}",
                             DisplayOrDebugGateway::new(e)
                         ),
+                        provider_type: PROVIDER_TYPE.to_string(),
+                        raw_request: None,
+                        raw_response: Some(serde_json::to_string(&input).unwrap_or_default()),
                     })
                 })?,
             }))
         }
-        FlattenUnknown::Unknown(obj) => Ok(ContentBlockOutput::Unknown {
-            data: obj.into_owned(),
+        FlattenUnknown::Normal(AnthropicContentBlock::Thinking {
+            thinking,
+            signature,
+        }) => Ok(ContentBlockOutput::Thought(Thought {
+            text: thinking,
+            signature: Some(signature),
+        })),
+        FlattenUnknown::Unknown(data) => Ok(ContentBlockOutput::Unknown {
+            data: data.into_owned(),
             model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
         }),
     }
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct GCPVertexAnthropic {
+pub struct AnthropicUsage {
     input_tokens: u32,
     output_tokens: u32,
 }
 
-impl From<GCPVertexAnthropic> for Usage {
-    fn from(value: GCPVertexAnthropic) -> Self {
+impl From<AnthropicUsage> for Usage {
+    fn from(value: AnthropicUsage) -> Self {
         Usage {
             input_tokens: value.input_tokens,
             output_tokens: value.output_tokens,
@@ -835,76 +873,96 @@ impl From<GCPVertexAnthropic> for Usage {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct GCPVertexAnthropicResponse {
+struct AnthropicResponse {
     id: String,
     r#type: String, // this is always "message"
     role: String,   // this is always "assistant"
-    content: Vec<FlattenUnknown<'static, GCPVertexAnthropicContentBlock>>,
+    content: Vec<FlattenUnknown<'static, AnthropicContentBlock>>,
     model: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     stop_reason: Option<AnthropicStopReason>,
     #[serde(skip_serializing_if = "Option::is_none")]
     stop_sequence: Option<String>,
-    usage: GCPVertexAnthropic,
+    usage: AnthropicUsage,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum AnthropicStopReason {
+    EndTurn,
+    MaxTokens,
+    StopSequence,
+    ToolUse,
+    #[serde(other)]
+    Unknown,
+}
+
+impl From<AnthropicStopReason> for FinishReason {
+    fn from(value: AnthropicStopReason) -> Self {
+        match value {
+            AnthropicStopReason::EndTurn => FinishReason::Stop,
+            AnthropicStopReason::MaxTokens => FinishReason::Length,
+            AnthropicStopReason::StopSequence => FinishReason::StopSequence,
+            AnthropicStopReason::ToolUse => FinishReason::ToolCall,
+            AnthropicStopReason::Unknown => FinishReason::Unknown,
+        }
+    }
 }
 
 #[derive(Debug, PartialEq)]
-struct GCPVertexAnthropicResponseWithMetadata<'a> {
-    response: GCPVertexAnthropicResponse,
+struct AnthropicResponseWithMetadata<'a> {
+    response: AnthropicResponse,
     raw_response: String,
     latency: Latency,
     raw_request: String,
+    generic_request: &'a ModelInferenceRequest<'a>,
+    input_messages: Vec<RequestMessage>,
     function_type: &'a FunctionType,
     json_mode: &'a ModelInferenceRequestJsonMode,
-    generic_request: &'a ModelInferenceRequest<'a>,
     model_name: &'a str,
     provider_name: &'a str,
 }
 
-impl<'a> TryFrom<GCPVertexAnthropicResponseWithMetadata<'a>> for ProviderInferenceResponse {
+impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceResponse {
     type Error = Error;
-    fn try_from(value: GCPVertexAnthropicResponseWithMetadata<'a>) -> Result<Self, Self::Error> {
-        let GCPVertexAnthropicResponseWithMetadata {
+    fn try_from(value: AnthropicResponseWithMetadata<'a>) -> Result<Self, Self::Error> {
+        let AnthropicResponseWithMetadata {
             response,
             raw_response,
             latency,
             raw_request,
+            generic_request,
+            input_messages,
             function_type,
             json_mode,
-            generic_request,
             model_name,
             provider_name,
         } = value;
-
-        let content: Vec<ContentBlockOutput> = response
+        let output: Vec<ContentBlockOutput> = response
             .content
             .into_iter()
             .map(|block| convert_to_output(model_name, provider_name, block))
             .collect::<Result<Vec<_>, _>>()?;
-
         let content = if matches!(
             json_mode,
             ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict
         ) && matches!(function_type, FunctionType::Json)
         {
-            prefill_json_response(content)?
+            prefill_json_response(output)?
         } else {
-            content
+            output
         };
-
-        let system = generic_request.system.clone();
-        let input_messages = generic_request.messages.clone();
 
         Ok(ProviderInferenceResponse::new(
             ProviderInferenceResponseArgs {
                 output: content,
-                system,
+                system: generic_request.system.clone(),
                 input_messages,
                 raw_request,
                 raw_response,
                 usage: response.usage.into(),
                 latency,
-                finish_reason: response.stop_reason.map(|r| r.into()),
+                finish_reason: response.stop_reason.map(|s| s.into()),
             },
         ))
     }
@@ -912,27 +970,28 @@ impl<'a> TryFrom<GCPVertexAnthropicResponseWithMetadata<'a>> for ProviderInferen
 
 fn handle_anthropic_error(
     response_code: StatusCode,
-    response_body: GCPVertexAnthropicErrorBody,
+    response_body: AnthropicErrorBody,
+    raw_request: String,
 ) -> Result<ProviderInferenceResponse, Error> {
     match response_code {
         StatusCode::UNAUTHORIZED
         | StatusCode::BAD_REQUEST
         | StatusCode::PAYLOAD_TOO_LARGE
         | StatusCode::TOO_MANY_REQUESTS => Err(ErrorDetails::InferenceClient {
-            raw_response: Some(serde_json::to_string(&response_body).unwrap_or_default()),
-            message: response_body.message,
             status_code: Some(response_code),
             provider_type: PROVIDER_TYPE.to_string(),
-            raw_request: None,
+            raw_request: Some(raw_request),
+            raw_response: serde_json::to_string(&response_body).ok(),
+            message: response_body.message,
         }
         .into()),
         // StatusCode::NOT_FOUND | StatusCode::FORBIDDEN | StatusCode::INTERNAL_SERVER_ERROR | 529: Overloaded
         // These are all captured in _ since they have the same error behavior
         _ => Err(ErrorDetails::InferenceServer {
-            raw_response: Some(serde_json::to_string(&response_body).unwrap_or_default()),
+            raw_response: serde_json::to_string(&response_body).ok(),
             message: response_body.message,
             provider_type: PROVIDER_TYPE.to_string(),
-            raw_request: None,
+            raw_request: Some(raw_request),
         }
         .into()),
     }
@@ -940,9 +999,13 @@ fn handle_anthropic_error(
 
 #[derive(Deserialize, Debug, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-enum GCPVertexAnthropicMessageBlock {
+enum AnthropicMessageBlock {
     Text {
         text: String,
+    },
+    Thinking {
+        thinking: String,
+        signature: String,
     },
     TextDelta {
         text: String,
@@ -955,17 +1018,32 @@ enum GCPVertexAnthropicMessageBlock {
     InputJsonDelta {
         partial_json: String,
     },
+    SignatureDelta {
+        signature: String,
+    },
+    ThinkingDelta {
+        thinking: String,
+    },
 }
 
 #[derive(Deserialize, Debug, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-enum GCPVertexAnthropicStreamMessage {
+pub(crate) struct AnthropicMessageDelta {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) stop_reason: Option<AnthropicStopReason>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) stop_sequence: Option<String>,
+}
+
+#[derive(Deserialize, Debug, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum AnthropicStreamMessage {
     ContentBlockDelta {
-        delta: GCPVertexAnthropicMessageBlock,
+        delta: AnthropicMessageBlock,
         index: u32,
     },
     ContentBlockStart {
-        content_block: GCPVertexAnthropicMessageBlock,
+        content_block: AnthropicMessageBlock,
         index: u32,
     },
     ContentBlockStop {
@@ -993,13 +1071,14 @@ enum GCPVertexAnthropicStreamMessage {
 /// See the Anthropic [docs](https://docs.anthropic.com/en/api/messages-streaming) on streaming messages for details on the types of events and their semantics.
 fn anthropic_to_tensorzero_stream_message(
     raw_message: String,
-    message: GCPVertexAnthropicStreamMessage,
+    message: AnthropicStreamMessage,
     message_latency: Duration,
     current_tool_id: &mut Option<String>,
+    current_tool_name: &mut Option<String>,
 ) -> Result<Option<ProviderInferenceResponseChunk>, Error> {
     match message {
-        GCPVertexAnthropicStreamMessage::ContentBlockDelta { delta, index } => match delta {
-            GCPVertexAnthropicMessageBlock::TextDelta { text } => {
+        AnthropicStreamMessage::ContentBlockDelta { delta, index } => match delta {
+            AnthropicMessageBlock::TextDelta { text } => {
                 Ok(Some(ProviderInferenceResponseChunk::new(
                     vec![ContentBlockChunk::Text(TextChunk {
                         text,
@@ -1011,7 +1090,7 @@ fn anthropic_to_tensorzero_stream_message(
                     None,
                 )))
             }
-            GCPVertexAnthropicMessageBlock::InputJsonDelta { partial_json } => {
+            AnthropicMessageBlock::InputJsonDelta { partial_json } => {
                 Ok(Some(ProviderInferenceResponseChunk::new(
                     // Take the current tool name and ID and use them to create a ToolCallChunk
                     // This is necessary because the ToolCallChunk must always contain the tool name and ID
@@ -1032,19 +1111,45 @@ fn anthropic_to_tensorzero_stream_message(
                     None,
                 )))
             }
+            AnthropicMessageBlock::ThinkingDelta { thinking } => {
+                Ok(Some(ProviderInferenceResponseChunk::new(
+                    vec![ContentBlockChunk::Thought(ThoughtChunk {
+                        text: Some(thinking),
+                        signature: None,
+                        id: index.to_string(),
+                    })],
+                    None,
+                    raw_message,
+                    message_latency,
+                    None,
+                )))
+            }
+            AnthropicMessageBlock::SignatureDelta { signature } => {
+                Ok(Some(ProviderInferenceResponseChunk::new(
+                    vec![ContentBlockChunk::Thought(ThoughtChunk {
+                        text: None,
+                        signature: Some(signature),
+                        id: index.to_string(),
+                    })],
+                    None,
+                    raw_message,
+                    message_latency,
+                    None,
+                )))
+            }
             _ => Err(ErrorDetails::InferenceServer {
                 message: "Unsupported content block type for ContentBlockDelta".to_string(),
                 provider_type: PROVIDER_TYPE.to_string(),
                 raw_request: None,
-                raw_response: None,
+                raw_response: Some(serde_json::to_string(&delta).unwrap_or_default()),
             }
             .into()),
         },
-        GCPVertexAnthropicStreamMessage::ContentBlockStart {
+        AnthropicStreamMessage::ContentBlockStart {
             content_block,
             index,
         } => match content_block {
-            GCPVertexAnthropicMessageBlock::Text { text } => {
+            AnthropicMessageBlock::Text { text } => {
                 let text_chunk = ContentBlockChunk::Text(TextChunk {
                     text,
                     id: index.to_string(),
@@ -1057,9 +1162,10 @@ fn anthropic_to_tensorzero_stream_message(
                     None,
                 )))
             }
-            GCPVertexAnthropicMessageBlock::ToolUse { id, name, .. } => {
+            AnthropicMessageBlock::ToolUse { id, name, .. } => {
                 // This is a new tool call, update the ID for future chunks
                 *current_tool_id = Some(id.clone());
+                *current_tool_name = Some(name.clone());
                 Ok(Some(ProviderInferenceResponseChunk::new(
                     vec![ContentBlockChunk::ToolCall(ToolCallChunk {
                         id,
@@ -1073,23 +1179,37 @@ fn anthropic_to_tensorzero_stream_message(
                     None,
                 )))
             }
+            AnthropicMessageBlock::Thinking {
+                thinking,
+                signature,
+            } => Ok(Some(ProviderInferenceResponseChunk::new(
+                vec![ContentBlockChunk::Thought(ThoughtChunk {
+                    text: Some(thinking),
+                    signature: Some(signature),
+                    id: index.to_string(),
+                })],
+                None,
+                raw_message,
+                message_latency,
+                None,
+            ))),
             _ => Err(ErrorDetails::InferenceServer {
                 message: "Unsupported content block type for ContentBlockStart".to_string(),
                 provider_type: PROVIDER_TYPE.to_string(),
                 raw_request: None,
-                raw_response: None,
+                raw_response: Some(serde_json::to_string(&content_block).unwrap_or_default()),
             }
             .into()),
         },
-        GCPVertexAnthropicStreamMessage::ContentBlockStop { .. } => Ok(None),
-        GCPVertexAnthropicStreamMessage::Error { error } => Err(ErrorDetails::InferenceServer {
+        AnthropicStreamMessage::ContentBlockStop { .. } => Ok(None),
+        AnthropicStreamMessage::Error { error } => Err(ErrorDetails::InferenceServer {
             message: error.to_string(),
             provider_type: PROVIDER_TYPE.to_string(),
             raw_request: None,
             raw_response: None,
         }
         .into()),
-        GCPVertexAnthropicStreamMessage::MessageDelta { usage, delta } => {
+        AnthropicStreamMessage::MessageDelta { usage, delta } => {
             let usage = parse_usage_info(&usage);
             Ok(Some(ProviderInferenceResponseChunk::new(
                 vec![],
@@ -1099,7 +1219,7 @@ fn anthropic_to_tensorzero_stream_message(
                 delta.stop_reason.map(|s| s.into()),
             )))
         }
-        GCPVertexAnthropicStreamMessage::MessageStart { message } => {
+        AnthropicStreamMessage::MessageStart { message } => {
             if let Some(usage_info) = message.get("usage") {
                 let usage = parse_usage_info(usage_info);
                 Ok(Some(ProviderInferenceResponseChunk::new(
@@ -1113,13 +1233,11 @@ fn anthropic_to_tensorzero_stream_message(
                 Ok(None)
             }
         }
-        GCPVertexAnthropicStreamMessage::MessageStop | GCPVertexAnthropicStreamMessage::Ping => {
-            Ok(None)
-        }
+        AnthropicStreamMessage::MessageStop | AnthropicStreamMessage::Ping => Ok(None),
     }
 }
 
-fn parse_usage_info(usage_info: &Value) -> GCPVertexAnthropic {
+fn parse_usage_info(usage_info: &Value) -> AnthropicUsage {
     let input_tokens = usage_info
         .get("input_tokens")
         .and_then(Value::as_u64)
@@ -1128,7 +1246,7 @@ fn parse_usage_info(usage_info: &Value) -> GCPVertexAnthropic {
         .get("output_tokens")
         .and_then(Value::as_u64)
         .unwrap_or(0) as u32;
-    GCPVertexAnthropic {
+    AnthropicUsage {
         input_tokens,
         output_tokens,
     }
@@ -1136,52 +1254,73 @@ fn parse_usage_info(usage_info: &Value) -> GCPVertexAnthropic {
 
 #[cfg(test)]
 mod tests {
-    use crate::inference::types::FlattenUnknown;
     use std::borrow::Cow;
 
     use super::*;
-
-    use serde_json::json;
-    use uuid::Uuid;
-
-    use crate::inference::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
+    use crate::inference::providers::test_helpers::WEATHER_TOOL_CONFIG;
     use crate::inference::types::{FunctionType, ModelInferenceRequestJsonMode};
     use crate::jsonschema_util::DynamicJSONSchema;
     use crate::tool::{DynamicToolConfig, ToolConfig, ToolResult};
+    use serde_json::json;
+    use uuid::Uuid;
 
     #[test]
-    fn test_try_from_tool_choice() {
-        // Test conversion of ToolChoice::None - now maps to Auto
-        let tool_choice = ToolChoice::None;
-        let anthropic_tool_choice = GCPVertexAnthropicToolChoice::try_from(&tool_choice);
+    fn test_try_from_tool_call_config() {
+        // Need to cover all 4 cases
+        let tool_call_config = ToolCallConfig {
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: Some(false),
+            tools_available: vec![],
+        };
+        let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
+        assert!(matches!(
+            anthropic_tool_choice.unwrap(),
+            AnthropicToolChoice::Auto {
+                disable_parallel_tool_use: Some(true)
+            }
+        ));
+
+        let tool_call_config = ToolCallConfig {
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: Some(true),
+            tools_available: vec![],
+        };
+        let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
         assert!(anthropic_tool_choice.is_ok());
         assert_eq!(
             anthropic_tool_choice.unwrap(),
-            GCPVertexAnthropicToolChoice::Auto
+            AnthropicToolChoice::Auto {
+                disable_parallel_tool_use: Some(false)
+            }
         );
 
-        let tool_choice = ToolChoice::Auto;
-        let anthropic_tool_choice = GCPVertexAnthropicToolChoice::try_from(&tool_choice);
+        let tool_call_config = ToolCallConfig {
+            tool_choice: ToolChoice::Required,
+            parallel_tool_calls: Some(true),
+            tools_available: vec![],
+        };
+        let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
         assert!(anthropic_tool_choice.is_ok());
         assert_eq!(
             anthropic_tool_choice.unwrap(),
-            GCPVertexAnthropicToolChoice::Auto
+            AnthropicToolChoice::Any {
+                disable_parallel_tool_use: Some(false)
+            }
         );
 
-        let tool_choice = ToolChoice::Required;
-        let anthropic_tool_choice = GCPVertexAnthropicToolChoice::try_from(&tool_choice);
+        let tool_call_config = ToolCallConfig {
+            tool_choice: ToolChoice::Specific("test".to_string()),
+            parallel_tool_calls: Some(false),
+            tools_available: vec![],
+        };
+        let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
         assert!(anthropic_tool_choice.is_ok());
         assert_eq!(
             anthropic_tool_choice.unwrap(),
-            GCPVertexAnthropicToolChoice::Any
-        );
-
-        let tool_choice = ToolChoice::Specific("test".to_string());
-        let anthropic_tool_choice = GCPVertexAnthropicToolChoice::try_from(&tool_choice);
-        assert!(anthropic_tool_choice.is_ok());
-        assert_eq!(
-            anthropic_tool_choice.unwrap(),
-            GCPVertexAnthropicToolChoice::Tool { name: "test" }
+            AnthropicToolChoice::Tool {
+                name: "test",
+                disable_parallel_tool_use: Some(true)
+            }
         );
     }
 
@@ -1201,10 +1340,10 @@ mod tests {
             parameters: DynamicJSONSchema::new(parameters.clone()),
             strict: false,
         });
-        let anthropic_tool: GCPVertexAnthropicTool = (&tool).into();
+        let anthropic_tool: AnthropicTool = (&tool).into();
         assert_eq!(
             anthropic_tool,
-            GCPVertexAnthropicTool {
+            AnthropicTool {
                 name: "test",
                 description: Some("test"),
                 input_schema: &parameters,
@@ -1214,16 +1353,14 @@ mod tests {
 
     #[test]
     fn test_try_from_content_block() {
-        let text_content_block = "test".to_string().into();
+        let text_content_block: ContentBlock = "test".to_string().into();
         let anthropic_content_block =
-            Option::<FlattenUnknown<GCPVertexAnthropicMessageContent>>::try_from(
-                &text_content_block,
-            )
-            .unwrap()
-            .unwrap();
+            Option::<FlattenUnknown<AnthropicMessageContent>>::try_from(&text_content_block)
+                .unwrap()
+                .unwrap();
         assert_eq!(
             anthropic_content_block,
-            FlattenUnknown::Normal(GCPVertexAnthropicMessageContent::Text { text: "test" })
+            FlattenUnknown::Normal(AnthropicMessageContent::Text { text: "test" })
         );
 
         let tool_call_content_block = ContentBlock::ToolCall(ToolCall {
@@ -1232,14 +1369,12 @@ mod tests {
             arguments: serde_json::to_string(&json!({"type": "string"})).unwrap(),
         });
         let anthropic_content_block =
-            Option::<FlattenUnknown<GCPVertexAnthropicMessageContent>>::try_from(
-                &tool_call_content_block,
-            )
-            .unwrap()
-            .unwrap();
+            Option::<FlattenUnknown<AnthropicMessageContent>>::try_from(&tool_call_content_block)
+                .unwrap()
+                .unwrap();
         assert_eq!(
             anthropic_content_block,
-            FlattenUnknown::Normal(GCPVertexAnthropicMessageContent::ToolUse {
+            FlattenUnknown::Normal(AnthropicMessageContent::ToolUse {
                 id: "test_id",
                 name: "test_name",
                 input: json!({"type": "string"})
@@ -1254,15 +1389,14 @@ mod tests {
             role: Role::User,
             content: vec!["test".to_string().into()],
         };
-        let anthropic_message =
-            GCPVertexAnthropicMessage::try_from(&inference_request_message).unwrap();
+        let anthropic_message = AnthropicMessage::try_from(&inference_request_message).unwrap();
         assert_eq!(
             anthropic_message,
-            GCPVertexAnthropicMessage {
-                role: GCPVertexAnthropicRole::User,
-                content: vec![FlattenUnknown::Normal(
-                    GCPVertexAnthropicMessageContent::Text { text: "test" }
-                )],
+            AnthropicMessage {
+                role: AnthropicRole::User,
+                content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
+                    text: "test"
+                })],
             }
         );
 
@@ -1271,17 +1405,14 @@ mod tests {
             role: Role::Assistant,
             content: vec!["test_assistant".to_string().into()],
         };
-        let anthropic_message =
-            GCPVertexAnthropicMessage::try_from(&inference_request_message).unwrap();
+        let anthropic_message = AnthropicMessage::try_from(&inference_request_message).unwrap();
         assert_eq!(
             anthropic_message,
-            GCPVertexAnthropicMessage {
-                role: GCPVertexAnthropicRole::Assistant,
-                content: vec![FlattenUnknown::Normal(
-                    GCPVertexAnthropicMessageContent::Text {
-                        text: "test_assistant",
-                    }
-                )],
+            AnthropicMessage {
+                role: AnthropicRole::Assistant,
+                content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
+                    text: "test_assistant",
+                })],
             }
         );
 
@@ -1294,16 +1425,15 @@ mod tests {
                 result: "test_tool_response".to_string(),
             })],
         };
-        let anthropic_message =
-            GCPVertexAnthropicMessage::try_from(&inference_request_message).unwrap();
+        let anthropic_message = AnthropicMessage::try_from(&inference_request_message).unwrap();
         assert_eq!(
             anthropic_message,
-            GCPVertexAnthropicMessage {
-                role: GCPVertexAnthropicRole::User,
+            AnthropicMessage {
+                role: AnthropicRole::User,
                 content: vec![FlattenUnknown::Normal(
-                    GCPVertexAnthropicMessageContent::ToolResult {
+                    AnthropicMessageContent::ToolResult {
                         tool_use_id: "test_tool_call_id",
-                        content: vec![GCPVertexAnthropicMessageContent::Text {
+                        content: vec![AnthropicMessageContent::Text {
                             text: "test_tool_response"
                         }],
                     }
@@ -1314,14 +1444,14 @@ mod tests {
 
     #[test]
     fn test_initialize_anthropic_request_body() {
-        let listening_message = GCPVertexAnthropicMessage {
-            role: GCPVertexAnthropicRole::User,
-            content: vec![FlattenUnknown::Normal(
-                GCPVertexAnthropicMessageContent::Text {
-                    text: "[listening]",
-                },
-            )],
+        let model = "claude".to_string();
+        let listening_message = AnthropicMessage {
+            role: AnthropicRole::User,
+            content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
+                text: "[listening]",
+            })],
         };
+
         // Test Case 1: Empty message list
         let inference_request = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
@@ -1329,11 +1459,11 @@ mod tests {
             system: None,
             tool_config: None,
             temperature: None,
-            max_tokens: None,
-            seed: None,
             top_p: None,
             presence_penalty: None,
             frequency_penalty: None,
+            max_tokens: None,
+            seed: None,
             stream: false,
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
@@ -1341,7 +1471,7 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let anthropic_request_body = GCPVertexAnthropicRequestBody::new(&inference_request);
+        let anthropic_request_body = AnthropicRequestBody::new(&model, &inference_request);
         let details = anthropic_request_body.unwrap_err().get_owned_details();
         assert_eq!(
             details,
@@ -1350,28 +1480,22 @@ mod tests {
             }
         );
 
-        // Test Case 2: Messages with System message
-        let messages = vec![
-            RequestMessage {
-                role: Role::User,
-                content: vec!["test_user".to_string().into()],
-            },
-            RequestMessage {
-                role: Role::Assistant,
-                content: vec!["test_assistant".to_string().into()],
-            },
-        ];
+        // Test Case 2: Messages starting with Assistant - should prepend and append listening message
+        let messages = vec![RequestMessage {
+            role: Role::Assistant,
+            content: vec!["test_assistant".to_string().into()],
+        }];
         let inference_request = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
-            messages: messages.clone(),
+            messages,
             system: Some("test_system".to_string()),
             tool_config: None,
             temperature: None,
-            max_tokens: None,
-            seed: None,
             top_p: None,
             presence_penalty: None,
             frequency_penalty: None,
+            max_tokens: None,
+            seed: None,
             stream: false,
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
@@ -1379,15 +1503,15 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let anthropic_request_body = GCPVertexAnthropicRequestBody::new(&inference_request);
+        let anthropic_request_body = AnthropicRequestBody::new(&model, &inference_request);
         assert!(anthropic_request_body.is_ok());
         assert_eq!(
             anthropic_request_body.unwrap(),
-            GCPVertexAnthropicRequestBody {
-                anthropic_version: ANTHROPIC_API_VERSION,
+            AnthropicRequestBody {
+                model: &model,
                 messages: vec![
-                    GCPVertexAnthropicMessage::try_from(&messages[0]).unwrap(),
-                    GCPVertexAnthropicMessage::try_from(&messages[1]).unwrap(),
+                    listening_message.clone(),
+                    AnthropicMessage::try_from(&inference_request.messages[0]).unwrap(),
                     listening_message.clone(),
                 ],
                 max_tokens: 4096,
@@ -1401,16 +1525,11 @@ mod tests {
             }
         );
 
-        // Test case 3: Messages with system message that require consolidation
-        // also some of the optional fields are tested
+        // Test Case 3: Messages ending with Assistant - should append listening message
         let messages = vec![
             RequestMessage {
                 role: Role::User,
                 content: vec!["test_user".to_string().into()],
-            },
-            RequestMessage {
-                role: Role::User,
-                content: vec!["test_user2".to_string().into()],
             },
             RequestMessage {
                 role: Role::Assistant,
@@ -1419,55 +1538,45 @@ mod tests {
         ];
         let inference_request = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
-            messages: messages.clone(),
+            messages,
             system: Some("test_system".to_string()),
             tool_config: None,
             temperature: Some(0.5),
-            top_p: Some(0.9),
+            top_p: None,
             presence_penalty: None,
             frequency_penalty: None,
             max_tokens: Some(100),
             seed: None,
             stream: true,
-            json_mode: ModelInferenceRequestJsonMode::On,
+            json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: Default::default(),
             ..Default::default()
         };
-        let anthropic_request_body = GCPVertexAnthropicRequestBody::new(&inference_request);
+        let anthropic_request_body = AnthropicRequestBody::new(&model, &inference_request);
         assert!(anthropic_request_body.is_ok());
         assert_eq!(
             anthropic_request_body.unwrap(),
-            GCPVertexAnthropicRequestBody {
-                anthropic_version: ANTHROPIC_API_VERSION,
+            AnthropicRequestBody {
+                model: &model,
                 messages: vec![
-                    GCPVertexAnthropicMessage {
-                        role: GCPVertexAnthropicRole::User,
-                        content: vec![
-                            FlattenUnknown::Normal(GCPVertexAnthropicMessageContent::Text {
-                                text: "test_user"
-                            }),
-                            FlattenUnknown::Normal(GCPVertexAnthropicMessageContent::Text {
-                                text: "test_user2"
-                            })
-                        ],
-                    },
-                    GCPVertexAnthropicMessage::try_from(&messages[2]).unwrap(),
+                    AnthropicMessage::try_from(&inference_request.messages[0]).unwrap(),
+                    AnthropicMessage::try_from(&inference_request.messages[1]).unwrap(),
                     listening_message.clone(),
                 ],
                 max_tokens: 100,
                 stream: Some(true),
                 system: Some("test_system"),
                 temperature: Some(0.5),
-                top_p: Some(0.9),
+                top_p: None,
                 tool_choice: None,
                 tools: None,
                 stop_sequences: None,
             }
         );
 
-        // Test case 4: Tool use & choice
+        // Test Case 4: Valid message sequence - no changes needed
         let messages = vec![
             RequestMessage {
                 role: Role::User,
@@ -1479,327 +1588,304 @@ mod tests {
             },
             RequestMessage {
                 role: Role::User,
-                content: vec![ContentBlock::ToolResult(ToolResult {
-                    id: "tool_call_id".to_string(),
-                    name: "test_tool_name".to_string(),
-                    result: "tool_response".to_string(),
-                })],
+                content: vec!["test_user2".to_string().into()],
             },
         ];
-
         let inference_request = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
-            messages: messages.clone(),
-            system: Some("test_system".to_string()),
-            tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
-            temperature: Some(0.5),
-            top_p: Some(0.9),
-            presence_penalty: Some(0.1),
-            frequency_penalty: Some(0.2),
-            max_tokens: Some(100),
+            messages,
+            system: None,
+            tool_config: None,
+            temperature: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            max_tokens: None,
             seed: None,
-            stream: true,
-            json_mode: ModelInferenceRequestJsonMode::On,
+            stream: false,
+            json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: Default::default(),
             ..Default::default()
         };
-
-        let anthropic_request_body = GCPVertexAnthropicRequestBody::new(&inference_request);
+        let anthropic_request_body = AnthropicRequestBody::new(&model, &inference_request);
         assert!(anthropic_request_body.is_ok());
         assert_eq!(
             anthropic_request_body.unwrap(),
-            GCPVertexAnthropicRequestBody {
-                anthropic_version: ANTHROPIC_API_VERSION,
-                messages: vec![
-                    GCPVertexAnthropicMessage::try_from(&messages[0]).unwrap(),
-                    GCPVertexAnthropicMessage::try_from(&messages[1]).unwrap(),
-                    GCPVertexAnthropicMessage::try_from(&messages[2]).unwrap(),
-                ],
-                max_tokens: 100,
-                stream: Some(true),
-                system: Some("test_system"),
-                temperature: Some(0.5),
-                top_p: Some(0.9),
-                tool_choice: Some(GCPVertexAnthropicToolChoice::Tool {
-                    name: "get_temperature",
-                }),
-                tools: Some(vec![GCPVertexAnthropicTool {
-                    name: WEATHER_TOOL.name(),
-                    description: Some(WEATHER_TOOL.description()),
-                    input_schema: WEATHER_TOOL.parameters(),
-                }]),
+            AnthropicRequestBody {
+                model: &model,
+                messages: inference_request
+                    .messages
+                    .iter()
+                    .map(|m| AnthropicMessage::try_from(m).unwrap())
+                    .collect(),
+                max_tokens: 4096,
+                stream: Some(false),
+                system: None,
+                temperature: None,
+                top_p: None,
+                tool_choice: None,
+                tools: None,
                 stop_sequences: None,
+            }
+        );
+
+        // Test Case 5: Tool use with JSON mode
+        let messages = vec![
+            RequestMessage {
+                role: Role::User,
+                content: vec!["test_user".to_string().into()],
+            },
+            RequestMessage {
+                role: Role::Assistant,
+                content: vec![ContentBlock::ToolCall(ToolCall {
+                    id: "test_id".to_string(),
+                    name: "get_temperature".to_string(),
+                    arguments: r#"{"location":"London"}"#.to_string(),
+                })],
+            },
+        ];
+        let inference_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages,
+            system: None,
+            tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
+            temperature: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            max_tokens: None,
+            seed: None,
+            stream: false,
+            json_mode: ModelInferenceRequestJsonMode::On,
+            function_type: FunctionType::Json,
+            output_schema: None,
+            extra_body: Default::default(),
+            ..Default::default()
+        };
+        let anthropic_request_body = AnthropicRequestBody::new(&model, &inference_request);
+        assert!(anthropic_request_body.is_ok());
+        let result = anthropic_request_body.unwrap();
+        assert_eq!(result.messages.len(), 4); // Original 2 messages + listening message + JSON prefill
+        assert_eq!(
+            result.messages[0],
+            AnthropicMessage::try_from(&inference_request.messages[0]).unwrap()
+        );
+        assert_eq!(
+            result.messages[1],
+            AnthropicMessage::try_from(&inference_request.messages[1]).unwrap()
+        );
+        assert_eq!(result.messages[2], listening_message);
+        assert_eq!(
+            result.messages[3],
+            AnthropicMessage {
+                role: AnthropicRole::Assistant,
+                content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
+                    text: "Here is the JSON requested:\n{",
+                })],
             }
         );
     }
 
     #[test]
-    fn test_consolidate_messages() {
-        let listening_message = GCPVertexAnthropicMessage {
-            role: GCPVertexAnthropicRole::User,
-            content: vec![FlattenUnknown::Normal(
-                GCPVertexAnthropicMessageContent::Text {
-                    text: "[listening]",
-                },
-            )],
+    fn test_prepare_messages() {
+        let listening_message = AnthropicMessage {
+            role: AnthropicRole::User,
+            content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
+                text: "[listening]",
+            })],
         };
-        // Test case 1: No consolidation needed
+
+        // Test case 1: Empty messages - should add listening message
+        let messages = vec![];
+        let result = prepare_messages(messages).unwrap();
+        assert_eq!(result, vec![listening_message.clone()]);
+
+        // Test case 2: First message is Assistant - should prepend listening message
         let messages = vec![
-            GCPVertexAnthropicMessage {
-                role: GCPVertexAnthropicRole::User,
-                content: vec![FlattenUnknown::Normal(
-                    GCPVertexAnthropicMessageContent::Text { text: "Hello" },
-                )],
+            AnthropicMessage {
+                role: AnthropicRole::Assistant,
+                content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
+                    text: "Hi",
+                })],
             },
-            GCPVertexAnthropicMessage {
-                role: GCPVertexAnthropicRole::Assistant,
-                content: vec![FlattenUnknown::Normal(
-                    GCPVertexAnthropicMessageContent::Text { text: "Hi" },
-                )],
+            AnthropicMessage {
+                role: AnthropicRole::User,
+                content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
+                    text: "Hello",
+                })],
             },
         ];
-        let expected = vec![
-            GCPVertexAnthropicMessage {
-                role: GCPVertexAnthropicRole::User,
-                content: vec![FlattenUnknown::Normal(
-                    GCPVertexAnthropicMessageContent::Text { text: "Hello" },
-                )],
-            },
-            GCPVertexAnthropicMessage {
-                role: GCPVertexAnthropicRole::Assistant,
-                content: vec![FlattenUnknown::Normal(
-                    GCPVertexAnthropicMessageContent::Text { text: "Hi" },
-                )],
-            },
-            listening_message.clone(),
-        ];
-        assert_eq!(prepare_messages(messages.clone()).unwrap(), expected);
+        let result = prepare_messages(messages).unwrap();
+        assert_eq!(
+            result,
+            vec![
+                listening_message.clone(),
+                AnthropicMessage {
+                    role: AnthropicRole::Assistant,
+                    content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
+                        text: "Hi"
+                    })],
+                },
+                AnthropicMessage {
+                    role: AnthropicRole::User,
+                    content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
+                        text: "Hello"
+                    })],
+                },
+            ]
+        );
 
-        // Test case 2: Consolidation needed
+        // Test case 3: Last message is Assistant - should append listening message
         let messages = vec![
-            GCPVertexAnthropicMessage {
-                role: GCPVertexAnthropicRole::User,
-                content: vec![FlattenUnknown::Normal(
-                    GCPVertexAnthropicMessageContent::Text { text: "Hello" },
-                )],
+            AnthropicMessage {
+                role: AnthropicRole::User,
+                content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
+                    text: "Hello",
+                })],
             },
-            GCPVertexAnthropicMessage {
-                role: GCPVertexAnthropicRole::User,
-                content: vec![FlattenUnknown::Normal(
-                    GCPVertexAnthropicMessageContent::Text {
-                        text: "How are you?",
-                    },
-                )],
-            },
-            GCPVertexAnthropicMessage {
-                role: GCPVertexAnthropicRole::Assistant,
-                content: vec![FlattenUnknown::Normal(
-                    GCPVertexAnthropicMessageContent::Text { text: "Hi" },
-                )],
+            AnthropicMessage {
+                role: AnthropicRole::Assistant,
+                content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
+                    text: "Hi",
+                })],
             },
         ];
-        let expected = vec![
-            GCPVertexAnthropicMessage {
-                role: GCPVertexAnthropicRole::User,
-                content: vec![
-                    FlattenUnknown::Normal(GCPVertexAnthropicMessageContent::Text {
-                        text: "Hello",
-                    }),
-                    FlattenUnknown::Normal(GCPVertexAnthropicMessageContent::Text {
-                        text: "How are you?",
-                    }),
-                ],
-            },
-            GCPVertexAnthropicMessage {
-                role: GCPVertexAnthropicRole::Assistant,
-                content: vec![FlattenUnknown::Normal(
-                    GCPVertexAnthropicMessageContent::Text { text: "Hi" },
-                )],
-            },
-            listening_message.clone(),
-        ];
-        assert_eq!(prepare_messages(messages.clone()).unwrap(), expected);
+        let result = prepare_messages(messages).unwrap();
+        assert_eq!(
+            result,
+            vec![
+                AnthropicMessage {
+                    role: AnthropicRole::User,
+                    content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
+                        text: "Hello"
+                    })],
+                },
+                AnthropicMessage {
+                    role: AnthropicRole::Assistant,
+                    content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
+                        text: "Hi"
+                    })],
+                },
+                listening_message.clone(),
+            ]
+        );
 
-        // Test case 3: Multiple consolidations needed
+        // Test case 4: Valid message sequence - no changes needed
         let messages = vec![
-            GCPVertexAnthropicMessage {
-                role: GCPVertexAnthropicRole::User,
-                content: vec![FlattenUnknown::Normal(
-                    GCPVertexAnthropicMessageContent::Text { text: "Hello" },
-                )],
+            AnthropicMessage {
+                role: AnthropicRole::User,
+                content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
+                    text: "Hello",
+                })],
             },
-            GCPVertexAnthropicMessage {
-                role: GCPVertexAnthropicRole::User,
-                content: vec![FlattenUnknown::Normal(
-                    GCPVertexAnthropicMessageContent::Text {
-                        text: "How are you?",
-                    },
-                )],
+            AnthropicMessage {
+                role: AnthropicRole::Assistant,
+                content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
+                    text: "Hi",
+                })],
             },
-            GCPVertexAnthropicMessage {
-                role: GCPVertexAnthropicRole::Assistant,
-                content: vec![FlattenUnknown::Normal(
-                    GCPVertexAnthropicMessageContent::Text { text: "Hi" },
-                )],
-            },
-            GCPVertexAnthropicMessage {
-                role: GCPVertexAnthropicRole::Assistant,
-                content: vec![FlattenUnknown::Normal(
-                    GCPVertexAnthropicMessageContent::Text {
-                        text: "I am here to help.",
-                    },
-                )],
+            AnthropicMessage {
+                role: AnthropicRole::User,
+                content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
+                    text: "How are you?",
+                })],
             },
         ];
-        let expected = vec![
-            GCPVertexAnthropicMessage {
-                role: GCPVertexAnthropicRole::User,
-                content: vec![
-                    FlattenUnknown::Normal(GCPVertexAnthropicMessageContent::Text {
-                        text: "Hello",
-                    }),
-                    FlattenUnknown::Normal(GCPVertexAnthropicMessageContent::Text {
-                        text: "How are you?",
-                    }),
-                ],
+        let result = prepare_messages(messages.clone()).unwrap();
+        assert_eq!(result, messages);
+
+        // Test case 5: Both first Assistant and last Assistant - should add listening messages at both ends
+        let messages = vec![
+            AnthropicMessage {
+                role: AnthropicRole::Assistant,
+                content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
+                    text: "Hi",
+                })],
             },
-            GCPVertexAnthropicMessage {
-                role: GCPVertexAnthropicRole::Assistant,
-                content: vec![
-                    FlattenUnknown::Normal(GCPVertexAnthropicMessageContent::Text { text: "Hi" }),
-                    FlattenUnknown::Normal(GCPVertexAnthropicMessageContent::Text {
-                        text: "I am here to help.",
-                    }),
-                ],
+            AnthropicMessage {
+                role: AnthropicRole::User,
+                content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
+                    text: "Hello",
+                })],
             },
-            listening_message.clone(),
+            AnthropicMessage {
+                role: AnthropicRole::Assistant,
+                content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
+                    text: "How can I help?",
+                })],
+            },
         ];
-        assert_eq!(prepare_messages(messages.clone()).unwrap(), expected);
+        let result = prepare_messages(messages).unwrap();
+        assert_eq!(
+            result,
+            vec![
+                listening_message.clone(),
+                AnthropicMessage {
+                    role: AnthropicRole::Assistant,
+                    content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
+                        text: "Hi"
+                    })],
+                },
+                AnthropicMessage {
+                    role: AnthropicRole::User,
+                    content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
+                        text: "Hello"
+                    })],
+                },
+                AnthropicMessage {
+                    role: AnthropicRole::Assistant,
+                    content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
+                        text: "How can I help?"
+                    })],
+                },
+                listening_message.clone(),
+            ]
+        );
 
-        // Test case 4: No messages
-        let messages: Vec<GCPVertexAnthropicMessage> = vec![];
-        let expected: Vec<GCPVertexAnthropicMessage> = vec![listening_message.clone()];
-        assert_eq!(prepare_messages(messages.clone()).unwrap(), expected);
-
-        // Test case 5: Single message
-        let messages = vec![GCPVertexAnthropicMessage {
-            role: GCPVertexAnthropicRole::User,
-            content: vec![FlattenUnknown::Normal(
-                GCPVertexAnthropicMessageContent::Text { text: "Hello" },
-            )],
+        // Test case 6: Single Assistant message - should add listening messages at both ends
+        let messages = vec![AnthropicMessage {
+            role: AnthropicRole::Assistant,
+            content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
+                text: "Hi",
+            })],
         }];
-        let expected = vec![GCPVertexAnthropicMessage {
-            role: GCPVertexAnthropicRole::User,
-            content: vec![FlattenUnknown::Normal(
-                GCPVertexAnthropicMessageContent::Text { text: "Hello" },
-            )],
-        }];
-        assert_eq!(prepare_messages(messages.clone()).unwrap(), expected);
+        let result = prepare_messages(messages).unwrap();
+        assert_eq!(
+            result,
+            vec![
+                listening_message.clone(),
+                AnthropicMessage {
+                    role: AnthropicRole::Assistant,
+                    content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
+                        text: "Hi"
+                    })],
+                },
+                listening_message.clone(),
+            ]
+        );
 
-        // Test case 6: Consolidate tool uses
-        let messages = vec![
-            GCPVertexAnthropicMessage {
-                role: GCPVertexAnthropicRole::User,
-                content: vec![FlattenUnknown::Normal(
-                    GCPVertexAnthropicMessageContent::ToolResult {
-                        tool_use_id: "tool1",
-                        content: vec![GCPVertexAnthropicMessageContent::Text {
-                            text: "Tool call 1",
-                        }],
-                    },
-                )],
-            },
-            GCPVertexAnthropicMessage {
-                role: GCPVertexAnthropicRole::User,
-                content: vec![FlattenUnknown::Normal(
-                    GCPVertexAnthropicMessageContent::ToolResult {
-                        tool_use_id: "tool2",
-                        content: vec![GCPVertexAnthropicMessageContent::Text {
-                            text: "Tool call 2",
-                        }],
-                    },
-                )],
-            },
-        ];
-        let expected = vec![GCPVertexAnthropicMessage {
-            role: GCPVertexAnthropicRole::User,
-            content: vec![
-                FlattenUnknown::Normal(GCPVertexAnthropicMessageContent::ToolResult {
-                    tool_use_id: "tool1",
-                    content: vec![GCPVertexAnthropicMessageContent::Text {
-                        text: "Tool call 1",
-                    }],
-                }),
-                FlattenUnknown::Normal(GCPVertexAnthropicMessageContent::ToolResult {
-                    tool_use_id: "tool2",
-                    content: vec![GCPVertexAnthropicMessageContent::Text {
-                        text: "Tool call 2",
-                    }],
-                }),
-            ],
+        // Test case 7: Single User message - no changes needed
+        let messages = vec![AnthropicMessage {
+            role: AnthropicRole::User,
+            content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
+                text: "Hello",
+            })],
         }];
-        assert_eq!(prepare_messages(messages.clone()).unwrap(), expected);
-
-        // Test case 7: Consolidate mixed text and tool use
-        let messages = vec![
-            GCPVertexAnthropicMessage {
-                role: GCPVertexAnthropicRole::User,
-                content: vec![FlattenUnknown::Normal(
-                    GCPVertexAnthropicMessageContent::Text {
-                        text: "User message 1",
-                    },
-                )],
-            },
-            GCPVertexAnthropicMessage {
-                role: GCPVertexAnthropicRole::User,
-                content: vec![FlattenUnknown::Normal(
-                    GCPVertexAnthropicMessageContent::ToolResult {
-                        tool_use_id: "tool1",
-                        content: vec![GCPVertexAnthropicMessageContent::Text {
-                            text: "Tool call 1",
-                        }],
-                    },
-                )],
-            },
-            GCPVertexAnthropicMessage {
-                role: GCPVertexAnthropicRole::User,
-                content: vec![FlattenUnknown::Normal(
-                    GCPVertexAnthropicMessageContent::Text {
-                        text: "User message 2",
-                    },
-                )],
-            },
-        ];
-        let expected = vec![GCPVertexAnthropicMessage {
-            role: GCPVertexAnthropicRole::User,
-            content: vec![
-                FlattenUnknown::Normal(GCPVertexAnthropicMessageContent::Text {
-                    text: "User message 1",
-                }),
-                FlattenUnknown::Normal(GCPVertexAnthropicMessageContent::ToolResult {
-                    tool_use_id: "tool1",
-                    content: vec![GCPVertexAnthropicMessageContent::Text {
-                        text: "Tool call 1",
-                    }],
-                }),
-                FlattenUnknown::Normal(GCPVertexAnthropicMessageContent::Text {
-                    text: "User message 2",
-                }),
-            ],
-        }];
-        assert_eq!(prepare_messages(messages.clone()).unwrap(), expected);
+        let result = prepare_messages(messages.clone()).unwrap();
+        assert_eq!(result, messages);
     }
 
     #[test]
     fn test_handle_anthropic_error() {
-        let error_body = GCPVertexAnthropicErrorBody {
+        let error_body = AnthropicErrorBody {
             r#type: "error".to_string(),
             message: "test_message".to_string(),
         };
         let response_code = StatusCode::BAD_REQUEST;
-        let result = handle_anthropic_error(response_code, error_body.clone());
+        let result =
+            handle_anthropic_error(response_code, error_body.clone(), "raw request".to_string());
         let details = result.unwrap_err().get_owned_details();
         assert_eq!(
             details,
@@ -1807,12 +1893,13 @@ mod tests {
                 message: "test_message".to_string(),
                 status_code: Some(response_code),
                 provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: None,
+                raw_request: Some("raw request".to_string()),
                 raw_response: Some("{\"type\":\"error\",\"message\":\"test_message\"}".to_string()),
             }
         );
         let response_code = StatusCode::UNAUTHORIZED;
-        let result = handle_anthropic_error(response_code, error_body.clone());
+        let result =
+            handle_anthropic_error(response_code, error_body.clone(), "raw request".to_string());
         let details = result.unwrap_err().get_owned_details();
         assert_eq!(
             details,
@@ -1820,12 +1907,13 @@ mod tests {
                 message: "test_message".to_string(),
                 status_code: Some(response_code),
                 provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: None,
+                raw_request: Some("raw request".to_string()),
                 raw_response: Some("{\"type\":\"error\",\"message\":\"test_message\"}".to_string()),
             }
         );
         let response_code = StatusCode::TOO_MANY_REQUESTS;
-        let result = handle_anthropic_error(response_code, error_body.clone());
+        let result =
+            handle_anthropic_error(response_code, error_body.clone(), "raw request".to_string());
         let details = result.unwrap_err().get_owned_details();
         assert_eq!(
             details,
@@ -1833,40 +1921,41 @@ mod tests {
                 message: "test_message".to_string(),
                 status_code: Some(response_code),
                 provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: None,
+                raw_request: Some("raw request".to_string()),
                 raw_response: Some("{\"type\":\"error\",\"message\":\"test_message\"}".to_string()),
             }
         );
         let response_code = StatusCode::NOT_FOUND;
-        let result = handle_anthropic_error(response_code, error_body.clone());
-        assert!(result.is_err());
+        let result =
+            handle_anthropic_error(response_code, error_body.clone(), "raw request".to_string());
         let details = result.unwrap_err().get_owned_details();
         assert_eq!(
             details,
             ErrorDetails::InferenceServer {
                 message: "test_message".to_string(),
-                raw_request: None,
+                raw_request: Some("raw request".to_string()),
                 raw_response: Some("{\"type\":\"error\",\"message\":\"test_message\"}".to_string()),
-                provider_type: PROVIDER_TYPE.to_string()
+                provider_type: PROVIDER_TYPE.to_string(),
             }
         );
         let response_code = StatusCode::INTERNAL_SERVER_ERROR;
-        let result = handle_anthropic_error(response_code, error_body.clone());
+        let result =
+            handle_anthropic_error(response_code, error_body.clone(), "raw request".to_string());
         let details = result.unwrap_err().get_owned_details();
         assert_eq!(
             details,
             ErrorDetails::InferenceServer {
                 message: "test_message".to_string(),
-                raw_request: None,
+                raw_request: Some("raw request".to_string()),
                 raw_response: Some("{\"type\":\"error\",\"message\":\"test_message\"}".to_string()),
-                provider_type: PROVIDER_TYPE.to_string()
+                provider_type: PROVIDER_TYPE.to_string(),
             }
         );
     }
 
     #[test]
     fn test_anthropic_usage_to_usage() {
-        let anthropic_usage = GCPVertexAnthropic {
+        let anthropic_usage = AnthropicUsage {
             input_tokens: 100,
             output_tokens: 50,
         };
@@ -1879,166 +1968,137 @@ mod tests {
 
     #[test]
     fn test_anthropic_response_conversion() {
-        // Test case 1: Text response and unknown content
-        let anthropic_response_body = GCPVertexAnthropicResponse {
+        // Test case 1: Text response
+        let anthropic_response_body = AnthropicResponse {
             id: "1".to_string(),
             r#type: "message".to_string(),
             role: "assistant".to_string(),
-            content: vec![
-                FlattenUnknown::Normal(GCPVertexAnthropicContentBlock::Text {
-                    text: "Response text".to_string(),
-                }),
-                FlattenUnknown::Unknown(Cow::Owned(json!({"my_custom": "content"}))),
-            ],
+            content: vec![FlattenUnknown::Normal(AnthropicContentBlock::Text {
+                text: "Response text".to_string(),
+            })],
             model: "model-name".into(),
             stop_reason: Some(AnthropicStopReason::EndTurn),
             stop_sequence: Some("stop sequence".to_string()),
-            usage: GCPVertexAnthropic {
+            usage: AnthropicUsage {
                 input_tokens: 100,
                 output_tokens: 50,
             },
         };
-        let latency = Latency::NonStreaming {
-            response_time: Duration::from_millis(100),
-        };
         let generic_request = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
-            system: Some("system".to_string()),
             messages: vec![RequestMessage {
                 role: Role::User,
-                content: vec!["Hello".to_string().into()],
+                content: vec!["test_user".to_string().into()],
             }],
-            tool_config: None,
-            temperature: None,
-            max_tokens: None,
-            seed: None,
-            top_p: None,
-            presence_penalty: None,
-            frequency_penalty: None,
+            system: None,
+            temperature: Some(0.5),
+            max_tokens: Some(100),
+            seed: Some(69),
+            top_p: Some(0.9),
+            presence_penalty: Some(0.1),
+            frequency_penalty: Some(0.2),
             stream: false,
-            json_mode: ModelInferenceRequestJsonMode::Off,
+            json_mode: ModelInferenceRequestJsonMode::On,
+            tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: Default::default(),
             ..Default::default()
         };
-        let request_body = GCPVertexAnthropicRequestBody {
-            anthropic_version: "1.0",
-            system: None,
+        let latency = Latency::NonStreaming {
+            response_time: Duration::from_millis(100),
+        };
+        let request_body = AnthropicRequestBody {
+            model: "model-name",
             messages: vec![],
+            max_tokens: 100,
             stream: Some(false),
-            max_tokens: 1000,
+            system: None,
+            top_p: Some(0.5),
             temperature: None,
-            top_p: None,
             tool_choice: None,
             tools: None,
             stop_sequences: None,
         };
+        let raw_response = "{\"foo\": \"bar\"}".to_string();
+        let input_messages = vec![RequestMessage {
+            role: Role::User,
+            content: vec!["Hello".to_string().into()],
+        }];
         let raw_request = serde_json::to_string(&request_body).unwrap();
-        let raw_response = "test response".to_string();
-        let body_with_latency = GCPVertexAnthropicResponseWithMetadata {
+        let body_with_latency = AnthropicResponseWithMetadata {
             response: anthropic_response_body.clone(),
             raw_response: raw_response.clone(),
             latency: latency.clone(),
             raw_request: raw_request.clone(),
+            generic_request: &generic_request,
+            input_messages: input_messages.clone(),
             function_type: &FunctionType::Chat,
             json_mode: &ModelInferenceRequestJsonMode::Off,
-            generic_request: &generic_request,
-            model_name: "my-model",
-            provider_name: "my-provider",
+            model_name: "model-name",
+            provider_name: "dummy",
         };
 
         let inference_response = ProviderInferenceResponse::try_from(body_with_latency).unwrap();
         assert_eq!(
             inference_response.output,
-            vec![
-                "Response text".to_string().into(),
-                ContentBlockOutput::Unknown {
-                    data: serde_json::json!({"my_custom": "content"}),
-                    model_provider_name: Some(
-                        "tensorzero::model_name::my-model::provider_name::my-provider".to_string()
-                    )
-                }
-            ]
+            vec!["Response text".to_string().into()]
         );
 
         assert_eq!(raw_response, inference_response.raw_response);
         assert_eq!(inference_response.usage.input_tokens, 100);
         assert_eq!(inference_response.usage.output_tokens, 50);
+        assert_eq!(inference_response.finish_reason, Some(FinishReason::Stop));
         assert_eq!(inference_response.latency, latency);
         assert_eq!(inference_response.raw_request, raw_request);
-        assert_eq!(inference_response.system, Some("system".to_string()));
-        assert_eq!(
-            inference_response.input_messages,
-            vec![RequestMessage {
-                role: Role::User,
-                content: vec!["Hello".to_string().into(),],
-            }]
-        );
+        assert_eq!(inference_response.input_messages, input_messages);
+
         // Test case 2: Tool call response
-        let anthropic_response_body = GCPVertexAnthropicResponse {
+        let anthropic_response_body = AnthropicResponse {
             id: "2".to_string(),
             r#type: "message".to_string(),
             role: "assistant".to_string(),
-            content: vec![FlattenUnknown::Normal(
-                GCPVertexAnthropicContentBlock::ToolUse {
-                    id: "tool_call_1".to_string(),
-                    name: "get_temperature".to_string(),
-                    input: json!({"location": "New York"}),
-                },
-            )],
+            content: vec![FlattenUnknown::Normal(AnthropicContentBlock::ToolUse {
+                id: "tool_call_1".to_string(),
+                name: "get_temperature".to_string(),
+                input: json!({"location": "New York"}),
+            })],
             model: "model-name".into(),
             stop_reason: Some(AnthropicStopReason::ToolUse),
             stop_sequence: None,
-            usage: GCPVertexAnthropic {
+            usage: AnthropicUsage {
                 input_tokens: 100,
                 output_tokens: 50,
             },
         };
-        let generic_request = ModelInferenceRequest {
-            inference_id: Uuid::now_v7(),
-            system: None,
-            messages: vec![RequestMessage {
-                role: Role::Assistant,
-                content: vec!["Hello2".to_string().into()],
-            }],
-            tool_config: None,
-            temperature: None,
-            max_tokens: None,
-            seed: None,
-            top_p: None,
-            presence_penalty: None,
-            frequency_penalty: None,
-            stream: false,
-            json_mode: ModelInferenceRequestJsonMode::Off,
-            function_type: FunctionType::Chat,
-            output_schema: None,
-            extra_body: Default::default(),
-            ..Default::default()
-        };
-        let request_body = GCPVertexAnthropicRequestBody {
-            anthropic_version: "1.0",
-            system: None,
+        let request_body = AnthropicRequestBody {
+            model: "model-name",
             messages: vec![],
+            max_tokens: 100,
             stream: Some(false),
-            max_tokens: 1000,
+            system: None,
             temperature: None,
-            top_p: None,
+            top_p: Some(0.5),
             tool_choice: None,
             tools: None,
             stop_sequences: None,
         };
+        let input_messages = vec![RequestMessage {
+            role: Role::Assistant,
+            content: vec!["Hello".to_string().into()],
+        }];
         let raw_request = serde_json::to_string(&request_body).unwrap();
-        let body_with_latency = GCPVertexAnthropicResponseWithMetadata {
+        let body_with_latency = AnthropicResponseWithMetadata {
             response: anthropic_response_body.clone(),
             raw_response: raw_response.clone(),
             latency: latency.clone(),
             raw_request: raw_request.clone(),
+            generic_request: &generic_request,
+            input_messages: input_messages.clone(),
             function_type: &FunctionType::Chat,
             json_mode: &ModelInferenceRequestJsonMode::Off,
-            generic_request: &generic_request,
             model_name: "model-name",
-            provider_name: "provider-name",
+            provider_name: "dummy",
         };
 
         let inference_response: ProviderInferenceResponse = body_with_latency.try_into().unwrap();
@@ -2057,24 +2117,22 @@ mod tests {
         assert_eq!(inference_response.usage.output_tokens, 50);
         assert_eq!(inference_response.latency, latency);
         assert_eq!(inference_response.raw_request, raw_request);
-        assert_eq!(inference_response.system, None);
         assert_eq!(
-            inference_response.input_messages,
-            vec![RequestMessage {
-                role: Role::Assistant,
-                content: vec!["Hello2".to_string().into()],
-            }]
+            inference_response.finish_reason,
+            Some(FinishReason::ToolCall)
         );
+        assert_eq!(inference_response.input_messages, input_messages);
+
         // Test case 3: Mixed response (text and tool call)
-        let anthropic_response_body = GCPVertexAnthropicResponse {
+        let anthropic_response_body = AnthropicResponse {
             id: "3".to_string(),
             r#type: "message".to_string(),
             role: "assistant".to_string(),
             content: vec![
-                FlattenUnknown::Normal(GCPVertexAnthropicContentBlock::Text {
+                FlattenUnknown::Normal(AnthropicContentBlock::Text {
                     text: "Here's the weather:".to_string(),
                 }),
-                FlattenUnknown::Normal(GCPVertexAnthropicContentBlock::ToolUse {
+                FlattenUnknown::Normal(AnthropicContentBlock::ToolUse {
                     id: "tool_call_2".to_string(),
                     name: "get_temperature".to_string(),
                     input: json!({"location": "London"}),
@@ -2083,55 +2141,39 @@ mod tests {
             model: "model-name".into(),
             stop_reason: None,
             stop_sequence: None,
-            usage: GCPVertexAnthropic {
+            usage: AnthropicUsage {
                 input_tokens: 100,
                 output_tokens: 50,
             },
         };
-        let generic_request = ModelInferenceRequest {
-            inference_id: Uuid::now_v7(),
-            system: None,
-            messages: vec![RequestMessage {
-                role: Role::Assistant,
-                content: vec!["Hello3".to_string().into()],
-            }],
-            tool_config: None,
-            temperature: None,
-            max_tokens: None,
-            seed: None,
-            top_p: None,
-            presence_penalty: None,
-            frequency_penalty: None,
-            stream: false,
-            json_mode: ModelInferenceRequestJsonMode::Off,
-            function_type: FunctionType::Chat,
-            output_schema: None,
-            extra_body: Default::default(),
-            ..Default::default()
-        };
-        let request_body = GCPVertexAnthropicRequestBody {
-            anthropic_version: "1.0",
-            system: None,
+        let request_body = AnthropicRequestBody {
+            model: "model-name",
             messages: vec![],
+            max_tokens: 100,
             stream: Some(false),
-            max_tokens: 1000,
+            system: None,
             temperature: None,
-            top_p: None,
+            top_p: Some(0.5),
             tool_choice: None,
             tools: None,
             stop_sequences: None,
         };
+        let input_messages = vec![RequestMessage {
+            role: Role::User,
+            content: vec!["Helloooo".to_string().into()],
+        }];
         let raw_request = serde_json::to_string(&request_body).unwrap();
-        let body_with_latency = GCPVertexAnthropicResponseWithMetadata {
+        let body_with_latency = AnthropicResponseWithMetadata {
             response: anthropic_response_body.clone(),
             raw_response: raw_response.clone(),
             latency: latency.clone(),
             raw_request: raw_request.clone(),
+            generic_request: &generic_request,
+            input_messages: input_messages.clone(),
             function_type: &FunctionType::Chat,
             json_mode: &ModelInferenceRequestJsonMode::Off,
-            generic_request: &generic_request,
             model_name: "model-name",
-            provider_name: "provider-name",
+            provider_name: "dummy",
         };
         let inference_response = ProviderInferenceResponse::try_from(body_with_latency).unwrap();
         assert_eq!(
@@ -2152,16 +2194,10 @@ mod tests {
 
         assert_eq!(inference_response.usage.input_tokens, 100);
         assert_eq!(inference_response.usage.output_tokens, 50);
+        assert_eq!(inference_response.finish_reason, None);
         assert_eq!(inference_response.latency, latency);
         assert_eq!(inference_response.raw_request, raw_request);
-        assert_eq!(inference_response.system, None);
-        assert_eq!(
-            inference_response.input_messages,
-            vec![RequestMessage {
-                role: Role::Assistant,
-                content: vec!["Hello3".to_string().into()],
-            }]
-        );
+        assert_eq!(inference_response.input_messages, input_messages);
     }
 
     #[test]
@@ -2170,8 +2206,9 @@ mod tests {
 
         // Test ContentBlockDelta with TextDelta
         let mut current_tool_id = None;
-        let content_block_delta = GCPVertexAnthropicStreamMessage::ContentBlockDelta {
-            delta: GCPVertexAnthropicMessageBlock::TextDelta {
+        let mut current_tool_name = None;
+        let content_block_delta = AnthropicStreamMessage::ContentBlockDelta {
+            delta: AnthropicMessageBlock::TextDelta {
                 text: "Hello".to_string(),
             },
             index: 0,
@@ -2182,6 +2219,7 @@ mod tests {
             content_block_delta,
             latency,
             &mut current_tool_id,
+            &mut current_tool_name,
         );
         assert!(result.is_ok());
         let chunk = result.unwrap().unwrap();
@@ -2197,8 +2235,9 @@ mod tests {
 
         // Test ContentBlockDelta with InputJsonDelta but no previous tool info
         let mut current_tool_id = None;
-        let content_block_delta = GCPVertexAnthropicStreamMessage::ContentBlockDelta {
-            delta: GCPVertexAnthropicMessageBlock::InputJsonDelta {
+        let mut current_tool_name = None;
+        let content_block_delta = AnthropicStreamMessage::ContentBlockDelta {
+            delta: AnthropicMessageBlock::InputJsonDelta {
                 partial_json: "aaaa: bbbbb".to_string(),
             },
             index: 0,
@@ -2209,6 +2248,7 @@ mod tests {
             content_block_delta,
             latency,
             &mut current_tool_id,
+            &mut current_tool_name,
         );
         let details = result.unwrap_err().get_owned_details();
         assert_eq!(
@@ -2217,14 +2257,15 @@ mod tests {
                 message: "Got InputJsonDelta chunk from Anthropic without current tool id being set by a ToolUse".to_string(),
                 raw_request: None,
                 raw_response: None,
-                provider_type: PROVIDER_TYPE.to_string()
+                provider_type: PROVIDER_TYPE.to_string(),
             }
         );
 
         // Test ContentBlockDelta with InputJsonDelta and previous tool info
         let mut current_tool_id = Some("tool_id".to_string());
-        let content_block_delta = GCPVertexAnthropicStreamMessage::ContentBlockDelta {
-            delta: GCPVertexAnthropicMessageBlock::InputJsonDelta {
+        let mut current_tool_name = Some("tool_name".to_string());
+        let content_block_delta = AnthropicStreamMessage::ContentBlockDelta {
+            delta: AnthropicMessageBlock::InputJsonDelta {
                 partial_json: "aaaa: bbbbb".to_string(),
             },
             index: 0,
@@ -2235,13 +2276,14 @@ mod tests {
             content_block_delta,
             latency,
             &mut current_tool_id,
+            &mut current_tool_name,
         );
         let chunk = result.unwrap().unwrap();
         assert_eq!(chunk.content.len(), 1);
         match &chunk.content[0] {
             ContentBlockChunk::ToolCall(tool_call) => {
                 assert_eq!(tool_call.id, "tool_id".to_string());
-                assert_eq!(tool_call.raw_name, None);
+                assert_eq!(tool_call.raw_name, None); // We don't add the tool name if it isn't in the contentBlockDelta
                 assert_eq!(tool_call.raw_arguments, "aaaa: bbbbb".to_string());
             }
             _ => panic!("Expected a tool call content block"),
@@ -2250,8 +2292,9 @@ mod tests {
 
         // Test ContentBlockStart with ToolUse
         let mut current_tool_id = None;
-        let content_block_start = GCPVertexAnthropicStreamMessage::ContentBlockStart {
-            content_block: GCPVertexAnthropicMessageBlock::ToolUse {
+        let mut current_tool_name = None;
+        let content_block_start = AnthropicStreamMessage::ContentBlockStart {
+            content_block: AnthropicMessageBlock::ToolUse {
                 id: "tool1".to_string(),
                 name: "calculator".to_string(),
                 input: json!({}),
@@ -2264,6 +2307,7 @@ mod tests {
             content_block_start,
             latency,
             &mut current_tool_id,
+            &mut current_tool_name,
         );
         let chunk = result.unwrap().unwrap();
         assert_eq!(chunk.content.len(), 1);
@@ -2277,11 +2321,13 @@ mod tests {
         }
         assert_eq!(chunk.latency, latency);
         assert_eq!(current_tool_id, Some("tool1".to_string()));
+        assert_eq!(current_tool_name, Some("calculator".to_string()));
 
         // Test ContentBlockStart with Text
         let mut current_tool_id = None;
-        let content_block_start = GCPVertexAnthropicStreamMessage::ContentBlockStart {
-            content_block: GCPVertexAnthropicMessageBlock::Text {
+        let mut current_tool_name = None;
+        let content_block_start = AnthropicStreamMessage::ContentBlockStart {
+            content_block: AnthropicMessageBlock::Text {
                 text: "Hello".to_string(),
             },
             index: 2,
@@ -2292,6 +2338,7 @@ mod tests {
             content_block_start,
             latency,
             &mut current_tool_id,
+            &mut current_tool_name,
         );
         let chunk = result.unwrap().unwrap();
         assert_eq!(chunk.content.len(), 1);
@@ -2306,8 +2353,9 @@ mod tests {
 
         // Test ContentBlockStart with InputJsonDelta (should fail)
         let mut current_tool_id = None;
-        let content_block_start = GCPVertexAnthropicStreamMessage::ContentBlockStart {
-            content_block: GCPVertexAnthropicMessageBlock::InputJsonDelta {
+        let mut current_tool_name = None;
+        let content_block_start = AnthropicStreamMessage::ContentBlockStart {
+            content_block: AnthropicMessageBlock::InputJsonDelta {
                 partial_json: "aaaa: bbbbb".to_string(),
             },
             index: 3,
@@ -2318,32 +2366,36 @@ mod tests {
             content_block_start,
             latency,
             &mut current_tool_id,
+            &mut current_tool_name,
         );
         let details = result.unwrap_err().get_owned_details();
         assert_eq!(
             details,
             ErrorDetails::InferenceServer {
                 message: "Unsupported content block type for ContentBlockStart".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
                 raw_request: None,
-                raw_response: None,
-                provider_type: PROVIDER_TYPE.to_string()
+                raw_response: Some(
+                    "{\"type\":\"input_json_delta\",\"partial_json\":\"aaaa: bbbbb\"}".to_string()
+                ),
             }
         );
 
         // Test ContentBlockStop
-        let content_block_stop = GCPVertexAnthropicStreamMessage::ContentBlockStop { index: 2 };
+        let content_block_stop = AnthropicStreamMessage::ContentBlockStop { index: 2 };
         let latency = Duration::from_millis(120);
         let result = anthropic_to_tensorzero_stream_message(
             "my_raw_chunk".to_string(),
             content_block_stop,
             latency,
             &mut current_tool_id,
+            &mut current_tool_name,
         );
         assert!(result.is_ok());
         assert!(result.unwrap().is_none());
 
         // Test Error
-        let error_message = GCPVertexAnthropicStreamMessage::Error {
+        let error_message = AnthropicStreamMessage::Error {
             error: json!({"message": "Test error"}),
         };
         let latency = Duration::from_millis(130);
@@ -2352,6 +2404,7 @@ mod tests {
             error_message,
             latency,
             &mut current_tool_id,
+            &mut current_tool_name,
         );
         let details = result.unwrap_err().get_owned_details();
         assert_eq!(
@@ -2365,7 +2418,7 @@ mod tests {
         );
 
         // Test MessageDelta with usage
-        let message_delta = GCPVertexAnthropicStreamMessage::MessageDelta {
+        let message_delta = AnthropicStreamMessage::MessageDelta {
             delta: AnthropicMessageDelta {
                 stop_reason: Some(AnthropicStopReason::EndTurn),
                 stop_sequence: None,
@@ -2378,6 +2431,7 @@ mod tests {
             message_delta,
             latency,
             &mut current_tool_id,
+            &mut current_tool_name,
         );
         assert!(result.is_ok());
         let chunk = result.unwrap().unwrap();
@@ -2387,9 +2441,10 @@ mod tests {
         assert_eq!(usage.input_tokens, 10);
         assert_eq!(usage.output_tokens, 20);
         assert_eq!(chunk.latency, latency);
+        assert_eq!(chunk.finish_reason, Some(FinishReason::Stop));
 
         // Test MessageStart with usage
-        let message_start = GCPVertexAnthropicStreamMessage::MessageStart {
+        let message_start = AnthropicStreamMessage::MessageStart {
             message: json!({"usage": {"input_tokens": 5, "output_tokens": 15}}),
         };
         let latency = Duration::from_millis(150);
@@ -2398,6 +2453,7 @@ mod tests {
             message_start,
             latency,
             &mut current_tool_id,
+            &mut current_tool_name,
         );
         assert!(result.is_ok());
         let chunk = result.unwrap().unwrap();
@@ -2409,25 +2465,27 @@ mod tests {
         assert_eq!(chunk.latency, latency);
 
         // Test MessageStop
-        let message_stop = GCPVertexAnthropicStreamMessage::MessageStop;
+        let message_stop = AnthropicStreamMessage::MessageStop;
         let latency = Duration::from_millis(160);
         let result = anthropic_to_tensorzero_stream_message(
             "my_raw_chunk".to_string(),
             message_stop,
             latency,
             &mut current_tool_id,
+            &mut current_tool_name,
         );
         assert!(result.is_ok());
         assert!(result.unwrap().is_none());
 
         // Test Ping
-        let ping = GCPVertexAnthropicStreamMessage::Ping {};
+        let ping = AnthropicStreamMessage::Ping {};
         let latency = Duration::from_millis(170);
         let result = anthropic_to_tensorzero_stream_message(
             "my_raw_chunk".to_string(),
             ping,
             latency,
             &mut current_tool_id,
+            &mut current_tool_name,
         );
         assert!(result.is_ok());
         assert!(result.unwrap().is_none());
@@ -2469,39 +2527,196 @@ mod tests {
     }
 
     #[test]
+    fn test_anthropic_base_url() {
+        assert_eq!(
+            ANTHROPIC_BASE_URL.as_str(),
+            "https://api.anthropic.com/v1/messages"
+        );
+    }
+
+    #[test]
     fn test_prefill_json_message() {
-        let input_messages = vec![GCPVertexAnthropicMessage {
-            role: GCPVertexAnthropicRole::User,
-            content: vec![FlattenUnknown::Normal(
-                GCPVertexAnthropicMessageContent::Text {
-                    text: "Generate some JSON",
-                },
-            )],
+        // Create a sample input message
+        let input_messages = vec![AnthropicMessage {
+            role: AnthropicRole::User,
+            content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
+                text: "Generate some JSON",
+            })],
         }];
 
-        let mut result = input_messages.clone();
-        prefill_json_message(&mut result);
+        // Call the function
+        let result = prefill_json_message(input_messages);
 
+        // Assert that the result has one more message than the input
         assert_eq!(result.len(), 2);
 
-        assert_eq!(result[0].role, GCPVertexAnthropicRole::User);
+        // Check the original message is unchanged
+        assert_eq!(result[0].role, AnthropicRole::User);
         assert_eq!(
             result[0].content,
-            vec![FlattenUnknown::Normal(
-                GCPVertexAnthropicMessageContent::Text {
-                    text: "Generate some JSON",
-                }
-            )]
+            vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
+                text: "Generate some JSON",
+            })]
         );
 
-        assert_eq!(result[1].role, GCPVertexAnthropicRole::Assistant);
+        // Check the new message is correct
+        assert_eq!(result[1].role, AnthropicRole::Assistant);
         assert_eq!(
             result[1].content,
-            vec![FlattenUnknown::Normal(
-                GCPVertexAnthropicMessageContent::Text {
-                    text: "Here is the JSON requested:\n{",
-                }
-            )]
+            vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
+                text: "Here is the JSON requested:\n{",
+            })]
         );
+    }
+
+    #[test]
+    fn test_prefill_json_response() {
+        // Test case 1: Single text block
+        let input = vec![ContentBlockOutput::Text(Text {
+            text: "  \"key\": \"value\"}".to_string(),
+        })];
+        let result = prefill_json_response(input).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(
+            result[0],
+            ContentBlockOutput::Text(Text {
+                text: "{\"key\": \"value\"}".to_string(),
+            })
+        );
+
+        // Test case 2: Multiple blocks
+        let input = vec![
+            ContentBlockOutput::Text(Text {
+                text: "Block 1".to_string(),
+            }),
+            ContentBlockOutput::Text(Text {
+                text: "Block 2".to_string(),
+            }),
+        ];
+        let result = prefill_json_response(input.clone()).unwrap();
+        assert_eq!(result, input);
+
+        // Test case 3: Empty input
+        let input = vec![];
+        let result = prefill_json_response(input.clone()).unwrap();
+        assert_eq!(result, input);
+
+        // Test case 4: Non-text block
+        let input = vec![ContentBlockOutput::ToolCall(ToolCall {
+            id: "1".to_string(),
+            name: "test_tool".to_string(),
+            arguments: "{}".to_string(),
+        })];
+        let result = prefill_json_response(input.clone()).unwrap();
+        assert_eq!(result, input);
+    }
+
+    #[test]
+    fn test_prefill_json_chunk_response() {
+        // Test case 1: Empty content
+        let chunk = ProviderInferenceResponseChunk {
+            content: vec![],
+            created: 0,
+            usage: None,
+            raw_response: "".to_string(),
+            latency: Duration::from_millis(0),
+            finish_reason: None,
+        };
+        let mut result = chunk.clone();
+        prefill_json_chunk_response(&mut result);
+        assert_eq!(
+            result.content,
+            vec![ContentBlockChunk::Text(TextChunk {
+                text: "{".to_string(),
+                id: "0".to_string()
+            })]
+        );
+        // Test case 2: Single text block
+        let chunk = ProviderInferenceResponseChunk {
+            created: 0,
+            usage: None,
+            raw_response: "".to_string(),
+            latency: Duration::from_millis(0),
+            finish_reason: None,
+            content: vec![ContentBlockChunk::Text(TextChunk {
+                text: "\"key\": \"value ".to_string(),
+                id: "0".to_string(),
+            })],
+        };
+        let mut result = chunk.clone();
+        prefill_json_chunk_response(&mut result);
+        assert_eq!(
+            result.content,
+            vec![ContentBlockChunk::Text(TextChunk {
+                text: "{\"key\": \"value ".to_string(),
+                id: "0".to_string()
+            })]
+        );
+
+        // Test case 3: Multiple blocks (should remain unchanged)
+        let chunk = ProviderInferenceResponseChunk {
+            created: 0,
+            usage: None,
+            raw_response: "".to_string(),
+            latency: Duration::from_millis(0),
+            finish_reason: None,
+            content: vec![
+                ContentBlockChunk::Text(TextChunk {
+                    text: "Block 1".to_string(),
+                    id: "test_id".to_string(),
+                }),
+                ContentBlockChunk::Text(TextChunk {
+                    text: "Block 2".to_string(),
+                    id: "test_id".to_string(),
+                }),
+            ],
+        };
+        let mut result = chunk.clone();
+        prefill_json_chunk_response(&mut result);
+        assert_eq!(result, chunk);
+
+        // Test case 4: Non-text block (should remain unchanged)
+        let chunk = ProviderInferenceResponseChunk {
+            created: 0,
+            usage: None,
+            raw_response: "".to_string(),
+            latency: Duration::from_millis(0),
+            finish_reason: None,
+            content: vec![ContentBlockChunk::ToolCall(ToolCallChunk {
+                id: "1".to_string(),
+                raw_name: Some("test_tool".to_string()),
+                raw_arguments: "{}".to_string(),
+            })],
+        };
+        let mut result = chunk.clone();
+        prefill_json_chunk_response(&mut result);
+        assert_eq!(result, chunk);
+    }
+
+    #[test]
+    fn test_credential_to_anthropic_credentials() {
+        // Test Static credential
+        let generic = Credential::Static(SecretString::from("test_key"));
+        let creds = AnthropicCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, AnthropicCredentials::Static(_)));
+
+        // Test Dynamic credential
+        let generic = Credential::Dynamic("key_name".to_string());
+        let creds = AnthropicCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, AnthropicCredentials::Dynamic(_)));
+
+        // Test Missing credential
+        let generic = Credential::Missing;
+        let creds = AnthropicCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, AnthropicCredentials::None));
+
+        // Test invalid type
+        let generic = Credential::FileContents(SecretString::from("test"));
+        let result = AnthropicCredentials::try_from(generic);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err().get_owned_details(),
+            ErrorDetails::Config { message } if message.contains("Invalid api_key_location")
+        ));
     }
 }

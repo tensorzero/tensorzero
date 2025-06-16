@@ -22,17 +22,16 @@ use tokio::time::Instant;
 use url::Url;
 use uuid::Uuid;
 
+use super::helpers::check_new_tool_call_name;
+use super::helpers::{
+    inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
+};
 use crate::cache::ModelProviderRequest;
 use crate::config_parser::{
     GCPBatchConfigCloudStorage, GCPBatchConfigType, GCPProviderTypeConfig, ProviderTypesConfig,
 };
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
-use crate::inference::providers::helpers::check_new_tool_call_name;
-use crate::inference::providers::helpers::{
-    inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
-};
-use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::{
     BatchRequestRow, BatchStatus, PollBatchInferenceResponse, ProviderBatchInferenceOutput,
     ProviderBatchInferenceResponse,
@@ -47,6 +46,7 @@ use crate::inference::types::{
     ModelInferenceRequestJsonMode, ProviderInferenceResponseArgs,
     ProviderInferenceResponseStreamInner, Role, Text, TextChunk, Thought, ThoughtChunk,
 };
+use crate::inference::InferenceProvider;
 use crate::model::{
     build_creds_caching_default_with_fn, fully_qualified_name, Credential, CredentialLocation,
     ModelProvider,

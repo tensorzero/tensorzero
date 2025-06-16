@@ -12,12 +12,11 @@ use tokio::time::Instant;
 use url::Url;
 use uuid::Uuid;
 
+use super::helpers::check_new_tool_call_name;
+use super::helpers::inject_extra_request_data_and_send_eventsource;
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
-use crate::inference::providers::helpers::check_new_tool_call_name;
-use crate::inference::providers::helpers::inject_extra_request_data_and_send_eventsource;
-use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::file::require_image;
 use crate::inference::types::resolved_input::FileWithPath;
@@ -32,6 +31,7 @@ use crate::inference::types::{
     Thought, ThoughtChunk,
 };
 use crate::inference::types::{FinishReason, FlattenUnknown};
+use crate::inference::InferenceProvider;
 use crate::model::{
     build_creds_caching_default, fully_qualified_name, Credential, CredentialLocation,
     ModelProvider,
