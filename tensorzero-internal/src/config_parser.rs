@@ -28,6 +28,7 @@ use crate::variant::dicl::UninitializedDiclConfig;
 use crate::variant::mixture_of_n::UninitializedMixtureOfNConfig;
 use crate::variant::{Variant, VariantConfig};
 use std::error::Error as StdError;
+use crate::auth::APIConfig;
 
 tokio::task_local! {
     /// When set, we skip performing credential validation in model providers
@@ -55,6 +56,7 @@ pub struct Config<'c> {
     pub templates: TemplateConfig<'c>,
     pub object_store_info: Option<ObjectStoreInfo>,
     pub provider_types: ProviderTypesConfig,
+    pub api_keys: HashMap<String, APIConfig>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -405,6 +407,7 @@ impl<'c> Config<'c> {
             templates,
             object_store_info,
             provider_types: uninitialized_config.provider_types,
+            api_keys: uninitialized_config.api_keys,
         };
 
         // Initialize the templates
@@ -674,6 +677,8 @@ struct UninitializedConfig {
     pub evaluations: HashMap<String, UninitializedEvaluationConfig>, // evaluation name => evaluation
     #[serde(default)]
     pub provider_types: ProviderTypesConfig, // global configuration for all model providers of a particular type
+    #[serde(default)]
+    pub api_keys: HashMap<String, APIConfig>,
     pub object_storage: Option<StorageKind>,
 }
 
