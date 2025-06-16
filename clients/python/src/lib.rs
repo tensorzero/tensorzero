@@ -1686,7 +1686,7 @@ pub fn convert_error(py: Python<'_>, e: TensorZeroError) -> PyErr {
 
 fn tensorzero_error(py: Python<'_>, status_code: u16, text: Option<String>) -> PyResult<PyErr> {
     let err = TENSORZERO_HTTP_ERROR.get_or_try_init::<_, PyErr>(py, || {
-        let self_module = PyModule::import(py, "tensorzero")?;
+        let self_module = PyModule::import(py, "tensorzero.types")?;
         let err: Bound<'_, PyAny> = self_module.getattr("TensorZeroError")?;
         Ok(err.unbind())
     })?;

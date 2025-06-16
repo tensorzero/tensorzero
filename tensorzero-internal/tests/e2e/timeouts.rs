@@ -6,14 +6,20 @@ use http::StatusCode;
 use reqwest::Client;
 use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{json, Value};
-use tensorzero_internal::clickhouse::test_helpers::{
-    get_clickhouse, select_chat_inference_clickhouse, select_json_inference_clickhouse,
-    select_model_inference_clickhouse, select_model_inferences_clickhouse,
+use tensorzero::{
+    ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent, Role,
+};
+use tensorzero_internal::{
+    clickhouse::test_helpers::{
+        get_clickhouse, select_model_inference_clickhouse, select_model_inferences_clickhouse,
+    },
+    inference::types::TextKind,
 };
 use tokio_stream::StreamExt;
+use tracing_test::traced_test;
 use uuid::Uuid;
 
-use crate::common::get_gateway_endpoint;
+use crate::{common::get_gateway_endpoint, providers::common::make_embedded_gateway_with_config};
 
 // Variant timeout tests
 
@@ -502,4 +508,158 @@ async fn slow_second_chunk_streaming(payload: Value) {
         ttft_ms <= 400,
         "ttft_ms should be less than 400ms, but was {ttft_ms}"
     );
+}
+
+// Model timeout tests
+
+// Test timeouts that occur at both the model and model-provider level
+#[tokio::test]
+#[traced_test]
+async fn test_double_model_timeout() {
+    let config = r#"
+[functions.double_timeout]
+type = "chat"
+
+[functions.double_timeout.variants.slow_variant]
+type = "chat_completion"
+model = "double_timeout"
+
+[models.double_timeout]
+# Each of these providers has a non-streaming timeout of 500ms
+# When we send an inference, the first two provides should time out,
+# and then the model-level timeout should trigger while the third provider
+# is still running
+routing = ["first_timeout", "second_timeout", "third_timeout"]
+timeouts = { non_streaming = { total_ms = 1200 }, streaming = { ttft_ms = 500 } }
+
+[models.double_timeout.providers.first_timeout]
+type = "dummy"
+model_name = "slow"
+timeouts = { non_streaming = { total_ms = 500 }, streaming = { ttft_ms = 500 } }
+
+[models.double_timeout.providers.second_timeout]
+type = "dummy"
+model_name = "slow"
+timeouts = { non_streaming = { total_ms = 500 }, streaming = { ttft_ms = 500 } }
+
+[models.double_timeout.providers.third_timeout]
+type = "dummy"
+model_name = "slow"
+timeouts = { non_streaming = { total_ms = 500 }, streaming = { ttft_ms = 500 } }
+    "#;
+
+    let client = make_embedded_gateway_with_config(config).await;
+    let response = client
+        .inference(ClientInferenceParams {
+            function_name: Some("double_timeout".to_string()),
+            variant_name: Some("slow_variant".to_string()),
+            input: ClientInput {
+                system: None,
+                messages: vec![ClientInputMessage {
+                    role: Role::User,
+                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                        text: "Hello, world!".to_string(),
+                    })],
+                }],
+            },
+            ..Default::default()
+        })
+        .await
+        .unwrap_err();
+
+    assert!(
+        response.to_string().contains("All variants failed with errors: slow_variant: Model double_timeout timed out due to configured `non_streaming.total_ms` timeout (1.2s)"),
+        "Unexpected error message: {response}"
+    );
+    // The first two providers should time out, but the third one shouldn't
+    // (since the top-level model timeout will trigger first)
+    assert!(logs_contain("Model provider first_timeout timed out"));
+    assert!(logs_contain("Model provider first_timeout timed out"));
+    assert!(!logs_contain("third_timeout"));
+}
+
+#[tokio::test]
+async fn test_model_timeout_non_streaming() {
+    let payload = json!({
+        "function_name": "basic_test_model_timeout",
+        "variant_name": "slow_variant",
+        "episode_id": Uuid::now_v7(),
+        "input": {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Hello, world!"
+                }
+            ]
+        },
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    let response_json = response.json::<Value>().await.unwrap();
+    assert_eq!(
+        response_json,
+        json!({
+            "error":"All variants failed with errors: slow_variant: Model slow_model_timeout timed out due to configured `non_streaming.total_ms` timeout (400ms)"
+        })
+    );
+}
+
+#[tokio::test]
+async fn test_model_timeout_streaming() {
+    let payload = json!({
+        "function_name": "basic_test_model_timeout",
+        "variant_name": "slow_variant",
+        "episode_id": Uuid::now_v7(),
+        "input": {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Hello, world!"
+                }
+            ]
+        },
+        "stream": true,
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    let status = response.status();
+    let response_json = response.json::<Value>().await.unwrap();
+    assert_eq!(
+        response_json,
+        json!({
+            "error":"All variants failed with errors: slow_variant: Model slow_model_timeout timed out due to configured `streaming.ttft_ms` timeout (500ms)"
+        })
+    );
+    assert_eq!(status, StatusCode::BAD_GATEWAY);
+}
+
+#[tokio::test]
+async fn test_model_timeout_slow_second_chunk_streaming() {
+    slow_second_chunk_streaming(json!({
+        "function_name": "basic_test_model_timeout",
+        "variant_name": "slow_second_chunk",
+        "episode_id": Uuid::now_v7(),
+        "input": {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Hello, world!"
+                }
+            ]
+        },
+        "stream": true,
+    }))
+    .await;
 }

@@ -120,6 +120,7 @@ struct InferenceMetadata {
     pub model_name: Arc<str>,
     pub model_provider_name: Arc<str>,
     pub raw_request: String,
+    pub raw_response: Option<String>,
     pub system: Option<String>,
     pub input_messages: Vec<RequestMessage>,
     pub previous_model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
@@ -392,6 +393,7 @@ pub async fn inference(
                 model_name: model_used_info.model_name,
                 model_provider_name: model_used_info.model_provider_name,
                 raw_request: model_used_info.raw_request,
+                raw_response: model_used_info.raw_response,
                 system: model_used_info.system,
                 input_messages: model_used_info.input_messages,
                 previous_model_inference_results: model_used_info.previous_model_inference_results,
@@ -602,6 +604,7 @@ fn create_stream(
                 model_name,
                 model_provider_name,
                 raw_request,
+                raw_response,
                 system,
                 input_messages,
                 previous_model_inference_results,
@@ -628,6 +631,7 @@ fn create_stream(
                     model_name,
                     model_provider_name,
                     raw_request,
+                    raw_response,
                     inference_params,
                     function_name: &function_name,
                     variant_name: &variant_name,
@@ -1102,9 +1106,12 @@ pub struct ChatCompletionInferenceParams {
     pub frequency_penalty: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub json_mode: Option<JsonMode>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stop_sequences: Option<Vec<String>>,
 }
 
 impl ChatCompletionInferenceParams {
+    #[expect(clippy::too_many_arguments)]
     pub fn backfill_with_variant_params(
         &mut self,
         temperature: Option<f32>,
@@ -1113,6 +1120,7 @@ impl ChatCompletionInferenceParams {
         top_p: Option<f32>,
         presence_penalty: Option<f32>,
         frequency_penalty: Option<f32>,
+        stop_sequences: Option<Vec<String>>,
     ) {
         if self.temperature.is_none() {
             self.temperature = temperature;
@@ -1131,6 +1139,9 @@ impl ChatCompletionInferenceParams {
         }
         if self.frequency_penalty.is_none() {
             self.frequency_penalty = frequency_penalty;
+        }
+        if self.stop_sequences.is_none() {
+            self.stop_sequences = stop_sequences;
         }
     }
 }
@@ -1179,6 +1190,7 @@ mod tests {
             model_name: "test_model".into(),
             model_provider_name: "test_provider".into(),
             raw_request: raw_request.clone(),
+            raw_response: None,
             system: None,
             input_messages: vec![],
             previous_model_inference_results: vec![],
@@ -1231,6 +1243,7 @@ mod tests {
             model_name: "test_model".into(),
             model_provider_name: "test_provider".into(),
             raw_request: raw_request.clone(),
+            raw_response: None,
             system: None,
             input_messages: vec![],
             previous_model_inference_results: vec![],

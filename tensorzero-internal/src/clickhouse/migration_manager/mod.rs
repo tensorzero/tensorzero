@@ -29,6 +29,7 @@ use migrations::migration_0026::Migration0026;
 use migrations::migration_0027::Migration0027;
 use migrations::migration_0028::Migration0028;
 use migrations::migration_0029::Migration0029;
+use migrations::migration_0030::Migration0030;
 
 /// This must match the number of migrations returned by `make_all_migrations` - the tests
 /// will panic if they don't match.
@@ -77,6 +78,7 @@ pub fn make_all_migrations<'a>(
         Box::new(Migration0027 { clickhouse }),
         Box::new(Migration0028 { clickhouse }),
         Box::new(Migration0029 { clickhouse }),
+        Box::new(Migration0030 { clickhouse }),
         Box::new(Migration0031 { clickhouse }),
     ];
     assert_eq!(
