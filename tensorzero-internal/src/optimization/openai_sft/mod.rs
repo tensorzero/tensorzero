@@ -6,16 +6,15 @@ use crate::{
     endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
     model::{build_creds_caching_default, CredentialLocation},
-    optimization::{
-        providers::openai::{
+    optimization::{Optimizer, OptimizerStatus},
+    providers::openai::{
+        default_api_key_location,
+        optimization::{
             OpenAIFineTuningJob, OpenAIFineTuningMethod, OpenAIFineTuningRequest,
             OpenAISupervisedRow, SupervisedHyperparameters,
         },
-        Optimizer, OptimizerStatus,
-    },
-    providers::openai::{
-        default_api_key_location, upload_openai_file, OpenAICredentials, DEFAULT_CREDENTIALS,
-        OPENAI_DEFAULT_BASE_URL, PROVIDER_TYPE,
+        upload_openai_file, OpenAICredentials, DEFAULT_CREDENTIALS, OPENAI_DEFAULT_BASE_URL,
+        PROVIDER_TYPE,
     },
     stored_inference::RenderedStoredInference,
 };

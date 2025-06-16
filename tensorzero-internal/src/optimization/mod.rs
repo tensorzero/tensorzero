@@ -10,7 +10,6 @@ use crate::optimization::openai_sft::{
 use crate::stored_inference::RenderedStoredInference;
 
 mod openai_sft;
-mod providers;
 
 #[derive(Clone, Debug)]
 pub enum OptimizerConfig {
