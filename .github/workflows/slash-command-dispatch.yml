@@ -18,6 +18,8 @@ jobs:
         run: |
           MEMBER=$((gh api 'orgs/tensorzero/members/${{ github.actor }}' && echo 1) || echo 0)
           echo "ACTOR_MEMBER=$MEMBER" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Slash Command Dispatch
         if: ${{ steps.check-permission.outputs.ACTOR_MEMBER == '1' }}
         uses: peter-evans/slash-command-dispatch@13bc09769d122a64f75aa5037256f6f2d78be8c4
