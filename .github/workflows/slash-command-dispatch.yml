@@ -1,0 +1,20 @@
+name: Slash Command Dispatch
+
+permissions:
+  pull-requests: write  # For doing the emoji reaction on a PR comment
+  issues: write  # For doing the emoji reaction on an issue comment
+  contents: write  # For executing the repository_dispatch event
+
+on:
+  issue_comment:
+    types: [created]
+jobs:
+  slashCommandDispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Slash Command Dispatch
+        uses: peter-evans/slash-command-dispatch@13bc09769d122a64f75aa5037256f6f2d78be8c4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commands: |
+            regen-fixtures
