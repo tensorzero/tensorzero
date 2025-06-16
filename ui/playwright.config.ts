@@ -28,7 +28,7 @@ export default defineConfig({
   /* Fail immediately while we're debugging the CI issue */
   maxFailures: process.env.TENSORZERO_CI ? 1 : undefined,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
-  reporter: process.env.TENSORZERO_CI ? [['list', 'github']] : [['dot']],
+  reporter: process.env.TENSORZERO_CI ? [['list'], ['github']] : [['dot']],
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Base URL to use in actions like `await page.goto('/')`. */
