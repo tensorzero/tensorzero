@@ -48,6 +48,7 @@ pub struct DiclConfig {
     pub system_instructions: String,
     pub temperature: Option<f32>,
     pub top_p: Option<f32>,
+    pub stop_sequences: Option<Vec<String>>,
     pub presence_penalty: Option<f32>,
     pub frequency_penalty: Option<f32>,
     pub max_tokens: Option<u32>,
@@ -69,6 +70,7 @@ pub struct UninitializedDiclConfig {
     pub system_instructions: Option<PathBuf>,
     pub temperature: Option<f32>,
     pub top_p: Option<f32>,
+    pub stop_sequences: Option<Vec<String>>,
     pub presence_penalty: Option<f32>,
     pub frequency_penalty: Option<f32>,
     pub max_tokens: Option<u32>,
@@ -509,6 +511,7 @@ impl DiclConfig {
                 self.top_p,
                 self.presence_penalty,
                 self.frequency_penalty,
+                self.stop_sequences.clone(),
             );
         if !inference_config.extra_body.is_empty() {
             return Err(ErrorDetails::InvalidRequest {
@@ -635,6 +638,7 @@ impl LoadableConfig<DiclConfig> for UninitializedDiclConfig {
             seed: self.seed,
             json_mode: self.json_mode,
             retries: self.retries,
+            stop_sequences: self.stop_sequences,
             extra_body: self.extra_body,
             extra_headers: self.extra_headers,
         })

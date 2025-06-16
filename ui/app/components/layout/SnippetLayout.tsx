@@ -10,7 +10,7 @@ interface SnippetLayoutProps {
 
 export function SnippetLayout({ children }: SnippetLayoutProps) {
   return (
-    <div className="w-full bg-bg-primary rounded-lg border border-border">
+    <div className="bg-bg-primary border-border w-full rounded-lg border">
       {children}
     </div>
   );
@@ -80,7 +80,7 @@ export function SnippetContent({
       </div>
 
       {needsExpansion && !expanded && maxHeight !== "Content" && (
-        <div className="from-bg-primary absolute right-0 bottom-0 left-0 flex justify-center bg-gradient-to-t to-transparent pt-8 pb-4 rounded-b-lg">
+        <div className="from-bg-primary absolute right-0 bottom-0 left-0 flex justify-center rounded-b-lg bg-gradient-to-t to-transparent pt-8 pb-4">
           <Button variant="outline" size="sm" onClick={() => setExpanded(true)}>
             Show more
           </Button>
@@ -109,7 +109,9 @@ export function SnippetMessage({
         <div className="text-sm font-medium text-purple-600 capitalize">
           {role}
         </div>
-        <div className="flex w-full flex-col gap-4 border-l border-border pl-4">{children}</div>
+        <div className="border-border flex w-full flex-col gap-4 border-l pl-4">
+          {children}
+        </div>
       </div>
     );
   }

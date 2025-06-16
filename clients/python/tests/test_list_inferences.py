@@ -2,12 +2,12 @@ from uuid import UUID
 
 import pytest
 from tensorzero import (
-    AndNode,
+    AndFilter,
     AsyncTensorZeroGateway,
-    BooleanMetricNode,
-    FloatMetricNode,
-    NotNode,
-    OrNode,
+    BooleanMetricFilter,
+    FloatMetricFilter,
+    NotFilter,
+    OrFilter,
     TensorZeroGateway,
     Text,
     ToolCall,
@@ -49,7 +49,7 @@ def test_simple_list_json_inferences(embedded_sync_client: TensorZeroGateway):
 
 
 def test_simple_query_with_float_filter(embedded_sync_client: TensorZeroGateway):
-    filters = FloatMetricNode(
+    filters = FloatMetricFilter(
         metric_name="jaccard_similarity",
         value=0.5,
         comparison_operator=">",
@@ -202,7 +202,7 @@ def test_demonstration_output_source(embedded_sync_client: TensorZeroGateway):
 
 
 def test_boolean_metric_filter(embedded_sync_client: TensorZeroGateway):
-    filters = BooleanMetricNode(
+    filters = BooleanMetricFilter(
         metric_name="exact_match",
         value=True,
     )
@@ -220,14 +220,14 @@ def test_boolean_metric_filter(embedded_sync_client: TensorZeroGateway):
 
 
 def test_and_filter_multiple_float_metrics(embedded_sync_client: TensorZeroGateway):
-    filters = AndNode(
+    filters = AndFilter(
         children=[
-            FloatMetricNode(
+            FloatMetricFilter(
                 metric_name="jaccard_similarity",
                 value=0.5,
                 comparison_operator=">",
             ),
-            FloatMetricNode(
+            FloatMetricFilter(
                 metric_name="jaccard_similarity",
                 value=0.8,
                 comparison_operator="<",
@@ -248,18 +248,18 @@ def test_and_filter_multiple_float_metrics(embedded_sync_client: TensorZeroGatew
 
 
 def test_or_filter_mixed_metrics(embedded_sync_client: TensorZeroGateway):
-    filters = OrNode(
+    filters = OrFilter(
         children=[
-            FloatMetricNode(
+            FloatMetricFilter(
                 metric_name="jaccard_similarity",
                 value=0.8,
                 comparison_operator=">=",
             ),
-            BooleanMetricNode(
+            BooleanMetricFilter(
                 metric_name="exact_match",
                 value=True,
             ),
-            BooleanMetricNode(
+            BooleanMetricFilter(
                 metric_name="goal_achieved",
                 value=True,
             ),
@@ -279,14 +279,14 @@ def test_or_filter_mixed_metrics(embedded_sync_client: TensorZeroGateway):
 
 
 def test_not_filter(embedded_sync_client: TensorZeroGateway):
-    filters = NotNode(
-        child=OrNode(
+    filters = NotFilter(
+        child=OrFilter(
             children=[
-                BooleanMetricNode(
+                BooleanMetricFilter(
                     metric_name="exact_match",
                     value=True,
                 ),
-                BooleanMetricNode(
+                BooleanMetricFilter(
                     metric_name="exact_match",
                     value=False,
                 ),
@@ -378,7 +378,7 @@ async def test_simple_list_json_inferences_async(
 async def test_simple_query_with_float_filter_async(
     embedded_async_client: AsyncTensorZeroGateway,
 ):
-    filters = FloatMetricNode(
+    filters = FloatMetricFilter(
         metric_name="jaccard_similarity",
         value=0.5,
         comparison_operator=">",
@@ -454,7 +454,7 @@ async def test_demonstration_output_source_async(
 async def test_boolean_metric_filter_async(
     embedded_async_client: AsyncTensorZeroGateway,
 ):
-    filters = BooleanMetricNode(
+    filters = BooleanMetricFilter(
         metric_name="exact_match",
         value=True,
     )
@@ -475,14 +475,14 @@ async def test_boolean_metric_filter_async(
 async def test_and_filter_multiple_float_metrics_async(
     embedded_async_client: AsyncTensorZeroGateway,
 ):
-    filters = AndNode(
+    filters = AndFilter(
         children=[
-            FloatMetricNode(
+            FloatMetricFilter(
                 metric_name="jaccard_similarity",
                 value=0.5,
                 comparison_operator=">",
             ),
-            FloatMetricNode(
+            FloatMetricFilter(
                 metric_name="jaccard_similarity",
                 value=0.8,
                 comparison_operator="<",
@@ -506,18 +506,18 @@ async def test_and_filter_multiple_float_metrics_async(
 async def test_or_filter_mixed_metrics_async(
     embedded_async_client: AsyncTensorZeroGateway,
 ):
-    filters = OrNode(
+    filters = OrFilter(
         children=[
-            FloatMetricNode(
+            FloatMetricFilter(
                 metric_name="jaccard_similarity",
                 value=0.8,
                 comparison_operator=">=",
             ),
-            BooleanMetricNode(
+            BooleanMetricFilter(
                 metric_name="exact_match",
                 value=True,
             ),
-            BooleanMetricNode(
+            BooleanMetricFilter(
                 metric_name="goal_achieved",
                 value=True,
             ),
@@ -538,14 +538,14 @@ async def test_or_filter_mixed_metrics_async(
 
 @pytest.mark.asyncio
 async def test_not_filter_async(embedded_async_client: AsyncTensorZeroGateway):
-    filters = NotNode(
-        child=OrNode(
+    filters = NotFilter(
+        child=OrFilter(
             children=[
-                BooleanMetricNode(
+                BooleanMetricFilter(
                     metric_name="exact_match",
                     value=True,
                 ),
-                BooleanMetricNode(
+                BooleanMetricFilter(
                     metric_name="exact_match",
                     value=False,
                 ),

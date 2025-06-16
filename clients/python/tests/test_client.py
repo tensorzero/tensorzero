@@ -2082,7 +2082,7 @@ def test_sync_basic_inference_with_content_block_plain_dict(
                             "type": "tool_call",
                             "id": "1",
                             "name": "test",
-                            "arguments": json.dumps({"arg": "value"}),
+                            "arguments": {"arg": "value"},
                         },
                         {
                             "type": "tool_result",

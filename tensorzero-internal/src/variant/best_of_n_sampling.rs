@@ -409,11 +409,12 @@ async fn inner_select_best_candidate<'a, 'request>(
     candidates: &[InferenceResult],
     function: &'a FunctionConfig,
 ) -> Result<(Option<usize>, Option<ModelInferenceResponseWithMetadata>), Error> {
+    let mut inference_params = InferenceParams::default();
     let (inference_request, skipped_indices) = evaluator.prepare_request(
         input,
         inference_config,
         candidates,
-        &mut InferenceParams::default(),
+        &mut inference_params,
         function,
     )?;
     if skipped_indices.len() == candidates.len() {
@@ -622,14 +623,14 @@ impl EvaluatorConfig {
     /// # Errors
     ///
     /// Returns an `Error` if any of the candidate outputs fail to serialize or if templating fails.
-    fn prepare_request(
+    fn prepare_request<'a>(
         &self,
         input: &ResolvedInput,
         inference_config: &InferenceConfig<'_, '_>,
         candidates: &[InferenceResult],
         inference_params: &mut InferenceParams,
         function: &FunctionConfig,
-    ) -> Result<(ModelInferenceRequest, Vec<usize>), Error> {
+    ) -> Result<(ModelInferenceRequest<'a>, Vec<usize>), Error> {
         // Do this before we prepare the system message so we can use the correct max index in the system message
         let (candidate_message, skipped_indices) =
             self.prepare_candidate_message(inference_config.templates, candidates)?;
@@ -670,6 +671,7 @@ impl EvaluatorConfig {
                 self.inner.top_p,
                 self.inner.presence_penalty,
                 self.inner.frequency_penalty,
+                self.inner.stop_sequences.clone(),
             );
         let json_mode = inference_params
             .chat_completion
@@ -707,6 +709,11 @@ impl EvaluatorConfig {
                 top_p: inference_params.chat_completion.top_p,
                 presence_penalty: inference_params.chat_completion.presence_penalty,
                 frequency_penalty: inference_params.chat_completion.frequency_penalty,
+                stop_sequences: inference_params
+                    .chat_completion
+                    .stop_sequences
+                    .clone()
+                    .map(Cow::Owned),
                 stream: false,
                 json_mode: json_mode.into(),
                 function_type: FunctionType::Json,
@@ -1257,6 +1264,7 @@ mod tests {
                         timeouts: Default::default(),
                     },
                 )]),
+                timeouts: Default::default(),
             },
         )]))
         .expect("Failed to create model table");
@@ -1373,6 +1381,7 @@ mod tests {
                             timeouts: Default::default(),
                         },
                     )]),
+                    timeouts: Default::default(),
                 },
             );
             ModelTable::try_from(map).expect("Failed to create model table")
@@ -1439,6 +1448,7 @@ mod tests {
                             timeouts: Default::default(),
                         },
                     )]),
+                    timeouts: Default::default(),
                 },
             );
             ModelTable::try_from(map).expect("Failed to create model table")
@@ -1523,6 +1533,7 @@ mod tests {
                         timeouts: Default::default(),
                     },
                 )]),
+                timeouts: Default::default(),
             },
         );
         let big_models = ModelTable::try_from(big_models).expect("Failed to create model table");
