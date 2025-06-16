@@ -5,10 +5,8 @@ use std::collections::HashMap;
 
 use crate::{
     error::Error,
-    inference::providers::openai::{
-        prepare_openai_messages, OpenAIFileID, OpenAIRequestMessage, OpenAITool,
-    },
     optimization::OptimizerStatus,
+    providers::openai::{prepare_openai_messages, OpenAIFileID, OpenAIRequestMessage, OpenAITool},
     stored_inference::RenderedStoredInference,
 };
 

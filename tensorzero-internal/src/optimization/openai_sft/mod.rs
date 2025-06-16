@@ -5,10 +5,6 @@ use url::Url;
 use crate::{
     endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
-    inference::providers::openai::{
-        default_api_key_location, upload_openai_file, OpenAICredentials, DEFAULT_CREDENTIALS,
-        OPENAI_DEFAULT_BASE_URL, PROVIDER_TYPE,
-    },
     model::{build_creds_caching_default, CredentialLocation},
     optimization::{
         providers::openai::{
@@ -16,6 +12,10 @@ use crate::{
             OpenAISupervisedRow, SupervisedHyperparameters,
         },
         Optimizer, OptimizerStatus,
+    },
+    providers::openai::{
+        default_api_key_location, upload_openai_file, OpenAICredentials, DEFAULT_CREDENTIALS,
+        OPENAI_DEFAULT_BASE_URL, PROVIDER_TYPE,
     },
     stored_inference::RenderedStoredInference,
 };

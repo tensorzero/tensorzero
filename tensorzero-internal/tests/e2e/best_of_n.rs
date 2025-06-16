@@ -1,8 +1,8 @@
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
-use tensorzero_internal::inference::{
+use tensorzero_internal::{
+    inference::types::{ContentBlock, RequestMessage, Role},
     providers::dummy::DUMMY_INFER_RESPONSE_CONTENT,
-    types::{ContentBlock, RequestMessage, Role},
 };
 use uuid::Uuid;
 

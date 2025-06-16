@@ -18,16 +18,14 @@ use tensorzero::{
 };
 use tensorzero_internal::{
     endpoints::inference::ChatInferenceResponse,
-    inference::{
-        providers::dummy::{
-            DUMMY_BAD_TOOL_RESPONSE, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW,
-            DUMMY_JSON_RESPONSE_RAW, DUMMY_RAW_REQUEST, DUMMY_STREAMING_RESPONSE,
-            DUMMY_STREAMING_TOOL_RESPONSE, DUMMY_TOOL_RESPONSE,
-        },
-        types::{
-            ContentBlock, ContentBlockOutput, File, RequestMessage, ResolvedInput,
-            ResolvedInputMessageContent, Role, Text, TextKind,
-        },
+    inference::types::{
+        ContentBlock, ContentBlockOutput, File, RequestMessage, ResolvedInput,
+        ResolvedInputMessageContent, Role, Text, TextKind,
+    },
+    providers::dummy::{
+        DUMMY_BAD_TOOL_RESPONSE, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW,
+        DUMMY_JSON_RESPONSE_RAW, DUMMY_RAW_REQUEST, DUMMY_STREAMING_RESPONSE,
+        DUMMY_STREAMING_TOOL_RESPONSE, DUMMY_TOOL_RESPONSE,
     },
     tool::{ToolCall, ToolCallInput},
 };

@@ -1,8 +1,4 @@
-use std::{
-    borrow::{Borrow, Cow},
-    collections::HashMap,
-    pin::Pin,
-};
+use std::{collections::HashMap, pin::Pin};
 
 use axum::http;
 use bytes::Bytes;
@@ -472,14 +468,6 @@ pub async fn peek_first_chunk<
                 message: "Stream produced error after we peeked non-error (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string()
              }))
         }
-    }
-}
-
-/// Turns a reference to a Cow into a `Cow::Borrowed`, without cloning
-pub fn borrow_cow<'a, T: ToOwned + ?Sized>(cow: &'a Cow<'a, T>) -> Cow<'a, T> {
-    match cow {
-        Cow::Borrowed(x) => Cow::Borrowed(x),
-        Cow::Owned(x) => Cow::Borrowed(x.borrow()),
     }
 }
 

@@ -1,6 +1,5 @@
 use futures::{Stream, StreamExt, TryStreamExt};
 use lazy_static::lazy_static;
-use reqwest::multipart::{Form, Part};
 use reqwest::StatusCode;
 use reqwest_eventsource::Event;
 use secrecy::{ExposeSecret, SecretString};
@@ -8,27 +7,22 @@ use serde::de::IntoDeserializer;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
 use std::borrow::Cow;
-use std::pin::Pin;
 use std::sync::OnceLock;
 use std::time::Duration;
 use tokio::time::Instant;
 use tracing::instrument;
 use url::Url;
+#[cfg(test)]
 use uuid::Uuid;
 
 use crate::cache::ModelProviderRequest;
-use crate::embeddings::{EmbeddingProvider, EmbeddingProviderResponse, EmbeddingRequest};
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
-use crate::inference::providers::provider_trait::InferenceProvider;
+use crate::inference::types::batch::StartBatchProviderInferenceResponse;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
-use crate::inference::types::batch::{
-    ProviderBatchInferenceOutput, ProviderBatchInferenceResponse,
-};
-use crate::inference::types::file::{mime_type_to_ext, require_image};
+use crate::inference::types::file::require_image;
 use crate::inference::types::resolved_input::FileWithPath;
 use crate::inference::types::{
-    batch::{BatchStatus, StartBatchProviderInferenceResponse},
     ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponse, ProviderInferenceResponseChunk, RequestMessage, Role, Text,
@@ -37,43 +31,42 @@ use crate::inference::types::{
 use crate::inference::types::{
     FinishReason, ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner,
 };
+use crate::inference::InferenceProvider;
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
-use crate::tool::{Tool, ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
+use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
-use crate::inference::providers::helpers::{
+use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
 
-use super::helpers::{parse_jsonl_batch_file, JsonlBatchFileInfo};
-use super::provider_trait::{TensorZeroEventError, WrappedProvider};
+use crate::inference::TensorZeroEventError;
 
 lazy_static! {
-    pub static ref OPENAI_DEFAULT_BASE_URL: Url = {
+    static ref OPENROUTER_DEFAULT_BASE_URL: Url = {
         #[expect(clippy::expect_used)]
-        Url::parse("https://api.openai.com/v1/").expect("Failed to parse OPENAI_DEFAULT_BASE_URL")
+        Url::parse("https://openrouter.ai/api/v1")
+            .expect("Failed to parse OPENROUTER_DEFAULT_BASE_URL")
     };
 }
 
-pub fn default_api_key_location() -> CredentialLocation {
-    CredentialLocation::Env("OPENAI_API_KEY".to_string())
+fn default_api_key_location() -> CredentialLocation {
+    CredentialLocation::Env("OPENROUTER_API_KEY".to_string())
 }
 
-const PROVIDER_NAME: &str = "OpenAI";
-pub const PROVIDER_TYPE: &str = "openai";
+const PROVIDER_NAME: &str = "OpenRouter";
+const PROVIDER_TYPE: &str = "openrouter";
 
 #[derive(Debug)]
-pub struct OpenAIProvider {
+pub struct OpenRouterProvider {
     model_name: String,
-    api_base: Option<Url>,
-    credentials: OpenAICredentials,
+    credentials: OpenRouterCredentials,
 }
 
-pub static DEFAULT_CREDENTIALS: OnceLock<OpenAICredentials> = OnceLock::new();
+static DEFAULT_CREDENTIALS: OnceLock<OpenRouterCredentials> = OnceLock::new();
 
-impl OpenAIProvider {
+impl OpenRouterProvider {
     pub fn new(
         model_name: String,
-        api_base: Option<Url>,
         api_key_location: Option<CredentialLocation>,
     ) -> Result<Self, Error> {
         let credentials = build_creds_caching_default(
@@ -82,15 +75,8 @@ impl OpenAIProvider {
             PROVIDER_TYPE,
             &DEFAULT_CREDENTIALS,
         )?;
-
-        // Check if the api_base has the `/chat/completions` suffix and warn if it does
-        if let Some(api_base) = &api_base {
-            check_api_base_suffix(api_base);
-        }
-
-        Ok(OpenAIProvider {
+        Ok(OpenRouterProvider {
             model_name,
-            api_base,
             credentials,
         })
     }
@@ -100,56 +86,37 @@ impl OpenAIProvider {
     }
 }
 
-/// Checks if the provided OpenAI API base URL has `/chat/completions` suffix and warns if it does.
-///
-/// This check exists because a common mistake when configuring OpenAI API endpoints is to include
-/// `/chat/completions` in the base URL. The gateway automatically appends this path when making requests,
-/// so including it in the base URL results in an invalid endpoint like:
-/// `http://localhost:1234/v1/chat/completions/chat/completions`
-///
-/// For example:
-/// - Correct: `http://localhost:1234/v1` or `http://localhost:1234/openai/v1/`
-/// - Incorrect: `http://localhost:1234/v1/chat/completions`
-pub fn check_api_base_suffix(api_base: &Url) {
-    let path = api_base.path();
-    if path.ends_with("/chat/completions") || path.ends_with("/chat/completions/") {
-        tracing::warn!(
-            "The gateway automatically appends `/chat/completions` to the `api_base`. You provided `{api_base}` which is likely incorrect. Please remove the `/chat/completions` suffix from `api_base`.",
-        );
-    }
-}
-
 #[derive(Clone, Debug)]
-pub enum OpenAICredentials {
+pub enum OpenRouterCredentials {
     Static(SecretString),
     Dynamic(String),
     None,
 }
 
-impl TryFrom<Credential> for OpenAICredentials {
+impl TryFrom<Credential> for OpenRouterCredentials {
     type Error = Error;
 
     fn try_from(credentials: Credential) -> Result<Self, Error> {
         match credentials {
-            Credential::Static(key) => Ok(OpenAICredentials::Static(key)),
-            Credential::Dynamic(key_name) => Ok(OpenAICredentials::Dynamic(key_name)),
-            Credential::None => Ok(OpenAICredentials::None),
-            Credential::Missing => Ok(OpenAICredentials::None),
+            Credential::Static(key) => Ok(OpenRouterCredentials::Static(key)),
+            Credential::Dynamic(key_name) => Ok(OpenRouterCredentials::Dynamic(key_name)),
+            Credential::None => Ok(OpenRouterCredentials::None),
+            Credential::Missing => Ok(OpenRouterCredentials::None),
             _ => Err(Error::new(ErrorDetails::Config {
-                message: "Invalid api_key_location for OpenAI provider".to_string(),
+                message: "Invalid api_key_location for OpenRouter provider".to_string(),
             })),
         }
     }
 }
 
-impl OpenAICredentials {
+impl OpenRouterCredentials {
     pub fn get_api_key<'a>(
         &'a self,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<Option<&'a SecretString>, Error> {
         match self {
-            OpenAICredentials::Static(api_key) => Ok(Some(api_key)),
-            OpenAICredentials::Dynamic(key_name) => {
+            OpenRouterCredentials::Static(api_key) => Ok(Some(api_key)),
+            OpenRouterCredentials::Dynamic(key_name) => {
                 Some(dynamic_api_keys.get(key_name).ok_or_else(|| {
                     ErrorDetails::ApiKeyMissing {
                         provider_name: PROVIDER_NAME.to_string(),
@@ -158,72 +125,12 @@ impl OpenAICredentials {
                 }))
                 .transpose()
             }
-            OpenAICredentials::None => Ok(None),
+            OpenRouterCredentials::None => Ok(None),
         }
     }
 }
 
-impl WrappedProvider for OpenAIProvider {
-    fn make_body<'a>(
-        &'a self,
-        ModelProviderRequest {
-            request,
-            provider_name: _,
-            model_name: _,
-        }: ModelProviderRequest<'a>,
-    ) -> Result<serde_json::Value, Error> {
-        let request_body = serde_json::to_value(OpenAIRequest::new(&self.model_name, request)?)
-            .map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: format!(
-                        "Error serializing OpenAI request: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                })
-            })?;
-        Ok(request_body)
-    }
-    fn parse_response(
-        &self,
-        request: &ModelInferenceRequest,
-        raw_request: String,
-        raw_response: String,
-        latency: Latency,
-    ) -> Result<ProviderInferenceResponse, Error> {
-        let response = serde_json::from_str(&raw_response).map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
-                message: format!(
-                    "Error parsing JSON response: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-                raw_request: Some(raw_request.clone()),
-                raw_response: Some(raw_response.clone()),
-                provider_type: PROVIDER_TYPE.to_string(),
-            })
-        })?;
-
-        OpenAIResponseWithMetadata {
-            response,
-            raw_response,
-            latency,
-            raw_request,
-            generic_request: request,
-        }
-        .try_into()
-    }
-
-    fn stream_events(
-        &self,
-        event_source: Pin<
-            Box<dyn Stream<Item = Result<Event, TensorZeroEventError>> + Send + 'static>,
-        >,
-        start_time: Instant,
-    ) -> ProviderInferenceResponseStreamInner {
-        stream_openai(PROVIDER_TYPE.to_string(), event_source, start_time)
-    }
-}
-
-impl InferenceProvider for OpenAIProvider {
+impl InferenceProvider for OpenRouterProvider {
     async fn infer<'a>(
         &'a self,
         request: ModelProviderRequest<'a>,
@@ -231,11 +138,22 @@ impl InferenceProvider for OpenAIProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_url = get_chat_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
+        let request_url = get_chat_url(&OPENROUTER_DEFAULT_BASE_URL)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
-        let request_body = self.make_body(request)?;
-        let mut request_builder = http_client.post(request_url);
+        let request_body_obj = OpenRouterRequest::new(&self.model_name, request.request)?;
+        let request_body = serde_json::to_value(request_body_obj).map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!(
+                    "Error serializing request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
+            })
+        })?;
+        let mut request_builder = http_client
+            .post(request_url)
+            .header("X-Title", "TensorZero")
+            .header("HTTP-Referer", "https://www.tensorzero.com/");
 
         if let Some(api_key) = api_key {
             request_builder = request_builder.bearer_auth(api_key.expose_secret());
@@ -280,7 +198,7 @@ impl InferenceProvider for OpenAIProvider {
             let latency = Latency::NonStreaming {
                 response_time: start_time.elapsed(),
             };
-            Ok(OpenAIResponseWithMetadata {
+            Ok(OpenRouterResponseWithMetadata {
                 response,
                 raw_response,
                 latency,
@@ -289,7 +207,7 @@ impl InferenceProvider for OpenAIProvider {
             }
             .try_into()?)
         } else {
-            Err(handle_openai_error(
+            Err(handle_openrouter_error(
                 &raw_request.clone(),
                 res.status(),
                 &res.text().await.map_err(|e| {
@@ -319,22 +237,26 @@ impl InferenceProvider for OpenAIProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let request_body = serde_json::to_value(OpenAIRequest::new(&self.model_name, request)?)
+        let request_body = serde_json::to_value(OpenRouterRequest::new(&self.model_name, request)?)
             .map_err(|e| {
                 Error::new(ErrorDetails::Serialization {
                     message: format!(
-                        "Error serializing OpenAI request: {}",
+                        "Error serializing OpenRouter request: {}",
                         DisplayOrDebugGateway::new(e)
                     ),
                 })
             })?;
-        let request_url = get_chat_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
+        let request_url = get_chat_url(&OPENROUTER_DEFAULT_BASE_URL)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
-        let mut request_builder = http_client.post(request_url);
+        let mut request_builder = http_client
+            .post(request_url)
+            .header("X-Title", "TensorZero")
+            .header("HTTP-Referer", "https://www.tensorzero.com/");
         if let Some(api_key) = api_key {
             request_builder = request_builder.bearer_auth(api_key.expose_secret());
         }
+
         let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
             PROVIDER_TYPE,
             &request.extra_body,
@@ -346,7 +268,7 @@ impl InferenceProvider for OpenAIProvider {
         )
         .await?;
 
-        let stream = stream_openai(
+        let stream = stream_openrouter(
             PROVIDER_TYPE.to_string(),
             event_source.map_err(TensorZeroEventError::EventSource),
             start_time,
@@ -355,303 +277,28 @@ impl InferenceProvider for OpenAIProvider {
         Ok((stream, raw_request))
     }
 
-    // Get a single chunk from the stream and make sure it is OK then send to client.
-    // We want to do this here so that we can tell that the request is working.
-    /// 1. Upload the requests to OpenAI as a File
-    /// 2. Start the batch inference
-    ///    We do them in sequence here.
     async fn start_batch_inference<'a>(
         &'a self,
-        requests: &'a [ModelInferenceRequest<'_>],
-        client: &'a reqwest::Client,
-        dynamic_api_keys: &'a InferenceCredentials,
+        _requests: &'a [ModelInferenceRequest<'_>],
+        _client: &'a reqwest::Client,
+        _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<StartBatchProviderInferenceResponse, Error> {
-        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
-        let mut batch_requests = Vec::with_capacity(requests.len());
-        for request in requests {
-            batch_requests.push(
-                OpenAIBatchFileInput::new(request.inference_id, &self.model_name, request).await?,
-            );
+        Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
+            provider_type: PROVIDER_TYPE.to_string(),
         }
-        let raw_requests: Result<Vec<String>, serde_json::Error> = batch_requests
-            .iter()
-            .map(|b| serde_json::to_string(&b.body))
-            .collect();
-        let raw_requests = raw_requests.map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: e.to_string(),
-            })
-        })?;
-        let file_id = upload_openai_file(
-            &batch_requests,
-            client,
-            api_key,
-            self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL),
-            "batch".to_string(),
-        )
-        .await?;
-        let batch_request = OpenAIBatchRequest::new(&file_id);
-        let raw_request = serde_json::to_string(&batch_request).map_err(|_| Error::new(ErrorDetails::Serialization { message: "Error serializing OpenAI batch request. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string() }))?;
-        let request_url =
-            get_batch_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
-        let mut request_builder = client.post(request_url);
-        if let Some(api_key) = api_key {
-            request_builder = request_builder.bearer_auth(api_key.expose_secret());
-        }
-        // Now let's actually start the batch inference
-        let res = request_builder
-            .json(&batch_request)
-            .send()
-            .await
-            .map_err(|e| {
-                Error::new(ErrorDetails::InferenceClient {
-                    status_code: e.status(),
-                    message: format!(
-                        "Error sending request to OpenAI: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: Some(serde_json::to_string(&batch_request).unwrap_or_default()),
-                    raw_response: None,
-                })
-            })?;
-        let text = res.text().await.map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
-                message: format!(
-                    "Error retrieving batch response: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-                raw_request: Some(serde_json::to_string(&batch_request).unwrap_or_default()),
-                raw_response: None,
-                provider_type: PROVIDER_TYPE.to_string(),
-            })
-        })?;
-        let response: OpenAIBatchResponse = serde_json::from_str(&text).map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
-                message: format!("Error parsing JSON response: {e}, text: {text}"),
-                raw_request: Some(serde_json::to_string(&batch_request).unwrap_or_default()),
-                raw_response: Some(text.clone()),
-                provider_type: PROVIDER_TYPE.to_string(),
-            })
-        })?;
-        let batch_params = OpenAIBatchParams {
-            file_id: Cow::Owned(file_id),
-            batch_id: Cow::Owned(response.id),
-        };
-        let batch_params = serde_json::to_value(batch_params).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!(
-                    "Error serializing OpenAI batch params: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-            })
-        })?;
-        let errors = match response.errors {
-            Some(errors) => errors
-                .data
-                .into_iter()
-                .map(|error| {
-                    serde_json::to_value(&error).map_err(|e| {
-                        Error::new(ErrorDetails::Serialization {
-                            message: format!(
-                                "Error serializing batch error: {}",
-                                DisplayOrDebugGateway::new(e)
-                            ),
-                        })
-                    })
-                })
-                .collect::<Result<Vec<_>, _>>()?,
-            None => vec![],
-        };
-        Ok(StartBatchProviderInferenceResponse {
-            batch_id: Uuid::now_v7(),
-            batch_params,
-            raw_requests,
-            raw_request,
-            raw_response: text,
-            status: BatchStatus::Pending,
-            errors,
-        })
+        .into())
     }
 
-    #[instrument(skip_all, fields(batch_request = ?batch_request))]
     async fn poll_batch_inference<'a>(
         &'a self,
-        batch_request: &'a BatchRequestRow<'a>,
-        http_client: &'a reqwest::Client,
-        dynamic_api_keys: &'a InferenceCredentials,
+        _batch_request: &'a BatchRequestRow<'a>,
+        _http_client: &'a reqwest::Client,
+        _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<PollBatchInferenceResponse, Error> {
-        let batch_params = OpenAIBatchParams::from_ref(&batch_request.batch_params)?;
-        let mut request_url =
-            get_batch_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
-        request_url
-            .path_segments_mut()
-            .map_err(|_| {
-                Error::new(ErrorDetails::Inference {
-                    message: "Failed to get mutable path segments".to_string(),
-                })
-            })?
-            .push(&batch_params.batch_id);
-        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
-        let raw_request = request_url.to_string();
-        let mut request_builder = http_client.get(request_url);
-        if let Some(api_key) = api_key {
-            request_builder = request_builder.bearer_auth(api_key.expose_secret());
+        Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
+            provider_type: PROVIDER_TYPE.to_string(),
         }
-        let res = request_builder.send().await.map_err(|e| {
-            Error::new(ErrorDetails::InferenceClient {
-                status_code: e.status(),
-                message: format!(
-                    "Error sending request to OpenAI: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-                provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: Some(serde_json::to_string(&batch_request).unwrap_or_default()),
-                raw_response: None,
-            })
-        })?;
-        let text = res.text().await.map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
-                message: format!(
-                    "Error parsing JSON response: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-                raw_request: Some(serde_json::to_string(&batch_request).unwrap_or_default()),
-                raw_response: None,
-                provider_type: PROVIDER_TYPE.to_string(),
-            })
-        })?;
-        let response: OpenAIBatchResponse = serde_json::from_str(&text).map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
-                message: format!("Error parsing JSON response: {e}."),
-                raw_request: Some(serde_json::to_string(&batch_request).unwrap_or_default()),
-                raw_response: Some(text.clone()),
-                provider_type: PROVIDER_TYPE.to_string(),
-            })
-        })?;
-        let status: BatchStatus = response.status.into();
-        let raw_response = text;
-        match status {
-            BatchStatus::Pending => Ok(PollBatchInferenceResponse::Pending {
-                raw_request,
-                raw_response,
-            }),
-            BatchStatus::Completed => {
-                let output_file_id = response.output_file_id.as_ref().ok_or_else(|| {
-                    Error::new(ErrorDetails::InferenceServer {
-                        message: "Output file ID is missing".to_string(),
-                        raw_request: Some(
-                            serde_json::to_string(&batch_request).unwrap_or_default(),
-                        ),
-                        raw_response: Some(raw_response.clone()),
-                        provider_type: PROVIDER_TYPE.to_string(),
-                    })
-                })?;
-                let response = self
-                    .collect_finished_batch(
-                        output_file_id,
-                        http_client,
-                        dynamic_api_keys,
-                        raw_request,
-                        raw_response,
-                    )
-                    .await?;
-                Ok(PollBatchInferenceResponse::Completed(response))
-            }
-            BatchStatus::Failed => Ok(PollBatchInferenceResponse::Failed {
-                raw_request,
-                raw_response,
-            }),
-        }
-    }
-}
-
-impl EmbeddingProvider for OpenAIProvider {
-    async fn embed(
-        &self,
-        request: &EmbeddingRequest,
-        client: &reqwest::Client,
-        dynamic_api_keys: &InferenceCredentials,
-    ) -> Result<EmbeddingProviderResponse, Error> {
-        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
-        let request_body = OpenAIEmbeddingRequest::new(&self.model_name, &request.input);
-        let request_url =
-            get_embedding_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
-        let start_time = Instant::now();
-        let mut request_builder = client.post(request_url);
-        if let Some(api_key) = api_key {
-            request_builder = request_builder.bearer_auth(api_key.expose_secret());
-        }
-        let res = request_builder
-            .json(&request_body)
-            .send()
-            .await
-            .map_err(|e| {
-                Error::new(ErrorDetails::InferenceClient {
-                    status_code: e.status(),
-                    message: format!(
-                        "Error sending request to OpenAI: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
-                    raw_response: None,
-                })
-            })?;
-        if res.status().is_success() {
-            let raw_response = res.text().await.map_err(|e| {
-                Error::new(ErrorDetails::InferenceServer {
-                    message: format!(
-                        "Error parsing text response: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
-                    raw_response: None,
-                    provider_type: PROVIDER_TYPE.to_string(),
-                })
-            })?;
-
-            let response: OpenAIEmbeddingResponse =
-                serde_json::from_str(&raw_response).map_err(|e| {
-                    Error::new(ErrorDetails::InferenceServer {
-                        message: format!(
-                            "Error parsing JSON response: {}",
-                            DisplayOrDebugGateway::new(e)
-                        ),
-                        raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
-                        raw_response: Some(raw_response.clone()),
-                        provider_type: PROVIDER_TYPE.to_string(),
-                    })
-                })?;
-            let latency = Latency::NonStreaming {
-                response_time: start_time.elapsed(),
-            };
-
-            Ok(OpenAIEmbeddingResponseWithMetadata {
-                response,
-                latency,
-                request: request_body,
-                raw_response,
-            }
-            .try_into()?)
-        } else {
-            Err(handle_openai_error(
-                &serde_json::to_string(&request_body).unwrap_or_default(),
-                res.status(),
-                &res.text().await.map_err(|e| {
-                    Error::new(ErrorDetails::InferenceServer {
-                        message: format!(
-                            "Error parsing error response: {}",
-                            DisplayOrDebugGateway::new(e)
-                        ),
-                        raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
-                        raw_response: None,
-                        provider_type: PROVIDER_TYPE.to_string(),
-                    })
-                })?,
-                PROVIDER_TYPE,
-            ))
-        }
+        .into())
     }
 }
 
@@ -670,7 +317,7 @@ pub async fn convert_stream_error(provider_type: String, e: reqwest_eventsource:
     .into()
 }
 
-pub fn stream_openai(
+pub fn stream_openrouter(
     provider_type: String,
     event_source: impl Stream<Item = Result<Event, TensorZeroEventError>> + Send + 'static,
     start_time: Instant,
@@ -696,7 +343,7 @@ pub fn stream_openai(
                         if message.data == "[DONE]" {
                             break;
                         }
-                        let data: Result<OpenAIChatChunk, Error> =
+                        let data: Result<OpenRouterChatChunk, Error> =
                             serde_json::from_str(&message.data).map_err(|e| Error::new(ErrorDetails::InferenceServer {
                                 message: format!(
                                     "Error parsing chunk. Error: {e}",
@@ -708,7 +355,7 @@ pub fn stream_openai(
 
                         let latency = start_time.elapsed();
                         let stream_message = data.and_then(|d| {
-                            openai_to_tensorzero_chunk(message.data, d, latency, &mut tool_call_ids)
+                            openrouter_to_tensorzero_chunk(message.data, d, latency, &mut tool_call_ids)
                         });
                         yield stream_message;
                     }
@@ -716,70 +363,6 @@ pub fn stream_openai(
             }
         }
     })
-}
-
-impl OpenAIProvider {
-    // Once a batch has been completed we need to retrieve the results from OpenAI using the files API
-    #[instrument(skip_all, fields(file_id = file_id))]
-    async fn collect_finished_batch(
-        &self,
-        file_id: &str,
-        client: &reqwest::Client,
-        credentials: &InferenceCredentials,
-        raw_request: String,
-        raw_response: String,
-    ) -> Result<ProviderBatchInferenceResponse, Error> {
-        let file_url = get_file_url(
-            self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL),
-            Some(file_id),
-        )?;
-        let api_key = self.credentials.get_api_key(credentials)?;
-        let mut request_builder = client.get(file_url);
-        if let Some(api_key) = api_key {
-            request_builder = request_builder.bearer_auth(api_key.expose_secret());
-        }
-        let res = request_builder.send().await.map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
-                message: format!(
-                    "Error downloading batch results from OpenAI for file {file_id}: {e}"
-                ),
-                raw_request: None,
-                raw_response: None,
-                provider_type: PROVIDER_TYPE.to_string(),
-            })
-        })?;
-
-        if res.status() != StatusCode::OK {
-            return Err(handle_openai_error(
-                &raw_request,
-                res.status(),
-                &res.text().await.map_err(|e| {
-                    Error::new(ErrorDetails::InferenceServer {
-                        message: format!(
-                            "Error parsing error response for file {file_id}: {}",
-                            DisplayOrDebugGateway::new(e)
-                        ),
-                        raw_request: None,
-                        raw_response: None,
-                        provider_type: PROVIDER_TYPE.to_string(),
-                    })
-                })?,
-                PROVIDER_TYPE,
-            ));
-        }
-
-        parse_jsonl_batch_file::<OpenAIBatchFileRow, _>(
-            res.bytes().await,
-            JsonlBatchFileInfo {
-                file_id: file_id.to_string(),
-                raw_request,
-                raw_response,
-                provider_type: PROVIDER_TYPE.to_string(),
-            },
-            |r| r.try_into(),
-        )
-        .await
-    }
 }
 
 pub(super) fn get_chat_url(base_url: &Url) -> Result<Url, Error> {
@@ -794,6 +377,8 @@ pub(super) fn get_chat_url(base_url: &Url) -> Result<Url, Error> {
     })
 }
 
+// Functions only needed for tests
+#[cfg(test)]
 fn get_file_url(base_url: &Url, file_id: Option<&str>) -> Result<Url, Error> {
     let mut url = base_url.clone();
     if !url.path().ends_with('/') {
@@ -811,31 +396,7 @@ fn get_file_url(base_url: &Url, file_id: Option<&str>) -> Result<Url, Error> {
     })
 }
 
-fn get_batch_url(base_url: &Url) -> Result<Url, Error> {
-    let mut url = base_url.clone();
-    if !url.path().ends_with('/') {
-        url.set_path(&format!("{}/", url.path()));
-    }
-    url.join("batches").map_err(|e| {
-        Error::new(ErrorDetails::InvalidBaseUrl {
-            message: e.to_string(),
-        })
-    })
-}
-
-fn get_embedding_url(base_url: &Url) -> Result<Url, Error> {
-    let mut url = base_url.clone();
-    if !url.path().ends_with('/') {
-        url.set_path(&format!("{}/", url.path()));
-    }
-    url.join("embeddings").map_err(|e| {
-        Error::new(ErrorDetails::InvalidBaseUrl {
-            message: e.to_string(),
-        })
-    })
-}
-
-pub(super) fn handle_openai_error(
+pub(super) fn handle_openrouter_error(
     raw_request: &str,
     response_code: StatusCode,
     response_body: &str,
@@ -864,88 +425,18 @@ pub(super) fn handle_openai_error(
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct OpenAISystemRequestMessage<'a> {
+pub(super) struct OpenRouterSystemRequestMessage<'a> {
     pub content: Cow<'a, str>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct OpenAIUserRequestMessage<'a> {
+pub(super) struct OpenRouterUserRequestMessage<'a> {
     #[serde(serialize_with = "serialize_text_content_vec")]
-    pub content: Vec<OpenAIContentBlock<'a>>,
-}
-
-pub type OpenAIFileID = String;
-
-pub async fn upload_openai_file<T>(
-    items: &[T],
-    client: &reqwest::Client,
-    api_key: Option<&SecretString>,
-    api_base: &Url,
-    purpose: String,
-) -> Result<OpenAIFileID, Error>
-where
-    T: Serialize,
-{
-    let mut jsonl_data = Vec::with_capacity(items.len());
-    for item in items {
-        serde_json::to_writer(&mut jsonl_data, item).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!("Error writing to JSONL: {}", DisplayOrDebugGateway::new(e)),
-            })
-        })?;
-    }
-    let form = Form::new().text("purpose", purpose).part(
-        "file",
-        Part::bytes(jsonl_data)
-            .file_name("data.jsonl")
-            .mime_str("application/json")
-            .map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: format!("Error setting MIME type: {}", DisplayOrDebugGateway::new(e)),
-                })
-            })?,
-    );
-    let request_url = get_file_url(api_base, None)?;
-    let mut request_builder = client.post(request_url);
-    if let Some(api_key) = api_key {
-        request_builder = request_builder.bearer_auth(api_key.expose_secret());
-    }
-    let res = request_builder.multipart(form).send().await.map_err(|e| {
-        Error::new(ErrorDetails::InferenceClient {
-            status_code: e.status(),
-            message: format!(
-                "Error sending request to OpenAI: {}",
-                DisplayOrDebugGateway::new(e)
-            ),
-            provider_type: PROVIDER_TYPE.to_string(),
-            raw_request: None,
-            raw_response: None,
-        })
-    })?;
-    let text = res.text().await.map_err(|e| {
-        Error::new(ErrorDetails::InferenceServer {
-            message: format!(
-                "Error retrieving text response: {}",
-                DisplayOrDebugGateway::new(e)
-            ),
-            provider_type: PROVIDER_TYPE.to_string(),
-            raw_request: None,
-            raw_response: None,
-        })
-    })?;
-    let response: OpenAIFileResponse = serde_json::from_str(&text).map_err(|e| {
-        Error::new(ErrorDetails::InferenceServer {
-            message: format!("Error parsing JSON response: {e}, text: {text}"),
-            raw_request: None,
-            raw_response: Some(text.clone()),
-            provider_type: PROVIDER_TYPE.to_string(),
-        })
-    })?;
-    Ok(response.id)
+    pub(super) content: Vec<OpenRouterContentBlock<'a>>,
 }
 
 fn serialize_text_content_vec<S>(
-    content: &Vec<OpenAIContentBlock<'_>>,
+    content: &Vec<OpenRouterContentBlock<'_>>,
     serializer: S,
 ) -> Result<S::Ok, S::Error>
 where
@@ -953,7 +444,7 @@ where
 {
     // If we have a single text block, serialize it as a string
     // to stay compatible with older providers which may not support content blocks
-    if let [OpenAIContentBlock::Text { text }] = &content.as_slice() {
+    if let [OpenRouterContentBlock::Text { text }] = &content.as_slice() {
         text.serialize(serializer)
     } else {
         content.serialize(serializer)
@@ -961,7 +452,7 @@ where
 }
 
 fn serialize_optional_text_content_vec<S>(
-    content: &Option<Vec<OpenAIContentBlock<'_>>>,
+    content: &Option<Vec<OpenRouterContentBlock<'_>>>,
     serializer: S,
 ) -> Result<S::Ok, S::Error>
 where
@@ -973,21 +464,14 @@ where
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct OpenAIFile<'a> {
-    file_data: Cow<'a, str>,
-    filename: Cow<'a, str>,
-}
-
 #[derive(Clone, Debug, PartialEq)]
-pub enum OpenAIContentBlock<'a> {
+pub enum OpenRouterContentBlock<'a> {
     Text { text: Cow<'a, str> },
-    ImageUrl { image_url: OpenAIImageUrl },
-    File { file: OpenAIFile<'a> },
+    ImageUrl { image_url: OpenRouterImageUrl },
     Unknown { data: Cow<'a, Value> },
 }
 
-impl Serialize for OpenAIContentBlock<'_> {
+impl Serialize for OpenRouterContentBlock<'_> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -996,45 +480,43 @@ impl Serialize for OpenAIContentBlock<'_> {
         #[serde(tag = "type", rename_all = "snake_case")]
         enum Helper<'a> {
             Text { text: &'a str },
-            ImageUrl { image_url: &'a OpenAIImageUrl },
-            File { file: &'a OpenAIFile<'a> },
+            ImageUrl { image_url: &'a OpenRouterImageUrl },
         }
         match self {
-            OpenAIContentBlock::Text { text } => Helper::Text { text }.serialize(serializer),
-            OpenAIContentBlock::ImageUrl { image_url } => {
+            OpenRouterContentBlock::Text { text } => Helper::Text { text }.serialize(serializer),
+            OpenRouterContentBlock::ImageUrl { image_url } => {
                 Helper::ImageUrl { image_url }.serialize(serializer)
             }
-            OpenAIContentBlock::File { file } => Helper::File { file }.serialize(serializer),
-            OpenAIContentBlock::Unknown { data } => data.serialize(serializer),
+            OpenRouterContentBlock::Unknown { data } => data.serialize(serializer),
         }
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub struct OpenAIImageUrl {
+pub struct OpenRouterImageUrl {
     pub url: String,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct OpenAIRequestFunctionCall<'a> {
+pub struct OpenRouterRequestFunctionCall<'a> {
     pub name: &'a str,
     pub arguments: &'a str,
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq, Deserialize)]
-pub struct OpenAIRequestToolCall<'a> {
+pub struct OpenRouterRequestToolCall<'a> {
     pub id: &'a str,
-    pub r#type: OpenAIToolType,
-    pub function: OpenAIRequestFunctionCall<'a>,
+    pub r#type: OpenRouterToolType,
+    pub function: OpenRouterRequestFunctionCall<'a>,
 }
 
-impl<'a> From<&'a ToolCall> for OpenAIRequestToolCall<'a> {
+impl<'a> From<&'a ToolCall> for OpenRouterRequestToolCall<'a> {
     fn from(tool_call: &'a ToolCall) -> Self {
-        OpenAIRequestToolCall {
+        OpenRouterRequestToolCall {
             id: &tool_call.id,
-            r#type: OpenAIToolType::Function,
-            function: OpenAIRequestFunctionCall {
+            r#type: OpenRouterToolType::Function,
+            function: OpenRouterRequestFunctionCall {
                 name: &tool_call.name,
                 arguments: &tool_call.arguments,
             },
@@ -1043,18 +525,18 @@ impl<'a> From<&'a ToolCall> for OpenAIRequestToolCall<'a> {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct OpenAIAssistantRequestMessage<'a> {
+pub(super) struct OpenRouterAssistantRequestMessage<'a> {
     #[serde(
         skip_serializing_if = "Option::is_none",
         serialize_with = "serialize_optional_text_content_vec"
     )]
-    pub content: Option<Vec<OpenAIContentBlock<'a>>>,
+    pub content: Option<Vec<OpenRouterContentBlock<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub tool_calls: Option<Vec<OpenAIRequestToolCall<'a>>>,
+    pub tool_calls: Option<Vec<OpenRouterRequestToolCall<'a>>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct OpenAIToolRequestMessage<'a> {
+pub(super) struct OpenRouterToolRequestMessage<'a> {
     pub content: &'a str,
     pub tool_call_id: &'a str,
 }
@@ -1062,66 +544,66 @@ pub struct OpenAIToolRequestMessage<'a> {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(tag = "role")]
 #[serde(rename_all = "lowercase")]
-pub enum OpenAIRequestMessage<'a> {
-    System(OpenAISystemRequestMessage<'a>),
-    User(OpenAIUserRequestMessage<'a>),
-    Assistant(OpenAIAssistantRequestMessage<'a>),
-    Tool(OpenAIToolRequestMessage<'a>),
+pub(super) enum OpenRouterRequestMessage<'a> {
+    System(OpenRouterSystemRequestMessage<'a>),
+    User(OpenRouterUserRequestMessage<'a>),
+    Assistant(OpenRouterAssistantRequestMessage<'a>),
+    Tool(OpenRouterToolRequestMessage<'a>),
 }
 
-impl OpenAIRequestMessage<'_> {
+impl OpenRouterRequestMessage<'_> {
     pub fn content_contains_case_insensitive(&self, value: &str) -> bool {
         match self {
-            OpenAIRequestMessage::System(msg) => msg.content.to_lowercase().contains(value),
-            OpenAIRequestMessage::User(msg) => msg.content.iter().any(|c| match c {
-                OpenAIContentBlock::Text { text } => text.to_lowercase().contains(value),
-                OpenAIContentBlock::ImageUrl { .. } | OpenAIContentBlock::File { .. } => false,
+            OpenRouterRequestMessage::System(msg) => msg.content.to_lowercase().contains(value),
+            OpenRouterRequestMessage::User(msg) => msg.content.iter().any(|c| match c {
+                OpenRouterContentBlock::Text { text } => text.to_lowercase().contains(value),
+                OpenRouterContentBlock::ImageUrl { .. } => false,
                 // Don't inspect the contents of 'unknown' blocks
-                OpenAIContentBlock::Unknown { data: _ } => false,
+                OpenRouterContentBlock::Unknown { data: _ } => false,
             }),
-            OpenAIRequestMessage::Assistant(msg) => {
+            OpenRouterRequestMessage::Assistant(msg) => {
                 if let Some(content) = &msg.content {
                     content.iter().any(|c| match c {
-                        OpenAIContentBlock::Text { text } => text.to_lowercase().contains(value),
-                        OpenAIContentBlock::ImageUrl { .. } | OpenAIContentBlock::File { .. } => {
-                            false
+                        OpenRouterContentBlock::Text { text } => {
+                            text.to_lowercase().contains(value)
                         }
+                        OpenRouterContentBlock::ImageUrl { .. } => false,
                         // Don't inspect the contents of 'unknown' blocks
-                        OpenAIContentBlock::Unknown { data: _ } => false,
+                        OpenRouterContentBlock::Unknown { data: _ } => false,
                     })
                 } else {
                     false
                 }
             }
-            OpenAIRequestMessage::Tool(msg) => msg.content.to_lowercase().contains(value),
+            OpenRouterRequestMessage::Tool(msg) => msg.content.to_lowercase().contains(value),
         }
     }
 }
 
-pub fn prepare_openai_messages<'a>(
-    system: Option<&'a str>,
-    messages: &'a [RequestMessage],
-    json_mode: Option<&'_ ModelInferenceRequestJsonMode>,
-) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
-    let mut openai_messages = Vec::with_capacity(messages.len());
-    for message in messages.iter() {
-        openai_messages.extend(tensorzero_to_openai_messages(message)?);
+pub(super) fn prepare_openrouter_messages<'a>(
+    request: &'a ModelInferenceRequest<'_>,
+) -> Result<Vec<OpenRouterRequestMessage<'a>>, Error> {
+    let mut messages = Vec::with_capacity(request.messages.len());
+    for message in request.messages.iter() {
+        messages.extend(tensorzero_to_openrouter_messages(message)?);
     }
-    if let Some(system_msg) =
-        tensorzero_to_openai_system_message(system, json_mode, &openai_messages)
-    {
-        openai_messages.insert(0, system_msg);
+    if let Some(system_msg) = tensorzero_to_openrouter_system_message(
+        request.system.as_deref(),
+        &request.json_mode,
+        &messages,
+    ) {
+        messages.insert(0, system_msg);
     }
-    Ok(openai_messages)
+    Ok(messages)
 }
 
 /// If there are no tools passed or the tools are empty, return None for both tools and tool_choice
-/// Otherwise convert the tool choice and tools to OpenAI format
-pub(super) fn prepare_openai_tools<'a>(
+/// Otherwise convert the tool choice and tools to OpenRouter format
+pub(super) fn prepare_openrouter_tools<'a>(
     request: &'a ModelInferenceRequest,
 ) -> (
-    Option<Vec<OpenAITool<'a>>>,
-    Option<OpenAIToolChoice<'a>>,
+    Option<Vec<OpenRouterTool<'a>>>,
+    Option<OpenRouterToolChoice<'a>>,
     Option<bool>,
 ) {
     match &request.tool_config {
@@ -1144,67 +626,67 @@ pub(super) fn prepare_openai_tools<'a>(
     }
 }
 
-/// This function is complicated only by the fact that OpenAI and Azure require
+/// This function is complicated only by the fact that OpenRouter and Azure require
 /// different instructions depending on the json mode and the content of the messages.
 ///
 /// If ModelInferenceRequestJsonMode::On and the system message or instructions does not contain "JSON"
 /// the request will return an error.
 /// So, we need to format the instructions to include "Respond using JSON." if it doesn't already.
-pub(super) fn tensorzero_to_openai_system_message<'a>(
+pub(super) fn tensorzero_to_openrouter_system_message<'a>(
     system: Option<&'a str>,
-    json_mode: Option<&'_ ModelInferenceRequestJsonMode>,
-    messages: &[OpenAIRequestMessage<'a>],
-) -> Option<OpenAIRequestMessage<'a>> {
+    json_mode: &ModelInferenceRequestJsonMode,
+    messages: &[OpenRouterRequestMessage<'a>],
+) -> Option<OpenRouterRequestMessage<'a>> {
     match system {
         Some(system) => {
             match json_mode {
-                Some(ModelInferenceRequestJsonMode::On) => {
+                ModelInferenceRequestJsonMode::On => {
                     if messages
                         .iter()
                         .any(|msg| msg.content_contains_case_insensitive("json"))
                         || system.to_lowercase().contains("json")
                     {
-                        OpenAIRequestMessage::System(OpenAISystemRequestMessage {
+                        OpenRouterRequestMessage::System(OpenRouterSystemRequestMessage {
                             content: Cow::Borrowed(system),
                         })
                     } else {
                         let formatted_instructions = format!("Respond using JSON.\n\n{system}");
-                        OpenAIRequestMessage::System(OpenAISystemRequestMessage {
+                        OpenRouterRequestMessage::System(OpenRouterSystemRequestMessage {
                             content: Cow::Owned(formatted_instructions),
                         })
                     }
                 }
 
                 // If JSON mode is either off or strict, we don't need to do anything special
-                _ => OpenAIRequestMessage::System(OpenAISystemRequestMessage {
+                _ => OpenRouterRequestMessage::System(OpenRouterSystemRequestMessage {
                     content: Cow::Borrowed(system),
                 }),
             }
             .into()
         }
-        None => match json_mode {
-            Some(ModelInferenceRequestJsonMode::On) => {
-                Some(OpenAIRequestMessage::System(OpenAISystemRequestMessage {
+        None => match *json_mode {
+            ModelInferenceRequestJsonMode::On => Some(OpenRouterRequestMessage::System(
+                OpenRouterSystemRequestMessage {
                     content: Cow::Owned("Respond using JSON.".to_string()),
-                }))
-            }
+                },
+            )),
             _ => None,
         },
     }
 }
 
-pub(super) fn tensorzero_to_openai_messages(
+pub(super) fn tensorzero_to_openrouter_messages(
     message: &RequestMessage,
-) -> Result<Vec<OpenAIRequestMessage<'_>>, Error> {
+) -> Result<Vec<OpenRouterRequestMessage<'_>>, Error> {
     match message.role {
-        Role::User => tensorzero_to_openai_user_messages(&message.content),
-        Role::Assistant => tensorzero_to_openai_assistant_messages(&message.content),
+        Role::User => tensorzero_to_openrouter_user_messages(&message.content),
+        Role::Assistant => tensorzero_to_openrouter_assistant_messages(&message.content),
     }
 }
 
-fn tensorzero_to_openai_user_messages(
+fn tensorzero_to_openrouter_user_messages(
     content_blocks: &[ContentBlock],
-) -> Result<Vec<OpenAIRequestMessage<'_>>, Error> {
+) -> Result<Vec<OpenRouterRequestMessage<'_>>, Error> {
     // We need to separate the tool result messages from the user content blocks.
 
     let mut messages = Vec::new();
@@ -1213,7 +695,7 @@ fn tensorzero_to_openai_user_messages(
     for block in content_blocks.iter() {
         match block {
             ContentBlock::Text(Text { text }) => {
-                user_content_blocks.push(OpenAIContentBlock::Text {
+                user_content_blocks.push(OpenRouterContentBlock::Text {
                     text: Cow::Borrowed(text),
                 });
             }
@@ -1223,59 +705,43 @@ fn tensorzero_to_openai_user_messages(
                 }));
             }
             ContentBlock::ToolResult(tool_result) => {
-                messages.push(OpenAIRequestMessage::Tool(OpenAIToolRequestMessage {
-                    content: &tool_result.result,
-                    tool_call_id: &tool_result.id,
-                }));
+                messages.push(OpenRouterRequestMessage::Tool(
+                    OpenRouterToolRequestMessage {
+                        content: &tool_result.result,
+                        tool_call_id: &tool_result.id,
+                    },
+                ));
             }
             ContentBlock::File(file) => {
                 let FileWithPath {
                     file,
                     storage_path: _,
                 } = &**file;
-                let data = format!("data:{};base64,{}", file.mime_type, file.data()?);
-                if file.mime_type.type_() == mime::IMAGE {
-                    user_content_blocks.push(OpenAIContentBlock::ImageUrl {
-                        image_url: OpenAIImageUrl {
-                            // This will only produce an error if we pass in a bad
-                            // `Base64File` (with missing file data)
-                            url: data,
-                        },
-                    });
-                } else {
-                    // OpenAI doesn't document how they determine the content type of the base64 blob
-                    // - let's try to pick a good suffix for the filename, in case they don't sniff
-                    // the mime type from the actual file content.
-                    let suffix = mime_type_to_ext(&file.mime_type)?.ok_or_else(|| {
-                        Error::new(ErrorDetails::InvalidMessage {
-                            message: format!("Mime type {} has no filetype suffix", file.mime_type),
-                        })
-                    })?;
-                    user_content_blocks.push(OpenAIContentBlock::File {
-                        file: OpenAIFile {
-                            file_data: Cow::Owned(data),
-                            // TODO - should we allow the user to specify the file name?
-                            filename: Cow::Owned(format!("input.{suffix}")),
-                        },
-                    });
-                }
+                require_image(&file.mime_type, PROVIDER_TYPE)?;
+                user_content_blocks.push(OpenRouterContentBlock::ImageUrl {
+                    image_url: OpenRouterImageUrl {
+                        // This will only produce an error if we pass in a bad
+                        // `Base64Image` (with missing image data)
+                        url: format!("data:{};base64,{}", file.mime_type, file.data()?),
+                    },
+                });
             }
             ContentBlock::Thought(_) => {
-                // OpenAI doesn't support thought blocks.
+                // OpenRouter doesn't support thought blocks.
                 // This can only happen if the thought block was generated by another model provider.
                 // At this point, we can either convert the thought blocks to text or drop them.
-                // We chose to drop them, because it's more consistent with the behavior that OpenAI expects.
+                // We chose to drop them, because it's more consistent with the behavior that OpenRouter expects.
 
                 // TODO (#1361): test that this warning is logged when we drop thought blocks
                 tracing::warn!(
-                    "Dropping `thought` content block from user message. OpenAI does not support them."
+                    "Dropping `thought` content block from user message. OpenRouter does not support them."
                 );
             }
             ContentBlock::Unknown {
                 data,
                 model_provider_name: _,
             } => {
-                user_content_blocks.push(OpenAIContentBlock::Unknown {
+                user_content_blocks.push(OpenRouterContentBlock::Unknown {
                     data: Cow::Borrowed(data),
                 });
             }
@@ -1284,17 +750,19 @@ fn tensorzero_to_openai_user_messages(
 
     // If there are any user content blocks, combine them into a single user message.
     if !user_content_blocks.is_empty() {
-        messages.push(OpenAIRequestMessage::User(OpenAIUserRequestMessage {
-            content: user_content_blocks,
-        }));
+        messages.push(OpenRouterRequestMessage::User(
+            OpenRouterUserRequestMessage {
+                content: user_content_blocks,
+            },
+        ));
     }
 
     Ok(messages)
 }
 
-fn tensorzero_to_openai_assistant_messages(
+fn tensorzero_to_openrouter_assistant_messages(
     content_blocks: &[ContentBlock],
-) -> Result<Vec<OpenAIRequestMessage<'_>>, Error> {
+) -> Result<Vec<OpenRouterRequestMessage<'_>>, Error> {
     // We need to separate the tool result messages from the assistant content blocks.
     let mut assistant_content_blocks = Vec::new();
     let mut assistant_tool_calls = Vec::new();
@@ -1302,15 +770,15 @@ fn tensorzero_to_openai_assistant_messages(
     for block in content_blocks.iter() {
         match block {
             ContentBlock::Text(Text { text }) => {
-                assistant_content_blocks.push(OpenAIContentBlock::Text {
+                assistant_content_blocks.push(OpenRouterContentBlock::Text {
                     text: Cow::Borrowed(text),
                 });
             }
             ContentBlock::ToolCall(tool_call) => {
-                let tool_call = OpenAIRequestToolCall {
+                let tool_call = OpenRouterRequestToolCall {
                     id: &tool_call.id,
-                    r#type: OpenAIToolType::Function,
-                    function: OpenAIRequestFunctionCall {
+                    r#type: OpenRouterToolType::Function,
+                    function: OpenRouterRequestFunctionCall {
                         name: &tool_call.name,
                         arguments: &tool_call.arguments,
                     },
@@ -1329,30 +797,30 @@ fn tensorzero_to_openai_assistant_messages(
                     storage_path: _,
                 } = &**file;
                 require_image(&file.mime_type, PROVIDER_TYPE)?;
-                assistant_content_blocks.push(OpenAIContentBlock::ImageUrl {
-                    image_url: OpenAIImageUrl {
+                assistant_content_blocks.push(OpenRouterContentBlock::ImageUrl {
+                    image_url: OpenRouterImageUrl {
                         // This will only produce an error if we pass in a bad
-                        // `Base64File` (with missing file data)
+                        // `Base64File` (with missing image data)
                         url: format!("data:{};base64,{}", file.mime_type, file.data()?),
                     },
                 });
             }
             ContentBlock::Thought(_) => {
-                // OpenAI doesn't support thought blocks.
+                // OpenRouter doesn't support thought blocks.
                 // This can only happen if the thought block was generated by another model provider.
                 // At this point, we can either convert the thought blocks to text or drop them.
-                // We chose to drop them, because it's more consistent with the behavior that OpenAI expects.
+                // We chose to drop them, because it's more consistent with the behavior that OpenRouter expects.
 
                 // TODO (#1361): test that this warning is logged when we drop thought blocks
                 tracing::warn!(
-                    "Dropping `thought` content block from assistant message. OpenAI does not support them."
+                    "Dropping `thought` content block from assistant message. OpenRouter does not support them."
                 );
             }
             ContentBlock::Unknown {
                 data,
                 model_provider_name: _,
             } => {
-                assistant_content_blocks.push(OpenAIContentBlock::Unknown {
+                assistant_content_blocks.push(OpenRouterContentBlock::Unknown {
                     data: Cow::Borrowed(data),
                 });
             }
@@ -1369,7 +837,7 @@ fn tensorzero_to_openai_assistant_messages(
         _ => Some(assistant_tool_calls),
     };
 
-    let message = OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
+    let message = OpenRouterRequestMessage::Assistant(OpenRouterAssistantRequestMessage {
         content,
         tool_calls,
     });
@@ -1380,7 +848,7 @@ fn tensorzero_to_openai_assistant_messages(
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "type")]
-enum OpenAIResponseFormat {
+enum OpenRouterResponseFormat {
     #[default]
     Text,
     JsonObject,
@@ -1389,26 +857,26 @@ enum OpenAIResponseFormat {
     },
 }
 
-impl OpenAIResponseFormat {
+impl OpenRouterResponseFormat {
     fn new(
         json_mode: &ModelInferenceRequestJsonMode,
         output_schema: Option<&Value>,
         model: &str,
     ) -> Option<Self> {
         if model.contains("3.5") && *json_mode == ModelInferenceRequestJsonMode::Strict {
-            return Some(OpenAIResponseFormat::JsonObject);
+            return Some(OpenRouterResponseFormat::JsonObject);
         }
 
         match json_mode {
-            ModelInferenceRequestJsonMode::On => Some(OpenAIResponseFormat::JsonObject),
-            // For now, we never explicitly send `OpenAIResponseFormat::Text`
+            ModelInferenceRequestJsonMode::On => Some(OpenRouterResponseFormat::JsonObject),
+            // For now, we never explicitly send `OpenRouterResponseFormat::Text`
             ModelInferenceRequestJsonMode::Off => None,
             ModelInferenceRequestJsonMode::Strict => match output_schema {
                 Some(schema) => {
                     let json_schema = json!({"name": "response", "strict": true, "schema": schema});
-                    Some(OpenAIResponseFormat::JsonSchema { json_schema })
+                    Some(OpenRouterResponseFormat::JsonSchema { json_schema })
                 }
-                None => Some(OpenAIResponseFormat::JsonObject),
+                None => Some(OpenRouterResponseFormat::JsonObject),
             },
         }
     }
@@ -1416,30 +884,30 @@ impl OpenAIResponseFormat {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
-pub enum OpenAIToolType {
+pub enum OpenRouterToolType {
     Function,
 }
 
 #[derive(Debug, PartialEq, Serialize)]
-pub struct OpenAIFunction<'a> {
-    pub name: &'a str,
+pub(super) struct OpenRouterFunction<'a> {
+    pub(super) name: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub description: Option<&'a str>,
+    pub(super) description: Option<&'a str>,
     pub parameters: &'a Value,
 }
 
 #[derive(Debug, PartialEq, Serialize)]
-pub struct OpenAITool<'a> {
-    pub r#type: OpenAIToolType,
-    pub function: OpenAIFunction<'a>,
-    pub strict: bool,
+pub(super) struct OpenRouterTool<'a> {
+    pub(super) r#type: OpenRouterToolType,
+    pub(super) function: OpenRouterFunction<'a>,
+    pub(super) strict: bool,
 }
 
-impl<'a> From<&'a ToolConfig> for OpenAITool<'a> {
+impl<'a> From<&'a ToolConfig> for OpenRouterTool<'a> {
     fn from(tool: &'a ToolConfig) -> Self {
-        OpenAITool {
-            r#type: OpenAIToolType::Function,
-            function: OpenAIFunction {
+        OpenRouterTool {
+            r#type: OpenRouterToolType::Function,
+            function: OpenRouterFunction {
                 name: tool.name(),
                 description: Some(tool.description()),
                 parameters: tool.parameters(),
@@ -1449,28 +917,14 @@ impl<'a> From<&'a ToolConfig> for OpenAITool<'a> {
     }
 }
 
-impl<'a> From<&'a Tool> for OpenAITool<'a> {
-    fn from(tool: &'a Tool) -> Self {
-        OpenAITool {
-            r#type: OpenAIToolType::Function,
-            function: OpenAIFunction {
-                name: &tool.name,
-                description: Some(&tool.description),
-                parameters: &tool.parameters,
-            },
-            strict: tool.strict,
-        }
-    }
-}
-
 #[derive(Debug, Deserialize, Serialize)]
-struct OpenAIBatchParams<'a> {
+struct OpenRouterBatchParams<'a> {
     file_id: Cow<'a, str>,
     batch_id: Cow<'a, str>,
 }
 
-impl<'a> OpenAIBatchParams<'a> {
-    #[instrument(name = "OpenAIBatchParams::from_ref", skip_all, fields(%value))]
+impl<'a> OpenRouterBatchParams<'a> {
+    #[instrument(name = "OpenRouterBatchParams::from_ref", skip_all, fields(%value))]
     fn from_ref(value: &'a Value) -> Result<Self, Error> {
         let file_id = value
             .get("file_id")
@@ -1507,14 +961,14 @@ impl<'a> OpenAIBatchParams<'a> {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(untagged)]
-pub(super) enum OpenAIToolChoice<'a> {
-    String(OpenAIToolChoiceString),
+pub(super) enum OpenRouterToolChoice<'a> {
+    String(OpenRouterToolChoiceString),
     Specific(SpecificToolChoice<'a>),
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
-pub(super) enum OpenAIToolChoiceString {
+pub(super) enum OpenRouterToolChoiceString {
     None,
     Auto,
     Required,
@@ -1522,7 +976,7 @@ pub(super) enum OpenAIToolChoiceString {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub(super) struct SpecificToolChoice<'a> {
-    pub(super) r#type: OpenAIToolType,
+    pub(super) r#type: OpenRouterToolType,
     pub(super) function: SpecificToolFunction<'a>,
 }
 
@@ -1531,20 +985,22 @@ pub(super) struct SpecificToolFunction<'a> {
     pub(super) name: &'a str,
 }
 
-impl Default for OpenAIToolChoice<'_> {
+impl Default for OpenRouterToolChoice<'_> {
     fn default() -> Self {
-        OpenAIToolChoice::String(OpenAIToolChoiceString::None)
+        OpenRouterToolChoice::String(OpenRouterToolChoiceString::None)
     }
 }
 
-impl<'a> From<&'a ToolChoice> for OpenAIToolChoice<'a> {
+impl<'a> From<&'a ToolChoice> for OpenRouterToolChoice<'a> {
     fn from(tool_choice: &'a ToolChoice) -> Self {
         match tool_choice {
-            ToolChoice::None => OpenAIToolChoice::String(OpenAIToolChoiceString::None),
-            ToolChoice::Auto => OpenAIToolChoice::String(OpenAIToolChoiceString::Auto),
-            ToolChoice::Required => OpenAIToolChoice::String(OpenAIToolChoiceString::Required),
-            ToolChoice::Specific(tool_name) => OpenAIToolChoice::Specific(SpecificToolChoice {
-                r#type: OpenAIToolType::Function,
+            ToolChoice::None => OpenRouterToolChoice::String(OpenRouterToolChoiceString::None),
+            ToolChoice::Auto => OpenRouterToolChoice::String(OpenRouterToolChoiceString::Auto),
+            ToolChoice::Required => {
+                OpenRouterToolChoice::String(OpenRouterToolChoiceString::Required)
+            }
+            ToolChoice::Specific(tool_name) => OpenRouterToolChoice::Specific(SpecificToolChoice {
+                r#type: OpenRouterToolType::Function,
                 function: SpecificToolFunction { name: tool_name },
             }),
         }
@@ -1556,15 +1012,15 @@ pub(super) struct StreamOptions {
     pub(super) include_usage: bool,
 }
 
-/// This struct defines the supported parameters for the OpenAI API
-/// See the [OpenAI API documentation](https://platform.openai.com/docs/api-reference/chat/create)
+/// This struct defines the supported parameters for the OpenRouter API
+/// See the [OpenRouter API documentation](https://platform.openrouter.com/docs/api-reference/chat/create)
 /// for more details.
 /// We are not handling logprobs, top_logprobs, n,
 /// presence_penalty, seed, service_tier, stop, user,
 /// or the deprecated function_call and functions arguments.
 #[derive(Debug, Serialize)]
-struct OpenAIRequest<'a> {
-    messages: Vec<OpenAIRequestMessage<'a>>,
+struct OpenRouterRequest<'a> {
+    messages: Vec<OpenRouterRequestMessage<'a>>,
     model: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
@@ -1582,46 +1038,42 @@ struct OpenAIRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     stream_options: Option<StreamOptions>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    response_format: Option<OpenAIResponseFormat>,
+    response_format: Option<OpenRouterResponseFormat>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tools: Option<Vec<OpenAITool<'a>>>,
+    tools: Option<Vec<OpenRouterTool<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tool_choice: Option<OpenAIToolChoice<'a>>,
+    tool_choice: Option<OpenRouterToolChoice<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     parallel_tool_calls: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     stop: Option<Cow<'a, [String]>>,
 }
 
-impl<'a> OpenAIRequest<'a> {
+impl<'a> OpenRouterRequest<'a> {
     pub fn new(
         model: &'a str,
         request: &'a ModelInferenceRequest<'_>,
-    ) -> Result<OpenAIRequest<'a>, Error> {
+    ) -> Result<OpenRouterRequest<'a>, Error> {
         let response_format =
-            OpenAIResponseFormat::new(&request.json_mode, request.output_schema, model);
+            OpenRouterResponseFormat::new(&request.json_mode, request.output_schema, model);
         let stream_options = match request.stream {
             true => Some(StreamOptions {
                 include_usage: true,
             }),
             false => None,
         };
-        let mut messages = prepare_openai_messages(
-            request.system.as_deref(),
-            &request.messages,
-            Some(&request.json_mode),
-        )?;
+        let mut messages = prepare_openrouter_messages(request)?;
 
-        let (tools, tool_choice, mut parallel_tool_calls) = prepare_openai_tools(request);
+        let (tools, tool_choice, mut parallel_tool_calls) = prepare_openrouter_tools(request);
         if model.to_lowercase().starts_with("o1") && parallel_tool_calls == Some(false) {
             parallel_tool_calls = None;
         }
 
         if model.to_lowercase().starts_with("o1-mini") {
-            if let Some(OpenAIRequestMessage::System(_)) = messages.first() {
-                if let OpenAIRequestMessage::System(system_msg) = messages.remove(0) {
-                    let user_msg = OpenAIRequestMessage::User(OpenAIUserRequestMessage {
-                        content: vec![OpenAIContentBlock::Text {
+            if let Some(OpenRouterRequestMessage::System(_)) = messages.first() {
+                if let OpenRouterRequestMessage::System(system_msg) = messages.remove(0) {
+                    let user_msg = OpenRouterRequestMessage::User(OpenRouterUserRequestMessage {
+                        content: vec![OpenRouterContentBlock::Text {
                             text: system_msg.content,
                         }],
                     });
@@ -1630,7 +1082,7 @@ impl<'a> OpenAIRequest<'a> {
             }
         }
 
-        Ok(OpenAIRequest {
+        Ok(OpenRouterRequest {
             messages,
             model,
             temperature: request.temperature,
@@ -1650,58 +1102,16 @@ impl<'a> OpenAIRequest<'a> {
     }
 }
 
-#[derive(Debug, Serialize)]
-struct OpenAIBatchFileInput<'a> {
-    custom_id: String,
-    method: String,
-    url: String,
-    body: OpenAIRequest<'a>,
-}
-
-impl<'a> OpenAIBatchFileInput<'a> {
-    async fn new(
-        inference_id: Uuid,
-        model: &'a str,
-        request: &'a ModelInferenceRequest<'_>,
-    ) -> Result<Self, Error> {
-        let body = OpenAIRequest::new(model, request)?;
-        Ok(Self {
-            custom_id: inference_id.to_string(),
-            method: "POST".to_string(),
-            url: "/v1/chat/completions".to_string(),
-            body,
-        })
-    }
-}
-
-#[derive(Debug, Serialize)]
-struct OpenAIBatchRequest<'a> {
-    input_file_id: &'a str,
-    endpoint: &'a str,
-    completion_window: &'a str,
-    // metadata: HashMap<String, String>
-}
-
-impl<'a> OpenAIBatchRequest<'a> {
-    fn new(input_file_id: &'a str) -> Self {
-        Self {
-            input_file_id,
-            endpoint: "/v1/chat/completions",
-            completion_window: "24h",
-        }
-    }
-}
-
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub(super) struct OpenAIUsage {
+pub(super) struct OpenRouterUsage {
     pub prompt_tokens: u32,
     #[serde(default)]
     pub completion_tokens: u32,
     pub total_tokens: u32,
 }
 
-impl From<OpenAIUsage> for Usage {
-    fn from(usage: OpenAIUsage) -> Self {
+impl From<OpenRouterUsage> for Usage {
+    fn from(usage: OpenRouterUsage) -> Self {
         Usage {
             input_tokens: usage.prompt_tokens,
             output_tokens: usage.completion_tokens,
@@ -1710,39 +1120,39 @@ impl From<OpenAIUsage> for Usage {
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq, Deserialize)]
-struct OpenAIResponseFunctionCall {
+struct OpenRouterResponseFunctionCall {
     name: String,
     arguments: String,
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq, Deserialize)]
-pub(super) struct OpenAIResponseToolCall {
+pub(super) struct OpenRouterResponseToolCall {
     id: String,
-    r#type: OpenAIToolType,
-    function: OpenAIResponseFunctionCall,
+    r#type: OpenRouterToolType,
+    function: OpenRouterResponseFunctionCall,
 }
 
-impl From<OpenAIResponseToolCall> for ToolCall {
-    fn from(openai_tool_call: OpenAIResponseToolCall) -> Self {
+impl From<OpenRouterResponseToolCall> for ToolCall {
+    fn from(openrouter_tool_call: OpenRouterResponseToolCall) -> Self {
         ToolCall {
-            id: openai_tool_call.id,
-            name: openai_tool_call.function.name,
-            arguments: openai_tool_call.function.arguments,
+            id: openrouter_tool_call.id,
+            name: openrouter_tool_call.function.name,
+            arguments: openrouter_tool_call.function.arguments,
         }
     }
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub(super) struct OpenAIResponseMessage {
+pub(super) struct OpenRouterResponseMessage {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) tool_calls: Option<Vec<OpenAIResponseToolCall>>,
+    pub(super) tool_calls: Option<Vec<OpenRouterResponseToolCall>>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
-pub(super) enum OpenAIFinishReason {
+pub(super) enum OpenRouterFinishReason {
     Stop,
     Length,
     ContentFilter,
@@ -1752,46 +1162,46 @@ pub(super) enum OpenAIFinishReason {
     Unknown,
 }
 
-impl From<OpenAIFinishReason> for FinishReason {
-    fn from(finish_reason: OpenAIFinishReason) -> Self {
+impl From<OpenRouterFinishReason> for FinishReason {
+    fn from(finish_reason: OpenRouterFinishReason) -> Self {
         match finish_reason {
-            OpenAIFinishReason::Stop => FinishReason::Stop,
-            OpenAIFinishReason::Length => FinishReason::Length,
-            OpenAIFinishReason::ContentFilter => FinishReason::ContentFilter,
-            OpenAIFinishReason::ToolCalls => FinishReason::ToolCall,
-            OpenAIFinishReason::FunctionCall => FinishReason::ToolCall,
-            OpenAIFinishReason::Unknown => FinishReason::Unknown,
+            OpenRouterFinishReason::Stop => FinishReason::Stop,
+            OpenRouterFinishReason::Length => FinishReason::Length,
+            OpenRouterFinishReason::ContentFilter => FinishReason::ContentFilter,
+            OpenRouterFinishReason::ToolCalls => FinishReason::ToolCall,
+            OpenRouterFinishReason::FunctionCall => FinishReason::ToolCall,
+            OpenRouterFinishReason::Unknown => FinishReason::Unknown,
         }
     }
 }
 
 // Leaving out logprobs and finish_reason for now
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub(super) struct OpenAIResponseChoice {
+pub(super) struct OpenRouterResponseChoice {
     pub(super) index: u8,
-    pub(super) message: OpenAIResponseMessage,
-    pub(super) finish_reason: OpenAIFinishReason,
+    pub(super) message: OpenRouterResponseMessage,
+    pub(super) finish_reason: OpenRouterFinishReason,
 }
 
 // Leaving out id, created, model, service_tier, system_fingerprint, object for now
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub(super) struct OpenAIResponse {
-    pub(super) choices: Vec<OpenAIResponseChoice>,
-    pub(super) usage: OpenAIUsage,
+pub(super) struct OpenRouterResponse {
+    pub(super) choices: Vec<OpenRouterResponseChoice>,
+    pub(super) usage: OpenRouterUsage,
 }
 
-struct OpenAIResponseWithMetadata<'a> {
-    response: OpenAIResponse,
+struct OpenRouterResponseWithMetadata<'a> {
+    response: OpenRouterResponse,
     latency: Latency,
     raw_request: String,
     generic_request: &'a ModelInferenceRequest<'a>,
     raw_response: String,
 }
 
-impl<'a> TryFrom<OpenAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
+impl<'a> TryFrom<OpenRouterResponseWithMetadata<'a>> for ProviderInferenceResponse {
     type Error = Error;
-    fn try_from(value: OpenAIResponseWithMetadata<'a>) -> Result<Self, Self::Error> {
-        let OpenAIResponseWithMetadata {
+    fn try_from(value: OpenRouterResponseWithMetadata<'a>) -> Result<Self, Self::Error> {
+        let OpenRouterResponseWithMetadata {
             mut response,
             latency,
             raw_request,
@@ -1810,7 +1220,7 @@ impl<'a> TryFrom<OpenAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
             }
             .into());
         }
-        let OpenAIResponseChoice {
+        let OpenRouterResponseChoice {
             message,
             finish_reason,
             ..
@@ -1851,7 +1261,7 @@ impl<'a> TryFrom<OpenAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct OpenAIFunctionCallChunk {
+struct OpenRouterFunctionCallChunk {
     #[serde(skip_serializing_if = "Option::is_none")]
     name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1859,22 +1269,22 @@ struct OpenAIFunctionCallChunk {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct OpenAIToolCallChunk {
+struct OpenRouterToolCallChunk {
     index: u8,
     #[serde(skip_serializing_if = "Option::is_none")]
     id: Option<String>,
     // NOTE: these are externally tagged enums, for now we're gonna just keep this hardcoded as there's only one option
     // If we were to do this better, we would need to check the `type` field
-    function: OpenAIFunctionCallChunk,
+    function: OpenRouterFunctionCallChunk,
 }
 
 // This doesn't include role
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct OpenAIDelta {
+struct OpenRouterDelta {
     #[serde(skip_serializing_if = "Option::is_none")]
     content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tool_calls: Option<Vec<OpenAIToolCallChunk>>,
+    tool_calls: Option<Vec<OpenRouterToolCallChunk>>,
 }
 
 // Custom deserializer function for empty string to None
@@ -1900,24 +1310,24 @@ where
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct OpenAIChatChunkChoice {
-    delta: OpenAIDelta,
+struct OpenRouterChatChunkChoice {
+    delta: OpenRouterDelta,
     #[serde(default)]
     #[serde(deserialize_with = "empty_string_as_none")]
-    finish_reason: Option<OpenAIFinishReason>,
+    finish_reason: Option<OpenRouterFinishReason>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct OpenAIChatChunk {
-    choices: Vec<OpenAIChatChunkChoice>,
+struct OpenRouterChatChunk {
+    choices: Vec<OpenRouterChatChunkChoice>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    usage: Option<OpenAIUsage>,
+    usage: Option<OpenRouterUsage>,
 }
 
-/// Maps an OpenAI chunk to a TensorZero chunk for streaming inferences
-fn openai_to_tensorzero_chunk(
+/// Maps an OpenRouter chunk to a TensorZero chunk for streaming inferences
+fn openrouter_to_tensorzero_chunk(
     raw_message: String,
-    mut chunk: OpenAIChatChunk,
+    mut chunk: OpenRouterChatChunk,
     latency: Duration,
     tool_call_ids: &mut Vec<String>,
 ) -> Result<ProviderInferenceResponseChunk, Error> {
@@ -1982,266 +1392,31 @@ fn openai_to_tensorzero_chunk(
     ))
 }
 
-#[derive(Debug, Serialize)]
-struct OpenAIEmbeddingRequest<'a> {
-    model: &'a str,
-    input: &'a str,
-}
-
-impl<'a> OpenAIEmbeddingRequest<'a> {
-    fn new(model: &'a str, input: &'a str) -> Self {
-        Self { model, input }
-    }
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct OpenAIEmbeddingResponse {
-    data: Vec<OpenAIEmbeddingData>,
-    usage: OpenAIUsage,
-}
-
-struct OpenAIEmbeddingResponseWithMetadata<'a> {
-    response: OpenAIEmbeddingResponse,
-    latency: Latency,
-    request: OpenAIEmbeddingRequest<'a>,
-    raw_response: String,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct OpenAIEmbeddingData {
-    embedding: Vec<f32>,
-}
-
-impl<'a> TryFrom<OpenAIEmbeddingResponseWithMetadata<'a>> for EmbeddingProviderResponse {
-    type Error = Error;
-    fn try_from(response: OpenAIEmbeddingResponseWithMetadata<'a>) -> Result<Self, Self::Error> {
-        let OpenAIEmbeddingResponseWithMetadata {
-            response,
-            latency,
-            request,
-            raw_response,
-        } = response;
-        let raw_request = serde_json::to_string(&request).map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
-                message: format!(
-                    "Error serializing request body as JSON: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-                raw_request: Some(serde_json::to_string(&request).unwrap_or_default()),
-                raw_response: None,
-                provider_type: PROVIDER_TYPE.to_string(),
-            })
-        })?;
-
-        if response.data.len() != 1 {
-            return Err(Error::new(ErrorDetails::InferenceServer {
-                message: "Expected exactly one embedding in response".to_string(),
-                raw_request: Some(raw_request.clone()),
-                raw_response: Some(raw_response.clone()),
-                provider_type: PROVIDER_TYPE.to_string(),
-            }));
-        }
-        let embedding = response
-            .data
-            .into_iter()
-            .next()
-            .ok_or_else(|| {
-                Error::new(ErrorDetails::InferenceServer {
-                    message: "Expected exactly one embedding in response".to_string(),
-                    raw_request: Some(raw_request.clone()),
-                    raw_response: Some(raw_response.clone()),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                })
-            })?
-            .embedding;
-
-        Ok(EmbeddingProviderResponse::new(
-            embedding,
-            request.input.to_string(),
-            raw_request,
-            raw_response,
-            response.usage.into(),
-            latency,
-        ))
-    }
-}
-
-#[derive(Debug, Deserialize)]
-struct OpenAIFileResponse {
-    id: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct OpenAIBatchResponse {
-    id: String,
-    // object: String,
-    // endpoint: String,
-    errors: Option<OpenAIBatchErrors>,
-    // input_file_id: String,
-    // completion_window: String,
-    status: OpenAIBatchStatus,
-    output_file_id: Option<String>,
-    // error_file_id: String,
-    // created_at: i64,
-    // in_progress_at: Option<i64>,
-    // expires_at: i64,
-    // finalizing_at: Option<i64>,
-    // completed_at: Option<i64>,
-    // failed_at: Option<i64>,
-    // expired_at: Option<i64>,
-    // cancelling_at: Option<i64>,
-    // cancelled_at: Option<i64>,
-    // request_counts: OpenAIBatchRequestCounts,
-    // metadata: HashMap<String, String>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "snake_case")]
-enum OpenAIBatchStatus {
-    Validating,
-    Failed,
-    InProgress,
-    Finalizing,
-    Completed,
-    Expired,
-    Cancelling,
-    Cancelled,
-}
-
-impl From<OpenAIBatchStatus> for BatchStatus {
-    fn from(status: OpenAIBatchStatus) -> Self {
-        match status {
-            OpenAIBatchStatus::Completed => BatchStatus::Completed,
-            OpenAIBatchStatus::Validating
-            | OpenAIBatchStatus::InProgress
-            | OpenAIBatchStatus::Finalizing => BatchStatus::Pending,
-            OpenAIBatchStatus::Failed
-            | OpenAIBatchStatus::Expired
-            | OpenAIBatchStatus::Cancelling
-            | OpenAIBatchStatus::Cancelled => BatchStatus::Failed,
-        }
-    }
-}
-
-impl TryFrom<OpenAIBatchFileRow> for ProviderBatchInferenceOutput {
-    type Error = Error;
-
-    fn try_from(row: OpenAIBatchFileRow) -> Result<Self, Self::Error> {
-        let mut response = row.response.body;
-        // Validate we have exactly one choice
-        if response.choices.len() != 1 {
-            return Err(ErrorDetails::InferenceServer {
-                message: format!(
-                    "Response has invalid number of choices: {}. Expected 1.",
-                    response.choices.len()
-                ),
-                raw_request: None,
-                raw_response: Some(serde_json::to_string(&response).unwrap_or_default()),
-                provider_type: PROVIDER_TYPE.to_string(),
-            }
-            .into());
-        }
-
-        // Convert response to raw string for storage
-        let raw_response = serde_json::to_string(&response).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!("Error parsing response: {}", DisplayOrDebugGateway::new(e)),
-            })
-        })?;
-
-        // Extract the message from choices
-        let OpenAIResponseChoice {
-            message,
-            finish_reason,
-            ..
-        } = response
-            .choices
-            .pop()
-            .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
-                message: "Response has no choices (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
-                raw_request: None,
-                raw_response: Some(raw_response.clone()),
-                provider_type: PROVIDER_TYPE.to_string(),
-            }))?;
-
-        // Convert message content to ContentBlocks
-        let mut content: Vec<ContentBlockOutput> = Vec::new();
-        if let Some(text) = message.content {
-            content.push(text.into());
-        }
-        if let Some(tool_calls) = message.tool_calls {
-            for tool_call in tool_calls {
-                content.push(ContentBlockOutput::ToolCall(tool_call.into()));
-            }
-        }
-
-        Ok(Self {
-            id: row.inference_id,
-            output: content,
-            raw_response,
-            usage: response.usage.into(),
-            finish_reason: Some(finish_reason.into()),
-        })
-    }
-}
-
-#[derive(Debug, Deserialize)]
-struct OpenAIBatchErrors {
-    // object: String,
-    data: Vec<OpenAIBatchError>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct OpenAIBatchError {
-    code: String,
-    message: String,
-    param: Option<String>,
-    line: Option<i32>,
-}
-
-#[derive(Debug, Deserialize)]
-struct OpenAIBatchRequestCounts {
-    // total: u32,
-    // completed: u32,
-    // failed: u32,
-}
-
-#[derive(Debug, Deserialize)]
-struct OpenAIBatchFileRow {
-    #[serde(rename = "custom_id")]
-    inference_id: Uuid,
-    response: OpenAIBatchFileResponse,
-}
-
-#[derive(Debug, Deserialize)]
-struct OpenAIBatchFileResponse {
-    // status_code: u16,
-    // request_id: String,
-    body: OpenAIResponse,
-}
-
 #[cfg(test)]
 mod tests {
-    use serde_json::json;
-    use std::borrow::Cow;
-    use tracing_test::traced_test;
 
-    use crate::inference::providers::test_helpers::{
-        MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL, WEATHER_TOOL_CONFIG,
+    use std::borrow::Cow;
+
+    use serde_json::json;
+
+    use crate::{
+        inference::types::{FunctionType, RequestMessage},
+        providers::test_helpers::{
+            MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL, WEATHER_TOOL_CONFIG,
+        },
+        tool::ToolCallConfig,
     };
-    use crate::inference::types::{FunctionType, RequestMessage};
-    use crate::tool::ToolCallConfig;
 
     use super::*;
 
     #[test]
     fn test_get_chat_url() {
         // Test with custom base URL
-        let custom_base = "https://custom.openai.com/api/";
+        let custom_base = "https://custom.openrouter.com/api/";
         let custom_url = get_chat_url(&Url::parse(custom_base).unwrap()).unwrap();
         assert_eq!(
             custom_url.as_str(),
-            "https://custom.openai.com/api/chat/completions"
+            "https://custom.openrouter.com/api/chat/completions"
         );
 
         // Test with URL without trailing slash
@@ -2261,11 +1436,11 @@ mod tests {
     }
 
     #[test]
-    fn test_handle_openai_error() {
+    fn test_handle_openrouter_error() {
         use reqwest::StatusCode;
 
         // Test unauthorized error
-        let unauthorized = handle_openai_error(
+        let unauthorized = handle_openrouter_error(
             "Request Body",
             StatusCode::UNAUTHORIZED,
             "Unauthorized access",
@@ -2289,7 +1464,7 @@ mod tests {
         }
 
         // Test forbidden error
-        let forbidden = handle_openai_error(
+        let forbidden = handle_openrouter_error(
             "Request Body",
             StatusCode::FORBIDDEN,
             "Forbidden access",
@@ -2313,7 +1488,7 @@ mod tests {
         }
 
         // Test rate limit error
-        let rate_limit = handle_openai_error(
+        let rate_limit = handle_openrouter_error(
             "Request Body",
             StatusCode::TOO_MANY_REQUESTS,
             "Rate limit exceeded",
@@ -2337,7 +1512,7 @@ mod tests {
         }
 
         // Test server error
-        let server_error = handle_openai_error(
+        let server_error = handle_openrouter_error(
             "Request Body",
             StatusCode::INTERNAL_SERVER_ERROR,
             "Server error",
@@ -2360,7 +1535,7 @@ mod tests {
     }
 
     #[test]
-    fn test_openai_request_new() {
+    fn test_openrouter_request_new() {
         // Test basic request
         let basic_request = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
@@ -2390,21 +1565,21 @@ mod tests {
             ..Default::default()
         };
 
-        let openai_request = OpenAIRequest::new("gpt-3.5-turbo", &basic_request).unwrap();
+        let openrouter_request = OpenRouterRequest::new("gpt-3.5-turbo", &basic_request).unwrap();
 
-        assert_eq!(openai_request.model, "gpt-3.5-turbo");
-        assert_eq!(openai_request.messages.len(), 2);
-        assert_eq!(openai_request.temperature, Some(0.7));
-        assert_eq!(openai_request.max_completion_tokens, Some(100));
-        assert_eq!(openai_request.seed, Some(69));
-        assert_eq!(openai_request.top_p, Some(0.9));
-        assert_eq!(openai_request.presence_penalty, Some(0.1));
-        assert_eq!(openai_request.frequency_penalty, Some(0.2));
-        assert!(openai_request.stream);
-        assert_eq!(openai_request.response_format, None);
-        assert!(openai_request.tools.is_none());
-        assert_eq!(openai_request.tool_choice, None);
-        assert!(openai_request.parallel_tool_calls.is_none());
+        assert_eq!(openrouter_request.model, "gpt-3.5-turbo");
+        assert_eq!(openrouter_request.messages.len(), 2);
+        assert_eq!(openrouter_request.temperature, Some(0.7));
+        assert_eq!(openrouter_request.max_completion_tokens, Some(100));
+        assert_eq!(openrouter_request.seed, Some(69));
+        assert_eq!(openrouter_request.top_p, Some(0.9));
+        assert_eq!(openrouter_request.presence_penalty, Some(0.1));
+        assert_eq!(openrouter_request.frequency_penalty, Some(0.2));
+        assert!(openrouter_request.stream);
+        assert_eq!(openrouter_request.response_format, None);
+        assert!(openrouter_request.tools.is_none());
+        assert_eq!(openrouter_request.tool_choice, None);
+        assert!(openrouter_request.parallel_tool_calls.is_none());
 
         // Test request with tools and JSON mode
         let request_with_tools = ModelInferenceRequest {
@@ -2429,29 +1604,29 @@ mod tests {
             ..Default::default()
         };
 
-        let openai_request = OpenAIRequest::new("gpt-4", &request_with_tools).unwrap();
+        let openrouter_request = OpenRouterRequest::new("gpt-4", &request_with_tools).unwrap();
 
-        assert_eq!(openai_request.model, "gpt-4");
-        assert_eq!(openai_request.messages.len(), 2); // We'll add a system message containing Json to fit OpenAI requirements
-        assert_eq!(openai_request.temperature, None);
-        assert_eq!(openai_request.max_completion_tokens, None);
-        assert_eq!(openai_request.seed, None);
-        assert_eq!(openai_request.top_p, None);
-        assert_eq!(openai_request.presence_penalty, None);
-        assert_eq!(openai_request.frequency_penalty, None);
-        assert!(!openai_request.stream);
+        assert_eq!(openrouter_request.model, "gpt-4");
+        assert_eq!(openrouter_request.messages.len(), 2); // We'll add a system message containing Json to fit OpenRouter requirements
+        assert_eq!(openrouter_request.temperature, None);
+        assert_eq!(openrouter_request.max_completion_tokens, None);
+        assert_eq!(openrouter_request.seed, None);
+        assert_eq!(openrouter_request.top_p, None);
+        assert_eq!(openrouter_request.presence_penalty, None);
+        assert_eq!(openrouter_request.frequency_penalty, None);
+        assert!(!openrouter_request.stream);
         assert_eq!(
-            openai_request.response_format,
-            Some(OpenAIResponseFormat::JsonObject)
+            openrouter_request.response_format,
+            Some(OpenRouterResponseFormat::JsonObject)
         );
-        assert!(openai_request.tools.is_some());
-        let tools = openai_request.tools.as_ref().unwrap();
+        assert!(openrouter_request.tools.is_some());
+        let tools = openrouter_request.tools.as_ref().unwrap();
         assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
         assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
         assert_eq!(
-            openai_request.tool_choice,
-            Some(OpenAIToolChoice::Specific(SpecificToolChoice {
-                r#type: OpenAIToolType::Function,
+            openrouter_request.tool_choice,
+            Some(OpenRouterToolChoice::Specific(SpecificToolChoice {
+                r#type: OpenRouterToolType::Function,
                 function: SpecificToolFunction {
                     name: WEATHER_TOOL.name(),
                 }
@@ -2481,21 +1656,21 @@ mod tests {
             ..Default::default()
         };
 
-        let openai_request = OpenAIRequest::new("gpt-4", &request_with_tools).unwrap();
+        let openrouter_request = OpenRouterRequest::new("gpt-4", &request_with_tools).unwrap();
 
-        assert_eq!(openai_request.model, "gpt-4");
-        assert_eq!(openai_request.messages.len(), 1);
-        assert_eq!(openai_request.temperature, None);
-        assert_eq!(openai_request.max_completion_tokens, None);
-        assert_eq!(openai_request.seed, None);
-        assert!(!openai_request.stream);
-        assert_eq!(openai_request.top_p, None);
-        assert_eq!(openai_request.presence_penalty, None);
-        assert_eq!(openai_request.frequency_penalty, None);
+        assert_eq!(openrouter_request.model, "gpt-4");
+        assert_eq!(openrouter_request.messages.len(), 1);
+        assert_eq!(openrouter_request.temperature, None);
+        assert_eq!(openrouter_request.max_completion_tokens, None);
+        assert_eq!(openrouter_request.seed, None);
+        assert!(!openrouter_request.stream);
+        assert_eq!(openrouter_request.top_p, None);
+        assert_eq!(openrouter_request.presence_penalty, None);
+        assert_eq!(openrouter_request.frequency_penalty, None);
         // Resolves to normal JSON mode since no schema is provided (this shouldn't really happen in practice)
         assert_eq!(
-            openai_request.response_format,
-            Some(OpenAIResponseFormat::JsonObject)
+            openrouter_request.response_format,
+            Some(OpenRouterResponseFormat::JsonObject)
         );
 
         // Test request with strict JSON mode with an output schema
@@ -2522,28 +1697,28 @@ mod tests {
             ..Default::default()
         };
 
-        let openai_request = OpenAIRequest::new("gpt-4", &request_with_tools).unwrap();
+        let openrouter_request = OpenRouterRequest::new("gpt-4", &request_with_tools).unwrap();
 
-        assert_eq!(openai_request.model, "gpt-4");
-        assert_eq!(openai_request.messages.len(), 1);
-        assert_eq!(openai_request.temperature, None);
-        assert_eq!(openai_request.max_completion_tokens, None);
-        assert_eq!(openai_request.seed, None);
-        assert!(!openai_request.stream);
-        assert_eq!(openai_request.top_p, None);
-        assert_eq!(openai_request.presence_penalty, None);
-        assert_eq!(openai_request.frequency_penalty, None);
+        assert_eq!(openrouter_request.model, "gpt-4");
+        assert_eq!(openrouter_request.messages.len(), 1);
+        assert_eq!(openrouter_request.temperature, None);
+        assert_eq!(openrouter_request.max_completion_tokens, None);
+        assert_eq!(openrouter_request.seed, None);
+        assert!(!openrouter_request.stream);
+        assert_eq!(openrouter_request.top_p, None);
+        assert_eq!(openrouter_request.presence_penalty, None);
+        assert_eq!(openrouter_request.frequency_penalty, None);
         let expected_schema = serde_json::json!({"name": "response", "strict": true, "schema": {}});
         assert_eq!(
-            openai_request.response_format,
-            Some(OpenAIResponseFormat::JsonSchema {
+            openrouter_request.response_format,
+            Some(OpenRouterResponseFormat::JsonSchema {
                 json_schema: expected_schema,
             })
         );
     }
 
     #[test]
-    fn test_openai_new_request_o1() {
+    fn test_openrouter_new_request_o1() {
         let request = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
@@ -2566,19 +1741,19 @@ mod tests {
             ..Default::default()
         };
 
-        let openai_request = OpenAIRequest::new("o1-preview", &request).unwrap();
+        let openrouter_request = OpenRouterRequest::new("o1-preview", &request).unwrap();
 
-        assert_eq!(openai_request.model, "o1-preview");
-        assert_eq!(openai_request.messages.len(), 1);
-        assert!(!openai_request.stream);
-        assert_eq!(openai_request.response_format, None);
-        assert_eq!(openai_request.temperature, Some(0.5));
-        assert_eq!(openai_request.max_completion_tokens, Some(100));
-        assert_eq!(openai_request.seed, Some(69));
-        assert_eq!(openai_request.top_p, Some(0.9));
-        assert_eq!(openai_request.presence_penalty, Some(0.1));
-        assert_eq!(openai_request.frequency_penalty, Some(0.2));
-        assert!(openai_request.tools.is_none());
+        assert_eq!(openrouter_request.model, "o1-preview");
+        assert_eq!(openrouter_request.messages.len(), 1);
+        assert!(!openrouter_request.stream);
+        assert_eq!(openrouter_request.response_format, None);
+        assert_eq!(openrouter_request.temperature, Some(0.5));
+        assert_eq!(openrouter_request.max_completion_tokens, Some(100));
+        assert_eq!(openrouter_request.seed, Some(69));
+        assert_eq!(openrouter_request.top_p, Some(0.9));
+        assert_eq!(openrouter_request.presence_penalty, Some(0.1));
+        assert_eq!(openrouter_request.frequency_penalty, Some(0.2));
+        assert!(openrouter_request.tools.is_none());
 
         // Test case: System message is converted to User message
         let request_with_system = ModelInferenceRequest {
@@ -2603,45 +1778,48 @@ mod tests {
             ..Default::default()
         };
 
-        let openai_request_with_system =
-            OpenAIRequest::new("o1-mini", &request_with_system).unwrap();
+        let openrouter_request_with_system =
+            OpenRouterRequest::new("o1-mini", &request_with_system).unwrap();
 
         // Check that the system message was converted to a user message
-        assert_eq!(openai_request_with_system.messages.len(), 2);
+        assert_eq!(openrouter_request_with_system.messages.len(), 2);
         assert!(
             matches!(
-                openai_request_with_system.messages[0],
-                OpenAIRequestMessage::User(ref msg) if msg.content == [OpenAIContentBlock::Text { text: "This is the system message".into() }]
+                openrouter_request_with_system.messages[0],
+                OpenRouterRequestMessage::User(ref msg) if msg.content == [OpenRouterContentBlock::Text { text: "This is the system message".into() }]
             ),
             "Unexpected messages: {:?}",
-            openai_request_with_system.messages
+            openrouter_request_with_system.messages
         );
 
-        assert_eq!(openai_request_with_system.model, "o1-mini");
-        assert!(!openai_request_with_system.stream);
-        assert_eq!(openai_request_with_system.response_format, None);
-        assert_eq!(openai_request_with_system.temperature, Some(0.5));
-        assert_eq!(openai_request_with_system.max_completion_tokens, Some(100));
-        assert_eq!(openai_request_with_system.seed, Some(69));
-        assert!(openai_request_with_system.tools.is_none());
-        assert_eq!(openai_request_with_system.top_p, Some(0.9));
-        assert_eq!(openai_request_with_system.presence_penalty, Some(0.1));
-        assert_eq!(openai_request_with_system.frequency_penalty, Some(0.2));
+        assert_eq!(openrouter_request_with_system.model, "o1-mini");
+        assert!(!openrouter_request_with_system.stream);
+        assert_eq!(openrouter_request_with_system.response_format, None);
+        assert_eq!(openrouter_request_with_system.temperature, Some(0.5));
+        assert_eq!(
+            openrouter_request_with_system.max_completion_tokens,
+            Some(100)
+        );
+        assert_eq!(openrouter_request_with_system.seed, Some(69));
+        assert!(openrouter_request_with_system.tools.is_none());
+        assert_eq!(openrouter_request_with_system.top_p, Some(0.9));
+        assert_eq!(openrouter_request_with_system.presence_penalty, Some(0.1));
+        assert_eq!(openrouter_request_with_system.frequency_penalty, Some(0.2));
     }
 
     #[test]
-    fn test_try_from_openai_response() {
+    fn test_try_from_openrouter_response() {
         // Test case 1: Valid response with content
-        let valid_response = OpenAIResponse {
-            choices: vec![OpenAIResponseChoice {
+        let valid_response = OpenRouterResponse {
+            choices: vec![OpenRouterResponseChoice {
                 index: 0,
-                message: OpenAIResponseMessage {
+                message: OpenRouterResponseMessage {
                     content: Some("Hello, world!".to_string()),
                     tool_calls: None,
                 },
-                finish_reason: OpenAIFinishReason::Stop,
+                finish_reason: OpenRouterFinishReason::Stop,
             }],
-            usage: OpenAIUsage {
+            usage: OpenRouterUsage {
                 prompt_tokens: 10,
                 completion_tokens: 20,
                 total_tokens: 30,
@@ -2669,7 +1847,7 @@ mod tests {
             ..Default::default()
         };
 
-        let request_body = OpenAIRequest {
+        let request_body = OpenRouterRequest {
             messages: vec![],
             model: "gpt-3.5-turbo",
             temperature: Some(0.5),
@@ -2679,7 +1857,7 @@ mod tests {
             max_completion_tokens: Some(100),
             seed: Some(69),
             stream: false,
-            response_format: Some(OpenAIResponseFormat::Text),
+            response_format: Some(OpenRouterResponseFormat::Text),
             stream_options: None,
             tools: None,
             tool_choice: None,
@@ -2688,7 +1866,7 @@ mod tests {
         };
         let raw_request = serde_json::to_string(&request_body).unwrap();
         let raw_response = "test_response".to_string();
-        let result = ProviderInferenceResponse::try_from(OpenAIResponseWithMetadata {
+        let result = ProviderInferenceResponse::try_from(OpenRouterResponseWithMetadata {
             response: valid_response,
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
@@ -2723,23 +1901,23 @@ mod tests {
             }]
         );
         // Test case 2: Valid response with tool calls
-        let valid_response_with_tools = OpenAIResponse {
-            choices: vec![OpenAIResponseChoice {
+        let valid_response_with_tools = OpenRouterResponse {
+            choices: vec![OpenRouterResponseChoice {
                 index: 0,
-                finish_reason: OpenAIFinishReason::ToolCalls,
-                message: OpenAIResponseMessage {
+                finish_reason: OpenRouterFinishReason::ToolCalls,
+                message: OpenRouterResponseMessage {
                     content: None,
-                    tool_calls: Some(vec![OpenAIResponseToolCall {
+                    tool_calls: Some(vec![OpenRouterResponseToolCall {
                         id: "call1".to_string(),
-                        r#type: OpenAIToolType::Function,
-                        function: OpenAIResponseFunctionCall {
+                        r#type: OpenRouterToolType::Function,
+                        function: OpenRouterResponseFunctionCall {
                             name: "test_function".to_string(),
                             arguments: "{}".to_string(),
                         },
                     }]),
                 },
             }],
-            usage: OpenAIUsage {
+            usage: OpenRouterUsage {
                 prompt_tokens: 15,
                 completion_tokens: 25,
                 total_tokens: 40,
@@ -2767,7 +1945,7 @@ mod tests {
             ..Default::default()
         };
 
-        let request_body = OpenAIRequest {
+        let request_body = OpenRouterRequest {
             messages: vec![],
             model: "gpt-3.5-turbo",
             temperature: Some(0.5),
@@ -2777,7 +1955,7 @@ mod tests {
             max_completion_tokens: Some(100),
             seed: Some(69),
             stream: false,
-            response_format: Some(OpenAIResponseFormat::Text),
+            response_format: Some(OpenRouterResponseFormat::Text),
             stream_options: None,
             tools: None,
             tool_choice: None,
@@ -2785,7 +1963,7 @@ mod tests {
             stop: None,
         };
         let raw_request = serde_json::to_string(&request_body).unwrap();
-        let result = ProviderInferenceResponse::try_from(OpenAIResponseWithMetadata {
+        let result = ProviderInferenceResponse::try_from(OpenRouterResponseWithMetadata {
             response: valid_response_with_tools,
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(110),
@@ -2827,15 +2005,15 @@ mod tests {
             }]
         );
         // Test case 3: Invalid response with no choices
-        let invalid_response_no_choices = OpenAIResponse {
+        let invalid_response_no_choices = OpenRouterResponse {
             choices: vec![],
-            usage: OpenAIUsage {
+            usage: OpenRouterUsage {
                 prompt_tokens: 5,
                 completion_tokens: 0,
                 total_tokens: 5,
             },
         };
-        let request_body = OpenAIRequest {
+        let request_body = OpenRouterRequest {
             messages: vec![],
             model: "gpt-3.5-turbo",
             temperature: Some(0.5),
@@ -2845,14 +2023,14 @@ mod tests {
             max_completion_tokens: Some(100),
             seed: Some(69),
             stream: false,
-            response_format: Some(OpenAIResponseFormat::Text),
+            response_format: Some(OpenRouterResponseFormat::Text),
             stream_options: None,
             tools: None,
             tool_choice: None,
             parallel_tool_calls: None,
             stop: None,
         };
-        let result = ProviderInferenceResponse::try_from(OpenAIResponseWithMetadata {
+        let result = ProviderInferenceResponse::try_from(OpenRouterResponseWithMetadata {
             response: invalid_response_no_choices,
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(120),
@@ -2867,33 +2045,33 @@ mod tests {
         assert!(matches!(details, ErrorDetails::InferenceServer { .. }));
 
         // Test case 4: Invalid response with multiple choices
-        let invalid_response_multiple_choices = OpenAIResponse {
+        let invalid_response_multiple_choices = OpenRouterResponse {
             choices: vec![
-                OpenAIResponseChoice {
+                OpenRouterResponseChoice {
                     index: 0,
-                    message: OpenAIResponseMessage {
+                    message: OpenRouterResponseMessage {
                         content: Some("Choice 1".to_string()),
                         tool_calls: None,
                     },
-                    finish_reason: OpenAIFinishReason::Stop,
+                    finish_reason: OpenRouterFinishReason::Stop,
                 },
-                OpenAIResponseChoice {
+                OpenRouterResponseChoice {
                     index: 1,
-                    finish_reason: OpenAIFinishReason::Stop,
-                    message: OpenAIResponseMessage {
+                    finish_reason: OpenRouterFinishReason::Stop,
+                    message: OpenRouterResponseMessage {
                         content: Some("Choice 2".to_string()),
                         tool_calls: None,
                     },
                 },
             ],
-            usage: OpenAIUsage {
+            usage: OpenRouterUsage {
                 prompt_tokens: 10,
                 completion_tokens: 10,
                 total_tokens: 20,
             },
         };
 
-        let request_body = OpenAIRequest {
+        let request_body = OpenRouterRequest {
             messages: vec![],
             model: "gpt-3.5-turbo",
             temperature: Some(0.5),
@@ -2903,14 +2081,14 @@ mod tests {
             max_completion_tokens: Some(100),
             seed: Some(69),
             stream: false,
-            response_format: Some(OpenAIResponseFormat::Text),
+            response_format: Some(OpenRouterResponseFormat::Text),
             stream_options: None,
             tools: None,
             tool_choice: None,
             parallel_tool_calls: None,
             stop: None,
         };
-        let result = ProviderInferenceResponse::try_from(OpenAIResponseWithMetadata {
+        let result = ProviderInferenceResponse::try_from(OpenRouterResponseWithMetadata {
             response: invalid_response_multiple_choices,
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(130),
@@ -2926,7 +2104,7 @@ mod tests {
     }
 
     #[test]
-    fn test_prepare_openai_tools() {
+    fn test_prepare_openrouter_tools() {
         let request_with_tools = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
@@ -2948,7 +2126,8 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let (tools, tool_choice, parallel_tool_calls) = prepare_openai_tools(&request_with_tools);
+        let (tools, tool_choice, parallel_tool_calls) =
+            prepare_openrouter_tools(&request_with_tools);
         let tools = tools.unwrap();
         assert_eq!(tools.len(), 2);
         assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
@@ -2958,7 +2137,7 @@ mod tests {
         let tool_choice = tool_choice.unwrap();
         assert_eq!(
             tool_choice,
-            OpenAIToolChoice::String(OpenAIToolChoiceString::Required)
+            OpenRouterToolChoice::String(OpenRouterToolChoiceString::Required)
         );
         let parallel_tool_calls = parallel_tool_calls.unwrap();
         assert!(parallel_tool_calls);
@@ -2991,22 +2170,22 @@ mod tests {
             ..Default::default()
         };
         let (tools, tool_choice, parallel_tool_calls) =
-            prepare_openai_tools(&request_without_tools);
+            prepare_openrouter_tools(&request_without_tools);
         assert!(tools.is_none());
         assert!(tool_choice.is_none());
         assert!(parallel_tool_calls.is_none());
     }
 
     #[test]
-    fn test_tensorzero_to_openai_messages() {
+    fn test_tensorzero_to_openrouter_messages() {
         let content_blocks = vec!["Hello".to_string().into()];
-        let openai_messages = tensorzero_to_openai_user_messages(&content_blocks).unwrap();
-        assert_eq!(openai_messages.len(), 1);
-        match &openai_messages[0] {
-            OpenAIRequestMessage::User(content) => {
+        let openrouter_messages = tensorzero_to_openrouter_user_messages(&content_blocks).unwrap();
+        assert_eq!(openrouter_messages.len(), 1);
+        match &openrouter_messages[0] {
+            OpenRouterRequestMessage::User(content) => {
                 assert_eq!(
                     content.content,
-                    &[OpenAIContentBlock::Text {
+                    &[OpenRouterContentBlock::Text {
                         text: "Hello".into()
                     }]
                 );
@@ -3019,17 +2198,17 @@ mod tests {
             "Hello".to_string().into(),
             "How are you?".to_string().into(),
         ];
-        let openai_messages = tensorzero_to_openai_user_messages(&content_blocks).unwrap();
-        assert_eq!(openai_messages.len(), 1);
-        match &openai_messages[0] {
-            OpenAIRequestMessage::User(content) => {
+        let openrouter_messages = tensorzero_to_openrouter_user_messages(&content_blocks).unwrap();
+        assert_eq!(openrouter_messages.len(), 1);
+        match &openrouter_messages[0] {
+            OpenRouterRequestMessage::User(content) => {
                 assert_eq!(
                     content.content,
                     vec![
-                        OpenAIContentBlock::Text {
+                        OpenRouterContentBlock::Text {
                             text: "Hello".into()
                         },
-                        OpenAIContentBlock::Text {
+                        OpenRouterContentBlock::Text {
                             text: "How are you?".into()
                         }
                     ]
@@ -3039,7 +2218,7 @@ mod tests {
         }
 
         // User message with one string and one tool call block
-        // Since user messages in OpenAI land can't contain tool calls (nor should they honestly),
+        // Since user messages in OpenRouter land can't contain tool calls (nor should they honestly),
         // We split the tool call out into a separate assistant message
         let tool_block = ContentBlock::ToolCall(ToolCall {
             id: "call1".to_string(),
@@ -3047,13 +2226,14 @@ mod tests {
             arguments: "{}".to_string(),
         });
         let content_blocks = vec!["Hello".to_string().into(), tool_block];
-        let openai_messages = tensorzero_to_openai_assistant_messages(&content_blocks).unwrap();
-        assert_eq!(openai_messages.len(), 1);
-        match &openai_messages[0] {
-            OpenAIRequestMessage::Assistant(content) => {
+        let openrouter_messages =
+            tensorzero_to_openrouter_assistant_messages(&content_blocks).unwrap();
+        assert_eq!(openrouter_messages.len(), 1);
+        match &openrouter_messages[0] {
+            OpenRouterRequestMessage::Assistant(content) => {
                 assert_eq!(
                     content.content,
-                    Some(vec![OpenAIContentBlock::Text {
+                    Some(vec![OpenRouterContentBlock::Text {
                         text: "Hello".into()
                     }])
                 );
@@ -3068,19 +2248,19 @@ mod tests {
     }
 
     #[test]
-    fn test_openai_to_tensorzero_chunk() {
-        let chunk = OpenAIChatChunk {
-            choices: vec![OpenAIChatChunkChoice {
-                delta: OpenAIDelta {
+    fn test_openrouter_to_tensorzero_chunk() {
+        let chunk = OpenRouterChatChunk {
+            choices: vec![OpenRouterChatChunkChoice {
+                delta: OpenRouterDelta {
                     content: Some("Hello".to_string()),
                     tool_calls: None,
                 },
-                finish_reason: Some(OpenAIFinishReason::Stop),
+                finish_reason: Some(OpenRouterFinishReason::Stop),
             }],
             usage: None,
         };
         let mut tool_call_ids = vec!["id1".to_string()];
-        let message = openai_to_tensorzero_chunk(
+        let message = openrouter_to_tensorzero_chunk(
             "my_raw_chunk".to_string(),
             chunk.clone(),
             Duration::from_millis(50),
@@ -3096,15 +2276,15 @@ mod tests {
         );
         assert_eq!(message.finish_reason, Some(FinishReason::Stop));
         // Test what an intermediate tool chunk should look like
-        let chunk = OpenAIChatChunk {
-            choices: vec![OpenAIChatChunkChoice {
-                finish_reason: Some(OpenAIFinishReason::ToolCalls),
-                delta: OpenAIDelta {
+        let chunk = OpenRouterChatChunk {
+            choices: vec![OpenRouterChatChunkChoice {
+                finish_reason: Some(OpenRouterFinishReason::ToolCalls),
+                delta: OpenRouterDelta {
                     content: None,
-                    tool_calls: Some(vec![OpenAIToolCallChunk {
+                    tool_calls: Some(vec![OpenRouterToolCallChunk {
                         index: 0,
                         id: None,
-                        function: OpenAIFunctionCallChunk {
+                        function: OpenRouterFunctionCallChunk {
                             name: None,
                             arguments: Some("{\"hello\":\"world\"}".to_string()),
                         },
@@ -3113,7 +2293,7 @@ mod tests {
             }],
             usage: None,
         };
-        let message = openai_to_tensorzero_chunk(
+        let message = openrouter_to_tensorzero_chunk(
             "my_raw_chunk".to_string(),
             chunk.clone(),
             Duration::from_millis(50),
@@ -3130,15 +2310,15 @@ mod tests {
         );
         assert_eq!(message.finish_reason, Some(FinishReason::ToolCall));
         // Test what a bad tool chunk would do (new ID but no names)
-        let chunk = OpenAIChatChunk {
-            choices: vec![OpenAIChatChunkChoice {
+        let chunk = OpenRouterChatChunk {
+            choices: vec![OpenRouterChatChunkChoice {
                 finish_reason: None,
-                delta: OpenAIDelta {
+                delta: OpenRouterDelta {
                     content: None,
-                    tool_calls: Some(vec![OpenAIToolCallChunk {
+                    tool_calls: Some(vec![OpenRouterToolCallChunk {
                         index: 1,
                         id: None,
-                        function: OpenAIFunctionCallChunk {
+                        function: OpenRouterFunctionCallChunk {
                             name: None,
                             arguments: Some("{\"hello\":\"world\"}".to_string()),
                         },
@@ -3147,7 +2327,7 @@ mod tests {
             }],
             usage: None,
         };
-        let error = openai_to_tensorzero_chunk(
+        let error = openrouter_to_tensorzero_chunk(
             "my_raw_chunk".to_string(),
             chunk.clone(),
             Duration::from_millis(50),
@@ -3165,15 +2345,15 @@ mod tests {
             }
         );
         // Test a correct new tool chunk
-        let chunk = OpenAIChatChunk {
-            choices: vec![OpenAIChatChunkChoice {
-                finish_reason: Some(OpenAIFinishReason::Stop),
-                delta: OpenAIDelta {
+        let chunk = OpenRouterChatChunk {
+            choices: vec![OpenRouterChatChunkChoice {
+                finish_reason: Some(OpenRouterFinishReason::Stop),
+                delta: OpenRouterDelta {
                     content: None,
-                    tool_calls: Some(vec![OpenAIToolCallChunk {
+                    tool_calls: Some(vec![OpenRouterToolCallChunk {
                         index: 1,
                         id: Some("id2".to_string()),
-                        function: OpenAIFunctionCallChunk {
+                        function: OpenRouterFunctionCallChunk {
                             name: Some("name2".to_string()),
                             arguments: Some("{\"hello\":\"world\"}".to_string()),
                         },
@@ -3182,7 +2362,7 @@ mod tests {
             }],
             usage: None,
         };
-        let message = openai_to_tensorzero_chunk(
+        let message = openrouter_to_tensorzero_chunk(
             "my_raw_chunk".to_string(),
             chunk.clone(),
             Duration::from_millis(50),
@@ -3203,15 +2383,15 @@ mod tests {
 
         // Check a chunk with no choices and only usage
         // Test a correct new tool chunk
-        let chunk = OpenAIChatChunk {
+        let chunk = OpenRouterChatChunk {
             choices: vec![],
-            usage: Some(OpenAIUsage {
+            usage: Some(OpenRouterUsage {
                 prompt_tokens: 10,
                 completion_tokens: 20,
                 total_tokens: 30,
             }),
         };
-        let message = openai_to_tensorzero_chunk(
+        let message = openrouter_to_tensorzero_chunk(
             "my_raw_chunk".to_string(),
             chunk.clone(),
             Duration::from_millis(50),
@@ -3229,22 +2409,22 @@ mod tests {
     }
 
     #[test]
-    fn test_new_openai_response_format() {
+    fn test_new_openrouter_response_format() {
         // Test JSON mode On
         let json_mode = ModelInferenceRequestJsonMode::On;
         let output_schema = None;
-        let format = OpenAIResponseFormat::new(&json_mode, output_schema, "gpt-4o");
-        assert_eq!(format, Some(OpenAIResponseFormat::JsonObject));
+        let format = OpenRouterResponseFormat::new(&json_mode, output_schema, "gpt-4o");
+        assert_eq!(format, Some(OpenRouterResponseFormat::JsonObject));
 
         // Test JSON mode Off
         let json_mode = ModelInferenceRequestJsonMode::Off;
-        let format = OpenAIResponseFormat::new(&json_mode, output_schema, "gpt-4o");
+        let format = OpenRouterResponseFormat::new(&json_mode, output_schema, "gpt-4o");
         assert_eq!(format, None);
 
         // Test JSON mode Strict with no schema
         let json_mode = ModelInferenceRequestJsonMode::Strict;
-        let format = OpenAIResponseFormat::new(&json_mode, output_schema, "gpt-4o");
-        assert_eq!(format, Some(OpenAIResponseFormat::JsonObject));
+        let format = OpenRouterResponseFormat::new(&json_mode, output_schema, "gpt-4o");
+        assert_eq!(format, Some(OpenRouterResponseFormat::JsonObject));
 
         // Test JSON mode Strict with schema
         let json_mode = ModelInferenceRequestJsonMode::Strict;
@@ -3255,9 +2435,9 @@ mod tests {
             }
         });
         let output_schema = Some(&schema);
-        let format = OpenAIResponseFormat::new(&json_mode, output_schema, "gpt-4o");
+        let format = OpenRouterResponseFormat::new(&json_mode, output_schema, "gpt-4o");
         match format {
-            Some(OpenAIResponseFormat::JsonSchema { json_schema }) => {
+            Some(OpenRouterResponseFormat::JsonSchema { json_schema }) => {
                 assert_eq!(json_schema["schema"], schema);
                 assert_eq!(json_schema["name"], "response");
                 assert_eq!(json_schema["strict"], true);
@@ -3274,192 +2454,210 @@ mod tests {
             }
         });
         let output_schema = Some(&schema);
-        let format = OpenAIResponseFormat::new(&json_mode, output_schema, "gpt-3.5-turbo");
-        assert_eq!(format, Some(OpenAIResponseFormat::JsonObject));
+        let format = OpenRouterResponseFormat::new(&json_mode, output_schema, "gpt-3.5-turbo");
+        assert_eq!(format, Some(OpenRouterResponseFormat::JsonObject));
     }
 
     #[test]
-    fn test_openai_api_base() {
+    fn test_openrouter_api_base() {
         assert_eq!(
-            OPENAI_DEFAULT_BASE_URL.as_str(),
-            "https://api.openai.com/v1/"
+            OPENROUTER_DEFAULT_BASE_URL.as_str(),
+            "https://openrouter.ai/api/v1"
         );
     }
 
     #[test]
-    fn test_tensorzero_to_openai_system_message() {
+    fn test_tensorzero_to_openrouter_system_message() {
         // Test Case 1: system is None, json_mode is Off
         let system = None;
         let json_mode = ModelInferenceRequestJsonMode::Off;
-        let messages: Vec<OpenAIRequestMessage> = vec![];
-        let result = tensorzero_to_openai_system_message(system, Some(&json_mode), &messages);
+        let messages: Vec<OpenRouterRequestMessage> = vec![];
+        let result = tensorzero_to_openrouter_system_message(system, &json_mode, &messages);
         assert_eq!(result, None);
 
         // Test Case 2: system is Some, json_mode is On, messages contain "json"
         let system = Some("System instructions");
         let json_mode = ModelInferenceRequestJsonMode::On;
         let messages = vec![
-            OpenAIRequestMessage::User(OpenAIUserRequestMessage {
-                content: vec![OpenAIContentBlock::Text {
+            OpenRouterRequestMessage::User(OpenRouterUserRequestMessage {
+                content: vec![OpenRouterContentBlock::Text {
                     text: "Please respond in JSON format.".into(),
                 }],
             }),
-            OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
-                content: Some(vec![OpenAIContentBlock::Text {
+            OpenRouterRequestMessage::Assistant(OpenRouterAssistantRequestMessage {
+                content: Some(vec![OpenRouterContentBlock::Text {
                     text: "Sure, here is the data.".into(),
                 }]),
                 tool_calls: None,
             }),
         ];
-        let expected = Some(OpenAIRequestMessage::System(OpenAISystemRequestMessage {
-            content: Cow::Borrowed("System instructions"),
-        }));
-        let result = tensorzero_to_openai_system_message(system, Some(&json_mode), &messages);
+        let expected = Some(OpenRouterRequestMessage::System(
+            OpenRouterSystemRequestMessage {
+                content: Cow::Borrowed("System instructions"),
+            },
+        ));
+        let result = tensorzero_to_openrouter_system_message(system, &json_mode, &messages);
         assert_eq!(result, expected);
 
         // Test Case 3: system is Some, json_mode is On, messages do not contain "json"
         let system = Some("System instructions");
         let json_mode = ModelInferenceRequestJsonMode::On;
         let messages = vec![
-            OpenAIRequestMessage::User(OpenAIUserRequestMessage {
-                content: vec![OpenAIContentBlock::Text {
+            OpenRouterRequestMessage::User(OpenRouterUserRequestMessage {
+                content: vec![OpenRouterContentBlock::Text {
                     text: "Hello, how are you?".into(),
                 }],
             }),
-            OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
-                content: Some(vec![OpenAIContentBlock::Text {
+            OpenRouterRequestMessage::Assistant(OpenRouterAssistantRequestMessage {
+                content: Some(vec![OpenRouterContentBlock::Text {
                     text: "I am fine, thank you!".into(),
                 }]),
                 tool_calls: None,
             }),
         ];
         let expected_content = "Respond using JSON.\n\nSystem instructions".to_string();
-        let expected = Some(OpenAIRequestMessage::System(OpenAISystemRequestMessage {
-            content: Cow::Owned(expected_content),
-        }));
-        let result = tensorzero_to_openai_system_message(system, Some(&json_mode), &messages);
+        let expected = Some(OpenRouterRequestMessage::System(
+            OpenRouterSystemRequestMessage {
+                content: Cow::Owned(expected_content),
+            },
+        ));
+        let result = tensorzero_to_openrouter_system_message(system, &json_mode, &messages);
         assert_eq!(result, expected);
 
         // Test Case 4: system is Some, json_mode is Off
         let system = Some("System instructions");
         let json_mode = ModelInferenceRequestJsonMode::Off;
         let messages = vec![
-            OpenAIRequestMessage::User(OpenAIUserRequestMessage {
-                content: vec![OpenAIContentBlock::Text {
+            OpenRouterRequestMessage::User(OpenRouterUserRequestMessage {
+                content: vec![OpenRouterContentBlock::Text {
                     text: "Hello, how are you?".into(),
                 }],
             }),
-            OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
-                content: Some(vec![OpenAIContentBlock::Text {
+            OpenRouterRequestMessage::Assistant(OpenRouterAssistantRequestMessage {
+                content: Some(vec![OpenRouterContentBlock::Text {
                     text: "I am fine, thank you!".into(),
                 }]),
                 tool_calls: None,
             }),
         ];
-        let expected = Some(OpenAIRequestMessage::System(OpenAISystemRequestMessage {
-            content: Cow::Borrowed("System instructions"),
-        }));
-        let result = tensorzero_to_openai_system_message(system, Some(&json_mode), &messages);
+        let expected = Some(OpenRouterRequestMessage::System(
+            OpenRouterSystemRequestMessage {
+                content: Cow::Borrowed("System instructions"),
+            },
+        ));
+        let result = tensorzero_to_openrouter_system_message(system, &json_mode, &messages);
         assert_eq!(result, expected);
 
         // Test Case 5: system is Some, json_mode is Strict
         let system = Some("System instructions");
         let json_mode = ModelInferenceRequestJsonMode::Strict;
         let messages = vec![
-            OpenAIRequestMessage::User(OpenAIUserRequestMessage {
-                content: vec![OpenAIContentBlock::Text {
+            OpenRouterRequestMessage::User(OpenRouterUserRequestMessage {
+                content: vec![OpenRouterContentBlock::Text {
                     text: "Hello, how are you?".into(),
                 }],
             }),
-            OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
-                content: Some(vec![OpenAIContentBlock::Text {
+            OpenRouterRequestMessage::Assistant(OpenRouterAssistantRequestMessage {
+                content: Some(vec![OpenRouterContentBlock::Text {
                     text: "I am fine, thank you!".into(),
                 }]),
                 tool_calls: None,
             }),
         ];
-        let expected = Some(OpenAIRequestMessage::System(OpenAISystemRequestMessage {
-            content: Cow::Borrowed("System instructions"),
-        }));
-        let result = tensorzero_to_openai_system_message(system, Some(&json_mode), &messages);
+        let expected = Some(OpenRouterRequestMessage::System(
+            OpenRouterSystemRequestMessage {
+                content: Cow::Borrowed("System instructions"),
+            },
+        ));
+        let result = tensorzero_to_openrouter_system_message(system, &json_mode, &messages);
         assert_eq!(result, expected);
 
         // Test Case 6: system contains "json", json_mode is On
         let system = Some("Respond using JSON.\n\nSystem instructions");
         let json_mode = ModelInferenceRequestJsonMode::On;
-        let messages = vec![OpenAIRequestMessage::User(OpenAIUserRequestMessage {
-            content: vec![OpenAIContentBlock::Text {
-                text: "Hello, how are you?".into(),
-            }],
-        })];
-        let expected = Some(OpenAIRequestMessage::System(OpenAISystemRequestMessage {
-            content: Cow::Borrowed("Respond using JSON.\n\nSystem instructions"),
-        }));
-        let result = tensorzero_to_openai_system_message(system, Some(&json_mode), &messages);
+        let messages = vec![OpenRouterRequestMessage::User(
+            OpenRouterUserRequestMessage {
+                content: vec![OpenRouterContentBlock::Text {
+                    text: "Hello, how are you?".into(),
+                }],
+            },
+        )];
+        let expected = Some(OpenRouterRequestMessage::System(
+            OpenRouterSystemRequestMessage {
+                content: Cow::Borrowed("Respond using JSON.\n\nSystem instructions"),
+            },
+        ));
+        let result = tensorzero_to_openrouter_system_message(system, &json_mode, &messages);
         assert_eq!(result, expected);
 
         // Test Case 7: system is None, json_mode is On
         let system = None;
         let json_mode = ModelInferenceRequestJsonMode::On;
         let messages = vec![
-            OpenAIRequestMessage::User(OpenAIUserRequestMessage {
-                content: vec![OpenAIContentBlock::Text {
+            OpenRouterRequestMessage::User(OpenRouterUserRequestMessage {
+                content: vec![OpenRouterContentBlock::Text {
                     text: "Tell me a joke.".into(),
                 }],
             }),
-            OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
-                content: Some(vec![OpenAIContentBlock::Text {
+            OpenRouterRequestMessage::Assistant(OpenRouterAssistantRequestMessage {
+                content: Some(vec![OpenRouterContentBlock::Text {
                     text: "Sure, here's one for you.".into(),
                 }]),
                 tool_calls: None,
             }),
         ];
-        let expected = Some(OpenAIRequestMessage::System(OpenAISystemRequestMessage {
-            content: Cow::Owned("Respond using JSON.".to_string()),
-        }));
-        let result = tensorzero_to_openai_system_message(system, Some(&json_mode), &messages);
+        let expected = Some(OpenRouterRequestMessage::System(
+            OpenRouterSystemRequestMessage {
+                content: Cow::Owned("Respond using JSON.".to_string()),
+            },
+        ));
+        let result = tensorzero_to_openrouter_system_message(system, &json_mode, &messages);
         assert_eq!(result, expected);
 
         // Test Case 8: system is None, json_mode is Strict
         let system = None;
         let json_mode = ModelInferenceRequestJsonMode::Strict;
         let messages = vec![
-            OpenAIRequestMessage::User(OpenAIUserRequestMessage {
-                content: vec![OpenAIContentBlock::Text {
+            OpenRouterRequestMessage::User(OpenRouterUserRequestMessage {
+                content: vec![OpenRouterContentBlock::Text {
                     text: "Provide a summary of the news.".into(),
                 }],
             }),
-            OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
-                content: Some(vec![OpenAIContentBlock::Text {
+            OpenRouterRequestMessage::Assistant(OpenRouterAssistantRequestMessage {
+                content: Some(vec![OpenRouterContentBlock::Text {
                     text: "Here's the summary.".into(),
                 }]),
                 tool_calls: None,
             }),
         ];
 
-        let result = tensorzero_to_openai_system_message(system, Some(&json_mode), &messages);
+        let result = tensorzero_to_openrouter_system_message(system, &json_mode, &messages);
         assert!(result.is_none());
 
         // Test Case 9: system is None, json_mode is On, with empty messages
         let system = None;
         let json_mode = ModelInferenceRequestJsonMode::On;
-        let messages: Vec<OpenAIRequestMessage> = vec![];
-        let expected = Some(OpenAIRequestMessage::System(OpenAISystemRequestMessage {
-            content: Cow::Owned("Respond using JSON.".to_string()),
-        }));
-        let result = tensorzero_to_openai_system_message(system, Some(&json_mode), &messages);
+        let messages: Vec<OpenRouterRequestMessage> = vec![];
+        let expected = Some(OpenRouterRequestMessage::System(
+            OpenRouterSystemRequestMessage {
+                content: Cow::Owned("Respond using JSON.".to_string()),
+            },
+        ));
+        let result = tensorzero_to_openrouter_system_message(system, &json_mode, &messages);
         assert_eq!(result, expected);
 
         // Test Case 10: system is None, json_mode is Off, with messages containing "json"
         let system = None;
         let json_mode = ModelInferenceRequestJsonMode::Off;
-        let messages = vec![OpenAIRequestMessage::User(OpenAIUserRequestMessage {
-            content: vec![OpenAIContentBlock::Text {
-                text: "Please include JSON in your response.".into(),
-            }],
-        })];
+        let messages = vec![OpenRouterRequestMessage::User(
+            OpenRouterUserRequestMessage {
+                content: vec![OpenRouterContentBlock::Text {
+                    text: "Please include JSON in your response.".into(),
+                }],
+            },
+        )];
         let expected = None;
-        let result = tensorzero_to_openai_system_message(system, Some(&json_mode), &messages);
+        let result = tensorzero_to_openrouter_system_message(system, &json_mode, &messages);
         assert_eq!(result, expected);
     }
 
@@ -3468,73 +2666,76 @@ mod tests {
         use url::Url;
 
         // Test Case 1: Base URL without trailing slash
-        let base_url = Url::parse("https://api.openai.com/v1").unwrap();
+        let base_url = Url::parse("https://openrouter.ai/api/v1").unwrap();
         let file_id = Some("file123");
         let result = get_file_url(&base_url, file_id).unwrap();
         assert_eq!(
             result.as_str(),
-            "https://api.openai.com/v1/files/file123/content"
+            "https://openrouter.ai/api/v1/files/file123/content"
         );
 
         // Test Case 2: Base URL with trailing slash
-        let base_url = Url::parse("https://api.openai.com/v1/").unwrap();
+        let base_url = Url::parse("https://openrouter.ai/api/v1/").unwrap();
         let file_id = Some("file456");
         let result = get_file_url(&base_url, file_id).unwrap();
         assert_eq!(
             result.as_str(),
-            "https://api.openai.com/v1/files/file456/content"
+            "https://openrouter.ai/api/v1/files/file456/content"
         );
 
         // Test Case 3: Base URL with custom domain
-        let base_url = Url::parse("https://custom-openai.example.com").unwrap();
+        let base_url = Url::parse("https://custom-openrouter.example.com").unwrap();
         let file_id = Some("file789");
         let result = get_file_url(&base_url, file_id).unwrap();
         assert_eq!(
             result.as_str(),
-            "https://custom-openai.example.com/files/file789/content"
+            "https://custom-openrouter.example.com/files/file789/content"
         );
 
         // Test Case 4: Base URL without trailing slash, no file ID
-        let base_url = Url::parse("https://api.openai.com/v1").unwrap();
+        let base_url = Url::parse("https://openrouter.ai/api/v1").unwrap();
         let result = get_file_url(&base_url, None).unwrap();
-        assert_eq!(result.as_str(), "https://api.openai.com/v1/files");
+        assert_eq!(result.as_str(), "https://openrouter.ai/api/v1/files");
 
         // Test Case 5: Base URL with trailing slash, no file ID
-        let base_url = Url::parse("https://api.openai.com/v1/").unwrap();
+        let base_url = Url::parse("https://openrouter.ai/api/v1/").unwrap();
         let result = get_file_url(&base_url, None).unwrap();
-        assert_eq!(result.as_str(), "https://api.openai.com/v1/files");
+        assert_eq!(result.as_str(), "https://openrouter.ai/api/v1/files");
 
         // Test Case 6: Custom domain base URL, no file ID
-        let base_url = Url::parse("https://custom-openai.example.com").unwrap();
+        let base_url = Url::parse("https://custom-openrouter.example.com").unwrap();
         let result = get_file_url(&base_url, None).unwrap();
-        assert_eq!(result.as_str(), "https://custom-openai.example.com/files");
+        assert_eq!(
+            result.as_str(),
+            "https://custom-openrouter.example.com/files"
+        );
     }
 
     #[test]
-    fn test_try_from_openai_credentials() {
+    fn test_try_from_openrouter_credentials() {
         // Test Static credentials
         let generic = Credential::Static(SecretString::from("test_key"));
-        let creds = OpenAICredentials::try_from(generic).unwrap();
-        assert!(matches!(creds, OpenAICredentials::Static(_)));
+        let creds = OpenRouterCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, OpenRouterCredentials::Static(_)));
 
         // Test Dynamic credentials
         let generic = Credential::Dynamic("key_name".to_string());
-        let creds = OpenAICredentials::try_from(generic).unwrap();
-        assert!(matches!(creds, OpenAICredentials::Dynamic(_)));
+        let creds = OpenRouterCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, OpenRouterCredentials::Dynamic(_)));
 
         // Test None credentials
         let generic = Credential::None;
-        let creds = OpenAICredentials::try_from(generic).unwrap();
-        assert!(matches!(creds, OpenAICredentials::None));
+        let creds = OpenRouterCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, OpenRouterCredentials::None));
 
         // Test Missing credentials
         let generic = Credential::Missing;
-        let creds = OpenAICredentials::try_from(generic).unwrap();
-        assert!(matches!(creds, OpenAICredentials::None));
+        let creds = OpenRouterCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, OpenRouterCredentials::None));
 
         // Test invalid credential type
         let generic = Credential::FileContents(SecretString::from("test"));
-        let result = OpenAICredentials::try_from(generic);
+        let result = OpenRouterCredentials::try_from(generic);
         assert!(result.is_err());
         assert!(matches!(
             result.unwrap_err().get_owned_details(),
@@ -3545,8 +2746,8 @@ mod tests {
     #[test]
     fn test_serialize_user_messages() {
         // Test that a single message is serialized as 'content: string'
-        let message = OpenAIUserRequestMessage {
-            content: vec![OpenAIContentBlock::Text {
+        let message = OpenRouterUserRequestMessage {
+            content: vec![OpenRouterContentBlock::Text {
                 text: "My single message".into(),
             }],
         };
@@ -3554,12 +2755,12 @@ mod tests {
         assert_eq!(serialized, r#"{"content":"My single message"}"#);
 
         // Test that a multiple messages are serialized as an array of content blocks
-        let message = OpenAIUserRequestMessage {
+        let message = OpenRouterUserRequestMessage {
             content: vec![
-                OpenAIContentBlock::Text {
+                OpenRouterContentBlock::Text {
                     text: "My first message".into(),
                 },
-                OpenAIContentBlock::Text {
+                OpenRouterContentBlock::Text {
                     text: "My second message".into(),
                 },
             ],
@@ -3569,82 +2770,5 @@ mod tests {
             serialized,
             r#"{"content":[{"type":"text","text":"My first message"},{"type":"text","text":"My second message"}]}"#
         );
-    }
-
-    #[test]
-    #[traced_test]
-    fn test_check_api_base_suffix() {
-        // Valid cases (should not warn)
-        check_api_base_suffix(&Url::parse("http://localhost:1234/").unwrap());
-        check_api_base_suffix(&Url::parse("http://localhost:1234/openai/").unwrap());
-        check_api_base_suffix(&Url::parse("http://localhost:1234/openai/v1").unwrap());
-        check_api_base_suffix(&Url::parse("http://localhost:1234/openai/v1/").unwrap());
-        check_api_base_suffix(&Url::parse("http://localhost:1234/v1/").unwrap());
-        check_api_base_suffix(&Url::parse("http://localhost:1234/v2").unwrap());
-        check_api_base_suffix(&Url::parse("http://localhost:1234/v2/").unwrap());
-
-        // Invalid cases (should warn)
-        let url1 = Url::parse("http://localhost:1234/chat/completions").unwrap();
-        check_api_base_suffix(&url1);
-        assert!(logs_contain("automatically appends `/chat/completions`"));
-        assert!(logs_contain(url1.as_ref()));
-
-        let url2 = Url::parse("http://localhost:1234/chat/completions/").unwrap();
-        check_api_base_suffix(&url2);
-        assert!(logs_contain("automatically appends `/chat/completions`"));
-        assert!(logs_contain(url2.as_ref()));
-
-        let url3 = Url::parse("http://localhost:1234/v1/chat/completions").unwrap();
-        check_api_base_suffix(&url3);
-        assert!(logs_contain("automatically appends `/chat/completions`"));
-        assert!(logs_contain(url3.as_ref()));
-
-        let url4 = Url::parse("http://localhost:1234/v1/chat/completions/").unwrap();
-        check_api_base_suffix(&url4);
-        assert!(logs_contain("automatically appends `/chat/completions`"));
-        assert!(logs_contain(url4.as_ref()));
-    }
-
-    #[test]
-    #[traced_test]
-    fn test_openai_provider_new_api_base_check() {
-        let model_name = "test-model".to_string();
-        let api_key_location = Some(CredentialLocation::None);
-
-        // Valid cases (should not warn)
-        let _ = OpenAIProvider::new(
-            model_name.clone(),
-            Some(Url::parse("http://localhost:1234/v1/").unwrap()),
-            api_key_location.clone(),
-        )
-        .unwrap();
-
-        let _ = OpenAIProvider::new(
-            model_name.clone(),
-            Some(Url::parse("http://localhost:1234/v1").unwrap()),
-            api_key_location.clone(),
-        )
-        .unwrap();
-
-        // Invalid cases (should warn)
-        let invalid_url_1 = Url::parse("http://localhost:1234/chat/completions").unwrap();
-        let _ = OpenAIProvider::new(
-            model_name.clone(),
-            Some(invalid_url_1.clone()),
-            api_key_location.clone(),
-        )
-        .unwrap();
-        assert!(logs_contain("automatically appends `/chat/completions`"));
-        assert!(logs_contain(invalid_url_1.as_ref()));
-
-        let invalid_url_2 = Url::parse("http://localhost:1234/v1/chat/completions/").unwrap();
-        let _ = OpenAIProvider::new(
-            model_name.clone(),
-            Some(invalid_url_2.clone()),
-            api_key_location.clone(),
-        )
-        .unwrap();
-        assert!(logs_contain("automatically appends `/chat/completions`"));
-        assert!(logs_contain(invalid_url_2.as_ref()));
     }
 }

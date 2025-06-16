@@ -1,18 +1,13 @@
-use crate::inference::providers::aws_common::build_interceptor;
 use crate::inference::types::Latency;
+use crate::inference::{InferenceProvider, WrappedProvider};
+use crate::providers::aws_common::{build_interceptor, InterceptorAndRawBody};
 use crate::{
     cache::ModelProviderRequest,
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails},
-    inference::{
-        providers::aws_common::InterceptorAndRawBody,
-        types::{
-            batch::{
-                BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse,
-            },
-            ModelInferenceRequest, PeekableProviderInferenceResponseStream,
-            ProviderInferenceResponse,
-        },
+    inference::types::{
+        batch::{BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse},
+        ModelInferenceRequest, PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
     },
     model::ModelProvider,
 };
@@ -23,11 +18,8 @@ use eventsource_stream::{EventStreamError, Eventsource};
 use futures::StreamExt;
 use std::time::Instant;
 
-use super::provider_trait::TensorZeroEventError;
-use super::{
-    aws_common,
-    provider_trait::{InferenceProvider, WrappedProvider},
-};
+use super::aws_common;
+use crate::inference::TensorZeroEventError;
 
 #[expect(unused)]
 const PROVIDER_NAME: &str = "AWS Sagemaker";

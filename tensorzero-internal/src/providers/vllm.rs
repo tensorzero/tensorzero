@@ -13,21 +13,21 @@ use super::openai::{
     tensorzero_to_openai_messages, OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice,
     OpenAISystemRequestMessage, OpenAITool, OpenAIToolChoice, StreamOptions,
 };
-use super::provider_trait::{InferenceProvider, TensorZeroEventError};
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
-use crate::inference::providers::helpers::{
-    inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
-};
-use crate::inference::providers::openai::check_api_base_suffix;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlockOutput, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponse, ProviderInferenceResponseArgs,
 };
+use crate::inference::{InferenceProvider, TensorZeroEventError};
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
+use crate::providers::helpers::{
+    inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
+};
+use crate::providers::openai::check_api_base_suffix;
 
 const PROVIDER_NAME: &str = "vLLM";
 const PROVIDER_TYPE: &str = "vllm";
@@ -459,7 +459,8 @@ mod tests {
 
     use super::*;
 
-    use crate::inference::{
+    use crate::{
+        inference::types::{FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role},
         providers::{
             openai::{
                 OpenAIFinishReason, OpenAIResponseChoice, OpenAIResponseMessage,
@@ -467,7 +468,6 @@ mod tests {
             },
             test_helpers::{MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL, WEATHER_TOOL_CONFIG},
         },
-        types::{FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role},
     };
 
     use crate::tool::{ToolCallConfig, ToolChoice};

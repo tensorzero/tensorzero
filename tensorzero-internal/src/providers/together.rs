@@ -11,15 +11,16 @@ use url::Url;
 
 use crate::cache::ModelProviderRequest;
 use crate::error::DisplayOrDebugGateway;
-use crate::inference::providers::helpers::{
-    inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
-};
 use crate::inference::types::{
     FinishReason, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
     ProviderInferenceResponseArgs,
 };
+use crate::inference::InferenceProvider;
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
+use crate::providers::helpers::{
+    inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
+};
 use crate::tool::ToolChoice;
 use crate::{
     endpoints::inference::InferenceCredentials,
@@ -33,13 +34,10 @@ use crate::{
 };
 
 use super::helpers_thinking_block::{process_think_blocks, ThinkingState};
-use super::{
-    openai::{
-        get_chat_url, handle_openai_error, prepare_openai_tools, tensorzero_to_openai_messages,
-        OpenAIRequestMessage, OpenAISystemRequestMessage, OpenAITool, OpenAIToolChoice,
-        OpenAIToolType, OpenAIUsage,
-    },
-    provider_trait::InferenceProvider,
+use super::openai::{
+    get_chat_url, handle_openai_error, prepare_openai_tools, tensorzero_to_openai_messages,
+    OpenAIRequestMessage, OpenAISystemRequestMessage, OpenAITool, OpenAIToolChoice, OpenAIToolType,
+    OpenAIUsage,
 };
 
 lazy_static! {
@@ -762,11 +760,11 @@ mod tests {
 
     use super::*;
 
-    use crate::inference::providers::openai::{
+    use crate::inference::types::{FunctionType, RequestMessage, Role, Usage};
+    use crate::providers::openai::{
         OpenAIToolType, OpenAIUsage, SpecificToolChoice, SpecificToolFunction,
     };
-    use crate::inference::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
-    use crate::inference::types::{FunctionType, RequestMessage, Role, Usage};
+    use crate::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
 
     #[test]
     fn test_together_request_new() {
