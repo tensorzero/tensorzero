@@ -133,6 +133,10 @@ jobs:
         run: |
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
 
+      - name: Download provider-proxy cache
+        run: |
+          AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY ./ci/download-provider-proxy-cache.sh
+
       - name: Launch ClickHouse container for E2E tests
         run: |
           # 'docker compose' will exit with status code 1 if any container exits, even if the container exits with status code 0
@@ -231,6 +235,10 @@ jobs:
         run: |
           echo "Killing gateway with pid $GATEWAY_PID"
           kill $GATEWAY_PID
+
+      - name: Upload provider-proxy cache
+        run: |
+          AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY ./ci/upload-provider-proxy-cache.sh
 
   check-production-docker-container:
     runs-on: ubuntu-latest
