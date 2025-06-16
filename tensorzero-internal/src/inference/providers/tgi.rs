@@ -16,6 +16,7 @@ use reqwest_eventsource::Event;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::borrow::Cow;
 use std::pin::Pin;
 use std::sync::OnceLock;
 use std::time::Duration;
@@ -413,6 +414,8 @@ struct TGIRequest<'a> {
     tool_choice: Option<OpenAIToolChoice<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     parallel_tool_calls: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stop: Option<Cow<'a, [String]>>,
 }
 
 impl<'a> TGIRequest<'a> {
@@ -452,6 +455,7 @@ impl<'a> TGIRequest<'a> {
             tools,
             tool_choice,
             parallel_tool_calls,
+            stop: request.borrow_stop_sequences(),
         })
     }
 }
@@ -614,6 +618,7 @@ struct TGIResponseMessage {
 #[serde(rename_all = "snake_case")]
 pub(super) enum TGIFinishReason {
     Stop,
+    StopSequence,
     Length,
     ContentFilter,
     ToolCalls,
@@ -626,6 +631,7 @@ impl From<TGIFinishReason> for FinishReason {
     fn from(finish_reason: TGIFinishReason) -> Self {
         match finish_reason {
             TGIFinishReason::Stop => FinishReason::Stop,
+            TGIFinishReason::StopSequence => FinishReason::StopSequence,
             TGIFinishReason::Length => FinishReason::Length,
             TGIFinishReason::ContentFilter => FinishReason::ContentFilter,
             TGIFinishReason::ToolCalls => FinishReason::ToolCall,

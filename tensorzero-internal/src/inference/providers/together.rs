@@ -338,6 +338,8 @@ struct TogetherRequest<'a> {
     tool_choice: Option<OpenAIToolChoice<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     parallel_tool_calls: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stop: Option<Cow<'a, [String]>>,
 }
 
 impl<'a> TogetherRequest<'a> {
@@ -380,6 +382,7 @@ impl<'a> TogetherRequest<'a> {
             tools,
             tool_choice,
             parallel_tool_calls,
+            stop: request.borrow_stop_sequences(),
         })
     }
 }

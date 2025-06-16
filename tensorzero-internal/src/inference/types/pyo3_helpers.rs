@@ -329,7 +329,7 @@ pub fn deserialize_from_pyobj<'a, T: serde::de::DeserializeOwned>(
 
 pub fn tensorzero_internal_error(py: Python<'_>, msg: &str) -> PyResult<PyErr> {
     let err = TENSORZERO_INTERNAL_ERROR.get_or_try_init::<_, PyErr>(py, || {
-        let self_module = PyModule::import(py, "tensorzero")?;
+        let self_module = PyModule::import(py, "tensorzero.types")?;
         let err: Bound<'_, PyAny> = self_module.getattr("TensorZeroInternalError")?;
         Ok(err.unbind())
     })?;

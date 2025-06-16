@@ -9,9 +9,9 @@ use tokio::time::Instant;
 use url::Url;
 
 use super::openai::{
-    get_chat_url, handle_openai_error, stream_openai, tensorzero_to_openai_messages,
-    OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, OpenAISystemRequestMessage,
-    StreamOptions,
+    get_chat_url, handle_openai_error, prepare_openai_tools, stream_openai,
+    tensorzero_to_openai_messages, OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice,
+    OpenAISystemRequestMessage, OpenAITool, OpenAIToolChoice, StreamOptions,
 };
 use super::provider_trait::{InferenceProvider, TensorZeroEventError};
 use crate::cache::ModelProviderRequest;
@@ -306,6 +306,13 @@ struct VLLMRequest<'a> {
     guided_json: Option<&'a Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     seed: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stop: Option<Cow<'a, [String]>>,
+    tools: Option<Vec<OpenAITool<'a>>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_choice: Option<OpenAIToolChoice<'a>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    parallel_tool_calls: Option<bool>,
 }
 
 impl<'a> VLLMRequest<'a> {
@@ -327,16 +334,8 @@ impl<'a> VLLMRequest<'a> {
             false => None,
         };
         let messages = prepare_vllm_messages(request)?;
-        // TODO (#169): Implement tool calling.
-        if request.tool_config.is_some() {
-            return Err(ErrorDetails::InferenceClient {
-                message: "TensorZero does not support tool use with vLLM. Please use a different provider.".to_string(),
-                status_code: Some(reqwest::StatusCode::BAD_REQUEST),
-                raw_request: None,
-                raw_response: None,
-                provider_type: PROVIDER_TYPE.to_string(),
-            }.into());
-        }
+
+        let (tools, tool_choice, parallel_tool_calls) = prepare_openai_tools(request);
 
         Ok(VLLMRequest {
             messages,
@@ -350,6 +349,10 @@ impl<'a> VLLMRequest<'a> {
             stream_options,
             guided_json,
             seed: request.seed,
+            stop: request.borrow_stop_sequences(),
+            tools,
+            tool_choice,
+            parallel_tool_calls,
         })
     }
 }
@@ -459,15 +462,19 @@ mod tests {
     use crate::inference::{
         providers::{
             openai::{
-                OpenAIFinishReason, OpenAIResponseChoice, OpenAIResponseMessage, OpenAIUsage,
+                OpenAIFinishReason, OpenAIResponseChoice, OpenAIResponseMessage,
+                OpenAIToolChoiceString, OpenAIUsage,
             },
-            test_helpers::WEATHER_TOOL_CONFIG,
+            test_helpers::{MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL, WEATHER_TOOL_CONFIG},
         },
-        types::{FunctionType, RequestMessage, Role},
+        types::{FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role},
     };
+
+    use crate::tool::{ToolCallConfig, ToolChoice};
 
     #[test]
     fn test_vllm_request_new() {
+        let model_name = "llama-v3-8b";
         let output_schema = json!({
             "type": "object",
             "properties": {
@@ -475,6 +482,7 @@ mod tests {
                 "location": {"type": "string"}
             }
         });
+
         let request_with_tools = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
@@ -497,9 +505,9 @@ mod tests {
             ..Default::default()
         };
 
-        let vllm_request = VLLMRequest::new("llama-v3-8b", &request_with_tools).unwrap();
+        let vllm_request = VLLMRequest::new(model_name, &request_with_tools).unwrap();
 
-        assert_eq!(vllm_request.model, "llama-v3-8b");
+        assert_eq!(vllm_request.model, model_name);
         assert_eq!(vllm_request.messages.len(), 1);
         assert_eq!(vllm_request.temperature, Some(0.5));
         assert_eq!(vllm_request.max_tokens, Some(100));
@@ -513,6 +521,8 @@ mod tests {
                 "location": {"type": "string"},
             }
         });
+
+        // Test request with tools and JSON mode
         let request_with_tools = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
@@ -535,10 +545,18 @@ mod tests {
             ..Default::default()
         };
 
-        let err = VLLMRequest::new("llama-v3-8b", &request_with_tools).unwrap_err();
-        assert!(err
-            .to_string()
-            .contains("TensorZero does not support tool use with vLLM"));
+        let vllm_request = VLLMRequest::new(model_name, &request_with_tools).unwrap();
+        assert_eq!(vllm_request.model, model_name);
+        assert_eq!(vllm_request.messages.len(), 1);
+        assert_eq!(vllm_request.temperature, Some(0.5));
+        assert_eq!(vllm_request.max_tokens, Some(100));
+        assert!(!vllm_request.stream);
+        assert_eq!(vllm_request.guided_json, Some(&output_schema));
+        assert_eq!(vllm_request.top_p, None);
+        assert_eq!(vllm_request.presence_penalty, None);
+        assert_eq!(vllm_request.frequency_penalty, None);
+        assert!(vllm_request.tools.is_some());
+        assert!(vllm_request.tool_choice.is_some());
     }
 
     #[test]
@@ -678,5 +696,79 @@ mod tests {
         .unwrap();
         assert!(logs_contain("automatically appends `/chat/completions`"));
         assert!(logs_contain(invalid_url_2.as_ref()));
+    }
+
+    #[test]
+    fn test_vllm_tools() {
+        let model_name = PROVIDER_TYPE.to_string();
+        let request_with_tools = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["What's the weather?".to_string().into()],
+            }],
+            system: None,
+            temperature: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            max_tokens: None,
+            seed: None,
+            stream: false,
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            tool_config: Some(Cow::Borrowed(&MULTI_TOOL_CONFIG)),
+            function_type: FunctionType::Chat,
+            output_schema: None,
+            extra_body: Default::default(),
+            ..Default::default()
+        };
+
+        let vllm_request = VLLMRequest::new(&model_name, &request_with_tools).unwrap();
+
+        let tools = vllm_request.tools.unwrap();
+        assert_eq!(tools.len(), 2);
+        assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
+        assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
+        assert_eq!(tools[1].function.name, QUERY_TOOL.name());
+        assert_eq!(tools[1].function.parameters, QUERY_TOOL.parameters());
+        let tool_choice = vllm_request.tool_choice.unwrap();
+        assert_eq!(
+            tool_choice,
+            OpenAIToolChoice::String(OpenAIToolChoiceString::Required)
+        );
+        let parallel_tool_calls = vllm_request.parallel_tool_calls.unwrap();
+        assert!(parallel_tool_calls);
+        let tool_config = ToolCallConfig {
+            tools_available: vec![],
+            tool_choice: ToolChoice::Required,
+            parallel_tool_calls: Some(true),
+        };
+
+        // Test no tools but a tool choice and make sure tool choice output is None
+        let request_without_tools = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["What's the weather?".to_string().into()],
+            }],
+            system: None,
+            temperature: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            max_tokens: None,
+            seed: None,
+            stream: false,
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            tool_config: Some(Cow::Borrowed(&tool_config)),
+            function_type: FunctionType::Chat,
+            output_schema: None,
+            extra_body: Default::default(),
+            ..Default::default()
+        };
+        let vllm_request = VLLMRequest::new(&model_name, &request_without_tools).unwrap();
+        assert!(vllm_request.tools.is_none());
+        assert!(vllm_request.tool_choice.is_none());
+        assert!(vllm_request.parallel_tool_calls.is_none());
     }
 }
