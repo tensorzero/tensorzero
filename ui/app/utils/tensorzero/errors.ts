@@ -1,4 +1,5 @@
 import { StatusCodes as HttpStatusCode } from "http-status-codes";
+import { isErrorLike } from "~/utils/common";
 
 export class TensorZeroServerError extends Error {
   readonly status: number;
@@ -470,4 +471,10 @@ export class TensorZeroServerError extends Error {
       super(message, { status: HttpStatusCode.NOT_FOUND });
     }
   };
+}
+
+export function isTensorZeroServerError(
+  error: unknown,
+): error is TensorZeroServerError {
+  return isErrorLike(error) && error.name === "TensorZeroServerError";
 }

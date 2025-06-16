@@ -1,2 +1,2 @@
 export * from "./tensorzero";
-export { TensorZeroServerError } from "./errors";
+export { TensorZeroServerError, isTensorZeroServerError } from "./errors";
