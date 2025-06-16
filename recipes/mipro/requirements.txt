@@ -8,8 +8,6 @@ anyio==4.9.0
     # via
     #   httpx
     #   openai
-appnope==0.1.4
-    # via ipykernel
 asttokens==3.0.0
     # via stack-data
 certifi==2025.4.26
@@ -18,12 +16,12 @@ certifi==2025.4.26
     #   httpcore
     #   httpx
 clickhouse-connect==0.8.17
-    # via -r requirements.in
+    # via -r mipro/requirements.in
 colorlog==6.9.0
     # via optuna
 comm==0.2.2
     # via ipykernel
-contourpy==1.3.2
+contourpy==1.3.0
     # via matplotlib
 cycler==0.12.1
     # via matplotlib
@@ -35,13 +33,15 @@ distro==1.9.0
     # via openai
 exceptiongroup==1.3.0
     # via
-    #   -r requirements.in
+    #   -r mipro/requirements.in
     #   anyio
     #   ipython
 executing==2.2.0
     # via stack-data
 fonttools==4.58.0
     # via matplotlib
+greenlet==3.2.3
+    # via sqlalchemy
 h11==0.16.0
     # via httpcore
 httpcore==1.0.9
@@ -54,9 +54,13 @@ idna==3.10
     # via
     #   anyio
     #   httpx
+importlib-metadata==8.7.0
+    # via jupyter-client
+importlib-resources==6.5.2
+    # via matplotlib
 ipykernel==6.29.5
-    # via -r requirements.in
-ipython==8.36.0
+    # via -r mipro/requirements.in
+ipython==8.18.1
     # via ipykernel
 jedi==0.19.2
     # via ipython
@@ -68,7 +72,7 @@ jupyter-core==5.7.2
     # via
     #   ipykernel
     #   jupyter-client
-kiwisolver==1.4.8
+kiwisolver==1.4.7
     # via matplotlib
 lz4==4.4.4
     # via clickhouse-connect
@@ -76,17 +80,17 @@ mako==1.3.10
     # via alembic
 markupsafe==3.0.2
     # via mako
-matplotlib==3.10.3
+matplotlib==3.9.4
     # via seaborn
 matplotlib-inline==0.1.7
     # via
     #   ipykernel
     #   ipython
 minijinja==2.10.2
-    # via -r requirements.in
+    # via -r mipro/requirements.in
 nest-asyncio==1.6.0
     # via ipykernel
-numpy==2.2.6
+numpy==2.0.2
     # via
     #   contourpy
     #   matplotlib
@@ -94,9 +98,9 @@ numpy==2.2.6
     #   pandas
     #   seaborn
 openai==1.80.0
-    # via -r requirements.in
+    # via -r mipro/requirements.in
 optuna==4.3.0
-    # via -r requirements.in
+    # via -r mipro/requirements.in
 packaging==25.0
     # via
     #   ipykernel
@@ -104,7 +108,7 @@ packaging==25.0
     #   optuna
 pandas==2.2.3
     # via
-    #   -r requirements.in
+    #   -r mipro/requirements.in
     #   seaborn
 parso==0.8.4
     # via jedi
@@ -124,7 +128,7 @@ pure-eval==0.2.3
     # via stack-data
 pydantic==2.11.4
     # via
-    #   -r requirements.in
+    #   -r mipro/requirements.in
     #   openai
 pydantic-core==2.33.2
     # via pydantic
@@ -148,7 +152,7 @@ pyzmq==26.4.0
     #   ipykernel
     #   jupyter-client
 seaborn==0.13.2
-    # via -r requirements.in
+    # via -r mipro/requirements.in
 six==1.17.0
     # via python-dateutil
 sniffio==1.3.1
@@ -162,16 +166,16 @@ sqlalchemy==2.0.41
 stack-data==0.6.3
     # via ipython
 tensorzero==2025.5.7
-    # via -r requirements.in
+    # via -r mipro/requirements.in
 toml==0.10.2
-    # via -r requirements.in
+    # via -r mipro/requirements.in
 tornado==6.5
     # via
     #   ipykernel
     #   jupyter-client
 tqdm==4.67.1
     # via
-    #   -r requirements.in
+    #   -r mipro/requirements.in
     #   openai
     #   optuna
 traitlets==5.14.3
@@ -204,5 +208,9 @@ uuid-utils==0.10.0
     # via tensorzero
 wcwidth==0.2.13
     # via prompt-toolkit
+zipp==3.23.0
+    # via
+    #   importlib-metadata
+    #   importlib-resources
 zstandard==0.23.0
     # via clickhouse-connect

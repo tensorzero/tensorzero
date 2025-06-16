@@ -6,8 +6,6 @@ anyio==4.6.0
     # via
     #   httpx
     #   openai
-appnope==0.1.4
-    # via ipykernel
 asttokens==2.4.1
     # via stack-data
 certifi==2024.8.30
@@ -43,9 +41,11 @@ idna==3.10
     # via
     #   anyio
     #   httpx
+importlib-metadata==8.7.0
+    # via jupyter-client
 ipykernel==6.29.5
     # via -r requirements.in
-ipython==8.27.0
+ipython==8.18.1
     # via ipykernel
 jedi==0.19.1
     # via ipython
@@ -65,7 +65,7 @@ matplotlib-inline==0.1.7
     #   ipython
 nest-asyncio==1.6.0
     # via ipykernel
-numpy==2.1.1
+numpy==2.0.2
     # via pandas
 openai==1.48.0
     # via -r requirements.in
@@ -120,7 +120,7 @@ tensorzero==2025.2.6
     # via -r requirements.in
 toml==0.10.2
     # via -r requirements.in
-tornado==6.4.2
+tornado==6.5
     # via
     #   ipykernel
     #   jupyter-client
@@ -151,5 +151,7 @@ uuid-utils==0.10.0
     # via tensorzero
 wcwidth==0.2.13
     # via prompt-toolkit
+zipp==3.23.0
+    # via importlib-metadata
 zstandard==0.23.0
     # via clickhouse-connect
