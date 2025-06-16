@@ -47,12 +47,7 @@ test.describe("Custom user agent", () => {
     // Expect redirect
     await page.waitForURL("/optimization/supervised-fine-tuning/*?backend=*");
 
-    let regex;
-    if (process.env.TENSORZERO_UI_FF_ENABLE_PYTHON === "1") {
-      regex = /\?backend=python$/;
-    } else {
-      regex = /\?backend=nodejs$/;
-    }
+    let regex = /\?backend=nodejs$/;
 
     // Verify that we used the correct fine-tuning backend
     expect(page.url()).toEqual(expect.stringMatching(regex));
@@ -118,12 +113,7 @@ model_name = "mock-inference-finetune-1234"
     // Expect redirect
     await page.waitForURL("/optimization/supervised-fine-tuning/*?backend=*");
 
-    let regex;
-    if (process.env.TENSORZERO_UI_FF_ENABLE_PYTHON === "1") {
-      regex = /\?backend=python$/;
-    } else {
-      regex = /\?backend=nodejs$/;
-    }
+    let regex = /\?backend=nodejs$/;
 
     // Verify that we used the correct fine-tuning backend
     expect(page.url()).toEqual(expect.stringMatching(regex));
@@ -159,8 +149,9 @@ model_name = "mock-inference-finetune-1234"
   test("@slow should fine-tune on image data with a mocked OpenAI server", async ({
     page,
   }) => {
-    if (process.env.TENSORZERO_UI_FF_ENABLE_PYTHON !== "1") {
-      // Image fine-tuning is only supported in Python backend
+    // TODO - implement this in either the Node or (future) Rust backend,
+    // and re-enable this test.
+    if (true) {
       return;
     }
     await page.goto("/optimization/supervised-fine-tuning");
@@ -190,12 +181,7 @@ model_name = "mock-inference-finetune-1234"
     // Expect redirect
     await page.waitForURL("/optimization/supervised-fine-tuning/*?backend=*");
 
-    let regex;
-    if (process.env.TENSORZERO_UI_FF_ENABLE_PYTHON === "1") {
-      regex = /\?backend=python$/;
-    } else {
-      regex = /\?backend=nodejs$/;
-    }
+    let regex = /\?backend=nodejs$/;
 
     // Verify that we used the correct fine-tuning backend
     expect(page.url()).toEqual(expect.stringMatching(regex));
@@ -257,12 +243,7 @@ model_name = "mock-inference-finetune-1234"
     // Expect redirect
     await page.waitForURL("/optimization/supervised-fine-tuning/*?backend=*");
 
-    let regex;
-    if (process.env.TENSORZERO_UI_FF_ENABLE_PYTHON === "1") {
-      regex = /\?backend=python$/;
-    } else {
-      regex = /\?backend=nodejs$/;
-    }
+    let regex = /\?backend=nodejs$/;
 
     // Verify that we used the correct fine-tuning backend
     expect(page.url()).toEqual(expect.stringMatching(regex));
