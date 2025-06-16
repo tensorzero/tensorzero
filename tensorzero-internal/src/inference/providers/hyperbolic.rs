@@ -325,7 +325,11 @@ impl<'a> HyperbolicRequest<'a> {
             ..
         } = request;
 
-        let messages = prepare_openai_messages(request)?;
+        let messages = prepare_openai_messages(
+            request.system.as_deref(),
+            &request.messages,
+            Some(&request.json_mode),
+        )?;
         Ok(HyperbolicRequest {
             messages,
             model,

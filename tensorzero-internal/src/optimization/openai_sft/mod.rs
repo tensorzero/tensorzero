@@ -82,12 +82,19 @@ impl Optimizer for OpenAISFTConfig {
         credentials: &InferenceCredentials,
     ) -> Result<Self::JobHandle, Error> {
         let train_rows: Vec<OpenAISupervisedRow> = train_examples
-            .into_iter()
-            .map(|example| example.into())
-            .collect();
+            .iter()
+            .map(OpenAISupervisedRow::try_from)
+            .collect::<Result<Vec<_>, _>>()?;
 
         let val_rows: Option<Vec<OpenAISupervisedRow>> = val_examples
-            .map(|examples| examples.into_iter().map(|example| example.into()).collect());
+            .as_ref()
+            .map(|examples| {
+                examples
+                    .iter()
+                    .map(OpenAISupervisedRow::try_from)
+                    .collect::<Result<Vec<_>, _>>()
+            })
+            .transpose()?;
 
         let api_key = self.credentials.get_api_key(credentials)?;
 
@@ -100,10 +107,10 @@ impl Optimizer for OpenAISFTConfig {
             "sft".to_string(),
         )
         .await?;
-        let val_file_id = if let Some(val_rows) = val_rows {
+        let val_file_id = if let Some(val_rows) = val_rows.as_ref() {
             Some(
                 upload_openai_file(
-                    &val_rows,
+                    val_rows,
                     client,
                     api_key,
                     self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL),
@@ -228,7 +235,7 @@ impl Optimizer for OpenAISFTConfig {
                 provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
-        todo!()
+        Ok(job.into())
     }
 }
 

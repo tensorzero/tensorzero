@@ -352,7 +352,11 @@ impl<'a> XAIRequest<'a> {
 
         let response_format = XAIResponseFormat::new(&request.json_mode, request.output_schema);
 
-        let messages = prepare_openai_messages(request)?;
+        let messages = prepare_openai_messages(
+            request.system.as_deref(),
+            &request.messages,
+            Some(&request.json_mode),
+        )?;
 
         let (tools, tool_choice, _) = prepare_openai_tools(request);
         Ok(XAIRequest {

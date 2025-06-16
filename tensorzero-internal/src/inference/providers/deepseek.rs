@@ -601,7 +601,7 @@ pub(super) fn prepare_deepseek_messages<'a>(
         }
     } else if let Some(system_msg) = tensorzero_to_openai_system_message(
         request.system.as_deref(),
-        &request.json_mode,
+        Some(&request.json_mode),
         &messages,
     ) {
         messages.insert(0, system_msg);
