@@ -181,13 +181,6 @@ jobs:
         if: always()
         run: cat sglang_modal_logs.txt
 
-      - name: Upload provider-proxy cache
-        if: ${{ false }} # Change to `if: ${{ always() }}` to start uploading the cache
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: provider-proxy-cache
-          path: ./ci/provider-proxy-cache/
-
       - name: Install Python for python async client tests
         run: uv python install 3.9
 
