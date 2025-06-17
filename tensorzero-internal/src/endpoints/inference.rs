@@ -23,6 +23,7 @@ use crate::cache::{CacheOptions, CacheParamsOptions};
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::config_parser::{Config, ObjectStoreInfo};
 use crate::embeddings::EmbeddingModelTable;
+use crate::kafka::KafkaConnectionInfo;
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::function::{sample_variant, FunctionConfigChat};
@@ -140,11 +141,12 @@ pub async fn inference_handler(
         config,
         http_client,
         clickhouse_connection_info,
+        kafka_connection_info,
     }): AppState,
     StructuredJson(params): StructuredJson<Params>,
 ) -> Result<Response<Body>, Error> {
     let inference_output =
-        inference(config, &http_client, clickhouse_connection_info, params).await?;
+        inference(config, &http_client, clickhouse_connection_info, kafka_connection_info, params).await?;
     match inference_output {
         InferenceOutput::NonStreaming(response) => Ok(Json(response).into_response()),
         InferenceOutput::Streaming(stream) => {
@@ -184,7 +186,7 @@ pub struct InferenceIds {
 
 #[instrument(
     name="inference",
-    skip(config, http_client, clickhouse_connection_info, params),
+    skip(config, http_client, clickhouse_connection_info, kafka_connection_info, params),
     fields(
         function_name,
         model_name,
@@ -198,6 +200,7 @@ pub async fn inference(
     config: Arc<Config<'static>>,
     http_client: &reqwest::Client,
     clickhouse_connection_info: ClickHouseConnectionInfo,
+    kafka_connection_info: KafkaConnectionInfo,
     params: Params,
 ) -> Result<InferenceOutput, Error> {
     let span = tracing::Span::current();
@@ -421,6 +424,7 @@ pub async fn inference(
                 inference_metadata,
                 stream,
                 clickhouse_connection_info,
+                kafka_connection_info,
             );
 
             return Ok(InferenceOutput::Streaming(Box::pin(stream)));
@@ -471,9 +475,11 @@ pub async fn inference(
                 // is cancelled. This reduces the chances that we only write to some tables and not others
                 // (but this is inherently best-effort due to ClickHouse's lack of transactions).
                 let config = config.clone();
+                let kafka_connection_info = kafka_connection_info.clone();
                 let write_future = tokio::spawn(async move {
                     write_inference(
                         &clickhouse_connection_info,
+                        &kafka_connection_info,
                         &config,
                         resolved_input,
                         result_to_write,
@@ -572,6 +578,7 @@ fn create_stream(
     metadata: InferenceMetadata,
     mut stream: InferenceResultStream,
     clickhouse_connection_info: ClickHouseConnectionInfo,
+    kafka_connection_info: KafkaConnectionInfo,
 ) -> impl Stream<Item = Result<InferenceResponseChunk, Error>> + Send {
     async_stream::stream! {
         let mut buffer = vec![];
@@ -662,8 +669,10 @@ fn create_stream(
                     let config = config.clone();
 
                         let clickhouse_connection_info = clickhouse_connection_info.clone();
+                        let kafka_connection_info = kafka_connection_info.clone();
                         write_inference(
                             &clickhouse_connection_info,
+                            &kafka_connection_info,
                             &config,
                             input,
                             inference_response,
@@ -724,7 +733,7 @@ fn prepare_serialized_events(
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct InferenceDatabaseInsertMetadata {
     pub function_name: String,
     pub variant_name: String,
@@ -783,6 +792,7 @@ async fn write_file(
 
 async fn write_inference(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
+    kafka_connection_info: &crate::kafka::KafkaConnectionInfo,
     config: &Config<'_>,
     input: ResolvedInput,
     result: InferenceResult,
@@ -809,6 +819,8 @@ async fn write_inference(
         }
     }
     let model_responses: Vec<serde_json::Value> = result.get_serialized_model_inferences();
+    
+    // ClickHouse writes
     futures.push(Box::pin(async {
         // Write the model responses to the ModelInference table
         for response in model_responses {
@@ -830,6 +842,40 @@ async fn write_inference(
                     JsonInferenceDatabaseInsert::new(result, input.clone(), metadata);
                 let _ = clickhouse_connection_info
                     .write(&[json_inference], "JsonInference")
+                    .await;
+            }
+        }
+    }));
+    
+    // Kafka writes
+    let model_responses_kafka = result.get_serialized_model_inferences();
+    let kafka_connection_info = kafka_connection_info.clone();
+    let result_clone = result.clone();
+    let input_clone = input.clone();
+    let metadata_clone = metadata.clone();
+    
+    futures.push(Box::pin(async move {
+        // Write model responses to Kafka
+        for response in model_responses_kafka {
+            let _ = kafka_connection_info
+                .write(&[response], "model_inference")
+                .await;
+        }
+        
+        // Write the inference to Kafka
+        match result_clone {
+            InferenceResult::Chat(result) => {
+                let chat_inference =
+                    ChatInferenceDatabaseInsert::new(result, input_clone, metadata_clone);
+                let _ = kafka_connection_info
+                    .write(&[chat_inference], "chat_inference")
+                    .await;
+            }
+            InferenceResult::Json(result) => {
+                let json_inference =
+                    JsonInferenceDatabaseInsert::new(result, input_clone, metadata_clone);
+                let _ = kafka_connection_info
+                    .write(&[json_inference], "json_inference")
                     .await;
             }
         }

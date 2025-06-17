@@ -238,6 +238,7 @@ pub struct ObservabilityConfig {
     pub enabled: Option<bool>,
     #[serde(default)]
     pub async_writes: bool,
+    pub kafka: Option<crate::kafka::KafkaConfig>,
 }
 
 #[derive(Debug, Default, Deserialize, PartialEq)]

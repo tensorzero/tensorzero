@@ -13,6 +13,7 @@ pub mod function; // types and methods for working with TensorZero functions
 pub mod gateway_util; // utilities for gateway
 pub mod inference; // model inference
 pub mod jsonschema_util; // utilities for working with JSON schemas
+pub mod kafka; // Kafka integration
 mod minijinja_util; // utilities for working with MiniJinja templates
 pub mod model; // types and methods for working with TensorZero-supported models
 pub mod model_table;

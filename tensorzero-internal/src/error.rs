@@ -383,6 +383,15 @@ pub enum ErrorDetails {
         path: String,
         method: String,
     },
+    KafkaConnection {
+        message: String,
+    },
+    KafkaProducer {
+        message: String,
+    },
+    KafkaSerialization {
+        message: String,
+    },
 }
 
 impl ErrorDetails {
@@ -472,6 +481,9 @@ impl ErrorDetails {
             ErrorDetails::UnsupportedVariantForStreamingInference { .. } => tracing::Level::WARN,
             ErrorDetails::UuidInFuture { .. } => tracing::Level::WARN,
             ErrorDetails::RouteNotFound { .. } => tracing::Level::WARN,
+            ErrorDetails::KafkaConnection { .. } => tracing::Level::ERROR,
+            ErrorDetails::KafkaProducer { .. } => tracing::Level::ERROR,
+            ErrorDetails::KafkaSerialization { .. } => tracing::Level::ERROR,
         }
     }
 
@@ -569,6 +581,9 @@ impl ErrorDetails {
             }
             ErrorDetails::UuidInFuture { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::RouteNotFound { .. } => StatusCode::NOT_FOUND,
+            ErrorDetails::KafkaConnection { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::KafkaProducer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::KafkaSerialization { .. } => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 
@@ -969,6 +984,15 @@ impl std::fmt::Display for ErrorDetails {
             }
             ErrorDetails::RouteNotFound { path, method } => {
                 write!(f, "Route not found: {method} {path}")
+            }
+            ErrorDetails::KafkaConnection { message } => {
+                write!(f, "Error connecting to Kafka: {message}")
+            }
+            ErrorDetails::KafkaProducer { message } => {
+                write!(f, "Error with Kafka producer: {message}")
+            }
+            ErrorDetails::KafkaSerialization { message } => {
+                write!(f, "Error serializing message for Kafka: {message}")
             }
         }
     }
