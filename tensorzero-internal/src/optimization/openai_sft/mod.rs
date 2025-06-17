@@ -12,7 +12,7 @@ use crate::{
         default_api_key_location,
         optimization::{
             convert_to_optimizer_status, OpenAIFineTuningJob, OpenAIFineTuningMethod,
-            OpenAIFineTuningRequest, OpenAISupervisedRow, SupervisedHyperparameters,
+            OpenAIFineTuningRequest, OpenAISupervisedRow, Supervised, SupervisedHyperparameters,
         },
         upload_openai_file, OpenAICredentials, DEFAULT_CREDENTIALS, OPENAI_DEFAULT_BASE_URL,
         PROVIDER_TYPE,
@@ -20,8 +20,7 @@ use crate::{
     stored_inference::RenderedStoredInference,
 };
 
-// TODO: consolidate providers into src/providers/openai/inference.rs and so on
-// so that internal types and logic can be privately shared
+const OPENAI_FINE_TUNE_PURPOSE: &str = "fine-tune";
 
 #[derive(Debug, Clone)]
 pub struct OpenAISFTConfig {
@@ -101,12 +100,22 @@ impl Optimizer for OpenAISFTConfig {
         // Run these concurrently
         let api_base = self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL);
 
-        let train_fut =
-            upload_openai_file(&train_rows, client, api_key, api_base, "sft".to_string());
+        let train_fut = upload_openai_file(
+            &train_rows,
+            client,
+            api_key,
+            api_base,
+            OPENAI_FINE_TUNE_PURPOSE.to_string(),
+        );
 
         let (train_file_id, val_file_id) = if let Some(val_rows) = val_rows.as_ref() {
-            let val_fut =
-                upload_openai_file(val_rows, client, api_key, api_base, "sft".to_string());
+            let val_fut = upload_openai_file(
+                val_rows,
+                client,
+                api_key,
+                api_base,
+                OPENAI_FINE_TUNE_PURPOSE.to_string(),
+            );
 
             // Run both futures concurrently
             let (train_id, val_id) = try_join!(train_fut, val_fut)?;
@@ -122,11 +131,13 @@ impl Optimizer for OpenAISFTConfig {
             training_file: train_file_id,
             validation_file: val_file_id,
             method: OpenAIFineTuningMethod::Supervised {
-                hyperparameters: Some(SupervisedHyperparameters {
-                    batch_size: self.batch_size,
-                    learning_rate_multiplier: self.learning_rate_multiplier,
-                    n_epochs: self.n_epochs,
-                }),
+                supervised: Supervised {
+                    hyperparameters: Some(SupervisedHyperparameters {
+                        batch_size: self.batch_size,
+                        learning_rate_multiplier: self.learning_rate_multiplier,
+                        n_epochs: self.n_epochs,
+                    }),
+                },
             },
             seed: self.seed,
             suffix: self.suffix.clone(),
@@ -242,7 +253,7 @@ fn get_fine_tuning_url(base_url: &Url, job_id: Option<&str>) -> Result<Url, Erro
     let path = if let Some(id) = job_id {
         format!("fine_tuning/jobs/{id}")
     } else {
-        "fine_tuning".to_string()
+        "fine_tuning/jobs".to_string()
     };
     url.join(&path).map_err(|e| {
         Error::new(ErrorDetails::InvalidBaseUrl {

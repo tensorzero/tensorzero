@@ -97,7 +97,7 @@ fn get_examples(
     test_case: &impl OptimizationTestCase,
     num_examples: usize,
 ) -> Vec<RenderedStoredInference> {
-    assert!(num_examples > 10);
+    assert!(num_examples >= 10);
     let mut generators: Vec<fn() -> RenderedStoredInference> = vec![generate_text_example];
     if test_case.supports_tool_calls() {
         generators.push(generate_tool_call_example);

@@ -8,6 +8,7 @@ use serde::de::IntoDeserializer;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
 use std::borrow::Cow;
+use std::io::Write;
 use std::pin::Pin;
 use std::sync::OnceLock;
 use std::time::Duration;
@@ -889,9 +890,14 @@ pub async fn upload_openai_file<T>(
 where
     T: Serialize,
 {
-    let mut jsonl_data = Vec::with_capacity(items.len());
+    let mut jsonl_data = Vec::new();
     for item in items {
         serde_json::to_writer(&mut jsonl_data, item).map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!("Error writing to JSONL: {}", DisplayOrDebugGateway::new(e)),
+            })
+        })?;
+        jsonl_data.write_all(b"\n").map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Error writing to JSONL: {}", DisplayOrDebugGateway::new(e)),
             })
@@ -1201,7 +1207,9 @@ pub(super) fn tensorzero_to_openai_messages(
 ) -> Result<Vec<OpenAIRequestMessage<'_>>, Error> {
     match message.role {
         Role::User => tensorzero_to_openai_user_messages(&message.content),
-        Role::Assistant => tensorzero_to_openai_assistant_messages(&message.content),
+        Role::Assistant => Ok(vec![tensorzero_to_openai_assistant_message(
+            &message.content,
+        )?]),
     }
 }
 
@@ -1295,9 +1303,9 @@ fn tensorzero_to_openai_user_messages(
     Ok(messages)
 }
 
-fn tensorzero_to_openai_assistant_messages(
+fn tensorzero_to_openai_assistant_message(
     content_blocks: &[ContentBlock],
-) -> Result<Vec<OpenAIRequestMessage<'_>>, Error> {
+) -> Result<OpenAIRequestMessage<'_>, Error> {
     // We need to separate the tool result messages from the assistant content blocks.
     let mut assistant_content_blocks = Vec::new();
     let mut assistant_tool_calls = Vec::new();
@@ -1377,7 +1385,7 @@ fn tensorzero_to_openai_assistant_messages(
         tool_calls,
     });
 
-    Ok(vec![message])
+    Ok(message)
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]

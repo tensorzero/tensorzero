@@ -6,11 +6,12 @@ use std::collections::HashMap;
 use crate::{
     config_parser::TimeoutsConfig,
     error::{Error, ErrorDetails},
+    inference::types::ContentBlock,
     model::{ModelConfig, ModelProvider, ProviderConfig},
     optimization::{OptimizerOutput, OptimizerStatus},
     providers::openai::{
-        prepare_openai_messages, OpenAICredentials, OpenAIFileID, OpenAIProvider,
-        OpenAIRequestMessage, OpenAITool,
+        prepare_openai_messages, tensorzero_to_openai_assistant_message, OpenAICredentials,
+        OpenAIFileID, OpenAIProvider, OpenAIRequestMessage, OpenAITool,
     },
     stored_inference::RenderedStoredInference,
 };
@@ -31,15 +32,30 @@ pub struct OpenAIFineTuningRequest {
 pub enum OpenAIFineTuningMethod {
     #[serde(rename = "dpo")]
     Dpo {
-        hyperparameters: Option<DPOHyperparameters>,
+        dpo: Dpo,
     },
     Supervised {
-        hyperparameters: Option<SupervisedHyperparameters>,
+        supervised: Supervised,
     },
     Reinforcement {
-        grader: Box<Grader>,
-        hyperparameters: Option<ReinforcementHyperparameters>,
+        reinforcement: Reinforcement,
     },
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Dpo {
+    pub hyperparameters: Option<DPOHyperparameters>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Supervised {
+    pub hyperparameters: Option<SupervisedHyperparameters>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Reinforcement {
+    pub grader: Box<Grader>,
+    pub hyperparameters: Option<ReinforcementHyperparameters>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -149,11 +165,25 @@ impl<'a> TryFrom<&'a RenderedStoredInference> for OpenAISupervisedRow<'a> {
             ),
             None => (false, vec![]),
         };
-        let messages = prepare_openai_messages(
+        let mut messages = prepare_openai_messages(
             inference.input.system.as_deref(),
             &inference.input.messages,
             None,
         )?;
+        if inference.output.is_empty() {
+            return Err(Error::new(ErrorDetails::InvalidRenderedStoredInference {
+                message: "No output in inference".to_string(),
+            }));
+        }
+        let output_content_blocks: Vec<ContentBlock> = inference
+            .output
+            .iter()
+            .map(|c| c.clone().into())
+            .collect::<Vec<_>>();
+        let final_assistant_message =
+            tensorzero_to_openai_assistant_message(&output_content_blocks)?;
+        messages.push(final_assistant_message);
+        // TODO: add a test that makes sure the last message is from the assistant
         Ok(Self {
             messages,
             parallel_tool_calls,
