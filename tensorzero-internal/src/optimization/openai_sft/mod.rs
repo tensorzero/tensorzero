@@ -1,5 +1,6 @@
 use secrecy::ExposeSecret;
 use serde::Deserialize;
+use tokio::try_join;
 use url::Url;
 
 use crate::{
@@ -97,28 +98,23 @@ impl Optimizer for OpenAISFTConfig {
 
         let api_key = self.credentials.get_api_key(credentials)?;
 
-        // TODO: run these concurrently
-        let train_file_id = upload_openai_file(
-            &train_rows,
-            client,
-            api_key,
-            self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL),
-            "sft".to_string(),
-        )
-        .await?;
-        let val_file_id = if let Some(val_rows) = val_rows.as_ref() {
-            Some(
-                upload_openai_file(
-                    val_rows,
-                    client,
-                    api_key,
-                    self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL),
-                    "sft".to_string(),
-                )
-                .await?,
-            )
+        // Run these concurrently
+        let api_base = self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL);
+
+        let train_fut =
+            upload_openai_file(&train_rows, client, api_key, api_base, "sft".to_string());
+
+        let (train_file_id, val_file_id) = if let Some(val_rows) = val_rows.as_ref() {
+            let val_fut =
+                upload_openai_file(val_rows, client, api_key, api_base, "sft".to_string());
+
+            // Run both futures concurrently
+            let (train_id, val_id) = try_join!(train_fut, val_fut)?;
+            (train_id, Some(val_id))
         } else {
-            None
+            // Just run the training file upload
+            let train_file_id = train_fut.await?;
+            (train_file_id, None)
         };
 
         let body = OpenAIFineTuningRequest {

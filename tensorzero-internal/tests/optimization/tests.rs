@@ -1,3 +1,5 @@
+#![expect(clippy::unwrap_used, clippy::panic, clippy::print_stdout)]
+use base64::Engine;
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -7,8 +9,10 @@ use tensorzero_internal::{
     clickhouse::ClickHouseConnectionInfo,
     endpoints::inference::InferenceClients,
     inference::types::{
-        ContentBlock, ContentBlockChatOutput, FunctionType, ModelInferenceRequest, ModelInput,
-        RequestMessage, Text,
+        resolved_input::FileWithPath,
+        storage::{StorageKind, StoragePath},
+        Base64File, ContentBlock, ContentBlockChatOutput, FunctionType, ModelInferenceRequest,
+        ModelInput, RequestMessage, Text,
     },
     optimization::{Optimizer, OptimizerConfig, OptimizerOutput, OptimizerStatus},
     tool::{Tool, ToolCall, ToolCallConfigDatabaseInsert, ToolCallOutput, ToolChoice, ToolResult},
@@ -16,6 +20,8 @@ use tensorzero_internal::{
 };
 
 mod openai_sft;
+
+static FERRIS_PNG: &[u8] = include_bytes!("../e2e/providers/ferris.png");
 
 pub trait OptimizationTestCase {
     fn supports_image_data(&self) -> bool;
@@ -84,7 +90,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
         .infer(&request, &clients, "test")
         .await
         .unwrap();
-    println!("{:?}", response);
+    println!("{response:?}");
 }
 
 fn get_examples(
@@ -230,7 +236,45 @@ fn generate_tool_call_example() -> RenderedStoredInference {
 }
 
 fn generate_image_example() -> RenderedStoredInference {
-    todo!()
+    // So the examples are different
+    let id = Uuid::now_v7().to_string();
+    RenderedStoredInference {
+        function_name: "test".to_string(),
+        variant_name: "test".to_string(),
+        input: ModelInput {
+            system: Some(format!(
+                "You are a helpful assistant named Dr. M.M. Patel with id number {id}."
+            )),
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec![
+                    ContentBlock::Text(Text {
+                        text: "What is the main color of this image?".to_string(),
+                    }),
+                    ContentBlock::File(Box::new(FileWithPath {
+                        file: Base64File {
+                            url: None,
+                            mime_type: mime::IMAGE_PNG,
+                            data: Some(base64::prelude::BASE64_STANDARD.encode(FERRIS_PNG)),
+                        },
+                        storage_path: StoragePath {
+                            kind: StorageKind::Disabled,
+                            path: object_store::path::Path::parse(
+                                "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"
+                            ).unwrap(),
+                        },
+                    })),
+                ],
+            }],
+        },
+        output: vec![ContentBlockChatOutput::Text(Text {
+            text: "Orange!".to_string(),
+        })],
+        episode_id: Uuid::now_v7(),
+        inference_id: Uuid::now_v7(),
+        tool_params: None,
+        output_schema: None,
+    }
 }
 
 /// Generates a `#[tokio::test] async fn $fn_name() { run_test_case(&$constructor).await; }`
@@ -243,7 +287,7 @@ macro_rules! optimization_test_case {
             #[tokio::test]
             async fn [<test_optimization_ $fn_name>]() {
                 // you might need to import run_test_case
-                crate::run_test_case(&$constructor).await;
+                $crate::run_test_case(&$constructor).await;
             }
         }
     };

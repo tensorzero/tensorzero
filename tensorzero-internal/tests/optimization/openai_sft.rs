@@ -1,7 +1,6 @@
 use crate::{optimization_test_case, OptimizationTestCase};
 use tensorzero_internal::optimization::{
-    openai_sft::UninitializedOpenAISFTConfig,
-    OptimizerConfig,
+    openai_sft::UninitializedOpenAISFTConfig, OptimizerConfig,
 };
 
 struct OpenAISFTTestCase();
