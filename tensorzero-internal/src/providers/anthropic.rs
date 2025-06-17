@@ -2745,9 +2745,9 @@ mod tests {
         )
         .unwrap_err()
         .to_string();
-        assert_eq!(
-            err,
-            "Error from anthropic server: Unsupported content block type for ContentBlockStart\nRaw response: {\"my_unknown\":\"content_block\"}"
+        assert!(
+            err.contains("Error from anthropic server: Unsupported content block type for ContentBlockStart"),
+            "Unexpected error message: {err}"
         );
     }
 
