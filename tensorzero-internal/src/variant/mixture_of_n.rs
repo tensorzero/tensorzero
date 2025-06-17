@@ -594,16 +594,14 @@ mod tests {
         clickhouse::ClickHouseConnectionInfo,
         endpoints::inference::{InferenceCredentials, InferenceIds},
         function::{FunctionConfigChat, FunctionConfigJson},
-        inference::{
-            providers::dummy::DummyProvider,
-            types::{
-                ChatInferenceResult, FinishReason, InternalJsonInferenceOutput,
-                JsonInferenceResult, Latency, ModelInferenceResponseWithMetadata,
-            },
+        inference::types::{
+            ChatInferenceResult, FinishReason, InternalJsonInferenceOutput, JsonInferenceResult,
+            Latency, ModelInferenceResponseWithMetadata,
         },
         jsonschema_util::StaticJSONSchema,
         minijinja_util::tests::get_test_template_config,
         model::{ModelConfig, ModelProvider, ProviderConfig},
+        providers::dummy::DummyProvider,
         tool::{ToolCallConfig, ToolChoice},
     };
 

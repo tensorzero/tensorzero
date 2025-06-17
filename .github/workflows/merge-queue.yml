@@ -78,11 +78,6 @@ jobs:
         uses: namespacelabs/nscloud-setup-buildx-action@84ca8c58fdf372d6a4750476cd09b7b96ee778ca
 
       - uses: dtolnay/rust-toolchain@stable
-
-      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
-        with:
-          cache-provider: "buildjet"
-
       # Start testing workload identity federation credentials once the SDK adds support: https://github.com/googleapis/google-cloud-rust/issues/1342
 
       # - uses: 'google-github-actions/auth@v2'
@@ -132,6 +127,10 @@ jobs:
       - name: Set up TENSORZERO_CLICKHOUSE_URL for E2E tests
         run: |
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
+
+      - name: Download provider-proxy cache
+        run: |
+          AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY ./ci/download-provider-proxy-cache.sh
 
       - name: Launch ClickHouse container for E2E tests
         run: |
@@ -236,6 +235,9 @@ jobs:
         if: always()
         run: cat sglang_modal_logs.txt
   
+      - name: Upload provider-proxy cache
+        run: |
+          AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY ./ci/upload-provider-proxy-cache.sh
 
   check-production-docker-container:
     runs-on: ubuntu-latest
