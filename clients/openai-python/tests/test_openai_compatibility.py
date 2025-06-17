@@ -55,7 +55,7 @@ async def test_async_basic_inference_old_model_format_and_headers(async_client):
     ]
 
     result = await async_client.chat.completions.create(
-        extra_headers={"episode_id": str(uuid7())},
+        extra_headers={"tensorzero::episode_id": str(uuid7())},
         messages=messages,
         model="tensorzero::function_name::basic_test",
         temperature=0.4,
@@ -1034,7 +1034,7 @@ async def test_dynamic_json_mode_inference_body_param_openai(async_client):
     ]
     result = await async_client.chat.completions.create(
         extra_headers={
-            "episode_id": header_episode_id,
+            "tensorzero::episode_id": header_episode_id,
         },
         extra_body={
             "tensorzero::episode_id": body_episode_id,

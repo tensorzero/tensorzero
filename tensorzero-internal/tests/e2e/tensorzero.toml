@@ -482,6 +482,7 @@ type = "json"
 
 [functions.inference_ttft_json.variants.second_provider_timeout]
 type = "chat_completion"
+json_mode = "strict"
 model = "first_provider_timeout"
 
 [models.first_provider_timeout]
