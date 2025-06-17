@@ -24,26 +24,26 @@ use crate::{
 
 #[derive(Debug, Clone)]
 pub struct OpenAISFTConfig {
-    model: String,
-    batch_size: Option<usize>,
-    learning_rate_multiplier: Option<f64>,
-    n_epochs: Option<usize>,
-    credentials: OpenAICredentials,
-    seed: Option<u64>,
-    suffix: Option<String>,
-    api_base: Option<Url>,
+    pub model: String,
+    pub batch_size: Option<usize>,
+    pub learning_rate_multiplier: Option<f64>,
+    pub n_epochs: Option<usize>,
+    pub credentials: OpenAICredentials,
+    pub seed: Option<u64>,
+    pub suffix: Option<String>,
+    pub api_base: Option<Url>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct UninitializedOpenAISFTConfig {
-    model: String,
-    batch_size: Option<usize>,
-    learning_rate_multiplier: Option<f64>,
-    n_epochs: Option<usize>,
-    credentials: Option<CredentialLocation>,
-    api_base: Option<Url>,
-    seed: Option<u64>,
-    suffix: Option<String>,
+    pub model: String,
+    pub batch_size: Option<usize>,
+    pub learning_rate_multiplier: Option<f64>,
+    pub n_epochs: Option<usize>,
+    pub credentials: Option<CredentialLocation>,
+    pub api_base: Option<Url>,
+    pub seed: Option<u64>,
+    pub suffix: Option<String>,
 }
 
 impl UninitializedOpenAISFTConfig {

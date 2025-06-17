@@ -6,8 +6,12 @@ use tensorzero_internal::{
     cache::CacheOptions,
     clickhouse::ClickHouseConnectionInfo,
     endpoints::inference::InferenceClients,
-    inference::types::{ContentBlock, FunctionType, ModelInferenceRequest, RequestMessage, Text},
+    inference::types::{
+        ContentBlock, ContentBlockChatOutput, FunctionType, ModelInferenceRequest, ModelInput,
+        RequestMessage, Text,
+    },
     optimization::{Optimizer, OptimizerConfig, OptimizerOutput, OptimizerStatus},
+    tool::{Tool, ToolCall, ToolCallConfigDatabaseInsert, ToolCallOutput, ToolChoice, ToolResult},
     variant::JsonMode,
 };
 
@@ -87,6 +91,145 @@ fn get_examples(
     test_case: &impl OptimizationTestCase,
     num_examples: usize,
 ) -> Vec<RenderedStoredInference> {
+    assert!(num_examples > 10);
+    let mut generators: Vec<fn() -> RenderedStoredInference> = vec![generate_text_example];
+    if test_case.supports_tool_calls() {
+        generators.push(generate_tool_call_example);
+    }
+    if test_case.supports_image_data() {
+        generators.push(generate_image_example);
+    }
+    generators
+        .into_iter()
+        .cycle()
+        .take(num_examples)
+        .map(|g| g())
+        .collect()
+}
+
+fn generate_text_example() -> RenderedStoredInference {
+    // So the examples are different
+    let id = Uuid::now_v7().to_string();
+    RenderedStoredInference {
+        function_name: "test".to_string(),
+        variant_name: "test".to_string(),
+        input: ModelInput {
+            system: Some(format!(
+                "You are a helpful assistant named Dr. M.M. Patel with id number {id}."
+            )),
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec![ContentBlock::Text(Text {
+                    text: "What is the capital of France?".to_string(),
+                })],
+            }],
+        },
+        output: vec![ContentBlockChatOutput::Text(Text {
+            text: "The capital of France is Paris.".to_string(),
+        })],
+        episode_id: Uuid::now_v7(),
+        inference_id: Uuid::now_v7(),
+        tool_params: None,
+        output_schema: None,
+    }
+}
+
+fn generate_tool_call_example() -> RenderedStoredInference {
+    // So the examples are different
+    let id = Uuid::now_v7().to_string();
+    RenderedStoredInference {
+        function_name: "test".to_string(),
+        variant_name: "test".to_string(),
+        input: ModelInput {
+            system: Some(format!(
+                "You are a helpful assistant named Dr. M.M. Patel with id number {id}."
+            )),
+            messages: vec![
+                RequestMessage {
+                    role: Role::User,
+                    content: vec![ContentBlock::Text(Text {
+                        text: "What is the weather in Paris?".to_string(),
+                    })],
+                },
+                RequestMessage {
+                    role: Role::Assistant,
+                    content: vec![
+                        ContentBlock::Text(Text {
+                            text: "Let me look that up for you.".to_string(),
+                        }),
+                        ContentBlock::ToolCall(ToolCall {
+                            name: "get_weather".to_string(),
+                            arguments: serde_json::json!({
+                                "location": "Paris"
+                            })
+                            .to_string(),
+                            id: "call_1".to_string(),
+                        }),
+                    ],
+                },
+                RequestMessage {
+                    role: Role::User,
+                    content: vec![ContentBlock::ToolResult(ToolResult {
+                        name: "get_weather".to_string(),
+                        result: serde_json::json!({
+                            "weather": "sunny, 25 degrees Celsius",
+                        })
+                        .to_string(),
+                        id: "call_1".to_string(),
+                    })],
+                },
+                RequestMessage {
+                    role: Role::Assistant,
+                    content: vec![ContentBlock::Text(Text {
+                        text: "The weather in Paris is sunny, 25 degrees Celsius.".to_string(),
+                    })],
+                },
+                RequestMessage {
+                    role: Role::User,
+                    content: vec![ContentBlock::Text(Text {
+                        text: "What is the weather in London?".to_string(),
+                    })],
+                },
+            ],
+        },
+        output: vec![ContentBlockChatOutput::ToolCall(ToolCallOutput {
+            name: Some("get_weather".to_string()),
+            arguments: Some(serde_json::json!({
+                "location": "London",
+            })),
+            raw_name: "get_weather".to_string(),
+            raw_arguments: serde_json::json!({
+                "location": "London",
+            })
+            .to_string(),
+            id: "call_2".to_string(),
+        })],
+        episode_id: Uuid::now_v7(),
+        inference_id: Uuid::now_v7(),
+        tool_params: Some(ToolCallConfigDatabaseInsert {
+            tools_available: vec![Tool {
+                name: "get_weather".to_string(),
+                description: "Get the weather for a location".to_string(),
+                parameters: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "location": {
+                            "type": "string",
+                            "description": "The location to get weather for"
+                        }
+                    },
+                    "required": ["location"]
+                }),
+                strict: false,
+            }],
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: None,
+        }),
+        output_schema: None,
+    }
+}
+
+fn generate_image_example() -> RenderedStoredInference {
     todo!()
 }
 

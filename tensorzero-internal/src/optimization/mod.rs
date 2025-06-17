@@ -11,7 +11,7 @@ use crate::optimization::openai_sft::{
 use crate::stored_inference::RenderedStoredInference;
 use crate::variant::VariantConfig;
 
-mod openai_sft;
+pub mod openai_sft;
 
 #[derive(Clone, Debug)]
 pub enum OptimizerConfig {
