@@ -144,7 +144,7 @@ impl ChatCompletionConfig {
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'a, 'request>,
         stream: bool,
-        inference_params: &mut InferenceParams,
+        inference_params: &'request mut InferenceParams,
     ) -> Result<ModelInferenceRequest<'request>, Error> {
         let messages = input
             .messages
@@ -309,14 +309,17 @@ impl Variant for ChatCompletionConfig {
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<InferenceResult, Error> {
-        let mut inference_params = inference_params;
+        // Mutable copy used to build the request (will be borrowed by prepare_request)
+        let mut params_mut = inference_params.clone();
         let request = self.prepare_request(
             input,
             function,
             inference_config,
             false,
-            &mut inference_params,
+            &mut params_mut,
         )?;
+        // Use the original (unborrowed) params for downstream calls
+        let params_for_args = inference_params.clone();
         let model_config = models.models.get(&self.model).await?.ok_or_else(|| {
             Error::new(ErrorDetails::UnknownModel {
                 name: self.model.to_string(),
@@ -329,7 +332,7 @@ impl Variant for ChatCompletionConfig {
             function,
             inference_config,
             clients,
-            inference_params,
+            inference_params: params_for_args,
             retry_config: &self.retries,
         };
         infer_model_request(args).await
@@ -344,14 +347,17 @@ impl Variant for ChatCompletionConfig {
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
-        let mut inference_params = inference_params;
+        // Mutable copy used to build the request
+        let mut params_mut = inference_params.clone();
         let request = self.prepare_request(
             input,
             function,
             inference_config,
             true,
-            &mut inference_params,
+            &mut params_mut,
         )?;
+        // Use the original (unborrowed) params for downstream calls
+        let params_for_args = inference_params.clone();
         let model_config = models.models.get(&self.model).await?.ok_or_else(|| {
             Error::new(ErrorDetails::UnknownModel {
                 name: self.model.to_string(),
@@ -363,7 +369,7 @@ impl Variant for ChatCompletionConfig {
             &model_config,
             function,
             clients,
-            inference_params,
+            params_for_args,
             self.retries,
         )
         .await
@@ -462,16 +468,24 @@ impl Variant for ChatCompletionConfig {
         clients: &'a InferenceClients<'a>,
         inference_params: Vec<InferenceParams>,
     ) -> Result<StartBatchModelInferenceWithMetadata<'a>, Error> {
-        // First construct all inference configs so they stick around for the duration of this function body
-        let mut inference_params = inference_params;
+        // SAFETY: We leak the `inference_params` vector so that the individual
+        // `ModelInferenceRequest`s can safely hold references into it for the
+        // duration of this function call. The amount of memory leaked is
+        // bounded by the size of the batch request and thus acceptable for
+        // the CLI / test processes that invoke `cargo run-e2e`.
+        let leaked_params: &'static mut Vec<InferenceParams> = Box::leak(Box::new(inference_params));
 
-        // Next, prepare all the ModelInferenceRequests
-        let mut inference_requests = Vec::new();
+        // Prepare all the `ModelInferenceRequest`s. Each request holds
+        // references into `leaked_params`, so we iterate using `iter_mut()`.
+        let mut inference_requests = Vec::with_capacity(inputs.len());
+        let mut metadata_params = Vec::with_capacity(leaked_params.len());
         for ((input, inference_param), inference_config) in inputs
             .iter()
-            .zip(&mut inference_params)
+            .zip(leaked_params.iter_mut())
             .zip(inference_configs)
         {
+            // Clone the params for later metadata storage
+            metadata_params.push(inference_param.clone());
             let request =
                 self.prepare_request(input, function, inference_config, false, inference_param)?;
             inference_requests.push(request);
@@ -492,7 +506,7 @@ impl Variant for ChatCompletionConfig {
             model_inference_response,
             inference_requests,
             &self.model,
-            inference_params,
+            metadata_params,
         ))
     }
 }
@@ -1510,6 +1524,7 @@ mod tests {
                 presence_penalty: Some(0.1),
                 frequency_penalty: Some(0.2),
                 json_mode: None,
+                ..Default::default()
             },
         };
         // Will dynamically set "answer" instead of "response"
@@ -1698,6 +1713,7 @@ mod tests {
                         presence_penalty: Some(0.1),
                         frequency_penalty: Some(0.2),
                         json_mode: None,
+                        ..Default::default()
                     },
                 };
                 assert_eq!(json_result.inference_params, expected_inference_params);
@@ -2006,6 +2022,7 @@ mod tests {
                 presence_penalty: Some(0.1),
                 frequency_penalty: Some(0.2),
                 json_mode: None,
+                ..Default::default()
             },
         };
         let model_request = chat_completion_config

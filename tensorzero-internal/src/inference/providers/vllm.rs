@@ -339,7 +339,27 @@ struct VLLMRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     stream_options: Option<StreamOptions>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    chat_template: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    chat_template_kwargs: Option<&'a Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    mm_processor_kwargs: Option<&'a Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     guided_json: Option<&'a Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    guided_regex: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    guided_choice: Option<&'a Vec<Cow<'a, str>>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    guided_grammar: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    structural_tag: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    guided_decoding_backend: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    guided_whitespace_pattern: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    logprobs: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     seed: Option<u32>,
 }
@@ -349,13 +369,6 @@ impl<'a> VLLMRequest<'a> {
         model: &'a str,
         request: &'a ModelInferenceRequest<'_>,
     ) -> Result<VLLMRequest<'a>, Error> {
-        let guided_json = match (&request.json_mode, request.output_schema) {
-            (
-                ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict,
-                Some(schema),
-            ) => Some(schema),
-            _ => None,
-        };
         let stream_options = match request.stream {
             true => Some(StreamOptions {
                 include_usage: true,
@@ -374,6 +387,20 @@ impl<'a> VLLMRequest<'a> {
             }.into());
         }
 
+        // Determine guided_json field: prefer explicit request.guided_json; otherwise derive from json_mode/output_schema
+        let guided_json_field = if request.guided_json.is_some() {
+            request.guided_json
+        } else {
+            match (&request.json_mode, request.output_schema) {
+                (
+                    ModelInferenceRequestJsonMode::On
+                    | ModelInferenceRequestJsonMode::Strict,
+                    Some(schema),
+                ) => Some(schema),
+                _ => None,
+            }
+        };
+
         Ok(VLLMRequest {
             messages,
             model,
@@ -384,7 +411,20 @@ impl<'a> VLLMRequest<'a> {
             max_tokens: request.max_tokens,
             stream: request.stream,
             stream_options,
-            guided_json,
+            chat_template: request.chat_template,
+            chat_template_kwargs: request.chat_template_kwargs,
+            mm_processor_kwargs: request.mm_processor_kwargs,
+            guided_json: guided_json_field,
+            guided_regex: request.guided_regex,
+            guided_choice: request.guided_choice.as_ref(),
+            guided_grammar: request.guided_grammar,
+            structural_tag: request.structural_tag,
+            guided_decoding_backend: request.guided_decoding_backend,
+            guided_whitespace_pattern: request.guided_whitespace_pattern,
+            logprobs: match request.logprobs {
+                true  => Some(true),   // client asked for log-probs
+                false => Some(false),  // client explicitly disabled it
+            },
             seed: request.seed,
         })
     }

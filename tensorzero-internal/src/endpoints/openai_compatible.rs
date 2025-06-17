@@ -67,7 +67,15 @@ pub async fn inference_handler(
         );
     }
     let stream_options = openai_compatible_params.stream_options;
-    let params = Params::try_from_openai(headers, openai_compatible_params)?;
+    let logprobs_requested = matches!(openai_compatible_params.logprobs, Some(true));
+
+    let mut params = Params::try_from_openai(headers.clone(), openai_compatible_params.clone())?;
+
+    // If the caller asked for logprobs, we need the raw provider response so we can
+    // copy logprobs back out later.  That is enabled via `include_original_response`.
+    if matches!(openai_compatible_params.logprobs, Some(true)) {
+        params.include_original_response = true;
+    }
 
     // The prefix for the response's `model` field depends on the inference target
     // (We run this disambiguation deep in the `inference` call below but we don't get the decision out, so we duplicate it here)
@@ -90,8 +98,39 @@ pub async fn inference_handler(
 
     match response {
         InferenceOutput::NonStreaming(response) => {
-            let openai_compatible_response =
-                OpenAICompatibleResponse::from((response, response_model_prefix));
+            let mut openai_compatible_response =
+                OpenAICompatibleResponse::from((response.clone(), response_model_prefix));
+
+            if logprobs_requested {
+                // Try to fetch real logprobs from the original provider response (if available)
+                if let Some(original_resp_json) = match &response {
+                    InferenceResponse::Chat(chat) => chat
+                        .original_response
+                        .as_ref()
+                        .and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok()),
+                    InferenceResponse::Json(json) => json
+                        .original_response
+                        .as_ref()
+                        .and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok()),
+                } {
+                    if let Some(provider_choices) = original_resp_json.get("choices").and_then(|v| v.as_array()) {
+                        for (idx, choice) in openai_compatible_response.choices.iter_mut().enumerate() {
+                            if let Some(provider_choice) = provider_choices.get(idx) {
+                                if let Some(lp) = provider_choice.get("logprobs") {
+                                    choice.logprobs = Some(lp.clone());
+                                } else {
+                                    choice.logprobs = Some(serde_json::json!({"content": []}));
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // Fallback to empty array if provider didn't send or we failed to parse
+                    for choice in &mut openai_compatible_response.choices {
+                        choice.logprobs = Some(serde_json::json!({"content": []}));
+                    }
+                }
+            }
             Ok(Json(openai_compatible_response).into_response())
         }
         InferenceOutput::Streaming(stream) => {
@@ -107,7 +146,7 @@ pub async fn inference_handler(
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, Default)]
 pub struct OpenAICompatibleFunctionCall {
     pub name: String,
     pub arguments: String,
@@ -243,7 +282,7 @@ struct OpenAICompatibleStreamOptions {
     include_usage: bool,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Default)]
 pub struct OpenAICompatibleParams {
     messages: Vec<OpenAICompatibleMessage>,
     model: String,
@@ -260,6 +299,19 @@ pub struct OpenAICompatibleParams {
     tool_choice: Option<ChatCompletionToolChoiceOption>,
     top_p: Option<f32>,
     parallel_tool_calls: Option<bool>,
+    /// If set to `true`, the response should include per-token log-probabilities.
+    logprobs: Option<bool>,
+    // Guided decoding / template fields (TensorZero extensions)
+    chat_template: Option<String>,
+    chat_template_kwargs: Option<Value>,
+    mm_processor_kwargs: Option<Value>,
+    guided_json: Option<Value>,
+    guided_regex: Option<String>,
+    guided_choice: Option<Vec<String>>,
+    guided_grammar: Option<String>,
+    structural_tag: Option<String>,
+    guided_decoding_backend: Option<String>,
+    guided_whitespace_pattern: Option<String>,
     #[serde(rename = "tensorzero::variant_name")]
     tensorzero_variant_name: Option<String>,
     #[serde(rename = "tensorzero::dryrun")]
@@ -288,6 +340,8 @@ struct OpenAICompatibleResponseMessage {
     content: Option<String>,
     tool_calls: Option<Vec<OpenAICompatibleToolCall>>,
     role: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    logprobs: Option<serde_json::Value>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -295,6 +349,8 @@ struct OpenAICompatibleChoice {
     index: u32,
     finish_reason: OpenAICompatibleFinishReason,
     message: OpenAICompatibleResponseMessage,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    logprobs: Option<serde_json::Value>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -433,7 +489,18 @@ impl Params {
             top_p: openai_compatible_params.top_p,
             presence_penalty: openai_compatible_params.presence_penalty,
             frequency_penalty: openai_compatible_params.frequency_penalty,
+            chat_template: openai_compatible_params.chat_template,
+            chat_template_kwargs: openai_compatible_params.chat_template_kwargs,
+            mm_processor_kwargs: openai_compatible_params.mm_processor_kwargs,
+            guided_json: openai_compatible_params.guided_json,
+            guided_regex: openai_compatible_params.guided_regex,
+            guided_choice: openai_compatible_params.guided_choice,
+            guided_grammar: openai_compatible_params.guided_grammar,
+            structural_tag: openai_compatible_params.structural_tag,
+            guided_decoding_backend: openai_compatible_params.guided_decoding_backend,
+            guided_whitespace_pattern: openai_compatible_params.guided_whitespace_pattern,
             json_mode,
+            logprobs: matches!(openai_compatible_params.logprobs, Some(true)),
         };
         let inference_params = InferenceParams {
             chat_completion: chat_completion_inference_params,
@@ -792,7 +859,9 @@ impl From<(InferenceResponse, String)> for OpenAICompatibleResponse {
                             content,
                             tool_calls: Some(tool_calls),
                             role: "assistant".to_string(),
+                            logprobs: None,
                         },
+                        logprobs: None,
                     }],
                     created: current_timestamp() as u32,
                     model: format!("{response_model_prefix}{}", response.variant_name),
@@ -812,7 +881,9 @@ impl From<(InferenceResponse, String)> for OpenAICompatibleResponse {
                         content: response.output.raw,
                         tool_calls: None,
                         role: "assistant".to_string(),
+                        logprobs: None,
                     },
+                    logprobs: None,
                 }],
                 created: current_timestamp() as u32,
                 model: format!("{response_model_prefix}{}", response.variant_name),
@@ -911,7 +982,7 @@ struct OpenAICompatibleChoiceChunk {
 }
 
 fn is_none_or_empty<T>(v: &Option<Vec<T>>) -> bool {
-    // if it’s None → skip, or if the Vec is empty → skip
+    // if it's None → skip, or if the Vec is empty → skip
     v.as_ref().is_none_or(|vec| vec.is_empty())
 }
 
@@ -1167,22 +1238,10 @@ mod tests {
                 max_tokens: Some(100),
                 max_completion_tokens: Some(50),
                 presence_penalty: Some(0.5),
-                response_format: None,
                 seed: Some(23),
-                stream: None,
                 temperature: Some(0.5),
-                tools: None,
-                tool_choice: None,
                 top_p: Some(0.5),
-                parallel_tool_calls: None,
-                tensorzero_episode_id: None,
-                tensorzero_variant_name: None,
-                tensorzero_dryrun: None,
-                tensorzero_cache_options: None,
-                tensorzero_extra_body: UnfilteredInferenceExtraBody::default(),
-                tensorzero_extra_headers: UnfilteredInferenceExtraHeaders::default(),
-                unknown_fields: Default::default(),
-                stream_options: None,
+                ..Default::default()
             },
         )
         .unwrap();
@@ -1629,26 +1688,7 @@ mod tests {
                     content: Value::String("test".to_string()),
                 })],
                 model: "tensorzero::function_name::test_function".into(),
-                frequency_penalty: None,
-                max_tokens: None,
-                max_completion_tokens: None,
-                presence_penalty: None,
-                response_format: None,
-                seed: None,
-                stream: None,
-                temperature: None,
-                tools: None,
-                tool_choice: None,
-                top_p: None,
-                parallel_tool_calls: None,
-                tensorzero_variant_name: None,
-                tensorzero_dryrun: None,
-                tensorzero_episode_id: None,
-                tensorzero_cache_options: None,
-                tensorzero_extra_body: UnfilteredInferenceExtraBody::default(),
-                tensorzero_extra_headers: UnfilteredInferenceExtraHeaders::default(),
-                unknown_fields: Default::default(),
-                stream_options: None,
+                ..Default::default()
             },
         )
         .unwrap();
@@ -1662,29 +1702,11 @@ mod tests {
                     content: Value::String("test".to_string()),
                 })],
                 model: "tensorzero::function_name::test_function".into(),
-                frequency_penalty: None,
-                max_tokens: None,
-                max_completion_tokens: None,
-                presence_penalty: None,
-                response_format: None,
-                seed: None,
-                stream: None,
-                temperature: None,
-                tools: None,
-                tool_choice: None,
-                top_p: None,
-                parallel_tool_calls: None,
-                tensorzero_variant_name: None,
-                tensorzero_dryrun: None,
-                tensorzero_episode_id: None,
                 tensorzero_cache_options: Some(CacheParamsOptions {
                     max_age_s: Some(3600),
                     enabled: CacheEnabledMode::On,
                 }),
-                tensorzero_extra_body: UnfilteredInferenceExtraBody::default(),
-                tensorzero_extra_headers: UnfilteredInferenceExtraHeaders::default(),
-                unknown_fields: Default::default(),
-                stream_options: None,
+                ..Default::default()
             },
         )
         .unwrap();
@@ -1704,29 +1726,12 @@ mod tests {
                     content: Value::String("test".to_string()),
                 })],
                 model: "tensorzero::function_name::test_function".into(),
-                frequency_penalty: None,
-                max_tokens: None,
-                max_completion_tokens: None,
-                presence_penalty: None,
-                response_format: None,
-                seed: None,
-                stream: None,
-                temperature: None,
-                tools: None,
-                tool_choice: None,
-                top_p: None,
-                parallel_tool_calls: None,
-                tensorzero_variant_name: None,
                 tensorzero_dryrun: Some(true),
-                tensorzero_episode_id: None,
                 tensorzero_cache_options: Some(CacheParamsOptions {
                     max_age_s: Some(3600),
                     enabled: CacheEnabledMode::On,
                 }),
-                tensorzero_extra_body: UnfilteredInferenceExtraBody::default(),
-                tensorzero_extra_headers: UnfilteredInferenceExtraHeaders::default(),
-                unknown_fields: Default::default(),
-                stream_options: None,
+                ..Default::default()
             },
         )
         .unwrap();
@@ -1746,29 +1751,12 @@ mod tests {
                     content: Value::String("test".to_string()),
                 })],
                 model: "tensorzero::function_name::test_function".into(),
-                frequency_penalty: None,
-                max_tokens: None,
-                max_completion_tokens: None,
-                presence_penalty: None,
-                response_format: None,
-                seed: None,
-                stream: None,
-                temperature: None,
-                tools: None,
-                tool_choice: None,
-                top_p: None,
-                parallel_tool_calls: None,
-                tensorzero_variant_name: None,
                 tensorzero_dryrun: Some(true),
-                tensorzero_episode_id: None,
                 tensorzero_cache_options: Some(CacheParamsOptions {
                     max_age_s: None,
                     enabled: CacheEnabledMode::WriteOnly,
                 }),
-                tensorzero_extra_body: UnfilteredInferenceExtraBody::default(),
-                tensorzero_extra_headers: UnfilteredInferenceExtraHeaders::default(),
-                unknown_fields: Default::default(),
-                stream_options: None,
+                ..Default::default()
             },
         )
         .unwrap();

@@ -467,7 +467,7 @@ fn prepare_model_inference_request<'a, 'request>(
     function: &'a FunctionConfig,
     inference_config: &'request InferenceConfig<'a, 'request>,
     stream: bool,
-    inference_params: &InferenceParams,
+    inference_params: &'request InferenceParams,
     base_json_mode: Option<JsonMode>,
     extra_body: FullExtraBodyConfig,
     extra_headers: FullExtraHeadersConfig,
@@ -494,6 +494,50 @@ where
                 frequency_penalty: inference_params.chat_completion.frequency_penalty,
                 seed: inference_params.chat_completion.seed,
                 stream,
+                // Template / guided-decoding parameters
+                chat_template: inference_params
+                    .chat_completion
+                    .chat_template
+                    .as_deref(),
+                chat_template_kwargs: inference_params
+                    .chat_completion
+                    .chat_template_kwargs
+                    .as_ref(),
+                mm_processor_kwargs: inference_params
+                    .chat_completion
+                    .mm_processor_kwargs
+                    .as_ref(),
+                guided_json: inference_params.chat_completion.guided_json.as_ref(),
+                guided_regex: inference_params
+                    .chat_completion
+                    .guided_regex
+                    .as_deref(),
+                guided_choice: inference_params
+                    .chat_completion
+                    .guided_choice
+                    .as_ref()
+                    .map(|choices| {
+                        choices
+                            .iter()
+                            .map(|s| Cow::Borrowed(s.as_str()))
+                            .collect::<Vec<Cow<'_, str>>>()
+                    }),
+                guided_grammar: inference_params
+                    .chat_completion
+                    .guided_grammar
+                    .as_deref(),
+                structural_tag: inference_params
+                    .chat_completion
+                    .structural_tag
+                    .as_deref(),
+                guided_decoding_backend: inference_params
+                    .chat_completion
+                    .guided_decoding_backend
+                    .as_deref(),
+                guided_whitespace_pattern: inference_params
+                    .chat_completion
+                    .guided_whitespace_pattern
+                    .as_deref(),
                 // In chat mode, we fall back to 'JsonMode::Off' - json mode will only be enabled if
                 // explicitly requested in `chat_completion` params.
                 json_mode: json_mode.unwrap_or(JsonMode::Off).into(),
@@ -502,6 +546,8 @@ where
                 extra_body,
                 extra_headers,
                 extra_cache_key: inference_config.extra_cache_key.clone(),
+                logprobs: inference_params.chat_completion.logprobs,
+                ..Default::default()
             }
         }
         FunctionConfig::Json(json_config) => {
@@ -530,6 +576,50 @@ where
                 frequency_penalty: inference_params.chat_completion.frequency_penalty,
                 seed: inference_params.chat_completion.seed,
                 stream,
+                // Template / guided-decoding parameters
+                chat_template: inference_params
+                    .chat_completion
+                    .chat_template
+                    .as_deref(),
+                chat_template_kwargs: inference_params
+                    .chat_completion
+                    .chat_template_kwargs
+                    .as_ref(),
+                mm_processor_kwargs: inference_params
+                    .chat_completion
+                    .mm_processor_kwargs
+                    .as_ref(),
+                guided_json: inference_params.chat_completion.guided_json.as_ref(),
+                guided_regex: inference_params
+                    .chat_completion
+                    .guided_regex
+                    .as_deref(),
+                guided_choice: inference_params
+                    .chat_completion
+                    .guided_choice
+                    .as_ref()
+                    .map(|choices| {
+                        choices
+                            .iter()
+                            .map(|s| Cow::Borrowed(s.as_str()))
+                            .collect::<Vec<Cow<'_, str>>>()
+                    }),
+                guided_grammar: inference_params
+                    .chat_completion
+                    .guided_grammar
+                    .as_deref(),
+                structural_tag: inference_params
+                    .chat_completion
+                    .structural_tag
+                    .as_deref(),
+                guided_decoding_backend: inference_params
+                    .chat_completion
+                    .guided_decoding_backend
+                    .as_deref(),
+                guided_whitespace_pattern: inference_params
+                    .chat_completion
+                    .guided_whitespace_pattern
+                    .as_deref(),
                 // In json mode, we fall back to 'JsonMode::Strict' if it was unset in both
                 // the `chat_completions` params and the variant config.
                 json_mode: json_mode.unwrap_or(JsonMode::Strict).into(),
@@ -538,6 +628,8 @@ where
                 extra_body,
                 extra_headers,
                 extra_cache_key: inference_config.extra_cache_key.clone(),
+                logprobs: inference_params.chat_completion.logprobs,
+                ..Default::default()
             }
         }
     })
@@ -732,9 +824,9 @@ mod tests {
                 max_tokens: Some(50),
                 top_p: Some(0.9),
                 presence_penalty: Some(0.0),
-                frequency_penalty: Some(0.0),
+                frequency_penalty: Some(0.2),
                 seed: Some(42),
-                json_mode: None,
+                ..Default::default()
             },
         };
 
@@ -784,7 +876,7 @@ mod tests {
         assert_eq!(result.top_p, Some(0.9));
         assert_eq!(result.max_tokens, Some(50));
         assert_eq!(result.presence_penalty, Some(0.0));
-        assert_eq!(result.frequency_penalty, Some(0.0));
+        assert_eq!(result.frequency_penalty, Some(0.2));
         assert_eq!(result.seed, Some(42));
         assert_eq!(result.stream, stream);
         assert_eq!(result.json_mode, ModelInferenceRequestJsonMode::Off);
@@ -941,7 +1033,17 @@ mod tests {
             },
         };
         let templates = get_test_template_config();
-        let inference_params = InferenceParams::default();
+        let inference_params = InferenceParams {
+            chat_completion: ChatCompletionInferenceParams {
+                temperature: Some(0.7),
+                max_tokens: Some(50),
+                top_p: Some(0.9),
+                presence_penalty: Some(0.0),
+                frequency_penalty: Some(0.2),
+                seed: Some(42),
+                ..Default::default()
+            },
+        };
         let inference_config = InferenceConfig {
             templates: &templates,
             tool_config: None,
@@ -1219,7 +1321,17 @@ mod tests {
             },
         };
         let templates = get_test_template_config();
-        let inference_params = InferenceParams::default();
+        let inference_params = InferenceParams {
+            chat_completion: ChatCompletionInferenceParams {
+                temperature: Some(0.7),
+                max_tokens: Some(50),
+                top_p: Some(0.9),
+                presence_penalty: Some(0.0),
+                frequency_penalty: Some(0.2),
+                seed: Some(42),
+                ..Default::default()
+            },
+        };
         let inference_config = InferenceConfig {
             templates: &templates,
             tool_config: None,
@@ -1510,11 +1622,21 @@ mod tests {
                 enabled: CacheEnabledMode::WriteOnly,
             },
         };
-        let inference_params = InferenceParams::default();
+        let inference_params = InferenceParams {
+            chat_completion: ChatCompletionInferenceParams {
+                temperature: Some(0.7),
+                max_tokens: Some(50),
+                top_p: Some(0.9),
+                presence_penalty: Some(0.0),
+                frequency_penalty: Some(0.2),
+                seed: Some(42),
+                ..Default::default()
+            },
+        };
 
         let model_name = "dummy_chat_model";
         let error_model_name = "error";
-        let function_config_chat = Box::leak(Box::new(FunctionConfig::Chat(FunctionConfigChat {
+        let function_config_chat = FunctionConfig::Chat(FunctionConfigChat {
             variants: HashMap::new(),
             system_schema: None,
             user_schema: None,
@@ -1523,7 +1645,7 @@ mod tests {
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
             description: None,
-        })));
+        });
 
         let request_messages = vec![RequestMessage {
             role: Role::User,
@@ -1593,7 +1715,7 @@ mod tests {
             model_request,
             model_name.into(),
             model_config,
-            function_config_chat,
+            &function_config_chat,
             &clients,
             inference_params.clone(),
             retry_config,

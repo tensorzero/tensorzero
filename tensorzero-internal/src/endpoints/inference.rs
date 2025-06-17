@@ -1093,7 +1093,29 @@ pub struct ChatCompletionInferenceParams {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub frequency_penalty: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub chat_template: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub chat_template_kwargs: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mm_processor_kwargs: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub guided_json: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub guided_regex: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub guided_choice: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub guided_grammar: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub structural_tag: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub guided_decoding_backend: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub guided_whitespace_pattern: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub json_mode: Option<JsonMode>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub logprobs: bool,
 }
 
 impl ChatCompletionInferenceParams {
@@ -1125,6 +1147,10 @@ impl ChatCompletionInferenceParams {
             self.frequency_penalty = frequency_penalty;
         }
     }
+}
+
+fn is_false(v: &bool) -> bool {
+    !*v
 }
 
 #[cfg(test)]

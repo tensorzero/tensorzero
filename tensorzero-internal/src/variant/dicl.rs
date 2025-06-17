@@ -92,8 +92,7 @@ impl Variant for DiclConfig {
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<InferenceResult, Error> {
-        // So this can be mutably borrowed by the prepare_request function
-        let mut inference_params = inference_params;
+        let mut params_mut = inference_params.clone();
 
         // Embed the input and grab the relevant examples from the database
         let (relevant_examples, embedding_response) = self
@@ -118,7 +117,7 @@ impl Variant for DiclConfig {
             function,
             inference_config,
             false,
-            &mut inference_params,
+            &mut params_mut,
         )?;
 
         let model_config = models.models.get(&self.model).await?.ok_or_else(|| {
@@ -128,6 +127,7 @@ impl Variant for DiclConfig {
         })?;
 
         // Instantiate the InferModelRequestArgs struct
+        let params_for_args = inference_params.clone();
         let args = InferModelRequestArgs {
             request: model_inference_request,
             model_name: self.model.clone(),
@@ -135,7 +135,7 @@ impl Variant for DiclConfig {
             function,
             inference_config,
             clients,
-            inference_params,
+            inference_params: params_for_args,
             retry_config: &self.retries,
         };
 
@@ -158,8 +158,9 @@ impl Variant for DiclConfig {
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
-        // So this can be mutably borrowed by the prepare_request function
-        let mut inference_params = inference_params;
+        let mut params_mut = inference_params.clone();
+        // Clone original for later call
+        let params_for_args = inference_params.clone();
 
         // Embed the input and grab the relevant examples from the database
         let (relevant_examples, embedding_response) = self
@@ -183,7 +184,7 @@ impl Variant for DiclConfig {
             function,
             inference_config,
             true,
-            &mut inference_params,
+            &mut params_mut,
         )?;
 
         let model_config = models.models.get(&self.model).await?.ok_or_else(|| {
@@ -199,7 +200,7 @@ impl Variant for DiclConfig {
             &model_config,
             function,
             clients,
-            inference_params,
+            params_for_args,
             self.retries,
         )
         .await?;
@@ -462,7 +463,7 @@ impl DiclConfig {
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'a, 'request>,
         stream: bool,
-        inference_params: &mut InferenceParams,
+        inference_params: &'request mut InferenceParams,
     ) -> Result<ModelInferenceRequest<'request>, Error>
     where
         'a: 'request,
