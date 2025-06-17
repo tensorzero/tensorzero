@@ -70,6 +70,9 @@ impl InferenceProvider for AWSSagemakerProvider {
             request.model_name.to_string(),
         );
 
+        // Use our custom `reqwest::Client` when making requests to Sagemaker.
+        // This ensures that our HTTP proxy (TENSORZERO_E2E_PROXY) is used
+        // here when it's enabled.
         let new_config = self
             .base_config
             .clone()
@@ -145,6 +148,7 @@ impl InferenceProvider for AWSSagemakerProvider {
             request.model_name.to_string(),
         );
 
+        // See `infer` for more details
         let new_config = self
             .base_config
             .clone()
