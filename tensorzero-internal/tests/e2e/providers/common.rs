@@ -1604,10 +1604,7 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
         }
         "aws_sagemaker" => {
             assert!(
-                res["error"]
-                    .as_str()
-                    .unwrap()
-                    .contains("InvalidSignatureException"),
+                res["error"].as_str().unwrap().contains("unexpected token"),
                 "Unexpected error: {res}"
             );
         }

@@ -31,6 +31,7 @@ pub struct AWSSagemakerProvider {
     endpoint_name: String,
     client: aws_sdk_sagemakerruntime::Client,
     hosted_provider: Box<dyn WrappedProvider + Send + Sync>,
+    base_config: aws_sdk_sagemakerruntime::config::Builder,
 }
 
 impl AWSSagemakerProvider {
@@ -46,6 +47,7 @@ impl AWSSagemakerProvider {
             endpoint_name,
             client,
             hosted_provider,
+            base_config: aws_sdk_sagemakerruntime::config::Builder::from(&config),
         })
     }
 }
@@ -54,7 +56,7 @@ impl InferenceProvider for AWSSagemakerProvider {
     async fn infer<'a>(
         &'a self,
         request: ModelProviderRequest<'a>,
-        _http_client: &'a reqwest::Client,
+        http_client: &'a reqwest::Client,
         _dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
@@ -68,6 +70,10 @@ impl InferenceProvider for AWSSagemakerProvider {
             request.model_name.to_string(),
         );
 
+        let new_config = self
+            .base_config
+            .clone()
+            .http_client(super::aws_http_client::Client::new(http_client.clone()));
         let start_time = Instant::now();
         let res = self
             .client
@@ -76,6 +82,7 @@ impl InferenceProvider for AWSSagemakerProvider {
             .body(request_body.to_string().into_bytes().into())
             .content_type("application/json")
             .customize()
+            .config_override(new_config)
             .interceptor(interceptor)
             .send()
             .await
@@ -123,7 +130,7 @@ impl InferenceProvider for AWSSagemakerProvider {
     async fn infer_stream<'a>(
         &'a self,
         request: ModelProviderRequest<'a>,
-        _http_client: &'a reqwest::Client,
+        http_client: &'a reqwest::Client,
         _dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
@@ -138,6 +145,10 @@ impl InferenceProvider for AWSSagemakerProvider {
             request.model_name.to_string(),
         );
 
+        let new_config = self
+            .base_config
+            .clone()
+            .http_client(super::aws_http_client::Client::new(http_client.clone()));
         let start_time = Instant::now();
         let res = self
             .client
@@ -146,6 +157,7 @@ impl InferenceProvider for AWSSagemakerProvider {
             .body(request_body.to_string().into_bytes().into())
             .content_type("application/json")
             .customize()
+            .config_override(new_config)
             .interceptor(interceptor)
             .send()
             .await
