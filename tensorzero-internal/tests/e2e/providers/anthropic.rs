@@ -347,7 +347,7 @@ async fn test_thinking_signature() {
     assert_eq!(response.status(), StatusCode::OK);
     let response_json = response.json::<Value>().await.unwrap();
     let content_blocks = response_json.get("content").unwrap().as_array().unwrap();
-    let mut tensorzero_content_blocks = content_blocks.clone();
+    let tensorzero_content_blocks = content_blocks.clone();
     assert!(
         content_blocks.len() == 3,
         "Unexpected content blocks: {content_blocks:?}"
@@ -457,19 +457,6 @@ async fn test_thinking_signature() {
     let _raw_response_json: Value = serde_json::from_str(raw_response).unwrap();
 
     println!("Original tensorzero_content_blocks: {tensorzero_content_blocks:?}");
-
-    // TODO - support passing tool call in directly (https://github.com/tensorzero/tensorzero/issues/1366)
-    tensorzero_content_blocks[2]["arguments"] =
-        Value::String(serde_json::to_string(&tensorzero_content_blocks[2]["arguments"]).unwrap());
-    tensorzero_content_blocks[2]
-        .as_object_mut()
-        .unwrap()
-        .remove("raw_arguments");
-    tensorzero_content_blocks[2]
-        .as_object_mut()
-        .unwrap()
-        .remove("raw_name");
-
     // Feed content blocks back in
     let mut new_messages = vec![
         serde_json::json!({
