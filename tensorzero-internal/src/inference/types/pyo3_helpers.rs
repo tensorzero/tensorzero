@@ -14,8 +14,9 @@ use super::ContentBlock;
 
 pub static JSON_LOADS: GILOnceCell<Py<PyAny>> = GILOnceCell::new();
 pub static JSON_DUMPS: GILOnceCell<Py<PyAny>> = GILOnceCell::new();
-pub static TENSORZERO_INTERNAL_ERROR: GILOnceCell<Py<PyAny>> = GILOnceCell::new();
 pub static UUID_UUID: GILOnceCell<Py<PyAny>> = GILOnceCell::new();
+static TENSORZERO_INTERNAL_ERROR: GILOnceCell<Py<PyAny>> = GILOnceCell::new();
+static TENSORZERO_ERROR: GILOnceCell<Py<PyAny>> = GILOnceCell::new();
 
 pub fn uuid_to_python(py: Python<'_>, uuid: Uuid) -> PyResult<Bound<'_, PyAny>> {
     let uuid_class = UUID_UUID.get_or_try_init::<_, PyErr>(py, || {
@@ -327,11 +328,26 @@ pub fn deserialize_from_pyobj<'a, T: serde::de::DeserializeOwned>(
     }
 }
 
-pub fn tensorzero_internal_error(py: Python<'_>, msg: &str) -> PyResult<PyErr> {
-    let err = TENSORZERO_INTERNAL_ERROR.get_or_try_init::<_, PyErr>(py, || {
+pub fn tensorzero_error_class(py: Python<'_>) -> PyResult<&Py<PyAny>> {
+    TENSORZERO_ERROR.get_or_try_init::<_, PyErr>(py, || {
+        let self_module = PyModule::import(py, "tensorzero.types")?;
+        let err: Bound<'_, PyAny> = self_module.getattr("TensorZeroError")?;
+        Ok(err.unbind())
+    })
+}
+
+pub fn tensorzero_internal_error_class(py: Python<'_>) -> PyResult<&Py<PyAny>> {
+    TENSORZERO_INTERNAL_ERROR.get_or_try_init::<_, PyErr>(py, || {
         let self_module = PyModule::import(py, "tensorzero.types")?;
         let err: Bound<'_, PyAny> = self_module.getattr("TensorZeroInternalError")?;
         Ok(err.unbind())
-    })?;
-    Ok(PyErr::from_value(err.bind(py).call1((msg,))?))
+    })
+}
+
+pub fn tensorzero_internal_error(py: Python<'_>, msg: &str) -> PyResult<PyErr> {
+    Ok(PyErr::from_value(
+        tensorzero_internal_error_class(py)?
+            .bind(py)
+            .call1((msg,))?,
+    ))
 }

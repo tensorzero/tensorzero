@@ -38,6 +38,14 @@ pub fn set_debug(debug: bool) -> Result<(), Error> {
     })
 }
 
+pub fn warn_discarded_unknown_chunk(provider_type: &str, part: &str) {
+    if *DEBUG.get().unwrap_or(&false) {
+        tracing::warn!("Discarding unknown chunk in {provider_type} response: {part}");
+    } else {
+        tracing::warn!("Discarding unknown chunk in {provider_type} response");
+    }
+}
+
 pub const IMPOSSIBLE_ERROR_MESSAGE: &str = "This should never happen, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports";
 
 /// Chooses between a `Debug` or `Display` representation based on the gateway-level `DEBUG` flag.

@@ -265,6 +265,7 @@ pub fn convert_to_optimizer_status(
                 extra_headers: None,
                 extra_body: None,
                 timeouts: None,
+                discard_unknown_chunks: false,
             };
             OptimizerStatus::Completed(OptimizerOutput::Model(ModelConfig {
                 routing: vec![model_name.clone().into()],
