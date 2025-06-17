@@ -13,6 +13,7 @@ import {
   SectionLayout,
 } from "~/components/layout/PageLayout";
 import type { Route } from "./+types/route";
+import { logger } from "~/utils/logger";
 
 export const meta = () => {
   return [
@@ -50,7 +51,7 @@ export async function action({ request }: ActionFunctionArgs) {
       `/datasets/${queryParams.dataset_name}?rowsAdded=${writtenRows}&rowsSkipped=${skippedRows}`,
     );
   } catch (error) {
-    console.error("Error creating dataset:", error);
+    logger.error("Error creating dataset:", error);
     return data({ errors: { message: `${error}` } }, { status: 500 });
   }
 }

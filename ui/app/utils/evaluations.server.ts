@@ -5,6 +5,7 @@ import {
   EvaluationErrorSchema,
   type DisplayEvaluationError,
 } from "./evaluations";
+import { logger } from "~/utils/logger";
 /**
  * Get the path to the evaluations binary from environment variables.
  * Defaults to 'evaluations' if not specified.
@@ -148,7 +149,7 @@ export function runEvaluation(
         }
         // We're ignoring other types of output that don't match these patterns
       } catch {
-        console.warn(`Bad JSON line: ${line}`);
+        logger.warn(`Bad JSON line: ${line}`);
       }
     };
 

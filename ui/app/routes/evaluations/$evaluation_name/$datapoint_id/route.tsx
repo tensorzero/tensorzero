@@ -48,6 +48,7 @@ import { addEvaluationHumanFeedback } from "~/utils/tensorzero.server";
 import { Toaster } from "~/components/ui/toaster";
 import { useToast } from "~/hooks/use-toast";
 import { useEffect } from "react";
+import { logger } from "~/utils/logger";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const evaluation_name = params.evaluation_name;
@@ -148,12 +149,12 @@ export async function action({ request }: Route.ActionArgs) {
           response.judgeDemonstrationResponse.feedback_id,
         );
       } else {
-        console.warn("No judge demonstration response");
+        logger.warn("No judge demonstration response");
       }
       return redirect(url.toString());
     }
     default:
-      console.error(`Unknown action: ${_action}`);
+      logger.error(`Unknown action: ${_action}`);
       return null;
   }
 }
@@ -313,7 +314,7 @@ const MetricRow = ({
     return null;
   }
   if (inferenceId === null) {
-    console.warn(
+    logger.warn(
       `Inference ID is null for metric ${metric_name} in datapoint ${datapointId}, this should not happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports`,
     );
   }
@@ -383,7 +384,7 @@ const MetricRow = ({
 };
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  console.error(error);
+  logger.error(error);
 
   if (isRouteErrorResponse(error)) {
     return (

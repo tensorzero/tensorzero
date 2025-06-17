@@ -52,6 +52,7 @@ import { HumanFeedbackModal } from "~/components/feedback/HumanFeedbackModal";
 import { HumanFeedbackForm } from "~/components/feedback/HumanFeedbackForm";
 import { isServerRequestError } from "~/utils/common";
 import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
+import { logger } from "~/utils/logger";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { inference_id } = params;
@@ -156,7 +157,7 @@ export async function action({ request }: Route.ActionArgs) {
           redirectTo: `/datasets/${dataset.toString()}/datapoint/${datapoint.id}`,
         });
       } catch (error) {
-        console.error(error);
+        logger.error(error);
         return data<ActionData>(
           {
             error:
@@ -188,7 +189,7 @@ export async function action({ request }: Route.ActionArgs) {
       }
     }
     default:
-      console.error(`Unknown action: ${_action}`);
+      logger.error(`Unknown action: ${_action}`);
       return data<ActionData>(
         { error: "Unknown server action" },
         { status: 400 },
@@ -497,7 +498,7 @@ function getUserFacingError(error: unknown): {
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   useEffect(() => {
-    console.error(error);
+    logger.error(error);
   }, [error]);
   const { heading, message } = getUserFacingError(error);
   return (

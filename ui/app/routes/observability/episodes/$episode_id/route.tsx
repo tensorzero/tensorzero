@@ -31,6 +31,7 @@ import { HumanFeedbackModal } from "~/components/feedback/HumanFeedbackModal";
 import { HumanFeedbackForm } from "~/components/feedback/HumanFeedbackForm";
 import { isServerRequestError } from "~/utils/common";
 import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
+import { logger } from "~/utils/logger";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { episode_id } = params;
@@ -284,7 +285,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   );
 }
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  console.error(error);
+  logger.error(error);
 
   if (isRouteErrorResponse(error)) {
     return (

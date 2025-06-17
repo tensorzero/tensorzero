@@ -34,6 +34,7 @@ import {
   SectionsGroup,
   SectionHeader,
 } from "~/components/layout/PageLayout";
+import { logger } from "~/utils/logger";
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
   const { function_name, variant_name } = params;
@@ -255,7 +256,7 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  console.error(error);
+  logger.error(error);
 
   if (isRouteErrorResponse(error)) {
     return (
