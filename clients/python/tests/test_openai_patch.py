@@ -1,3 +1,5 @@
+# TODO - remove this 'type: ignore'
+# type: ignore
 import json
 from uuid import UUID
 
