@@ -1,6 +1,7 @@
-#![expect(clippy::unwrap_used, clippy::panic, clippy::print_stdout)]
+#![expect(clippy::unwrap_used, clippy::panic)]
 use base64::Engine;
 use std::collections::HashMap;
+use tokio::time::{sleep, Duration};
 use uuid::Uuid;
 
 use tensorzero::{RenderedStoredInference, Role};
@@ -48,6 +49,11 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
             .poll(&client, &job_handle, &credentials)
             .await
             .unwrap();
+        // Sleep for a minute
+        sleep(Duration::from_secs(60)).await;
+        if matches!(status, OptimizerStatus::Failed) {
+            panic!("Optimization failed");
+        }
     }
     assert!(matches!(status, OptimizerStatus::Completed(_)));
     let OptimizerStatus::Completed(OptimizerOutput::Model(model_config)) = status else {
@@ -86,11 +92,10 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
         credentials: &HashMap::new(),
         cache_options: &CacheOptions::default(),
     };
-    let response = model_config
+    model_config
         .infer(&request, &clients, "test")
         .await
         .unwrap();
-    println!("{response:?}");
 }
 
 fn get_examples(

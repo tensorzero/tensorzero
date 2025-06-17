@@ -56,6 +56,13 @@ filter = 'binary(e2e) and test(providers::sglang::)'
 slow-timeout = { period = "60s", terminate-after = 2 }
 
 [[profile.default.overrides]]
+# Settings for running optimization tests
+# We may have to update this as we add faster optimization methods that shouldn't
+# take as long
+filter = 'test(optimization)'
+slow-timeout = { period = "21600s", terminate-after = 1 }
+
+[[profile.default.overrides]]
 filter = 'test(test_concurrent_clickhouse_migrations)'
 # the test fails if migrations > 60s so we can kill it at 65
 slow-timeout = { period = "65s" }

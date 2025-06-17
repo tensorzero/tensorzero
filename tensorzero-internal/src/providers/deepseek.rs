@@ -1137,19 +1137,19 @@ mod tests {
     fn test_coalesce_consecutive_messages() {
         // Create dummy tool calls to test assistant message merging.
         let tool_call1 = OpenAIRequestToolCall {
-            id: "tc1",
+            id: "tc1".into(),
             r#type: OpenAIToolType::Function,
             function: OpenAIRequestFunctionCall {
-                name: "func1",
-                arguments: "args1",
+                name: "func1".into(),
+                arguments: "args1".into(),
             },
         };
         let tool_call2 = OpenAIRequestToolCall {
-            id: "tc2",
+            id: "tc2".into(),
             r#type: OpenAIToolType::Function,
             function: OpenAIRequestFunctionCall {
-                name: "func2",
-                arguments: "args2",
+                name: "func2".into(),
+                arguments: "args2".into(),
             },
         };
 

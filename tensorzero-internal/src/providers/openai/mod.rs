@@ -1027,13 +1027,13 @@ pub struct OpenAIImageUrl {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct OpenAIRequestFunctionCall<'a> {
-    pub name: &'a str,
-    pub arguments: &'a str,
+    pub name: Cow<'a, str>,
+    pub arguments: Cow<'a, str>,
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq, Deserialize)]
 pub struct OpenAIRequestToolCall<'a> {
-    pub id: &'a str,
+    pub id: Cow<'a, str>,
     pub r#type: OpenAIToolType,
     pub function: OpenAIRequestFunctionCall<'a>,
 }
@@ -1041,11 +1041,11 @@ pub struct OpenAIRequestToolCall<'a> {
 impl<'a> From<&'a ToolCall> for OpenAIRequestToolCall<'a> {
     fn from(tool_call: &'a ToolCall) -> Self {
         OpenAIRequestToolCall {
-            id: &tool_call.id,
+            id: Cow::Borrowed(&tool_call.id),
             r#type: OpenAIToolType::Function,
             function: OpenAIRequestFunctionCall {
-                name: &tool_call.name,
-                arguments: &tool_call.arguments,
+                name: Cow::Borrowed(&tool_call.name),
+                arguments: Cow::Borrowed(&tool_call.arguments),
             },
         }
     }
@@ -1208,7 +1208,7 @@ pub(super) fn tensorzero_to_openai_messages(
     match message.role {
         Role::User => tensorzero_to_openai_user_messages(&message.content),
         Role::Assistant => Ok(vec![tensorzero_to_openai_assistant_message(
-            &message.content,
+            Cow::Borrowed(&message.content),
         )?]),
     }
 }
@@ -1304,37 +1304,64 @@ fn tensorzero_to_openai_user_messages(
 }
 
 fn tensorzero_to_openai_assistant_message(
-    content_blocks: &[ContentBlock],
+    content_blocks: Cow<'_, [ContentBlock]>,
 ) -> Result<OpenAIRequestMessage<'_>, Error> {
+    let content_block_cows: Vec<Cow<'_, ContentBlock>> = match content_blocks {
+        Cow::Borrowed(content_blocks) => content_blocks.iter().map(Cow::Borrowed).collect(),
+        Cow::Owned(content_blocks) => content_blocks.into_iter().map(Cow::Owned).collect(),
+    };
+
     // We need to separate the tool result messages from the assistant content blocks.
     let mut assistant_content_blocks = Vec::new();
     let mut assistant_tool_calls = Vec::new();
 
-    for block in content_blocks.iter() {
+    for block in content_block_cows {
         match block {
-            ContentBlock::Text(Text { text }) => {
+            Cow::Borrowed(ContentBlock::Text(Text { text })) => {
                 assistant_content_blocks.push(OpenAIContentBlock::Text {
                     text: Cow::Borrowed(text),
                 });
             }
-            ContentBlock::ToolCall(tool_call) => {
+            Cow::Owned(ContentBlock::Text(Text { text })) => {
+                assistant_content_blocks.push(OpenAIContentBlock::Text {
+                    text: Cow::Owned(text),
+                });
+            }
+            Cow::Borrowed(ContentBlock::ToolCall(tool_call)) => {
                 let tool_call = OpenAIRequestToolCall {
-                    id: &tool_call.id,
+                    id: Cow::Borrowed(&tool_call.id),
                     r#type: OpenAIToolType::Function,
                     function: OpenAIRequestFunctionCall {
-                        name: &tool_call.name,
-                        arguments: &tool_call.arguments,
+                        name: Cow::Borrowed(&tool_call.name),
+                        arguments: Cow::Borrowed(&tool_call.arguments),
                     },
                 };
 
                 assistant_tool_calls.push(tool_call);
             }
-            ContentBlock::ToolResult(_) => {
+            Cow::Owned(ContentBlock::ToolCall(tool_call)) => {
+                let tool_call = OpenAIRequestToolCall {
+                    id: Cow::Owned(tool_call.id),
+                    r#type: OpenAIToolType::Function,
+                    function: OpenAIRequestFunctionCall {
+                        name: Cow::Owned(tool_call.name),
+                        arguments: Cow::Owned(tool_call.arguments),
+                    },
+                };
+
+                assistant_tool_calls.push(tool_call);
+            }
+            Cow::Borrowed(ContentBlock::ToolResult(_)) => {
                 return Err(Error::new(ErrorDetails::InvalidMessage {
                     message: "Tool results are not supported in assistant messages".to_string(),
                 }));
             }
-            ContentBlock::File(file) => {
+            Cow::Owned(ContentBlock::ToolResult(_)) => {
+                return Err(Error::new(ErrorDetails::InvalidMessage {
+                    message: "Tool results are not supported in assistant messages".to_string(),
+                }));
+            }
+            Cow::Borrowed(ContentBlock::File(file)) => {
                 let FileWithPath {
                     file,
                     storage_path: _,
@@ -1348,7 +1375,21 @@ fn tensorzero_to_openai_assistant_message(
                     },
                 });
             }
-            ContentBlock::Thought(_) => {
+            Cow::Owned(ContentBlock::File(file)) => {
+                let FileWithPath {
+                    file,
+                    storage_path: _,
+                } = &*file;
+                require_image(&file.mime_type, PROVIDER_TYPE)?;
+                assistant_content_blocks.push(OpenAIContentBlock::ImageUrl {
+                    image_url: OpenAIImageUrl {
+                        // This will only produce an error if we pass in a bad
+                        // `Base64File` (with missing file data)
+                        url: format!("data:{};base64,{}", file.mime_type, file.data()?),
+                    },
+                });
+            }
+            Cow::Borrowed(ContentBlock::Thought(_)) => {
                 // OpenAI doesn't support thought blocks.
                 // This can only happen if the thought block was generated by another model provider.
                 // At this point, we can either convert the thought blocks to text or drop them.
@@ -1359,12 +1400,26 @@ fn tensorzero_to_openai_assistant_message(
                     "Dropping `thought` content block from assistant message. OpenAI does not support them."
                 );
             }
-            ContentBlock::Unknown {
+            Cow::Owned(ContentBlock::Thought(_)) => {
+                // Same as above
+                tracing::warn!(
+                    "Dropping `thought` content block from assistant message. OpenAI does not support them."
+                );
+            }
+            Cow::Borrowed(ContentBlock::Unknown {
                 data,
                 model_provider_name: _,
-            } => {
+            }) => {
                 assistant_content_blocks.push(OpenAIContentBlock::Unknown {
                     data: Cow::Borrowed(data),
+                });
+            }
+            Cow::Owned(ContentBlock::Unknown {
+                data,
+                model_provider_name: _,
+            }) => {
+                assistant_content_blocks.push(OpenAIContentBlock::Unknown {
+                    data: Cow::Owned(data),
                 });
             }
         }
@@ -1456,6 +1511,25 @@ impl<'a> From<&'a ToolConfig> for OpenAITool<'a> {
                 parameters: tool.parameters(),
             },
             strict: tool.strict(),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Serialize)]
+pub struct OpenAISFTTool<'a> {
+    pub r#type: OpenAIToolType,
+    pub function: OpenAIFunction<'a>,
+}
+
+impl<'a> From<&'a Tool> for OpenAISFTTool<'a> {
+    fn from(tool: &'a Tool) -> Self {
+        OpenAISFTTool {
+            r#type: OpenAIToolType::Function,
+            function: OpenAIFunction {
+                name: &tool.name,
+                description: Some(&tool.description),
+                parameters: &tool.parameters,
+            },
         }
     }
 }
@@ -3058,9 +3132,9 @@ mod tests {
             arguments: "{}".to_string(),
         });
         let content_blocks = vec!["Hello".to_string().into(), tool_block];
-        let openai_messages = tensorzero_to_openai_assistant_messages(&content_blocks).unwrap();
-        assert_eq!(openai_messages.len(), 1);
-        match &openai_messages[0] {
+        let openai_message =
+            tensorzero_to_openai_assistant_message(Cow::Borrowed(&content_blocks)).unwrap();
+        match &openai_message {
             OpenAIRequestMessage::Assistant(content) => {
                 assert_eq!(
                     content.content,

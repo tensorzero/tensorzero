@@ -1,18 +1,18 @@
 use chrono::DateTime;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::HashMap;
+use std::{borrow::Cow, collections::HashMap};
 
+use super::{
+    prepare_openai_messages, tensorzero_to_openai_assistant_message, OpenAICredentials,
+    OpenAIFileID, OpenAIProvider, OpenAIRequestMessage, OpenAISFTTool,
+};
 use crate::{
     config_parser::TimeoutsConfig,
     error::{Error, ErrorDetails},
     inference::types::ContentBlock,
     model::{ModelConfig, ModelProvider, ProviderConfig},
     optimization::{OptimizerOutput, OptimizerStatus},
-    providers::openai::{
-        prepare_openai_messages, tensorzero_to_openai_assistant_message, OpenAICredentials,
-        OpenAIFileID, OpenAIProvider, OpenAIRequestMessage, OpenAITool,
-    },
     stored_inference::RenderedStoredInference,
 };
 
@@ -148,7 +148,8 @@ pub enum Grader {
 pub struct OpenAISupervisedRow<'a> {
     messages: Vec<OpenAIRequestMessage<'a>>,
     parallel_tool_calls: bool,
-    tools: Vec<OpenAITool<'a>>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    tools: Vec<OpenAISFTTool<'a>>,
 }
 
 impl<'a> TryFrom<&'a RenderedStoredInference> for OpenAISupervisedRow<'a> {
@@ -181,7 +182,7 @@ impl<'a> TryFrom<&'a RenderedStoredInference> for OpenAISupervisedRow<'a> {
             .map(|c| c.clone().into())
             .collect::<Vec<_>>();
         let final_assistant_message =
-            tensorzero_to_openai_assistant_message(&output_content_blocks)?;
+            tensorzero_to_openai_assistant_message(Cow::Owned(output_content_blocks))?;
         messages.push(final_assistant_message);
         // TODO: add a test that makes sure the last message is from the assistant
         Ok(Self {
@@ -216,7 +217,7 @@ pub struct OpenAIFineTuningJob {
     pub fine_tuned_model: Option<String>,
     pub finished_at: Option<u64>, // Unix timestamp in seconds
     pub id: String,
-    pub metadata: HashMap<String, String>,
+    pub metadata: Option<HashMap<String, String>>,
     pub trained_tokens: Option<u64>,
     pub status: OpenAIFineTuningJobStatus,
 }
