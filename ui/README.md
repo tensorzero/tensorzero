@@ -25,11 +25,5 @@ The instructions below assume you're using the provided setup with fixture data.
 6. Run `pnpm` scripts from the root of the repository to start the app:
 
    - Run `pnpm install` to install the dependencies.
-   - Run `pnpm ui:dev` to start the development server. Optionally, enable the feature flags to try out new features:
-
-     ```sh
-     # for delegating to Python-based optimization server
-     TENSORZERO_UI_FF_ENABLE_PYTHON=1
-     ```
-
+   - Run `pnpm ui:dev` to start the development server.
    - You can also run tests with `pnpm ui:test` and Storybook with `pnpm ui:storybook`.

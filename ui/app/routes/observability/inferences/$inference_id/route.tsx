@@ -50,8 +50,9 @@ import { AddToDatasetButton } from "./AddToDatasetButton";
 import { HumanFeedbackButton } from "~/components/feedback/HumanFeedbackButton";
 import { HumanFeedbackModal } from "~/components/feedback/HumanFeedbackModal";
 import { HumanFeedbackForm } from "~/components/feedback/HumanFeedbackForm";
-import { isServerRequestError } from "~/utils/common";
+import { isServerRequestError, JSONParseError } from "~/utils/common";
 import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
+import { processJson } from "~/utils/syntax-highlighting.server";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { inference_id } = params;
@@ -117,8 +118,23 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     });
   }
 
+  const [inferenceParams, toolParams] = await Promise.all([
+    processJson(
+      inference.inference_params,
+      `inference params: ${inference_id}`,
+    ).catch(handleJsonProcessingError),
+    inference.function_type === "chat"
+      ? processJson(
+          inference.tool_params,
+          `tool params: ${inference_id}`,
+        ).catch(handleJsonProcessingError)
+      : Promise.resolve(null),
+  ]);
+
   return {
     inference,
+    inferenceParams,
+    toolParams,
     model_inferences,
     feedback,
     feedback_bounds,
@@ -201,6 +217,8 @@ type ModalType = "human-feedback" | "variant-response" | null;
 export default function InferencePage({ loaderData }: Route.ComponentProps) {
   const {
     inference,
+    inferenceParams,
+    toolParams,
     model_inferences,
     feedback,
     feedback_bounds,
@@ -411,13 +429,21 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
 
         <SectionLayout>
           <SectionHeader heading="Inference Parameters" />
-          <ParameterCard parameters={inference.inference_params} />
+          <ParameterCard
+            parameters={inferenceParams.raw}
+            html={inferenceParams.html}
+          />
         </SectionLayout>
 
         {inference.function_type === "chat" && (
           <SectionLayout>
             <SectionHeader heading="Tool Parameters" />
-            <ParameterCard parameters={inference.tool_params} />
+            {toolParams && (
+              <ParameterCard
+                parameters={toolParams.raw}
+                html={inferenceParams.html}
+              />
+            )}
           </SectionLayout>
         )}
 
@@ -514,4 +540,13 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
       </div>
     </div>
   );
+}
+
+function handleJsonProcessingError(error: unknown): never {
+  if (error instanceof JSONParseError) {
+    throw data(error.message, { status: 400 });
+  }
+  throw data(`Server error while processing JSON. Please contact support.`, {
+    status: 500,
+  });
 }

@@ -7664,7 +7664,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
                             "type": "tool_call",
                             "id": "123456789",
                             "name": "get_temperature",
-                            "arguments": "{\"location\": \"Tokyo\", \"units\": \"celsius\"}"
+                            "arguments": {"location": "Tokyo", "units": "celsius"}
                         }
                     ]
                 },
@@ -7797,7 +7797,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
                         "type": "tool_call",
                         "id": "123456789",
                         "name": "get_temperature",
-                        "arguments": "{\"location\": \"Tokyo\", \"units\": \"celsius\"}"
+                        "arguments": "{\"location\":\"Tokyo\",\"units\":\"celsius\"}"
                     }
                 ]
             },
@@ -7926,7 +7926,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
             content: vec![ContentBlock::ToolCall(ToolCall {
                 id: "123456789".to_string(),
                 name: "get_temperature".to_string(),
-                arguments: "{\"location\": \"Tokyo\", \"units\": \"celsius\"}".to_string(),
+                arguments: "{\"location\":\"Tokyo\",\"units\":\"celsius\"}".to_string(),
             })],
         },
         RequestMessage {
@@ -11053,18 +11053,7 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
             );
         }
 
-        let mut redacted_content_block = content_block.clone();
-        redacted_content_block
-            .as_object_mut()
-            .unwrap()
-            .remove("raw_name");
-        redacted_content_block
-            .as_object_mut()
-            .unwrap()
-            .remove("raw_arguments");
-        redacted_content_block["arguments"] =
-            Value::String(redacted_content_block.get("arguments").unwrap().to_string());
-        redacted_tool_calls.push(redacted_content_block);
+        redacted_tool_calls.push(content_block);
     }
 
     // Build the payload for the second inference request

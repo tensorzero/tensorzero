@@ -81,7 +81,15 @@ export function isErrorLike(error: unknown): error is ErrorLike {
   );
 }
 
-export class JSONParseError extends SyntaxError {}
+export class JSONParseError extends SyntaxError {
+  constructor(
+    public message: string,
+    public cause?: unknown,
+  ) {
+    super(message, { cause });
+    this.name = "JSONParseError";
+  }
+}
 
 export class ServerRequestError extends Error {
   statusCode: number;

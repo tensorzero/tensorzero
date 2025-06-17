@@ -11,6 +11,7 @@ import { defineConfig, devices } from "@playwright/test";
 const useUIDocker =
   process.env.TENSORZERO_PLAYWRIGHT_NO_WEBSERVER || process.env.TENSORZERO_CI;
 
+
 /**
  * See https://playwright.dev/docs/test-configuration.
  */
@@ -27,7 +28,7 @@ export default defineConfig({
   /* Fail immediately while we're debugging the CI issue */
   maxFailures: process.env.TENSORZERO_CI ? 1 : undefined,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
-  reporter: "html",
+  reporter: process.env.TENSORZERO_CI ? [['list'], ['github']] : [['dot']],
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Base URL to use in actions like `await page.goto('/')`. */

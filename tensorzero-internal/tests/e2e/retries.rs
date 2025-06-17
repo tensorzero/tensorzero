@@ -2,12 +2,12 @@ use futures::StreamExt;
 use reqwest::{Client, StatusCode};
 use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{json, Value};
-use tensorzero_internal::inference::{
+use tensorzero_internal::{
+    inference::types::{ContentBlock, RequestMessage, Role, Text},
     providers::dummy::{
         DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW, DUMMY_RAW_REQUEST,
         DUMMY_STREAMING_RESPONSE,
     },
-    types::{ContentBlock, RequestMessage, Role, Text},
 };
 use uuid::Uuid;
 

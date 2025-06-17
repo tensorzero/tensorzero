@@ -20,9 +20,8 @@ import {
   PageLayout,
   SectionLayout,
 } from "~/components/layout/PageLayout";
-import { SFTFormValuesSchema, type SFTFormValues } from "./types";
+import { SFTFormValuesSchema } from "./types";
 import { launch_sft_job } from "~/utils/supervised_fine_tuning/client";
-import { FF_ENABLE_PYTHON } from "./featureflag.server";
 
 export const meta: MetaFunction = () => {
   return [
@@ -50,10 +49,6 @@ export async function loader({
     };
   }
 
-  if (FF_ENABLE_PYTHON) {
-    return await loadPythonFineTuneJob(job_id);
-  }
-
   const storedJob = jobStore[job_id];
   if (!storedJob) {
     throw new Response(JSON.stringify({ error: "Job not found" }), {
@@ -68,22 +63,6 @@ export async function loader({
   return status;
 }
 
-async function loadPythonFineTuneJob(job_id: string) {
-  const res = await fetch(`http://localhost:7001/optimizations/poll/${job_id}`);
-  if (!res.ok) {
-    if (res.status === 404) {
-      throw new Response(JSON.stringify({ error: await res.text() }), {
-        status: 404,
-      });
-    } else {
-      throw new Response(JSON.stringify({ error: await res.text() }), {
-        status: 500,
-      });
-    }
-  }
-  return await res.json();
-}
-
 // The action actually launches the fine-tuning job.
 export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
@@ -93,10 +72,6 @@ export async function action({ request }: Route.ActionArgs) {
   }
   const jsonData = JSON.parse(serializedFormData);
   const validatedData = SFTFormValuesSchema.parse(jsonData);
-
-  if (FF_ENABLE_PYTHON) {
-    return await startPythonFineTune(jsonData, validatedData);
-  }
 
   let job;
   try {
@@ -116,43 +91,6 @@ export async function action({ request }: Route.ActionArgs) {
   // using the expected backend
   return redirect(
     `/optimization/supervised-fine-tuning/${validatedData.jobId}?backend=nodejs`,
-  );
-}
-
-async function startPythonFineTune(
-  parsedFormData: object,
-  validatedData: SFTFormValues,
-) {
-  try {
-    const res = await fetch("http://localhost:7001/optimizations", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        data: {
-          kind: "sft",
-          ...parsedFormData,
-        },
-      }),
-    });
-    const resText = await res.text();
-    if (!res.ok) {
-      return data(
-        { message: `Error ${res.status} from fine-tuning server: ${resText}` },
-        { status: 500 },
-      );
-    }
-  } catch (error) {
-    const errors = {
-      message:
-        error instanceof Error
-          ? error.message
-          : "Unknown error occurred while launching fine-tuning job",
-    };
-    return data({ errors }, { status: 500 });
-  }
-
-  return redirect(
-    `/optimization/supervised-fine-tuning/${validatedData.jobId}?backend=python`,
   );
 }
 

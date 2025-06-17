@@ -90,19 +90,6 @@ COPY --from=minijinja-build-env /build/ui/app/utils/minijinja/pkg ./ui/app/utils
 
 RUN pnpm --filter=tensorzero-ui run build
 
-# ========== python-build-env ==========
-
-FROM rust:latest AS python-build-env
-RUN apt-get update && apt-get install -y python3
-COPY --from=ghcr.io/astral-sh/uv:0.6.6 /uv /uvx /bin/
-COPY . /build
-WORKDIR /build/optimization-server
-# TODO - figure out how to cache the rust build here
-# UV_PYTHON_DOWNLOADS=never
-# https://hynek.me/articles/docker-uv/
-ENV UV_COMPILE_BYTECODE=1
-RUN uv --verbose sync --locked --no-dev
-
 # ========== ui ==========
 
 FROM base AS ui
@@ -123,11 +110,6 @@ COPY --from=production-dependencies-env /app/ui/node_modules /app/ui/node_module
 
 # Copy the built UI
 COPY --from=build-env /app/ui/build /app/ui/build
-
-# Copy Python optimization server and its dependencies
-COPY --from=python-build-env /build/optimization-server /build/optimization-server
-COPY --from=python-build-env /build/clients/python /build/clients/python
-COPY --from=python-build-env /build/optimization-server/.venv  /build/optimization-server/.venv
 
 # Copy evaluations binary
 COPY --from=evaluations-build-env /release/evaluations /usr/local/bin/evaluations

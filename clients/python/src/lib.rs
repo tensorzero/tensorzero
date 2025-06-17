@@ -16,7 +16,6 @@ use pyo3::{
     ffi::c_str,
     marker::Ungil,
     prelude::*,
-    sync::GILOnceCell,
     types::{PyDict, PyList, PyString, PyType},
     IntoPyObjectExt,
 };
@@ -30,7 +29,8 @@ use tensorzero_internal::{
     inference::types::{
         pyo3_helpers::{
             deserialize_from_pyobj, deserialize_from_stored_inference, serialize_to_dict,
-            tensorzero_internal_error, JSON_DUMPS, JSON_LOADS,
+            tensorzero_error_class, tensorzero_internal_error, tensorzero_internal_error_class,
+            JSON_DUMPS, JSON_LOADS,
         },
         ResolvedInput, ResolvedInputMessage,
     },
@@ -58,10 +58,12 @@ use url::Url;
 mod internal;
 mod python_helpers;
 
-pub(crate) static TENSORZERO_HTTP_ERROR: GILOnceCell<Py<PyAny>> = GILOnceCell::new();
-
 #[pymodule]
 fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    // Make sure that we can load our error classes, so that we don't trigger
+    // a nested exception when calling `convert_error` below
+    let _ = tensorzero_error_class(m.py())?;
+    let _ = tensorzero_internal_error_class(m.py())?;
     // Otel is disabled for now in the Python client until we decide how it should be configured
     let _delayed_enable = tokio_block_on_without_gil(
         m.py(),
@@ -1685,12 +1687,11 @@ pub fn convert_error(py: Python<'_>, e: TensorZeroError) -> PyErr {
 }
 
 fn tensorzero_error(py: Python<'_>, status_code: u16, text: Option<String>) -> PyResult<PyErr> {
-    let err = TENSORZERO_HTTP_ERROR.get_or_try_init::<_, PyErr>(py, || {
-        let self_module = PyModule::import(py, "tensorzero.types")?;
-        let err: Bound<'_, PyAny> = self_module.getattr("TensorZeroError")?;
-        Ok(err.unbind())
-    })?;
-    Ok(PyErr::from_value(err.bind(py).call1((status_code, text))?))
+    Ok(PyErr::from_value(
+        tensorzero_error_class(py)?
+            .bind(py)
+            .call1((status_code, text))?,
+    ))
 }
 
 fn warn_no_config(py: Python<'_>, config: Option<&str>) -> PyResult<()> {

@@ -342,18 +342,39 @@
 
 @layer base {
   * {
-    @apply border-border;
+    @apply border-border outline-ring/50;
   }
   body {
     @apply bg-background text-foreground;
   }
 }
 
-@layer base {
-  * {
-    @apply border-border outline-ring/50;
-  }
-  body {
-    @apply bg-background text-foreground;
+@layer components {
+  .CodeBlock {
+    &:where(.CodeBlock--with-line-numbers) code {
+      counter-reset: line;
+    }
+
+    &:where(.CodeBlock--with-line-numbers) .line {
+      counter-increment: line;
+
+      &::before {
+        display: block;
+        content: counter(line);
+        position: sticky;
+        align-self: flex-start;
+        color: theme(--color-fg-muted);
+        left: 0;
+        width: --spacing(13);
+        padding-right: --spacing(3);
+        text-align: right;
+        user-select: none;
+        font-family: theme(--font-mono);
+        background: theme(--color-bg-primary);
+        @media (width <= theme(--breakpoint-sm)) {
+          display: none;
+        }
+      }
+    }
   }
 }
