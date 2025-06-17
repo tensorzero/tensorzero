@@ -14,14 +14,11 @@ use crate::model_table::ShorthandModelConfig;
 use crate::{
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails},
-    inference::{
-        providers::openai::OpenAIProvider,
-        types::{
-            current_timestamp, Latency, ModelInferenceResponseWithMetadata, RequestMessage, Role,
-            Usage,
-        },
+    inference::types::{
+        current_timestamp, Latency, ModelInferenceResponseWithMetadata, RequestMessage, Role, Usage,
     },
     model::ProviderConfig,
+    providers::openai::OpenAIProvider,
 };
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -29,7 +26,7 @@ use tracing::instrument;
 use uuid::Uuid;
 
 #[cfg(any(test, feature = "e2e_tests"))]
-use crate::inference::providers::dummy::DummyProvider;
+use crate::providers::dummy::DummyProvider;
 
 pub type EmbeddingModelTable = BaseModelTable<EmbeddingModelConfig>;
 

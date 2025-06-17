@@ -138,6 +138,7 @@ pub struct ModelUsedInfo {
     pub model_name: Arc<str>,
     pub model_provider_name: Arc<str>,
     pub raw_request: String,
+    pub raw_response: Option<String>,
     pub system: Option<String>,
     pub input_messages: Vec<RequestMessage>,
     pub inference_params: InferenceParams,
@@ -547,6 +548,11 @@ where
                 json_mode: json_mode.unwrap_or(JsonMode::Off).into(),
                 function_type: FunctionType::Chat,
                 output_schema: inference_config.dynamic_output_schema.map(|v| &v.value),
+                stop_sequences: inference_params
+                    .chat_completion
+                    .stop_sequences
+                    .clone()
+                    .map(Cow::Owned),
                 extra_body,
                 extra_headers,
                 extra_cache_key: inference_config.extra_cache_key.clone(),
@@ -583,6 +589,11 @@ where
                 json_mode: json_mode.unwrap_or(JsonMode::Strict).into(),
                 function_type: FunctionType::Json,
                 output_schema,
+                stop_sequences: inference_params
+                    .chat_completion
+                    .stop_sequences
+                    .clone()
+                    .map(Cow::Owned),
                 extra_body,
                 extra_headers,
                 extra_cache_key: inference_config.extra_cache_key.clone(),
@@ -667,6 +678,7 @@ async fn infer_model_request_stream<'request>(
         model_name,
         model_provider_name,
         raw_request,
+        raw_response: None,
         inference_params,
         previous_model_inference_results: vec![],
         system,
@@ -729,16 +741,16 @@ mod tests {
     use crate::endpoints::inference::{ChatCompletionInferenceParams, InferenceCredentials};
     use crate::error::ErrorDetails;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
-    use crate::inference::providers::dummy::{
-        DummyProvider, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_USAGE, DUMMY_JSON_RESPONSE_RAW,
-        DUMMY_STREAMING_RESPONSE,
-    };
     use crate::inference::types::{
         ContentBlockChunk, ModelInferenceRequestJsonMode, RequestMessage, Role,
     };
     use crate::jsonschema_util::StaticJSONSchema;
     use crate::minijinja_util::tests::get_test_template_config;
     use crate::model::{ModelProvider, ProviderConfig};
+    use crate::providers::dummy::{
+        DummyProvider, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_USAGE, DUMMY_JSON_RESPONSE_RAW,
+        DUMMY_STREAMING_RESPONSE,
+    };
     use crate::tool::{ToolCallConfig, ToolChoice};
     use reqwest::Client;
     use serde_json::json;
@@ -784,6 +796,7 @@ mod tests {
                 frequency_penalty: Some(0.0),
                 seed: Some(42),
                 json_mode: None,
+                stop_sequences: None,
             },
         };
 
@@ -1064,6 +1077,7 @@ mod tests {
                     discard_unknown_chunks: false,
                 },
             )]),
+            timeouts: Default::default(),
         };
         let retry_config = Box::leak(Box::new(RetryConfig::default()));
 
@@ -1173,6 +1187,7 @@ mod tests {
                     discard_unknown_chunks: false,
                 },
             )]),
+            timeouts: Default::default(),
         };
 
         // Create the arguments struct
@@ -1232,6 +1247,7 @@ mod tests {
                     discard_unknown_chunks: false,
                 },
             )]),
+            timeouts: Default::default(),
         };
 
         // Create the arguments struct
@@ -1367,6 +1383,7 @@ mod tests {
                     },
                 ),
             ]),
+            timeouts: Default::default(),
         };
         let retry_config = Box::leak(Box::new(RetryConfig::default()));
 
@@ -1465,6 +1482,7 @@ mod tests {
                     discard_unknown_chunks: false,
                 },
             )]),
+            timeouts: Default::default(),
         }));
 
         // Prepare the model inference request
@@ -1650,6 +1668,7 @@ mod tests {
                     },
                 ),
             ]),
+            timeouts: Default::default(),
         }));
         let retry_config = RetryConfig::default();
 

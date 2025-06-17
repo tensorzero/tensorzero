@@ -13,13 +13,14 @@ pub fn get_extra_headers() -> UnfilteredInferenceExtraHeaders {
     if let Ok(modal_key) = env::var("MODAL_KEY") {
         extra_headers.push(InferenceExtraHeader::Provider {
             model_provider_name:
-                "tensorzero::model_name::smol-lm-instruct-vllm::provider_name::vllm".to_string(),
+                "tensorzero::model_name::qwen2.5-0.5b-instruct-vllm::provider_name::vllm"
+                    .to_string(),
             name: "Modal-Key".to_string(),
             value: modal_key.clone(),
         });
         extra_headers.push(InferenceExtraHeader::Provider {
             model_provider_name:
-                "tensorzero::model_name::smol-lm-instruct-vllm-dynamic::provider_name::vllm"
+                "tensorzero::model_name::qwen2.5-0.5b-instruct-vllm-dynamic::provider_name::vllm"
                     .to_string(),
             name: "Modal-Key".to_string(),
             value: modal_key.clone(),
@@ -35,13 +36,14 @@ pub fn get_extra_headers() -> UnfilteredInferenceExtraHeaders {
     if let Ok(modal_secret) = env::var("MODAL_SECRET") {
         extra_headers.push(InferenceExtraHeader::Provider {
             model_provider_name:
-                "tensorzero::model_name::smol-lm-instruct-vllm::provider_name::vllm".to_string(),
+                "tensorzero::model_name::qwen2.5-0.5b-instruct-vllm::provider_name::vllm"
+                    .to_string(),
             name: "Modal-Secret".to_string(),
             value: modal_secret.clone(),
         });
         extra_headers.push(InferenceExtraHeader::Provider {
             model_provider_name:
-                "tensorzero::model_name::smol-lm-instruct-vllm-dynamic::provider_name::vllm"
+                "tensorzero::model_name::qwen2.5-0.5b-instruct-vllm-dynamic::provider_name::vllm"
                     .to_string(),
             name: "Modal-Secret".to_string(),
             value: modal_secret.clone(),

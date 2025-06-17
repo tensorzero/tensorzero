@@ -24,8 +24,8 @@ workspace = true
 [dependencies]
 async-stream = { workspace = true }
 async-trait = "0.1.86"
-aws-config = { version = "1.6", features = ["behavior-version-latest"] }
-aws-sdk-bedrockruntime = { version = "1.92.0", default-features = false, features = [
+aws-config = { version = "1.8", features = ["behavior-version-latest"] }
+aws-sdk-bedrockruntime = { version = "1.93.0", default-features = false, features = [
     "behavior-version-latest",
     "rt-tokio",
     "default-https-client",
@@ -86,7 +86,7 @@ url = { workspace = true, features = ["serde"] }
 uuid = { workspace = true }
 tensorzero-derive = { path = "../tensorzero-derive" }
 clap = { workspace = true }
-aws-sdk-sagemakerruntime = { version = "1.74.0", features = [
+aws-sdk-sagemakerruntime = { version = "1.75.0", features = [
     "behavior-version-latest",
     "rt-tokio",
     "default-https-client",
@@ -119,7 +119,7 @@ tracing-test = { workspace = true }
 tensorzero = { path = "../clients/rust" }
 paste = "1.0.15"
 base64 = "0.22.1"
-aws-sdk-s3 = { version = "1.91.0", default-features = false, features = [
+aws-sdk-s3 = { version = "1.92.0", default-features = false, features = [
     "behavior-version-latest",
     "sigv4a",
     "rt-tokio",
@@ -128,6 +128,7 @@ aws-sdk-s3 = { version = "1.91.0", default-features = false, features = [
 aws-credential-types = { version = "1.2.2", features = [
     "hardcoded-credentials",
 ] }
+http-body-util = "0.1.3"
 
 [build-dependencies]
 built = { version = "0.8.0", features = ["git2"] }

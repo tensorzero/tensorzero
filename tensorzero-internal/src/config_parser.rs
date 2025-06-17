@@ -57,6 +57,7 @@ pub struct Config<'c> {
 }
 
 #[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct NonStreamingTimeouts {
     #[serde(default)]
     /// The total time allowed for the non-streaming request to complete.
@@ -64,6 +65,7 @@ pub struct NonStreamingTimeouts {
 }
 
 #[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct StreamingTimeouts {
     #[serde(default)]
     /// The time allowed for the first token to be produced.
@@ -73,6 +75,7 @@ pub struct StreamingTimeouts {
 /// Configures the timeouts for both streaming and non-streaming requests.
 /// This can be attached to various other configs (e.g. variants, models, model providers)
 #[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct TimeoutsConfig {
     #[serde(default)]
     pub non_streaming: NonStreamingTimeouts,
@@ -2943,5 +2946,74 @@ thinking = { type = "enabled", budget_tokens = 1024 }
             .expect_err("Config should fail to load");
 
         assert_eq!(err.to_string(), "`functions.no_schema.variants.invalid_system_template.system_template`: template needs variables: [assistant_name] but only `system_text` is allowed when template has no schema");
+    }
+
+    #[tokio::test]
+    async fn deny_bad_timeout_fields() {
+        let config = r#"
+    [models.slow_with_timeout]
+    routing = ["slow"]
+
+    [models.slow_with_timeout.providers.slow]
+    type = "dummy"
+    model = "good"
+    timeouts = { bad_field = 1 }
+    "#;
+        let config = toml::from_str(config).unwrap();
+        let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let err = Config::load_from_toml(config, base_path.clone())
+            .await
+            .expect_err("Config should fail to load");
+
+        assert_eq!(
+            err.to_string(),
+            "models.slow_with_timeout.providers.slow.timeouts.bad_field: unknown field `bad_field`, expected `non_streaming` or `streaming`"
+        );
+    }
+
+    #[tokio::test]
+    async fn deny_bad_timeouts_non_streaming_field() {
+        let config = r#"
+        [models.slow_with_timeout]
+        routing = ["slow"]
+
+        [models.slow_with_timeout.providers.slow]
+        type = "dummy"
+        model = "good"
+        timeouts = { non_streaming = { unknown_field = 1000 } }
+        "#;
+        let config = toml::from_str(config).unwrap();
+        let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let err = Config::load_from_toml(config, base_path.clone())
+            .await
+            .expect_err("Config should fail to load");
+
+        assert_eq!(
+            err.to_string(),
+            "models.slow_with_timeout.providers.slow.timeouts.non_streaming.unknown_field: unknown field `unknown_field`, expected `total_ms`"
+        );
+    }
+
+    #[tokio::test]
+    async fn deny_bad_timeouts_streaming_field() {
+        let config = r#"
+        [models.slow_with_timeout]
+        routing = ["slow"]
+
+        [models.slow_with_timeout.providers.slow]
+        type = "dummy"
+        model = "good"
+        timeouts = { streaming = { unknown_field = 1000 } }
+        "#;
+        let config = toml::from_str(config).unwrap();
+        let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let err = Config::load_from_toml(config, base_path.clone())
+            .await
+            .expect_err("Config should fail to load");
+
+        assert_eq!(
+            err.to_string(),
+            "models.slow_with_timeout.providers.slow.timeouts.streaming.unknown_field: unknown field `unknown_field`, expected `ttft_ms`"
+        );
     }
 }

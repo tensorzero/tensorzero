@@ -361,12 +361,13 @@ async fn inner_fuse_candidates<'a, 'request>(
     clients: &'request InferenceClients<'request>,
     candidates: &[InferenceResult],
 ) -> Result<InferenceResult, Error> {
+    let mut inference_params = InferenceParams::default();
     let (inference_request, included_indices) = fuser.prepare_request(
         input,
         function,
         inference_config,
         candidates,
-        &mut InferenceParams::default(),
+        &mut inference_params,
     )?;
     if included_indices.is_empty() {
         return Err(ErrorDetails::Inference {
@@ -508,7 +509,7 @@ impl FuserConfig {
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'a, 'request>,
         candidates: &[InferenceResult],
-        inference_params: &mut InferenceParams,
+        inference_params: &'request mut InferenceParams,
     ) -> Result<(ModelInferenceRequest<'request>, Vec<usize>), Error>
     where
         'a: 'request,
@@ -544,6 +545,7 @@ impl FuserConfig {
                 self.inner.top_p,
                 self.inner.presence_penalty,
                 self.inner.frequency_penalty,
+                self.inner.stop_sequences.clone(),
             );
 
         if !inference_config.extra_body.is_empty() {
@@ -592,16 +594,14 @@ mod tests {
         clickhouse::ClickHouseConnectionInfo,
         endpoints::inference::{InferenceCredentials, InferenceIds},
         function::{FunctionConfigChat, FunctionConfigJson},
-        inference::{
-            providers::dummy::DummyProvider,
-            types::{
-                ChatInferenceResult, FinishReason, InternalJsonInferenceOutput,
-                JsonInferenceResult, Latency, ModelInferenceResponseWithMetadata,
-            },
+        inference::types::{
+            ChatInferenceResult, FinishReason, InternalJsonInferenceOutput, JsonInferenceResult,
+            Latency, ModelInferenceResponseWithMetadata,
         },
         jsonschema_util::StaticJSONSchema,
         minijinja_util::tests::get_test_template_config,
         model::{ModelConfig, ModelProvider, ProviderConfig},
+        providers::dummy::DummyProvider,
         tool::{ToolCallConfig, ToolChoice},
     };
 
@@ -1083,6 +1083,7 @@ mod tests {
                         discard_unknown_chunks: false,
                     },
                 )]),
+                timeouts: Default::default(),
             },
         )]))
         .expect("Failed to create model table");
@@ -1183,6 +1184,7 @@ mod tests {
                             discard_unknown_chunks: false,
                         },
                     )]),
+                    timeouts: Default::default(),
                 },
             );
             ModelTable::try_from(map).expect("Failed to create model table")
@@ -1250,6 +1252,7 @@ mod tests {
                             discard_unknown_chunks: false,
                         },
                     )]),
+                    timeouts: Default::default(),
                 },
             );
             ModelTable::try_from(map).expect("Failed to create model table")
