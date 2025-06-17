@@ -657,21 +657,19 @@ mod tests {
         ChatCompletionInferenceParams, InferenceCredentials, InferenceIds,
     };
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
-    use crate::inference::providers::dummy::{DummyProvider, DUMMY_JSON_RESPONSE_RAW};
-    use crate::inference::providers::test_helpers::get_temperature_tool_config;
     use crate::inference::types::{
         ContentBlockChatOutput, InferenceResultChunk, ModelInferenceRequestJsonMode, Usage,
     };
     use crate::jsonschema_util::{DynamicJSONSchema, StaticJSONSchema};
     use crate::minijinja_util::tests::get_test_template_config;
     use crate::model::{ModelConfig, ModelProvider, ProviderConfig};
+    use crate::providers::dummy::{DummyProvider, DUMMY_JSON_RESPONSE_RAW};
+    use crate::providers::test_helpers::get_temperature_tool_config;
     use crate::tool::{ToolCallConfig, ToolChoice};
     use crate::{
         error::Error,
-        inference::{
-            providers::dummy::{DUMMY_INFER_RESPONSE_CONTENT, DUMMY_STREAMING_RESPONSE},
-            types::{ContentBlockChunk, Role, TextChunk},
-        },
+        inference::types::{ContentBlockChunk, Role, TextChunk},
+        providers::dummy::{DUMMY_INFER_RESPONSE_CONTENT, DUMMY_STREAMING_RESPONSE},
     };
 
     #[test]

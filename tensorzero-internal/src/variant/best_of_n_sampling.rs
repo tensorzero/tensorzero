@@ -757,12 +757,10 @@ mod tests {
         clickhouse::ClickHouseConnectionInfo,
         endpoints::inference::{InferenceCredentials, InferenceIds},
         function::FunctionConfigChat,
-        inference::{
-            providers::dummy::DummyProvider,
-            types::{ChatInferenceResult, FinishReason, JsonInferenceResult, Latency},
-        },
+        inference::types::{ChatInferenceResult, FinishReason, JsonInferenceResult, Latency},
         minijinja_util::tests::get_test_template_config,
         model::{ModelConfig, ModelProvider, ProviderConfig},
+        providers::dummy::DummyProvider,
         variant::{VariantConfig, VariantInfo},
     };
 

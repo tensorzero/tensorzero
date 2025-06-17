@@ -19,16 +19,11 @@ use crate::cache::{
 };
 use crate::config_parser::{skip_credential_validation, ProviderTypesConfig, TimeoutsConfig};
 use crate::endpoints::inference::InferenceClients;
-use crate::inference::providers::aws_sagemaker::AWSSagemakerProvider;
+use crate::providers::aws_sagemaker::AWSSagemakerProvider;
 #[cfg(any(test, feature = "e2e_tests"))]
-use crate::inference::providers::dummy::DummyProvider;
-use crate::inference::providers::google_ai_studio_gemini::GoogleAIStudioGeminiProvider;
+use crate::providers::dummy::DummyProvider;
+use crate::providers::google_ai_studio_gemini::GoogleAIStudioGeminiProvider;
 
-use crate::inference::providers::helpers::peek_first_chunk;
-use crate::inference::providers::hyperbolic::HyperbolicProvider;
-use crate::inference::providers::provider_trait::WrappedProvider;
-use crate::inference::providers::sglang::SGLangProvider;
-use crate::inference::providers::tgi::TGIProvider;
 use crate::inference::types::batch::{
     BatchRequestRow, PollBatchInferenceResponse, StartBatchModelInferenceResponse,
     StartBatchProviderInferenceResponse,
@@ -39,24 +34,30 @@ use crate::inference::types::{
     current_timestamp, ContentBlock, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, RequestMessage, Usage,
 };
+use crate::inference::WrappedProvider;
 use crate::model_table::{BaseModelTable, ShorthandModelConfig};
+use crate::providers::helpers::peek_first_chunk;
+use crate::providers::hyperbolic::HyperbolicProvider;
+use crate::providers::sglang::SGLangProvider;
+use crate::providers::tgi::TGIProvider;
 use crate::{
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails},
     inference::{
-        providers::{
-            anthropic::AnthropicProvider, aws_bedrock::AWSBedrockProvider, azure::AzureProvider,
-            deepseek::DeepSeekProvider, fireworks::FireworksProvider,
-            gcp_vertex_anthropic::GCPVertexAnthropicProvider,
-            gcp_vertex_gemini::GCPVertexGeminiProvider, groq::GroqProvider,
-            mistral::MistralProvider, openai::OpenAIProvider, openrouter::OpenRouterProvider,
-            provider_trait::InferenceProvider, together::TogetherProvider, vllm::VLLMProvider,
-            xai::XAIProvider,
-        },
         types::{ModelInferenceRequest, ModelInferenceResponse, ProviderInferenceResponse},
+        InferenceProvider,
     },
 };
 use serde::Deserialize;
+
+use crate::providers::{
+    anthropic::AnthropicProvider, aws_bedrock::AWSBedrockProvider, azure::AzureProvider,
+    deepseek::DeepSeekProvider, fireworks::FireworksProvider,
+    gcp_vertex_anthropic::GCPVertexAnthropicProvider, gcp_vertex_gemini::GCPVertexGeminiProvider,
+    groq::GroqProvider, mistral::MistralProvider, openai::OpenAIProvider,
+    openrouter::OpenRouterProvider, together::TogetherProvider, vllm::VLLMProvider,
+    xai::XAIProvider,
+};
 
 #[derive(Debug)]
 pub struct ModelConfig {
@@ -827,7 +828,7 @@ pub(super) enum UninitializedProviderConfig {
     Fireworks {
         model_name: String,
         api_key_location: Option<CredentialLocation>,
-        #[serde(default = "crate::inference::providers::fireworks::default_parse_think_blocks")]
+        #[serde(default = "crate::providers::fireworks::default_parse_think_blocks")]
         parse_think_blocks: bool,
     },
     Mistral {
@@ -846,7 +847,7 @@ pub(super) enum UninitializedProviderConfig {
     Together {
         model_name: String,
         api_key_location: Option<CredentialLocation>,
-        #[serde(default = "crate::inference::providers::together::default_parse_think_blocks")]
+        #[serde(default = "crate::providers::together::default_parse_think_blocks")]
         parse_think_blocks: bool,
     },
     #[expect(clippy::upper_case_acronyms)]
@@ -1698,7 +1699,7 @@ impl ShorthandModelConfig for ModelConfig {
             "fireworks" => ProviderConfig::Fireworks(FireworksProvider::new(
                 model_name,
                 None,
-                crate::inference::providers::fireworks::default_parse_think_blocks(),
+                crate::providers::fireworks::default_parse_think_blocks(),
             )?),
             "google_ai_studio_gemini" => ProviderConfig::GoogleAIStudioGemini(
                 GoogleAIStudioGeminiProvider::new(model_name, None)?,
@@ -1717,7 +1718,7 @@ impl ShorthandModelConfig for ModelConfig {
             "together" => ProviderConfig::Together(TogetherProvider::new(
                 model_name,
                 None,
-                crate::inference::providers::together::default_parse_think_blocks(),
+                crate::providers::together::default_parse_think_blocks(),
             )?),
             "xai" => ProviderConfig::XAI(XAIProvider::new(model_name, None)?),
             #[cfg(any(test, feature = "e2e_tests"))]
@@ -1805,14 +1806,14 @@ mod tests {
     use crate::{
         cache::CacheOptions,
         clickhouse::ClickHouseConnectionInfo,
-        inference::{
-            providers::dummy::{
-                DummyCredentials, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW,
-                DUMMY_STREAMING_RESPONSE,
-            },
-            types::{ContentBlockChunk, FunctionType, ModelInferenceRequestJsonMode, TextChunk},
+        inference::types::{
+            ContentBlockChunk, FunctionType, ModelInferenceRequestJsonMode, TextChunk,
         },
         model_table::RESERVED_MODEL_PREFIXES,
+        providers::dummy::{
+            DummyCredentials, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW,
+            DUMMY_STREAMING_RESPONSE,
+        },
     };
     use secrecy::SecretString;
     use tokio_stream::StreamExt;

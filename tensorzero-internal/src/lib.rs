@@ -17,6 +17,7 @@ mod minijinja_util; // utilities for working with MiniJinja templates
 pub mod model; // types and methods for working with TensorZero-supported models
 pub mod model_table;
 pub mod observability; // utilities for observability (logs, metrics, etc.)
+pub mod providers; // providers for the inference and / or optimization services TensorZero integrates
 pub mod serde_util; // utilities for working with serde
 mod testing;
 pub mod tool; // types and methods for working with TensorZero tools
