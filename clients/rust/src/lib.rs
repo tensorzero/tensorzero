@@ -10,7 +10,7 @@ use reqwest::header::HeaderMap;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use serde_json::Value;
 use std::fmt::Debug;
-use stored_inference::render_stored_inference;
+use tensorzero_core::stored_inference::render_stored_inference;
 use tensorzero_core::{
     config_parser::Config,
     endpoints::{
@@ -33,10 +33,8 @@ use uuid::Uuid;
 mod client_inference_params;
 mod client_input;
 mod git;
-mod stored_inference;
-pub use stored_inference::RenderedStoredInference;
-pub use tensorzero_core::clickhouse::types::{
-    StoredChatInference, StoredInference, StoredJsonInference,
+pub use tensorzero_core::stored_inference::{
+    RenderedStoredInference, StoredChatInference, StoredInference, StoredJsonInference,
 };
 pub mod input_handling;
 pub use client_inference_params::{ClientInferenceParams, ClientSecretString};

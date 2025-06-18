@@ -15,12 +15,11 @@ pub mod migration_manager;
 pub mod query_builder;
 #[cfg(any(test, feature = "e2e_tests"))]
 pub mod test_helpers;
-pub mod types;
 
-use crate::clickhouse::types::StoredInference;
 use crate::config_parser::Config;
 use crate::error::DisplayOrDebugGateway;
 use crate::error::{Error, ErrorDetails};
+use crate::stored_inference::StoredInference;
 use query_builder::generate_list_inferences_sql;
 use query_builder::ListInferencesParams;
 

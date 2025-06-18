@@ -913,7 +913,7 @@ type = "chat_completion"
 model = "gemma-3-1b-aws-sagemaker-openai"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
-extra_headers = [{ name = "Content-Length", value = "2" }]
+extra_headers = [{ name = "x-amz-security-token", value = "InvalidToken"}]
 
 
 [functions.basic_test.variants.aws-bedrock-us-east-1]
