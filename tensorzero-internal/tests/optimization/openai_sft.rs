@@ -1,6 +1,6 @@
 use crate::{optimization_test_case, OptimizationTestCase};
 use tensorzero_internal::optimization::{
-    openai_sft::UninitializedOpenAISFTConfig, OptimizerConfig,
+    openai_sft::UninitializedOpenAISFTConfig, OptimizerInfo, UninitializedOptimizerConfig,
 };
 
 struct OpenAISFTTestCase();
@@ -14,8 +14,8 @@ impl OptimizationTestCase for OpenAISFTTestCase {
         true
     }
 
-    fn get_optimizer_config(&self) -> OptimizerConfig {
-        OptimizerConfig::OpenAISFT(
+    fn get_optimizer_info(&self) -> OptimizerInfo {
+        OptimizerInfo::new(UninitializedOptimizerConfig::OpenAISFT(
             UninitializedOpenAISFTConfig {
                 // This is the only model that supports images
                 model: "gpt-4o-2024-08-06".to_string(),
@@ -26,10 +26,9 @@ impl OptimizationTestCase for OpenAISFTTestCase {
                 seed: None,
                 suffix: None,
                 api_base: None,
-            }
-            .load()
-            .unwrap(),
-        )
+            },
+        ))
+        .expect("Failed to create OpenAISFT optimizer info")
     }
 }
 

@@ -1,4 +1,4 @@
-#![expect(clippy::unwrap_used, clippy::panic)]
+#![expect(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 use base64::Engine;
 use std::collections::HashMap;
 use tokio::time::{sleep, Duration};
@@ -15,7 +15,7 @@ use tensorzero_internal::{
         Base64File, ContentBlock, ContentBlockChatOutput, FunctionType, ModelInferenceRequest,
         ModelInput, RequestMessage, Text,
     },
-    optimization::{Optimizer, OptimizerConfig, OptimizerOutput, OptimizerStatus},
+    optimization::{Optimizer, OptimizerInfo, OptimizerOutput, OptimizerStatus},
     tool::{Tool, ToolCall, ToolCallConfigDatabaseInsert, ToolCallOutput, ToolChoice, ToolResult},
     variant::JsonMode,
 };
@@ -27,25 +27,25 @@ static FERRIS_PNG: &[u8] = include_bytes!("../e2e/providers/ferris.png");
 pub trait OptimizationTestCase {
     fn supports_image_data(&self) -> bool;
     fn supports_tool_calls(&self) -> bool;
-    fn get_optimizer_config(&self) -> OptimizerConfig;
+    fn get_optimizer_info(&self) -> OptimizerInfo;
 }
 
 pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
-    let optimizer_config = test_case.get_optimizer_config();
+    let optimizer_info = test_case.get_optimizer_info();
     let client = reqwest::Client::new();
     let test_examples = get_examples(test_case, 10);
     let val_examples = Some(get_examples(test_case, 10));
     let credentials: HashMap<String, secrecy::SecretBox<str>> = HashMap::new();
-    let job_handle = optimizer_config
+    let job_handle = optimizer_info
         .launch(&client, test_examples, val_examples, &credentials)
         .await
         .unwrap();
-    let mut status = optimizer_config
+    let mut status = optimizer_info
         .poll(&client, &job_handle, &credentials)
         .await
         .unwrap();
     while !matches!(status, OptimizerStatus::Completed(_)) {
-        status = optimizer_config
+        status = optimizer_info
             .poll(&client, &job_handle, &credentials)
             .await
             .unwrap();

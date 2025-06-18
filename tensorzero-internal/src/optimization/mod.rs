@@ -14,7 +14,20 @@ use crate::variant::VariantConfig;
 pub mod openai_sft;
 
 #[derive(Clone, Debug)]
-pub enum OptimizerConfig {
+pub struct OptimizerInfo {
+    inner: OptimizerConfig,
+}
+
+impl OptimizerInfo {
+    pub fn new(unintialized_config: UninitializedOptimizerConfig) -> Result<Self, Error> {
+        Ok(Self {
+            inner: unintialized_config.load()?,
+        })
+    }
+}
+
+#[derive(Clone, Debug)]
+enum OptimizerConfig {
     OpenAISFT(OpenAISFTConfig),
 }
 
@@ -57,7 +70,7 @@ pub trait Optimizer {
     ) -> Result<OptimizerStatus, Error>;
 }
 
-impl Optimizer for OptimizerConfig {
+impl Optimizer for OptimizerInfo {
     type JobHandle = OptimizerJobHandle;
     async fn launch(
         &self,
@@ -66,7 +79,7 @@ impl Optimizer for OptimizerConfig {
         val_examples: Option<Vec<RenderedStoredInference>>,
         credentials: &InferenceCredentials,
     ) -> Result<Self::JobHandle, Error> {
-        match self {
+        match &self.inner {
             OptimizerConfig::OpenAISFT(config) => config
                 .launch(client, train_examples, val_examples, credentials)
                 .await
@@ -80,7 +93,7 @@ impl Optimizer for OptimizerConfig {
         job_handle: &OptimizerJobHandle,
         credentials: &InferenceCredentials,
     ) -> Result<OptimizerStatus, Error> {
-        match (self, job_handle) {
+        match (&self.inner, job_handle) {
             (OptimizerConfig::OpenAISFT(config), OptimizerJobHandle::OpenAISFT(job_handle)) => {
                 config.poll(client, job_handle, credentials).await
             }
@@ -95,7 +108,7 @@ pub enum UninitializedOptimizerConfig {
 
 impl UninitializedOptimizerConfig {
     // TODO: add a provider_types argument as needed
-    pub fn load(self) -> Result<OptimizerConfig, Error> {
+    fn load(self) -> Result<OptimizerConfig, Error> {
         Ok(match self {
             UninitializedOptimizerConfig::OpenAISFT(config) => {
                 OptimizerConfig::OpenAISFT(config.load()?)
