@@ -741,16 +741,16 @@ mod tests {
     use crate::endpoints::inference::{ChatCompletionInferenceParams, InferenceCredentials};
     use crate::error::ErrorDetails;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
-    use crate::inference::providers::dummy::{
-        DummyProvider, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_USAGE, DUMMY_JSON_RESPONSE_RAW,
-        DUMMY_STREAMING_RESPONSE,
-    };
     use crate::inference::types::{
         ContentBlockChunk, ModelInferenceRequestJsonMode, RequestMessage, Role,
     };
     use crate::jsonschema_util::StaticJSONSchema;
     use crate::minijinja_util::tests::get_test_template_config;
     use crate::model::{ModelProvider, ProviderConfig};
+    use crate::providers::dummy::{
+        DummyProvider, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_USAGE, DUMMY_JSON_RESPONSE_RAW,
+        DUMMY_STREAMING_RESPONSE,
+    };
     use crate::tool::{ToolCallConfig, ToolChoice};
     use reqwest::Client;
     use serde_json::json;
@@ -1074,6 +1074,7 @@ mod tests {
                     extra_body: Default::default(),
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
+                    discard_unknown_chunks: false,
                 },
             )]),
             timeouts: Default::default(),
@@ -1183,6 +1184,7 @@ mod tests {
                     extra_body: Default::default(),
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
+                    discard_unknown_chunks: false,
                 },
             )]),
             timeouts: Default::default(),
@@ -1242,6 +1244,7 @@ mod tests {
                     extra_body: Default::default(),
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
+                    discard_unknown_chunks: false,
                 },
             )]),
             timeouts: Default::default(),
@@ -1365,6 +1368,7 @@ mod tests {
                         extra_body: Default::default(),
                         extra_headers: Default::default(),
                         timeouts: Default::default(),
+                        discard_unknown_chunks: false,
                     },
                 ),
                 (
@@ -1375,6 +1379,7 @@ mod tests {
                         extra_body: Default::default(),
                         extra_headers: Default::default(),
                         timeouts: Default::default(),
+                        discard_unknown_chunks: false,
                     },
                 ),
             ]),
@@ -1474,6 +1479,7 @@ mod tests {
                     extra_body: Default::default(),
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
+                    discard_unknown_chunks: false,
                 },
             )]),
             timeouts: Default::default(),
@@ -1647,6 +1653,7 @@ mod tests {
                         extra_body: Default::default(),
                         extra_headers: Default::default(),
                         timeouts: Default::default(),
+                        discard_unknown_chunks: false,
                     },
                 ),
                 (
@@ -1657,6 +1664,7 @@ mod tests {
                         extra_body: Default::default(),
                         extra_headers: Default::default(),
                         timeouts: Default::default(),
+                        discard_unknown_chunks: false,
                     },
                 ),
             ]),

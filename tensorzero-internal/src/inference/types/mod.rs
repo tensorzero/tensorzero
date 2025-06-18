@@ -1,4 +1,3 @@
-use crate::inference::providers::helpers::borrow_cow;
 use crate::serde_util::{deserialize_json_string, deserialize_optional_json_string};
 use crate::tool::ToolCallInput;
 use derive_builder::Builder;
@@ -21,6 +20,7 @@ pub use resolved_input::{ResolvedInput, ResolvedInputMessage, ResolvedInputMessa
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{Map, Value};
 use serde_untagged::UntaggedEnumVisitor;
+use std::borrow::Borrow;
 use std::{
     borrow::Cow,
     collections::HashMap,
@@ -788,6 +788,7 @@ pub struct ChatInferenceDatabaseInsert {
     #[serde(deserialize_with = "deserialize_json_string")]
     pub inference_params: InferenceParams,
     pub processing_time_ms: Option<u32>,
+    pub ttft_ms: Option<u32>,
     pub tags: HashMap<String, String>,
     #[serde(default)]
     pub extra_body: UnfilteredInferenceExtraBody,
@@ -809,6 +810,7 @@ pub struct JsonInferenceDatabaseInsert {
     pub inference_params: InferenceParams,
     pub processing_time_ms: Option<u32>,
     pub output_schema: Value,
+    pub ttft_ms: Option<u32>,
     pub tags: HashMap<String, String>,
     #[serde(default)]
     pub extra_body: UnfilteredInferenceExtraBody,
@@ -1255,6 +1257,7 @@ impl ChatInferenceDatabaseInsert {
             output: chat_result.content,
             processing_time_ms,
             tags: metadata.tags,
+            ttft_ms: metadata.ttft_ms,
             extra_body: metadata.extra_body,
         }
     }
@@ -1292,6 +1295,7 @@ impl JsonInferenceDatabaseInsert {
             output_schema: json_result.output_schema,
             tags: metadata.tags,
             extra_body: metadata.extra_body,
+            ttft_ms: metadata.ttft_ms,
         }
     }
 }
@@ -1878,13 +1882,21 @@ fn handle_textual_content_block<F, A>(
     }
 }
 
+/// Turns a reference to a Cow into a `Cow::Borrowed`, without cloning
+fn borrow_cow<'a, T: ToOwned + ?Sized>(cow: &'a Cow<'a, T>) -> Cow<'a, T> {
+    match cow {
+        Cow::Borrowed(x) => Cow::Borrowed(x),
+        Cow::Owned(x) => Cow::Borrowed(x.borrow()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
-    use crate::inference::providers::test_helpers::get_temperature_tool_config;
     use crate::jsonschema_util::StaticJSONSchema;
     use crate::minijinja_util::TemplateConfig;
+    use crate::providers::test_helpers::get_temperature_tool_config;
     use crate::tool::ToolConfig;
     use crate::tool::{DynamicToolConfig, ToolChoice};
     use serde_json::json;

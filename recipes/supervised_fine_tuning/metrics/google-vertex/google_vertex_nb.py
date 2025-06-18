@@ -40,9 +40,9 @@ MAX_SAMPLES = 100_000
 MODEL_NAME = "gemini-2.0-flash-lite-001"
 
 # Google Cloud Variables
-PROJECT_ID = "alpine-realm-415615"
-LOCATION = "us-central1"
-BUCKET_NAME = "tensorzero-fine-tuning"
+PROJECT_ID = "<your-project-id>"
+LOCATION = "<your-region>"  # e.g. us-central1
+BUCKET_NAME = "<your-bucket-name>"
 
 # %%
 import json

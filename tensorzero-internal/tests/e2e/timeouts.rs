@@ -11,7 +11,8 @@ use tensorzero::{
 };
 use tensorzero_internal::{
     clickhouse::test_helpers::{
-        get_clickhouse, select_model_inference_clickhouse, select_model_inferences_clickhouse,
+        get_clickhouse, select_chat_inference_clickhouse, select_json_inference_clickhouse,
+        select_model_inference_clickhouse, select_model_inferences_clickhouse,
     },
     inference::types::TextKind,
 };
@@ -107,6 +108,103 @@ async fn test_variant_timeout_slow_second_chunk_streaming() {
         "stream": true,
     }))
     .await;
+}
+
+#[tokio::test]
+async fn test_chat_inference_ttft_ms() {
+    test_inference_ttft_ms(
+        json!({
+            "function_name": "inference_ttft_chat",
+            "episode_id": Uuid::now_v7(),
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Hello, world!"
+                    }
+                ]
+            },
+            "stream": true,
+        }),
+        false,
+    )
+    .await;
+}
+#[tokio::test]
+async fn test_json_inference_ttft_ms() {
+    test_inference_ttft_ms(
+        json!({
+            "function_name": "inference_ttft_json",
+            "episode_id": Uuid::now_v7(),
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Hello, world!"
+                    }
+                ]
+            },
+            "stream": true,
+        }),
+        true,
+    )
+    .await;
+}
+
+async fn test_inference_ttft_ms(payload: Value, json: bool) {
+    let mut response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .eventsource()
+        .unwrap();
+
+    let mut inference_id = None;
+
+    while let Some(event) = response.next().await {
+        let chunk = event.unwrap();
+        println!("chunk: {chunk:?}");
+        if let Event::Message(event) = chunk {
+            if event.data == "[DONE]" {
+                break;
+            }
+            let event = serde_json::from_str::<Value>(&event.data).unwrap();
+            inference_id = Some(event["inference_id"].as_str().unwrap().parse().unwrap());
+        }
+    }
+
+    let clickhouse = get_clickhouse().await;
+
+    let inference = if json {
+        select_json_inference_clickhouse(&clickhouse, inference_id.unwrap())
+            .await
+            .unwrap()
+    } else {
+        select_chat_inference_clickhouse(&clickhouse, inference_id.unwrap())
+            .await
+            .unwrap()
+    };
+
+    // The inference level-TTFT should be high, due to the timeout for the first provider
+    assert!(
+        inference["ttft_ms"].as_u64().unwrap() > 500,
+        "Unexpected ttft_ms: {inference:?}"
+    );
+
+    let model_inferences = select_model_inferences_clickhouse(&clickhouse, inference_id.unwrap())
+        .await
+        .unwrap();
+
+    // The first provider will time out, so we should only have one inference
+    assert_eq!(model_inferences.len(), 1);
+    println!("model_inferences: {model_inferences:?}");
+    assert_eq!(model_inferences[0]["model_name"], "first_provider_timeout");
+    assert_eq!(model_inferences[0]["model_provider_name"], "second_good");
+    // The model inference should have a small TTFT, since the successful model provider
+    // is fast
+    assert!(
+        model_inferences[0]["ttft_ms"].as_u64().unwrap() < 100,
+        "Unexpected ttft ms in model provider"
+    );
 }
 
 // We don't currently support setting an actual variant as the judge,
