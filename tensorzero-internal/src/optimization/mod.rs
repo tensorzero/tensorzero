@@ -19,9 +19,9 @@ pub struct OptimizerInfo {
 }
 
 impl OptimizerInfo {
-    pub fn new(unintialized_config: UninitializedOptimizerConfig) -> Result<Self, Error> {
+    pub fn new(uninitialized_info: UninitializedOptimizerInfo) -> Result<Self, Error> {
         Ok(Self {
-            inner: unintialized_config.load()?,
+            inner: uninitialized_info.inner.load()?,
         })
     }
 }
@@ -104,7 +104,23 @@ impl Optimizer for OptimizerInfo {
 }
 
 #[derive(Clone, Debug, Deserialize)]
+pub struct UninitializedOptimizerInfo {
+    #[serde(flatten)]
+    pub inner: UninitializedOptimizerConfig,
+}
+
+impl UninitializedOptimizerInfo {
+    pub fn load(self) -> Result<OptimizerInfo, Error> {
+        Ok(OptimizerInfo {
+            inner: self.inner.load()?,
+        })
+    }
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum UninitializedOptimizerConfig {
+    #[serde(rename = "openai_sft")]
     OpenAISFT(UninitializedOpenAISFTConfig),
 }
 

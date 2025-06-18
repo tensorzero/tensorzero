@@ -1607,7 +1607,7 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
                 res["error"]
                     .as_str()
                     .unwrap()
-                    .contains("InvalidSignatureException"),
+                    .contains("The security token included in the request is invalid"),
                 "Unexpected error: {res}"
             );
         }
