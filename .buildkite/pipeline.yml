@@ -7,6 +7,7 @@ steps:
     concurrency_group: 'clickhouse-cloud-${CLICKHOUSE_ID}'
     command: |
       echo "CLICKHOUSE_ID=${CLICKHOUSE_ID}"
+      export TENSORZERO_CLICKHOUSE_SERVICE=$$(curl --user "$$CLICKHOUSE_API_KEY:$$CLICKHOUSE_KEY_SECRET" https://api.clickhouse.cloud/v1/organizations/b55f1935-803f-4931-90b3-4d26089004d4/services | jq '.result[] | select(.name == "prod-megumeter") | .id')
       export TENSORZERO_CLICKHOUSE_URL=$(buildkite-agent secret get tensorzero_clickhouse_url)
       curl $$TENSORZERO_CLICKHOUSE_URL --data-binary 'SHOW DATABASES'
       curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh  -s -- -y
