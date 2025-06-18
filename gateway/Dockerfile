@@ -1,19 +1,21 @@
 # ========== builder ==========
-
-FROM rust:latest AS builder
-
-WORKDIR /src
-
-RUN apt-get update && apt-get install -y clang libc++-dev && rm -rf /var/lib/apt/lists/*
-
-COPY . .
-
 ARG CARGO_BUILD_FLAGS=""
 
-RUN --mount=type=cache,id=tensorzero-gateway-release,sharing=shared,target=/usr/local/cargo/registry \
-    --mount=type=cache,id=tensorzero-gateway-release,sharing=shared,target=/usr/local/cargo/git \
-    cargo build --release -p gateway $CARGO_BUILD_FLAGS && \
-    cp -r /src/target/release /release
+FROM lukemathwalker/cargo-chef:latest-rust-1 AS chef
+WORKDIR /app
+
+FROM chef as planner
+COPY . .
+RUN cargo chef prepare --recipe-path recipe.json --bin gateway
+
+FROM chef AS builder
+RUN apt-get update && apt-get install -y clang libc++-dev && rm -rf /var/lib/apt/lists/*
+WORKDIR /src
+COPY --from=planner /app/recipe.json recipe.json
+RUN cargo chef cook --release -p gateway
+COPY . .
+
+RUN cargo build --release -p gateway $CARGO_BUILD_FLAGS && cp -r /src/target/release /release
 
 # ========== base ==========
 

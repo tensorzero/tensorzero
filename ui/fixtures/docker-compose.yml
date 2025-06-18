@@ -54,6 +54,8 @@ services:
   fixtures:
     build:
       dockerfile: Dockerfile
+      additional_contexts:
+        fixtures_gateway: service:gateway
     volumes:
       - .:/fixtures
       - ~/.aws:/root/.aws
