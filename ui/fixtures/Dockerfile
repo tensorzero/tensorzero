@@ -16,4 +16,5 @@ ENV TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero
 RUN ./start-server-and-load-fixtures.sh
 
 FROM clickhouse/clickhouse-server:${CLICKHOUSE_VERSION}
-COPY --from=load-fixtures /var/lib/clickhouse/data /var/lib/clickhouse/data
+COPY --from=load-fixtures /var/lib/clickhouse/ /var/lib/clickhouse/
+ENTRYPOINT ["/entrypoint.sh"]
