@@ -48,6 +48,10 @@ struct Args {
     #[clap(default_value_t = LogFormat::default())]
     log_format: LogFormat,
 
+    /// Runs any needed ClickHouse migrations, then exits
+    #[arg(long)]
+    migrate_only: bool,
+
     /// Deprecated: use `--config-file` instead
     tensorzero_toml: Option<PathBuf>,
 }
@@ -169,6 +173,11 @@ async fn main() {
     let app_state = gateway_util::AppStateData::new(config.clone())
         .await
         .expect_pretty("Failed to initialize AppState");
+
+    if args.migrate_only {
+        tracing::info!("Exiting due to --migrate-only");
+        return;
+    }
 
     // Create a new observability_enabled_pretty string for the log message below
     let observability_enabled_pretty = match &app_state.clickhouse_connection_info {

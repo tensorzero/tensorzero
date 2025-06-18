@@ -365,13 +365,13 @@ jobs:
     strategy:
       matrix:
         clickhouse_version:
-          - tag: "24.12-alpine"
+          - tag: "24.12"
             prefix: "24.12"
             allow_failure: false
-          - tag: "25.2-alpine"
+          - tag: "25.2"
             prefix: "25.2"
             allow_failure: false
-          - tag: "latest-alpine"
+          - tag: "latest"
             prefix: ""
             # ClickHouse can make new releases at any time, which might break our tests.
             # We allow this job to fail to avoid blocking CI whenever this happens.

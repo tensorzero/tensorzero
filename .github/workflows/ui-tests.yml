@@ -9,7 +9,7 @@ jobs:
 
     strategy:
       matrix:
-        clickhouse_version: ["24.12-alpine", "25.2-alpine", "latest-alpine"]
+        clickhouse_version: ["24.12", "25.2", "latest"]
 
     steps:
       - uses: namespacelabs/nscloud-checkout-action@953fed31a6113cc2347ca69c9d823743c65bc84b
