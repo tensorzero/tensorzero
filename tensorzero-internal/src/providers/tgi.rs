@@ -438,7 +438,11 @@ impl<'a> TGIRequest<'a> {
             false => None,
         };
 
-        let messages = prepare_openai_messages(request)?;
+        let messages = prepare_openai_messages(
+            request.system.as_deref(),
+            &request.messages,
+            Some(&request.json_mode),
+        )?;
 
         let (tools, tool_choice, parallel_tool_calls) = prepare_openai_tools(request);
 
