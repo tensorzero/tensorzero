@@ -533,7 +533,6 @@ where
                 extra_headers,
                 extra_cache_key: inference_config.extra_cache_key.clone(),
                 logprobs: inference_params.chat_completion.logprobs,
-                ..Default::default()
             }
         }
         FunctionConfig::Json(json_config) => {
@@ -601,7 +600,6 @@ where
                 extra_headers,
                 extra_cache_key: inference_config.extra_cache_key.clone(),
                 logprobs: inference_params.chat_completion.logprobs,
-                ..Default::default()
             }
         }
     })

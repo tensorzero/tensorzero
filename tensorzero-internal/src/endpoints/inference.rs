@@ -337,7 +337,7 @@ pub async fn inference(
 
     let models = config.models.read().await;
     let inference_models = InferenceModels {
-        models: &*models,
+        models: &models,
         embedding_models: &config.embedding_models,
     };
     let resolved_input = params

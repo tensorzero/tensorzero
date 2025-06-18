@@ -31,17 +31,22 @@ impl Auth {
     }
 
     pub fn update_api_keys(&self, api_key: &str, api_config: APIConfig) {
-        let mut api_keys = self.api_keys.write().unwrap();
+        // In practice, a poisoned RwLock indicates a panic in another thread while holding the lock.
+        // This is a catastrophic failure that should not be recovered from.
+        #[expect(clippy::expect_used)]
+        let mut api_keys = self.api_keys.write().expect("RwLock poisoned");
         api_keys.insert(api_key.to_string(), api_config);
     }
 
     pub fn delete_api_key(&self, api_key: &str) {
-        let mut api_keys = self.api_keys.write().unwrap();
+        #[expect(clippy::expect_used)]
+        let mut api_keys = self.api_keys.write().expect("RwLock poisoned");
         api_keys.remove(api_key);
     }
 
     pub fn validate_api_key(&self, api_key: &str) -> Result<APIConfig, StatusCode> {
-        let api_keys = self.api_keys.read().unwrap();
+        #[expect(clippy::expect_used)]
+        let api_keys = self.api_keys.read().expect("RwLock poisoned");
         if let Some(api_config) = api_keys.get(api_key) {
             return Ok(api_config.clone());
         }
@@ -109,6 +114,8 @@ pub async fn require_api_key(
         }
     };
 
+    // We already checked that api_config is Ok in the if statement above
+    #[expect(clippy::unwrap_used)]
     let api_config = api_config.unwrap();
     let model_value = match api_config.get(model) {
         Some(v) => v,

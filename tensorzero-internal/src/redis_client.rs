@@ -24,9 +24,14 @@ pub struct RedisClient {
 
 impl RedisClient {
     pub async fn new(url: &str, app_state: AppStateData, auth: Auth) -> Self {
+        #[expect(clippy::expect_used)]
         let (client, conn) = Self::init_conn(url)
             .await
-            .expect("Failed to connect to Redis");
+            .map_err(|e| {
+                tracing::error!("Failed to connect to Redis: {e}");
+                e
+            })
+            .expect("Redis connection is required for operation");
         Self {
             client,
             conn,
@@ -142,13 +147,19 @@ impl RedisClient {
     ) -> Result<(), Error> {
         match key {
             k if k.starts_with(API_KEY_KEY_PREFIX) => {
-                auth.delete_api_key(key.split(":").last().unwrap());
+                if let Some(api_key) = key.rsplit(':').next() {
+                    auth.delete_api_key(api_key);
+                } else {
+                    tracing::error!("Invalid API key format: {key}");
+                }
                 tracing::info!("Deleted API key");
             }
             k if k.starts_with(MODEL_TABLE_KEY_PREFIX) => {
-                app_state
-                    .remove_model_table(key.split(":").last().unwrap())
-                    .await;
+                if let Some(model_name) = key.rsplit(':').next() {
+                    app_state.remove_model_table(model_name).await;
+                } else {
+                    tracing::error!("Invalid model table key format: {key}");
+                }
                 tracing::info!("Deleted model table: {key}");
             }
             _ => {
@@ -165,7 +176,7 @@ impl RedisClient {
         // Fetch all model_table:* keys
         if let Ok(model_keys) = self
             .conn
-            .keys::<_, Vec<String>>(format!("{}*", MODEL_TABLE_KEY_PREFIX))
+            .keys::<_, Vec<String>>(format!("{MODEL_TABLE_KEY_PREFIX}*"))
             .await
         {
             for key in model_keys {
@@ -182,10 +193,10 @@ impl RedisClient {
         // Fetch all api_key:* keys
         if let Ok(api_keys_keys) = self
             .conn
-            .keys::<_, Vec<String>>(format!("{}*", API_KEY_KEY_PREFIX))
+            .keys::<_, Vec<String>>(format!("{API_KEY_KEY_PREFIX}*"))
             .await
         {
-            println!("api_keys_keys: {:?}", api_keys_keys);
+            tracing::debug!("Found API keys: {:?}", api_keys_keys);
             for key in api_keys_keys {
                 if let Ok(json) = self.conn.get::<_, String>(&key).await {
                     match Self::parse_api_keys(&json).await {
@@ -243,9 +254,7 @@ impl RedisClient {
         tokio::spawn(async move {
             let mut stream = pubsub_conn.on_message();
             while let Some(msg) = stream.next().await {
-                let channel: String = match msg.get_channel_name() {
-                    s => s.to_string(),
-                };
+                let channel: String = msg.get_channel_name().to_string();
 
                 let payload: String = match msg.get_payload() {
                     Ok(p) => p,
