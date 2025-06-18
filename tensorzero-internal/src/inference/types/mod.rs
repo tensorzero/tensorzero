@@ -421,6 +421,34 @@ pub struct ModelInferenceRequest<'a> {
     /// This is used by best_of_n/mixture_of_n to force different sub-variants
     /// to have different cache keys.
     pub extra_cache_key: Option<String>,
+    // If true, the provider should return per-token log-probabilities (if supported).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub logprobs: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub chat_template: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub chat_template_kwargs: Option<&'a Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mm_processor_kwargs: Option<&'a Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub guided_json: Option<&'a Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub guided_regex: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub guided_choice: Option<Vec<Cow<'a, str>>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub guided_grammar: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub structural_tag: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub guided_decoding_backend: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub guided_whitespace_pattern: Option<&'a str>,
+}
+
+// Helper used by serde to omit the field when false
+fn is_false(v: &bool) -> bool {
+    !*v
 }
 
 /// For use in rendering for optimization purposes

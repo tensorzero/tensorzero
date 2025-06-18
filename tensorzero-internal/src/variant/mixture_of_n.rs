@@ -361,12 +361,14 @@ async fn inner_fuse_candidates<'a, 'request>(
     clients: &'request InferenceClients<'request>,
     candidates: &[InferenceResult],
 ) -> Result<InferenceResult, Error> {
+    let mut fusion_params = InferenceParams::default();
+    let params_for_call = fusion_params.clone();
     let (inference_request, included_indices) = fuser.prepare_request(
         input,
         function,
         inference_config,
         candidates,
-        &mut InferenceParams::default(),
+        &mut fusion_params,
     )?;
     if included_indices.is_empty() {
         return Err(ErrorDetails::Inference {
@@ -387,7 +389,7 @@ async fn inner_fuse_candidates<'a, 'request>(
         inference_config,
         retry_config: &fuser.inner.retries,
         clients,
-        inference_params: InferenceParams::default(),
+        inference_params: params_for_call,
     };
     let inference_result = infer_model_request(infer_model_request_args).await?;
     Ok(inference_result)
@@ -505,7 +507,7 @@ impl FuserConfig {
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'a, 'request>,
         candidates: &[InferenceResult],
-        inference_params: &mut InferenceParams,
+        inference_params: &'request mut InferenceParams,
     ) -> Result<(ModelInferenceRequest<'request>, Vec<usize>), Error>
     where
         'a: 'request,

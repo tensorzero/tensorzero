@@ -56,7 +56,7 @@ impl TryFrom<&str> for FileKind {
     type Error = Error;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
-        let extension = value.split('.').last().ok_or_else(|| {
+        let extension = value.rsplit('.').next().ok_or_else(|| {
             Error::new(ErrorDetails::MissingFileExtension {
                 file_name: value.to_string(),
             })

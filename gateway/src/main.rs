@@ -14,8 +14,8 @@ use std::sync::Arc;
 use tokio::signal;
 use tower_http::trace::{DefaultOnFailure, TraceLayer};
 use tracing::Level;
-use std::collections::HashMap;
 
+use tensorzero_internal::auth::{require_api_key, Auth};
 use tensorzero_internal::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_internal::config_parser::Config;
 use tensorzero_internal::endpoints;
@@ -23,7 +23,6 @@ use tensorzero_internal::endpoints::status::TENSORZERO_VERSION;
 use tensorzero_internal::error;
 use tensorzero_internal::gateway_util;
 use tensorzero_internal::observability::{self, LogFormat, RouterExt};
-use tensorzero_internal::auth::{require_api_key, Auth};
 use tensorzero_internal::redis_client::RedisClient;
 
 #[global_allocator]
@@ -173,15 +172,17 @@ async fn main() {
         .await
         .expect_pretty("Failed to initialize AppState");
 
-    // Initialize Auth
-    let auth = Auth::new(HashMap::new());
+    // Initialize Auth with any API keys provided in the config
+    let auth = Auth::new(config.api_keys.clone());
 
     // Setup Redis client with both app_state and auth
     if let Ok(redis_url) = std::env::var("TENSORZERO_REDIS_URL") {
         if !redis_url.is_empty() {
-            let redis_client = RedisClient::new(&redis_url, app_state.clone(), auth.clone())
-                .await;
-            redis_client.start().await.expect_pretty("Failed to start Redis client");
+            let redis_client = RedisClient::new(&redis_url, app_state.clone(), auth.clone()).await;
+            redis_client
+                .start()
+                .await
+                .expect_pretty("Failed to start Redis client");
         } else {
             tracing::warn!("TENSORZERO_REDIS_URL is empty, so Redis client will not be started");
         }
@@ -203,6 +204,21 @@ async fn main() {
 
     // Routes that require authentication
     let authenticated_routes = Router::new()
+        .route(
+            "/openai/v1/chat/completions",
+            post(endpoints::openai_compatible::inference_handler),
+        )
+        .route(
+            "/v1/chat/completions",
+            post(endpoints::openai_compatible::inference_handler),
+        )
+        .layer(axum::middleware::from_fn_with_state(
+            auth.clone(),
+            require_api_key,
+        ));
+
+    // Routes that don't require authentication
+    let public_routes = Router::new()
         .route("/inference", post(endpoints::inference::inference_handler))
         .route(
             "/batch_inference",
@@ -215,10 +231,6 @@ async fn main() {
         .route(
             "/batch_inference/{batch_id}/inference/{inference_id}",
             get(endpoints::batch_inference::poll_batch_inference_handler),
-        )
-        .route(
-            "/openai/v1/chat/completions",
-            post(endpoints::openai_compatible::inference_handler),
         )
         .route("/feedback", post(endpoints::feedback::feedback_handler))
         // Everything above this layer has OpenTelemetry tracing enabled
@@ -262,10 +274,6 @@ async fn main() {
             "/dynamic_evaluation_run/{run_id}/episode",
             post(endpoints::dynamic_evaluation_run::dynamic_evaluation_run_episode_handler),
         )
-        .layer(axum::middleware::from_fn_with_state(auth.clone(), require_api_key));
-
-    // Routes that don't require authentication
-    let public_routes = Router::new()
         .route("/status", get(endpoints::status::status_handler))
         .route("/health", get(endpoints::status::health_handler))
         .route(

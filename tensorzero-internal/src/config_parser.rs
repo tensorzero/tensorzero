@@ -6,10 +6,11 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tokio::sync::RwLock;
 use tensorzero_derive::TensorZeroDeserialize;
+use tokio::sync::RwLock;
 use tracing::instrument;
 
+use crate::auth::APIConfig;
 use crate::embeddings::{EmbeddingModelTable, UninitializedEmbeddingModelConfig};
 use crate::endpoints::inference::DEFAULT_FUNCTION_NAME;
 use crate::error::{Error, ErrorDetails};
@@ -46,7 +47,7 @@ pub fn skip_credential_validation() -> bool {
 #[derive(Debug, Default)]
 pub struct Config<'c> {
     pub gateway: GatewayConfig,
-    pub models: Arc<RwLock<ModelTable>>,                    // model name => model config
+    pub models: Arc<RwLock<ModelTable>>, // model name => model config
     pub embedding_models: EmbeddingModelTable, // embedding model name => embedding model config
     pub functions: HashMap<String, Arc<FunctionConfig>>, // function name => function config
     pub metrics: HashMap<String, MetricConfig>, // metric name => metric config
@@ -55,6 +56,7 @@ pub struct Config<'c> {
     pub templates: TemplateConfig<'c>,
     pub object_store_info: Option<ObjectStoreInfo>,
     pub provider_types: ProviderTypesConfig,
+    pub api_keys: HashMap<String, APIConfig>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -405,6 +407,7 @@ impl<'c> Config<'c> {
             templates,
             object_store_info,
             provider_types: uninitialized_config.provider_types,
+            api_keys: uninitialized_config.api_keys,
         };
 
         // Initialize the templates
@@ -605,14 +608,11 @@ impl<'c> Config<'c> {
     }
 
     /// Get a model by name
-    /// 
+    ///
     /// This method is currently unused but provided for API completeness.
     /// Since ModelConfig doesn't implement Clone, this returns an error
     /// indicating the method needs to be reimplemented if/when needed.
-    pub async fn get_model(
-        &self,
-        _model_name: &str,
-    ) -> Result<Arc<ModelConfig>, Error> {
+    pub async fn get_model(&self, _model_name: &str) -> Result<Arc<ModelConfig>, Error> {
         // ModelConfig doesn't implement Clone, so we can't create an Arc from a borrowed reference.
         // The actual model access in the codebase is done through InferenceModels struct
         // which provides direct access to the ModelTable.
@@ -674,6 +674,8 @@ struct UninitializedConfig {
     pub evaluations: HashMap<String, UninitializedEvaluationConfig>, // evaluation name => evaluation
     #[serde(default)]
     pub provider_types: ProviderTypesConfig, // global configuration for all model providers of a particular type
+    #[serde(default)]
+    pub api_keys: HashMap<String, APIConfig>,
     pub object_storage: Option<StorageKind>,
 }
 

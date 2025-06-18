@@ -957,3 +957,118 @@ async fn test_openai_compatible_streaming() {
         assert_eq!(response_model, "tensorzero::model_name::openai::gpt-4o");
     }
 }
+
+#[tokio::test]
+async fn test_openai_compatible_logprobs_true_non_stream() {
+    let client = Client::new();
+    let episode_id = Uuid::now_v7();
+    let body = json!({
+        "model": "tensorzero::model_name::dummy::good",
+        "messages": [
+            {"role": "user", "content": "Who are you?"}
+        ],
+        "stream": false,
+        "logprobs": true
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/openai/v1/chat/completions"))
+        .header("Content-Type", "application/json")
+        .header("X-Episode-Id", episode_id.to_string())
+        .json(&body)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // Basic sanity check on returned JSON
+    let response_json: Value = response.json().await.unwrap();
+    let choices = response_json["choices"].as_array().unwrap();
+    assert!(!choices.is_empty());
+}
+
+#[tokio::test]
+async fn test_openai_compatible_logprobs_true_stream() {
+    use futures::StreamExt;
+    use reqwest_eventsource::{Event, RequestBuilderExt};
+
+    let client = Client::new();
+    let episode_id = Uuid::now_v7();
+    let body = json!({
+        "model": "tensorzero::model_name::dummy::good",
+        "messages": [
+            {"role": "user", "content": "Say hi"}
+        ],
+        "stream": true,
+        "logprobs": true
+    });
+
+    let mut response = client
+        .post(get_gateway_endpoint("/openai/v1/chat/completions"))
+        .header("Content-Type", "application/json")
+        .header("X-Episode-Id", episode_id.to_string())
+        .json(&body)
+        .eventsource()
+        .unwrap();
+
+    // Just ensure we can iterate until we get the DONE chunk without error.
+    while let Some(event) = response.next().await {
+        let event = event.unwrap();
+        match event {
+            Event::Open => continue,
+            Event::Message(message) => {
+                if message.data == "[DONE]" {
+                    break;
+                }
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_openai_compatible_logprobs_false_should_work() {
+    let client = Client::new();
+    let episode_id = Uuid::now_v7();
+    let body = json!({
+        "model": "tensorzero::model_name::dummy::good",
+        "messages": [
+            {"role": "user", "content": "Who are you?"}
+        ],
+        "stream": false,
+        "logprobs": false
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/openai/v1/chat/completions"))
+        .header("Content-Type", "application/json")
+        .header("X-Episode-Id", episode_id.to_string())
+        .json(&body)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn test_openai_compatible_logprobs_numeric_should_error() {
+    let client = Client::new();
+    let episode_id = Uuid::now_v7();
+    let body = json!({
+        "model": "tensorzero::model_name::dummy::good",
+        "messages": [
+            {"role": "user", "content": "Who are you?"}
+        ],
+        "stream": false,
+        "logprobs": 3
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/openai/v1/chat/completions"))
+        .header("Content-Type", "application/json")
+        .header("X-Episode-Id", episode_id.to_string())
+        .json(&body)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
