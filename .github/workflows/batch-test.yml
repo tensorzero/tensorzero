@@ -68,7 +68,7 @@ jobs:
           curl ${{ secrets.CLICKHOUSE_CLOUD_URL }} --data-binary 'SHOW DATABASES'
 
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@37bdc826eaedac215f638a96472df572feab0f9b
+        uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
         with:
           tool: cargo-nextest
 

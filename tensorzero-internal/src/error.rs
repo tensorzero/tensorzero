@@ -38,6 +38,14 @@ pub fn set_debug(debug: bool) -> Result<(), Error> {
     })
 }
 
+pub fn warn_discarded_unknown_chunk(provider_type: &str, part: &str) {
+    if *DEBUG.get().unwrap_or(&false) {
+        tracing::warn!("Discarding unknown chunk in {provider_type} response: {part}");
+    } else {
+        tracing::warn!("Discarding unknown chunk in {provider_type} response");
+    }
+}
+
 pub const IMPOSSIBLE_ERROR_MESSAGE: &str = "This should never happen, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports";
 
 /// Chooses between a `Debug` or `Display` representation based on the gateway-level `DEBUG` flag.
@@ -271,6 +279,9 @@ pub enum ErrorDetails {
     InvalidProviderConfig {
         message: String,
     },
+    InvalidRenderedStoredInference {
+        message: String,
+    },
     InvalidRequest {
         message: String,
     },
@@ -331,6 +342,10 @@ pub enum ErrorDetails {
     OutputParsing {
         message: String,
         raw_output: String,
+    },
+    OptimizationResponse {
+        message: String,
+        provider_type: String,
     },
     OutputValidation {
         source: Box<Error>,
@@ -455,6 +470,7 @@ impl ErrorDetails {
             ErrorDetails::InvalidTensorzeroUuid { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidFunctionVariants { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidVariantForOptimization { .. } => tracing::Level::WARN,
+            ErrorDetails::InvalidRenderedStoredInference { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidMetricName { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidMessage { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidModel { .. } => tracing::Level::ERROR,
@@ -480,6 +496,7 @@ impl ErrorDetails {
             ErrorDetails::Observability { .. } => tracing::Level::ERROR,
             ErrorDetails::OutputParsing { .. } => tracing::Level::WARN,
             ErrorDetails::OutputValidation { .. } => tracing::Level::WARN,
+            ErrorDetails::OptimizationResponse { .. } => tracing::Level::ERROR,
             ErrorDetails::ProviderNotFound { .. } => tracing::Level::ERROR,
             ErrorDetails::Serialization { .. } => tracing::Level::ERROR,
             ErrorDetails::StreamError { .. } => tracing::Level::ERROR,
@@ -558,6 +575,7 @@ impl ErrorDetails {
             ErrorDetails::InvalidOpenAICompatibleRequest { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidProviderConfig { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidRequest { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::InvalidRenderedStoredInference { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidTemplatePath => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidTool { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidVariantForOptimization { .. } => StatusCode::BAD_REQUEST,
@@ -574,6 +592,7 @@ impl ErrorDetails {
             ErrorDetails::ModelProvidersExhausted { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ModelValidation { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::Observability { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::OptimizationResponse { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::OutputParsing { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::OutputValidation { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ProviderNotFound { .. } => StatusCode::NOT_FOUND,
@@ -889,6 +908,9 @@ impl std::fmt::Display for ErrorDetails {
             ),
             ErrorDetails::InvalidProviderConfig { message } => write!(f, "{message}"),
             ErrorDetails::InvalidRequest { message } => write!(f, "{message}"),
+            ErrorDetails::InvalidRenderedStoredInference { message } => {
+                write!(f, "Invalid rendered stored inference: {message}")
+            }
             ErrorDetails::InvalidTemplatePath => {
                 write!(f, "Template path failed to convert to Rust string")
             }
@@ -974,6 +996,15 @@ impl std::fmt::Display for ErrorDetails {
             }
             ErrorDetails::Observability { message } => {
                 write!(f, "{message}")
+            }
+            ErrorDetails::OptimizationResponse {
+                message,
+                provider_type,
+            } => {
+                write!(
+                    f,
+                    "Error from {provider_type} optimization response: {message}"
+                )
             }
             ErrorDetails::OutputParsing {
                 raw_output,
