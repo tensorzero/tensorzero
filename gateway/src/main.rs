@@ -14,8 +14,8 @@ use std::sync::Arc;
 use tokio::signal;
 use tower_http::trace::{DefaultOnFailure, TraceLayer};
 use tracing::Level;
-use std::collections::HashMap;
 
+use tensorzero_internal::auth::{require_api_key, Auth};
 use tensorzero_internal::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_internal::config_parser::Config;
 use tensorzero_internal::endpoints;
@@ -23,7 +23,6 @@ use tensorzero_internal::endpoints::status::TENSORZERO_VERSION;
 use tensorzero_internal::error;
 use tensorzero_internal::gateway_util;
 use tensorzero_internal::observability::{self, LogFormat, RouterExt};
-use tensorzero_internal::auth::{require_api_key, Auth};
 use tensorzero_internal::redis_client::RedisClient;
 
 #[global_allocator]
@@ -179,9 +178,11 @@ async fn main() {
     // Setup Redis client with both app_state and auth
     if let Ok(redis_url) = std::env::var("TENSORZERO_REDIS_URL") {
         if !redis_url.is_empty() {
-            let redis_client = RedisClient::new(&redis_url, app_state.clone(), auth.clone())
-                .await;
-            redis_client.start().await.expect_pretty("Failed to start Redis client");
+            let redis_client = RedisClient::new(&redis_url, app_state.clone(), auth.clone()).await;
+            redis_client
+                .start()
+                .await
+                .expect_pretty("Failed to start Redis client");
         } else {
             tracing::warn!("TENSORZERO_REDIS_URL is empty, so Redis client will not be started");
         }
@@ -207,7 +208,14 @@ async fn main() {
             "/openai/v1/chat/completions",
             post(endpoints::openai_compatible::inference_handler),
         )
-        .layer(axum::middleware::from_fn_with_state(auth.clone(), require_api_key));
+        .route(
+            "/v1/chat/completions",
+            post(endpoints::openai_compatible::inference_handler),
+        )
+        .layer(axum::middleware::from_fn_with_state(
+            auth.clone(),
+            require_api_key,
+        ));
 
     // Routes that don't require authentication
     let public_routes = Router::new()

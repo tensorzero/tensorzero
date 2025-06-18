@@ -340,7 +340,7 @@ pub async fn inference(
 
     let models = config.models.read().await;
     let inference_models = InferenceModels {
-        models: &*models,
+        models: &models,
         embedding_models: &config.embedding_models,
     };
     let resolved_input = params
@@ -517,7 +517,11 @@ pub async fn inference(
 /// invalid combination of parameters is provided.
 /// If `model_name` is specified, then we use the special 'default' function
 /// Returns the function config and the function name
-fn find_function(params: &Params, config: &Config, models: &ModelTable) -> Result<(Arc<FunctionConfig>, String), Error> {
+fn find_function(
+    params: &Params,
+    config: &Config,
+    models: &ModelTable,
+) -> Result<(Arc<FunctionConfig>, String), Error> {
     match (&params.function_name, &params.model_name) {
         // Get the function config or return an error if it doesn't exist
         (Some(function_name), None) => Ok((
@@ -1166,7 +1170,29 @@ pub struct ChatCompletionInferenceParams {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub frequency_penalty: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub chat_template: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub chat_template_kwargs: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mm_processor_kwargs: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub guided_json: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub guided_regex: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub guided_choice: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub guided_grammar: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub structural_tag: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub guided_decoding_backend: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub guided_whitespace_pattern: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub json_mode: Option<JsonMode>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub logprobs: bool,
 }
 
 impl ChatCompletionInferenceParams {
@@ -1198,6 +1224,10 @@ impl ChatCompletionInferenceParams {
             self.frequency_penalty = frequency_penalty;
         }
     }
+}
+
+fn is_false(v: &bool) -> bool {
+    !*v
 }
 
 #[cfg(test)]

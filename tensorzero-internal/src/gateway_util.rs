@@ -15,9 +15,9 @@ use crate::clickhouse::migration_manager;
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::config_parser::Config;
 use crate::kafka::KafkaConnectionInfo;
-use crate::model::ModelTable;
 use crate::endpoints;
 use crate::error::{Error, ErrorDetails};
+use crate::model::ModelTable;
 /// State for the API
 #[derive(Clone)]
 pub struct AppStateData {
@@ -58,7 +58,7 @@ impl AppStateData {
     }
     pub async fn update_model_table(&self, mut new_models: ModelTable) {
         let mut models = self.config.models.write().await;
-        
+
         for (name, config) in std::mem::take(&mut *new_models).into_iter() {
             models.insert(name, config);
         }

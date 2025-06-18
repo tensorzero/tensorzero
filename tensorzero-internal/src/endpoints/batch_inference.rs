@@ -213,7 +213,7 @@ pub async fn start_batch_inference_handler(
     };
     let models = config.models.read().await;
     let inference_models = InferenceModels {
-        models: &*models,
+        models: &models,
         embedding_models: &config.embedding_models,
     };
     let inference_params: Vec<InferenceParams> =
@@ -349,8 +349,7 @@ pub async fn poll_batch_inference_handler(
             let credentials = InferenceCredentials::default();
             let models = config.models.read().await;
             let response =
-                poll_batch_inference(&batch_request, http_client, &*models, &credentials)
-                    .await?;
+                poll_batch_inference(&batch_request, http_client, &models, &credentials).await?;
             let response = write_poll_batch_inference(
                 &clickhouse_connection_info,
                 &batch_request,

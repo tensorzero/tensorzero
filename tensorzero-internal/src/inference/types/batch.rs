@@ -495,6 +495,7 @@ impl TryFrom<BatchChatCompletionParamsWithSize> for Vec<ChatCompletionInferenceP
                 presence_penalty: presence_penalty_iter.next().unwrap_or(None),
                 frequency_penalty: frequency_penalty_iter.next().unwrap_or(None),
                 json_mode: None,
+                ..Default::default()
             });
         }
         Ok(all_inference_params)

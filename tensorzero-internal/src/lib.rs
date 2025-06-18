@@ -2,6 +2,7 @@
 // traits with async fns for now.
 #![expect(async_fn_in_trait)]
 
+pub mod auth;
 pub mod cache;
 pub mod clickhouse;
 pub mod config_parser; // TensorZero config file
@@ -18,12 +19,11 @@ mod minijinja_util; // utilities for working with MiniJinja templates
 pub mod model; // types and methods for working with TensorZero-supported models
 pub mod model_table;
 pub mod observability; // utilities for observability (logs, metrics, etc.)
+pub mod redis_client; // redis client
 mod testing;
 pub mod tool; // types and methods for working with TensorZero tools
 mod uuid_util; // utilities for working with UUIDs
-pub mod variant; // types and methods for working with TensorZero variants
-pub mod redis_client; // redis client
-pub mod auth; // authentication
+pub mod variant; // types and methods for working with TensorZero variants // authentication
 
 pub mod built_info {
     #![expect(clippy::allow_attributes)]
