@@ -1,5 +1,5 @@
 import type { Control } from "react-hook-form";
-import { FormField, FormItem, FormLabel } from "~/components/ui/form";
+import { FormField, FormItem } from "~/components/ui/form";
 import { useState } from "react";
 import {
   Popover,
@@ -54,7 +54,6 @@ export function DatasetSelector({
       name="dataset"
       render={({ field }) => (
         <FormItem className="flex flex-col gap-1">
-          <FormLabel>Dataset</FormLabel>
           <div className="w-full space-y-2">
             <Popover open={open} onOpenChange={setOpen}>
               <PopoverTrigger className="border-gray-200 bg-gray-50" asChild>

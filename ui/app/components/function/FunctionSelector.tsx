@@ -1,6 +1,6 @@
 import type { Control, Path } from "react-hook-form";
 import { Config } from "~/utils/config";
-import { FormField, FormItem, FormLabel } from "~/components/ui/form";
+import { FormField, FormItem } from "~/components/ui/form";
 import {
   Select,
   SelectContent,
@@ -32,7 +32,6 @@ export function FunctionSelector<T extends Record<string, unknown>>({
       name={name}
       render={({ field }) => (
         <FormItem className="flex flex-col gap-1">
-          <FormLabel>Function</FormLabel>
           <Select
             onValueChange={(value: string) => {
               field.onChange(value);
