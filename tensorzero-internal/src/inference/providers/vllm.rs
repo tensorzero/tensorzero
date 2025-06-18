@@ -393,8 +393,7 @@ impl<'a> VLLMRequest<'a> {
         } else {
             match (&request.json_mode, request.output_schema) {
                 (
-                    ModelInferenceRequestJsonMode::On
-                    | ModelInferenceRequestJsonMode::Strict,
+                    ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict,
                     Some(schema),
                 ) => Some(schema),
                 _ => None,
@@ -422,8 +421,8 @@ impl<'a> VLLMRequest<'a> {
             guided_decoding_backend: request.guided_decoding_backend,
             guided_whitespace_pattern: request.guided_whitespace_pattern,
             logprobs: match request.logprobs {
-                true  => Some(true),   // client asked for log-probs
-                false => Some(false),  // client explicitly disabled it
+                true => Some(true),   // client asked for log-probs
+                false => Some(false), // client explicitly disabled it
             },
             seed: request.seed,
         })
@@ -478,10 +477,12 @@ impl<'a> TryFrom<VLLMResponseWithMetadata<'a>> for ProviderInferenceResponse {
         let mut content: Vec<ContentBlockOutput> = Vec::new();
         // Handle reasoning_content if present (for vLLM with enable_thinking)
         if let Some(reasoning_text) = message.reasoning_content {
-            content.push(ContentBlockOutput::Thought(crate::inference::types::Thought {
-                text: reasoning_text,
-                signature: None,
-            }));
+            content.push(ContentBlockOutput::Thought(
+                crate::inference::types::Thought {
+                    text: reasoning_text,
+                    signature: None,
+                },
+            ));
         }
         if let Some(text) = message.content {
             content.push(text.into());

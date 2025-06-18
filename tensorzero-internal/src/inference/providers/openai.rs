@@ -1847,10 +1847,12 @@ impl<'a> TryFrom<OpenAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
         let mut content: Vec<ContentBlockOutput> = Vec::new();
         // Handle reasoning_content if present (for vLLM with enable_thinking)
         if let Some(reasoning_text) = message.reasoning_content {
-            content.push(ContentBlockOutput::Thought(crate::inference::types::Thought {
-                text: reasoning_text,
-                signature: None,
-            }));
+            content.push(ContentBlockOutput::Thought(
+                crate::inference::types::Thought {
+                    text: reasoning_text,
+                    signature: None,
+                },
+            ));
         }
         if let Some(text) = message.content {
             content.push(text.into());
@@ -1970,11 +1972,13 @@ fn openai_to_tensorzero_chunk(
         }
         // Handle reasoning_content if present (for vLLM with enable_thinking)
         if let Some(reasoning_text) = choice.delta.reasoning_content {
-            content.push(ContentBlockChunk::Thought(crate::inference::types::ThoughtChunk {
-                id: "reasoning".to_string(),
-                text: Some(reasoning_text),
-                signature: None,
-            }));
+            content.push(ContentBlockChunk::Thought(
+                crate::inference::types::ThoughtChunk {
+                    id: "reasoning".to_string(),
+                    text: Some(reasoning_text),
+                    signature: None,
+                },
+            ));
         }
         if let Some(text) = choice.delta.content {
             content.push(ContentBlockChunk::Text(TextChunk {

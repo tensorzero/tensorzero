@@ -68,13 +68,17 @@ pub async fn inference_handler(
     }
     let stream_options = openai_compatible_params.stream_options;
     let logprobs_requested = matches!(openai_compatible_params.logprobs, Some(true));
-    
+
     // Extract the original model name by removing the TensorZero prefix
-    let original_model_name = if let Some(model_name) = openai_compatible_params.model
-        .strip_prefix("tensorzero::model_name::") {
+    let original_model_name = if let Some(model_name) = openai_compatible_params
+        .model
+        .strip_prefix("tensorzero::model_name::")
+    {
         model_name.to_string()
-    } else if let Some(_function_name) = openai_compatible_params.model
-        .strip_prefix("tensorzero::function_name::") {
+    } else if let Some(_function_name) = openai_compatible_params
+        .model
+        .strip_prefix("tensorzero::function_name::")
+    {
         // For function-based requests, keep the full format
         openai_compatible_params.model.clone()
     } else {
@@ -89,7 +93,6 @@ pub async fn inference_handler(
     if matches!(openai_compatible_params.logprobs, Some(true)) {
         params.include_original_response = true;
     }
-
 
     let response = inference(config, &http_client, clickhouse_connection_info, params).await?;
 
@@ -110,8 +113,12 @@ pub async fn inference_handler(
                         .as_ref()
                         .and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok()),
                 } {
-                    if let Some(provider_choices) = original_resp_json.get("choices").and_then(|v| v.as_array()) {
-                        for (idx, choice) in openai_compatible_response.choices.iter_mut().enumerate() {
+                    if let Some(provider_choices) =
+                        original_resp_json.get("choices").and_then(|v| v.as_array())
+                    {
+                        for (idx, choice) in
+                            openai_compatible_response.choices.iter_mut().enumerate()
+                        {
                             if let Some(provider_choice) = provider_choices.get(idx) {
                                 if let Some(lp) = provider_choice.get("logprobs") {
                                     choice.logprobs = Some(lp.clone());
@@ -847,7 +854,8 @@ impl From<(InferenceResponse, String)> for OpenAICompatibleResponse {
     fn from((inference_response, model_name): (InferenceResponse, String)) -> Self {
         match inference_response {
             InferenceResponse::Chat(response) => {
-                let (content, tool_calls, reasoning_content) = process_chat_content(response.content);
+                let (content, tool_calls, reasoning_content) =
+                    process_chat_content(response.content);
 
                 OpenAICompatibleResponse {
                     id: response.inference_id.to_string(),
@@ -906,7 +914,11 @@ impl From<(InferenceResponse, String)> for OpenAICompatibleResponse {
 // This is useful since the OpenAI format separates text, tool calls, and reasoning content in the response fields.
 fn process_chat_content(
     content: Vec<ContentBlockChatOutput>,
-) -> (Option<String>, Vec<OpenAICompatibleToolCall>, Option<String>) {
+) -> (
+    Option<String>,
+    Vec<OpenAICompatibleToolCall>,
+    Option<String>,
+) {
     let mut content_str: Option<String> = None;
     let mut tool_calls = Vec::new();
     let mut reasoning_content: Option<String> = None;
@@ -925,7 +937,7 @@ fn process_chat_content(
                     Some(ref mut content) => {
                         content.push('\n');
                         content.push_str(&thought.text);
-                    },
+                    }
                     None => reasoning_content = Some(thought.text),
                 }
             }
@@ -1008,7 +1020,8 @@ fn convert_inference_response_chunk_to_openai_compatible(
 ) -> Vec<OpenAICompatibleResponseChunk> {
     let response_chunk = match chunk {
         InferenceResponseChunk::Chat(c) => {
-            let (content, tool_calls, reasoning_content) = process_chat_content_chunk(c.content, tool_id_to_index);
+            let (content, tool_calls, reasoning_content) =
+                process_chat_content_chunk(c.content, tool_id_to_index);
             OpenAICompatibleResponseChunk {
                 id: c.inference_id.to_string(),
                 episode_id: c.episode_id.to_string(),
@@ -1060,7 +1073,11 @@ fn convert_inference_response_chunk_to_openai_compatible(
 fn process_chat_content_chunk(
     content: Vec<ContentBlockChunk>,
     tool_id_to_index: &mut HashMap<String, usize>,
-) -> (Option<String>, Vec<OpenAICompatibleToolCallChunk>, Option<String>) {
+) -> (
+    Option<String>,
+    Vec<OpenAICompatibleToolCallChunk>,
+    Option<String>,
+) {
     let mut content_str: Option<String> = None;
     let mut tool_calls = Vec::new();
     let mut reasoning_content: Option<String> = None;
@@ -1602,7 +1619,8 @@ mod tests {
             }),
         ];
         let mut tool_id_to_index = HashMap::new();
-        let (content_str, tool_calls, reasoning_content) = process_chat_content_chunk(content, &mut tool_id_to_index);
+        let (content_str, tool_calls, reasoning_content) =
+            process_chat_content_chunk(content, &mut tool_id_to_index);
         assert_eq!(content_str, Some("Hello, world!".to_string()));
         assert_eq!(tool_calls.len(), 1);
         assert_eq!(tool_calls[0].id, Some("1".to_string()));
@@ -1612,7 +1630,8 @@ mod tests {
         assert_eq!(reasoning_content, None);
 
         let content: Vec<ContentBlockChunk> = vec![];
-        let (content_str, tool_calls, reasoning_content) = process_chat_content_chunk(content, &mut tool_id_to_index);
+        let (content_str, tool_calls, reasoning_content) =
+            process_chat_content_chunk(content, &mut tool_id_to_index);
         assert_eq!(content_str, None);
         assert!(tool_calls.is_empty());
 
@@ -1645,7 +1664,8 @@ mod tests {
             }),
         ];
         let mut tool_id_to_index = HashMap::new();
-        let (content_str, tool_calls, reasoning_content) = process_chat_content_chunk(content, &mut tool_id_to_index);
+        let (content_str, tool_calls, reasoning_content) =
+            process_chat_content_chunk(content, &mut tool_id_to_index);
         assert_eq!(
             content_str,
             Some("First part second part third part fourth part".to_string())

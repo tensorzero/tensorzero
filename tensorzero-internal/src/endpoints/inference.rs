@@ -511,7 +511,11 @@ pub async fn inference(
 /// invalid combination of parameters is provided.
 /// If `model_name` is specified, then we use the special 'default' function
 /// Returns the function config and the function name
-fn find_function(params: &Params, config: &Config, models: &ModelTable) -> Result<(Arc<FunctionConfig>, String), Error> {
+fn find_function(
+    params: &Params,
+    config: &Config,
+    models: &ModelTable,
+) -> Result<(Arc<FunctionConfig>, String), Error> {
     match (&params.function_name, &params.model_name) {
         // Get the function config or return an error if it doesn't exist
         (Some(function_name), None) => Ok((

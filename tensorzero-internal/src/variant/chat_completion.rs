@@ -311,13 +311,8 @@ impl Variant for ChatCompletionConfig {
     ) -> Result<InferenceResult, Error> {
         // Mutable copy used to build the request (will be borrowed by prepare_request)
         let mut params_mut = inference_params.clone();
-        let request = self.prepare_request(
-            input,
-            function,
-            inference_config,
-            false,
-            &mut params_mut,
-        )?;
+        let request =
+            self.prepare_request(input, function, inference_config, false, &mut params_mut)?;
         // Use the original (unborrowed) params for downstream calls
         let params_for_args = inference_params.clone();
         let model_config = models.models.get(&self.model).await?.ok_or_else(|| {
@@ -349,13 +344,8 @@ impl Variant for ChatCompletionConfig {
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
         // Mutable copy used to build the request
         let mut params_mut = inference_params.clone();
-        let request = self.prepare_request(
-            input,
-            function,
-            inference_config,
-            true,
-            &mut params_mut,
-        )?;
+        let request =
+            self.prepare_request(input, function, inference_config, true, &mut params_mut)?;
         // Use the original (unborrowed) params for downstream calls
         let params_for_args = inference_params.clone();
         let model_config = models.models.get(&self.model).await?.ok_or_else(|| {
@@ -473,7 +463,8 @@ impl Variant for ChatCompletionConfig {
         // duration of this function call. The amount of memory leaked is
         // bounded by the size of the batch request and thus acceptable for
         // the CLI / test processes that invoke `cargo run-e2e`.
-        let leaked_params: &'static mut Vec<InferenceParams> = Box::leak(Box::new(inference_params));
+        let leaked_params: &'static mut Vec<InferenceParams> =
+            Box::leak(Box::new(inference_params));
 
         // Prepare all the `ModelInferenceRequest`s. Each request holds
         // references into `leaked_params`, so we iterate using `iter_mut()`.

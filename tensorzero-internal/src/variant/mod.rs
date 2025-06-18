@@ -495,10 +495,7 @@ where
                 seed: inference_params.chat_completion.seed,
                 stream,
                 // Template / guided-decoding parameters
-                chat_template: inference_params
-                    .chat_completion
-                    .chat_template
-                    .as_deref(),
+                chat_template: inference_params.chat_completion.chat_template.as_deref(),
                 chat_template_kwargs: inference_params
                     .chat_completion
                     .chat_template_kwargs
@@ -508,28 +505,17 @@ where
                     .mm_processor_kwargs
                     .as_ref(),
                 guided_json: inference_params.chat_completion.guided_json.as_ref(),
-                guided_regex: inference_params
-                    .chat_completion
-                    .guided_regex
-                    .as_deref(),
-                guided_choice: inference_params
-                    .chat_completion
-                    .guided_choice
-                    .as_ref()
-                    .map(|choices| {
+                guided_regex: inference_params.chat_completion.guided_regex.as_deref(),
+                guided_choice: inference_params.chat_completion.guided_choice.as_ref().map(
+                    |choices| {
                         choices
                             .iter()
                             .map(|s| Cow::Borrowed(s.as_str()))
                             .collect::<Vec<Cow<'_, str>>>()
-                    }),
-                guided_grammar: inference_params
-                    .chat_completion
-                    .guided_grammar
-                    .as_deref(),
-                structural_tag: inference_params
-                    .chat_completion
-                    .structural_tag
-                    .as_deref(),
+                    },
+                ),
+                guided_grammar: inference_params.chat_completion.guided_grammar.as_deref(),
+                structural_tag: inference_params.chat_completion.structural_tag.as_deref(),
                 guided_decoding_backend: inference_params
                     .chat_completion
                     .guided_decoding_backend
@@ -577,10 +563,7 @@ where
                 seed: inference_params.chat_completion.seed,
                 stream,
                 // Template / guided-decoding parameters
-                chat_template: inference_params
-                    .chat_completion
-                    .chat_template
-                    .as_deref(),
+                chat_template: inference_params.chat_completion.chat_template.as_deref(),
                 chat_template_kwargs: inference_params
                     .chat_completion
                     .chat_template_kwargs
@@ -590,28 +573,17 @@ where
                     .mm_processor_kwargs
                     .as_ref(),
                 guided_json: inference_params.chat_completion.guided_json.as_ref(),
-                guided_regex: inference_params
-                    .chat_completion
-                    .guided_regex
-                    .as_deref(),
-                guided_choice: inference_params
-                    .chat_completion
-                    .guided_choice
-                    .as_ref()
-                    .map(|choices| {
+                guided_regex: inference_params.chat_completion.guided_regex.as_deref(),
+                guided_choice: inference_params.chat_completion.guided_choice.as_ref().map(
+                    |choices| {
                         choices
                             .iter()
                             .map(|s| Cow::Borrowed(s.as_str()))
                             .collect::<Vec<Cow<'_, str>>>()
-                    }),
-                guided_grammar: inference_params
-                    .chat_completion
-                    .guided_grammar
-                    .as_deref(),
-                structural_tag: inference_params
-                    .chat_completion
-                    .structural_tag
-                    .as_deref(),
+                    },
+                ),
+                guided_grammar: inference_params.chat_completion.guided_grammar.as_deref(),
+                structural_tag: inference_params.chat_completion.structural_tag.as_deref(),
                 guided_decoding_backend: inference_params
                     .chat_completion
                     .guided_decoding_backend

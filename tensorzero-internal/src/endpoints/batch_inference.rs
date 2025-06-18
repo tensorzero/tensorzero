@@ -349,8 +349,7 @@ pub async fn poll_batch_inference_handler(
             let credentials = InferenceCredentials::default();
             let models = config.models.read().await;
             let response =
-                poll_batch_inference(&batch_request, http_client, &*models, &credentials)
-                    .await?;
+                poll_batch_inference(&batch_request, http_client, &*models, &credentials).await?;
             let response = write_poll_batch_inference(
                 &clickhouse_connection_info,
                 &batch_request,

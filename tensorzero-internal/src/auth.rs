@@ -1,11 +1,11 @@
-use serde_json::Value;
+use axum::body::{to_bytes, Body};
+use axum::extract::{Request, State};
 use axum::http::StatusCode;
 use axum::middleware::Next;
-use axum::response::{Response, IntoResponse};
-use axum::extract::{State, Request};
-use axum::body::{to_bytes, Body};
-use std::sync::{Arc, RwLock};
+use axum::response::{IntoResponse, Response};
+use serde_json::Value;
 use std::collections::HashMap;
+use std::sync::{Arc, RwLock};
 
 pub type APIConfig = HashMap<String, String>;
 
@@ -20,12 +20,14 @@ fn auth_error_response(status: StatusCode, error_type: &str, message: &str) -> R
 
 #[derive(Clone)]
 pub struct Auth {
-    api_keys: Arc<RwLock<HashMap<String, APIConfig>>>
+    api_keys: Arc<RwLock<HashMap<String, APIConfig>>>,
 }
 
 impl Auth {
     pub fn new(api_keys: HashMap<String, APIConfig>) -> Self {
-        Self { api_keys: Arc::new(RwLock::new(api_keys)) }
+        Self {
+            api_keys: Arc::new(RwLock::new(api_keys)),
+        }
     }
 
     pub fn update_api_keys(&self, api_key: &str, api_config: APIConfig) {
@@ -45,7 +47,6 @@ impl Auth {
         }
         Err(StatusCode::UNAUTHORIZED)
     }
-    
 }
 
 pub async fn require_api_key(
@@ -60,56 +61,64 @@ pub async fn require_api_key(
         .headers
         .get("authorization")
         .and_then(|v| v.to_str().ok());
-    
+
     let key = match key {
         Some(key) => {
             // Strip "Bearer " prefix if present (case-insensitive)
             let key = key.trim();
             key.strip_prefix("Bearer ").unwrap_or(key)
         }
-        None => return Err(auth_error_response(
-            StatusCode::UNAUTHORIZED, 
-            "missing_authorization", 
-            "Missing authorization header"
-        )),
+        None => {
+            return Err(auth_error_response(
+                StatusCode::UNAUTHORIZED,
+                "missing_authorization",
+                "Missing authorization header",
+            ))
+        }
     };
 
     let api_config = auth.validate_api_key(key);
     if api_config.is_err() {
         return Err(auth_error_response(
-            StatusCode::UNAUTHORIZED, 
-            "invalid_api_key", 
-            "Invalid API key"
+            StatusCode::UNAUTHORIZED,
+            "invalid_api_key",
+            "Invalid API key",
         ));
     }
 
     // Parse the JSON body and replace the "model" field with the value from api_config if present
     let mut val: Value = match serde_json::from_slice(&bytes) {
         Ok(v) => v,
-        Err(_) => return Err(auth_error_response(
-            StatusCode::BAD_REQUEST, 
-            "invalid_request_body", 
-            "Invalid request body"
-        )),
+        Err(_) => {
+            return Err(auth_error_response(
+                StatusCode::BAD_REQUEST,
+                "invalid_request_body",
+                "Invalid request body",
+            ))
+        }
     };
 
     let model = match val.get("model").and_then(|v| v.as_str()) {
         Some(m) => m,
-        None => return Err(auth_error_response(
-            StatusCode::BAD_REQUEST, 
-            "invalid_request_body", 
-            "Missing model name in request body"
-        )),
+        None => {
+            return Err(auth_error_response(
+                StatusCode::BAD_REQUEST,
+                "invalid_request_body",
+                "Missing model name in request body",
+            ))
+        }
     };
 
     let api_config = api_config.unwrap();
     let model_value = match api_config.get(model) {
         Some(v) => v,
-        None => return Err(auth_error_response(
-            StatusCode::NOT_FOUND, 
-            "model_not_found", 
-            "Model not found in API key"
-        )),
+        None => {
+            return Err(auth_error_response(
+                StatusCode::NOT_FOUND,
+                "model_not_found",
+                "Model not found in API key",
+            ))
+        }
     };
 
     // Replace the "model" field in the request body with the value from api_config
@@ -118,11 +127,13 @@ pub async fn require_api_key(
     // Re-serialize the modified JSON body for the downstream handler
     let bytes = match serde_json::to_vec(&val) {
         Ok(b) => b,
-        Err(_) => return Err(auth_error_response(
-            StatusCode::INTERNAL_SERVER_ERROR, 
-            "serialization_error", 
-            "Failed to serialize modified request body"
-        )),
+        Err(_) => {
+            return Err(auth_error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "serialization_error",
+                "Failed to serialize modified request body",
+            ))
+        }
     };
 
     let request = Request::from_parts(parts, Body::from(bytes));
