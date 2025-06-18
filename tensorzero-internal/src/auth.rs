@@ -130,7 +130,7 @@ pub async fn require_api_key(
 
     // Store the original model name before replacing it
     let original_model = model.to_string();
-    
+
     // Replace the "model" field in the request body with the value from api_config
     val["model"] = format!("tensorzero::model_name::{}", model_value.clone()).into();
 
@@ -147,10 +147,12 @@ pub async fn require_api_key(
     };
 
     let mut request = Request::from_parts(parts, Body::from(bytes));
-    
+
     // Add the original model name as a custom header
     if let Ok(header_value) = original_model.parse() {
-        request.headers_mut().insert("x-tensorzero-original-model", header_value);
+        request
+            .headers_mut()
+            .insert("x-tensorzero-original-model", header_value);
     }
 
     Ok(next.run(request).await)
