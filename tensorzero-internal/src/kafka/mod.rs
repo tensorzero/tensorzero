@@ -1,12 +1,18 @@
+pub mod buffer;
+pub mod cloudevents;
+
 use crate::error::{Error, ErrorDetails};
-use metrics::{counter, histogram};
+use metrics::{counter, histogram, gauge};
 use rdkafka::config::ClientConfig;
 use rdkafka::producer::{FutureProducer, FutureRecord};
 use rdkafka::util::Timeout;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::{error, warn};
+use tracing::{error, warn, info};
+
+use self::buffer::{MessageBuffer, BufferConfig};
+use self::cloudevents::{CloudEvent, ObservabilityEntry, ObservabilityEvent};
 
 #[derive(Clone, Debug)]
 pub enum KafkaConnectionInfo {
@@ -20,6 +26,8 @@ pub enum KafkaConnectionInfo {
 pub struct KafkaProducerInfo {
     pub producer: FutureProducer,
     pub topic_prefix: String,
+    pub buffer: Arc<MessageBuffer>,
+    pub metrics_topic: String,
 }
 
 #[cfg(any(test, feature = "e2e_tests"))]
@@ -32,7 +40,10 @@ pub struct MockKafkaConnectionInfo {
 pub struct KafkaConfig {
     pub enabled: bool,
     pub brokers: String,
+    #[serde(default = "default_topic_prefix")]
     pub topic_prefix: String,
+    #[serde(default = "default_metrics_topic")]
+    pub metrics_topic: String,
     #[serde(default)]
     pub compression_type: Option<String>,
     #[serde(default)]
@@ -43,6 +54,32 @@ pub struct KafkaConfig {
     pub request_timeout_ms: Option<i32>,
     #[serde(default)]
     pub sasl: Option<KafkaSaslConfig>,
+    #[serde(default = "default_buffer_size")]
+    pub buffer_max_size: usize,
+    #[serde(default = "default_metrics_batch_size")]
+    pub metrics_batch_size: usize,
+    #[serde(default = "default_flush_interval")]
+    pub flush_interval_seconds: u64,
+}
+
+fn default_topic_prefix() -> String {
+    "tensorzero".to_string()
+}
+
+fn default_metrics_topic() -> String {
+    "budMetricsMessages".to_string()
+}
+
+fn default_buffer_size() -> usize {
+    5000
+}
+
+fn default_metrics_batch_size() -> usize {
+    500
+}
+
+fn default_flush_interval() -> u64 {
+    10
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -100,11 +137,23 @@ impl KafkaConnectionInfo {
                     }
                 })?;
                 
+                // Create message buffer
+                let buffer_config = BufferConfig {
+                    max_size: config.buffer_max_size,
+                    batch_size: config.metrics_batch_size,
+                    flush_interval: Duration::from_secs(config.flush_interval_seconds),
+                };
+                let buffer = Arc::new(MessageBuffer::new(buffer_config));
+                
                 counter!("kafka_connections_established").increment(1);
+                info!("Kafka producer initialized with metrics topic: {}", config.metrics_topic);
+                
                 Ok(KafkaConnectionInfo::Production(Arc::new(
                     KafkaProducerInfo {
                         producer,
                         topic_prefix: config.topic_prefix.clone(),
+                        buffer,
+                        metrics_topic: config.metrics_topic.clone(),
                     },
                 )))
             }
@@ -186,6 +235,155 @@ impl KafkaConnectionInfo {
                 
                 Ok(())
             }
+        }
+    }
+    
+    /// Add an observability event to the buffer
+    pub async fn add_observability_event(&self, event: ObservabilityEvent) -> Result<(), Error> {
+        match self {
+            KafkaConnectionInfo::Disabled => Ok(()),
+            #[cfg(any(test, feature = "e2e_tests"))]
+            KafkaConnectionInfo::Mock(mock) => {
+                let entry = ObservabilityEntry::new(event);
+                let cloud_event = CloudEvent::new_observability_event(vec![entry]);
+                
+                let value = serde_json::to_string(&cloud_event).map_err(|e| {
+                    ErrorDetails::KafkaSerialization {
+                        message: format!("Failed to serialize CloudEvent: {}", e),
+                    }
+                })?;
+                
+                let mut messages = mock.messages.lock().await;
+                messages.push(("budMetricsMessages".to_string(), event.project_id.clone(), value));
+                Ok(())
+            }
+            KafkaConnectionInfo::Production(producer_info) => {
+                // Validate the event
+                if let Err(e) = cloudevents::validate_event(&event) {
+                    counter!("kafka_event_validation_errors").increment(1);
+                    return Err(ErrorDetails::KafkaSerialization {
+                        message: format!("Invalid observability event: {}", e),
+                    }.into());
+                }
+                
+                let entry = ObservabilityEntry::new(event);
+                let producer_info_clone = producer_info.clone();
+                
+                // Add to buffer
+                match producer_info.buffer.add(entry).await {
+                    Ok(Some(batch)) => {
+                        // Buffer returned a batch to send
+                        tokio::spawn(async move {
+                            if let Err(e) = send_metrics_batch(producer_info_clone, batch).await {
+                                error!("Failed to send metrics batch: {}", e);
+                            }
+                        });
+                    }
+                    Ok(None) => {
+                        // Entry added to buffer, no batch ready yet
+                    }
+                    Err(e) => {
+                        counter!("kafka_buffer_errors").increment(1);
+                        return Err(ErrorDetails::KafkaProducer {
+                            message: format!("Buffer error: {}", e),
+                        }.into());
+                    }
+                }
+                
+                Ok(())
+            }
+        }
+    }
+    
+    /// Start the background flush task for the buffer
+    pub fn start_flush_task(&self) -> Option<tokio::task::JoinHandle<()>> {
+        match self {
+            KafkaConnectionInfo::Production(producer_info) => {
+                let buffer = producer_info.buffer.clone();
+                let producer_info_clone = producer_info.clone();
+                
+                Some(tokio::spawn(async move {
+                    buffer::start_flush_task(buffer, move |entries| {
+                        let producer_info = producer_info_clone.clone();
+                        tokio::spawn(async move {
+                            if let Err(e) = send_metrics_batch(producer_info, entries).await {
+                                error!("Failed to send metrics batch during flush: {}", e);
+                            }
+                        });
+                    }).await;
+                }))
+            }
+            _ => None,
+        }
+    }
+    
+    /// Flush any pending messages in the buffer
+    pub async fn flush(&self) -> Result<(), Error> {
+        match self {
+            KafkaConnectionInfo::Production(producer_info) => {
+                let entries = producer_info.buffer.flush().await;
+                if !entries.is_empty() {
+                    send_metrics_batch(producer_info.clone(), entries).await?;
+                }
+                Ok(())
+            }
+            _ => Ok(()),
+        }
+    }
+}
+
+/// Send a batch of observability entries to Kafka
+async fn send_metrics_batch(
+    producer_info: Arc<KafkaProducerInfo>,
+    entries: Vec<ObservabilityEntry>,
+) -> Result<(), Error> {
+    let cloud_event = CloudEvent::new_observability_event(entries);
+    
+    // Extract project_id for key (use first entry's project_id)
+    let key = cloud_event.data.entries.first()
+        .map(|e| e.event.project_id.clone())
+        .unwrap_or_default();
+    
+    let value = serde_json::to_string(&cloud_event).map_err(|e| {
+        counter!("kafka_serialization_errors").increment(1);
+        ErrorDetails::KafkaSerialization {
+            message: format!("Failed to serialize CloudEvent: {}", e),
+        }
+    })?;
+    
+    let record = FutureRecord::to(&producer_info.metrics_topic)
+        .key(&key)
+        .payload(&value);
+    
+    let start_time = std::time::Instant::now();
+    let delivery_result = producer_info
+        .producer
+        .send(record, Timeout::After(Duration::from_secs(30)))
+        .await;
+    
+    match delivery_result {
+        Ok((partition, offset)) => {
+            let duration = start_time.elapsed();
+            histogram!("gateway_kafka_publish_duration_seconds")
+                .record(duration.as_secs_f64());
+            counter!("gateway_metrics_published_total")
+                .increment(cloud_event.data.entries.len() as u64);
+            info!(
+                "Sent {} metrics to Kafka topic {} partition {} offset {}",
+                cloud_event.data.entries.len(),
+                producer_info.metrics_topic,
+                partition,
+                offset
+            );
+            Ok(())
+        }
+        Err((e, _)) => {
+            counter!("gateway_metrics_failed_total")
+                .increment(cloud_event.data.entries.len() as u64);
+            error!("Failed to send metrics to Kafka: {:?}", e);
+            Err(ErrorDetails::KafkaProducer {
+                message: format!("Failed to send metrics to Kafka: {:?}", e),
+            }.into())
         }
     }
 }

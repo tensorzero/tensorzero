@@ -122,6 +122,18 @@ pub async fn setup_kafka(config: &Config<'static>) -> Result<KafkaConnectionInfo
             match KafkaConnectionInfo::new(Some(kafka_conf)) {
                 Ok(conn) => {
                     tracing::info!("Successfully initialized Kafka producer");
+                    
+                    // Start the background flush task for the buffer
+                    if let Some(handle) = conn.start_flush_task() {
+                        // Store the handle to prevent it from being dropped
+                        // In a production system, you might want to store this handle
+                        // for graceful shutdown
+                        tokio::spawn(async move {
+                            handle.await.ok();
+                        });
+                        tracing::info!("Started Kafka buffer flush task");
+                    }
+                    
                     Ok(conn)
                 }
                 Err(e) => {

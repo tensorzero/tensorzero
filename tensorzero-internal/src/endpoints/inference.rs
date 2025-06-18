@@ -847,37 +847,64 @@ async fn write_inference(
         }
     }));
     
-    // Kafka writes
-    let model_responses_kafka = result.get_serialized_model_inferences();
+    // Kafka observability metrics
     let kafka_connection_info = kafka_connection_info.clone();
     let result_clone = result.clone();
-    let input_clone = input.clone();
     let metadata_clone = metadata.clone();
     
     futures.push(Box::pin(async move {
-        // Write model responses to Kafka
-        for response in model_responses_kafka {
-            let _ = kafka_connection_info
-                .write(&[response], "model_inference")
-                .await;
-        }
+        // Create observability event from inference result
+        let inference_id = match &result_clone {
+            InferenceResult::Chat(result) => result.inference_id,
+            InferenceResult::Json(result) => result.inference_id,
+        };
         
-        // Write the inference to Kafka
-        match result_clone {
+        let request_arrival_time = chrono::Utc::now() - chrono::Duration::milliseconds(
+            metadata_clone.processing_time.map(|d| d.as_millis() as i64).unwrap_or(0)
+        );
+        let request_forward_time = request_arrival_time + chrono::Duration::milliseconds(10); // Approximate forward time
+        
+        // Extract model info
+        let model_id = match &result_clone {
             InferenceResult::Chat(result) => {
-                let chat_inference =
-                    ChatInferenceDatabaseInsert::new(result, input_clone, metadata_clone);
-                let _ = kafka_connection_info
-                    .write(&[chat_inference], "chat_inference")
-                    .await;
+                result.model_inference_results.first()
+                    .map(|m| m.model_name.clone())
+                    .unwrap_or_else(|| "unknown".to_string())
             }
             InferenceResult::Json(result) => {
-                let json_inference =
-                    JsonInferenceDatabaseInsert::new(result, input_clone, metadata_clone);
-                let _ = kafka_connection_info
-                    .write(&[json_inference], "json_inference")
-                    .await;
+                result.model_inference_results.first()
+                    .map(|m| m.model_name.clone())
+                    .unwrap_or_else(|| "unknown".to_string())
             }
+        };
+        
+        // Calculate cost (simplified - you may want to enhance this)
+        let usage = match &result_clone {
+            InferenceResult::Chat(result) => &result.usage,
+            InferenceResult::Json(result) => &result.usage,
+        };
+        let cost = if usage.input_tokens > 0 || usage.output_tokens > 0 {
+            Some((usage.input_tokens as f64 * 0.00001) + (usage.output_tokens as f64 * 0.00003))
+        } else {
+            None
+        };
+        
+        let event = crate::kafka::cloudevents::ObservabilityEvent {
+            inference_id,
+            project_id: metadata_clone.function_name.clone(), // Using function_name as project_id
+            endpoint_id: metadata_clone.variant_name.clone(),
+            model_id,
+            is_success: true,
+            request_arrival_time,
+            request_forward_time,
+            request_ip: None, // Would need to extract from request context
+            cost,
+            response_analysis: None,
+        };
+        
+        // Send to Kafka observability topic
+        if let Err(e) = kafka_connection_info.add_observability_event(event).await {
+            tracing::error!("Failed to send observability event to Kafka: {}", e);
         }
     }));
     futures::future::join_all(futures).await;
