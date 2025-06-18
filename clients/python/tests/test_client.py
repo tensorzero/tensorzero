@@ -1342,7 +1342,7 @@ def test_image_inference_url_wrong_mime_type(sync_client: TensorZeroGateway):
                 "role": "user",
                 "content": [
                     ImageUrl(
-                        url="https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-core/tests/e2e/providers/ferris.png",
+                        url="https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
                         mime_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                     )
                 ],
@@ -1369,7 +1369,7 @@ def test_image_inference_url_wrong_mime_type(sync_client: TensorZeroGateway):
     assert json_content == [
         {
             "file": {
-                "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-core/tests/e2e/providers/ferris.png",
+                "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
                 "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             },
             "storage_path": {
@@ -1388,7 +1388,7 @@ def test_image_inference_url(sync_client: TensorZeroGateway):
                 "role": "user",
                 "content": [
                     ImageUrl(
-                        url="https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-core/tests/e2e/providers/ferris.png"
+                        url="https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png"
                     )
                 ],
             }
@@ -1414,7 +1414,7 @@ def test_image_inference_url(sync_client: TensorZeroGateway):
     assert json_content == [
         {
             "file": {
-                "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-core/tests/e2e/providers/ferris.png",
+                "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
                 "mime_type": "image/png",
             },
             "storage_path": {
@@ -1433,7 +1433,7 @@ def test_file_inference_url(sync_client: TensorZeroGateway):
                 "role": "user",
                 "content": [
                     FileUrl(
-                        url="https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-core/tests/e2e/providers/ferris.png"
+                        url="https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png"
                     )
                 ],
             }
@@ -1459,7 +1459,7 @@ def test_file_inference_url(sync_client: TensorZeroGateway):
     assert json_content == [
         {
             "file": {
-                "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-core/tests/e2e/providers/ferris.png",
+                "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
                 "mime_type": "image/png",
             },
             "storage_path": {
