@@ -1539,7 +1539,7 @@ func TestImageInference(t *testing.T) {
 
 		usrMsg := openai.UserMessage([]openai.ChatCompletionContentPartUnionParam{
 			openai.ImageContentPart(openai.ChatCompletionContentPartImageImageURLParam{
-				URL: "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-core/tests/e2e/providers/ferris.png",
+				URL: "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
 			}),
 			openai.TextContentPart("Output exactly two words describing the image"),
 		})
