@@ -3,6 +3,8 @@ agents:
 
 steps:
   - label: "Clickhouse Cloud tests"
+    concurrency: 1
+    concurrency_group: 'clickhouse-cloud-${CLICKHOUSE_ID}'
     commands:
       - "TENSORZERO_CLICKHOUSE_URL=$(buildkite-agent secret get secret_name)"
       - curl $TENSORZERO_CLICKHOUSE_URL --data-binary 'SHOW DATABASES'
