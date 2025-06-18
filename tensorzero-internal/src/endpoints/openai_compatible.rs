@@ -68,6 +68,19 @@ pub async fn inference_handler(
     }
     let stream_options = openai_compatible_params.stream_options;
     let logprobs_requested = matches!(openai_compatible_params.logprobs, Some(true));
+    
+    // Extract the original model name by removing the TensorZero prefix
+    let original_model_name = if let Some(model_name) = openai_compatible_params.model
+        .strip_prefix("tensorzero::model_name::") {
+        model_name.to_string()
+    } else if let Some(_function_name) = openai_compatible_params.model
+        .strip_prefix("tensorzero::function_name::") {
+        // For function-based requests, keep the full format
+        openai_compatible_params.model.clone()
+    } else {
+        // Fallback to the full model name if no prefix found
+        openai_compatible_params.model.clone()
+    };
 
     let mut params = Params::try_from_openai(headers.clone(), openai_compatible_params.clone())?;
 
@@ -77,29 +90,13 @@ pub async fn inference_handler(
         params.include_original_response = true;
     }
 
-    // The prefix for the response's `model` field depends on the inference target
-    // (We run this disambiguation deep in the `inference` call below but we don't get the decision out, so we duplicate it here)
-    let response_model_prefix = match (&params.function_name, &params.model_name) {
-        (Some(function_name), None) => Ok::<String, Error>(format!(
-            "tensorzero::function_name::{function_name}::variant_name::",
-        )),
-        (None, Some(_model_name)) => Ok("tensorzero::model_name::".to_string()),
-        (Some(_), Some(_)) => Err(ErrorDetails::InvalidInferenceTarget {
-            message: "Only one of `function_name` or `model_name` can be provided".to_string(),
-        }
-        .into()),
-        (None, None) => Err(ErrorDetails::InvalidInferenceTarget {
-            message: "Either `function_name` or `model_name` must be provided".to_string(),
-        }
-        .into()),
-    }?;
 
     let response = inference(config, &http_client, clickhouse_connection_info, params).await?;
 
     match response {
         InferenceOutput::NonStreaming(response) => {
             let mut openai_compatible_response =
-                OpenAICompatibleResponse::from((response.clone(), response_model_prefix));
+                OpenAICompatibleResponse::from((response.clone(), original_model_name.clone()));
 
             if logprobs_requested {
                 // Try to fetch real logprobs from the original provider response (if available)
@@ -136,7 +133,7 @@ pub async fn inference_handler(
         InferenceOutput::Streaming(stream) => {
             let openai_compatible_stream = prepare_serialized_openai_compatible_events(
                 stream,
-                response_model_prefix,
+                original_model_name,
                 stream_options,
             );
             Ok(Sse::new(openai_compatible_stream)
@@ -342,6 +339,8 @@ struct OpenAICompatibleResponseMessage {
     role: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     logprobs: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_content: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -845,10 +844,10 @@ impl From<OpenAICompatibleToolCall> for ToolCall {
 }
 
 impl From<(InferenceResponse, String)> for OpenAICompatibleResponse {
-    fn from((inference_response, response_model_prefix): (InferenceResponse, String)) -> Self {
+    fn from((inference_response, model_name): (InferenceResponse, String)) -> Self {
         match inference_response {
             InferenceResponse::Chat(response) => {
-                let (content, tool_calls) = process_chat_content(response.content);
+                let (content, tool_calls, reasoning_content) = process_chat_content(response.content);
 
                 OpenAICompatibleResponse {
                     id: response.inference_id.to_string(),
@@ -860,11 +859,12 @@ impl From<(InferenceResponse, String)> for OpenAICompatibleResponse {
                             tool_calls: Some(tool_calls),
                             role: "assistant".to_string(),
                             logprobs: None,
+                            reasoning_content,
                         },
                         logprobs: None,
                     }],
                     created: current_timestamp() as u32,
-                    model: format!("{response_model_prefix}{}", response.variant_name),
+                    model: model_name.clone(),
                     service_tier: "".to_string(),
                     system_fingerprint: "".to_string(),
                     object: "chat.completion".to_string(),
@@ -882,11 +882,12 @@ impl From<(InferenceResponse, String)> for OpenAICompatibleResponse {
                         tool_calls: None,
                         role: "assistant".to_string(),
                         logprobs: None,
+                        reasoning_content: None,
                     },
                     logprobs: None,
                 }],
                 created: current_timestamp() as u32,
-                model: format!("{response_model_prefix}{}", response.variant_name),
+                model: model_name,
                 system_fingerprint: "".to_string(),
                 service_tier: "".to_string(),
                 object: "chat.completion".to_string(),
@@ -901,13 +902,14 @@ impl From<(InferenceResponse, String)> for OpenAICompatibleResponse {
     }
 }
 
-// Takes a vector of ContentBlockOutput and returns a tuple of (Option<String>, Vec<OpenAICompatibleToolCall>).
-// This is useful since the OpenAI format separates text and tool calls in the response fields.
+// Takes a vector of ContentBlockOutput and returns a tuple of (Option<String>, Vec<OpenAICompatibleToolCall>, Option<String>).
+// This is useful since the OpenAI format separates text, tool calls, and reasoning content in the response fields.
 fn process_chat_content(
     content: Vec<ContentBlockChatOutput>,
-) -> (Option<String>, Vec<OpenAICompatibleToolCall>) {
+) -> (Option<String>, Vec<OpenAICompatibleToolCall>, Option<String>) {
     let mut content_str: Option<String> = None;
     let mut tool_calls = Vec::new();
+    let mut reasoning_content: Option<String> = None;
     for block in content {
         match block {
             ContentBlockChatOutput::Text(text) => match content_str {
@@ -917,12 +919,15 @@ fn process_chat_content(
             ContentBlockChatOutput::ToolCall(tool_call) => {
                 tool_calls.push(tool_call.into());
             }
-            ContentBlockChatOutput::Thought(_thought) => {
-                // OpenAI compatible endpoint does not support thought blocks
-                // Users of this endpoint will need to check observability to see them
-                tracing::warn!(
-                    "Ignoring 'thought' content block when constructing OpenAI-compatible response"
-                );
+            ContentBlockChatOutput::Thought(thought) => {
+                // Collect reasoning content from thought blocks
+                match reasoning_content {
+                    Some(ref mut content) => {
+                        content.push('\n');
+                        content.push_str(&thought.text);
+                    },
+                    None => reasoning_content = Some(thought.text),
+                }
             }
             ContentBlockChatOutput::Unknown {
                 data: _,
@@ -934,7 +939,7 @@ fn process_chat_content(
             }
         }
     }
-    (content_str, tool_calls)
+    (content_str, tool_calls, reasoning_content)
 }
 
 impl From<ToolCallOutput> for OpenAICompatibleToolCall {
@@ -992,16 +997,18 @@ struct OpenAICompatibleDelta {
     content: Option<String>,
     #[serde(skip_serializing_if = "is_none_or_empty")]
     tool_calls: Option<Vec<OpenAICompatibleToolCallChunk>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_content: Option<String>,
 }
 
 fn convert_inference_response_chunk_to_openai_compatible(
     chunk: InferenceResponseChunk,
     tool_id_to_index: &mut HashMap<String, usize>,
-    response_model_prefix: &str,
+    model_name: &str,
 ) -> Vec<OpenAICompatibleResponseChunk> {
     let response_chunk = match chunk {
         InferenceResponseChunk::Chat(c) => {
-            let (content, tool_calls) = process_chat_content_chunk(c.content, tool_id_to_index);
+            let (content, tool_calls, reasoning_content) = process_chat_content_chunk(c.content, tool_id_to_index);
             OpenAICompatibleResponseChunk {
                 id: c.inference_id.to_string(),
                 episode_id: c.episode_id.to_string(),
@@ -1012,11 +1019,12 @@ fn convert_inference_response_chunk_to_openai_compatible(
                     delta: OpenAICompatibleDelta {
                         content,
                         tool_calls: Some(tool_calls),
+                        reasoning_content,
                     },
                 }],
                 created: current_timestamp() as u32,
                 service_tier: "".to_string(),
-                model: format!("{response_model_prefix}{}", c.variant_name),
+                model: model_name.to_string(),
                 system_fingerprint: "".to_string(),
                 object: "chat.completion.chunk".to_string(),
                 // We emit a single chunk containing 'usage' at the end of the stream
@@ -1033,11 +1041,12 @@ fn convert_inference_response_chunk_to_openai_compatible(
                 delta: OpenAICompatibleDelta {
                     content: Some(c.raw),
                     tool_calls: None,
+                    reasoning_content: None,
                 },
             }],
             created: current_timestamp() as u32,
             service_tier: "".to_string(),
-            model: format!("{response_model_prefix}{}", c.variant_name),
+            model: model_name.to_string(),
             system_fingerprint: "".to_string(),
             object: "chat.completion.chunk".to_string(),
             // We emit a single chunk containing 'usage' at the end of the stream
@@ -1051,9 +1060,10 @@ fn convert_inference_response_chunk_to_openai_compatible(
 fn process_chat_content_chunk(
     content: Vec<ContentBlockChunk>,
     tool_id_to_index: &mut HashMap<String, usize>,
-) -> (Option<String>, Vec<OpenAICompatibleToolCallChunk>) {
+) -> (Option<String>, Vec<OpenAICompatibleToolCallChunk>, Option<String>) {
     let mut content_str: Option<String> = None;
     let mut tool_calls = Vec::new();
+    let mut reasoning_content: Option<String> = None;
     for block in content {
         match block {
             ContentBlockChunk::Text(text) => match content_str {
@@ -1074,23 +1084,25 @@ fn process_chat_content_chunk(
                     },
                 });
             }
-            ContentBlockChunk::Thought(_thought) => {
-                // OpenAI compatible endpoint does not support thought blocks
-                // Users of this endpoint will need to check observability to see them
-                tracing::warn!(
-                    "Ignoring 'thought' content block chunk when constructing OpenAI-compatible response"
-                );
+            ContentBlockChunk::Thought(thought) => {
+                // Collect reasoning content from thought chunks
+                if let Some(thought_text) = thought.text {
+                    match reasoning_content {
+                        Some(ref mut content) => content.push_str(&thought_text),
+                        None => reasoning_content = Some(thought_text),
+                    }
+                }
             }
         }
     }
-    (content_str, tool_calls)
+    (content_str, tool_calls, reasoning_content)
 }
 
 /// Prepares an Event for SSE on the way out of the gateway
 /// When None is passed in, we send "[DONE]" to the client to signal the end of the stream
 fn prepare_serialized_openai_compatible_events(
     mut stream: InferenceStream,
-    response_model_prefix: String,
+    model_name: String,
     stream_options: Option<OpenAICompatibleStreamOptions>,
 ) -> impl Stream<Item = Result<Event, Error>> {
     async_stream::stream! {
@@ -1103,7 +1115,6 @@ fn prepare_serialized_openai_compatible_events(
         };
         let mut inference_id = None;
         let mut episode_id = None;
-        let mut variant_name = None;
         while let Some(chunk) = stream.next().await {
             // NOTE - in the future, we may want to end the stream early if we get an error
             // For now, we just ignore the error and try to get more chunks
@@ -1112,7 +1123,6 @@ fn prepare_serialized_openai_compatible_events(
             };
             inference_id = Some(chunk.inference_id());
             episode_id = Some(chunk.episode_id());
-            variant_name = Some(chunk.variant_name().to_string());
             let chunk_usage = match &chunk {
                 InferenceResponseChunk::Chat(c) => {
                     &c.usage
@@ -1126,7 +1136,7 @@ fn prepare_serialized_openai_compatible_events(
                 total_usage.completion_tokens += chunk_usage.output_tokens;
                 total_usage.total_tokens += chunk_usage.input_tokens + chunk_usage.output_tokens;
             }
-            let openai_compatible_chunks = convert_inference_response_chunk_to_openai_compatible(chunk, &mut tool_id_to_index, &response_model_prefix);
+            let openai_compatible_chunks = convert_inference_response_chunk_to_openai_compatible(chunk, &mut tool_id_to_index, &model_name);
             for chunk in openai_compatible_chunks {
                 let mut chunk_json = serde_json::to_value(chunk).map_err(|e| {
                     Error::new(ErrorDetails::Inference {
@@ -1157,17 +1167,12 @@ fn prepare_serialized_openai_compatible_events(
                     message: "Cannot find inference_id - no chunks were produced by TensorZero".to_string(),
                 })
             })?;
-            let variant_name = variant_name.ok_or_else(|| {
-                Error::new(ErrorDetails::Inference {
-                    message: "Cannot find variant_name - no chunks were produced by TensorZero".to_string(),
-                })
-            })?;
             let usage_chunk = OpenAICompatibleResponseChunk {
                 id: inference_id.to_string(),
                 episode_id: episode_id.to_string(),
                 choices: vec![],
                 created: current_timestamp() as u32,
-                model: format!("{response_model_prefix}{variant_name}"),
+                model: model_name.clone(),
                 system_fingerprint: "".to_string(),
                 object: "chat.completion.chunk".to_string(),
                 service_tier: "".to_string(),
@@ -1534,14 +1539,15 @@ mod tests {
                 text: ", world!".to_string(),
             }),
         ];
-        let (content_str, tool_calls) = process_chat_content(content);
+        let (content_str, tool_calls, reasoning_content) = process_chat_content(content);
         assert_eq!(content_str, Some("Hello, world!".to_string()));
         assert_eq!(tool_calls.len(), 1);
         assert_eq!(tool_calls[0].id, "1");
         assert_eq!(tool_calls[0].function.name, "test_tool");
         assert_eq!(tool_calls[0].function.arguments, "{}");
+        assert_eq!(reasoning_content, None);
         let content: Vec<ContentBlockChatOutput> = vec![];
-        let (content_str, tool_calls) = process_chat_content(content);
+        let (content_str, tool_calls, reasoning_content) = process_chat_content(content);
         assert_eq!(content_str, None);
         assert!(tool_calls.is_empty());
 
@@ -1566,12 +1572,13 @@ mod tests {
                 text: " fourth part".to_string(),
             }),
         ];
-        let (content_str, tool_calls) = process_chat_content(content);
+        let (content_str, tool_calls, reasoning_content) = process_chat_content(content);
         assert_eq!(
             content_str,
             Some("First part second part third part fourth part".to_string())
         );
         assert_eq!(tool_calls.len(), 1);
+        assert_eq!(reasoning_content, None);
         assert_eq!(tool_calls[0].id, "123");
         assert_eq!(tool_calls[0].function.name, "middle_tool");
         assert_eq!(tool_calls[0].function.arguments, "{\"key\": \"value\"}");
@@ -1595,16 +1602,17 @@ mod tests {
             }),
         ];
         let mut tool_id_to_index = HashMap::new();
-        let (content_str, tool_calls) = process_chat_content_chunk(content, &mut tool_id_to_index);
+        let (content_str, tool_calls, reasoning_content) = process_chat_content_chunk(content, &mut tool_id_to_index);
         assert_eq!(content_str, Some("Hello, world!".to_string()));
         assert_eq!(tool_calls.len(), 1);
         assert_eq!(tool_calls[0].id, Some("1".to_string()));
         assert_eq!(tool_calls[0].index, 0);
         assert_eq!(tool_calls[0].function.name, "test_tool");
         assert_eq!(tool_calls[0].function.arguments, "{}");
+        assert_eq!(reasoning_content, None);
 
         let content: Vec<ContentBlockChunk> = vec![];
-        let (content_str, tool_calls) = process_chat_content_chunk(content, &mut tool_id_to_index);
+        let (content_str, tool_calls, reasoning_content) = process_chat_content_chunk(content, &mut tool_id_to_index);
         assert_eq!(content_str, None);
         assert!(tool_calls.is_empty());
 
@@ -1637,12 +1645,13 @@ mod tests {
             }),
         ];
         let mut tool_id_to_index = HashMap::new();
-        let (content_str, tool_calls) = process_chat_content_chunk(content, &mut tool_id_to_index);
+        let (content_str, tool_calls, reasoning_content) = process_chat_content_chunk(content, &mut tool_id_to_index);
         assert_eq!(
             content_str,
             Some("First part second part third part fourth part".to_string())
         );
         assert_eq!(tool_calls.len(), 2);
+        assert_eq!(reasoning_content, None);
         assert_eq!(tool_calls[0].id, Some("123".to_string()));
         assert_eq!(tool_calls[0].index, 0);
         assert_eq!(tool_calls[0].function.name, "middle_tool");

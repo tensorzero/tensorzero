@@ -476,6 +476,13 @@ impl<'a> TryFrom<VLLMResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_response: Some(raw_response.clone()),
             }))?;
         let mut content: Vec<ContentBlockOutput> = Vec::new();
+        // Handle reasoning_content if present (for vLLM with enable_thinking)
+        if let Some(reasoning_text) = message.reasoning_content {
+            content.push(ContentBlockOutput::Thought(crate::inference::types::Thought {
+                text: reasoning_text,
+                signature: None,
+            }));
+        }
         if let Some(text) = message.content {
             content.push(text.into());
         }
@@ -660,6 +667,7 @@ mod tests {
                 message: OpenAIResponseMessage {
                     content: Some("Hello, world!".to_string()),
                     tool_calls: None,
+                    reasoning_content: None,
                 },
                 finish_reason: OpenAIFinishReason::Stop,
             }],

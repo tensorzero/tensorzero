@@ -14,7 +14,6 @@ use std::sync::Arc;
 use tokio::signal;
 use tower_http::trace::{DefaultOnFailure, TraceLayer};
 use tracing::Level;
-use std::collections::HashMap;
 
 use tensorzero_internal::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_internal::config_parser::Config;
@@ -205,6 +204,10 @@ async fn main() {
     let authenticated_routes = Router::new()
         .route(
             "/openai/v1/chat/completions",
+            post(endpoints::openai_compatible::inference_handler),
+        )
+        .route(
+            "/v1/chat/completions",
             post(endpoints::openai_compatible::inference_handler),
         )
         .layer(axum::middleware::from_fn_with_state(auth.clone(), require_api_key));

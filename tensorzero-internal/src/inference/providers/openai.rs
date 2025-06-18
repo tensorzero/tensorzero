@@ -1757,6 +1757,8 @@ pub(super) struct OpenAIResponseMessage {
     pub(super) content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) tool_calls: Option<Vec<OpenAIResponseToolCall>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) reasoning_content: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -1843,6 +1845,13 @@ impl<'a> TryFrom<OpenAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 provider_type: PROVIDER_TYPE.to_string(),
             }))?;
         let mut content: Vec<ContentBlockOutput> = Vec::new();
+        // Handle reasoning_content if present (for vLLM with enable_thinking)
+        if let Some(reasoning_text) = message.reasoning_content {
+            content.push(ContentBlockOutput::Thought(crate::inference::types::Thought {
+                text: reasoning_text,
+                signature: None,
+            }));
+        }
         if let Some(text) = message.content {
             content.push(text.into());
         }
@@ -1894,6 +1903,8 @@ struct OpenAIDelta {
     content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_calls: Option<Vec<OpenAIToolCallChunk>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_content: Option<String>,
 }
 
 // Custom deserializer function for empty string to None
@@ -1956,6 +1967,14 @@ fn openai_to_tensorzero_chunk(
     if let Some(choice) = chunk.choices.pop() {
         if let Some(choice_finish_reason) = choice.finish_reason {
             finish_reason = Some(choice_finish_reason.into());
+        }
+        // Handle reasoning_content if present (for vLLM with enable_thinking)
+        if let Some(reasoning_text) = choice.delta.reasoning_content {
+            content.push(ContentBlockChunk::Thought(crate::inference::types::ThoughtChunk {
+                id: "reasoning".to_string(),
+                text: Some(reasoning_text),
+                signature: None,
+            }));
         }
         if let Some(text) = choice.delta.content {
             content.push(ContentBlockChunk::Text(TextChunk {
@@ -2674,6 +2693,7 @@ mod tests {
                 message: OpenAIResponseMessage {
                     content: Some("Hello, world!".to_string()),
                     tool_calls: None,
+                    reasoning_content: None,
                 },
                 finish_reason: OpenAIFinishReason::Stop,
             }],
@@ -2772,6 +2792,7 @@ mod tests {
                             arguments: "{}".to_string(),
                         },
                     }]),
+                    reasoning_content: None,
                 },
             }],
             usage: OpenAIUsage {
@@ -2907,6 +2928,7 @@ mod tests {
                     message: OpenAIResponseMessage {
                         content: Some("Choice 1".to_string()),
                         tool_calls: None,
+                        reasoning_content: None,
                     },
                     finish_reason: OpenAIFinishReason::Stop,
                 },
@@ -2916,6 +2938,7 @@ mod tests {
                     message: OpenAIResponseMessage {
                         content: Some("Choice 2".to_string()),
                         tool_calls: None,
+                        reasoning_content: None,
                     },
                 },
             ],
@@ -3106,6 +3129,7 @@ mod tests {
                 delta: OpenAIDelta {
                     content: Some("Hello".to_string()),
                     tool_calls: None,
+                    reasoning_content: None,
                 },
                 finish_reason: Some(OpenAIFinishReason::Stop),
             }],
@@ -3143,6 +3167,7 @@ mod tests {
                             arguments: Some("{\"hello\":\"world\"}".to_string()),
                         },
                     }]),
+                    reasoning_content: None,
                 },
             }],
             usage: None,
@@ -3178,6 +3203,7 @@ mod tests {
                             arguments: Some("{\"hello\":\"world\"}".to_string()),
                         },
                     }]),
+                    reasoning_content: None,
                 },
             }],
             usage: None,
@@ -3214,6 +3240,7 @@ mod tests {
                             arguments: Some("{\"hello\":\"world\"}".to_string()),
                         },
                     }]),
+                    reasoning_content: None,
                 },
             }],
             usage: None,

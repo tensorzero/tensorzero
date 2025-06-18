@@ -549,6 +549,7 @@ mod tests {
                 message: OpenAIResponseMessage {
                     content: Some("Hello, world!".to_string()),
                     tool_calls: None,
+                    reasoning_content: None,
                 },
             }],
             usage: OpenAIUsage {
