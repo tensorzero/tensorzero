@@ -4,6 +4,7 @@ use aws_config::{meta::region::RegionProviderChain, Region};
 use aws_smithy_runtime_api::client::interceptors::context::BeforeTransmitInterceptorContextMut;
 use aws_smithy_runtime_api::client::interceptors::Intercept;
 use aws_smithy_runtime_api::client::runtime_components::RuntimeComponents;
+use aws_smithy_runtime_api::client::stalled_stream_protection::StalledStreamProtectionConfig;
 use aws_smithy_types::body::SdkBody;
 use aws_smithy_types::config_bag::ConfigBag;
 use aws_types::SdkConfig;
@@ -45,7 +46,15 @@ pub async fn config_with_region(
 
     tracing::trace!("Creating new AWS config for region: {region}",);
 
-    let config = aws_config::from_env().region(region).load().await;
+    let config = aws_config::from_env()
+        .region(region)
+        // Using a custom HTTP client seems to break stalled stream protection, so disable it:
+        // https://github.com/awslabs/aws-sdk-rust/issues/1287
+        // We shouldn't actually need it, since we have user-configurable timeouts for
+        // both streaming and non-streaming requests.
+        .stalled_stream_protection(StalledStreamProtectionConfig::disabled())
+        .load()
+        .await;
     Ok(config)
 }
 
