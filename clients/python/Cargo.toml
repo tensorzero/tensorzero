@@ -19,7 +19,7 @@ name = "tensorzero"
 crate-type = ["cdylib"]
 
 [dependencies]
-tensorzero-internal = { path = "../../tensorzero-internal" }
+tensorzero-core = { path = "../../tensorzero-core" }
 futures = { workspace = true }
 pyo3 = { workspace = true }
 pyo3-async-runtimes = { version = "0.24.0", features = ["tokio-runtime"] }

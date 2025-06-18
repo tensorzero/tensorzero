@@ -4,10 +4,8 @@
 use std::collections::HashMap;
 
 use pyo3::{exceptions::PyValueError, prelude::*, sync::GILOnceCell};
-use tensorzero_internal::endpoints::dynamic_evaluation_run::DynamicEvaluationRunEpisodeResponse;
-use tensorzero_internal::inference::types::pyo3_helpers::{
-    deserialize_from_pyobj, serialize_to_dict,
-};
+use tensorzero_core::endpoints::dynamic_evaluation_run::DynamicEvaluationRunEpisodeResponse;
+use tensorzero_core::inference::types::pyo3_helpers::{deserialize_from_pyobj, serialize_to_dict};
 use tensorzero_rust::{
     Datapoint, DynamicEvaluationRunResponse, FeedbackResponse, InferenceResponse,
     InferenceResponseChunk, Tool,

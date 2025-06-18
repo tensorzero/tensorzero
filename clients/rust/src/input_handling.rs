@@ -1,10 +1,10 @@
 use futures::future::try_join_all;
 use serde_json::Value;
-use tensorzero_internal::error::Error;
+use tensorzero_core::error::Error;
 
 use crate::{Client, ClientInput, ClientInputMessage, ClientInputMessageContent, TensorZeroError};
-use tensorzero_internal::tool::{ToolCall, ToolCallInput};
-use tensorzero_internal::{
+use tensorzero_core::tool::{ToolCall, ToolCallInput};
+use tensorzero_core::{
     error::ErrorDetails,
     inference::types::{
         storage::StoragePath, File, ResolvedInput, ResolvedInputMessage,
@@ -60,7 +60,7 @@ async fn resolved_input_message_content_to_client_input_message_content(
                 arguments: o,
             })),
             _ => Err(TensorZeroError::Other {
-                source: tensorzero_internal::error::Error::new(ErrorDetails::Serialization {
+                source: tensorzero_core::error::Error::new(ErrorDetails::Serialization {
                     message: "Text types must be a string or an object".to_string(),
                 })
                 .into(),
@@ -175,7 +175,7 @@ async fn fetch_file_data(
 mod tests {
     use object_store::path::Path;
 
-    use tensorzero_internal::inference::types::{
+    use tensorzero_core::inference::types::{
         resolved_input::FileWithPath, storage::StorageKind, Base64File,
     };
     use url::Url;

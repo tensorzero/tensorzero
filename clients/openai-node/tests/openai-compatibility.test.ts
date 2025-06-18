@@ -1105,7 +1105,7 @@ describe("OpenAI Compatibility", () => {
     // Read image and convert to base64
     const imagePath = path.join(
       __dirname,
-      "../../../tensorzero-internal/tests/e2e/providers/ferris.png"
+      "../../../tensorzero-core/tests/e2e/providers/ferris.png"
     );
     const ferrisPng = fs.readFileSync(imagePath).toString("base64");
 
@@ -1142,7 +1142,7 @@ describe("OpenAI Compatibility", () => {
     // Read PDF file and convert to base64
     const pdfPath = path.join(
       __dirname,
-      "../../../tensorzero-internal/tests/e2e/providers/deepseek_paper.pdf"
+      "../../../tensorzero-core/tests/e2e/providers/deepseek_paper.pdf"
     );
     const deepseekPaperPdf = fs.readFileSync(pdfPath).toString("base64");
 
