@@ -35,11 +35,13 @@ pub enum OptimizerJobHandle {
     OpenAISFT(OpenAISFTJobHandle),
 }
 
+#[derive(Debug)]
 pub enum OptimizerOutput {
     Variant(Box<VariantConfig>),
     Model(ModelConfig),
 }
 
+#[derive(Debug)]
 pub enum OptimizerStatus {
     Pending {
         message: String,

@@ -1,4 +1,9 @@
-#![expect(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#![expect(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::print_stdout
+)]
 use base64::Engine;
 use std::collections::HashMap;
 use tokio::time::{sleep, Duration};
@@ -49,6 +54,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
             .poll(&client, &job_handle, &credentials)
             .await
             .unwrap();
+        println!("Status: {status:?}");
         // Sleep for a minute
         sleep(Duration::from_secs(60)).await;
         if matches!(status, OptimizerStatus::Failed) {
@@ -92,10 +98,11 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
         credentials: &HashMap::new(),
         cache_options: &CacheOptions::default(),
     };
-    model_config
+    let response = model_config
         .infer(&request, &clients, "test")
         .await
         .unwrap();
+    println!("Response: {response:?}");
 }
 
 fn get_examples(
@@ -291,7 +298,6 @@ macro_rules! optimization_test_case {
         ::paste::paste! {
             #[tokio::test]
             async fn [<test_slow_optimization_ $fn_name>]() {
-                // you might need to import run_test_case
                 $crate::run_test_case(&$constructor).await;
             }
         }
