@@ -4860,8 +4860,11 @@ pub async fn check_tool_use_tool_choice_required_inference_response(
         .unwrap();
     let raw_arguments: Value = serde_json::from_str(raw_arguments).unwrap();
     let raw_arguments = raw_arguments.as_object().unwrap();
-    assert!(raw_arguments.len() == 1 || raw_arguments.len() == 2);
-    assert!(raw_arguments.get("location").unwrap().as_str().is_some());
+    // OpenAI occasionally emits a tool call with an empty object for `arguments`
+    assert!(raw_arguments.len() <= 2);
+    if let Some(location) = raw_arguments.get("location") {
+        assert!(location.as_str().is_some());
+    }
     if raw_arguments.len() == 2 {
         let units = raw_arguments.get("units").unwrap().as_str().unwrap();
         assert!(units == "celsius" || units == "fahrenheit");
