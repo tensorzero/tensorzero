@@ -288,3 +288,173 @@ pub enum OpenAIFineTuningJobStatus {
     Failed,
     Cancelled,
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        inference::types::{ContentBlockChatOutput, ModelInput, RequestMessage, Role, Text},
+        providers::openai::OpenAIContentBlock,
+    };
+    use serde_json::json;
+    use uuid::Uuid;
+
+    use super::*;
+
+    #[test]
+    fn test_convert_to_sft_row() {
+        let inference = RenderedStoredInference {
+            function_name: "test".to_string(),
+            variant_name: "test".to_string(),
+            input: ModelInput {
+                system: Some("You are a helpful assistant named Dr. M.M. Patel.".to_string()),
+                messages: vec![RequestMessage {
+                    role: Role::User,
+                    content: vec![ContentBlock::Text(Text {
+                        text: "What is the capital of France?".to_string(),
+                    })],
+                }],
+            },
+            output: vec![ContentBlockChatOutput::Text(Text {
+                text: "The capital of France is Paris.".to_string(),
+            })],
+            episode_id: Uuid::now_v7(),
+            inference_id: Uuid::now_v7(),
+            tool_params: None,
+            output_schema: None,
+        };
+        let row = OpenAISupervisedRow::try_from(&inference).unwrap();
+        assert_eq!(row.messages.len(), 3);
+        let OpenAIRequestMessage::System(system_message) = &row.messages[0] else {
+            panic!("First message should be a system message");
+        };
+        assert_eq!(
+            system_message.content,
+            "You are a helpful assistant named Dr. M.M. Patel."
+        );
+        let OpenAIRequestMessage::User(user_message) = &row.messages[1] else {
+            panic!("First message should be a user message");
+        };
+        let OpenAIContentBlock::Text { text } = &user_message.content[0] else {
+            panic!("First message should be a text message");
+        };
+        assert_eq!(text, "What is the capital of France?");
+        let OpenAIRequestMessage::Assistant(assistant_message) = &row.messages[2] else {
+            panic!("Second message should be an assistant message");
+        };
+        let OpenAIContentBlock::Text { text } =
+            assistant_message.content.as_ref().unwrap().first().unwrap()
+        else {
+            panic!("Second message should be a text message");
+        };
+        assert_eq!(text, "The capital of France is Paris.");
+        assert!(!row.parallel_tool_calls);
+        assert_eq!(row.tools.len(), 0);
+    }
+
+    #[test]
+    fn test_convert_to_optimizer_status() {
+        // Test for "succeeded" status with a model output
+        let succeeded_model = json!({
+            "id": "ftjob-123",
+            "status": "succeeded",
+            "fine_tuned_model": "ft:gpt-3.5-turbo:my-org:custom_suffix:id",
+            "created_at": 1620000000,
+            "metadata": {},
+        });
+        let job = serde_json::from_value::<OpenAIFineTuningJob>(succeeded_model).unwrap();
+        let status = convert_to_optimizer_status(job, &OpenAICredentials::None).unwrap();
+        assert!(matches!(
+            status,
+            OptimizerStatus::Completed(OptimizerOutput::Model(_))
+        ));
+
+        // Test for "succeeded" status with a file output
+        let succeeded_file = json!({
+            "id": "ftjob-456",
+            "status": "succeeded",
+            "result_files": ["file-abc"],
+            "fine_tuned_model": "ft:gpt-3.5-turbo:my-org:custom_suffix:id",
+            "created_at": 1620000000,
+            "metadata": {},
+        });
+        let job = serde_json::from_value::<OpenAIFineTuningJob>(succeeded_file).unwrap();
+        let status = convert_to_optimizer_status(job, &OpenAICredentials::None).unwrap();
+        assert!(matches!(
+            status,
+            OptimizerStatus::Completed(OptimizerOutput::Model(_))
+        ));
+
+        // Test for "running" status
+        let running = json!({
+            "id": "ftjob-789",
+            "status": "running",
+            "created_at": 1620000000,
+            "metadata": {},
+        });
+        let job = serde_json::from_value::<OpenAIFineTuningJob>(running).unwrap();
+        let status = convert_to_optimizer_status(job, &OpenAICredentials::None).unwrap();
+        assert!(matches!(status, OptimizerStatus::Pending { .. }));
+
+        // Test for "failed" status
+        let failed = json!({
+            "id": "ftjob-abc",
+            "status": "failed",
+            "created_at": 1620000000,
+            "metadata": {},
+        });
+        let job = serde_json::from_value::<OpenAIFineTuningJob>(failed).unwrap();
+        let status = convert_to_optimizer_status(job, &OpenAICredentials::None).unwrap();
+        assert!(matches!(status, OptimizerStatus::Failed));
+
+        // Test for "validating_files" status
+        let validating = json!({
+            "id": "ftjob-def",
+            "status": "validating_files",
+            "created_at": 1620000000,
+            "metadata": {},
+        });
+        let job = serde_json::from_value::<OpenAIFineTuningJob>(validating).unwrap();
+        let status = convert_to_optimizer_status(job, &OpenAICredentials::None).unwrap();
+        assert!(matches!(status, OptimizerStatus::Pending { .. }));
+
+        // Test for "queued" status
+        let queued = json!({
+            "id": "ftjob-ghi",
+            "status": "queued",
+            "created_at": 1620000000,
+            "metadata": {},
+        });
+        let job = serde_json::from_value::<OpenAIFineTuningJob>(queued).unwrap();
+        let status = convert_to_optimizer_status(job, &OpenAICredentials::None).unwrap();
+        assert!(matches!(status, OptimizerStatus::Pending { .. }));
+
+        // Test for unknown status - this should result in an error from convert_to_optimizer_status
+        // as OpenAIFineTuningJobStatus deserialization would fail first if it's truly unknown.
+        // If the status is known to OpenAIFineTuningJobStatus but not handled in convert_to_optimizer_status,
+        // that would be a different kind of error (panic or unhandled match arm).
+        // For this test, let's assume an OpenAIFineTuningJobStatus that convert_to_optimizer_status might not expect.
+        // However, the current convert_to_optimizer_status covers all variants of OpenAIFineTuningJobStatus.
+        // So, a truly "unknown" status to OpenAIFineTuningJobStatus would fail deserialization.
+        // Let's test a valid OpenAIFineTuningJobStatus that might lead to an error in conversion logic,
+        // e.g. "succeeded" but missing fine_tuned_model.
+        let succeeded_missing_model = json!({
+            "id": "ftjob-jkl",
+            "status": "succeeded",
+            // "fine_tuned_model": null, // This would be an issue
+            "created_at": 1620000000,
+            "metadata": {},
+        });
+        let job = serde_json::from_value::<OpenAIFineTuningJob>(succeeded_missing_model).unwrap();
+        let result = convert_to_optimizer_status(job, &OpenAICredentials::None);
+        assert!(result.is_err());
+
+        // Test for missing status field - this would fail deserialization of OpenAIFineTuningJob
+        let missing_status = json!({
+            "id": "ftjob-mno",
+            // "status": "running", // Status is missing
+            "created_at": 1620000000,
+            "metadata": {},
+        });
+        assert!(serde_json::from_value::<OpenAIFineTuningJob>(missing_status).is_err());
+    }
+}
