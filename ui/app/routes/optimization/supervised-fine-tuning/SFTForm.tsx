@@ -163,7 +163,8 @@ export function SFTForm({
                 )}
               </div>
             
-
+            {functionName && (
+            <>
             <div className="flex flex-col">
               <CurationMetricSelector<SFTFormValues>
                 control={form.control}
@@ -193,7 +194,9 @@ export function SFTForm({
               control={form.control}
               maxSamplesLimit={counts.inferenceCount ?? undefined}
             />
-            </div>
+            </>
+            )}
+          </div>
           </div>
 
           <Button

@@ -138,6 +138,8 @@ export function DatasetBuilderForm({
                 inferenceCount={counts.inferenceCount}
                 config={config}
               />
+              {functionName && (
+              <>
               <CurationMetricSelector<DatasetBuilderFormValues>
                 control={form.control}
                 name="metric_name"
@@ -149,9 +151,11 @@ export function DatasetBuilderForm({
               />
               <OutputSourceSelector control={form.control} />
               <DatasetCountDisplay
-                control={form.control}
-                setCountToInsert={setCountToInsert}
+              control={form.control}
+              setCountToInsert={setCountToInsert}
               />
+              </>
+              )}
             </div>
           </div>
         <Button
