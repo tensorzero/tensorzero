@@ -26,5 +26,3 @@ steps:
           export GATEWAY_PID=$!
       - cargo test-e2e-no-creds -- --skip test_concurrent_clickhouse_migrations
       - cat e2e_logs.txt
-
-
