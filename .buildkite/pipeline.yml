@@ -1,5 +1,5 @@
 agents:
-  queue: "default"
+  queue: "t0-merge-queue"
 
 steps:
   - label: "Clickhouse Cloud tests"
