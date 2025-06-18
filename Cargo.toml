@@ -4,6 +4,7 @@ members = [
     "tensorzero-internal/tests/mock-inference-provider",
     "gateway",
     "ui/app/utils/minijinja",
+    "internal/tensorzero-node",
     "clients/rust",
     "clients/python",
     "provider-proxy",
