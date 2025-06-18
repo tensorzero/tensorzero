@@ -1564,7 +1564,7 @@ mod tests {
         assert_eq!(tool_calls[0].function.arguments, "{}");
         assert_eq!(reasoning_content, None);
         let content: Vec<ContentBlockChatOutput> = vec![];
-        let (content_str, tool_calls, reasoning_content) = process_chat_content(content);
+        let (content_str, tool_calls, _reasoning_content) = process_chat_content(content);
         assert_eq!(content_str, None);
         assert!(tool_calls.is_empty());
 
@@ -1630,7 +1630,7 @@ mod tests {
         assert_eq!(reasoning_content, None);
 
         let content: Vec<ContentBlockChunk> = vec![];
-        let (content_str, tool_calls, reasoning_content) =
+        let (content_str, tool_calls, _reasoning_content) =
             process_chat_content_chunk(content, &mut tool_id_to_index);
         assert_eq!(content_str, None);
         assert!(tool_calls.is_empty());

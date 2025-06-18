@@ -154,17 +154,6 @@ impl ChatCompletionConfig {
         let system =
             self.prepare_system_message(inference_config.templates, input.system.as_ref())?;
 
-        inference_params
-            .chat_completion
-            .backfill_with_variant_params(
-                self.temperature,
-                self.max_tokens,
-                self.seed,
-                self.top_p,
-                self.presence_penalty,
-                self.frequency_penalty,
-            );
-
         let extra_body = FullExtraBodyConfig {
             extra_body: self.extra_body.clone(),
             inference_extra_body: inference_config
@@ -309,12 +298,27 @@ impl Variant for ChatCompletionConfig {
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<InferenceResult, Error> {
-        // Mutable copy used to build the request (will be borrowed by prepare_request)
-        let mut params_mut = inference_params.clone();
+        // Create a mutable copy for backfilling variant params
+        let mut inference_params_mut = inference_params.clone();
+        
+        // Backfill the variant params before creating the request
+        inference_params_mut
+            .chat_completion
+            .backfill_with_variant_params(
+                self.temperature,
+                self.max_tokens,
+                self.seed,
+                self.top_p,
+                self.presence_penalty,
+                self.frequency_penalty,
+            );
+        
+        // Clone the params that will be passed to the model
+        let inference_params_for_model = inference_params_mut.clone();
+        
+        // Create the request with the backfilled params
         let request =
-            self.prepare_request(input, function, inference_config, false, &mut params_mut)?;
-        // Use the original (unborrowed) params for downstream calls
-        let params_for_args = inference_params.clone();
+            self.prepare_request(input, function, inference_config, false, &mut inference_params_mut)?;
         let model_config = models.models.get(&self.model).await?.ok_or_else(|| {
             Error::new(ErrorDetails::UnknownModel {
                 name: self.model.to_string(),
@@ -327,7 +331,7 @@ impl Variant for ChatCompletionConfig {
             function,
             inference_config,
             clients,
-            inference_params: params_for_args,
+            inference_params: inference_params_for_model,
             retry_config: &self.retries,
         };
         infer_model_request(args).await
@@ -342,12 +346,27 @@ impl Variant for ChatCompletionConfig {
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
-        // Mutable copy used to build the request
-        let mut params_mut = inference_params.clone();
+        // Create a mutable copy for backfilling variant params
+        let mut inference_params_mut = inference_params.clone();
+        
+        // Backfill the variant params before creating the request
+        inference_params_mut
+            .chat_completion
+            .backfill_with_variant_params(
+                self.temperature,
+                self.max_tokens,
+                self.seed,
+                self.top_p,
+                self.presence_penalty,
+                self.frequency_penalty,
+            );
+        
+        // Clone the params that will be passed to the model
+        let inference_params_for_model = inference_params_mut.clone();
+        
+        // Create the request with the backfilled params
         let request =
-            self.prepare_request(input, function, inference_config, true, &mut params_mut)?;
-        // Use the original (unborrowed) params for downstream calls
-        let params_for_args = inference_params.clone();
+            self.prepare_request(input, function, inference_config, true, &mut inference_params_mut)?;
         let model_config = models.models.get(&self.model).await?.ok_or_else(|| {
             Error::new(ErrorDetails::UnknownModel {
                 name: self.model.to_string(),
@@ -359,7 +378,7 @@ impl Variant for ChatCompletionConfig {
             &model_config,
             function,
             clients,
-            params_for_args,
+            inference_params_for_model,
             self.retries,
         )
         .await
@@ -1997,12 +2016,12 @@ mod tests {
                 &mut inference_params,
             )
             .unwrap();
-        assert_eq!(model_request.temperature, Some(0.5));
-        assert_eq!(model_request.max_tokens, Some(100));
-        assert_eq!(model_request.seed, Some(69));
-        assert_eq!(inference_params.chat_completion.temperature, Some(0.5));
-        assert_eq!(inference_params.chat_completion.max_tokens, Some(100));
-        assert_eq!(inference_params.chat_completion.seed, Some(69));
+        assert_eq!(model_request.temperature, None);
+        assert_eq!(model_request.max_tokens, None);
+        assert_eq!(model_request.seed, None);
+        assert_eq!(inference_params.chat_completion.temperature, None);
+        assert_eq!(inference_params.chat_completion.max_tokens, None);
+        assert_eq!(inference_params.chat_completion.seed, None);
 
         let mut inference_params = InferenceParams {
             chat_completion: ChatCompletionInferenceParams {
@@ -2106,25 +2125,25 @@ mod tests {
                 &mut inference_params,
             )
             .unwrap();
-        assert_eq!(model_request.temperature, Some(0.5));
-        assert_eq!(model_request.max_tokens, Some(100));
-        assert_eq!(model_request.seed, Some(69));
-        assert_eq!(model_request.top_p, Some(0.9));
-        assert_eq!(model_request.presence_penalty, Some(0.1));
-        assert_eq!(model_request.frequency_penalty, Some(0.2));
+        assert_eq!(model_request.temperature, None);
+        assert_eq!(model_request.max_tokens, None);
+        assert_eq!(model_request.seed, None);
+        assert_eq!(model_request.top_p, None);
+        assert_eq!(model_request.presence_penalty, None);
+        assert_eq!(model_request.frequency_penalty, None);
         assert_eq!(
             model_request.json_mode,
             ModelInferenceRequestJsonMode::Strict
         );
         assert_eq!(model_request.output_schema, Some(&output_schema_value));
-        assert_eq!(inference_params.chat_completion.temperature, Some(0.5));
-        assert_eq!(inference_params.chat_completion.max_tokens, Some(100));
-        assert_eq!(inference_params.chat_completion.seed, Some(69));
-        assert_eq!(inference_params.chat_completion.top_p, Some(0.9));
-        assert_eq!(inference_params.chat_completion.presence_penalty, Some(0.1));
+        assert_eq!(inference_params.chat_completion.temperature, None);
+        assert_eq!(inference_params.chat_completion.max_tokens, None);
+        assert_eq!(inference_params.chat_completion.seed, None);
+        assert_eq!(inference_params.chat_completion.top_p, None);
+        assert_eq!(inference_params.chat_completion.presence_penalty, None);
         assert_eq!(
             inference_params.chat_completion.frequency_penalty,
-            Some(0.2)
+            None
         );
 
         // We will vary temperature, max_tokens, and seed
