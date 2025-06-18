@@ -10,12 +10,12 @@ on:
     branches: ["main"]
 
 env:
-  DOCKERHUB_USER: tensorzero
+  DOCKERHUB_USER: budstudio
 
 jobs:
   build:
     name: Build and push Docker image to Docker Hub
-    runs-on: ${{ matrix.platform.runner }}
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         platform:
@@ -23,16 +23,6 @@ jobs:
             target: linux/amd64
           - runner: ubuntu-24.04-arm
             target: linux/arm64
-        container:
-          # Set the container name to a '-dev' name when this workflow is invoked by a push event
-          # Otherwise, use the unsuffixed name (which will be invoked by a release or manual dispatch)
-          # Unfortunately, we can't use 'env' in 'strategy.matrix'
-          - name: ${{ github.event_name == 'push' && 'ui-dev' || 'ui' }}
-            path: ui
-          - name: ${{ github.event_name == 'push' && 'gateway-dev' || 'gateway' }}
-            path: gateway
-          - name: ${{ github.event_name == 'push' && 'evaluations-dev' || 'evaluations' }}
-            path: evaluations
 
     permissions:
       packages: write
@@ -61,21 +51,21 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ matrix.container.name }}
+          images: ${{ env.DOCKERHUB_USER }}/budproxy
 
       - name: Build and push Docker image
         id: push
         uses: docker/build-push-action@v6
         with:
           platforms: ${{ matrix.platform.target }}
-          file: ./${{ matrix.container.path }}/Dockerfile
+          file: ./gateway/Dockerfile
           # This is required to make '.git' available in the build context:
           # https://github.com/docker/build-push-action/issues/513#issuecomment-987951050
           context: .
           push: true
           provenance: mode=max
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
-          tags: ${{ env.DOCKERHUB_USER }}/${{ matrix.container.name }}
+          tags: ${{ env.DOCKERHUB_USER }}/budproxy
           labels: ${{ steps.meta.outputs.labels }}
           sbom: true
 
@@ -88,18 +78,12 @@ jobs:
       - name: Upload digest
         uses: actions/upload-artifact@v4
         with:
-          name: digests-${{ matrix.container.name }}-${{ env.PLATFORM_PAIR }}
+          name: digests-budproxy-${{ env.PLATFORM_PAIR }}
           path: ${{ runner.temp }}/digests/*
           if-no-files-found: error
           retention-days: 1
 
   merge:
-    strategy:
-      matrix:
-        container:
-          - name: ${{ github.event_name == 'push' && 'ui-dev' || 'ui' }}
-          - name: ${{ github.event_name == 'push' && 'gateway-dev' || 'gateway' }}
-          - name: ${{ github.event_name == 'push' && 'evaluations-dev' || 'evaluations' }}
     runs-on: ubuntu-latest
     needs:
       - build
@@ -108,7 +92,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: ${{ runner.temp }}/digests
-          pattern: digests-${{ matrix.container.name }}-*
+          pattern: digests-budproxy-*
           merge-multiple: true
 
       - name: Login to Docker Hub
@@ -124,7 +108,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.DOCKERHUB_USER }}/${{ matrix.container.name }}
+          images: ${{ env.DOCKERHUB_USER }}/budproxy
           flavor: |
             latest=false
           tags: |
@@ -136,8 +120,8 @@ jobs:
         working-directory: ${{ runner.temp }}/digests
         run: |
           docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf '${{ env.DOCKERHUB_USER }}/${{ matrix.container.name }}@sha256:%s ' *)
+            $(printf '${{ env.DOCKERHUB_USER }}/budproxy@sha256:%s ' *)
 
       - name: Inspect image
         run: |
-          docker buildx imagetools inspect ${{ env.DOCKERHUB_USER }}/${{ matrix.container.name }}:${{ steps.meta.outputs.version }}
+          docker buildx imagetools inspect ${{ env.DOCKERHUB_USER }}/budproxy:${{ steps.meta.outputs.version }}
