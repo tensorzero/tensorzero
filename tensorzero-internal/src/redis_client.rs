@@ -196,7 +196,6 @@ impl RedisClient {
             .keys::<_, Vec<String>>(format!("{API_KEY_KEY_PREFIX}*"))
             .await
         {
-            tracing::debug!("Found API keys: {:?}", api_keys_keys);
             for key in api_keys_keys {
                 if let Ok(json) = self.conn.get::<_, String>(&key).await {
                     match Self::parse_api_keys(&json).await {

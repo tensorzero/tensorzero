@@ -69,21 +69,26 @@ pub async fn inference_handler(
     let stream_options = openai_compatible_params.stream_options;
     let logprobs_requested = matches!(openai_compatible_params.logprobs, Some(true));
 
-    // Extract the original model name by removing the TensorZero prefix
-    let original_model_name = if let Some(model_name) = openai_compatible_params
-        .model
-        .strip_prefix("tensorzero::model_name::")
-    {
-        model_name.to_string()
-    } else if let Some(_function_name) = openai_compatible_params
-        .model
-        .strip_prefix("tensorzero::function_name::")
-    {
-        // For function-based requests, keep the full format
-        openai_compatible_params.model.clone()
+    // Check if we have the original model name from the auth middleware
+    let original_model_name = if let Some(original_model) = headers.get("x-tensorzero-original-model") {
+        original_model.to_str().unwrap_or(&openai_compatible_params.model).to_string()
     } else {
-        // Fallback to the full model name if no prefix found
-        openai_compatible_params.model.clone()
+        // Fallback to extracting from the prefixed model name
+        if let Some(model_name) = openai_compatible_params
+            .model
+            .strip_prefix("tensorzero::model_name::")
+        {
+            model_name.to_string()
+        } else if let Some(_function_name) = openai_compatible_params
+            .model
+            .strip_prefix("tensorzero::function_name::")
+        {
+            // For function-based requests, keep the full format
+            openai_compatible_params.model.clone()
+        } else {
+            // Fallback to the full model name if no prefix found
+            openai_compatible_params.model.clone()
+        }
     };
 
     let mut params = Params::try_from_openai(headers.clone(), openai_compatible_params.clone())?;
