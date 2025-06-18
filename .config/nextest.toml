@@ -60,8 +60,8 @@ slow-timeout = { period = "60s", terminate-after = 2 }
 # We may have to update this as we add faster optimization methods that shouldn't
 # take as long
 filter = 'test(slow_optimization)'
-slow-timeout = { period = "21600s", terminate-after = 1, retries = { count = 0 } }
-retries = { count = 0 }
+slow-timeout = { period = "21600s", terminate-after = 1 }
+retries = { count = 0, backoff = "fixed", delay = "0s" }
 
 [[profile.default.overrides]]
 filter = 'test(test_concurrent_clickhouse_migrations)'
