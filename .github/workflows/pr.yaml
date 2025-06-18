@@ -117,7 +117,7 @@ jobs:
         run: rustc --version
 
       - name: Install cargo-nextest, cargo-deny, and cargo-hack
-        uses: taiki-e/install-action@cfe1303741c2e620e5f7daa667105e0da1316db9
+        uses: taiki-e/install-action@7b20dfd705618832f20d29066e34aa2f2f6194c2
         with:
           tool: cargo-nextest,cargo-deny,cargo-hack
 
