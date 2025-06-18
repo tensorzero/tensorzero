@@ -121,7 +121,7 @@ export function DatasetBuilderForm({
         }}
         className="flex flex-col gap-4 w-full max-w-200"
       >
-          <div className="flex flex-col gap-3 w-full p-4 border border-border rounded-xl bg-bg-primary">
+          <div className="flex flex-col gap-3 w-full p-4 border border-border rounded-xl">
             <span className="text-fg-primary text-lg font-medium">Create or update a dataset</span>
             <DatasetSelector
               control={form.control}
@@ -129,7 +129,7 @@ export function DatasetBuilderForm({
               setIsNewDataset={setIsNewDataset}
             />
           </div>
-          <div className="flex flex-col gap-3 w-full p-4 border border-border rounded-xl bg-bg-primary">
+          <div className="flex flex-col gap-3 w-full p-4 border border-border rounded-xl">
             <span className="text-fg-primary text-lg font-medium">Use data from</span>
             <div className="flex flex-col gap-6">
               <FunctionSelector<DatasetBuilderFormValues>
