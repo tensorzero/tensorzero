@@ -7,11 +7,11 @@ use pyo3::types::{PyAny, PyList};
 use serde::Serialize;
 use serde_json::Value;
 #[cfg(feature = "pyo3")]
-use tensorzero_internal::inference::types::pyo3_helpers::{
+use tensorzero_core::inference::types::pyo3_helpers::{
     content_block_chat_output_to_python, serialize_to_dict, uuid_to_python,
 };
-use tensorzero_internal::inference::types::Text;
-use tensorzero_internal::{
+use tensorzero_core::inference::types::Text;
+use tensorzero_core::{
     clickhouse::types::StoredInference,
     config_parser::Config,
     error::{Error, ErrorDetails},

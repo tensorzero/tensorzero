@@ -75,7 +75,7 @@ from uuid_utils import uuid7
 
 TEST_CONFIG_FILE = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
-    "../../../tensorzero-internal/tests/e2e/tensorzero.toml",
+    "../../../tensorzero-core/tests/e2e/tensorzero.toml",
 )
 
 
@@ -1193,7 +1193,7 @@ def test_default_function_inference(sync_client: TensorZeroGateway):
 def test_image_inference_base64(sync_client: TensorZeroGateway):
     basepath = path.dirname(__file__)
     with open(
-        f"{basepath}/../../../tensorzero-internal/tests/e2e/providers/ferris.png", "rb"
+        f"{basepath}/../../../tensorzero-core/tests/e2e/providers/ferris.png", "rb"
     ) as f:
         ferris_png = base64.b64encode(f.read()).decode("ascii")
 
@@ -1242,7 +1242,7 @@ def test_file_inference_base64(sync_client: TensorZeroGateway):
     # Test image with File block
     basepath = path.dirname(__file__)
     with open(
-        f"{basepath}/../../../tensorzero-internal/tests/e2e/providers/ferris.png", "rb"
+        f"{basepath}/../../../tensorzero-core/tests/e2e/providers/ferris.png", "rb"
     ) as f:
         ferris_png = base64.b64encode(f.read()).decode("ascii")
 
@@ -1288,7 +1288,7 @@ def test_file_inference_base64(sync_client: TensorZeroGateway):
     # Test pdf with File block
     basepath = path.dirname(__file__)
     with open(
-        f"{basepath}/../../../tensorzero-internal/tests/e2e/providers/deepseek_paper.pdf",
+        f"{basepath}/../../../tensorzero-core/tests/e2e/providers/deepseek_paper.pdf",
         "rb",
     ) as f:
         deepseek_paper_pdf = base64.b64encode(f.read()).decode("ascii")
@@ -1342,7 +1342,7 @@ def test_image_inference_url_wrong_mime_type(sync_client: TensorZeroGateway):
                 "role": "user",
                 "content": [
                     ImageUrl(
-                        url="https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
+                        url="https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-core/tests/e2e/providers/ferris.png",
                         mime_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                     )
                 ],
@@ -1369,7 +1369,7 @@ def test_image_inference_url_wrong_mime_type(sync_client: TensorZeroGateway):
     assert json_content == [
         {
             "file": {
-                "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
+                "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-core/tests/e2e/providers/ferris.png",
                 "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             },
             "storage_path": {
@@ -1388,7 +1388,7 @@ def test_image_inference_url(sync_client: TensorZeroGateway):
                 "role": "user",
                 "content": [
                     ImageUrl(
-                        url="https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png"
+                        url="https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-core/tests/e2e/providers/ferris.png"
                     )
                 ],
             }
@@ -1414,7 +1414,7 @@ def test_image_inference_url(sync_client: TensorZeroGateway):
     assert json_content == [
         {
             "file": {
-                "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
+                "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-core/tests/e2e/providers/ferris.png",
                 "mime_type": "image/png",
             },
             "storage_path": {
@@ -1433,7 +1433,7 @@ def test_file_inference_url(sync_client: TensorZeroGateway):
                 "role": "user",
                 "content": [
                     FileUrl(
-                        url="https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png"
+                        url="https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-core/tests/e2e/providers/ferris.png"
                     )
                 ],
             }
@@ -1459,7 +1459,7 @@ def test_file_inference_url(sync_client: TensorZeroGateway):
     assert json_content == [
         {
             "file": {
-                "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
+                "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-core/tests/e2e/providers/ferris.png",
                 "mime_type": "image/png",
             },
             "storage_path": {
@@ -2600,7 +2600,7 @@ def test_patch_openai_client_with_config():
     client = OpenAI()
     tensorzero.patch_openai_client(
         client,
-        config_file="../../tensorzero-internal/tests/e2e/tensorzero.toml",
+        config_file="../../tensorzero-core/tests/e2e/tensorzero.toml",
         async_setup=False,
     )
     response = client.chat.completions.create(

@@ -4,8 +4,8 @@ use std::sync::Arc;
 use anyhow::Result;
 use chrono::Utc;
 use serde::Deserialize;
-use tensorzero_internal::serde_util::deserialize_json_string;
-use tensorzero_internal::{
+use tensorzero_core::serde_util::deserialize_json_string;
+use tensorzero_core::{
     clickhouse::ClickHouseConnectionInfo,
     inference::types::{ContentBlockChatOutput, ResolvedInput},
 };

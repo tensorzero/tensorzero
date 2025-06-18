@@ -33,7 +33,7 @@ use rayon::prelude::*;
 use serde_json::json;
 use std::sync::Arc;
 use tensorzero::{ClientBuilder, ClientBuilderMode, FeedbackParams};
-use tensorzero_internal::clickhouse::ClickHouseConnectionInfo;
+use tensorzero_core::clickhouse::ClickHouseConnectionInfo;
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
 use url::Url;
 use uuid::Uuid;

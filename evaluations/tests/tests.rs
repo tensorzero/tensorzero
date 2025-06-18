@@ -9,16 +9,14 @@ use evaluations::evaluators::llm_judge::{run_llm_judge_evaluator, RunLLMJudgeEva
 use evaluations::{Clients, ThrottledTensorZeroClient};
 use serde_json::json;
 use tensorzero::input_handling::resolved_input_to_client_input;
-use tensorzero_internal::cache::CacheEnabledMode;
-use tensorzero_internal::clickhouse::test_helpers::{
+use tensorzero_core::cache::CacheEnabledMode;
+use tensorzero_core::clickhouse::test_helpers::{
     select_human_static_evaluation_feedback_clickhouse, select_model_inferences_clickhouse,
 };
-use tensorzero_internal::endpoints::datasets::Datapoint;
-use tensorzero_internal::evaluations::{LLMJudgeConfig, LLMJudgeInputFormat, LLMJudgeOutputType};
-use tensorzero_internal::function::{FunctionConfig, FunctionConfigJson};
-use tensorzero_internal::inference::types::{
-    ResolvedInputMessage, ResolvedInputMessageContent, Text,
-};
+use tensorzero_core::endpoints::datasets::Datapoint;
+use tensorzero_core::evaluations::{LLMJudgeConfig, LLMJudgeInputFormat, LLMJudgeOutputType};
+use tensorzero_core::function::{FunctionConfig, FunctionConfigJson};
+use tensorzero_core::inference::types::{ResolvedInputMessage, ResolvedInputMessageContent, Text};
 use tokio::time::sleep;
 use url::Url;
 
@@ -30,14 +28,14 @@ use std::time::Duration;
 use std::{path::PathBuf, sync::Arc};
 use tensorzero::{ClientBuilder, ClientBuilderMode, FeedbackParams};
 use tensorzero::{InferenceResponse, Role};
-use tensorzero_internal::{
+use tensorzero_core::{
     clickhouse::test_helpers::{
         clickhouse_flush_async_insert, get_clickhouse, select_chat_inference_clickhouse,
         select_feedback_by_target_id_clickhouse, select_json_inference_clickhouse,
     },
     inference::types::{ContentBlockChatOutput, JsonInferenceOutput, ResolvedInput, Usage},
 };
-use tensorzero_internal::{
+use tensorzero_core::{
     endpoints::{
         datasets::{ChatInferenceDatapoint, JsonInferenceDatapoint},
         inference::{ChatInferenceResponse, JsonInferenceResponse},

@@ -7,7 +7,7 @@ use std::{
 use tensorzero::{
     ChatInferenceDatapoint, Client, ClientBuilder, ClientBuilderMode, JsonInferenceDatapoint,
 };
-use tensorzero_internal::clickhouse::test_helpers::{get_clickhouse, CLICKHOUSE_URL};
+use tensorzero_core::clickhouse::test_helpers::{get_clickhouse, CLICKHOUSE_URL};
 use uuid::Uuid;
 
 /// Takes a chat fixture as a path to a JSONL file and writes the fixture to the dataset.
