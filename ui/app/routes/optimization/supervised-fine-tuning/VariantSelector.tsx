@@ -27,37 +27,35 @@ export function VariantSelector({
       control={control}
       name="variant"
       render={({ field }) => (
-        <FormItem>
+        <FormItem className="flex flex-col gap-1">
           <FormLabel>Prompt</FormLabel>
-          <div className="grid gap-x-8 gap-y-2 md:grid-cols-2">
-            <Select
-              onValueChange={field.onChange}
-              defaultValue={field.value}
-              disabled={!hasVariants}
-            >
-              <SelectTrigger>
-                <SelectValue
-                  placeholder={
-                    hasVariants
-                      ? "Select a variant name"
-                      : "No variants available"
-                  }
-                />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.entries(chatCompletionVariants).map(([name]) => (
-                  <SelectItem key={name} value={name}>
-                    <span>{name}</span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <TemplateDetailsDialog
-              variant={field.value}
-              disabled={!field.value}
-              chatCompletionVariants={chatCompletionVariants}
-            />
-          </div>
+          <Select
+            onValueChange={field.onChange}
+            defaultValue={field.value}
+            disabled={!hasVariants}
+          >
+            <SelectTrigger>
+              <SelectValue
+                placeholder={
+                  hasVariants
+                    ? "Select a variant name"
+                    : "No variants available"
+                }
+              />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.entries(chatCompletionVariants).map(([name]) => (
+                <SelectItem key={name} value={name}>
+                  <span>{name}</span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <TemplateDetailsDialog
+            variant={field.value}
+            disabled={!field.value}
+            chatCompletionVariants={chatCompletionVariants}
+          />
         </FormItem>
       )}
     />

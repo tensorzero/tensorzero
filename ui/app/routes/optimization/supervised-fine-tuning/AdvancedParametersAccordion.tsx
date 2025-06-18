@@ -51,7 +51,7 @@ export function AdvancedParametersAccordion({
           </div>
         </AccordionTrigger>
         <AccordionContent>
-          <div className="space-y-6 px-3 pt-3">
+          <div className="flex flex-col gap-4">
             <FormField
               control={control}
               name="validationSplitPercent"

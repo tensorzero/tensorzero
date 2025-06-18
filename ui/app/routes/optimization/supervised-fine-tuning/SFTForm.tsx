@@ -134,7 +134,7 @@ export function SFTForm({
           onSubmit={(e) => {
             handleSubmit(onSubmit)(e);
           }}
-          className="space-y-6"
+          className="w-full max-w-200 space-y-6"
         >
           <div className="space-y-6">
             <div className="flex flex-col gap-1">
