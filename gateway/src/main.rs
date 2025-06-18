@@ -173,7 +173,7 @@ async fn main() {
         tracing::info!("Enabled OpenTelemetry OTLP export");
     } else if let Err(e) = delayed_log_config.delayed_otel {
         tracing::warn!(
-            "[gateway.export.otlp.traces.enabled]  is `false`, so ignoring OTEL error: `{e}`"
+            "[gateway.export.otlp.traces.enabled]  is `false`, so ignoring OpenTelemetry error: `{e}`"
         );
     }
 
