@@ -1,5 +1,5 @@
 use secrecy::ExposeSecret;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tokio::try_join;
 use url::Url;
 
@@ -34,7 +34,7 @@ pub struct OpenAISFTConfig {
     pub api_base: Option<Url>,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize)]
 pub struct UninitializedOpenAISFTConfig {
     pub model: String,
     pub batch_size: Option<usize>,
@@ -66,6 +66,7 @@ impl UninitializedOpenAISFTConfig {
     }
 }
 
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct OpenAISFTJobHandle {
     pub job_id: String,
 }

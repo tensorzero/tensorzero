@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::endpoints::inference::InferenceCredentials;
@@ -31,7 +31,10 @@ enum OptimizerConfig {
     OpenAISFT(OpenAISFTConfig),
 }
 
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum OptimizerJobHandle {
+    #[serde(rename = "openai_sft")]
     OpenAISFT(OpenAISFTJobHandle),
 }
 
@@ -115,6 +118,14 @@ impl UninitializedOptimizerInfo {
             inner: self.inner.load()?,
         })
     }
+
+    pub fn load_from_default_optimizer(
+        job_handle: &OptimizerJobHandle,
+    ) -> Result<OptimizerInfo, Error> {
+        Ok(OptimizerInfo {
+            inner: UninitializedOptimizerConfig::load_from_default_optimizer(job_handle)?,
+        })
+    }
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -132,5 +143,15 @@ impl UninitializedOptimizerConfig {
                 OptimizerConfig::OpenAISFT(config.load()?)
             }
         })
+    }
+
+    fn load_from_default_optimizer(
+        job_handle: &OptimizerJobHandle,
+    ) -> Result<OptimizerConfig, Error> {
+        match job_handle {
+            OptimizerJobHandle::OpenAISFT(_) => Ok(OptimizerConfig::OpenAISFT(
+                UninitializedOpenAISFTConfig::default().load()?,
+            )),
+        }
     }
 }

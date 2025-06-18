@@ -282,7 +282,7 @@ impl StoredInference {
 /// This is constructed by rendering a StoredInference with a variant for messages
 /// and by resolving all network resources (e.g. images).
 #[cfg_attr(feature = "pyo3", pyclass(str))]
-#[derive(Debug, PartialEq, Serialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct RenderedStoredInference {
     pub function_name: String,
     pub variant_name: String,

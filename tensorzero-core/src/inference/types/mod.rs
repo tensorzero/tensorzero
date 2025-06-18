@@ -496,7 +496,7 @@ impl<'a> ModelInferenceRequest<'a> {
 }
 
 /// For use in rendering for optimization purposes
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
 pub struct ModelInput {
     pub system: Option<String>,
