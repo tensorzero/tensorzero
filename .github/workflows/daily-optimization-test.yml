@@ -1,0 +1,38 @@
+name: Daily Optimization Test
+
+on:
+  schedule:
+    # Run every day at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch: # Allow manual triggering
+
+env:
+  FORCE_COLOR: 1
+
+jobs:
+  test-optimization:
+    if: github.repository == 'tensorzero/tensorzero'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
+        with:
+          cache-provider: "buildjet"
+          shared-key: "build-gateway-cache"
+          save-if: false
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
+        with:
+          tool: cargo-nextest
+
+      - name: Run optimization tests
+        run: cargo test-optimization
