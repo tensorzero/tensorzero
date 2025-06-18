@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::{bail, Result};
 use chrono::{DateTime, Utc};
-use tensorzero_internal::inference::types::ContentBlockChatOutput;
+use tensorzero_core::inference::types::ContentBlockChatOutput;
 use tree_sitter::Tree;
 use uuid::{Builder, Uuid};
 

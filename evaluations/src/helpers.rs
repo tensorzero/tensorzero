@@ -4,9 +4,9 @@ use anyhow::{anyhow, Result};
 use serde::Deserialize;
 use serde_json::Value;
 use tensorzero::{CacheParamsOptions, DynamicToolParams, InferenceResponse};
-use tensorzero_internal::clickhouse::escape_string_for_clickhouse_literal;
-use tensorzero_internal::serde_util::deserialize_json_string;
-use tensorzero_internal::{
+use tensorzero_core::clickhouse::escape_string_for_clickhouse_literal;
+use tensorzero_core::serde_util::deserialize_json_string;
+use tensorzero_core::{
     cache::CacheEnabledMode, clickhouse::ClickHouseConnectionInfo, function::FunctionConfig,
     tool::ToolCallConfigDatabaseInsert,
 };
@@ -131,7 +131,7 @@ mod tests {
 
     use serde_json::json;
     use tensorzero::Tool;
-    use tensorzero_internal::{function::FunctionConfigChat, tool::ToolChoice};
+    use tensorzero_core::{function::FunctionConfigChat, tool::ToolChoice};
 
     use super::*;
 
