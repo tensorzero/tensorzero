@@ -290,7 +290,7 @@ macro_rules! optimization_test_case {
     ($fn_name:ident, $constructor:expr) => {
         ::paste::paste! {
             #[tokio::test]
-            async fn [<test_optimization_ $fn_name>]() {
+            async fn [<test_slow_optimization_ $fn_name>]() {
                 // you might need to import run_test_case
                 $crate::run_test_case(&$constructor).await;
             }
