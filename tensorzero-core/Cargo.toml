@@ -90,7 +90,7 @@ tracing-subscriber = { version = "0.3.18", features = [
 ] }
 url = { workspace = true, features = ["serde"] }
 uuid = { workspace = true }
-tensorzero-derive = { path = "../tensorzero-derive" }
+tensorzero-derive = { path = "../internal/tensorzero-derive" }
 clap = { workspace = true }
 aws-sdk-sagemakerruntime = { version = "1.75.0", features = [
     "behavior-version-latest",
