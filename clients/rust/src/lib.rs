@@ -291,6 +291,8 @@ impl ClientBuilder {
                                 config,
                                 http_client,
                                 clickhouse_connection_info,
+                                kafka_connection_info:
+                                    tensorzero_internal::kafka::KafkaConnectionInfo::Disabled,
                             },
                         },
                         timeout: *timeout,
@@ -468,6 +470,7 @@ impl Client {
                         gateway.state.config.clone(),
                         &gateway.state.http_client,
                         gateway.state.clickhouse_connection_info.clone(),
+                        gateway.state.kafka_connection_info.clone(),
                         params.try_into().map_err(err_to_http)?,
                     )
                     .await

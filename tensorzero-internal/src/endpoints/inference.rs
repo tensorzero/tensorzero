@@ -1,5 +1,6 @@
 use axum::body::Body;
 use axum::extract::State;
+use axum::http::HeaderMap;
 use axum::response::sse::{Event, Sse};
 use axum::response::{IntoResponse, Response};
 use axum::{debug_handler, Json};
@@ -23,7 +24,6 @@ use crate::cache::{CacheOptions, CacheParamsOptions};
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::config_parser::{Config, ObjectStoreInfo};
 use crate::embeddings::EmbeddingModelTable;
-use crate::kafka::KafkaConnectionInfo;
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::function::{sample_variant, FunctionConfigChat};
@@ -40,6 +40,7 @@ use crate::inference::types::{
     RequestMessage, ResolvedInput, ResolvedInputMessageContent, Usage,
 };
 use crate::jsonschema_util::DynamicJSONSchema;
+use crate::kafka::KafkaConnectionInfo;
 use crate::model::ModelTable;
 use crate::tool::{DynamicToolParams, ToolCallConfig, ToolChoice};
 use crate::variant::chat_completion::ChatCompletionConfig;
@@ -106,6 +107,16 @@ pub struct Params {
     pub extra_body: UnfilteredInferenceExtraBody,
     #[serde(default)]
     pub extra_headers: UnfilteredInferenceExtraHeaders,
+    /// Observability metadata from auth middleware
+    #[serde(skip)]
+    pub observability_metadata: Option<ObservabilityMetadata>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct ObservabilityMetadata {
+    pub project_id: String,
+    pub endpoint_id: String,
+    pub model_id: String,
 }
 
 #[derive(Clone, Debug)]
@@ -130,6 +141,7 @@ struct InferenceMetadata {
     pub cached: bool,
     pub extra_body: UnfilteredInferenceExtraBody,
     pub extra_headers: UnfilteredInferenceExtraHeaders,
+    pub observability_metadata: Option<ObservabilityMetadata>,
 }
 
 pub type InferenceCredentials = HashMap<String, SecretString>;
@@ -143,10 +155,40 @@ pub async fn inference_handler(
         clickhouse_connection_info,
         kafka_connection_info,
     }): AppState,
-    StructuredJson(params): StructuredJson<Params>,
+    headers: HeaderMap,
+    StructuredJson(mut params): StructuredJson<Params>,
 ) -> Result<Response<Body>, Error> {
-    let inference_output =
-        inference(config, &http_client, clickhouse_connection_info, kafka_connection_info, params).await?;
+    // Extract observability metadata from headers
+    let observability_metadata = if let (Some(project_id), Some(endpoint_id), Some(model_id)) = (
+        headers
+            .get("x-tensorzero-project-id")
+            .and_then(|v| v.to_str().ok()),
+        headers
+            .get("x-tensorzero-endpoint-id")
+            .and_then(|v| v.to_str().ok()),
+        headers
+            .get("x-tensorzero-model-id")
+            .and_then(|v| v.to_str().ok()),
+    ) {
+        Some(ObservabilityMetadata {
+            project_id: project_id.to_string(),
+            endpoint_id: endpoint_id.to_string(),
+            model_id: model_id.to_string(),
+        })
+    } else {
+        None
+    };
+
+    params.observability_metadata = observability_metadata;
+
+    let inference_output = inference(
+        config,
+        &http_client,
+        clickhouse_connection_info,
+        kafka_connection_info,
+        params,
+    )
+    .await?;
     match inference_output {
         InferenceOutput::NonStreaming(response) => Ok(Json(response).into_response()),
         InferenceOutput::Streaming(stream) => {
@@ -416,6 +458,7 @@ pub async fn inference(
                 cached: model_used_info.cached,
                 extra_body,
                 extra_headers,
+                observability_metadata: params.observability_metadata,
             };
 
             let stream = create_stream(
@@ -484,6 +527,7 @@ pub async fn inference(
                         resolved_input,
                         result_to_write,
                         write_metadata,
+                        params.observability_metadata.clone(),
                     )
                     .await;
                 });
@@ -626,6 +670,7 @@ fn create_stream(
                 cached,
                 extra_body,
                 extra_headers,
+                observability_metadata,
             } = metadata;
 
             let config = config.clone();
@@ -681,6 +726,7 @@ fn create_stream(
                             input,
                             inference_response,
                             write_metadata,
+                            observability_metadata,
                         ).await;
 
                 }
@@ -801,6 +847,7 @@ async fn write_inference(
     input: ResolvedInput,
     result: InferenceResult,
     metadata: InferenceDatabaseInsertMetadata,
+    observability_metadata: Option<ObservabilityMetadata>,
 ) {
     let mut futures: Vec<Pin<Box<dyn Future<Output = ()> + Send>>> = Vec::new();
     if config.gateway.observability.enabled.unwrap_or(true) {
@@ -823,7 +870,12 @@ async fn write_inference(
         }
     }
     let model_responses: Vec<serde_json::Value> = result.get_serialized_model_inferences();
-    
+
+    // Clone for Kafka before moving into ClickHouse writes
+    let kafka_connection_info = kafka_connection_info.clone();
+    let result_clone = result.clone();
+    let metadata_clone = metadata.clone();
+
     // ClickHouse writes
     futures.push(Box::pin(async {
         // Write the model responses to the ModelInference table
@@ -850,38 +902,39 @@ async fn write_inference(
             }
         }
     }));
-    
+
     // Kafka observability metrics
-    let kafka_connection_info = kafka_connection_info.clone();
-    let result_clone = result.clone();
-    let metadata_clone = metadata.clone();
-    
+
     futures.push(Box::pin(async move {
         // Create observability event from inference result
         let inference_id = match &result_clone {
             InferenceResult::Chat(result) => result.inference_id,
             InferenceResult::Json(result) => result.inference_id,
         };
-        
-        let request_arrival_time = chrono::Utc::now() - chrono::Duration::milliseconds(
-            metadata_clone.processing_time.map(|d| d.as_millis() as i64).unwrap_or(0)
-        );
+
+        let request_arrival_time = chrono::Utc::now()
+            - chrono::Duration::milliseconds(
+                metadata_clone
+                    .processing_time
+                    .map(|d| d.as_millis() as i64)
+                    .unwrap_or(0),
+            );
         let request_forward_time = request_arrival_time + chrono::Duration::milliseconds(10); // Approximate forward time
-        
+
         // Extract model info
         let model_id = match &result_clone {
-            InferenceResult::Chat(result) => {
-                result.model_inference_results.first()
-                    .map(|m| m.model_name.clone())
-                    .unwrap_or_else(|| "unknown".to_string())
-            }
-            InferenceResult::Json(result) => {
-                result.model_inference_results.first()
-                    .map(|m| m.model_name.clone())
-                    .unwrap_or_else(|| "unknown".to_string())
-            }
+            InferenceResult::Chat(result) => result
+                .model_inference_results
+                .first()
+                .map(|m| m.model_name.clone())
+                .unwrap_or_else(|| Arc::from("unknown")),
+            InferenceResult::Json(result) => result
+                .model_inference_results
+                .first()
+                .map(|m| m.model_name.clone())
+                .unwrap_or_else(|| Arc::from("unknown")),
         };
-        
+
         // Calculate cost (simplified - you may want to enhance this)
         let usage = match &result_clone {
             InferenceResult::Chat(result) => &result.usage,
@@ -892,12 +945,28 @@ async fn write_inference(
         } else {
             None
         };
-        
+
+        // Use observability metadata if available, otherwise fall back to function/variant names
+        let (project_id, endpoint_id, obs_model_id) =
+            if let Some(obs_metadata) = observability_metadata {
+                (
+                    obs_metadata.project_id.clone(),
+                    obs_metadata.endpoint_id.clone(),
+                    obs_metadata.model_id.clone(),
+                )
+            } else {
+                (
+                    metadata_clone.function_name.clone(),
+                    metadata_clone.variant_name.clone(),
+                    model_id.to_string(),
+                )
+            };
+
         let event = crate::kafka::cloudevents::ObservabilityEvent {
             inference_id,
-            project_id: metadata_clone.function_name.clone(), // Using function_name as project_id
-            endpoint_id: metadata_clone.variant_name.clone(),
-            model_id,
+            project_id,
+            endpoint_id,
+            model_id: obs_model_id,
             is_success: true,
             request_arrival_time,
             request_forward_time,
@@ -905,7 +974,7 @@ async fn write_inference(
             cost,
             response_analysis: None,
         };
-        
+
         // Send to Kafka observability topic
         if let Err(e) = kafka_connection_info.add_observability_event(event).await {
             tracing::error!("Failed to send observability event to Kafka: {}", e);
@@ -1283,6 +1352,7 @@ mod tests {
             cached: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
+            observability_metadata: None,
         };
 
         let result = prepare_response_chunk(&inference_metadata, chunk).unwrap();
@@ -1334,6 +1404,7 @@ mod tests {
             cached: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
+            observability_metadata: None,
         };
 
         let result = prepare_response_chunk(&inference_metadata, chunk).unwrap();

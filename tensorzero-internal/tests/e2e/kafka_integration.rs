@@ -9,7 +9,7 @@ use uuid::Uuid;
 async fn test_kafka_integration_with_real_broker() {
     // This test assumes Kafka is running on localhost:9092
     // You can run it with: docker run -d --name kafka -p 9092:9092 apache/kafka:latest
-    
+
     let config = KafkaConfig {
         enabled: true,
         brokers: "localhost:9092".to_string(),
@@ -19,10 +19,14 @@ async fn test_kafka_integration_with_real_broker() {
         linger_ms: Some(10),
         request_timeout_ms: Some(5000),
         sasl: None,
+        buffer_max_size: 5000,
+        flush_interval_seconds: 10,
+        metrics_batch_size: 500,
+        metrics_topic: "budMetricsMessages".to_string(),
     };
-    
+
     let kafka_conn = KafkaConnectionInfo::new(Some(&config)).unwrap();
-    
+
     // Test writing inference data
     let inference_id = Uuid::now_v7();
     let inference_payload = json!({
@@ -33,18 +37,20 @@ async fn test_kafka_integration_with_real_broker() {
         "output": {"content": "test response"},
         "processing_time_ms": 123
     });
-    
+
     // This should succeed if Kafka is running
-    let result = kafka_conn.write(&[inference_payload], "chat_inference").await;
+    let result = kafka_conn
+        .write(&[inference_payload], "chat_inference")
+        .await;
     assert!(result.is_ok());
-    
+
     // Test batch writes
     let batch_payloads = vec![
         json!({"id": Uuid::now_v7(), "data": "batch1"}),
         json!({"id": Uuid::now_v7(), "data": "batch2"}),
         json!({"id": Uuid::now_v7(), "data": "batch3"}),
     ];
-    
+
     let result = kafka_conn.write(&batch_payloads, "batch_test").await;
     assert!(result.is_ok());
 }
@@ -61,12 +67,16 @@ async fn test_kafka_connection_error_handling() {
         linger_ms: None,
         request_timeout_ms: Some(1000), // Short timeout for test
         sasl: None,
+        buffer_max_size: 5000,
+        flush_interval_seconds: 10,
+        metrics_batch_size: 500,
+        metrics_topic: "budMetricsMessages".to_string(),
     };
-    
+
     // This should fail to create the producer
     let kafka_conn = KafkaConnectionInfo::new(Some(&config));
     // Note: rdkafka might not fail immediately on creation, so we might need to test writes
-    
+
     if let Ok(conn) = kafka_conn {
         let payload = json!({"id": "test", "data": "test"});
         let result = conn.write(&[payload], "test_topic").await;
@@ -78,7 +88,7 @@ async fn test_kafka_connection_error_handling() {
 #[cfg(test)]
 mod docker_compose_tests {
     use super::*;
-    
+
     // This test requires the docker-compose setup from tests/e2e/docker-compose.yml
     // to be running with a Kafka service added
     #[tokio::test]
@@ -92,7 +102,7 @@ mod docker_compose_tests {
         //   environment:
         //     KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
         //     KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
-        
+
         let config = KafkaConfig {
             enabled: true,
             brokers: "localhost:9092".to_string(),
@@ -102,10 +112,14 @@ mod docker_compose_tests {
             linger_ms: None,
             request_timeout_ms: None,
             sasl: None,
+            buffer_max_size: 5000,
+            flush_interval_seconds: 10,
+            metrics_batch_size: 500,
+            metrics_topic: "budMetricsMessages".to_string(),
         };
-        
+
         let kafka_conn = KafkaConnectionInfo::new(Some(&config)).unwrap();
-        
+
         // Test complete inference flow
         let inference_data = json!({
             "id": Uuid::now_v7(),
@@ -121,7 +135,7 @@ mod docker_compose_tests {
             "response_time_ms": 500,
             "cached": false
         });
-        
+
         let result = kafka_conn.write(&[inference_data], "model_inference").await;
         assert!(result.is_ok());
     }

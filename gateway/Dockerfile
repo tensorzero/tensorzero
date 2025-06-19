@@ -4,7 +4,7 @@ FROM rust:latest AS builder
 
 WORKDIR /src
 
-RUN apt-get update && apt-get install -y clang libc++-dev && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y clang libc++-dev libsasl2-dev && rm -rf /var/lib/apt/lists/*
 
 COPY . .
 
@@ -19,7 +19,7 @@ RUN --mount=type=cache,id=tensorzero-gateway-release,sharing=shared,target=/usr/
 
 FROM debian:bookworm-slim AS base
 
-RUN apt-get update && apt-get install -y ca-certificates openssl wget && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y ca-certificates openssl wget libsasl2-2 && rm -rf /var/lib/apt/lists/*
 
 # ========== gateway ==========
 

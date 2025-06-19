@@ -14,9 +14,9 @@ use tracing::instrument;
 use crate::clickhouse::migration_manager;
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::config_parser::Config;
-use crate::kafka::KafkaConnectionInfo;
 use crate::endpoints;
 use crate::error::{Error, ErrorDetails};
+use crate::kafka::KafkaConnectionInfo;
 use crate::model::ModelTable;
 /// State for the API
 #[derive(Clone)]
@@ -115,14 +115,17 @@ pub async fn setup_clickhouse(
 
 pub async fn setup_kafka(config: &Config<'static>) -> Result<KafkaConnectionInfo, Error> {
     let kafka_config = config.gateway.observability.kafka.as_ref();
-    
+
     match kafka_config {
         Some(kafka_conf) if kafka_conf.enabled => {
-            tracing::info!("Initializing Kafka producer with brokers: {}", kafka_conf.brokers);
+            tracing::info!(
+                "Initializing Kafka producer with brokers: {}",
+                kafka_conf.brokers
+            );
             match KafkaConnectionInfo::new(Some(kafka_conf)) {
                 Ok(conn) => {
                     tracing::info!("Successfully initialized Kafka producer");
-                    
+
                     // Start the background flush task for the buffer
                     if let Some(handle) = conn.start_flush_task() {
                         // Store the handle to prevent it from being dropped
@@ -133,7 +136,7 @@ pub async fn setup_kafka(config: &Config<'static>) -> Result<KafkaConnectionInfo
                         });
                         tracing::info!("Started Kafka buffer flush task");
                     }
-                    
+
                     Ok(conn)
                 }
                 Err(e) => {
@@ -293,6 +296,7 @@ mod tests {
             observability: ObservabilityConfig {
                 enabled: Some(false),
                 async_writes: false,
+                kafka: None,
             },
             bind_address: None,
             debug: false,
@@ -319,6 +323,7 @@ mod tests {
             observability: ObservabilityConfig {
                 enabled: None,
                 async_writes: false,
+                kafka: None,
             },
             ..Default::default()
         };
@@ -344,6 +349,7 @@ mod tests {
             observability: ObservabilityConfig {
                 enabled: Some(true),
                 async_writes: false,
+                kafka: None,
             },
             bind_address: None,
             debug: false,
@@ -366,6 +372,7 @@ mod tests {
             observability: ObservabilityConfig {
                 enabled: Some(true),
                 async_writes: false,
+                kafka: None,
             },
             bind_address: None,
             debug: false,
@@ -390,6 +397,7 @@ mod tests {
             observability: ObservabilityConfig {
                 enabled: Some(true),
                 async_writes: false,
+                kafka: None,
             },
             bind_address: None,
             debug: false,

@@ -112,6 +112,7 @@ impl TryFrom<ClientInferenceParams> for Params {
             include_original_response: this.include_original_response,
             extra_body: this.extra_body,
             extra_headers: this.extra_headers,
+            observability_metadata: None,
         })
     }
 }
@@ -158,6 +159,7 @@ fn assert_params_match(client_params: ClientInferenceParams) {
         include_original_response,
         extra_body,
         extra_headers,
+        observability_metadata: None,
     };
 }
 

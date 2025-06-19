@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::Value;
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -47,7 +47,7 @@ pub struct ObservabilityEvent {
     pub is_success: bool,
     pub request_arrival_time: DateTime<Utc>,
     pub request_forward_time: DateTime<Utc>,
-    
+
     // Optional fields
     #[serde(skip_serializing_if = "Option::is_none")]
     pub request_ip: Option<String>,
@@ -63,7 +63,7 @@ impl CloudEvent {
         let event_id = Uuid::now_v7().to_string();
         let mut metadata = HashMap::new();
         metadata.insert("source".to_string(), "gateway-service".to_string());
-        
+
         Self {
             specversion: "1.0".to_string(),
             event_type: "add_observability_metrics".to_string(),
@@ -88,8 +88,11 @@ impl ObservabilityEntry {
         let entry_id = Uuid::now_v7().to_string();
         let mut metadata = HashMap::new();
         metadata.insert("cloudevent.id".to_string(), Uuid::now_v7().to_string());
-        metadata.insert("cloudevent.type".to_string(), "com.bud.observability.inference".to_string());
-        
+        metadata.insert(
+            "cloudevent.type".to_string(),
+            "com.bud.observability.inference".to_string(),
+        );
+
         Self {
             event,
             entry_id,
@@ -105,35 +108,32 @@ pub fn validate_event(event: &ObservabilityEvent) -> Result<(), String> {
     if event.request_forward_time < event.request_arrival_time {
         return Err("request_forward_time must be >= request_arrival_time".to_string());
     }
-    
+
     // Validate cost >= 0 when provided
     if let Some(cost) = event.cost {
         if cost < 0.0 {
             return Err("cost must be >= 0".to_string());
         }
     }
-    
+
     // Validate request_ip format when provided
     if let Some(ip) = &event.request_ip {
         if !is_valid_ipv4(ip) {
             return Err("request_ip must be valid IPv4 format".to_string());
         }
     }
-    
+
     Ok(())
 }
 
 fn is_valid_ipv4(ip: &str) -> bool {
-    ip.split('.').count() == 4 && 
-    ip.split('.').all(|octet| {
-        octet.parse::<u8>().is_ok()
-    })
+    ip.split('.').count() == 4 && ip.split('.').all(|octet| octet.parse::<u8>().is_ok())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_cloudevent_creation() {
         let event = ObservabilityEvent {
@@ -148,17 +148,17 @@ mod tests {
             cost: Some(0.002),
             response_analysis: None,
         };
-        
+
         let entry = ObservabilityEntry::new(event);
         let cloud_event = CloudEvent::new_observability_event(vec![entry]);
-        
+
         assert_eq!(cloud_event.specversion, "1.0");
         assert_eq!(cloud_event.event_type, "add_observability_metrics");
         assert_eq!(cloud_event.source, "gateway-service");
         assert_eq!(cloud_event.data.pubsubname, "pubsub-kafka");
         assert_eq!(cloud_event.data.topic, "observability-metrics");
     }
-    
+
     #[test]
     fn test_event_validation() {
         let mut event = ObservabilityEvent {
@@ -173,19 +173,19 @@ mod tests {
             cost: Some(0.002),
             response_analysis: None,
         };
-        
+
         // Valid event
         assert!(validate_event(&event).is_ok());
-        
+
         // Invalid time ordering
         event.request_forward_time = event.request_arrival_time - chrono::Duration::seconds(1);
         assert!(validate_event(&event).is_err());
-        
+
         // Invalid cost
         event.request_forward_time = event.request_arrival_time + chrono::Duration::seconds(1);
         event.cost = Some(-1.0);
         assert!(validate_event(&event).is_err());
-        
+
         // Invalid IP
         event.cost = Some(0.002);
         event.request_ip = Some("invalid-ip".to_string());
