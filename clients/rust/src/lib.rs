@@ -10,6 +10,7 @@ use reqwest::header::HeaderMap;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use serde_json::Value;
 use std::fmt::Debug;
+use tensorzero_core::optimization::{OptimizerJobHandle, OptimizerStatus};
 use tensorzero_core::stored_inference::render_stored_inference;
 use tensorzero_core::{
     config_parser::Config,
@@ -839,6 +840,61 @@ impl Client {
             .collect();
 
         Ok(final_rendered_examples)
+    }
+
+    /// Launch an optimization job.
+    pub async fn experimental_launch_optimization(
+        &self,
+        params: tensorzero_core::endpoints::optimization::Params,
+    ) -> Result<OptimizerJobHandle, TensorZeroError> {
+        match &self.mode {
+            ClientMode::EmbeddedGateway { gateway, timeout } => {
+                // TODO: do we want this?
+                Ok(with_embedded_timeout(*timeout, async {
+                    tensorzero_core::endpoints::optimization::launch_optimization(
+                        &gateway.state.http_client,
+                        params,
+                    )
+                    .await
+                    .map_err(err_to_http)
+                })
+                .await?)
+            }
+            ClientMode::HTTPGateway(_) => Err(TensorZeroError::Other {
+                source: tensorzero_core::error::Error::new(ErrorDetails::InvalidClientMode {
+                    mode: "Http".to_string(),
+                    message: "This function is only available in EmbeddedGateway mode".to_string(),
+                })
+                .into(),
+            }),
+        }
+    }
+
+    /// Poll an optimization job for status.
+    pub async fn experimental_poll_optimization(
+        &self,
+        job_handle: OptimizerJobHandle,
+    ) -> Result<OptimizerStatus, TensorZeroError> {
+        match &self.mode {
+            ClientMode::EmbeddedGateway { gateway, timeout } => {
+                Ok(with_embedded_timeout(*timeout, async {
+                    tensorzero_core::endpoints::optimization::poll_optimization(
+                        &gateway.state.http_client,
+                        &job_handle,
+                    )
+                    .await
+                    .map_err(err_to_http)
+                })
+                .await?)
+            }
+            ClientMode::HTTPGateway(_) => Err(TensorZeroError::Other {
+                source: tensorzero_core::error::Error::new(ErrorDetails::InvalidClientMode {
+                    mode: "Http".to_string(),
+                    message: "This function is only available in EmbeddedGateway mode".to_string(),
+                })
+                .into(),
+            }),
+        }
     }
 
     async fn parse_http_response<T: serde::de::DeserializeOwned>(
