@@ -25,7 +25,7 @@ services:
   mock-inference-provider:
     build:
       context: ../../
-      dockerfile: tensorzero-internal/tests/mock-inference-provider/Dockerfile
+      dockerfile: tensorzero-core/tests/mock-inference-provider/Dockerfile
     environment:
       RUST_LOG: debug
     ports:

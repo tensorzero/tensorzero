@@ -22,7 +22,7 @@ tree-sitter-python = "0.23.6"
 tree-sitter-toml-ng = "0.7.0"
 tree-sitter-md = "0.3.2"
 tensorzero = { path = "../../../../clients/rust" }
-tensorzero-internal = { path = "../../../../tensorzero-internal" }
+tensorzero-core = { path = "../../../../tensorzero-core" }
 chrono.workspace = true
 uuid.workspace = true
 serde.workspace = true

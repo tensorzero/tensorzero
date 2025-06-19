@@ -12,8 +12,6 @@ anyio==4.8.0
     # via
     #   httpx
     #   jupyter-server
-appnope==0.1.4
-    # via ipykernel
 argon2-cffi==23.1.0
     # via jupyter-server
 argon2-cffi-bindings==21.2.0
@@ -35,7 +33,7 @@ babel==2.17.0
     # via jupyterlab-server
 beautifulsoup4==4.13.3
     # via nbconvert
-bleach==6.2.0
+bleach[css]==6.2.0
     # via nbconvert
 certifi==2025.1.31
     # via
@@ -94,11 +92,18 @@ idna==3.10
     #   jsonschema
     #   requests
     #   yarl
+importlib-metadata==8.7.0
+    # via
+    #   jupyter-client
+    #   jupyter-lsp
+    #   jupyterlab
+    #   jupyterlab-server
+    #   nbconvert
 ipykernel==6.29.5
     # via
     #   -r requirements.in
     #   jupyterlab
-ipython==8.32.0
+ipython==8.18.1
     # via ipykernel
 isoduration==20.11.0
     # via jsonschema
@@ -114,7 +119,7 @@ json5==0.10.0
     # via jupyterlab-server
 jsonpointer==3.0.0
     # via jsonschema
-jsonschema==4.23.0
+jsonschema[format-nongpl]==4.23.0
     # via
     #   jupyter-events
     #   jupyterlab-server
@@ -195,7 +200,7 @@ notebook-shim==0.2.4
     # via
     #   jupyterlab
     #   notebook
-numpy==2.2.2
+numpy==2.0.2
     # via
     #   -r requirements.in
     #   pandas
@@ -220,8 +225,6 @@ pexpect==4.9.0
     # via ipython
 pillow==11.1.0
     # via together
-pip==25.0.1
-    # via -r requirements.in
 platformdirs==4.3.6
     # via jupyter-core
 prometheus-client==0.21.1
@@ -299,8 +302,6 @@ rpds-py==0.22.3
     #   referencing
 send2trash==1.8.3
     # via jupyter-server
-setuptools==75.8.0
-    # via jupyterlab
 shellingham==1.5.4
     # via typer
 six==1.17.0
@@ -367,6 +368,7 @@ typing-extensions==4.12.2
     #   multidict
     #   pydantic
     #   pydantic-core
+    #   python-json-logger
     #   referencing
     #   rich
     #   typer
@@ -392,5 +394,7 @@ websocket-client==1.8.0
     # via jupyter-server
 yarl==1.18.3
     # via aiohttp
+zipp==3.23.0
+    # via importlib-metadata
 zstandard==0.23.0
     # via clickhouse-connect

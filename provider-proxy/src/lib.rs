@@ -16,7 +16,7 @@ use std::sync::Arc;
 use anyhow::Context as _;
 use bytes::{Bytes, BytesMut};
 use clap::{Parser, ValueEnum};
-use http::{HeaderName, HeaderValue};
+use http::{HeaderName, HeaderValue, Version};
 use http_body_util::{combinators::BoxBody, BodyExt, Full};
 use hyper::service::service_fn;
 use mitm_server::MitmProxy;
@@ -113,10 +113,9 @@ async fn check_cache<
 >(
     start_time: std::time::SystemTime,
     args: &Args,
-    request: &hyper::Request<Bytes>,
+    mut request: hyper::Request<Bytes>,
     missing: F,
 ) -> Result<hyper::Response<BoxBody<Bytes, E>>, anyhow::Error> {
-    let mut request = request.clone();
     request.extensions_mut().clear();
     let mut sanitized_header = false;
     if args.sanitize_bearer_auth {
@@ -297,7 +296,7 @@ pub struct Args {
     pub sanitize_aws_sigv4: bool,
     #[arg(long, default_value = "true")]
     pub sanitize_model_headers: bool,
-    #[arg(long, default_value = "ReadOldWriteNew")]
+    #[arg(long, default_value = "read-old-write-new")]
     pub mode: CacheMode,
 }
 
@@ -402,11 +401,14 @@ pub async fn run_server(args: Args, server_started: oneshot::Sender<SocketAddr>)
                         .with_context(|| "Failed to collect body")?
                         .to_bytes();
                     let bytes_request = hyper::Request::from_parts(parts, body_bytes);
-                    let response = check_cache(start_time, &args, &bytes_request, || async {
-                        let request: reqwest::Request =
-                            bytes_request.clone().try_into().with_context(|| {
+                    let response = check_cache(start_time, &args, bytes_request.clone(), || async {
+                        let mut request: reqwest::Request =
+                            bytes_request.try_into().with_context(|| {
                                 "Failed to convert Request from `hyper` to `reqwest`"
                             })?;
+                        // Don't explicitly request HTTP2 - let the connection upgrade if the
+                        // remote server supports it
+                        *request.version_mut() = Version::default();
                         Ok(http::Response::from(client.execute(request).await?).map(BoxBody::new))
                     })
                     .await?;
