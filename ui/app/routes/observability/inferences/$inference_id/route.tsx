@@ -15,6 +15,7 @@ import {
   Link,
   useFetcher,
   useNavigate,
+  type RouteHandle,
 } from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
 import BasicInfo from "./InferenceBasicInfo";
@@ -53,6 +54,10 @@ import { HumanFeedbackForm } from "~/components/feedback/HumanFeedbackForm";
 import { isServerRequestError, JSONParseError } from "~/utils/common";
 import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
 import { processJson } from "~/utils/syntax-highlighting.server";
+
+export const handle: RouteHandle = {
+  crumb: (match) => [match.params.inference_id!],
+};
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { inference_id } = params;

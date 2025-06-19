@@ -1,4 +1,4 @@
-import { data, type MetaFunction } from "react-router";
+import { data, type RouteHandle } from "react-router";
 import { useEffect, useState } from "react";
 import type {
   SFTJob,
@@ -23,14 +23,8 @@ import {
 import { SFTFormValuesSchema } from "./types";
 import { launch_sft_job } from "~/utils/supervised_fine_tuning/client";
 
-export const meta: MetaFunction = () => {
-  return [
-    { title: "TensorZero Supervised Fine-Tuning UI" },
-    {
-      name: "description",
-      content: "Supervised Fine-Tuning Optimization UI",
-    },
-  ];
+export const handle: RouteHandle = {
+  crumb: () => ["Supervised Fine-Tuning"],
 };
 
 // Mutable store mapping job IDs to their info
