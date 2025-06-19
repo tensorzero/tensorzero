@@ -151,8 +151,11 @@ export function DatasetBuilderForm({
               />
               <OutputSourceSelector control={form.control} />
               <DatasetCountDisplay
-              control={form.control}
-              setCountToInsert={setCountToInsert}
+                control={form.control}
+                setCountToInsert={setCountToInsert}
+                functionInferenceCount={counts.inferenceCount}
+                metricFeedbackCount={counts.feedbackCount}
+                metricCuratedInferenceCount={counts.curatedInferenceCount}
               />
               </>
               )}
