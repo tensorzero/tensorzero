@@ -113,6 +113,7 @@ export default function DynamicEvaluationRunEpisodesTable({
                                 : "max" // Default to max for non-float/boolean metrics (this won't matter for comments/demonstrations)
                             }
                             cutoff={metricType === "boolean" ? 0.5 : undefined}
+                            isHumanFeedback={false}
                           />
                         ) : (
                           <span className="text-gray-400">-</span>

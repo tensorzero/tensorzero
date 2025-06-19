@@ -12,8 +12,14 @@ import {
   SectionsGroup,
 } from "~/components/layout/PageLayout";
 import { PageLayout } from "~/components/layout/PageLayout";
-import Input from "~/components/inference/Input";
-import { data, isRouteErrorResponse, redirect } from "react-router";
+import InputSnippet from "~/components/inference/InputSnippet";
+
+import {
+  data,
+  isRouteErrorResponse,
+  redirect,
+  type RouteHandle,
+} from "react-router";
 import Output from "~/components/inference/NewOutput";
 import {
   consolidate_evaluation_results,
@@ -48,6 +54,10 @@ import { addEvaluationHumanFeedback } from "~/utils/tensorzero.server";
 import { Toaster } from "~/components/ui/toaster";
 import { useToast } from "~/hooks/use-toast";
 import { useEffect } from "react";
+
+export const handle: RouteHandle = {
+  crumb: (match) => ["Datapoints", match.params.datapoint_id!],
+};
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const evaluation_name = params.evaluation_name;
@@ -218,7 +228,7 @@ export default function EvaluationDatapointPage({
         <SectionsGroup>
           <SectionLayout>
             <SectionHeader heading="Input" />
-            <Input input={consolidatedEvaluationResults[0].input} />
+            <InputSnippet input={consolidatedEvaluationResults[0].input} />
           </SectionLayout>
           <OutputsSection
             outputsToDisplay={outputsToDisplay}
@@ -270,6 +280,7 @@ const MetricsDisplay = ({
               evaluatorInferenceId={metricObj.evaluator_inference_id}
               evalRunId={evalRunId}
               variantName={variantName}
+              isHumanFeedback={metricObj.is_human_feedback}
             />
           );
         })}
@@ -289,6 +300,7 @@ const MetricRow = ({
   evalRunId,
   evaluatorInferenceId,
   variantName,
+  isHumanFeedback,
 }: {
   evaluatorName: string;
   evaluation_name: string;
@@ -299,6 +311,7 @@ const MetricRow = ({
   evaluatorInferenceId: string | null;
   evalRunId: string;
   variantName: string;
+  isHumanFeedback: boolean;
 }) => {
   const config = useConfig();
   const metric_name = getEvaluatorMetricName(evaluation_name, evaluatorName);
@@ -359,6 +372,7 @@ const MetricRow = ({
             : "max"
         }
         cutoff={evaluatorConfig.cutoff}
+        isHumanFeedback={isHumanFeedback}
         className="text-sm"
       />
       {inferenceId !== null && evaluationType === "llm_judge" && (
@@ -430,12 +444,9 @@ function OutputsSection({
   return (
     <SectionLayout>
       <SectionHeader heading="Output" />
-      <div className="flex gap-4 overflow-x-auto pb-4">
+      <div className="flex flex-row gap-4 overflow-x-auto">
         {outputsToDisplay.map((result) => (
-          <div
-            key={result.id}
-            className="flex max-w-[450px] min-w-[300px] shrink-0 flex-col justify-between"
-          >
+          <div key={result.id} className="flex w-1/2 min-w-4/9 flex-col">
             <div>
               <div className="mb-2 flex">
                 {result.id === "Reference" ? (

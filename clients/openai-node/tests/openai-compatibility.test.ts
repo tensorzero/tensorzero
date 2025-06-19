@@ -85,6 +85,9 @@ describe("OpenAI Compatibility", () => {
       temperature: 0.4,
       // @ts-expect-error - custom TensorZero property
       "tensorzero::episode_id": episodeId,
+      "tensorzero::tags": {
+        foo: "bar",
+      },
     });
 
     // @ts-expect-error - custom TensorZero property
@@ -491,6 +494,7 @@ describe("OpenAI Compatibility", () => {
 
     let previousInferenceId: string | null = null;
     let previousEpisodeId: string | null = null;
+    let nameSeen = false;
 
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i];
@@ -516,7 +520,11 @@ describe("OpenAI Compatibility", () => {
 
         const toolCall = chunk.choices[0].delta.tool_calls![0];
         expect(toolCall.type).toBe("function");
-        expect(toolCall.function?.name).toBe("get_temperature");
+        if (toolCall.function?.name) {
+          expect(nameSeen).toBe(false);
+          expect(toolCall.function.name).toBe("get_temperature");
+          nameSeen = true;
+        }
         expect(toolCall.function?.arguments).toBe(expectedText[i]);
       } else {
         expect(chunk.choices[0].delta.content).toBeUndefined();
@@ -526,6 +534,7 @@ describe("OpenAI Compatibility", () => {
         expect(chunk.choices[0].finish_reason).toBe("tool_calls");
       }
     }
+    expect(nameSeen).toBe(true);
   });
 
   it("should handle JSON streaming", async () => {
@@ -1096,7 +1105,7 @@ describe("OpenAI Compatibility", () => {
     // Read image and convert to base64
     const imagePath = path.join(
       __dirname,
-      "../../../tensorzero-internal/tests/e2e/providers/ferris.png"
+      "../../../tensorzero-core/tests/e2e/providers/ferris.png"
     );
     const ferrisPng = fs.readFileSync(imagePath).toString("base64");
 
@@ -1127,6 +1136,49 @@ describe("OpenAI Compatibility", () => {
     });
 
     expect(result.choices[0].message.content?.toLowerCase()).toContain("crab");
+  });
+
+  it("should handle multi-block file_base64", async () => {
+    // Read PDF file and convert to base64
+    const pdfPath = path.join(
+      __dirname,
+      "../../../tensorzero-core/tests/e2e/providers/deepseek_paper.pdf"
+    );
+    const deepseekPaperPdf = fs.readFileSync(pdfPath).toString("base64");
+
+    const messages: ChatCompletionMessageParam[] = [
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: "Output exactly two words describing the image",
+          },
+          {
+            type: "file",
+            file: {
+              file_data: deepseekPaperPdf,
+              filename: "test.pdf",
+            },
+          },
+        ],
+      },
+    ];
+
+    const episodeId = uuidv7();
+    const result = await client.chat.completions.create({
+      messages,
+      model: "tensorzero::model_name::dummy::require_pdf",
+      // @ts-expect-error - custom TensorZero property
+      "tensorzero::episode_id": episodeId,
+    });
+
+    expect(result.choices[0].message.content).not.toBeNull();
+    const jsonContent = JSON.parse(result.choices[0].message.content!);
+    expect(jsonContent[0].storage_path).toEqual({
+      kind: { type: "disabled" },
+      path: "observability/files/3e127d9a726f6be0fd81d73ccea97d96ec99419f59650e01d49183cd3be999ef.pdf",
+    });
   });
 });
 

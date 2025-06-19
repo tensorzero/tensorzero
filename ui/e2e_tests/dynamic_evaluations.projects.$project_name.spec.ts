@@ -14,15 +14,20 @@ test("dynamic evaluation project page should render and show correct information
   // Click on the run selector
   await page.getByText("Select dynamic evaluation runs to compare...").click();
   await page.waitForTimeout(1000);
-  // Check that the run selector has the correct runs
-  await expect(page.getByText("aac7e7")).toBeVisible();
-  await expect(page.getByText("8fddbd")).toBeVisible();
+
+  // Check that the run selector has the correct runs using CommandItem selectors
+  await expect(
+    page.getByRole("option").filter({ hasText: "aac7e7" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("option").filter({ hasText: "8fddbd" }),
+  ).toBeVisible();
   await page.waitForTimeout(500);
 
-  // Select 2 runs
-  await page.getByText("aac7e7").click();
+  // Select 2 runs using CommandItem selectors
+  await page.getByRole("option").filter({ hasText: "aac7e7" }).click();
   await page.waitForTimeout(500);
-  await page.getByText("8fddbd").click();
+  await page.getByRole("option").filter({ hasText: "8fddbd" }).click();
   await page.waitForTimeout(500);
   // Click away from the run selector
   await page.click("body");

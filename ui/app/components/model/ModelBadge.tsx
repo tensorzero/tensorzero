@@ -79,6 +79,11 @@ function formatProvider(provider: ProviderType): {
         name: "Google AI Studio",
         className: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300",
       };
+    case "groq":
+      return {
+        name: "Groq",
+        className: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300",
+      };
     case "hyperbolic":
       return {
         name: "Hyperbolic",
@@ -93,6 +98,12 @@ function formatProvider(provider: ProviderType): {
     case "openai":
       return {
         name: "OpenAI",
+        className:
+          "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300",
+      };
+    case "openrouter":
+      return {
+        name: "OpenRouter",
         className:
           "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300",
       };

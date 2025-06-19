@@ -6,7 +6,17 @@ cd "$(git rev-parse --show-toplevel)"
 
 echo "Running cursorzero.."
 
-# run the debug build of cursorzero
-./target/debug/cursorzero "$@"
+# Optional: Configure user for feedback attribution
+# Uncomment and set your preferred user identifier:
+# CURSORZERO_USER="your-username"
+
+# Build cursorzero command with optional user parameter
+CURSORZERO_CMD="cursorzero"
+if [ -n "${CURSORZERO_USER:-}" ]; then
+    CURSORZERO_CMD="$CURSORZERO_CMD --user $CURSORZERO_USER"
+fi
+
+# run the installed build of cursorzero
+$CURSORZERO_CMD "$@"
 
 echo "done!"

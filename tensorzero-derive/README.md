@@ -1,6 +1,6 @@
 # tensorzero-derive
 
-This is an internal crate containing derive macros using by `tensorzero-internal`
+This is an internal crate containing derive macros using by `tensorzero-core`
 
 Current macros:
 

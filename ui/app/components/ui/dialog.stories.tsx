@@ -8,8 +8,8 @@ import {
   DialogTitle,
 } from "./dialog";
 import { Button } from "./button";
-import type { Meta, StoryObj } from "@storybook/react";
-import { useArgs } from "@storybook/preview-api";
+import type { Meta, StoryObj } from "@storybook/react-vite";
+import { useArgs } from "storybook/preview-api";
 import { withRouter } from "storybook-addon-remix-react-router";
 
 const meta = {
