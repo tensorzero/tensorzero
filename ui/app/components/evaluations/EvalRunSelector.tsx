@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import {
@@ -15,12 +15,11 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "~/components/ui/popover";
-import { useSearchParams, useNavigate } from "react-router";
+import { useSearchParams, useNavigate, useFetcher } from "react-router";
 import type {
   EvaluationRunInfo,
   EvaluationRunSearchResult,
 } from "~/utils/clickhouse/evaluations";
-import { useSearchEvaluationRunsFetcher } from "~/routes/api/evaluations/search_runs/$evaluation_name/route";
 import { useColorAssigner } from "~/hooks/evaluations/ColorAssigner";
 import { getLastUuidSegment } from "~/components/evaluations/EvaluationRunBadge";
 import EvaluationRunBadge from "~/components/evaluations/EvaluationRunBadge";
@@ -52,10 +51,12 @@ export function EvalRunSelector({
   // Use the color assigner context
   const { getColor } = useColorAssigner();
 
-  const { data, isLoading } = useSearchEvaluationRunsFetcher({
-    evaluationName: evaluationName,
-    query: searchValue,
-  });
+  const {
+    data,
+    state,
+    load: loadRunsFetcher,
+  } = useFetcher<EvaluationRunSearchResult[]>();
+  const isLoading = state === "loading";
 
   // Filter the fetched runs based on allowedRunInfos if it's provided
   const availableRunInfos = data
@@ -128,6 +129,30 @@ export function EvalRunSelector({
     updateSelectedRunIds(newSelectedRunIdInfos);
   };
 
+  const hasInitializedRuns = useRef(false);
+  function loadRuns(query: string | null, args?: { debounce?: boolean }) {
+    if (evaluationName) {
+      const searchParams = new URLSearchParams();
+      searchParams.set("evaluation_name", evaluationName);
+      if (query) {
+        searchParams.set("q", query);
+      }
+      if (args?.debounce) {
+        searchParams.set("debounce", "");
+      }
+      hasInitializedRuns.current = true;
+      loadRunsFetcher(
+        `/api/evaluations/search_runs/${evaluationName}?${searchParams}`,
+      );
+    }
+  }
+
+  function loadInitialRuns() {
+    if (!hasInitializedRuns.current) {
+      loadRuns(null);
+    }
+  }
+
   return (
     <div className="mb-6">
       <div className="flex flex-col space-y-2">
@@ -138,6 +163,9 @@ export function EvalRunSelector({
               role="combobox"
               aria-expanded={open}
               className="flex w-96 items-center justify-between gap-2"
+              onFocus={loadInitialRuns}
+              onClick={loadInitialRuns}
+              onPointerEnter={loadInitialRuns}
             >
               <span>Select evaluation runs to compare...</span>
               <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
@@ -148,10 +176,13 @@ export function EvalRunSelector({
               <CommandInput
                 placeholder="Search by variant name or evaluation run ID..."
                 value={searchValue}
-                onValueChange={setSearchValue}
+                onValueChange={(value) => {
+                  setSearchValue(value);
+                  loadRuns(value, { debounce: true });
+                }}
               />
               <CommandList>
-                {isLoading ? (
+                {isLoading && !hasInitializedRuns.current ? (
                   <div className="flex items-center justify-center py-6">
                     <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-gray-600"></div>
                     <span className="text-muted-foreground ml-2 text-sm">
@@ -175,7 +206,8 @@ export function EvalRunSelector({
                         const runIdSegment = getLastUuidSegment(
                           info.evaluation_run_id,
                         );
-                        const isDisabled = !isSelected && !canAddMore;
+                        const isDisabled =
+                          (!isSelected && !canAddMore) || isLoading;
 
                         return (
                           <CommandItem
@@ -208,6 +240,7 @@ export function EvalRunSelector({
                           <CommandItem
                             onSelect={selectAll}
                             className="font-medium"
+                            disabled={isLoading}
                           >
                             {availableRunInfos.every((info) =>
                               selectedRunIds.includes(info.evaluation_run_id),

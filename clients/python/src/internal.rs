@@ -5,8 +5,8 @@ use pyo3::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use tensorzero_internal::serde_util::deserialize_json_string;
-use tensorzero_internal::{
+use tensorzero_core::serde_util::deserialize_json_string;
+use tensorzero_core::{
     clickhouse::ClickHouseConnectionInfo,
     config_parser::{
         Config, MetricConfig, MetricConfigLevel, MetricConfigOptimize, MetricConfigType,

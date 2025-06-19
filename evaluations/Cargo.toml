@@ -12,7 +12,7 @@ required-features = ["e2e_tests"]
 
 [dependencies]
 tensorzero = { path = "../clients/rust" }
-tensorzero-internal = { path = "../tensorzero-internal" }
+tensorzero-core = { path = "../tensorzero-core" }
 clap = { workspace = true }
 url = { workspace = true }
 tracing = { workspace = true }

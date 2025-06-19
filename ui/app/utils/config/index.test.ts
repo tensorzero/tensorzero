@@ -3,7 +3,7 @@ import { loadConfig } from "./index.server";
 
 test("parse e2e config", async () => {
   const validatedConfig = await loadConfig(
-    "./../tensorzero-internal/tests/e2e/tensorzero.toml",
+    "./../tensorzero-core/tests/e2e/tensorzero.toml",
   );
   expect(validatedConfig).toBeDefined();
   // Test something in the gateway config
@@ -49,7 +49,7 @@ test("parse e2e config", async () => {
     jsonTestFunction.variants["gcp-vertex-gemini-pro"];
   if (gcpVertexGeminiProVariant.type === "chat_completion") {
     expect(gcpVertexGeminiProVariant.model).toBe(
-      "gemini-2.5-pro-preview-05-06",
+      "gemini-2.5-pro-preview-06-05",
     );
   } else {
     throw new Error("GCP Vertex Gemini Pro variant not found");

@@ -1577,7 +1577,7 @@ func TestImageInference(t *testing.T) {
 		episodeID, _ := uuid.NewV7()
 
 		// Read image and convert to base64
-		imagePath := "../../../tensorzero-internal/tests/e2e/providers/ferris.png"
+		imagePath := "../../../tensorzero-core/tests/e2e/providers/ferris.png"
 		imageData, err := os.ReadFile(imagePath)
 		require.NoError(t, err, "Failed to read image file")
 		imageBase64 := base64.StdEncoding.EncodeToString(imageData)
