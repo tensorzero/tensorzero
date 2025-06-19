@@ -1,8 +1,8 @@
 {
   "name": "tensorzero-node",
   "version": "0.0.0",
-  "main": "index.js",
-  "types": "index.d.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "napi": {
     "name": "tensorzero-node",
     "triples": {
@@ -20,7 +20,9 @@
   "license": "Apache-2.0",
   "devDependencies": {
     "@napi-rs/cli": "^2.18.4",
-    "vitest": "^1.0.0"
+    "vitest": "^1.0.0",
+    "typescript": "^5.0.0",
+    "@types/node": "^20.0.0"
   },
   "vitest": {
     "testTimeout": 180000
@@ -30,8 +32,9 @@
   },
   "scripts": {
     "artifacts": "napi artifacts",
-    "build": "napi build --platform --release",
-    "build:debug": "napi build --platform",
+    "build": "napi build --platform --release && tsc",
+    "build:debug": "napi build --platform && tsc",
+    "build:ts": "tsc",
     "prepublishOnly": "napi prepublish -t npm",
     "test": "vitest",
     "universal": "napi universal",

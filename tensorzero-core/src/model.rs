@@ -67,6 +67,8 @@ pub struct ModelConfig {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedModelConfig {
     pub routing: Vec<Arc<str>>, // [provider name A, provider name B, ...]
@@ -619,6 +621,8 @@ fn consolidate_usage(chunks: &[ProviderInferenceResponseChunk]) -> Usage {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct UninitializedModelProvider {
     #[serde(flatten)]
     pub config: UninitializedProviderConfig,
@@ -760,6 +764,8 @@ pub enum ProviderConfig {
 /// Contains all providers which implement `SelfHostedProvider` - these providers
 /// can be used as the target provider hosted by AWS Sagemaker
 #[derive(Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 #[serde(rename_all = "lowercase")]
 #[serde(deny_unknown_fields)]
 pub enum HostedProviderKind {
@@ -767,6 +773,8 @@ pub enum HostedProviderKind {
     TGI,
 }
 
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 #[derive(Debug, TensorZeroDeserialize, VariantNames, Serialize)]
 #[strum(serialize_all = "lowercase")]
 #[serde(tag = "type")]
@@ -775,6 +783,7 @@ pub enum HostedProviderKind {
 pub enum UninitializedProviderConfig {
     Anthropic {
         model_name: String,
+        #[cfg_attr(test, ts(type = "string | null"))]
         api_key_location: Option<CredentialLocation>,
     },
     #[strum(serialize = "aws_bedrock")]
@@ -798,6 +807,7 @@ pub enum UninitializedProviderConfig {
     Azure {
         deployment_id: String,
         endpoint: Url,
+        #[cfg_attr(test, ts(type = "string | null"))]
         api_key_location: Option<CredentialLocation>,
     },
     #[strum(serialize = "gcp_vertex_anthropic")]
@@ -806,6 +816,7 @@ pub enum UninitializedProviderConfig {
         model_id: String,
         location: String,
         project_id: String,
+        #[cfg_attr(test, ts(type = "string | null"))]
         credential_location: Option<CredentialLocation>,
     },
     #[strum(serialize = "gcp_vertex_gemini")]
@@ -815,47 +826,56 @@ pub enum UninitializedProviderConfig {
         endpoint_id: Option<String>,
         location: String,
         project_id: String,
+        #[cfg_attr(test, ts(type = "string | null"))]
         credential_location: Option<CredentialLocation>,
     },
     #[strum(serialize = "google_ai_studio_gemini")]
     #[serde(rename = "google_ai_studio_gemini")]
     GoogleAIStudioGemini {
         model_name: String,
+        #[cfg_attr(test, ts(type = "string | null"))]
         api_key_location: Option<CredentialLocation>,
     },
     #[strum(serialize = "groq")]
     #[serde(rename = "groq")]
     Groq {
         model_name: String,
+        #[cfg_attr(test, ts(type = "string | null"))]
         api_key_location: Option<CredentialLocation>,
     },
     Hyperbolic {
         model_name: String,
+        #[cfg_attr(test, ts(type = "string | null"))]
         api_key_location: Option<CredentialLocation>,
     },
     #[strum(serialize = "fireworks")]
     #[serde(rename = "fireworks")]
     Fireworks {
         model_name: String,
+        #[cfg_attr(test, ts(type = "string | null"))]
         api_key_location: Option<CredentialLocation>,
         #[serde(default = "crate::providers::fireworks::default_parse_think_blocks")]
         parse_think_blocks: bool,
     },
     Mistral {
         model_name: String,
+        #[cfg_attr(test, ts(type = "string | null"))]
         api_key_location: Option<CredentialLocation>,
     },
     OpenAI {
         model_name: String,
         api_base: Option<Url>,
+        #[cfg_attr(test, ts(type = "string | null"))]
         api_key_location: Option<CredentialLocation>,
     },
     OpenRouter {
         model_name: String,
+        #[cfg_attr(test, ts(type = "string | null"))]
         api_key_location: Option<CredentialLocation>,
     },
     Together {
         model_name: String,
+        #[cfg_attr(test, ts(type = "string | null"))]
         api_key_location: Option<CredentialLocation>,
         #[serde(default = "crate::providers::together::default_parse_think_blocks")]
         parse_think_blocks: bool,
@@ -863,28 +883,34 @@ pub enum UninitializedProviderConfig {
     VLLM {
         model_name: String,
         api_base: Url,
+        #[cfg_attr(test, ts(type = "string | null"))]
         api_key_location: Option<CredentialLocation>,
     },
     XAI {
         model_name: String,
+        #[cfg_attr(test, ts(type = "string | null"))]
         api_key_location: Option<CredentialLocation>,
     },
     TGI {
         api_base: Url,
+        #[cfg_attr(test, ts(type = "string | null"))]
         api_key_location: Option<CredentialLocation>,
     },
     SGLang {
         model_name: String,
         api_base: Url,
+        #[cfg_attr(test, ts(type = "string | null"))]
         api_key_location: Option<CredentialLocation>,
     },
     DeepSeek {
         model_name: String,
+        #[cfg_attr(test, ts(type = "string | null"))]
         api_key_location: Option<CredentialLocation>,
     },
     #[cfg(any(test, feature = "e2e_tests"))]
     Dummy {
         model_name: String,
+        #[cfg_attr(test, ts(type = "string | null"))]
         api_key_location: Option<CredentialLocation>,
     },
 }

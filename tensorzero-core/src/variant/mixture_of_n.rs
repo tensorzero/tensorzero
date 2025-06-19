@@ -34,6 +34,8 @@ use super::{
 };
 
 #[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct MixtureOfNConfig {
     pub weight: Option<f64>,
     pub timeout_s: f64,
@@ -57,6 +59,8 @@ fn default_timeout() -> f64 {
 }
 
 #[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct FuserConfig {
     #[serde(flatten)]
     pub inner: ChatCompletionConfig,

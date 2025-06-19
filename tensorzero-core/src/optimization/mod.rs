@@ -40,16 +40,23 @@ pub enum OptimizerJobHandle {
     OpenAISFT(OpenAISFTJobHandle),
 }
 
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Debug, Serialize)]
+#[cfg_attr(test, ts(export))]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum OptimizerOutput {
     Variant(Box<VariantConfig>),
     Model(UninitializedModelConfig),
 }
 
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Debug, Serialize)]
+#[cfg_attr(test, ts(export))]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum OptimizerStatus {
     Pending {
         message: String,
+        #[cfg_attr(test, ts(type = "Date | null"))]
         estimated_finish: Option<DateTime<Utc>>,
         trained_tokens: Option<u64>,
         error: Option<Value>,

@@ -51,7 +51,10 @@ pub struct VariantInfo {
     pub timeouts: TimeoutsConfig,
 }
 
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Debug, Serialize)]
+#[cfg_attr(test, ts(export))]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum VariantConfig {
     ChatCompletion(chat_completion::ChatCompletionConfig),
     BestOfNSampling(best_of_n_sampling::BestOfNSamplingConfig),
@@ -66,6 +69,8 @@ pub enum VariantConfig {
 /// This is represented as a tool config in the
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub enum JsonMode {
     Off,
     On,
@@ -692,6 +697,8 @@ async fn infer_model_request_stream<'request>(
 }
 
 #[derive(Debug, Deserialize, Copy, Clone, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct RetryConfig {
     pub num_retries: usize,
     pub max_delay_s: f32,

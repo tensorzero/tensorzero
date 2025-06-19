@@ -29,6 +29,8 @@ use super::{
 };
 
 #[derive(Debug, Default, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct ChatCompletionConfig {
     pub weight: Option<f64>,
     pub model: Arc<str>,
