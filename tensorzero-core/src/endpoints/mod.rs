@@ -12,7 +12,7 @@ pub mod object_storage;
 pub mod openai_compatible;
 pub mod optimization;
 pub mod status;
-pub mod stored_inferences;
+pub mod stored_inference;
 
 pub fn validate_tags(tags: &HashMap<String, String>, internal: bool) -> Result<(), Error> {
     if internal {
