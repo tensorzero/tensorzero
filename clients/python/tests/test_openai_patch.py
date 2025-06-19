@@ -16,7 +16,7 @@ async def test_async_basic_inference_old_model_format_and_headers():
     async_client = await tensorzero.patch_openai_client(
         async_client,
         clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests",
-        config_file="../../tensorzero-internal/tests/e2e/tensorzero.toml",
+        config_file="../../tensorzero-core/tests/e2e/tensorzero.toml",
         async_setup=True,
     )
 
