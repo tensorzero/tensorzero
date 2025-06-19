@@ -293,6 +293,9 @@ pub enum ErrorDetails {
         function_name: String,
         variant_name: String,
     },
+    InvalidValFraction {
+        val_fraction: f64,
+    },
     InvalidUuid {
         raw_uuid: String,
     },
@@ -481,6 +484,7 @@ impl ErrorDetails {
             ErrorDetails::InvalidTemplatePath => tracing::Level::ERROR,
             ErrorDetails::InvalidTool { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidUuid { .. } => tracing::Level::ERROR,
+            ErrorDetails::InvalidValFraction { .. } => tracing::Level::WARN,
             ErrorDetails::JsonRequest { .. } => tracing::Level::WARN,
             ErrorDetails::JsonSchema { .. } => tracing::Level::ERROR,
             ErrorDetails::JsonSchemaValidation { .. } => tracing::Level::ERROR,
@@ -560,6 +564,7 @@ impl ErrorDetails {
             ErrorDetails::InputValidation { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InternalError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidBaseUrl { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::InvalidValFraction { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::UnsupportedContentBlockType { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidBatchParams { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidCandidate { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -900,6 +905,12 @@ impl std::fmt::Display for ErrorDetails {
                 write!(
                     f,
                     "Invalid model provider: {provider_name} for model: {model_name}"
+                )
+            }
+            ErrorDetails::InvalidValFraction { val_fraction } => {
+                write!(
+                    f,
+                    "Invalid val fraction: {val_fraction}. Must be between 0 and 1."
                 )
             }
             ErrorDetails::InvalidOpenAICompatibleRequest { message } => write!(

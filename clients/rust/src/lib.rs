@@ -10,7 +10,8 @@ use reqwest::header::HeaderMap;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use serde_json::Value;
 use std::fmt::Debug;
-pub use tensorzero_core::endpoints::optimization::Params as OptimizationParams;
+use tensorzero_core::endpoints::optimization::launch_optimization;
+pub use tensorzero_core::endpoints::optimization::LaunchOptimizationParams as OptimizationParams;
 pub use tensorzero_core::optimization::{OptimizerJobHandle, OptimizerStatus};
 use tensorzero_core::stored_inference::render_stored_inference;
 use tensorzero_core::{
@@ -846,18 +847,15 @@ impl Client {
     /// Launch an optimization job.
     pub async fn experimental_launch_optimization(
         &self,
-        params: tensorzero_core::endpoints::optimization::Params,
+        params: tensorzero_core::endpoints::optimization::LaunchOptimizationParams,
     ) -> Result<OptimizerJobHandle, TensorZeroError> {
         match &self.mode {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 // TODO: do we want this?
                 Ok(with_embedded_timeout(*timeout, async {
-                    tensorzero_core::endpoints::optimization::launch_optimization(
-                        &gateway.state.http_client,
-                        params,
-                    )
-                    .await
-                    .map_err(err_to_http)
+                    launch_optimization(&gateway.state.http_client, params)
+                        .await
+                        .map_err(err_to_http)
                 })
                 .await?)
             }
