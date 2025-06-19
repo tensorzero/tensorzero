@@ -5,7 +5,7 @@ use backon::Retryable;
 use futures::future::join_all;
 use lazy_static::lazy_static;
 use rand::Rng;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio::time::{timeout, Duration};
 
@@ -36,7 +36,7 @@ use crate::{
 use super::chat_completion::UninitializedChatCompletionConfig;
 use super::{InferenceConfig, JsonMode, ModelUsedInfo, Variant};
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct BestOfNSamplingConfig {
     pub weight: Option<f64>,
     pub timeout_s: f64,
@@ -59,8 +59,9 @@ fn default_timeout() -> f64 {
     300.0
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct EvaluatorConfig {
+    #[serde(flatten)]
     pub inner: ChatCompletionConfig,
 }
 

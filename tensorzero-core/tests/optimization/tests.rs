@@ -13,6 +13,7 @@ use tensorzero::{RenderedStoredInference, Role};
 use tensorzero_core::{
     cache::CacheOptions,
     clickhouse::ClickHouseConnectionInfo,
+    config_parser::ProviderTypesConfig,
     endpoints::inference::InferenceClients,
     inference::types::{
         resolved_input::FileWithPath,
@@ -65,6 +66,9 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
     let OptimizerStatus::Completed(OptimizerOutput::Model(model_config)) = status else {
         panic!("Expected model config");
     };
+    let model_config = model_config
+        .load("test-fine-tuned-model", &ProviderTypesConfig::default())
+        .unwrap();
     let system = "You are a helpful assistant named Dr. M.M. Patel.".to_string();
     let messages = vec![RequestMessage {
         role: Role::User,

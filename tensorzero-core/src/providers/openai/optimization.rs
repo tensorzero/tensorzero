@@ -4,14 +4,14 @@ use serde_json::Value;
 use std::{borrow::Cow, collections::HashMap};
 
 use super::{
-    prepare_openai_messages, tensorzero_to_openai_assistant_message, OpenAICredentials,
-    OpenAIFileID, OpenAIProvider, OpenAIRequestMessage, OpenAISFTTool,
+    prepare_openai_messages, tensorzero_to_openai_assistant_message, OpenAIFileID,
+    OpenAIRequestMessage, OpenAISFTTool,
 };
 use crate::{
     config_parser::TimeoutsConfig,
     error::{Error, ErrorDetails},
     inference::types::ContentBlock,
-    model::{ModelConfig, ModelProvider, ProviderConfig},
+    model::{UninitializedModelConfig, UninitializedModelProvider, UninitializedProviderConfig},
     optimization::{OptimizerOutput, OptimizerStatus},
     stored_inference::RenderedStoredInference,
 };
@@ -222,10 +222,7 @@ pub struct OpenAIFineTuningJob {
     pub status: OpenAIFineTuningJobStatus,
 }
 
-pub fn convert_to_optimizer_status(
-    job: OpenAIFineTuningJob,
-    credentials: &OpenAICredentials,
-) -> Result<OptimizerStatus, Error> {
+pub fn convert_to_optimizer_status(job: OpenAIFineTuningJob) -> Result<OptimizerStatus, Error> {
     let estimated_finish = job
         .estimated_finish
         .and_then(|unix_timestamp| DateTime::from_timestamp(unix_timestamp as i64, 0));
@@ -255,19 +252,18 @@ pub fn convert_to_optimizer_status(
                     provider_type: super::PROVIDER_TYPE.to_string(),
                 })
             })?;
-            let model_provider = ModelProvider {
-                name: model_name.clone().into(),
-                config: ProviderConfig::OpenAI(OpenAIProvider {
+            let model_provider = UninitializedModelProvider {
+                config: UninitializedProviderConfig::OpenAI {
                     model_name: model_name.clone(),
                     api_base: None,
-                    credentials: credentials.clone(),
-                }),
+                    api_key_location: None,
+                },
                 extra_headers: None,
                 extra_body: None,
                 timeouts: None,
                 discard_unknown_chunks: false,
             };
-            OptimizerStatus::Completed(OptimizerOutput::Model(ModelConfig {
+            OptimizerStatus::Completed(OptimizerOutput::Model(UninitializedModelConfig {
                 routing: vec![model_name.clone().into()],
                 providers: HashMap::from([(model_name.clone().into(), model_provider)]),
                 timeouts: TimeoutsConfig::default(),
@@ -362,7 +358,7 @@ mod tests {
             "metadata": {},
         });
         let job = serde_json::from_value::<OpenAIFineTuningJob>(succeeded_model).unwrap();
-        let status = convert_to_optimizer_status(job, &OpenAICredentials::None).unwrap();
+        let status = convert_to_optimizer_status(job).unwrap();
         assert!(matches!(
             status,
             OptimizerStatus::Completed(OptimizerOutput::Model(_))
@@ -378,7 +374,7 @@ mod tests {
             "metadata": {},
         });
         let job = serde_json::from_value::<OpenAIFineTuningJob>(succeeded_file).unwrap();
-        let status = convert_to_optimizer_status(job, &OpenAICredentials::None).unwrap();
+        let status = convert_to_optimizer_status(job).unwrap();
         assert!(matches!(
             status,
             OptimizerStatus::Completed(OptimizerOutput::Model(_))
@@ -392,7 +388,7 @@ mod tests {
             "metadata": {},
         });
         let job = serde_json::from_value::<OpenAIFineTuningJob>(running).unwrap();
-        let status = convert_to_optimizer_status(job, &OpenAICredentials::None).unwrap();
+        let status = convert_to_optimizer_status(job).unwrap();
         assert!(matches!(status, OptimizerStatus::Pending { .. }));
 
         // Test for "failed" status
@@ -403,7 +399,7 @@ mod tests {
             "metadata": {},
         });
         let job = serde_json::from_value::<OpenAIFineTuningJob>(failed).unwrap();
-        let status = convert_to_optimizer_status(job, &OpenAICredentials::None).unwrap();
+        let status = convert_to_optimizer_status(job).unwrap();
         assert!(matches!(status, OptimizerStatus::Failed));
 
         // Test for "validating_files" status
@@ -414,7 +410,7 @@ mod tests {
             "metadata": {},
         });
         let job = serde_json::from_value::<OpenAIFineTuningJob>(validating).unwrap();
-        let status = convert_to_optimizer_status(job, &OpenAICredentials::None).unwrap();
+        let status = convert_to_optimizer_status(job).unwrap();
         assert!(matches!(status, OptimizerStatus::Pending { .. }));
 
         // Test for "queued" status
@@ -425,7 +421,7 @@ mod tests {
             "metadata": {},
         });
         let job = serde_json::from_value::<OpenAIFineTuningJob>(queued).unwrap();
-        let status = convert_to_optimizer_status(job, &OpenAICredentials::None).unwrap();
+        let status = convert_to_optimizer_status(job).unwrap();
         assert!(matches!(status, OptimizerStatus::Pending { .. }));
 
         // Test for unknown status - this should result in an error from convert_to_optimizer_status
@@ -445,7 +441,7 @@ mod tests {
             "metadata": {},
         });
         let job = serde_json::from_value::<OpenAIFineTuningJob>(succeeded_missing_model).unwrap();
-        let result = convert_to_optimizer_status(job, &OpenAICredentials::None);
+        let result = convert_to_optimizer_status(job);
         assert!(result.is_err());
 
         // Test for missing status field - this would fail deserialization of OpenAIFineTuningJob

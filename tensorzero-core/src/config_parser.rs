@@ -58,7 +58,7 @@ pub struct Config<'c> {
     pub optimizers: HashMap<String, OptimizerInfo>,
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct NonStreamingTimeouts {
     #[serde(default)]
@@ -66,7 +66,7 @@ pub struct NonStreamingTimeouts {
     pub total_ms: Option<u64>,
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct StreamingTimeouts {
     #[serde(default)]
@@ -76,7 +76,7 @@ pub struct StreamingTimeouts {
 
 /// Configures the timeouts for both streaming and non-streaming requests.
 /// This can be attached to various other configs (e.g. variants, models, model providers)
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct TimeoutsConfig {
     #[serde(default)]
@@ -999,7 +999,7 @@ impl UninitializedToolConfig {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize)]
 pub struct PathWithContents {
     pub path: PathBuf,
     pub contents: String,

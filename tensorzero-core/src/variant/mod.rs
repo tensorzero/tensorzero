@@ -51,7 +51,7 @@ pub struct VariantInfo {
     pub timeouts: TimeoutsConfig,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub enum VariantConfig {
     ChatCompletion(chat_completion::ChatCompletionConfig),
     BestOfNSampling(best_of_n_sampling::BestOfNSamplingConfig),
@@ -691,7 +691,7 @@ async fn infer_model_request_stream<'request>(
     Ok((Box::pin(stream), model_used_info))
 }
 
-#[derive(Debug, Deserialize, Copy, Clone)]
+#[derive(Debug, Deserialize, Copy, Clone, Serialize)]
 pub struct RetryConfig {
     pub num_retries: usize,
     pub max_delay_s: f32,

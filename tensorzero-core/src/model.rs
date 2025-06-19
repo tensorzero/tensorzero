@@ -48,7 +48,7 @@ use crate::{
         InferenceProvider,
     },
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::providers::{
     anthropic::AnthropicProvider, aws_bedrock::AWSBedrockProvider, azure::AzureProvider,
@@ -66,9 +66,9 @@ pub struct ModelConfig {
     pub timeouts: TimeoutsConfig,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct UninitializedModelConfig {
+pub struct UninitializedModelConfig {
     pub routing: Vec<Arc<str>>, // [provider name A, provider name B, ...]
     pub providers: HashMap<Arc<str>, UninitializedModelProvider>, // provider name => provider config
     #[serde(default)]
@@ -618,8 +618,8 @@ fn consolidate_usage(chunks: &[ProviderInferenceResponseChunk]) -> Usage {
     }
 }
 
-#[derive(Debug, Deserialize)]
-pub(crate) struct UninitializedModelProvider {
+#[derive(Debug, Deserialize, Serialize)]
+pub struct UninitializedModelProvider {
     #[serde(flatten)]
     pub config: UninitializedProviderConfig,
     pub extra_body: Option<ExtraBodyConfig>,
@@ -759,7 +759,7 @@ pub enum ProviderConfig {
 
 /// Contains all providers which implement `SelfHostedProvider` - these providers
 /// can be used as the target provider hosted by AWS Sagemaker
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 #[serde(deny_unknown_fields)]
 pub enum HostedProviderKind {
@@ -767,12 +767,12 @@ pub enum HostedProviderKind {
     TGI,
 }
 
-#[derive(Debug, TensorZeroDeserialize, VariantNames)]
+#[derive(Debug, TensorZeroDeserialize, VariantNames, Serialize)]
 #[strum(serialize_all = "lowercase")]
 #[serde(tag = "type")]
 #[serde(rename_all = "lowercase")]
 #[serde(deny_unknown_fields)]
-pub(super) enum UninitializedProviderConfig {
+pub enum UninitializedProviderConfig {
     Anthropic {
         model_name: String,
         api_key_location: Option<CredentialLocation>,
@@ -860,18 +860,15 @@ pub(super) enum UninitializedProviderConfig {
         #[serde(default = "crate::providers::together::default_parse_think_blocks")]
         parse_think_blocks: bool,
     },
-    #[expect(clippy::upper_case_acronyms)]
     VLLM {
         model_name: String,
         api_base: Url,
         api_key_location: Option<CredentialLocation>,
     },
-    #[expect(clippy::upper_case_acronyms)]
     XAI {
         model_name: String,
         api_key_location: Option<CredentialLocation>,
     },
-    #[expect(clippy::upper_case_acronyms)]
     TGI {
         api_base: Url,
         api_key_location: Option<CredentialLocation>,
@@ -1504,6 +1501,23 @@ impl<'de> Deserialize<'de> for CredentialLocation {
                 "Invalid ApiKeyLocation format: {s}"
             )))
         }
+    }
+}
+
+impl Serialize for CredentialLocation {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let s = match self {
+            CredentialLocation::Env(inner) => format!("env::{inner}"),
+            CredentialLocation::PathFromEnv(inner) => format!("path_from_env::{inner}"),
+            CredentialLocation::Dynamic(inner) => format!("dynamic::{inner}"),
+            CredentialLocation::Path(inner) => format!("path::{inner}"),
+            CredentialLocation::Sdk => "sdk".to_string(),
+            CredentialLocation::None => "none".to_string(),
+        };
+        serializer.serialize_str(&s)
     }
 }
 

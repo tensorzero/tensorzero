@@ -5,7 +5,7 @@ use ts_rs::TS;
 
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::Error;
-use crate::model::ModelConfig;
+use crate::model::UninitializedModelConfig;
 use crate::optimization::openai_sft::{
     OpenAISFTConfig, OpenAISFTJobHandle, UninitializedOpenAISFTConfig,
 };
@@ -40,13 +40,13 @@ pub enum OptimizerJobHandle {
     OpenAISFT(OpenAISFTJobHandle),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub enum OptimizerOutput {
     Variant(Box<VariantConfig>),
-    Model(ModelConfig),
+    Model(UninitializedModelConfig),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub enum OptimizerStatus {
     Pending {
         message: String,

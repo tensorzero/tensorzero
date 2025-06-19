@@ -246,7 +246,7 @@ impl Optimizer for OpenAISFTConfig {
                 provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
-        convert_to_optimizer_status(job, &self.credentials)
+        convert_to_optimizer_status(job)
     }
 }
 

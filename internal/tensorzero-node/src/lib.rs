@@ -1,7 +1,7 @@
 #![deny(clippy::all)]
 use std::{path::Path, time::Duration};
 
-use tensorzero::{Client, ClientBuilder, ClientBuilderMode};
+use tensorzero::{Client, ClientBuilder, ClientBuilderMode, OptimizerJobHandle};
 
 #[macro_use]
 extern crate napi_derive;
@@ -46,5 +46,22 @@ impl TensorZeroClient {
             napi::Error::from_reason(format!("Failed to serialize job handle: {}", e))
         })?;
         Ok(job_handle_str)
+    }
+
+    #[napi]
+    pub async fn experimental_poll_optimization(
+        &self,
+        job_handle: String,
+    ) -> Result<String, napi::Error> {
+        let job_handle: OptimizerJobHandle = serde_json::from_str(&job_handle)
+            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+        let info = self
+            .client
+            .experimental_poll_optimization(job_handle)
+            .await
+            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+        let info_str =
+            serde_json::to_string(&info).map_err(|e| napi::Error::from_reason(e.to_string()))?;
+        Ok(info_str)
     }
 }
