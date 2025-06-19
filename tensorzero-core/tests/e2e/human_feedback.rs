@@ -62,9 +62,11 @@ async fn e2e_test_comment_human_feedback() {
     let serialized_inference_output =
         serde_json::to_string(&inference_response_json.get("output").unwrap()).unwrap();
 
+    let evaluator_id = Uuid::now_v7();
+
     let datapoint_id = Uuid::now_v7();
     // Test comment human evaluation feedback on episode
-    let payload = json!({"episode_id": episode_id, "metric_name": "comment", "value": "good job!", "internal": true, "tags": {"tensorzero::datapoint_id": datapoint_id.to_string(), "tensorzero::human_feedback": "true"}});
+    let payload = json!({"episode_id": episode_id, "metric_name": "comment", "value": "good job!", "internal": true, "tags": {"tensorzero::evaluator_inference_id": evaluator_id.to_string(), "tensorzero::datapoint_id": datapoint_id.to_string(), "tensorzero::human_feedback": "true"}});
     let response = client
         .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
@@ -367,7 +369,7 @@ async fn e2e_test_demonstration_feedback_json() {
     let retrieved_value = serde_json::from_str::<JsonInferenceOutput>(retrieved_value).unwrap();
     let expected_value = JsonInferenceOutput {
         parsed: Some(json!({"answer": "Tokyo"})),
-        raw: "{\"answer\":\"Tokyo\"}".to_string(),
+        raw: Some("{\"answer\":\"Tokyo\"}".to_string()),
     };
     assert_eq!(retrieved_value, expected_value);
 
@@ -493,7 +495,7 @@ async fn e2e_test_demonstration_feedback_dynamic_json() {
     let retrieved_value = serde_json::from_str::<JsonInferenceOutput>(retrieved_value).unwrap();
     let expected_value = JsonInferenceOutput {
         parsed: Some(json!({"answer": "Tokyo", "comment": "This is a comment"})),
-        raw: "{\"answer\":\"Tokyo\",\"comment\":\"This is a comment\"}".to_string(),
+        raw: Some("{\"answer\":\"Tokyo\",\"comment\":\"This is a comment\"}".to_string()),
     };
     assert_eq!(retrieved_value, expected_value);
 
@@ -966,8 +968,7 @@ async fn e2e_test_float_feedback() {
     let error_message = response_json.get("error").unwrap().as_str().unwrap();
     assert!(
         error_message.contains("Correct ID was not provided for feedback level"),
-        "Unexpected error message: {}",
-        error_message
+        "Unexpected error message: {error_message}"
     );
 
     // Running without valid inference_id. Should fail.
@@ -1138,8 +1139,7 @@ async fn e2e_test_boolean_feedback() {
     let error_message = response_json.get("error").unwrap().as_str().unwrap();
     assert!(
         error_message.contains("Correct ID was not provided for feedback level"),
-        "Unexpected error message: {}",
-        error_message
+        "Unexpected error message: {error_message}"
     );
 
     // Try string feedback (should fail)
