@@ -10,8 +10,8 @@ use reqwest::header::HeaderMap;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use serde_json::Value;
 use std::fmt::Debug;
-use tensorzero_internal::stored_inference::render_stored_inference;
-use tensorzero_internal::{
+use tensorzero_core::stored_inference::render_stored_inference;
+use tensorzero_core::{
     config_parser::Config,
     endpoints::{
         datasets::InsertDatapointParams,
@@ -33,36 +33,36 @@ use uuid::Uuid;
 mod client_inference_params;
 mod client_input;
 mod git;
-pub use tensorzero_internal::stored_inference::{
+pub use tensorzero_core::stored_inference::{
     RenderedStoredInference, StoredChatInference, StoredInference, StoredJsonInference,
 };
 pub mod input_handling;
 pub use client_inference_params::{ClientInferenceParams, ClientSecretString};
 pub use client_input::{ClientInput, ClientInputMessage, ClientInputMessageContent};
 
-pub use tensorzero_internal::cache::CacheParamsOptions;
-pub use tensorzero_internal::clickhouse::query_builder::{
+pub use tensorzero_core::cache::CacheParamsOptions;
+pub use tensorzero_core::clickhouse::query_builder::{
     BooleanMetricNode, FloatComparisonOperator, FloatMetricNode, InferenceFilterTreeNode,
     InferenceOutputSource, ListInferencesParams,
 };
-pub use tensorzero_internal::endpoints::datasets::{
+pub use tensorzero_core::endpoints::datasets::{
     ChatInferenceDatapoint, Datapoint, JsonInferenceDatapoint,
 };
-pub use tensorzero_internal::endpoints::dynamic_evaluation_run::{
+pub use tensorzero_core::endpoints::dynamic_evaluation_run::{
     DynamicEvaluationRunParams, DynamicEvaluationRunResponse,
 };
-pub use tensorzero_internal::endpoints::feedback::FeedbackResponse;
-pub use tensorzero_internal::endpoints::feedback::Params as FeedbackParams;
-pub use tensorzero_internal::endpoints::inference::{
+pub use tensorzero_core::endpoints::feedback::FeedbackResponse;
+pub use tensorzero_core::endpoints::feedback::Params as FeedbackParams;
+pub use tensorzero_core::endpoints::inference::{
     InferenceOutput, InferenceParams, InferenceResponse, InferenceResponseChunk, InferenceStream,
 };
-pub use tensorzero_internal::endpoints::object_storage::ObjectResponse;
-pub use tensorzero_internal::inference::types::storage::{StorageKind, StoragePath};
-pub use tensorzero_internal::inference::types::File;
-pub use tensorzero_internal::inference::types::{
+pub use tensorzero_core::endpoints::object_storage::ObjectResponse;
+pub use tensorzero_core::inference::types::storage::{StorageKind, StoragePath};
+pub use tensorzero_core::inference::types::File;
+pub use tensorzero_core::inference::types::{
     ContentBlockChunk, Input, InputMessage, InputMessageContent, Role,
 };
-pub use tensorzero_internal::tool::{DynamicToolParams, Tool};
+pub use tensorzero_core::tool::{DynamicToolParams, Tool};
 
 enum ClientMode {
     HTTPGateway(HTTPGateway),
@@ -156,7 +156,7 @@ pub enum TensorZeroError {
 
 #[derive(Debug, Error)]
 #[error("Internal TensorZero Error: {0}")]
-pub struct TensorZeroInternalError(#[from] tensorzero_internal::error::Error);
+pub struct TensorZeroInternalError(#[from] tensorzero_core::error::Error);
 
 #[derive(Error, Debug)]
 #[non_exhaustive]
@@ -372,13 +372,11 @@ impl Client {
                     .base_url
                     .join("feedback")
                     .map_err(|e| TensorZeroError::Other {
-                        source: tensorzero_internal::error::Error::new(
-                            ErrorDetails::InvalidBaseUrl {
-                                message: format!(
-                                    "Failed to join base URL with /feedback endpoint: {e}"
-                                ),
-                            },
-                        )
+                        source: tensorzero_core::error::Error::new(ErrorDetails::InvalidBaseUrl {
+                            message: format!(
+                                "Failed to join base URL with /feedback endpoint: {e}"
+                            ),
+                        })
                         .into(),
                     })?;
                 let builder = client.http_client.post(url).json(&params);
@@ -386,12 +384,9 @@ impl Client {
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
-                    tensorzero_internal::endpoints::feedback::feedback(
-                        gateway.state.clone(),
-                        params,
-                    )
-                    .await
-                    .map_err(err_to_http)
+                    tensorzero_core::endpoints::feedback::feedback(gateway.state.clone(), params)
+                        .await
+                        .map_err(err_to_http)
                 })
                 .await?
                 .0)
@@ -416,7 +411,7 @@ impl Client {
                         .base_url
                         .join("inference")
                         .map_err(|e| TensorZeroError::Other {
-                            source: tensorzero_internal::error::Error::new(
+                            source: tensorzero_core::error::Error::new(
                                 ErrorDetails::InvalidBaseUrl {
                                     message: format!(
                                         "Failed to join base URL with /inference endpoint: {e}"
@@ -426,7 +421,7 @@ impl Client {
                             .into(),
                         })?;
                 let body = serde_json::to_string(&params).map_err(|e| TensorZeroError::Other {
-                    source: tensorzero_internal::error::Error::new(ErrorDetails::Serialization {
+                    source: tensorzero_core::error::Error::new(ErrorDetails::Serialization {
                         message: format!(
                             "Failed to serialize inference params: {}",
                             DisplayOrDebug {
@@ -449,11 +444,9 @@ impl Client {
                 if params.stream.unwrap_or(false) {
                     let event_source =
                         builder.eventsource().map_err(|e| TensorZeroError::Other {
-                            source: tensorzero_internal::error::Error::new(
-                                ErrorDetails::JsonRequest {
-                                    message: format!("Error constructing event stream: {e:?}"),
-                                },
-                            )
+                            source: tensorzero_core::error::Error::new(ErrorDetails::JsonRequest {
+                                message: format!("Error constructing event stream: {e:?}"),
+                            })
                             .into(),
                         })?;
                     Ok(InferenceOutput::Streaming(
@@ -467,7 +460,7 @@ impl Client {
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
-                    tensorzero_internal::endpoints::inference::inference(
+                    tensorzero_core::endpoints::inference::inference(
                         gateway.state.config.clone(),
                         &gateway.state.http_client,
                         gateway.state.clickhouse_connection_info.clone(),
@@ -491,7 +484,7 @@ impl Client {
                     .base_url
                     .join("internal/object_storage")
                     .map_err(|e| TensorZeroError::Other {
-                        source: tensorzero_internal::error::Error::new(
+                        source: tensorzero_core::error::Error::new(
                             ErrorDetails::InvalidBaseUrl {
                                 message: format!(
                                     "Failed to join base URL with /internal/object_storage endpoint: {e}"
@@ -502,11 +495,9 @@ impl Client {
                     })?;
                 let storage_path_json =
                     serde_json::to_string(&storage_path).map_err(|e| TensorZeroError::Other {
-                        source: tensorzero_internal::error::Error::new(
-                            ErrorDetails::Serialization {
-                                message: format!("Failed to serialize storage path: {e}"),
-                            },
-                        )
+                        source: tensorzero_core::error::Error::new(ErrorDetails::Serialization {
+                            message: format!("Failed to serialize storage path: {e}"),
+                        })
                         .into(),
                     })?;
                 let builder = client
@@ -517,7 +508,7 @@ impl Client {
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
-                    tensorzero_internal::endpoints::object_storage::get_object(
+                    tensorzero_core::endpoints::object_storage::get_object(
                         &gateway.state.config,
                         storage_path,
                     )
@@ -545,7 +536,7 @@ impl Client {
         match &self.mode {
             ClientMode::HTTPGateway(client) => {
                 let url = client.base_url.join("dynamic_evaluation_run").map_err(|e| TensorZeroError::Other {
-                    source: tensorzero_internal::error::Error::new(ErrorDetails::InvalidBaseUrl {
+                    source: tensorzero_core::error::Error::new(ErrorDetails::InvalidBaseUrl {
                         message: format!("Failed to join base URL with /dynamic_evaluation_run endpoint: {e}"),
                     })
                     .into(),
@@ -555,7 +546,7 @@ impl Client {
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
-                    tensorzero_internal::endpoints::dynamic_evaluation_run::dynamic_evaluation_run(
+                    tensorzero_core::endpoints::dynamic_evaluation_run::dynamic_evaluation_run(
                         gateway.state.clone(),
                         params,
                     )
@@ -575,7 +566,7 @@ impl Client {
         match &self.mode {
             ClientMode::HTTPGateway(client) => {
                 let url = client.base_url.join(&format!("dynamic_evaluation_run/{run_id}/episode")).map_err(|e| TensorZeroError::Other {
-                    source: tensorzero_internal::error::Error::new(ErrorDetails::InvalidBaseUrl {
+                    source: tensorzero_core::error::Error::new(ErrorDetails::InvalidBaseUrl {
                         message: format!("Failed to join base URL with /dynamic_evaluation_run/{run_id}/episode endpoint: {e}"),
                     })
                     .into(),
@@ -585,7 +576,7 @@ impl Client {
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
-                    tensorzero_internal::endpoints::dynamic_evaluation_run::dynamic_evaluation_run_episode(
+                    tensorzero_core::endpoints::dynamic_evaluation_run::dynamic_evaluation_run_episode(
                         gateway.state.clone(),
                         run_id,
                         params,
@@ -606,7 +597,7 @@ impl Client {
         match &self.mode {
             ClientMode::HTTPGateway(client) => {
                 let url = client.base_url.join(&format!("datasets/{dataset_name}/datapoints/bulk")).map_err(|e| TensorZeroError::Other {
-                    source: tensorzero_internal::error::Error::new(ErrorDetails::InvalidBaseUrl {
+                    source: tensorzero_core::error::Error::new(ErrorDetails::InvalidBaseUrl {
                         message: format!("Failed to join base URL with /datasets/{dataset_name}/datapoints/bulk endpoint: {e}"),
                     })
                     .into(),
@@ -616,7 +607,7 @@ impl Client {
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
-                    tensorzero_internal::endpoints::datasets::insert_datapoint(
+                    tensorzero_core::endpoints::datasets::insert_datapoint(
                         dataset_name,
                         params,
                         &gateway.state.config,
@@ -639,14 +630,14 @@ impl Client {
         match &self.mode {
             ClientMode::HTTPGateway(client) => {
                 let url = client.base_url.join(&format!("datasets/{dataset_name}/datapoints/{datapoint_id}")).map_err(|e| TensorZeroError::Other {
-                    source: tensorzero_internal::error::Error::new(ErrorDetails::InvalidBaseUrl {
+                    source: tensorzero_core::error::Error::new(ErrorDetails::InvalidBaseUrl {
                         message: format!("Failed to join base URL with /datasets/{dataset_name}/datapoints/{datapoint_id} endpoint: {e}"),
                     })
                     .into(),
                 })?;
                 let builder = client.http_client.delete(url);
                 let resp = builder.send().await.map_err(|e| TensorZeroError::Other {
-                    source: tensorzero_internal::error::Error::new(ErrorDetails::JsonRequest {
+                    source: tensorzero_core::error::Error::new(ErrorDetails::JsonRequest {
                         message: format!("Error deleting datapoint: {e:?}"),
                     })
                     .into(),
@@ -655,7 +646,7 @@ impl Client {
                     Ok(())
                 } else {
                     Err(TensorZeroError::Other {
-                        source: tensorzero_internal::error::Error::new(ErrorDetails::JsonRequest {
+                        source: tensorzero_core::error::Error::new(ErrorDetails::JsonRequest {
                             message: format!(
                                 "Error deleting datapoint: {}",
                                 resp.text().await.unwrap_or_default()
@@ -667,7 +658,7 @@ impl Client {
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
-                    tensorzero_internal::endpoints::datasets::delete_datapoint(
+                    tensorzero_core::endpoints::datasets::delete_datapoint(
                         dataset_name,
                         datapoint_id,
                         &gateway.state.clickhouse_connection_info,
@@ -689,7 +680,7 @@ impl Client {
         match &self.mode {
             ClientMode::HTTPGateway(client) => {
                 let url = client.base_url.join(&format!("datasets/{dataset_name}/datapoints")).map_err(|e| TensorZeroError::Other {
-                    source: tensorzero_internal::error::Error::new(ErrorDetails::InvalidBaseUrl {
+                    source: tensorzero_core::error::Error::new(ErrorDetails::InvalidBaseUrl {
                         message: format!("Failed to join base URL with /datasets/{dataset_name}/datapoints endpoint: {e}"),
                     })
                     .into(),
@@ -702,7 +693,7 @@ impl Client {
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
-                    tensorzero_internal::endpoints::datasets::list_datapoints(
+                    tensorzero_core::endpoints::datasets::list_datapoints(
                         dataset_name,
                         &gateway.state.clickhouse_connection_info,
                         limit,
@@ -724,7 +715,7 @@ impl Client {
         match &self.mode {
             ClientMode::HTTPGateway(client) => {
                 let url = client.base_url.join(&format!("datasets/{dataset_name}/datapoints/{datapoint_id}")).map_err(|e| TensorZeroError::Other {
-                    source: tensorzero_internal::error::Error::new(ErrorDetails::InvalidBaseUrl {
+                    source: tensorzero_core::error::Error::new(ErrorDetails::InvalidBaseUrl {
                         message: format!("Failed to join base URL with /datasets/{dataset_name}/datapoints/{datapoint_id} endpoint: {e}"),
                     })
                     .into(),
@@ -734,7 +725,7 @@ impl Client {
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
-                    tensorzero_internal::endpoints::datasets::get_datapoint(
+                    tensorzero_core::endpoints::datasets::get_datapoint(
                         dataset_name,
                         datapoint_id,
                         &gateway.state.clickhouse_connection_info,
@@ -767,7 +758,7 @@ impl Client {
         // TODO: consider adding a flag that returns the generated sql query
         let ClientMode::EmbeddedGateway { gateway, .. } = &self.mode else {
             return Err(TensorZeroError::Other {
-                source: tensorzero_internal::error::Error::new(ErrorDetails::InvalidClientMode {
+                source: tensorzero_core::error::Error::new(ErrorDetails::InvalidClientMode {
                     mode: "Http".to_string(),
                     message: "This function is only available in EmbeddedGateway mode".to_string(),
                 })
@@ -798,7 +789,7 @@ impl Client {
     ) -> Result<Vec<RenderedStoredInference>, TensorZeroError> {
         let ClientMode::EmbeddedGateway { gateway, .. } = &self.mode else {
             return Err(TensorZeroError::Other {
-                source: tensorzero_internal::error::Error::new(ErrorDetails::InvalidClientMode {
+                source: tensorzero_core::error::Error::new(ErrorDetails::InvalidClientMode {
                     mode: "Http".to_string(),
                     message: "This function is only available in EmbeddedGateway mode".to_string(),
                 })
@@ -859,7 +850,7 @@ impl Client {
                 TensorZeroError::RequestTimeout
             } else {
                 TensorZeroError::Other {
-                    source: tensorzero_internal::error::Error::new(ErrorDetails::JsonRequest {
+                    source: tensorzero_core::error::Error::new(ErrorDetails::JsonRequest {
                         message: format!(
                             "Error from server: {}",
                             DisplayOrDebug {
@@ -882,7 +873,7 @@ impl Client {
             return Err(TensorZeroError::Http {
                 status_code,
                 text,
-                source: tensorzero_internal::error::Error::new(ErrorDetails::JsonRequest {
+                source: tensorzero_core::error::Error::new(ErrorDetails::JsonRequest {
                     message: format!(
                         "Request failed: {}",
                         DisplayOrDebug {
@@ -896,7 +887,7 @@ impl Client {
         }
 
         resp.json().await.map_err(|e| TensorZeroError::Other {
-            source: tensorzero_internal::error::Error::new(ErrorDetails::Serialization {
+            source: tensorzero_core::error::Error::new(ErrorDetails::Serialization {
                 message: format!(
                     "Error deserializing response: {}",
                     DisplayOrDebug {
@@ -924,8 +915,8 @@ impl Client {
                 panic!("Peeked error but got non-err {res:?}");
             };
             let err_str = format!("Error in streaming response: {e:?}");
-            let inner_err = tensorzero_internal::error::Error::new(ErrorDetails::StreamError {
-                source: Box::new(tensorzero_internal::error::Error::new(
+            let inner_err = tensorzero_core::error::Error::new(ErrorDetails::StreamError {
+                source: Box::new(tensorzero_core::error::Error::new(
                     ErrorDetails::Serialization { message: err_str },
                 )),
             });
@@ -937,7 +928,7 @@ impl Client {
                 });
             }
             return Err(TensorZeroError::Other {
-                source: tensorzero_internal::error::Error::new(ErrorDetails::StreamError {
+                source: tensorzero_core::error::Error::new(ErrorDetails::StreamError {
                     source: Box::new(inner_err),
                 })
                 .into(),
@@ -951,8 +942,8 @@ impl Client {
                         if matches!(e, reqwest_eventsource::Error::StreamEnded) {
                             break;
                         }
-                        yield Err(tensorzero_internal::error::Error::new(ErrorDetails::StreamError {
-                            source: Box::new(tensorzero_internal::error::Error::new(ErrorDetails::Serialization {
+                        yield Err(tensorzero_core::error::Error::new(ErrorDetails::StreamError {
+                            source: Box::new(tensorzero_core::error::Error::new(ErrorDetails::Serialization {
                                 message: format!("Error in streaming response: {}", DisplayOrDebug {
                                     val: e,
                                     debug: verbose_errors,
@@ -967,7 +958,7 @@ impl Client {
                                 break;
                             }
                             let json: serde_json::Value = serde_json::from_str(&message.data).map_err(|e| {
-                                tensorzero_internal::error::Error::new(ErrorDetails::Serialization {
+                                tensorzero_core::error::Error::new(ErrorDetails::Serialization {
                                     message: format!("Error deserializing inference response chunk: {}", DisplayOrDebug {
                                         val: e,
                                         debug: verbose_errors,
@@ -975,8 +966,8 @@ impl Client {
                                 })
                             })?;
                             if let Some(err) = json.get("error") {
-                                yield Err(tensorzero_internal::error::Error::new(ErrorDetails::StreamError {
-                                    source: Box::new(tensorzero_internal::error::Error::new(ErrorDetails::Serialization {
+                                yield Err(tensorzero_core::error::Error::new(ErrorDetails::StreamError {
+                                    source: Box::new(tensorzero_core::error::Error::new(ErrorDetails::Serialization {
                                         message: format!("Stream produced an error: {}", DisplayOrDebug {
                                             val: err,
                                             debug: verbose_errors,
@@ -986,7 +977,7 @@ impl Client {
                             } else {
                                 let data: InferenceResponseChunk =
                                 serde_json::from_value(json).map_err(|e| {
-                                    tensorzero_internal::error::Error::new(ErrorDetails::Serialization {
+                                    tensorzero_core::error::Error::new(ErrorDetails::Serialization {
                                         message: format!("Error deserializing json value as InferenceResponseChunk: {}", DisplayOrDebug {
                                             val: e,
                                             debug: verbose_errors,
@@ -1138,7 +1129,7 @@ fn try_adjust_tool_call_arguments(
 // errors for certain embedded gateway errors. For example, a config parsing error
 // should be `TensorZeroError::Other`, not `TensorZeroError::Http`.
 #[doc(hidden)]
-pub fn err_to_http(e: tensorzero_internal::error::Error) -> TensorZeroError {
+pub fn err_to_http(e: tensorzero_core::error::Error) -> TensorZeroError {
     TensorZeroError::Http {
         status_code: e.status_code().as_u16(),
         text: Some(serde_json::json!({"error": e.to_string()}).to_string()),
@@ -1147,7 +1138,7 @@ pub fn err_to_http(e: tensorzero_internal::error::Error) -> TensorZeroError {
 }
 
 #[cfg(feature = "pyo3")]
-pub use tensorzero_internal::observability;
+pub use tensorzero_core::observability;
 
 #[cfg(test)]
 mod tests {
@@ -1218,7 +1209,7 @@ mod tests {
     use super::compare_versions;
     use super::try_adjust_tool_call_arguments;
     use serde_json::Value;
-    use tensorzero_internal::tool::ToolCallInput;
+    use tensorzero_core::tool::ToolCallInput;
 
     #[test]
     fn test_compare_versions() {

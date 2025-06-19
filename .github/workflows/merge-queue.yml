@@ -135,7 +135,7 @@ jobs:
       - name: Launch ClickHouse container for E2E tests
         run: |
           # 'docker compose' will exit with status code 1 if any container exits, even if the container exits with status code 0
-          docker compose -f tensorzero-internal/tests/e2e/docker-compose.yml up -d --wait || true
+          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up -d --wait || true
 
       - name: Launch the provider-proxy cache for E2E tests
         run: |
@@ -239,7 +239,7 @@ jobs:
       - name: Launch ClickHouse container for E2E tests
         run: |
           # 'docker compose' will exit with status code 1 if any container exits, even if the container exits with status code 0
-          docker compose -f tensorzero-internal/tests/e2e/docker-compose.yml up -d --wait || true
+          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up -d --wait || true
 
       - name: Set up .env file for production deployment tests
         run: |
@@ -255,7 +255,7 @@ jobs:
       - name: Take down docker compose for production deployment tests
         run: |
           docker compose -f examples/production-deployment/docker-compose.yml down
-          docker compose -f tensorzero-internal/tests/e2e/docker-compose.yml down
+          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml down
 
   # See 'ci/README.md' at the repository root for more details.
   check-all-live-tests-passed:

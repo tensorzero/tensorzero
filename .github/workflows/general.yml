@@ -345,10 +345,10 @@ jobs:
         run: wasm-pack test --node --features console_error_panic_hook
 
       - name: Run ESLint
-        run: pnpm --filter=tensorzero-ui run lint
+        run: pnpm --filter=tensorzero-ui run lint:check
 
       - name: Run Prettier
-        run: pnpm --filter=tensorzero-ui run format
+        run: pnpm --filter=tensorzero-ui run format:check
 
       - name: pnpm TypeScript type checking
         run: pnpm --filter=tensorzero-ui run typecheck
@@ -409,7 +409,7 @@ jobs:
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
 
       - name: Launch ClickHouse container for E2E tests
-        run: TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-internal/tests/e2e/docker-compose.yml up clickhouse --wait
+        run: TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up clickhouse --wait
 
       # Make an HTTP request to ClickHouse and check that the version matches '${{ matrix.clickhouse_version }}'
       - name: Check ClickHouse version
