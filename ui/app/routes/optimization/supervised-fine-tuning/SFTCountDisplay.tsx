@@ -1,5 +1,7 @@
 import type { Control } from "react-hook-form";
 import { useWatch } from "react-hook-form";
+import { useState } from "react";
+import { ChevronDown } from "lucide-react";
 import type { SFTFormValues } from "./types";
 
 export function SFTCountDisplay({
@@ -15,6 +17,8 @@ export function SFTCountDisplay({
   metricCuratedInferenceCount: number | null;
   isLoading: boolean;
 }) {
+  const [showSplit, setShowSplit] = useState(false);
+  
   const watchedFields = useWatch({
     control,
     name: ["maxSamples", "validationSplitPercent"] as const,
@@ -83,20 +87,36 @@ export function SFTCountDisplay({
 
       {actualSamples > 0 && (
         <>
-          <div className="flex flex-row items-center py-2 border-b border-border justify-between gap-2">
-            <span>Total Samples</span>
-            <span className="font-medium">{actualSamples.toLocaleString()}</span>
+          <div className="flex flex-row items-center justify-between gap-2 py-2">
+            <div className="flex items-center gap-2">
+              <span className="font-medium text-fg-primary">Total Samples</span>
+                <button
+                  type="button"
+                  onClick={() => setShowSplit(!showSplit)}
+                  className="flex items-center gap-1 text-xs font-medium text-fg-secondary hover:bg-neutral-300 transition-colors bg-neutral-200 rounded-md pl-1.5 pr-1 py-px"
+                >
+                  <span>Show Split</span>
+                  <ChevronDown
+                    className={`w-3 h-3 transition-transform ${showSplit ? 'rotate-180' : ''}`}
+                  />
+                </button>
+            </div>
+            <span className="font-semibold text-fg-primary">{actualSamples.toLocaleString()}</span>
           </div>
           
-          <div className="flex flex-row items-center py-2 border-b border-border justify-between gap-2">
-            <span>Training Samples</span>
-            <span className="font-medium">{trainingCount.toLocaleString()}</span>
-          </div>
-          
-          <div className="flex flex-row items-center pt-2 font-medium text-fg-primary justify-between gap-2">
-            <span>Validation Samples</span>
-            <span className="font-medium">{validationCount.toLocaleString()}</span>
-          </div>
+          {showSplit && (
+            <>
+              <div className="flex py-2 border-t border-border flex-row items-center justify-between gap-2">
+                <span>Training Samples</span>
+                <span className="font-medium">{trainingCount.toLocaleString()}</span>
+              </div>
+              
+              <div className="flex pt-2 border-t border-border flex-row items-center justify-between gap-2">
+                <span>Validation Samples</span>
+                <span className="font-medium">{validationCount.toLocaleString()}</span>
+              </div>
+            </>
+          )}
         </>
       )}
     </div>
