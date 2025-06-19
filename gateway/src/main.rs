@@ -157,12 +157,24 @@ async fn main() {
             }
         }
 
-        delayed_log_config
-            .delayed_otel
-            .enable_otel()
-            .expect_pretty("Failed to enable OpenTelemetry");
-
+        match delayed_log_config.delayed_otel {
+            Ok(delayed_otel) => {
+                delayed_otel
+                    .enable_otel()
+                    .expect_pretty("Failed to enable OpenTelemetry");
+            }
+            Err(e) => {
+                tracing::error!(
+                    "Could not enable OpenTelemetry export due to previous error: `{e}`. Exiting."
+                );
+                std::process::exit(1);
+            }
+        }
         tracing::info!("Enabled OpenTelemetry OTLP export");
+    } else if let Err(e) = delayed_log_config.delayed_otel {
+        tracing::warn!(
+            "[gateway.export.otlp.traces.enabled]  is `false`, so ignoring OpenTelemetry error: `{e}`"
+        );
     }
 
     // Initialize AppState
