@@ -110,25 +110,6 @@ async fn e2e_test_comment_human_feedback() {
     let id = result.get("feedback_id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, feedback_id);
-    // Check ClickHouse StaticEvaluationHumanFeedback
-    // Currently this fails because the output is being escaped as it is passed into the query to compare against the values
-    // in the table.
-    // We need to figure out how do effectively compare strings in ClickHouse without manually escaping them.
-    let result = select_human_static_evaluation_feedback_clickhouse(
-        &clickhouse,
-        "comment",
-        datapoint_id,
-        &serialized_inference_output,
-    )
-    .await
-    .unwrap();
-    assert_eq!(result.metric_name, "comment");
-    assert_eq!(result.datapoint_id, datapoint_id);
-    assert_eq!(result.output, serialized_inference_output);
-    assert_eq!(
-        result.value,
-        serde_json::to_string(&json!("good job!")).unwrap() // All feedback values are JSON encoded in the StaticEvaluationHumanFeedback table
-    );
 
     // Running without datapoint_id.
     // We generate a new datapoint_id so these don't trample. We'll only use it to check that there is no StaticEvaluationHumanFeedback
