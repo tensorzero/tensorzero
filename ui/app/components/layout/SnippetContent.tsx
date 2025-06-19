@@ -64,11 +64,11 @@ export function CodeMessage({
     <div className="relative w-full">
       <Label text={label} />
 
-      <div className="bg-bg-primary w-full overflow-hidden rounded-lg">
+      <div className="w-full overflow-hidden">
         <div className="w-full">
           <div className="flex w-full">
             {showLineNumbers && (
-              <div className="bg-bg-primary text-fg-muted pointer-events-none sticky left-0 min-w-[2rem] shrink-0 pr-3 text-right font-mono select-none">
+              <div className="text-fg-muted pointer-events-none sticky left-0 min-w-[2rem] shrink-0 pr-3 text-right font-mono select-none">
                 {Array.from({ length: lineCount }, (_, i) => (
                   <div key={i} className="text-sm leading-6">
                     {i + 1}
@@ -94,12 +94,14 @@ export function CodeMessage({
 interface TextMessageProps {
   label?: string;
   content?: string;
+  type?: "default" | "structured";
   emptyMessage?: string;
 }
 
 export function TextMessage({
   label,
   content,
+  type = "default",
   emptyMessage,
 }: TextMessageProps) {
   if (!content) {
@@ -107,56 +109,18 @@ export function TextMessage({
   }
 
   return (
-    <div className="relative flex max-w-200 min-w-80 flex-col gap-2">
+    <div className="flex max-w-240 min-w-80 flex-col gap-1">
       <Label
         text={label}
         icon={<AlignLeft className="text-fg-muted h-3 w-3" />}
       />
-
-      <div className="bg-bg-primary w-full overflow-hidden rounded-lg">
-        <div className="text-fg-primary text-sm break-words whitespace-pre-wrap">
-          {content || ""}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Input Text Message component
-interface InputTextMessageProps {
-  content: string;
-}
-
-export function InputTextMessage({ content }: InputTextMessageProps) {
-  return (
-    <div className="flex max-w-200 min-w-80 flex-col gap-1">
-      <Label
-        text="Text"
-        icon={<AlignLeft className="text-fg-muted h-3 w-3" />}
-      />
-      <pre className="whitespace-pre-wrap">
-        <span className="font-sans text-sm">{content}</span>
-      </pre>
-    </div>
-  );
-}
-
-interface TextMessageWithArgumentsProps {
-  content: object;
-}
-
-export function TextMessageWithArguments({
-  content,
-}: TextMessageWithArgumentsProps) {
-  return (
-    <div className="flex max-w-200 min-w-80 flex-col gap-1.5">
-      <Label
-        text="Text (Arguments)"
-        icon={<AlignLeft className="text-fg-muted h-3 w-3" />}
-      />
-      <pre className="max-w-full font-mono text-sm break-words whitespace-pre-wrap">
-        {JSON.stringify(content, null, 2)}
-      </pre>
+      {type === "structured" ? (
+        <pre className="w-full font-mono text-sm break-words whitespace-pre-wrap">
+          {content}
+        </pre>
+      ) : (
+        <span className="text-fg-primary w-full text-sm">{content}</span>
+      )}
     </div>
   );
 }
@@ -174,23 +138,25 @@ export function ToolCallMessage({
   toolCallId,
 }: ToolCallMessageProps) {
   return (
-    <div className="flex max-w-200 min-w-80 flex-col gap-1 overflow-x-auto">
+    <div className="flex max-w-240 min-w-80 flex-col gap-1">
       <Label
         text="Tool Call"
         icon={<Terminal className="text-fg-muted h-3 w-3" />}
       />
-      <div className="border-border bg-bg-tertiary flex flex-col gap-1 rounded-md border px-3 py-2">
-        <div className="flex flex-row items-center gap-1 whitespace-nowrap">
-          <span className="text-fg-secondary w-16 min-w-16 text-sm">Name:</span>
-          <span className="text-sm">{toolName}</span>
+      <div className="border-border bg-bg-tertiary flex flex-col gap-1 rounded-md border px-3 py-2 text-sm">
+        <div className="flex flex-row items-start gap-1 whitespace-nowrap">
+          <span className="text-fg-secondary w-16 min-w-16">Name:</span>
+          <span className="overflow-hidden text-ellipsis">{toolName}</span>
         </div>
-        <div className="flex flex-row items-center gap-1 whitespace-nowrap">
-          <span className="text-fg-secondary w-16 min-w-16 text-sm">ID:</span>
-          <span className="font-mono text-sm">{toolCallId}</span>
+        <div className="flex flex-row items-start gap-1 whitespace-nowrap">
+          <span className="text-fg-secondary w-16 min-w-16">ID:</span>
+          <span className="overflow-hidden font-mono text-ellipsis">
+            {toolCallId}
+          </span>
         </div>
         <div className="flex flex-row items-start gap-1">
-          <span className="text-fg-secondary w-16 min-w-16 text-sm">Args:</span>
-          <pre className="max-w-full font-mono text-sm break-words whitespace-pre-wrap">
+          <span className="text-fg-secondary w-16 min-w-16">Args:</span>
+          <pre className="max-w-full font-mono break-words whitespace-pre-wrap">
             {toolArguments}
           </pre>
         </div>
@@ -212,27 +178,29 @@ export function ToolResultMessage({
   toolResultId,
 }: ToolResultMessageProps) {
   return (
-    <div className="flex max-w-200 min-w-80 flex-col gap-1 overflow-x-auto">
+    <div className="flex max-w-240 min-w-80 flex-col gap-1">
       <Label
         text="Tool Result"
         icon={<ArrowRight className="text-fg-muted h-3 w-3" />}
       />
-      <div className="border-border bg-bg-tertiary flex flex-col gap-1 rounded-md border px-3 py-2">
+      <div className="border-border bg-bg-tertiary flex flex-col gap-1 rounded-md border px-3 py-2 text-sm">
         <div className="flex flex-row items-start gap-1 whitespace-nowrap">
-          <span className="text-fg-secondary w-16 min-w-16 text-sm">Name:</span>
-          <span className="text-sm">{toolName}</span>
+          <span className="text-fg-secondary w-16 min-w-16">Name:</span>
+          <span className="overflow-hidden text-ellipsis">{toolName}</span>
         </div>
         <div className="flex flex-row items-start gap-1 whitespace-nowrap">
-          <span className="text-fg-secondary w-16 min-w-16 text-sm">ID:</span>
-          <span className="font-mono text-sm">{toolResultId}</span>
+          <span className="text-fg-secondary w-16 min-w-16">ID:</span>
+          <span className="overflow-hidden font-mono text-ellipsis">
+            {toolResultId}
+          </span>
         </div>
         <div className="flex flex-row items-start gap-1">
-          <span className="text-fg-secondary w-16 min-w-16 text-sm">
-            Result:
-          </span>
-          <pre className="max-w-full font-mono text-sm break-words whitespace-pre-wrap">
-            {toolResult}
-          </pre>
+          <span className="text-fg-secondary w-16 min-w-16">Result:</span>
+          <div className="w-full overflow-x-auto">
+            <pre className="max-w-full font-mono break-words whitespace-pre-wrap">
+              {toolResult}
+            </pre>
+          </div>
         </div>
       </div>
     </div>
@@ -267,8 +235,12 @@ export function ImageMessage({ url, downloadName }: ImageMessageProps) {
   );
 }
 
+interface ImageErrorMessageProps {
+  error: string;
+}
+
 // Image Error Message component
-export function ImageErrorMessage() {
+export function ImageErrorMessage({ error }: ImageErrorMessageProps) {
   return (
     <div className="flex flex-col gap-1.5">
       <Label
@@ -279,29 +251,10 @@ export function ImageErrorMessage() {
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-2">
           <ImageOff className="text-fg-muted h-4 w-4" />
           <span className="text-fg-tertiary text-center text-xs font-medium">
-            Failed to retrieve image
+            {error}
           </span>
         </div>
       </div>
-    </div>
-  );
-}
-
-// Raw Text Message component
-interface RawTextMessageProps {
-  content: string;
-}
-
-export function RawTextMessage({ content }: RawTextMessageProps) {
-  return (
-    <div className="flex max-w-200 min-w-80 flex-col gap-1.5">
-      <Label
-        text="Text (Raw)"
-        icon={<AlignLeft className="text-fg-muted h-3 w-3" />}
-      />
-      <pre className="whitespace-pre-wrap">
-        <span className="font-mono text-sm">{content}</span>
-      </pre>
     </div>
   );
 }

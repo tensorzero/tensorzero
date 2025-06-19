@@ -28,14 +28,13 @@ from uuid import UUID
 
 import pytest
 import pytest_asyncio
-import tensorzero
 from openai import AsyncOpenAI, BadRequestError
 from pydantic import BaseModel, ValidationError
-from tensorzero.util import uuid7
+from uuid_utils.compat import uuid7
 
 TEST_CONFIG_FILE = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
-    "../../../tensorzero-internal/tests/e2e/tensorzero.toml",
+    "../../../tensorzero-core/tests/e2e/tensorzero.toml",
 )
 
 
@@ -48,33 +47,6 @@ async def async_client():
 
 
 @pytest.mark.asyncio
-async def test_async_basic_inference_old_model_format_and_headers(async_client):
-    messages = [
-        {"role": "system", "content": [{"assistant_name": "Alfred Pennyworth"}]},
-        {"role": "user", "content": "Hello"},
-    ]
-
-    result = await async_client.chat.completions.create(
-        extra_headers={"episode_id": str(uuid7())},
-        messages=messages,
-        model="tensorzero::function_name::basic_test",
-        temperature=0.4,
-    )
-    # Verify IDs are valid UUIDs
-    UUID(result.id)  # Will raise ValueError if invalid
-    UUID(result.episode_id)  # Will raise ValueError if invalid
-    assert (
-        result.choices[0].message.content
-        == "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
-    )
-    usage = result.usage
-    assert usage.prompt_tokens == 10
-    assert usage.completion_tokens == 10
-    assert usage.total_tokens == 20
-    assert result.choices[0].finish_reason == "stop"
-
-
-@pytest.mark.asyncio
 async def test_async_basic_inference(async_client):
     messages = [
         {"role": "system", "content": [{"assistant_name": "Alfred Pennyworth"}]},
@@ -82,7 +54,10 @@ async def test_async_basic_inference(async_client):
     ]
 
     result = await async_client.chat.completions.create(
-        extra_body={"tensorzero::episode_id": str(uuid7())},
+        extra_body={
+            "tensorzero::episode_id": str(uuid7()),
+            "tensorzero::tags": {"foo": "bar"},
+        },
         messages=messages,
         model="tensorzero::function_name::basic_test",
         temperature=0.4,
@@ -99,6 +74,7 @@ async def test_async_basic_inference(async_client):
     assert usage.completion_tokens == 10
     assert usage.total_tokens == 20
     assert result.choices[0].finish_reason == "stop"
+    assert result.service_tier is None
 
 
 class DummyModel(BaseModel):
@@ -209,6 +185,7 @@ async def test_async_inference_streaming_with_cache(async_client):
 
     content = ""
     for i, chunk in enumerate(chunks[:-1]):  # All but the last chunk
+        assert chunk.service_tier is None
         if i < len(expected_text):
             assert chunk.choices[0].delta.content == expected_text[i]
             content += chunk.choices[0].delta.content
@@ -527,6 +504,7 @@ async def test_async_tool_call_streaming(async_client):
     ]
     previous_inference_id = None
     previous_episode_id = None
+    name_seen = False
     for i, chunk in enumerate(chunks):
         if previous_inference_id is not None:
             assert chunk.id == previous_inference_id
@@ -544,7 +522,10 @@ async def test_async_tool_call_streaming(async_client):
             assert len(chunk.choices[0].delta.tool_calls) == 1
             tool_call = chunk.choices[0].delta.tool_calls[0]
             assert tool_call.type == "function"
-            assert tool_call.function.name == "get_temperature"
+            if tool_call.function.name is not None and tool_call.function.name != "":
+                assert not name_seen
+                assert tool_call.function.name == "get_temperature"
+                name_seen = True
             assert tool_call.function.arguments == expected_text[i]
         else:
             assert chunk.choices[0].delta.content is None
@@ -552,6 +533,7 @@ async def test_async_tool_call_streaming(async_client):
             # We did not send 'include_usage'
             assert chunk.usage is None
             assert chunk.choices[0].finish_reason == "tool_calls"
+    assert name_seen
 
 
 @pytest.mark.asyncio
@@ -996,7 +978,6 @@ async def test_dynamic_tool_use_inference_openai(async_client):
 
 @pytest.mark.asyncio
 async def test_dynamic_json_mode_inference_body_param_openai(async_client):
-    header_episode_id = str(uuid7())
     body_episode_id = str(uuid7())
     output_schema = {
         "type": "object",
@@ -1023,9 +1004,6 @@ async def test_dynamic_json_mode_inference_body_param_openai(async_client):
         {"role": "user", "content": [{"country": "Japan"}]},
     ]
     result = await async_client.chat.completions.create(
-        extra_headers={
-            "episode_id": header_episode_id,
-        },
         extra_body={
             "tensorzero::episode_id": body_episode_id,
             "tensorzero::variant_name": "openai",
@@ -1062,50 +1040,6 @@ async def test_dynamic_json_mode_inference_openai(async_client):
             "description": "test",
             "schema": output_schema,
         },
-    }
-    messages = [
-        {
-            "role": "system",
-            "content": [
-                {"assistant_name": "Dr. Mehta", "schema": serialized_output_schema}
-            ],
-        },
-        {"role": "user", "content": [{"country": "Japan"}]},
-    ]
-    result = await async_client.chat.completions.create(
-        extra_body={
-            "tensorzero::episode_id": episode_id,
-            "tensorzero::variant_name": "openai",
-        },
-        messages=messages,
-        model="tensorzero::function_name::dynamic_json",
-        response_format=response_format,
-    )
-    assert (
-        result.model == "tensorzero::function_name::dynamic_json::variant_name::openai"
-    )
-    assert result.episode_id == episode_id
-    json_content = json.loads(result.choices[0].message.content)
-    assert "tokyo" in json_content["response"].lower()
-    assert result.choices[0].message.tool_calls is None
-    assert result.usage.prompt_tokens > 50
-    assert result.usage.completion_tokens > 0
-
-
-@pytest.mark.asyncio
-async def test_dynamic_json_mode_inference_openai_deprecated(async_client):
-    episode_id = str(uuid7())
-    output_schema = {
-        "type": "object",
-        "properties": {"response": {"type": "string"}},
-        "required": ["response"],
-        "additionalProperties": False,
-    }
-    serialized_output_schema = json.dumps(output_schema)
-    # This response format is deprecated and will be rejected in a future TensorZero release.
-    response_format = {
-        "type": "json_schema",
-        "json_schema": output_schema,
     }
     messages = [
         {
@@ -1215,7 +1149,7 @@ async def test_async_multi_block_image_url(async_client):
 async def test_async_multi_block_image_base64(async_client):
     basepath = os.path.dirname(__file__)
     with open(
-        f"{basepath}/../../../tensorzero-internal/tests/e2e/providers/ferris.png", "rb"
+        f"{basepath}/../../../tensorzero-core/tests/e2e/providers/ferris.png", "rb"
     ) as f:
         ferris_png = base64.b64encode(f.read()).decode("ascii")
 
@@ -1241,6 +1175,44 @@ async def test_async_multi_block_image_base64(async_client):
         model="tensorzero::model_name::openai::gpt-4o-mini",
     )
     assert "crab" in result.choices[0].message.content.lower()
+
+
+@pytest.mark.asyncio
+async def test_async_multi_block_file_base64(async_client):
+    basepath = os.path.dirname(__file__)
+    with open(
+        f"{basepath}/../../../tensorzero-core/tests/e2e/providers/deepseek_paper.pdf",
+        "rb",
+    ) as f:
+        deepseek_paper_pdf = base64.b64encode(f.read()).decode("ascii")
+
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": "Output exactly two words describing the image",
+                },
+                {
+                    "type": "file",
+                    "file": {"file_data": deepseek_paper_pdf, "filename": "test.pdf"},
+                },
+            ],
+        },
+    ]
+    episode_id = str(uuid7())
+    result = await async_client.chat.completions.create(
+        extra_body={"tensorzero::episode_id": episode_id},
+        messages=messages,
+        model="tensorzero::model_name::dummy::require_pdf",
+    )
+    assert result.choices[0].message.content is not None
+    json_content = json.loads(result.choices[0].message.content)
+    assert json_content[0]["storage_path"] == {
+        "kind": {"type": "disabled"},
+        "path": "observability/files/3e127d9a726f6be0fd81d73ccea97d96ec99419f59650e01d49183cd3be999ef.pdf",
+    }
 
 
 @pytest.mark.asyncio
@@ -1316,86 +1288,6 @@ async def test_async_multi_turn_parallel_tool_use(async_client):
 
     assert "70" in assistant_message.content
     assert "30" in assistant_message.content
-
-
-@pytest.mark.asyncio
-async def test_patch_openai_client_with_async_client_async_setup_true():
-    """Tests that tensorzero.patch_openai_client works with AsyncOpenAI client."""
-    client = AsyncOpenAI(api_key="donotuse")
-
-    # Patch the client
-    patched_client = await tensorzero.patch_openai_client(
-        client,
-        clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests",
-        config_file="../../examples/quickstart/config/tensorzero.toml",
-        async_setup=True,
-    )
-
-    messages = [
-        {"role": "user", "content": "What is the capital of Japan?"},
-    ]
-
-    result = await patched_client.chat.completions.create(
-        messages=messages,
-        model="tensorzero::function_name::generate_haiku",
-        temperature=0.4,
-        extra_body={"tensorzero::episode_id": str(uuid7())},
-    )
-
-    # Verify IDs are valid UUIDs
-    UUID(result.id)  # Will raise ValueError if invalid
-    UUID(result.episode_id)  # Will raise ValueError if invalid
-    assert "Tokyo" in result.choices[0].message.content
-    assert result.usage.prompt_tokens > 0
-    assert result.usage.completion_tokens > 0
-    assert result.usage.total_tokens > 0
-    assert result.choices[0].finish_reason == "stop"
-    assert (
-        result.model
-        == "tensorzero::function_name::generate_haiku::variant_name::gpt_4o_mini"
-    )
-
-    tensorzero.close_patched_openai_client_gateway(patched_client)
-
-
-@pytest.mark.asyncio
-async def test_patch_openai_client_with_async_client_async_setup_false():
-    """Tests that tensorzero.patch_openai_client works with AsyncOpenAI client using sync setup."""
-    client = AsyncOpenAI(api_key="donotuse")
-
-    # Patch the client with sync setup
-    patched_client = tensorzero.patch_openai_client(
-        client,
-        clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests",
-        config_file="../../examples/quickstart/config/tensorzero.toml",
-        async_setup=False,
-    )
-
-    messages = [
-        {"role": "user", "content": "What is the capital of Japan?"},
-    ]
-
-    result = await patched_client.chat.completions.create(
-        messages=messages,
-        model="tensorzero::function_name::generate_haiku",
-        temperature=0.4,
-        extra_body={"tensorzero::episode_id": str(uuid7())},
-    )
-
-    # Verify IDs are valid UUIDs
-    UUID(result.id)  # Will raise ValueError if invalid
-    UUID(result.episode_id)  # Will raise ValueError if invalid
-    assert "Tokyo" in result.choices[0].message.content
-    assert result.usage.prompt_tokens > 0
-    assert result.usage.completion_tokens > 0
-    assert result.usage.total_tokens > 0
-    assert result.choices[0].finish_reason == "stop"
-    assert (
-        result.model
-        == "tensorzero::function_name::generate_haiku::variant_name::gpt_4o_mini"
-    )
-
-    tensorzero.close_patched_openai_client_gateway(patched_client)
 
 
 @pytest.mark.asyncio

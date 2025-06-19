@@ -6,6 +6,17 @@ on:
   pull_request:
     branches: ["main"]
 
+# Hack to cancel existing merge-queue workflows when a new one is created.
+# This ensures that we don't have multiple ClickHouse cloud tests running at the same time.
+concurrency:
+  # This is how you do a ternary-if in Github Actions.defaults:
+  # In the merge queue, we use a fixed concurrency group name, which will cancel any
+  # leftover workflow runs when a PR was removed from the merge queue.
+  # Otherwise, we use the unique 'github.run_id' field, which will create a new concurrency group,
+  # and avoid cancelling any existing workflow runs.
+  group: ${{ (github.event_name == 'merge_group' && 'merge-group-general-checks') || github.run_id }}
+  cancel-in-progress: true
+
 env:
   FORCE_COLOR: 1
   TENSORZERO_CLICKHOUSE_URL: "http://chuser:chpassword@localhost:8123/tensorzero"
@@ -27,9 +38,10 @@ jobs:
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
         with:
           cache-provider: "buildjet"
-          save-if: ${{ github.event_name == 'merge_group' }}
+          shared-key: "build-gateway-cache"
+          save-if: false
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@37bdc826eaedac215f638a96472df572feab0f9b
+        uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
         with:
           tool: cargo-nextest
 
@@ -148,13 +160,22 @@ jobs:
         uses: namespacelabs/nscloud-setup-buildx-action@84ca8c58fdf372d6a4750476cd09b7b96ee778ca
         continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
+      # We deliberately install our MSRV here (rather than 'stable') to ensure that everything compiles with that version
+      - name: Install Rust 1.85.0
+        run: |
+          rustup install 1.85.0 --component clippy,rustfmt
+          rustup default 1.85.0
+
       - name: Print Rust version
         run: rustc --version
 
+      - name: Setup Node.js
+        uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
+        with:
+          node-version: "22.9.0"
+
       - name: Install pnpm
         uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda
-        with:
-          version: 10
 
       - name: Install uv
         run: curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
@@ -166,6 +187,9 @@ jobs:
             pnpm
             rust
             uv
+
+      - name: Install JS dependencies
+        run: pnpm install --frozen-lockfile
 
       - name: check‑case‑conflict
         run: uv run --with pre-commit pre-commit run check-case-conflict --all-files
@@ -232,7 +256,7 @@ jobs:
       #   run: uv run --with nb-clean nb-clean check --remove-empty-cells
 
       - name: Install cargo-nextest, cargo-deny, and cargo-hack
-        uses: taiki-e/install-action@37bdc826eaedac215f638a96472df572feab0f9b
+        uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
         with:
           tool: cargo-nextest,cargo-deny,cargo-hack
 
@@ -245,7 +269,7 @@ jobs:
           cargo hack clippy --all-targets --each-feature -- -D warnings
 
       - name: Run cargo-deny
-        run: cargo deny check advisories bans
+        run: cargo deny check
 
       - name: Test (Rust)
         run: |
@@ -288,24 +312,15 @@ jobs:
           uv pip install pyright==1.1.394
           uv run pyright
 
-      - name: "Node.js: OpenAI Client: Install dependencies"
-        working-directory: clients/openai-node
-        run: |
-          pnpm install
-
       - name: "Node.js: Run prettier"
-        working-directory: clients/openai-node
-        run: pnpm run format
+        run: pnpm --filter=openai-node run format
 
       - name: "Node.js: OpenAI Client: typecheck"
-        working-directory: clients/openai-node
-        run: |
-          pnpm run typecheck
+        run: pnpm --filter=openai-node run typecheck
 
       - name: "Node.js: OpenAI Client: lint"
         working-directory: clients/openai-node
-        run: |
-          pnpm run lint
+        run: pnpm --filter=openai-node run lint
 
       - name: "Python: Recipes: Install dependencies"
         working-directory: recipes
@@ -318,11 +333,6 @@ jobs:
         run: |
           uv run pyright
 
-      - name: Setup Node.js
-        uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
-        with:
-          node-version: "22.9.0"
-
       - name: Install wasm-pack
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
@@ -334,21 +344,14 @@ jobs:
         working-directory: ui/app/utils/minijinja
         run: wasm-pack test --node --features console_error_panic_hook
 
-      - name: Install dependencies
-        working-directory: ui
-        run: pnpm install --frozen-lockfile
-
       - name: Run ESLint
-        working-directory: ui
-        run: pnpm run lint
+        run: pnpm --filter=tensorzero-ui run lint:check
 
       - name: Run Prettier
-        working-directory: ui
-        run: pnpm run format
+        run: pnpm --filter=tensorzero-ui run format:check
 
       - name: pnpm TypeScript type checking
-        working-directory: ui
-        run: pnpm run typecheck
+        run: pnpm --filter=tensorzero-ui run typecheck
 
       - name: Compile / validate notebooks
         run: ci/compile-check-notebooks.sh
@@ -381,18 +384,17 @@ jobs:
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
         with:
           cache-provider: "buildjet"
-          save-if: ${{ github.event_name == 'merge_group' }}
+          shared-key: "build-gateway-cache"
+          save-if: false
       - run: df -h
       # ClickHouse intermittently runs out of disk space on the `ubuntu-latest` runner
       # I'm using the commands from https://carlosbecker.com/posts/github-actions-disk-space/ to try to get more disk space
       - name: "Free up disk space"
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
-          sudo docker image prune --all --force
-          sudo docker builder prune -a
       - run: df -h
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@37bdc826eaedac215f638a96472df572feab0f9b
+        uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
         with:
           tool: cargo-nextest
 
@@ -407,7 +409,7 @@ jobs:
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
 
       - name: Launch ClickHouse container for E2E tests
-        run: TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-internal/tests/e2e/docker-compose.yml up clickhouse --wait
+        run: TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up clickhouse --wait
 
       # Make an HTTP request to ClickHouse and check that the version matches '${{ matrix.clickhouse_version }}'
       - name: Check ClickHouse version

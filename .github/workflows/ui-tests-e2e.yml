@@ -27,16 +27,12 @@ jobs:
 
       - name: Setup `pnpm`
         uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda
-        with:
-          version: 10
 
       - name: Install `pnpm` dependencies
-        working-directory: ui
         run: pnpm install --frozen-lockfile
 
       - name: Setup Playwright
-        working-directory: ui
-        run: pnpm exec playwright install --with-deps chromium
+        run: pnpm --filter=tensorzero-ui exec playwright install --with-deps chromium
 
       - name: Cache `s3-fixtures`
         uses: namespacelabs/nscloud-cache-action@2f50e7d0f70475e6f59a55ba0f05eec9108e77cc
@@ -59,6 +55,12 @@ jobs:
           docker load < gateway-container.tar
           docker load < ui-container.tar
 
+      # This allows us to use 'no-build' on subsequent steps
+      - name: Build needed docker images
+        working-directory: ui
+        run: |
+          docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml build fixtures mock-inference-provider
+
       - name: Start Docker containers and apply fixtures
         working-directory: ui
         run: |
@@ -71,15 +73,17 @@ jobs:
           echo "S3_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> fixtures/.env
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures" >> fixtures/.env
           echo "TENSORZERO_GATEWAY_URL=http://gateway:3000" >> fixtures/.env
-          docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml up --wait
+          echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> fixtures/.env
+          echo "TENSORZERO_UI_TAG=sha-${{ github.sha }}" >> fixtures/.env
+          docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml up --no-build -d
+          docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml wait fixtures
 
       - name: Run UI E2E tests
         id: e2e_tests
-        working-directory: ui
         env:
           TENSORZERO_CI: 1
         continue-on-error: true
-        run: pnpm test-e2e
+        run: pnpm ui:test:e2e
 
       - name: Print Docker Compose logs
         if: always()

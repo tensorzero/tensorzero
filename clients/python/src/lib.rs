@@ -16,30 +16,41 @@ use pyo3::{
     ffi::c_str,
     marker::Ungil,
     prelude::*,
-    sync::GILOnceCell,
     types::{PyDict, PyList, PyString, PyType},
     IntoPyObjectExt,
 };
 use python_helpers::{
-    deserialize_from_pyobj, parse_datapoint, parse_dynamic_evaluation_run_episode_response,
+    parse_datapoint, parse_dynamic_evaluation_run_episode_response,
     parse_dynamic_evaluation_run_response, parse_feedback_response, parse_inference_chunk,
-    parse_inference_response, parse_tool, python_uuid_to_uuid, serialize_to_dict,
+    parse_inference_response, parse_tool, python_uuid_to_uuid,
 };
-use tensorzero_internal::{
+use tensorzero_core::{
+    clickhouse::ClickhouseFormat,
+    inference::types::{
+        pyo3_helpers::{
+            deserialize_from_pyobj, deserialize_from_stored_inference, serialize_to_dict,
+            tensorzero_core_error, tensorzero_core_error_class, tensorzero_error_class, JSON_DUMPS,
+            JSON_LOADS,
+        },
+        ResolvedInput, ResolvedInputMessage,
+    },
+};
+use tensorzero_core::{
     endpoints::{
         datasets::InsertDatapointParams, dynamic_evaluation_run::DynamicEvaluationRunEpisodeParams,
     },
     gateway_util::ShutdownHandle,
     inference::types::{
         extra_body::UnfilteredInferenceExtraBody, extra_headers::UnfilteredInferenceExtraHeaders,
-        image::serialize_with_image_data,
+        file::serialize_with_file_data,
     },
 };
 use tensorzero_rust::{
     err_to_http, observability::LogFormat, CacheParamsOptions, Client, ClientBuilder,
     ClientBuilderMode, ClientInferenceParams, ClientInput, ClientSecretString,
     DynamicEvaluationRunParams, DynamicToolParams, FeedbackParams, InferenceOutput,
-    InferenceParams, InferenceStream, TensorZeroError, Tool,
+    InferenceParams, InferenceStream, ListInferencesParams, RenderedStoredInference,
+    StoredInference, TensorZeroError, Tool,
 };
 use tokio::sync::Mutex;
 use url::Url;
@@ -47,14 +58,16 @@ use url::Url;
 mod internal;
 mod python_helpers;
 
-pub(crate) static JSON_LOADS: GILOnceCell<Py<PyAny>> = GILOnceCell::new();
-pub(crate) static JSON_DUMPS: GILOnceCell<Py<PyAny>> = GILOnceCell::new();
-pub(crate) static TENSORZERO_HTTP_ERROR: GILOnceCell<Py<PyAny>> = GILOnceCell::new();
-pub(crate) static TENSORZERO_INTERNAL_ERROR: GILOnceCell<Py<PyAny>> = GILOnceCell::new();
-
 #[pymodule]
 fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    // Make sure that we can load our error classes, so that we don't trigger
+    // a nested exception when calling `convert_error` below
+    let _ = tensorzero_error_class(m.py())?;
+    let _ = tensorzero_core_error_class(m.py())?;
     // Otel is disabled for now in the Python client until we decide how it should be configured
+    // We might have produced an error when trying to construct the (not yet enabled) OTEL layer,
+    // which will just get ignored here. The HTTP gateway will handle that error, as that's
+    // the only place where we actually try to enable OTEL.
     let _delayed_enable = tokio_block_on_without_gil(
         m.py(),
         tensorzero_rust::observability::setup_observability(LogFormat::Pretty),
@@ -64,6 +77,10 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<AsyncTensorZeroGateway>()?;
     m.add_class::<TensorZeroGateway>()?;
     m.add_class::<LocalHttpGateway>()?;
+    m.add_class::<RenderedStoredInference>()?;
+    m.add_class::<StoredInference>()?;
+    m.add_class::<ResolvedInput>()?;
+    m.add_class::<ResolvedInputMessage>()?;
 
     let py_json = PyModule::import(m.py(), "json")?;
     let json_loads = py_json.getattr("loads")?;
@@ -102,7 +119,7 @@ fn _start_http_gateway(
 ) -> PyResult<Bound<'_, PyAny>> {
     warn_no_config(py, config_file.as_deref())?;
     let gateway_fut = async move {
-        let (addr, handle) = tensorzero_internal::gateway_util::start_openai_compatible_gateway(
+        let (addr, handle) = tensorzero_core::gateway_util::start_openai_compatible_gateway(
             config_file,
             clickhouse_url,
         )
@@ -221,7 +238,7 @@ impl BaseTensorZeroGateway {
         let client = match client_builder.build_http() {
             Ok(client) => client,
             Err(e) => {
-                return Err(tensorzero_internal_error(
+                return Err(tensorzero_core_error(
                     py,
                     &format!("Failed to construct TensorZero client: {e:?}"),
                 )?);
@@ -497,7 +514,7 @@ impl TensorZeroGateway {
         let client = match client_res {
             Ok(client) => client,
             Err(e) => {
-                return Err(tensorzero_internal_error(
+                return Err(tensorzero_core_error(
                     cls.py(),
                     &format!("Failed to construct TensorZero client: {e:?}"),
                 )?);
@@ -571,7 +588,7 @@ impl TensorZeroGateway {
         let client = match client {
             Ok(client) => client,
             Err(e) => {
-                return Err(tensorzero_internal_error(
+                return Err(tensorzero_core_error(
                     cls.py(),
                     &format!("Failed to construct TensorZero client: {e:?}"),
                 )?);
@@ -887,6 +904,93 @@ impl TensorZeroGateway {
             Err(e) => Err(convert_error(this.py(), e)),
         }
     }
+
+    /// Query the Clickhouse database for inferences.
+    ///
+    /// This function is only available in EmbeddedGateway mode.
+    ///
+    /// # Arguments
+    ///
+    /// * `function_name` - The name of the function to query.
+    /// * `variant_name` - The name of the variant to query. Optional
+    /// * `filters` - A filter tree to apply to the query. Optional
+    /// * `output_source` - The source of the output to query. "inference" or "demonstration"
+    /// * `limit` - The maximum number of inferences to return. Optional
+    /// * `offset` - The offset to start from. Optional
+    /// * `format` - The format to return the inferences in. For now, only "JSONEachRow" is supported.
+    #[pyo3(signature = (*,
+                        function_name,
+                        variant_name=None,
+                        filters=None,
+                        output_source="inference".to_string(),
+                        limit=None,
+                        offset=None
+    ),
+    text_signature = "(self, *, function_name, variant_name=None, filters=None, output_source='inference', limit=None, offset=None)"
+    )]
+    // The text_signature is a workaround to weird behavior in pyo3 where the default for an option
+    // is written as an ellipsis object.
+    fn experimental_list_inferences(
+        this: PyRef<'_, Self>,
+        function_name: String,
+        variant_name: Option<String>,
+        filters: Option<Bound<'_, PyAny>>,
+        output_source: String,
+        limit: Option<u64>,
+        offset: Option<u64>,
+    ) -> PyResult<Vec<StoredInference>> {
+        let client = this.as_super().client.clone();
+        let filters = filters
+            .as_ref()
+            .map(|x| deserialize_from_pyobj(this.py(), x))
+            .transpose()?;
+        let output_source =
+            output_source
+                .as_str()
+                .try_into()
+                .map_err(|e: tensorzero_core::error::Error| {
+                    convert_error(this.py(), TensorZeroError::Other { source: e.into() })
+                })?;
+        let params = ListInferencesParams {
+            function_name: &function_name,
+            variant_name: variant_name.as_deref(),
+            filters: filters.as_ref(),
+            output_source,
+            limit,
+            offset,
+            format: ClickhouseFormat::JsonEachRow,
+        };
+        let fut = client.experimental_list_inferences(params);
+        tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))
+    }
+
+    /// Render a list of stored inferences into a list of rendered stored inferences.
+    /// There are two things that need to happen in this function:
+    /// 1. We need to resolve all network resources (e.g. images) in the stored inferences.
+    /// 2. We need to prepare all messages into "simple" messages that have been templated for a particular variant.
+    ///    To do this, we need to know what variant to use for each function that might appear in the data.
+    ///
+    /// IMPORTANT: For now, this function drops datapoints which are bad, e.g. ones where templating fails, the function
+    ///            has no variant specified, or where the process of downloading resources fails.
+    ///            In future we will make this behavior configurable by the caller.
+    ///
+    /// :param stored_inferences: A list of stored inferences to render.
+    /// :param variants: A map from function name to variant name.
+    /// :return: A list of rendered stored inferences.
+    #[pyo3(signature = (*, stored_inferences, variants))]
+    fn experimental_render_inferences(
+        this: PyRef<'_, Self>,
+        stored_inferences: Vec<Bound<'_, PyAny>>,
+        variants: HashMap<String, String>,
+    ) -> PyResult<Vec<RenderedStoredInference>> {
+        let client = this.as_super().client.clone();
+        let stored_inferences = stored_inferences
+            .iter()
+            .map(|x| deserialize_from_stored_inference(this.py(), x))
+            .collect::<Result<Vec<_>, _>>()?;
+        let fut = client.experimental_render_inferences(stored_inferences, variants);
+        tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))
+    }
 }
 
 #[pyclass(extends=BaseTensorZeroGateway)]
@@ -948,7 +1052,7 @@ impl AsyncTensorZeroGateway {
                 let client = match client {
                     Ok(client) => client,
                     Err(e) => {
-                        return Err(tensorzero_internal_error(
+                        return Err(tensorzero_core_error(
                             py,
                             &format!("Failed to construct TensorZero client: {e:?}"),
                         )?);
@@ -1046,7 +1150,7 @@ impl AsyncTensorZeroGateway {
                 let client = match client {
                     Ok(client) => client,
                     Err(e) => {
-                        return Err(tensorzero_internal_error(
+                        return Err(tensorzero_core_error(
                             py,
                             &format!("Failed to construct TensorZero client: {e:?}"),
                         )?);
@@ -1394,6 +1498,105 @@ impl AsyncTensorZeroGateway {
         })
     }
 
+    /// Query the Clickhouse database for inferences.
+    ///
+    /// This function is only available in EmbeddedGateway mode.
+    ///
+    /// # Arguments
+    ///
+    /// * `function_name` - The name of the function to query.
+    /// * `variant_name` - The name of the variant to query. Optional
+    /// * `filters` - A filter tree to apply to the query. Optional
+    /// * `output_source` - The source of the output to query. "inference" or "demonstration"
+    /// * `limit` - The maximum number of inferences to return. Optional
+    /// * `offset` - The offset to start from. Optional
+    /// * `format` - The format to return the inferences in. For now, only "JSONEachRow" is supported.
+    #[pyo3(signature = (*,
+        function_name,
+        variant_name=None,
+        filters=None,
+        output_source="inference".to_string(),
+        limit=None,
+        offset=None
+    ),
+    text_signature = "(self, *, function_name, variant_name=None, filters=None, output_source='inference', limit=None, offset=None)"
+    )]
+    // The text_signature is a workaround to weird behavior in pyo3 where the default for an option
+    // is written as an ellipsis object.
+    fn experimental_list_inferences<'a>(
+        this: PyRef<'a, Self>,
+        function_name: String,
+        variant_name: Option<String>,
+        filters: Option<Bound<'a, PyAny>>,
+        output_source: String,
+        limit: Option<u64>,
+        offset: Option<u64>,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        let client = this.as_super().client.clone();
+        let filters = filters
+            .as_ref()
+            .map(|x| deserialize_from_pyobj(this.py(), x))
+            .transpose()?;
+        let output_source =
+            output_source
+                .as_str()
+                .try_into()
+                .map_err(|e: tensorzero_core::error::Error| {
+                    convert_error(this.py(), TensorZeroError::Other { source: e.into() })
+                })?;
+        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
+            let params = ListInferencesParams {
+                function_name: &function_name,
+                variant_name: variant_name.as_deref(),
+                filters: filters.as_ref(),
+                output_source,
+                limit,
+                offset,
+                format: ClickhouseFormat::JsonEachRow,
+            };
+            let res = client.experimental_list_inferences(params).await;
+            Python::with_gil(|py| match res {
+                Ok(stored_inferences) => Ok(PyList::new(py, stored_inferences)?.unbind()),
+                Err(e) => Err(convert_error(py, e)),
+            })
+        })
+    }
+
+    /// Render a list of stored inferences into a list of rendered stored inferences.
+    /// There are two things that need to happen in this function:
+    /// 1. We need to resolve all network resources (e.g. images) in the stored inferences.
+    /// 2. We need to prepare all messages into "simple" messages that have been templated for a particular variant.
+    ///    To do this, we need to know what variant to use for each function that might appear in the data.
+    ///
+    /// IMPORTANT: For now, this function drops datapoints which are bad, e.g. ones where templating fails, the function
+    ///            has no variant specified, or where the process of downloading resources fails.
+    ///            In future we will make this behavior configurable by the caller.
+    ///
+    /// :param stored_inferences: A list of stored inferences to render.
+    /// :param variants: A map from function name to variant name.
+    /// :return: A list of rendered stored inferences.
+    #[pyo3(signature = (*, stored_inferences, variants))]
+    fn experimental_render_inferences<'a>(
+        this: PyRef<'a, Self>,
+        stored_inferences: Vec<Bound<'a, PyAny>>,
+        variants: HashMap<String, String>,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        let client = this.as_super().client.clone();
+        let stored_inferences = stored_inferences
+            .iter()
+            .map(|x| deserialize_from_stored_inference(this.py(), x))
+            .collect::<Result<Vec<_>, _>>()?;
+        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
+            let res = client
+                .experimental_render_inferences(stored_inferences, variants)
+                .await;
+            Python::with_gil(|py| match res {
+                Ok(inferences) => Ok(PyList::new(py, inferences)?.unbind()),
+                Err(e) => Err(convert_error(py, e)),
+            })
+        })
+    }
+
     /// For internal use only - do not call.
     // This is a helper function used by `optimization-server` to get the template config
     // when applying a new prompt template during fine-tuning
@@ -1404,7 +1607,7 @@ impl AsyncTensorZeroGateway {
         variant_name: &str,
     ) -> PyResult<Py<PyDict>> {
         let Some(config) = this.as_super().client.get_config() else {
-            return Err(tensorzero_internal_error(
+            return Err(tensorzero_core_error(
                 this.py(),
                 "Called _get_template_config on HTTP gateway",
             )?);
@@ -1423,7 +1626,7 @@ impl AsyncTensorZeroGateway {
         max_samples: Option<u64>,
     ) -> PyResult<Py<PyAny>> {
         let Some(app_state) = this.as_super().client.get_app_state_data().cloned() else {
-            return Err(tensorzero_internal_error(
+            return Err(tensorzero_core_error(
                 this.py(),
                 "Called _internal_get_curated_inferences on HTTP gateway",
             )?);
@@ -1448,7 +1651,7 @@ impl AsyncTensorZeroGateway {
                     for inference in inferences {
                         dict_inferences.push(serialize_to_dict(
                             py,
-                            serialize_with_image_data(&inference).map_err(|e| {
+                            serialize_with_file_data(&inference).map_err(|e| {
                                 convert_error(py, TensorZeroError::Other { source: e.into() })
                             })?,
                         )?);
@@ -1473,35 +1676,25 @@ pub fn convert_error(py: Python<'_>, e: TensorZeroError) -> PyErr {
             source: _,
         } => tensorzero_error(py, status_code, text).unwrap_or_else(|e| e),
         TensorZeroError::Other { source } => {
-            tensorzero_internal_error(py, &source.to_string()).unwrap_or_else(|e| e)
+            tensorzero_core_error(py, &source.to_string()).unwrap_or_else(|e| e)
         }
         TensorZeroError::RequestTimeout => {
-            tensorzero_internal_error(py, &e.to_string()).unwrap_or_else(|e| e)
+            tensorzero_core_error(py, &e.to_string()).unwrap_or_else(|e| e)
         }
         // Required due to the `#[non_exhaustive]` attribute on `TensorZeroError` - we want to force
         // downstream consumers to handle all possible error types, but the compiler also requires us
         // to do this (since our python bindings are in a different crate from the Rust client.)
-        _ => tensorzero_internal_error(py, &format!("Unexpected TensorZero error: {e:?}"))
+        _ => tensorzero_core_error(py, &format!("Unexpected TensorZero error: {e:?}"))
             .unwrap_or_else(|e| e),
     }
 }
 
 fn tensorzero_error(py: Python<'_>, status_code: u16, text: Option<String>) -> PyResult<PyErr> {
-    let err = TENSORZERO_HTTP_ERROR.get_or_try_init::<_, PyErr>(py, || {
-        let self_module = PyModule::import(py, "tensorzero")?;
-        let err: Bound<'_, PyAny> = self_module.getattr("TensorZeroError")?;
-        Ok(err.unbind())
-    })?;
-    Ok(PyErr::from_value(err.bind(py).call1((status_code, text))?))
-}
-
-fn tensorzero_internal_error(py: Python<'_>, msg: &str) -> PyResult<PyErr> {
-    let err = TENSORZERO_INTERNAL_ERROR.get_or_try_init::<_, PyErr>(py, || {
-        let self_module = PyModule::import(py, "tensorzero")?;
-        let err: Bound<'_, PyAny> = self_module.getattr("TensorZeroInternalError")?;
-        Ok(err.unbind())
-    })?;
-    Ok(PyErr::from_value(err.bind(py).call1((msg,))?))
+    Ok(PyErr::from_value(
+        tensorzero_error_class(py)?
+            .bind(py)
+            .call1((status_code, text))?,
+    ))
 }
 
 fn warn_no_config(py: Python<'_>, config: Option<&str>) -> PyResult<()> {

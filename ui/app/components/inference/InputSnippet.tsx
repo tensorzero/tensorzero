@@ -11,14 +11,10 @@ import {
   SnippetMessage,
 } from "~/components/layout/SnippetLayout";
 import {
-  CodeMessage,
-  InputTextMessage,
   ToolCallMessage,
   ToolResultMessage,
   ImageMessage,
   ImageErrorMessage,
-  TextMessageWithArguments,
-  RawTextMessage,
   TextMessage,
   EmptyMessage,
 } from "~/components/layout/SnippetContent";
@@ -31,7 +27,14 @@ function renderContentBlock(block: ResolvedInputMessageContent, index: number) {
   switch (block.type) {
     case "text": {
       if (typeof block.value === "object") {
-        return <TextMessageWithArguments key={index} content={block.value} />;
+        return (
+          <TextMessage
+            key={index}
+            label="Text (Arguments)"
+            content={JSON.stringify(block.value, null, 2)}
+            type="structured"
+          />
+        );
       }
 
       // Try to parse JSON strings
@@ -40,7 +43,12 @@ function renderContentBlock(block: ResolvedInputMessageContent, index: number) {
           const parsedJson = JSON.parse(block.value);
           if (typeof parsedJson === "object") {
             return (
-              <TextMessageWithArguments key={index} content={parsedJson} />
+              <TextMessage
+                key={index}
+                label="Text (Arguments)"
+                content={JSON.stringify(parsedJson, null, 2)}
+                type="structured"
+              />
             );
           }
         } catch {
@@ -48,18 +56,26 @@ function renderContentBlock(block: ResolvedInputMessageContent, index: number) {
         }
       }
 
-      return <InputTextMessage key={index} content={block.value} />;
+      return <TextMessage key={index} label="Text" content={block.value} />;
     }
 
     case "raw_text":
-      return <RawTextMessage key={index} content={block.value} />;
+      return (
+        <TextMessage
+          key={index}
+          label="Text (Raw)"
+          content={block.value}
+          type="structured"
+        />
+      );
 
     case "tool_call":
       return (
         <ToolCallMessage
           key={index}
           toolName={block.name}
-          toolArguments={JSON.stringify(block.arguments, null, 2)}
+          toolArguments={JSON.stringify(JSON.parse(block.arguments), null, 2)}
+          // TODO: if arguments is null, display raw arguments without parsing
           toolCallId={block.id}
         />
       );
@@ -74,17 +90,27 @@ function renderContentBlock(block: ResolvedInputMessageContent, index: number) {
         />
       );
 
-    case "image":
-      return (
-        <ImageMessage
-          key={index}
-          url={block.image.url}
-          downloadName={`tensorzero_${block.storage_path.path}`}
-        />
-      );
-
-    case "image_error":
-      return <ImageErrorMessage key={index} />;
+    case "file":
+      if (block.file.mime_type.startsWith("image/")) {
+        return (
+          <ImageMessage
+            key={index}
+            url={block.file.url}
+            downloadName={`tensorzero_${block.storage_path.path}`}
+          />
+        );
+      } else {
+        return (
+          <div key={index}>
+            <ImageErrorMessage
+              key={index}
+              error={`Unsupported file type: ${block.file.mime_type}`}
+            />
+          </div>
+        );
+      }
+    case "file_error":
+      return <ImageErrorMessage key={index} error="Failed to retrieve image" />;
 
     default:
       return null;
@@ -106,14 +132,14 @@ export default function InputSnippet({ input }: InputSnippetProps) {
   return (
     <SnippetLayout>
       {input.system && (
-        <div>
+        <>
           <SnippetHeading heading="System" />
           <SnippetContent>
             <SnippetMessage>
               {typeof input.system === "object" ? (
-                <CodeMessage
+                <TextMessage
                   content={JSON.stringify(input.system, null, 2)}
-                  showLineNumbers={true}
+                  type="structured"
                 />
               ) : (
                 <TextMessage content={input.system} />
@@ -121,7 +147,7 @@ export default function InputSnippet({ input }: InputSnippetProps) {
             </SnippetMessage>
           </SnippetContent>
           <SnippetDivider />
-        </div>
+        </>
       )}
 
       <div>
@@ -133,13 +159,11 @@ export default function InputSnippet({ input }: InputSnippetProps) {
           <>
             <SnippetHeading heading="Messages" />
             <SnippetContent>
-              <div className="pb-4">
-                {input.messages.map((message, messageIndex) => (
-                  <div key={messageIndex}>
-                    {renderMessage(message, messageIndex)}
-                  </div>
-                ))}
-              </div>
+              {input.messages.map((message, messageIndex) => (
+                <div key={messageIndex}>
+                  {renderMessage(message, messageIndex)}
+                </div>
+              ))}
             </SnippetContent>
           </>
         )}

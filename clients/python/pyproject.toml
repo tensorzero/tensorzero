@@ -55,6 +55,7 @@ dev = [
     "pyright",
     "pytest-asyncio",
     "pytest-xdist",
+    "pytest-rerunfailures",
     "pytest",
     "openai",
 ]
