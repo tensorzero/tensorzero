@@ -18,7 +18,7 @@ import {
   TextMessage,
   EmptyMessage,
 } from "~/components/layout/SnippetContent";
-import {safeStringify} from '../utils/safeStringify'
+
 interface InputSnippetProps {
   input: ResolvedInput;
 }
@@ -27,7 +27,20 @@ function renderContentBlock(block: ResolvedInputMessageContent, index: number) {
   switch (block.type) {
     case "text": {
       if (typeof block.value === "object") {
-        return <TextMessage key={index} label="Text (Arguments)" content={safeStringify(block.value, 2)} type="structured" />;
+        let serializedContent;
+        try {
+          serializedContent = JSON.stringify(block.value, null, 2);
+        } catch {
+          return null;
+        }
+        return (
+          <TextMessage
+            key={index}
+            label="Text (Arguments)"
+            content={serializedContent}
+            type="structured"
+          />
+        );
       }
 
       // Try to parse JSON strings
@@ -35,8 +48,19 @@ function renderContentBlock(block: ResolvedInputMessageContent, index: number) {
         try {
           const parsedJson = JSON.parse(block.value);
           if (typeof parsedJson === "object") {
+            let serializedContent;
+            try {
+              serializedContent = JSON.stringify(block.value, null, 2);
+            } catch {
+              return null;
+            }
             return (
-              <TextMessage key={index} label="Text (Arguments)" content={safeStringify(parsedJson, 2)} type="structured" />
+              <TextMessage
+                key={index}
+                label="Text (Arguments)"
+                content={serializedContent}
+                type="structured"
+              />
             );
           }
         } catch {
@@ -48,18 +72,36 @@ function renderContentBlock(block: ResolvedInputMessageContent, index: number) {
     }
 
     case "raw_text":
-      return <TextMessage key={index} label="Text (Raw)" content={block.value} type="structured" />;
+      return (
+        <TextMessage
+          key={index}
+          label="Text (Raw)"
+          content={block.value}
+          type="structured"
+        />
+      );
 
-    case "tool_call":
+    case "tool_call": {
+      let serializedArguments;
+      try {
+        serializedArguments = JSON.stringify(
+          JSON.parse(block.arguments),
+          null,
+          2,
+        );
+      } catch {
+        serializedArguments = block.arguments;
+      }
       return (
         <ToolCallMessage
           key={index}
           toolName={block.name}
-          toolArguments={safeStringify(JSON.parse(block.arguments), 2)}
+          toolArguments={serializedArguments}
           // TODO: if arguments is null, display raw arguments without parsing
           toolCallId={block.id}
         />
       );
+    }
 
     case "tool_result":
       return (
@@ -118,10 +160,17 @@ export default function InputSnippet({ input }: InputSnippetProps) {
           <SnippetContent>
             <SnippetMessage>
               {typeof input.system === "object" ? (
-                <TextMessage
-                  content={safeStringify(input.system, 2)}
-                  type="structured"
-                />
+                (() => {
+                  let serializedSystem;
+                  try {
+                    serializedSystem = JSON.stringify(input.system, null, 2);
+                  } catch {
+                    return null;
+                  }
+                  return (
+                    <TextMessage content={serializedSystem} type="structured" />
+                  );
+                })()
               ) : (
                 <TextMessage content={input.system} />
               )}
