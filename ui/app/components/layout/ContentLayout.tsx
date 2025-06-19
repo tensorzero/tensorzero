@@ -4,7 +4,7 @@ import { useBreadcrumbs } from "~/hooks/useBreadcrumbs";
 export function ContentLayout({ children }: React.PropsWithChildren) {
   const breadcrumbs = useBreadcrumbs();
   const pageTitle = [...breadcrumbs.map((b) => b.label), "TensorZero"].join(
-    " - ",
+    " • ",
   );
 
   return (
