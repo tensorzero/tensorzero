@@ -1,8 +1,7 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use rand::seq::SliceRandom;
 use serde::Deserialize;
-use ts_rs::TS;
 
 use crate::{
     clickhouse::{
@@ -10,13 +9,15 @@ use crate::{
         ClickHouseConnectionInfo, ClickhouseFormat,
     },
     config_parser::Config,
-    endpoints::inference::InferenceCredentials,
+    endpoints::{inference::InferenceCredentials, stored_inference::render_inferences},
     error::{Error, ErrorDetails},
     optimization::{Optimizer, OptimizerJobHandle, OptimizerStatus, UninitializedOptimizerInfo},
     stored_inference::RenderedStoredInference,
 };
 
-#[derive(Debug, Deserialize, TS)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Debug, Deserialize)]
+#[cfg_attr(test, ts(export))]
 pub struct StartOptimizationParams {
     pub function_name: String,
     pub template_variant_name: String,
@@ -49,6 +50,7 @@ pub async fn start_optimization(
         format,
         optimizer_config,
     } = params;
+    // Query the database for the stored inferences
     let stored_inferences = clickhouse_connection_info
         .list_inferences(
             &config,
@@ -63,13 +65,28 @@ pub async fn start_optimization(
             },
         )
         .await?;
-    let rendered_inferences = stored_inferences
+    let variants = HashMap::from([(function_name.clone(), template_variant_name.clone())]);
+    // Template the inferences and fetch any network resources needed
+    let rendered_inferences = render_inferences(config, stored_inferences, variants).await?;
 
-    todo!()
+    // Split the inferences into train and val sets
+    let (train_examples, val_examples) = split_examples(rendered_inferences, val_fraction)?;
+
+    // Launch the optimization job
+    optimizer_config
+        .load()?
+        .launch(
+            http_client,
+            train_examples,
+            val_examples,
+            &InferenceCredentials::default(),
+        )
+        .await
 }
 
-#[derive(Debug, Deserialize, TS)]
-#[ts(export)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Debug, Deserialize)]
+#[cfg_attr(test, ts(export))]
 pub struct LaunchOptimizationParams {
     pub train_examples: Vec<RenderedStoredInference>,
     pub val_examples: Option<Vec<RenderedStoredInference>>,

@@ -21,7 +21,6 @@ use pyo3::types::{PyAny, PyList};
 use pyo3::{exceptions::PyValueError, prelude::*, IntoPyObjectExt};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use ts_rs::TS;
 use uuid::Uuid;
 
 /// Represents an stored inference to be used for optimization.
@@ -285,8 +284,9 @@ impl StoredInference {
 /// This is constructed by rendering a StoredInference with a variant for messages
 /// and by resolving all network resources (e.g. images).
 #[cfg_attr(feature = "pyo3", pyclass(str))]
-#[derive(Debug, PartialEq, Serialize, Deserialize, TS)]
-#[ts(export)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, ts(export))]
 pub struct RenderedStoredInference {
     pub function_name: String,
     pub variant_name: String,
@@ -486,7 +486,7 @@ pub async fn reresolve_input_for_fine_tuning(
                     let storage_path = file_with_path.storage_path.clone();
                     let fut = async move {
                         let result = get_object(config, storage_path).await?;
-                        Ok((message_index, content_index, result))
+                        Ok::<_, Error>((message_index, content_index, result.data))
                     };
                     file_fetch_tasks.push(fut);
                 }
@@ -513,12 +513,9 @@ pub async fn reresolve_input_for_fine_tuning(
                     .into());
                 }
             } else {
-                return Err(TensorZeroError::Other {
-                    source: Error::new(ErrorDetails::Serialization {
-                        message: "Message index invalid during input reresolution".to_string(),
-                    })
-                    .into(),
-                });
+                return Err(Error::new(ErrorDetails::Serialization {
+                    message: "Message index invalid during input reresolution".to_string(),
+                }));
             }
         }
     }

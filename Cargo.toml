@@ -55,6 +55,7 @@ ts-rs = { version = "11.0.1", features = [
     "serde-json-impl",
     "uuid-impl",
     "url-impl",
+    "no-serde-warnings",
 ] }
 chrono = { version = "0.4.41", features = ["serde"] }
 git2 = { version = "0.20.2", default-features = false }

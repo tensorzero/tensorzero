@@ -4,7 +4,6 @@ use std::{
     collections::{BTreeSet, HashMap},
     fmt::{self, Display},
 };
-use ts_rs::TS;
 
 use crate::{
     clickhouse::ClickhouseFormat,
@@ -13,8 +12,9 @@ use crate::{
     function::FunctionConfig,
 };
 
-#[derive(Clone, Copy, Debug, PartialEq, Deserialize, TS)]
-#[ts(export)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Copy, Debug, PartialEq, Deserialize)]
+#[cfg_attr(test, ts(export))]
 pub enum InferenceOutputSource {
     Inference,
     Demonstration,
@@ -34,8 +34,9 @@ impl TryFrom<&str> for InferenceOutputSource {
     }
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, TS)]
-#[ts(export)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq)]
+#[cfg_attr(test, ts(export))]
 pub enum FloatComparisonOperator {
     #[serde(rename = "<")]
     LessThan,
@@ -158,23 +159,26 @@ LEFT JOIN (
     }
 }
 
-#[derive(Debug, Clone, Deserialize, TS)]
-#[ts(export)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Debug, Clone, Deserialize)]
+#[cfg_attr(test, ts(export))]
 pub struct FloatMetricNode {
     pub metric_name: String,
     pub value: f64,
     pub comparison_operator: FloatComparisonOperator,
 }
 
-#[derive(Debug, Clone, Deserialize, TS)]
-#[ts(export)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Debug, Clone, Deserialize)]
+#[cfg_attr(test, ts(export))]
 pub struct BooleanMetricNode {
     pub metric_name: String,
     pub value: bool,
 }
 
-#[derive(Debug, Clone, Deserialize, TS)]
-#[ts(export)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Debug, Clone, Deserialize)]
+#[cfg_attr(test, ts(export))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum InferenceFilterTreeNode {
     FloatMetric(FloatMetricNode),

@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use ts_rs::TS;
 
 use crate::tool::{ToolCall, ToolResult};
 
@@ -112,8 +111,9 @@ pub enum ResolvedInputMessageContent {
     // We may extend this in the future to include other types of content
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, TS)]
-#[ts(export)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[cfg_attr(test, ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
 pub struct FileWithPath {
     #[serde(alias = "image")]

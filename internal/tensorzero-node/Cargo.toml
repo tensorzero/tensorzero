@@ -17,10 +17,12 @@ napi = { version = "2.12.2", default-features = false, features = [
 napi-derive = "2.12.2"
 serde_json.workspace = true
 tensorzero = { path = "../../clients/rust" }
-ts-rs.workspace = true
 
 [build-dependencies]
 napi-build = "2.0.1"
+
+[dev-dependencies]
+ts-rs.workspace = true
 
 # [profile.release]
 # lto = true

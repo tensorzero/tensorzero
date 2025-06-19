@@ -5,7 +5,6 @@ use std::{
 
 use futures::future::join_all;
 use git::GitInfo;
-use input_handling::reresolve_input_for_fine_tuning;
 use reqwest::header::HeaderMap;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use serde_json::Value;
@@ -13,7 +12,7 @@ use std::fmt::Debug;
 use tensorzero_core::endpoints::optimization::launch_optimization;
 pub use tensorzero_core::endpoints::optimization::LaunchOptimizationParams as OptimizationParams;
 pub use tensorzero_core::optimization::{OptimizerJobHandle, OptimizerStatus};
-use tensorzero_core::stored_inference::render_stored_inference;
+use tensorzero_core::stored_inference::{render_stored_inference, reresolve_input_for_fine_tuning};
 use tensorzero_core::{
     config_parser::Config,
     endpoints::{
@@ -805,7 +804,7 @@ impl Client {
             // Create a future for each call to reresolve_input_for_fine_tuning.
             // This function modifies inference_example.input_mut() in place.
             // `self` (the client) is passed by immutable reference.
-            reresolve_input_for_fine_tuning(inference_example.input_mut(), self)
+            reresolve_input_for_fine_tuning(inference_example.input_mut(), &gateway.state.config)
         });
 
         // Await all futures concurrently.

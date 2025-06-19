@@ -9,7 +9,6 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
 use tokio::sync::RwLockWriteGuard;
-use ts_rs::TS;
 use url::Url;
 
 pub mod migration_manager;
@@ -640,8 +639,9 @@ where
 /// The format of the data that will be returned from / sent to ClickHouse.
 /// Currently only used in the query builder.
 /// TODO: use across the codebase.
-#[derive(Clone, Debug, Default, PartialEq, Deserialize, TS)]
-#[ts(export)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, Default, PartialEq, Deserialize)]
+#[cfg_attr(test, ts(export))]
 pub enum ClickhouseFormat {
     #[default]
     JsonEachRow,

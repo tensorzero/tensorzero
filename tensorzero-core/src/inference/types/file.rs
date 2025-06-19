@@ -2,7 +2,6 @@ use mime::MediaType;
 use scoped_tls::scoped_thread_local;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use ts_rs::TS;
 use url::Url;
 
 use super::{resolved_input::FileWithPath, ContentBlock, RequestMessage};
@@ -34,13 +33,14 @@ fn skip_serialize_file_data(_: &Option<String>) -> bool {
     !SERIALIZE_FILE_DATA.is_set()
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, TS)]
-#[ts(export)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[cfg_attr(test, ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass)]
 pub struct Base64File {
     // The original url we used to download the file
     pub url: Option<Url>,
-    #[ts(type = "string")]
+    #[cfg_attr(test, ts(type = "string"))]
     pub mime_type: MediaType,
     // TODO - should we add a wrapper type to enforce base64?
     #[serde(skip_serializing_if = "skip_serialize_file_data")]

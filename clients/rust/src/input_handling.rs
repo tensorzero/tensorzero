@@ -1,6 +1,5 @@
 use futures::future::try_join_all;
 use serde_json::Value;
-use tensorzero_core::error::Error;
 
 use crate::{Client, ClientInput, ClientInputMessage, ClientInputMessageContent, TensorZeroError};
 use tensorzero_core::tool::{ToolCall, ToolCallInput};

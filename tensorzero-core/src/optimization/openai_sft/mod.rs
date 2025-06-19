@@ -1,7 +1,6 @@
 use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
 use tokio::try_join;
-use ts_rs::TS;
 use url::Url;
 
 use crate::{
@@ -35,14 +34,15 @@ pub struct OpenAISFTConfig {
     pub api_base: Option<Url>,
 }
 
-#[derive(Clone, Debug, Default, Deserialize, TS)]
-#[ts(export)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, Default, Deserialize)]
+#[cfg_attr(test, ts(export))]
 pub struct UninitializedOpenAISFTConfig {
     pub model: String,
     pub batch_size: Option<usize>,
     pub learning_rate_multiplier: Option<f64>,
     pub n_epochs: Option<usize>,
-    #[ts(type = "string | null")]
+    #[cfg_attr(test, ts(type = "string | null"))]
     pub credentials: Option<CredentialLocation>,
     pub api_base: Option<Url>,
     pub seed: Option<u64>,
@@ -69,8 +69,9 @@ impl UninitializedOpenAISFTConfig {
     }
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize, TS)]
-#[ts(export)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, ts(export))]
 pub struct OpenAISFTJobHandle {
     pub job_id: String,
 }

@@ -1,7 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use ts_rs::TS;
 
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::Error;
@@ -32,8 +31,9 @@ enum OptimizerConfig {
     OpenAISFT(OpenAISFTConfig),
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize, TS)]
-#[ts(export)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, ts(export))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum OptimizerJobHandle {
     #[serde(rename = "openai_sft")]
@@ -108,8 +108,9 @@ impl Optimizer for OptimizerInfo {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, TS)]
-#[ts(export)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize)]
+#[cfg_attr(test, ts(export))]
 pub struct UninitializedOptimizerInfo {
     #[serde(flatten)]
     pub inner: UninitializedOptimizerConfig,
@@ -131,8 +132,9 @@ impl UninitializedOptimizerInfo {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, TS)]
-#[ts(export)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize)]
+#[cfg_attr(test, ts(export))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum UninitializedOptimizerConfig {
     #[serde(rename = "openai_sft")]

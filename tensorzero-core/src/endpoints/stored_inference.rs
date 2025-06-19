@@ -1,13 +1,17 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use futures::future::join_all;
+
 use crate::config_parser::Config;
 use crate::endpoints::dynamic_evaluation_run::validate_variant_pins;
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
-use crate::stored_inference::{RenderedStoredInference, StoredInference};
+use crate::stored_inference::{
+    render_stored_inference, reresolve_input_for_fine_tuning, RenderedStoredInference,
+    StoredInference,
+};
 
 pub async fn render_inferences(
-    http_client: &reqwest::Client,
     config: Arc<Config<'static>>,
     mut inferences: Vec<StoredInference>,
     variants: HashMap<String, String>,
@@ -17,7 +21,7 @@ pub async fn render_inferences(
         // Create a future for each call to reresolve_input_for_fine_tuning.
         // This function modifies inference_example.input_mut() in place.
         // `self` (the client) is passed by immutable reference.
-        reresolve_input_for_fine_tuning(inference_example.input_mut(), self)
+        reresolve_input_for_fine_tuning(inference_example.input_mut(), &config)
     });
 
     // Await all futures concurrently.
@@ -38,7 +42,7 @@ pub async fn render_inferences(
         }));
     }
 
-    let final_rendered_examples: Vec<RenderedStoredInference> = stored_inferences
+    let final_rendered_examples: Vec<RenderedStoredInference> = inferences
         .into_iter() // Consumes Vec<StoredInference>; elements are already mutated
         .zip(results.into_iter()) // Creates an iterator of (StoredInference, Result<(), Error>)
         .filter_map(|(example, resolution_result)| {
@@ -53,7 +57,7 @@ pub async fn render_inferences(
             // render_stored_inference returns Result<RenderedStoredInference, Error>.
             // .ok() converts this to Option<RenderedStoredInference>.
             // filter_map will keep Some(RenderedStoredInference) and discard None (if rendering failed).
-            render_stored_inference(resolved_example, &gateway.state.config, &variants).ok()
+            render_stored_inference(resolved_example, &config, &variants).ok()
         })
         .collect();
 
