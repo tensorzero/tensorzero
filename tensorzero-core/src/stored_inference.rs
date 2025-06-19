@@ -286,7 +286,6 @@ impl StoredInference {
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(test, ts(export))]
 pub struct RenderedStoredInference {
     pub function_name: String,
     pub variant_name: String,

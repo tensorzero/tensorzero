@@ -9,11 +9,11 @@ import type { JsonValue } from "./serde_json/JsonValue";
 /**
  * Core representation of the types of content that could go into a model provider
  */
-export type ContentBlock = { "type": "text" } & Text | { "type": "tool_call" } & ToolCall | { "type": "tool_result" } & ToolResult | { "type": "file" } & FileWithPath | { "type": "thought" } & Thought | { "type": "unknown", 
+export type ContentBlock = { "type": "text" } & Text | { "type": "tool_call" } & ToolCall | { "type": "tool_result" } & ToolResult | { "type": "file" } & FileWithPath | { "type": "thought" } & Thought | { "type": "unknown",
 /**
  * The underlying content block to be passed to the model provider.
  */
-data: JsonValue, 
+data: JsonValue,
 /**
  * A fully-qualified name specifying when this content block should
  * be included in the model provider input.
