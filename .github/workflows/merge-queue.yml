@@ -115,7 +115,7 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@37bdc826eaedac215f638a96472df572feab0f9b
+        uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
         with:
           tool: cargo-nextest
 
@@ -135,7 +135,7 @@ jobs:
       - name: Launch ClickHouse container for E2E tests
         run: |
           # 'docker compose' will exit with status code 1 if any container exits, even if the container exits with status code 0
-          docker compose -f tensorzero-internal/tests/e2e/docker-compose.yml up -d --wait || true
+          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up -d --wait || true
 
       - name: Launch the provider-proxy cache for E2E tests
         run: |
@@ -164,14 +164,6 @@ jobs:
       #   run: |
       #     TENSORZERO_E2E_PROXY="http://localhost:3003" cargo test-e2e --profile ci --no-fail-fast ${{ vars.CARGO_NEXTEST_EXTRA_ARGS }} -E "${{ vars.CARGO_NEXTEST_FLAKY_TESTS }}"
       #   continue-on-error: true
-
-      - name: Upload provider-proxy cache
-        if: ${{ false }} # Change to `if: ${{ always() }}` to start uploading the cache
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: provider-proxy-cache
-          path: ./ci/provider-proxy-cache/
-
       - name: Install Python for python async client tests
         run: uv python install 3.9
 
@@ -236,6 +228,7 @@ jobs:
         run: cat sglang_modal_logs.txt
   
       - name: Upload provider-proxy cache
+        if: github.event_name == 'merge_group'
         run: |
           AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY ./ci/upload-provider-proxy-cache.sh
 
@@ -249,7 +242,7 @@ jobs:
       - name: Launch ClickHouse container for E2E tests
         run: |
           # 'docker compose' will exit with status code 1 if any container exits, even if the container exits with status code 0
-          docker compose -f tensorzero-internal/tests/e2e/docker-compose.yml up -d --wait || true
+          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up -d --wait || true
 
       - name: Set up .env file for production deployment tests
         run: |
@@ -265,7 +258,7 @@ jobs:
       - name: Take down docker compose for production deployment tests
         run: |
           docker compose -f examples/production-deployment/docker-compose.yml down
-          docker compose -f tensorzero-internal/tests/e2e/docker-compose.yml down
+          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml down
 
   # See 'ci/README.md' at the repository root for more details.
   check-all-live-tests-passed:
