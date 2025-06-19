@@ -1,6 +1,7 @@
 import { useDatasetCountFetcher } from "~/routes/api/datasets/count_inserts.route";
 import type { DatasetBuilderFormValues } from "./types";
 import type { Control } from "react-hook-form";
+import { useEffect } from "react";
 
 export function DatasetCountDisplay({
   control,
@@ -17,11 +18,13 @@ export function DatasetCountDisplay({
 }) {
   const { count: rowsToInsertCount, isLoading: isLoadingRowsToInsert } = useDatasetCountFetcher(control);
 
+  useEffect(() => {
+    setCountToInsert(rowsToInsertCount);
+  }, [rowsToInsertCount, setCountToInsert]);
+
   if (isLoadingRowsToInsert) {
     return <div>Loading counts...</div>;
   }
-
-  setCountToInsert(rowsToInsertCount);
 
   // Determine if any count is available to avoid showing an empty div or only the placeholder
   const hasAnyCountToShow = 
