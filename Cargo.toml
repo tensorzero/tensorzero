@@ -8,7 +8,7 @@ members = [
     "clients/python",
     "provider-proxy",
     "evaluations",
-    "tensorzero-derive",
+    "internal/tensorzero-derive",
     "examples/integrations/cursor/experimental",
 ]
 resolver = "2"
