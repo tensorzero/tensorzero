@@ -20,5 +20,5 @@ test-optimization = ["nextest", "run", "--features", "optimization_tests", "-E",
 test-e2e-no-creds = ["nextest", "run", "--features", "e2e_tests", "-E", "test(test_dummy_only) | test(clickhouse)"]
 
 build-e2e = "build --bin gateway --features e2e_tests"
-run-e2e = "run --bin gateway --features e2e_tests -- --config-file tensorzero-internal/tests/e2e/tensorzero.toml"
+run-e2e = "run --bin gateway --features e2e_tests -- --config-file tensorzero-core/tests/e2e/tensorzero.toml"
 watch-e2e = "watch -x run-e2e"
