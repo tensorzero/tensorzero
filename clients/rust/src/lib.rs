@@ -9,8 +9,9 @@ use reqwest::header::HeaderMap;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use serde_json::Value;
 use std::fmt::Debug;
-use tensorzero_core::endpoints::optimization::launch_optimization;
-pub use tensorzero_core::endpoints::optimization::LaunchOptimizationParams as OptimizationParams;
+pub use tensorzero_core::endpoints::optimization::LaunchOptimizationParams;
+pub use tensorzero_core::endpoints::optimization::StartOptimizationParams;
+use tensorzero_core::endpoints::optimization::{launch_optimization, start_optimization};
 pub use tensorzero_core::optimization::{OptimizerJobHandle, OptimizerStatus};
 use tensorzero_core::stored_inference::{render_stored_inference, reresolve_input_for_fine_tuning};
 use tensorzero_core::{
@@ -866,6 +867,34 @@ impl Client {
                 .into(),
             }),
         }
+    }
+
+    /// Start an optimization job.
+    /// NOTE: This is the composition of `list_inferences`, `render_inferences`, and `launch_optimization`.
+    pub async fn experimental_start_optimization(
+        &self,
+        params: StartOptimizationParams,
+    ) -> Result<OptimizerJobHandle, TensorZeroError> {
+        let ClientMode::EmbeddedGateway { gateway, timeout } = &self.mode else {
+            return Err(TensorZeroError::Other {
+                source: tensorzero_core::error::Error::new(ErrorDetails::InvalidClientMode {
+                    mode: "Http".to_string(),
+                    message: "This function is only available in EmbeddedGateway mode".to_string(),
+                })
+                .into(),
+            });
+        };
+        with_embedded_timeout(*timeout, async {
+            start_optimization(
+                &gateway.state.http_client,
+                gateway.state.config.clone(),
+                &gateway.state.clickhouse_connection_info,
+                params,
+            )
+            .await
+            .map_err(err_to_http)
+        })
+        .await
     }
 
     /// Poll an optimization job for status.

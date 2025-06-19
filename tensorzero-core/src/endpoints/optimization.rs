@@ -32,10 +32,15 @@ pub struct StartOptimizationParams {
     pub optimizer_config: UninitializedOptimizerInfo,
 }
 
+/// Starts an optimization job.
+/// This function will query inferences from the database,
+/// render them by fetching any network resources needed and
+/// templating them with the template variant,
+/// and launch the optimization job specified.
 pub async fn start_optimization(
     http_client: &reqwest::Client,
     config: Arc<Config<'static>>,
-    clickhouse_connection_info: ClickHouseConnectionInfo,
+    clickhouse_connection_info: &ClickHouseConnectionInfo,
     params: StartOptimizationParams,
 ) -> Result<OptimizerJobHandle, Error> {
     let StartOptimizationParams {

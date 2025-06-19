@@ -31,15 +31,15 @@ impl TensorZeroClient {
     }
 
     #[napi]
-    pub async fn experimental_launch_optimization(
+    pub async fn experimental_start_optimization(
         &self,
         params: String,
     ) -> Result<String, napi::Error> {
-        let params: tensorzero::OptimizationParams =
+        let params: tensorzero::StartOptimizationParams =
             serde_json::from_str(&params).map_err(|e| napi::Error::from_reason(e.to_string()))?;
         let job_handle = self
             .client
-            .experimental_launch_optimization(params)
+            .experimental_start_optimization(params)
             .await
             .map_err(|e| napi::Error::from_reason(e.to_string()))?;
         let job_handle_str = serde_json::to_string(&job_handle).map_err(|e| {

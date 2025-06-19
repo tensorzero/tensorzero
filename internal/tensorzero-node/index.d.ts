@@ -5,6 +5,6 @@
 
 export declare class TensorZeroClient {
   static new(configPath: string, clickhouseUrl?: string | undefined | null, timeout?: number | undefined | null): Promise<TensorZeroClient>
-  experimentalLaunchOptimization(params: string): Promise<string>
+  experimentalStartOptimization(params: string): Promise<string>
   experimentalPollOptimization(jobHandle: string): Promise<string>
 }
