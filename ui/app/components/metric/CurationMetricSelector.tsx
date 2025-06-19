@@ -14,7 +14,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "~/components/ui/select";
-import { Skeleton } from "~/components/ui/skeleton";
 import { Input } from "~/components/ui/input";
 import MetricBadges from "~/components/metric/MetricBadges";
 import { useEffect, useMemo } from "react";
@@ -178,35 +177,33 @@ export default function CurationMetricSelector<
               />
             )}
           </div>
-
+          
+          {/* keeping temporary until full update
           <div className="text-muted-foreground space-y-1 text-sm">
             <div>
               Feedbacks:{" "}
-              {/* If field.value is empty string (unselected), show loading skeleton */}
               {field.value === "" ? (
                 <Skeleton className="inline-block h-4 w-16 align-middle" />
-              ) : /* If field.value is null (selected "None"), show N/A */
+              ) : 
               field.value === null ? (
                 <span className="font-medium">N/A</span>
               ) : (
-                /* Otherwise show the actual feedback count */
                 <span className="font-medium">{feedbackCount}</span>
               )}
             </div>
             <div>
               Curated Inferences:{" "}
-              {/* If field.value is empty string (unselected), show loading skeleton */}
               {field.value === "" ? (
                 <Skeleton className="inline-block h-4 w-16 align-middle" />
-              ) : /* If field.value is null (selected "None"), show N/A */
+              ) : 
               field.value === null ? (
                 <span className="font-medium">N/A</span>
               ) : (
-                /* Otherwise show the actual curated inference count */
                 <span className="font-medium">{curatedInferenceCount}</span>
               )}
             </div>
           </div>
+          */}
         </FormItem>
       )}
     />

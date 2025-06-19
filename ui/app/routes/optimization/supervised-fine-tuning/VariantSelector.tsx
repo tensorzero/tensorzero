@@ -29,6 +29,7 @@ export function VariantSelector({
       render={({ field }) => (
         <FormItem className="flex flex-col gap-1">
           <FormLabel>Prompt</FormLabel>
+          <div className="flex flex-row items-center gap-2">
           <Select
             onValueChange={field.onChange}
             defaultValue={field.value}
@@ -55,7 +56,8 @@ export function VariantSelector({
             variant={field.value}
             disabled={!field.value}
             chatCompletionVariants={chatCompletionVariants}
-          />
+            />
+          </div>
         </FormItem>
       )}
     />

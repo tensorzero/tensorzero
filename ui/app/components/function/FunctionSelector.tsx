@@ -8,7 +8,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "~/components/ui/select";
-import { Skeleton } from "~/components/ui/skeleton";
 import { FunctionBadges } from "~/components/function/FunctionBadges";
 
 type FunctionSelectorProps<T extends Record<string, unknown>> = {
@@ -59,6 +58,7 @@ export function FunctionSelector<T extends Record<string, unknown>>({
               })}
             </SelectContent>
           </Select>
+          {/* keeping temporary until full update
           <div className="text-muted-foreground text-sm">
             Inferences:{" "}
             {field.value ? (
@@ -71,6 +71,7 @@ export function FunctionSelector<T extends Record<string, unknown>>({
               <Skeleton className="inline-block h-4 w-16 align-middle" />
             )}
           </div>
+          */}
         </FormItem>
       )}
     />
