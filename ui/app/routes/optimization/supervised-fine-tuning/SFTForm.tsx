@@ -14,6 +14,7 @@ import type { ChatCompletionConfig } from "~/utils/config/variant";
 import type { Config } from "~/utils/config";
 import { models } from "./model_options";
 import { useCountFetcher } from "~/routes/api/curated_inferences/count.route";
+import { SFTCountDisplay } from "./SFTCountDisplay";
 
 export function SFTForm({
   config,
@@ -192,6 +193,13 @@ export function SFTForm({
             <AdvancedParametersAccordion
               control={form.control}
               maxSamplesLimit={counts.inferenceCount ?? undefined}
+            />
+            <SFTCountDisplay
+              control={form.control}
+              functionInferenceCount={counts.inferenceCount}
+              metricFeedbackCount={counts.feedbackCount}
+              metricCuratedInferenceCount={counts.curatedInferenceCount}
+              isLoading={counts.isLoading}
             />
             </>
             )}
