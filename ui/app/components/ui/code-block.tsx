@@ -1,7 +1,12 @@
+"use client";
+import * as React from "react";
 import { clsx } from "clsx";
+import { Button, type ButtonProps } from "./button";
+import { DummyCheckbox } from "./checkbox";
 
 interface CodeBlockSharedProps {
   showLineNumbers?: boolean;
+  showWrapToggle?: boolean;
 }
 
 interface CodeBlockRawProps extends CodeBlockSharedProps {
@@ -70,38 +75,86 @@ export function CodeBlock({
   html,
   raw,
   showLineNumbers = false,
+  showWrapToggle = true,
 }: CodeBlockProps) {
-  const codeProps = {
-    dangerouslySetInnerHTML: html ? { __html: html } : undefined,
-    children: raw ? (
-      <pre tabIndex={0}>
-        <code dangerouslySetInnerHTML={{ __html: handleRawContent(raw) }} />
-      </pre>
-    ) : undefined,
-  };
+  const [wrapLinesState, setWrapLines] = React.useState(false);
+
+  const wrapLines = showWrapToggle ? wrapLinesState : false;
+
+  const codeProps = html
+    ? { dangerouslySetInnerHTML: { __html: html } }
+    : {
+        children: raw ? (
+          <pre tabIndex={0}>
+            <code dangerouslySetInnerHTML={{ __html: handleRawContent(raw) }} />
+          </pre>
+        ) : undefined,
+      };
 
   return (
     <div
       className={clsx(
-        "CodeBlock relative font-mono text-sm",
+        "CodeBlock relative isolate",
         showLineNumbers && "CodeBlock--with-line-numbers",
       )}
     >
+      {showWrapToggle && (
+        <div className="pointer-events-none absolute top-0 right-0 z-10 flex justify-end p-2">
+          <ToggleButton
+            type="button"
+            toggled={wrapLines}
+            onToggle={setWrapLines}
+            className="pointer-events-auto pl-2"
+            size="sm"
+            variant="outline"
+          >
+            <DummyCheckbox checked={wrapLines} />
+            <span>Wrap</span>
+          </ToggleButton>
+        </div>
+      )}
       <div
         className={clsx(
+          "font-mono text-sm",
           // <pre> styles
           "**:[pre]:!bg-bg-primary **:[pre]:max-w-none **:[pre]:shrink-0 **:[pre]:grow **:[pre]:overflow-auto **:[pre]:rounded-lg **:[pre]:outline-offset-1",
           // line numbers have their own left padding so that they stick to
           // the left border when scrolled
           showLineNumbers ? "*:p-5 *:pl-0" : "*:p-5",
           // <code> styles
-          "**:[code]:text-fg-primary **:[code]:relative **:[code]:flex **:[code]:min-w-min **:[code]:flex-col **:[code]:gap-1.5 **:[code]:whitespace-pre",
+          "**:[code]:text-fg-primary **:[code]:relative **:[code]:flex **:[code]:min-w-min **:[code]:flex-col **:[code]:gap-1.5",
+          wrapLines
+            ? "**:[code]:whitespace-pre-wrap"
+            : "**:[code]:whitespace-pre",
           // <span class="line"> styles
           "**:[.line]:m-0 **:[.line]:flex **:[.line]:h-4.5 **:[.line]:flex-0 **:[.line]:p-0",
         )}
         {...codeProps}
       />
     </div>
+  );
+}
+
+function ToggleButton({
+  toggled,
+  onToggle,
+  ...props
+}: Omit<ButtonProps, "onToggle"> & {
+  toggled: boolean;
+  onToggle: React.Dispatch<React.SetStateAction<boolean>>;
+}) {
+  return (
+    <Button
+      type="button"
+      aria-pressed={toggled}
+      {...props}
+      onClick={(event) => {
+        props.onClick?.(event);
+        if (!event.defaultPrevented) {
+          onToggle?.((toggled) => !toggled);
+        }
+      }}
+    />
   );
 }
 
