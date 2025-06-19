@@ -1206,7 +1206,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tensorzero",
- "tensorzero-internal",
+ "tensorzero-core",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -1433,7 +1433,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tensorzero",
- "tensorzero-internal",
+ "tensorzero-core",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -1632,7 +1632,7 @@ dependencies = [
  "reqwest",
  "serde",
  "tempfile",
- "tensorzero-internal",
+ "tensorzero-core",
  "tokio",
  "tower-http",
  "tracing",
@@ -4228,8 +4228,8 @@ dependencies = [
  "serde-untagged",
  "serde_json",
  "serde_path_to_error",
+ "tensorzero-core",
  "tensorzero-derive",
- "tensorzero-internal",
  "thiserror 2.0.12",
  "tokio",
  "tokio-stream",
@@ -4241,20 +4241,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "tensorzero-derive"
-version = "0.1.0"
-dependencies = [
- "proc-macro2",
- "quote",
- "serde",
- "serde_json",
- "serde_path_to_error",
- "syn",
- "trybuild",
-]
-
-[[package]]
-name = "tensorzero-internal"
+name = "tensorzero-core"
 version = "2025.6.2"
 dependencies = [
  "async-stream",
@@ -4333,6 +4320,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "tensorzero-derive"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "serde",
+ "serde_json",
+ "serde_path_to_error",
+ "syn",
+ "trybuild",
+]
+
+[[package]]
 name = "tensorzero-python"
 version = "2025.6.2"
 dependencies = [
@@ -4344,7 +4344,7 @@ dependencies = [
  "serde_json",
  "serde_path_to_error",
  "tensorzero",
- "tensorzero-internal",
+ "tensorzero-core",
  "tokio",
  "tracing",
  "url",

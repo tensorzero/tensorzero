@@ -6,7 +6,7 @@ edition = "2021"
 license.workspace = true
 
 [dependencies]
-tensorzero-internal = { path = "../tensorzero-internal" }
+tensorzero-core = { path = "../tensorzero-core" }
 axum = { workspace = true }
 tracing = { version = "0.1.40", features = ["log", "release_max_level_debug"] }
 tracing-subscriber = { version = "0.3.18", features = [
@@ -25,7 +25,7 @@ tower-http = { workspace = true }
 workspace = true
 
 [features]
-e2e_tests = ["tensorzero-internal/e2e_tests"]
+e2e_tests = ["tensorzero-core/e2e_tests"]
 default = []
 
 [dev-dependencies]

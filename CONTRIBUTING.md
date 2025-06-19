@@ -117,7 +117,7 @@ cargo test-unit
 1. Launch the test ClickHouse database
 
    ```bash
-   docker compose -f tensorzero-internal/tests/e2e/docker-compose.yml up --wait
+   docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --wait
    ```
 
 2. Set the relevant environment variables. See `examples/production-deployment/.env.example` for the full list.

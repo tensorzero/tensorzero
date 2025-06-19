@@ -1,7 +1,7 @@
 [workspace]
 members = [
-    "tensorzero-internal",
-    "tensorzero-internal/tests/mock-inference-provider",
+    "tensorzero-core",
+    "tensorzero-core/tests/mock-inference-provider",
     "gateway",
     "ui/app/utils/minijinja",
     "clients/rust",
