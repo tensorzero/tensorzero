@@ -47,33 +47,6 @@ async def async_client():
 
 
 @pytest.mark.asyncio
-async def test_async_basic_inference_old_model_format_and_headers(async_client):
-    messages = [
-        {"role": "system", "content": [{"assistant_name": "Alfred Pennyworth"}]},
-        {"role": "user", "content": "Hello"},
-    ]
-
-    result = await async_client.chat.completions.create(
-        extra_headers={"episode_id": str(uuid7())},
-        messages=messages,
-        model="tensorzero::function_name::basic_test",
-        temperature=0.4,
-    )
-    # Verify IDs are valid UUIDs
-    UUID(result.id)  # Will raise ValueError if invalid
-    UUID(result.episode_id)  # Will raise ValueError if invalid
-    assert (
-        result.choices[0].message.content
-        == "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
-    )
-    usage = result.usage
-    assert usage.prompt_tokens == 10
-    assert usage.completion_tokens == 10
-    assert usage.total_tokens == 20
-    assert result.choices[0].finish_reason == "stop"
-
-
-@pytest.mark.asyncio
 async def test_async_basic_inference(async_client):
     messages = [
         {"role": "system", "content": [{"assistant_name": "Alfred Pennyworth"}]},
@@ -1005,7 +978,6 @@ async def test_dynamic_tool_use_inference_openai(async_client):
 
 @pytest.mark.asyncio
 async def test_dynamic_json_mode_inference_body_param_openai(async_client):
-    header_episode_id = str(uuid7())
     body_episode_id = str(uuid7())
     output_schema = {
         "type": "object",
@@ -1032,9 +1004,6 @@ async def test_dynamic_json_mode_inference_body_param_openai(async_client):
         {"role": "user", "content": [{"country": "Japan"}]},
     ]
     result = await async_client.chat.completions.create(
-        extra_headers={
-            "episode_id": header_episode_id,
-        },
         extra_body={
             "tensorzero::episode_id": body_episode_id,
             "tensorzero::variant_name": "openai",
