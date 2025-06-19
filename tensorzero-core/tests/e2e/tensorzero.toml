@@ -1178,7 +1178,11 @@ type = "chat_completion"
 model = "gpt-4o-mini-2024-07-18"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
-extra_body = [{ pointer = "/temperature", value = 0.123 }]
+extra_body = [
+    { pointer = "/temperature", value = 0.123 },
+    { pointer = "/invalid-field-should-be-deleted", value = "Bad value" },
+    { pointer = "/invalid-field-should-be-deleted", delete = true },
+]
 
 [functions.basic_test.variants.openai-extra-body-provider-config]
 type = "chat_completion"
