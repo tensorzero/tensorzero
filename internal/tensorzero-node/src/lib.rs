@@ -30,6 +30,7 @@ impl TensorZeroClient {
         Ok(Self { client })
     }
 
+    #[napi]
     pub async fn experimental_launch_optimization(
         &self,
         params: String,
