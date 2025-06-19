@@ -56,7 +56,7 @@ export function DatasetSelector({
         <FormItem className="flex flex-col gap-1">
           <div className="w-full space-y-2">
             <Popover open={open} onOpenChange={setOpen}>
-              <PopoverTrigger className="border-gray-200 bg-gray-50" asChild>
+              <PopoverTrigger className="border-gray-200" asChild>
                 <Button
                   variant="outline"
                   role="combobox"

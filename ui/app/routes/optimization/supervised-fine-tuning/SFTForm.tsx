@@ -128,7 +128,6 @@ export function SFTForm({
   }
 
   return (
-    <div className="mt-4">
       <Form {...form}>
         <form
           onSubmit={(e) => {
@@ -211,6 +210,5 @@ export function SFTForm({
           )}
         </form>
       </Form>
-    </div>
   );
 }
