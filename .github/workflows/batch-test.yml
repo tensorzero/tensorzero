@@ -31,8 +31,6 @@ env:
 on:
   workflow_dispatch:
   workflow_call:
-  schedule:
-    - cron: "0 0 * * *" # Runs at 00:00 UTC every day
 
 jobs:
   batch-tests:

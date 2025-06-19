@@ -4,6 +4,8 @@ run-name: Merge Queue Checks for ${{ github.ref }}
 on:
   workflow_dispatch:
   merge_group:
+  schedule:
+    - cron: "0 0 * * *" # Runs at 00:00 UTC every day
 
 # See 'general.yml' for more details. Note that we use a difference concurrency group,
 # so that general.yml and merge-queue.yml can run in parallel.
@@ -129,6 +131,9 @@ jobs:
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
 
       - name: Download provider-proxy cache
+        # When running as a cron job, don't use the provider-proxy cache.
+        # The cron job is used to gather information about provider flakiness.
+        if: github.event_name != 'schedule'
         run: |
           AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY ./ci/download-provider-proxy-cache.sh
 
