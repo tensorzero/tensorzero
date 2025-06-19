@@ -50,6 +50,12 @@ url = "2.5.4"
 serde-untagged = "0.1.7"
 object_store = { version = "0.12.2", features = ["serde", "aws", "gcp"] }
 rand = "0.9.1"
+ts-rs = { version = "11.0.1", features = [
+    "serde-compat",
+    "serde-json-impl",
+    "uuid-impl",
+    "url-impl",
+] }
 chrono = { version = "0.4.41", features = ["serde"] }
 git2 = { version = "0.20.2", default-features = false }
 tracing-opentelemetry-instrumentation-sdk = { version = "0.29.0", features = [

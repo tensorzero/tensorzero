@@ -19,6 +19,7 @@ use pyo3::types::{PyAny, PyList};
 use pyo3::{exceptions::PyValueError, prelude::*, IntoPyObjectExt};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use ts_rs::TS;
 use uuid::Uuid;
 
 /// Represents an stored inference to be used for optimization.
@@ -282,7 +283,8 @@ impl StoredInference {
 /// This is constructed by rendering a StoredInference with a variant for messages
 /// and by resolving all network resources (e.g. images).
 #[cfg_attr(feature = "pyo3", pyclass(str))]
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
 pub struct RenderedStoredInference {
     pub function_name: String,
     pub variant_name: String,

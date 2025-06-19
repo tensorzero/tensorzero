@@ -29,4 +29,21 @@ impl TensorZeroClient {
         .map_err(|e| napi::Error::from_reason(e.to_string()))?;
         Ok(Self { client })
     }
+
+    pub async fn experimental_launch_optimization(
+        &self,
+        params: String,
+    ) -> Result<String, napi::Error> {
+        let params: tensorzero::OptimizationParams =
+            serde_json::from_str(&params).map_err(|e| napi::Error::from_reason(e.to_string()))?;
+        let job_handle = self
+            .client
+            .experimental_launch_optimization(params)
+            .await
+            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+        let job_handle_str = serde_json::to_string(&job_handle).map_err(|e| {
+            napi::Error::from_reason(format!("Failed to serialize job handle: {}", e))
+        })?;
+        Ok(job_handle_str)
+    }
 }

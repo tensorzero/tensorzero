@@ -15,7 +15,9 @@ napi = { version = "2.12.2", default-features = false, features = [
     "tokio_rt",
 ] }
 napi-derive = "2.12.2"
+serde_json.workspace = true
 tensorzero = { path = "../../clients/rust" }
+ts-rs.workspace = true
 
 [build-dependencies]
 napi-build = "2.0.1"

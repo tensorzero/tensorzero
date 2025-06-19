@@ -10,6 +10,7 @@ use reqwest::header::HeaderMap;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use serde_json::Value;
 use std::fmt::Debug;
+pub use tensorzero_core::endpoints::optimization::Params as OptimizationParams;
 use tensorzero_core::optimization::{OptimizerJobHandle, OptimizerStatus};
 use tensorzero_core::stored_inference::render_stored_inference;
 use tensorzero_core::{

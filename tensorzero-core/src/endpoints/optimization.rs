@@ -1,4 +1,5 @@
 use serde::Deserialize;
+use ts_rs::TS;
 
 use crate::{
     endpoints::inference::InferenceCredentials,
@@ -7,7 +8,8 @@ use crate::{
     stored_inference::RenderedStoredInference,
 };
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, TS)]
+#[ts(export)]
 pub struct Params {
     pub train_examples: Vec<RenderedStoredInference>,
     pub val_examples: Option<Vec<RenderedStoredInference>>,

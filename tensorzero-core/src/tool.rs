@@ -4,6 +4,7 @@ use std::{collections::HashMap, sync::Arc};
 use pyo3::prelude::*;
 use serde::{Deserialize, Serialize, Serializer};
 use serde_json::Value;
+use ts_rs::TS;
 
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::serialize_to_dict;
@@ -23,7 +24,8 @@ use crate::{
  */
 
 /// A Tool object describes how a tool can be dynamically configured by the user.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, TS)]
+#[ts(export)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct Tool {
@@ -215,7 +217,8 @@ impl ToolCallConfig {
 
 /// ToolCallConfigDatabaseInsert is a lightweight version of ToolCallConfig that can be serialized and cloned.
 /// It is used to insert the ToolCallConfig into the database.
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, TS)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct ToolCallConfigDatabaseInsert {
     pub tools_available: Vec<Tool>,
@@ -279,7 +282,8 @@ pub struct BatchDynamicToolParams {
 pub struct BatchDynamicToolParamsWithSize(pub BatchDynamicToolParams, pub usize);
 
 /// A ToolCall is a request by a model to call a Tool
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, TS)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
 pub struct ToolCall {
     pub name: String,
@@ -359,7 +363,8 @@ impl TryFrom<ToolCallInput> for ToolCall {
 
 /// A ToolCallOutput is a request by a model to call a Tool
 /// in the form that we return to the client / ClickHouse
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct ToolCallOutput {
     pub arguments: Option<Value>,
@@ -433,7 +438,8 @@ impl ToolCallConfig {
 
 /// A ToolResult is the outcome of a ToolCall, which we may want to present back to the model
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, TS)]
+#[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct ToolResult {
     pub name: String,
@@ -460,7 +466,8 @@ impl ToolResult {
 /// and even specify which tool to be used.
 ///
 /// This enum is used to denote this tool choice.
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "lowercase")]
 #[serde(deny_unknown_fields)]
 pub enum ToolChoice {
