@@ -1104,12 +1104,6 @@ pub struct JsonDatapointInsert {
     pub tags: Option<HashMap<String, String>>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-pub enum DatapointInsert {
-    Json(JsonDatapointInsert),
-    Chat(ChatDatapointInsert),
-}
-
 #[derive(Debug, Deserialize, PartialEq, Serialize)]
 pub struct ChatInferenceDatapoint {
     pub dataset_name: String,
