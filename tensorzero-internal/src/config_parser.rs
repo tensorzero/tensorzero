@@ -2647,7 +2647,9 @@ thinking = { type = "enabled", budget_tokens = 1024 }
         // The specific error can vary depending on the environment
         // In some cases we get BadScheme, in others we get DNS resolution errors
         assert!(
-            err.contains("BadScheme") || err.contains("dns error") || err.contains("Name or service not known"),
+            err.contains("BadScheme")
+                || err.contains("dns error")
+                || err.contains("Name or service not known"),
             "Expected BadScheme or DNS error, got: {err}"
         );
         assert!(logs_contain("Consider setting `[object_storage.allow_http]` to `true` if you are using a non-HTTPs endpoint"));
