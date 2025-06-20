@@ -354,7 +354,7 @@ test("should be able to add demonstration feedback via Try with variant flow", a
   // Look for variant options and click on one that's not the current variant
   const variantOption = page
     .getByRole("menuitem")
-    .filter({ hasText: "better_prompt" });
+    .filter({ hasText: "initial_prompt_gpt4o_mini" });
   await variantOption.waitFor({ state: "visible" });
   await variantOption.click();
 
