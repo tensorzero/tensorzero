@@ -420,12 +420,8 @@ fn delete_json_pointer(mut value: &mut serde_json::Value, pointer: &str) -> Resu
                     }
                 }
                 other => {
-                    return Err(Error::new(ErrorDetails::ExtraBodyReplacement {
-                        message: format!(
-                            "Can only index into object or array - found target {other}"
-                        ),
-                        pointer: pointer.to_string(),
-                    }))
+                    tracing::warn!("Skipping deletion of extra_body pointer `{pointer}` - found non array/object target {other}");
+                    return Ok(());
                 }
             }
         } else {
@@ -448,12 +444,8 @@ fn delete_json_pointer(mut value: &mut serde_json::Value, pointer: &str) -> Resu
                     }
                 },
                 other => {
-                    return Err(Error::new(ErrorDetails::ExtraBodyReplacement {
-                        message: format!(
-                            "Can only index into object or array - found target {other}"
-                        ),
-                        pointer: pointer.to_string(),
-                    }))
+                    tracing::warn!("Skipping deletion of extra_body pointer `{pointer}` - found non array/object target {other}");
+                    return Ok(());
                 }
             }
             return Ok(());
@@ -1272,6 +1264,17 @@ mod tests {
         delete_json_pointer(&mut obj, "/my_array/non-int-index").unwrap();
         assert!(logs_contain(
             "Skipping deletion of extra_body pointer `/my_array/non-int-index` - non-numeric array index `non-int-index`"
+        ));
+        assert_eq!(
+            obj,
+            serde_json::json!({
+                "my_array": ["value1", true],
+            })
+        );
+
+        delete_json_pointer(&mut obj, "/my_array/0/bad-index").unwrap();
+        assert!(logs_contain(
+            "Skipping deletion of extra_body pointer `/my_array/0/bad-index` - found non array/object target \"value1\""
         ));
         assert_eq!(
             obj,
