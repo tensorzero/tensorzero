@@ -3,6 +3,7 @@ pub mod migrations;
 
 use crate::clickhouse::migration_manager::migrations::migration_0031::Migration0031;
 use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::endpoints::status::TENSORZERO_VERSION;
 use crate::error::{Error, ErrorDetails};
 use async_trait::async_trait;
 use migration_trait::Migration;
@@ -30,6 +31,7 @@ use migrations::migration_0027::Migration0027;
 use migrations::migration_0028::Migration0028;
 use migrations::migration_0029::Migration0029;
 use migrations::migration_0030::Migration0030;
+use serde::{Deserialize, Serialize};
 
 /// This must match the number of migrations returned by `make_all_migrations` - the tests
 /// will panic if they don't match.
@@ -98,10 +100,36 @@ pub async fn run(clickhouse: &ClickHouseConnectionInfo) -> Result<(), Error> {
 
     // If the first migration needs to run, we are starting from scratch and don't need to wait for data to migrate
     // The value we pass in for 'clean_start' is ignored for the first migration
-    let clean_start = run_migration(&*migrations[0], false).await?;
+    let clean_start = run_migration(clickhouse, &*migrations[0], false).await?;
     for migration in &migrations[1..] {
-        run_migration(&**migration, clean_start).await?;
+        run_migration(clickhouse, &**migration, clean_start).await?;
     }
+    Ok(())
+}
+
+#[derive(Deserialize, Debug, Serialize, PartialEq)]
+pub struct MigrationRecordDatabaseInsert {
+    pub migration_id: u32,
+    pub migration_name: String,
+    pub gateway_version: String,
+}
+
+async fn insert_migration_record(
+    clickhouse: &ClickHouseConnectionInfo,
+    migration: &(impl Migration + ?Sized),
+) -> Result<(), Error> {
+    let migration_id = migration.migration_num()?;
+    let migration_name = migration.name();
+    clickhouse
+        .write(
+            &[MigrationRecordDatabaseInsert {
+                migration_id,
+                migration_name,
+                gateway_version: TENSORZERO_VERSION.to_string(),
+            }],
+            "TensorZeroMigration",
+        )
+        .await?;
     Ok(())
 }
 
@@ -109,6 +137,7 @@ pub async fn run(clickhouse: &ClickHouseConnectionInfo) -> Result<(), Error> {
 /// Returns Ok(false) if the migration should not apply.
 /// Returns Ok(true) if the migration succeeds.
 pub async fn run_migration(
+    clickhouse: &ClickHouseConnectionInfo,
     migration: &(impl Migration + ?Sized),
     clean_start: bool,
 ) -> Result<bool, Error> {
@@ -131,6 +160,7 @@ pub async fn run_migration(
         match migration.has_succeeded().await {
             Ok(true) => {
                 tracing::info!("Migration succeeded: {migration_name}");
+                insert_migration_record(clickhouse, migration).await?;
                 return Ok(true);
             }
             Ok(false) => {
@@ -189,6 +219,10 @@ mod tests {
 
     #[async_trait]
     impl Migration for MockMigration {
+        fn name(&self) -> String {
+            "Migration1".to_string()
+        }
+
         async fn can_apply(&self) -> Result<(), Error> {
             self.called_can_apply
                 .store(true, std::sync::atomic::Ordering::Relaxed);
@@ -239,7 +273,11 @@ mod tests {
         let mock_migration = MockMigration::default();
 
         // First check that method succeeds
-        assert!(run_migration(&mock_migration, false).await.is_ok());
+        assert!(
+            run_migration(&ClickHouseConnectionInfo::Disabled, &mock_migration, false)
+                .await
+                .is_ok()
+        );
 
         // Check that we called every method
         assert!(mock_migration
@@ -264,7 +302,11 @@ mod tests {
         };
 
         // First check that the method fails
-        assert!(run_migration(&mock_migration, false).await.is_err());
+        assert!(
+            run_migration(&ClickHouseConnectionInfo::Disabled, &mock_migration, false)
+                .await
+                .is_err()
+        );
 
         // Check that we called every method
         assert!(mock_migration
@@ -289,7 +331,11 @@ mod tests {
         };
 
         // First check that the method succeeds
-        assert!(run_migration(&mock_migration, false).await.is_ok());
+        assert!(
+            run_migration(&ClickHouseConnectionInfo::Disabled, &mock_migration, false)
+                .await
+                .is_ok()
+        );
 
         // Check that we called every method
         assert!(mock_migration
@@ -314,7 +360,11 @@ mod tests {
         };
 
         // First check that the method fails
-        assert!(run_migration(&mock_migration, false).await.is_err());
+        assert!(
+            run_migration(&ClickHouseConnectionInfo::Disabled, &mock_migration, false)
+                .await
+                .is_err()
+        );
 
         // Check that we called every method
         assert!(mock_migration
@@ -339,7 +389,11 @@ mod tests {
         };
 
         // First check that the method fails
-        assert!(run_migration(&mock_migration, false).await.is_err());
+        assert!(
+            run_migration(&ClickHouseConnectionInfo::Disabled, &mock_migration, false)
+                .await
+                .is_err()
+        );
 
         // Check that we called every method
         assert!(mock_migration
