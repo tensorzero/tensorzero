@@ -865,7 +865,7 @@ async fn test_streaming_thinking() {
                             "type": "tool_call",
                             "name": "get_capital",
                             "id": tool_call_id,
-                            "arguments": serde_json::Value::String(content_blocks[tool_call_id].to_string()),
+                            "raw_arguments": content_blocks[tool_call_id].to_string(),
                         },
                     ]
                 },
