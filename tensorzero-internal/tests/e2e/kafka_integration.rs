@@ -19,6 +19,7 @@ async fn test_kafka_integration_with_real_broker() {
         linger_ms: Some(10),
         request_timeout_ms: Some(5000),
         sasl: None,
+        security_protocol: None,
         buffer_max_size: 5000,
         flush_interval_seconds: 10,
         metrics_batch_size: 500,
@@ -67,6 +68,7 @@ async fn test_kafka_connection_error_handling() {
         linger_ms: None,
         request_timeout_ms: Some(1000), // Short timeout for test
         sasl: None,
+        security_protocol: None,
         buffer_max_size: 5000,
         flush_interval_seconds: 10,
         metrics_batch_size: 500,
@@ -112,6 +114,7 @@ mod docker_compose_tests {
             linger_ms: None,
             request_timeout_ms: None,
             sasl: None,
+            security_protocol: None,
             buffer_max_size: 5000,
             flush_interval_seconds: 10,
             metrics_batch_size: 500,
