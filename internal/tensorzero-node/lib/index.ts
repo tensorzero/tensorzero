@@ -1,6 +1,10 @@
 // Import the NAPI-RS generated bindings
 import { TensorZeroClient as NativeTensorZeroClient } from "../index";
-import { OptimizerJobHandle, StartOptimizationParams } from "./bindings";
+import {
+  OptimizerJobHandle,
+  OptimizerStatus,
+  StartOptimizationParams,
+} from "./bindings";
 
 // Re-export types from bindings
 export * from "./bindings";
@@ -35,9 +39,10 @@ export class TensorZeroClient {
     jobHandle: OptimizerJobHandle
   ): Promise<OptimizerStatus> {
     const jobHandleString = JSON.stringify(jobHandle);
-    const =
-      await this.nativeClient.experimentalPollOptimization(jobHandleString);
-    return JSON.parse(jobHandleString) as OptimizerJobHandle;
+    const statusString = await this.nativeClient.experimentalPollOptimization(
+      jobHandleString
+    );
+    return JSON.parse(statusString) as OptimizerStatus;
   }
 }
 
