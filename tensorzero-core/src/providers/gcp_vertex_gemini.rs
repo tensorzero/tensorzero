@@ -31,7 +31,10 @@ use crate::config_parser::{
     GCPBatchConfigCloudStorage, GCPBatchConfigType, GCPProviderTypeConfig, ProviderTypesConfig,
 };
 use crate::endpoints::inference::InferenceCredentials;
-use crate::error::{warn_discarded_unknown_chunk, DisplayOrDebugGateway, Error, ErrorDetails};
+use crate::error::{
+    warn_discarded_thought_block, warn_discarded_unknown_chunk, DisplayOrDebugGateway, Error,
+    ErrorDetails,
+};
 use crate::inference::types::batch::{
     BatchRequestRow, BatchStatus, PollBatchInferenceResponse, ProviderBatchInferenceOutput,
     ProviderBatchInferenceResponse,
@@ -914,6 +917,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
         let request_body = serde_json::to_value(GCPVertexGeminiRequest::new(
             provider_request.request,
             self.model_or_endpoint_id(),
+            false,
         )?)
         .map_err(|e| {
             Error::new(ErrorDetails::Serialization {
@@ -1018,6 +1022,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
         let request_body = serde_json::to_value(GCPVertexGeminiRequest::new(
             request,
             self.model_or_endpoint_id(),
+            false,
         )?)
         .map_err(|e| {
             Error::new(ErrorDetails::Serialization {
@@ -1079,7 +1084,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
         let mut raw_requests = Vec::with_capacity(requests.len());
         let mut jsonl_data = Vec::new();
         for request in requests {
-            let body = GCPVertexGeminiRequest::new(request, self.model_or_endpoint_id())?;
+            let body = GCPVertexGeminiRequest::new(request, self.model_or_endpoint_id(), true)?;
             let line =
                 serde_json::to_string(&GCPVertexBatchLine { request: body }).map_err(|e| {
                     Error::new(ErrorDetails::Serialization {
@@ -1543,12 +1548,10 @@ impl<'a> TryFrom<&'a ContentBlock> for Option<FlattenUnknown<'a, GCPVertexGemini
                     },
                 },
             ))),
-            // We don't support thought blocks being passed in from a request.
-            // These are only possible to be passed in in the scenario where the
-            // output of a chat completion is used as an input to another model inference,
-            // i.e. a judge or something.
-            // We don't think the thoughts should be passed in in this case.
-            ContentBlock::Thought(_thought) => Ok(None),
+            ContentBlock::Thought(thought) => {
+                warn_discarded_thought_block(PROVIDER_TYPE, thought);
+                Ok(None)
+            }
             ContentBlock::Unknown {
                 data,
                 model_provider_name: _,
@@ -1735,12 +1738,17 @@ struct GCPVertexGeminiRequest<'a> {
     tool_config: Option<GCPVertexGeminiToolConfig<'a>>,
     generation_config: Option<GCPVertexGeminiGenerationConfig<'a>>,
     system_instruction: Option<GCPVertexGeminiContent<'a>>,
+    #[serde(skip_serializing_if = "HashMap::is_empty")]
     labels: HashMap<String, String>,
     // TODO (if needed): [Safety Settings](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/SafetySetting)
 }
 
 impl<'a> GCPVertexGeminiRequest<'a> {
-    pub fn new(request: &'a ModelInferenceRequest<'a>, model_name: &'a str) -> Result<Self, Error> {
+    pub fn new(
+        request: &'a ModelInferenceRequest<'a>,
+        model_name: &'a str,
+        attach_label: bool,
+    ) -> Result<Self, Error> {
         if request.messages.is_empty() {
             return Err(ErrorDetails::InvalidRequest {
                 message: "GCP Vertex Gemini requires at least one message".to_string(),
@@ -1784,6 +1792,18 @@ impl<'a> GCPVertexGeminiRequest<'a> {
             response_mime_type,
             response_schema,
         });
+        // We attach our custom tag so that we can identify the original inference when
+        // retrieving batch results.
+        let labels = if attach_label {
+            [(
+                INFERENCE_ID_LABEL.to_string(),
+                request.inference_id.to_string(),
+            )]
+            .into_iter()
+            .collect()
+        } else {
+            HashMap::new()
+        };
         Ok(GCPVertexGeminiRequest {
             contents,
             tools,
@@ -1793,14 +1813,7 @@ impl<'a> GCPVertexGeminiRequest<'a> {
                 role: GCPVertexGeminiRole::Model,
                 parts: vec![FlattenUnknown::Normal(content)],
             }),
-            // We attach our custom tag so that we can identify the original inference when
-            // retrieving batch results.
-            labels: [(
-                INFERENCE_ID_LABEL.to_string(),
-                request.inference_id.to_string(),
-            )]
-            .into_iter()
-            .collect(),
+            labels,
         })
     }
 }
@@ -2494,7 +2507,7 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let result = GCPVertexGeminiRequest::new(&inference_request, "gemini-pro");
+        let result = GCPVertexGeminiRequest::new(&inference_request, "gemini-pro", false);
         let details = result.unwrap_err().get_owned_details();
         assert_eq!(
             details,
@@ -2532,7 +2545,7 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let result = GCPVertexGeminiRequest::new(&inference_request, "gemini-pro");
+        let result = GCPVertexGeminiRequest::new(&inference_request, "gemini-pro", false);
         let request = result.unwrap();
         assert_eq!(request.contents.len(), 2);
         assert_eq!(request.contents[0].role, GCPVertexGeminiRole::User);
@@ -2585,7 +2598,7 @@ mod tests {
         };
         // JSON schema should be supported for Gemini Pro models
         let result =
-            GCPVertexGeminiRequest::new(&inference_request, "gemini-2.5-pro-preview-06-05");
+            GCPVertexGeminiRequest::new(&inference_request, "gemini-2.5-pro-preview-06-05", false);
         let request = result.unwrap();
         assert_eq!(request.contents.len(), 3);
         assert_eq!(request.contents[0].role, GCPVertexGeminiRole::User);
@@ -2653,7 +2666,7 @@ mod tests {
             ..Default::default()
         };
         // JSON mode should be supported for Gemini Flash models but without a schema
-        let result = GCPVertexGeminiRequest::new(&inference_request, "gemini-flash");
+        let result = GCPVertexGeminiRequest::new(&inference_request, "gemini-flash", false);
         let request = result.unwrap();
         assert_eq!(request.contents.len(), 3);
         assert_eq!(request.contents[0].role, GCPVertexGeminiRole::User);

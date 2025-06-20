@@ -19,6 +19,7 @@ use crate::jsonschema_util::StaticJSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::{ModelConfig, ModelTable, UninitializedModelConfig};
 use crate::model_table::{CowNoClone, ShorthandModelConfig};
+use crate::optimization::{OptimizerInfo, UninitializedOptimizerInfo};
 use crate::tool::{create_implicit_tool_call_config, StaticToolConfig, ToolChoice};
 use crate::variant::best_of_n_sampling::UninitializedBestOfNSamplingConfig;
 use crate::variant::chain_of_thought::UninitializedChainOfThoughtConfig;
@@ -54,6 +55,7 @@ pub struct Config<'c> {
     pub templates: TemplateConfig<'c>,
     pub object_store_info: Option<ObjectStoreInfo>,
     pub provider_types: ProviderTypesConfig,
+    pub optimizers: HashMap<String, OptimizerInfo>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -420,6 +422,11 @@ impl<'c> Config<'c> {
             .collect::<Result<HashMap<_, _>, _>>()?;
 
         let object_store_info = ObjectStoreInfo::new(uninitialized_config.object_storage)?;
+        let optimizers = uninitialized_config
+            .optimizers
+            .into_iter()
+            .map(|(name, config)| config.load().map(|c| (name, c)))
+            .collect::<Result<HashMap<_, _>, _>>()?;
 
         let mut config = Config {
             gateway: uninitialized_config.gateway,
@@ -440,6 +447,7 @@ impl<'c> Config<'c> {
             templates,
             object_store_info,
             provider_types: uninitialized_config.provider_types,
+            optimizers,
         };
 
         // Initialize the templates
@@ -703,6 +711,8 @@ struct UninitializedConfig {
     #[serde(default)]
     pub provider_types: ProviderTypesConfig, // global configuration for all model providers of a particular type
     pub object_storage: Option<StorageKind>,
+    #[serde(default)]
+    pub optimizers: HashMap<String, UninitializedOptimizerInfo>, // optimizer name => optimizer config
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -2359,6 +2369,27 @@ mod tests {
 
         // Check the total number of templates
         assert_eq!(templates.len(), 22);
+    }
+
+    #[tokio::test]
+    async fn test_load_bad_extra_body_delete() {
+        let config_str = r#"
+        [functions.bash_assistant]
+        type = "chat"
+        
+        [functions.bash_assistant.variants.anthropic_claude_3_7_sonnet_20250219]
+        type = "chat_completion"
+        model = "anthropic::claude-3-7-sonnet-20250219"
+        max_tokens = 2048
+        extra_body = [{ pointer = "/invalid-field-should-be-deleted", delete = false }]
+        "#;
+        let config = toml::from_str(config_str).expect("Failed to parse sample config");
+        let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let err = Config::load_from_toml(config, base_path.clone())
+            .await
+            .expect_err("Config loading should fail")
+            .to_string();
+        assert_eq!(err, "functions.bash_assistant: variants.anthropic_claude_3_7_sonnet_20250219: extra_body.[0]: Error deserializing extra body replacement: 'delete' must be 'true', or not set");
     }
 
     #[tokio::test]

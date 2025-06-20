@@ -359,13 +359,15 @@
       counter-increment: line;
 
       &::before {
+        --_width: --spacing(13);
         display: block;
         content: counter(line);
         position: sticky;
+        flex: 0 0 var(--_width);
         align-self: flex-start;
         color: theme(--color-fg-muted);
         left: 0;
-        width: --spacing(13);
+        width: var(--_width);
         padding-right: --spacing(3);
         text-align: right;
         user-select: none;

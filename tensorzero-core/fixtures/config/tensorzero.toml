@@ -250,3 +250,19 @@ active = true
 json_mode = "off"
 model = "anthropic::claude-3.5-sonnet"
 system_instructions = "fixtures/config/evaluations/evaluation1/llm_judge_float/system_instructions.txt"
+
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                OPTIMIZERS                                  │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[optimizers.openai_sft]
+type = "openai_sft"
+model = "gpt-4o-2024-08-06"
+batch_size = 16
+learning_rate_multiplier = 0.1
+n_epochs = 1
+seed = 42
+suffix = "test"
+# credentials = "env:OPENAI_API_KEY"
+# api_base = "http://localhost:1234"
