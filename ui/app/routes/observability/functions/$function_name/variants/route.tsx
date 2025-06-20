@@ -5,7 +5,7 @@ import {
   useNavigate,
   useSearchParams,
 } from "react-router";
-import type { LoaderFunctionArgs } from "react-router";
+import type { LoaderFunctionArgs, RouteHandle } from "react-router";
 import BasicInfo from "./VariantBasicInfo";
 import VariantTemplate from "./VariantTemplate";
 import { useConfig } from "~/context/config";
@@ -35,6 +35,10 @@ import {
   SectionHeader,
 } from "~/components/layout/PageLayout";
 import { logger } from "~/utils/logger";
+
+export const handle: RouteHandle = {
+  crumb: (match) => ["Variants", match.params.variant_name!],
+};
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
   const { function_name, variant_name } = params;

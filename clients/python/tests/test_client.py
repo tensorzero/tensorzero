@@ -75,7 +75,7 @@ from uuid_utils import uuid7
 
 TEST_CONFIG_FILE = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
-    "../../../tensorzero-internal/tests/e2e/tensorzero.toml",
+    "../../../tensorzero-core/tests/e2e/tensorzero.toml",
 )
 
 
@@ -1193,7 +1193,7 @@ def test_default_function_inference(sync_client: TensorZeroGateway):
 def test_image_inference_base64(sync_client: TensorZeroGateway):
     basepath = path.dirname(__file__)
     with open(
-        f"{basepath}/../../../tensorzero-internal/tests/e2e/providers/ferris.png", "rb"
+        f"{basepath}/../../../tensorzero-core/tests/e2e/providers/ferris.png", "rb"
     ) as f:
         ferris_png = base64.b64encode(f.read()).decode("ascii")
 
@@ -1242,7 +1242,7 @@ def test_file_inference_base64(sync_client: TensorZeroGateway):
     # Test image with File block
     basepath = path.dirname(__file__)
     with open(
-        f"{basepath}/../../../tensorzero-internal/tests/e2e/providers/ferris.png", "rb"
+        f"{basepath}/../../../tensorzero-core/tests/e2e/providers/ferris.png", "rb"
     ) as f:
         ferris_png = base64.b64encode(f.read()).decode("ascii")
 
@@ -1288,7 +1288,7 @@ def test_file_inference_base64(sync_client: TensorZeroGateway):
     # Test pdf with File block
     basepath = path.dirname(__file__)
     with open(
-        f"{basepath}/../../../tensorzero-internal/tests/e2e/providers/deepseek_paper.pdf",
+        f"{basepath}/../../../tensorzero-core/tests/e2e/providers/deepseek_paper.pdf",
         "rb",
     ) as f:
         deepseek_paper_pdf = base64.b64encode(f.read()).decode("ascii")
@@ -2082,7 +2082,7 @@ def test_sync_basic_inference_with_content_block_plain_dict(
                             "type": "tool_call",
                             "id": "1",
                             "name": "test",
-                            "arguments": json.dumps({"arg": "value"}),
+                            "arguments": {"arg": "value"},
                         },
                         {
                             "type": "tool_result",
@@ -2600,7 +2600,7 @@ def test_patch_openai_client_with_config():
     client = OpenAI()
     tensorzero.patch_openai_client(
         client,
-        config_file="../../tensorzero-internal/tests/e2e/tensorzero.toml",
+        config_file="../../tensorzero-core/tests/e2e/tensorzero.toml",
         async_setup=False,
     )
     response = client.chat.completions.create(

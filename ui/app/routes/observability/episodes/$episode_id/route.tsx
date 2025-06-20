@@ -10,7 +10,12 @@ import {
   queryFeedbackByTargetId,
 } from "~/utils/clickhouse/feedback";
 import type { Route } from "./+types/route";
-import { data, isRouteErrorResponse, useNavigate } from "react-router";
+import {
+  data,
+  isRouteErrorResponse,
+  useNavigate,
+  type RouteHandle,
+} from "react-router";
 import EpisodeInferenceTable from "./EpisodeInferenceTable";
 import FeedbackTable from "~/components/feedback/FeedbackTable";
 import PageButtons from "~/components/utils/PageButtons";
@@ -32,6 +37,10 @@ import { HumanFeedbackForm } from "~/components/feedback/HumanFeedbackForm";
 import { isServerRequestError } from "~/utils/common";
 import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
 import { logger } from "~/utils/logger";
+
+export const handle: RouteHandle = {
+  crumb: (match) => [match.params.episode_id!],
+};
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { episode_id } = params;

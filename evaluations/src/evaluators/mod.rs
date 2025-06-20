@@ -4,11 +4,9 @@ use std::sync::Arc;
 use anyhow::Result;
 use serde_json::Value;
 use tensorzero::{ClientInput, FeedbackParams, InferenceResponse};
-use tensorzero_internal::cache::CacheEnabledMode;
-use tensorzero_internal::endpoints::datasets::Datapoint;
-use tensorzero_internal::evaluations::{
-    get_evaluator_metric_name, EvaluationConfig, EvaluatorConfig,
-};
+use tensorzero_core::cache::CacheEnabledMode;
+use tensorzero_core::endpoints::datasets::Datapoint;
+use tensorzero_core::evaluations::{get_evaluator_metric_name, EvaluationConfig, EvaluatorConfig};
 
 mod exact_match;
 use exact_match::run_exact_match_evaluator;

@@ -2,7 +2,7 @@ use anyhow::Result;
 use regex::Regex;
 use serde_json::Value;
 use std::path::PathBuf;
-use tensorzero_internal::inference::types::{
+use tensorzero_core::inference::types::{
     ContentBlockChatOutput, ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent,
 };
 /*

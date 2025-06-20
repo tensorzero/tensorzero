@@ -1,4 +1,4 @@
-import type { ActionFunctionArgs } from "react-router";
+import type { ActionFunctionArgs, RouteHandle } from "react-router";
 import {
   data,
   isRouteErrorResponse,
@@ -152,6 +152,10 @@ export async function action({ request }: ActionFunctionArgs) {
     }
   }
 }
+
+export const handle: RouteHandle = {
+  crumb: (match) => [match.params.id!],
+};
 
 export async function loader({
   params,

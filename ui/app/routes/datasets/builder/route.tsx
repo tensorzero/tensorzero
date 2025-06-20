@@ -5,7 +5,7 @@ import {
   getDatasetCounts,
   insertRowsForDataset,
 } from "~/utils/clickhouse/datasets.server";
-import type { ActionFunctionArgs } from "react-router";
+import type { ActionFunctionArgs, RouteHandle } from "react-router";
 import { serializedFormDataToDatasetQueryParams } from "./types";
 import {
   PageHeader,
@@ -15,14 +15,8 @@ import {
 import type { Route } from "./+types/route";
 import { logger } from "~/utils/logger";
 
-export const meta = () => {
-  return [
-    { title: "TensorZero Dataset Builder" },
-    {
-      name: "description",
-      content: "Dataset Builder",
-    },
-  ];
+export const handle: RouteHandle = {
+  crumb: () => ["Builder"],
 };
 
 export async function loader() {

@@ -76,6 +76,7 @@ export default function DatasetDetailPage({
     searchParams.set("offset", String(offset - pageSize));
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
+
   return (
     <PageLayout>
       <PageHeader heading="Dataset" name={count_info.dataset_name} />
