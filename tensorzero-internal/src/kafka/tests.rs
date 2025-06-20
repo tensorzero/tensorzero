@@ -63,7 +63,7 @@ async fn test_mock_kafka_buffer_and_batch() {
     for i in 0..5 {
         let event = ObservabilityEvent {
             inference_id: Uuid::now_v7(),
-            project_id: format!("project-{}", i),
+            project_id: format!("project-{i}"),
             endpoint_id: "test-endpoint".to_string(),
             model_id: "test-model".to_string(),
             is_success: true,
@@ -84,10 +84,10 @@ async fn test_mock_kafka_buffer_and_batch() {
     // Verify each message
     for (i, (topic, key, value)) in messages.iter().enumerate() {
         assert_eq!(topic, "budMetricsMessages");
-        assert_eq!(key, &format!("project-{}", i));
+        assert_eq!(key, &format!("project-{i}"));
 
         let cloud_event: serde_json::Value = serde_json::from_str(value).unwrap();
-        assert_eq!(cloud_event["data"]["project_id"], format!("project-{}", i));
+        assert_eq!(cloud_event["data"]["project_id"], format!("project-{i}"));
         assert_eq!(cloud_event["data"]["cost"], 0.001 * i as f64);
     }
 }
