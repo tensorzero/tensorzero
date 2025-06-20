@@ -1905,7 +1905,7 @@ where
     let val = bool::deserialize(d)?;
     if !val {
         return Err(D::Error::custom(
-            "Error deserializing extra body replacement: 'delete' must be 'true', or not set",
+            "Error deserializing replacement config: 'delete' must be 'true', or not set",
         ));
     }
     Ok(())
