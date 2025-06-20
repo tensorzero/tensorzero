@@ -15,6 +15,8 @@ import {
   ToolResultMessage,
   ImageMessage,
   ImageErrorMessage,
+  FileMessage,
+  AudioMessage,
   TextMessage,
   EmptyMessage,
 } from "~/components/layout/SnippetContent";
@@ -99,16 +101,26 @@ function renderContentBlock(block: ResolvedInputMessageContent, index: number) {
             downloadName={`tensorzero_${block.storage_path.path}`}
           />
         );
+      } else if (block.file.mime_type.startsWith("audio/")) {
+        return (
+          <AudioMessage
+            key={index}
+            url={block.file.url}
+            mimeType={block.file.mime_type}
+            filePath={block.storage_path.path}
+          />
+        );
       } else {
         return (
-          <div key={index}>
-            <ImageErrorMessage
-              key={index}
-              error={`Unsupported file type: ${block.file.mime_type}`}
-            />
-          </div>
+          <FileMessage
+            key={index}
+            url={block.file.url}
+            mimeType={block.file.mime_type}
+            filePath={block.storage_path.path}
+          />
         );
       }
+
     case "file_error":
       return <ImageErrorMessage key={index} error="Failed to retrieve image" />;
 
