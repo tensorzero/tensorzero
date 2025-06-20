@@ -6,7 +6,8 @@ import { z } from "zod";
 import {
   contentBlockOutputSchema,
   type StoragePath,
-} from "./clickhouse/common";
+} from "~/utils/clickhouse/common";
+import { TensorZeroServerError } from "./errors";
 
 /**
  * JSON types.
@@ -309,25 +310,6 @@ export const StatusResponseSchema = z.object({
 });
 export type StatusResponse = z.infer<typeof StatusResponseSchema>;
 
-export class HttpError extends Error {
-  readonly name: string = "HttpError";
-  readonly message: string;
-  readonly response: Response;
-
-  constructor({
-    message,
-    response,
-  }: {
-    message: string;
-    readonly response: Response;
-  }) {
-    message = message || "The request could not be completed";
-    super(message);
-    this.message = message;
-    this.response = response;
-  }
-}
-
 /**
  * A client for calling the TensorZero Gateway inference and feedback endpoints.
  */
@@ -363,12 +345,8 @@ export class TensorZeroClient {
         body: JSON.stringify(request),
       });
       if (!response.ok) {
-        const errorText = await response.text();
-        const errorContents = JSON.parse(errorText).error;
-        this.handleHttpError({
-          message: `Inference request failed with status ${response.status}: ${errorContents}`,
-          response,
-        });
+        const message = await this.getErrorText(response);
+        this.handleHttpError({ message, response });
       }
       return (await response.json()) as InferenceResponse;
     }
@@ -388,10 +366,8 @@ export class TensorZeroClient {
       body: JSON.stringify(request),
     });
     if (!response.ok) {
-      this.handleHttpError({
-        message: `Streaming inference failed with status ${response.status}`,
-        response,
-      });
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
     }
     if (!response.body) {
       this.handleHttpError({
@@ -442,12 +418,8 @@ export class TensorZeroClient {
       body: JSON.stringify(request),
     });
     if (!response.ok) {
-      const errorText = await response.text();
-      const errorContents = JSON.parse(errorText).error;
-      this.handleHttpError({
-        message: `Feedback request failed with status ${response.status}: ${errorContents}`,
-        response,
-      });
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
     }
     return (await response.json()) as FeedbackResponse;
   }
@@ -486,10 +458,8 @@ export class TensorZeroClient {
     });
 
     if (!response.ok) {
-      this.handleHttpError({
-        message: `Create datapoint request failed with status ${response.status}`,
-        response,
-      });
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
     }
 
     const body = await response.json();
@@ -538,11 +508,8 @@ export class TensorZeroClient {
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      this.handleHttpError({
-        message: `Update datapoint request failed with status ${response.status}: ${errorText}`,
-        response,
-      });
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
     }
 
     const body = await response.json();
@@ -552,10 +519,8 @@ export class TensorZeroClient {
     const endpoint = `/internal/object_storage?storage_path=${encodeURIComponent(JSON.stringify(storagePath))}`;
     const response = await this.fetch(endpoint, { method: "GET" });
     if (!response.ok) {
-      this.handleHttpError({
-        message: `Failed to get object: ${response.statusText}`,
-        response,
-      });
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
     }
     return response.text();
   }
@@ -563,10 +528,8 @@ export class TensorZeroClient {
   async status(): Promise<StatusResponse> {
     const response = await this.fetch("/status", { method: "GET" });
     if (!response.ok) {
-      this.handleHttpError({
-        message: `Failed to get status: ${response.statusText}`,
-        response,
-      });
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
     }
     return StatusResponseSchema.parse(await response.json());
   }
@@ -594,6 +557,20 @@ export class TensorZeroClient {
     return await fetch(url, { method, headers, body });
   }
 
+  private async getErrorText(response: Response): Promise<string> {
+    if (response.bodyUsed) {
+      response = response.clone();
+    }
+    const responseText = await response.text();
+    try {
+      const parsed = JSON.parse(responseText);
+      return typeof parsed?.error === "string" ? parsed.error : responseText;
+    } catch {
+      // Invalid JSON; return plain text from response
+      return responseText;
+    }
+  }
+
   private handleHttpError({
     message,
     response,
@@ -601,8 +578,11 @@ export class TensorZeroClient {
     message: string;
     response: Response;
   }): never {
-    // TODO: Switch on HTTP status code to handle known errors with more
-    // specificity
-    throw new HttpError({ message, response });
+    throw new TensorZeroServerError(message, {
+      // TODO: Ensure that server errors do not leak sensitive information to
+      // the client before exposing the statusText
+      // statusText: response.statusText,
+      status: response.status,
+    });
   }
 }

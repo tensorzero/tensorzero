@@ -90,18 +90,3 @@ export class JSONParseError extends SyntaxError {
     this.name = "JSONParseError";
   }
 }
-
-export class ServerRequestError extends Error {
-  statusCode: number;
-  constructor(message: string, statusCode: number) {
-    super(message);
-    this.name = "ServerRequestError";
-    this.statusCode = statusCode;
-  }
-}
-
-export function isServerRequestError(
-  error: unknown,
-): error is ServerRequestError {
-  return isErrorLike(error) && error.name === "ServerRequestError";
-}

@@ -1,22 +1,22 @@
 import { ZodError } from "zod";
-import {
-  InferenceRequestSchema,
-  HttpError as TensorZeroHttpError,
-} from "~/utils/tensorzero";
 import { tensorZeroClient } from "~/utils/tensorzero.server";
 import type {
   ResolvedFileContent,
   ResolvedInput,
   ResolvedInputMessageContent,
 } from "~/utils/clickhouse/common";
+import type { ResolvedInputMessage } from "~/utils/clickhouse/common";
 import type {
   InferenceResponse,
+  InputMessageContent as TensorZeroContent,
+  ImageContent as TensorZeroImage,
+  InputMessage as TensorZeroMessage,
   Input as TensorZeroInput,
 } from "~/utils/tensorzero";
-import type { ResolvedInputMessage } from "~/utils/clickhouse/common";
-import type { InputMessage as TensorZeroMessage } from "~/utils/tensorzero";
-import type { InputMessageContent as TensorZeroContent } from "~/utils/tensorzero";
-import type { ImageContent as TensorZeroImage } from "~/utils/tensorzero";
+import {
+  isTensorZeroServerError,
+  InferenceRequestSchema,
+} from "~/utils/tensorzero";
 import { JSONParseError } from "~/utils/common";
 import type { Route } from "./+types/inference";
 
@@ -35,11 +35,8 @@ export async function action({ request }: Route.ActionArgs): Promise<Response> {
     if (error instanceof ZodError) {
       return Response.json({ error: error.issues }, { status: 400 });
     }
-    if (error instanceof TensorZeroHttpError) {
-      return Response.json(
-        { error: error.message },
-        { status: error.response.status },
-      );
+    if (isTensorZeroServerError(error)) {
+      return Response.json({ error: error.message }, { status: error.status });
     }
     return Response.json({ error: "Server error" }, { status: 500 });
   }
