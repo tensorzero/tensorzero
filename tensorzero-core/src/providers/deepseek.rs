@@ -585,7 +585,7 @@ pub(super) fn prepare_deepseek_messages<'a>(
 ) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
     let mut messages = Vec::with_capacity(request.messages.len());
     for message in request.messages.iter() {
-        messages.extend(tensorzero_to_openai_messages(message)?);
+        messages.extend(tensorzero_to_openai_messages(message, PROVIDER_TYPE)?);
     }
     // If this is an R1 model, prepend the system message as the first user message instead of using it as a system message
     if model_name.to_lowercase().contains("reasoner") {

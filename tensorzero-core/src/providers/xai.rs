@@ -356,6 +356,7 @@ impl<'a> XAIRequest<'a> {
             request.system.as_deref(),
             &request.messages,
             Some(&request.json_mode),
+            PROVIDER_TYPE,
         )?;
 
         let (tools, tool_choice, _) = prepare_openai_tools(request);

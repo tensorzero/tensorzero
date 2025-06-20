@@ -25,11 +25,12 @@ use tensorzero::{
     ClientInputMessageContent, InferenceOutput, InferenceResponse,
 };
 use tensorzero_core::endpoints::inference::ChatCompletionInferenceParams;
+use tracing_test::traced_test;
 
 use tensorzero_core::endpoints::object_storage::{get_object_handler, ObjectResponse, PathParams};
 
 use tensorzero_core::gateway_util::AppStateData;
-use tensorzero_core::inference::types::{FinishReason, TextKind};
+use tensorzero_core::inference::types::{FinishReason, TextKind, Thought};
 use tensorzero_core::{
     cache::CacheEnabledMode,
     inference::types::{
@@ -207,6 +208,7 @@ macro_rules! generate_provider_tests {
         use $crate::providers::common::test_streaming_include_original_response_with_provider;
         use $crate::providers::common::test_pdf_inference_with_provider_filesystem;
         use $crate::providers::common::test_stop_sequences_inference_request_with_provider;
+        use $crate::providers::common::test_warn_ignored_thought_block_with_provider;
 
         #[tokio::test]
         async fn test_simple_inference_request() {
@@ -216,7 +218,13 @@ macro_rules! generate_provider_tests {
             }
         }
 
-
+        #[tokio::test(flavor = "multi_thread")]
+        async fn test_warn_ignored_thought_block() {
+            let providers = $func().await.simple_inference;
+            for provider in providers {
+                test_warn_ignored_thought_block_with_provider(provider).await;
+            }
+        }
 
         #[tokio::test]
         async fn test_reasoning_inference_request_simple() {
@@ -1702,6 +1710,50 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
     }
 
     assert_eq!(status, StatusCode::BAD_GATEWAY);
+}
+
+#[traced_test]
+pub async fn test_warn_ignored_thought_block_with_provider(provider: E2ETestProvider) {
+    let client = make_embedded_gateway().await;
+    client
+        .inference(ClientInferenceParams {
+            function_name: Some("basic_test".to_string()),
+            variant_name: Some(provider.variant_name),
+            input: ClientInput {
+                system: Some(serde_json::json!({"assistant_name": "Dr. Mehta"})),
+                messages: vec![
+                    ClientInputMessage {
+                        role: Role::Assistant,
+                        content: vec![ClientInputMessageContent::Thought(Thought {
+                            text: "My TensorZero thought".to_string(),
+                            signature: Some("My TensorZero signature".to_string()),
+                        })],
+                    },
+                    ClientInputMessage {
+                        role: Role::User,
+                        content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                            text: "What is the name of the capital city of Japan?".to_string(),
+                        })],
+                    },
+                ],
+            },
+            extra_headers: get_extra_headers(),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+
+    if ["anthropic"].contains(&provider.model_provider_name.as_str()) {
+        assert!(
+            !logs_contain("does not support input thought blocks"),
+            "Should not have warned about dropping thought blocks"
+        );
+    } else {
+        assert!(
+            logs_contain("does not support input thought blocks"),
+            "Missing expected warning"
+        );
+    }
 }
 
 pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvider) {
