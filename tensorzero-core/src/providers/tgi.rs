@@ -442,6 +442,7 @@ impl<'a> TGIRequest<'a> {
             request.system.as_deref(),
             &request.messages,
             Some(&request.json_mode),
+            PROVIDER_TYPE,
         )?;
 
         let (tools, tool_choice, parallel_tool_calls) = prepare_openai_tools(request);

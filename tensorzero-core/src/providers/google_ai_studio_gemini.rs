@@ -16,6 +16,7 @@ use super::helpers::check_new_tool_call_name;
 use super::helpers::inject_extra_request_data_and_send_eventsource;
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
+use crate::error::warn_discarded_thought_block;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::file::require_image;
@@ -479,7 +480,10 @@ impl<'a> TryFrom<&'a ContentBlock> for Option<FlattenUnknown<'a, GeminiPart<'a>>
             // output of a chat completion is used as an input to another model inference,
             // i.e. a judge or something.
             // We don't think the thoughts should be passed in in this case.
-            ContentBlock::Thought(_thought) => Ok(None),
+            ContentBlock::Thought(thought) => {
+                warn_discarded_thought_block(PROVIDER_TYPE, thought);
+                Ok(None)
+            }
             ContentBlock::Unknown {
                 data,
                 model_provider_name: _,

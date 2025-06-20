@@ -15,7 +15,7 @@ use super::helpers::{
 use crate::cache::ModelProviderRequest;
 use crate::config_parser::skip_credential_validation;
 use crate::endpoints::inference::InferenceCredentials;
-use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
+use crate::error::{warn_discarded_thought_block, DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::file::require_image;
@@ -564,7 +564,10 @@ impl<'a> TryFrom<&'a ContentBlock>
             // output of a chat completion is used as an input to another model inference,
             // i.e. a judge or something.
             // We don't think the thoughts should be passed in in this case.
-            ContentBlock::Thought(_thought) => Ok(None),
+            ContentBlock::Thought(thought) => {
+                warn_discarded_thought_block(PROVIDER_TYPE, thought);
+                Ok(None)
+            }
             ContentBlock::Unknown {
                 data,
                 model_provider_name: _,

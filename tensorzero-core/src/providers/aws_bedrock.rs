@@ -21,7 +21,7 @@ use super::aws_common::{self, build_interceptor, InterceptorAndRawBody};
 use super::helpers::peek_first_chunk;
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
-use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
+use crate::error::{warn_discarded_thought_block, DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::file::mime_type_to_ext;
@@ -677,7 +677,10 @@ impl TryFrom<&ContentBlock> for Option<BedrockContentBlock> {
             // output of a chat completion is used as an input to another model inference,
             // i.e. a judge or something.
             // We don't think the thoughts should be passed in in this case.
-            ContentBlock::Thought(_thought) => Ok(None),
+            ContentBlock::Thought(thought) => {
+                warn_discarded_thought_block(PROVIDER_TYPE, thought);
+                Ok(None)
+            }
             ContentBlock::Unknown {
                 data: _,
                 model_provider_name: _,
