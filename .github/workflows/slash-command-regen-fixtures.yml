@@ -8,6 +8,7 @@ env:
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
 permissions:
+  pull-requests: write  # For doing the emoji reaction on a PR comment
   contents: write
 
 jobs:
