@@ -131,6 +131,10 @@ export default function CurationMetricSelector<
                     </div>
                   </SelectItem>
                   {Object.entries(config.metrics).map(([name, metric]) => {
+                    if (removeDemonstrations && name === "demonstration") {
+                      return null;
+                    }
+
                     const metricFeedback = metricsFetcher.data?.metrics.find(
                       (m) => m.metric_name === name,
                     );

@@ -6,15 +6,13 @@ use tensorzero::{
     ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
     DynamicToolParams, File, InferenceOutput, InferenceParams, InferenceResponse, Role,
 };
-use tensorzero_internal::cache::CacheEnabledMode;
-use tensorzero_internal::endpoints::datasets::Datapoint;
-use tensorzero_internal::evaluations::{
+use tensorzero_core::cache::CacheEnabledMode;
+use tensorzero_core::endpoints::datasets::Datapoint;
+use tensorzero_core::evaluations::{
     get_evaluator_metric_name, get_llm_judge_function_name, LLMJudgeConfig, LLMJudgeInputFormat,
     LLMJudgeOutputType,
 };
-use tensorzero_internal::inference::types::{
-    ContentBlockChatOutput, JsonInferenceOutput, TextKind,
-};
+use tensorzero_core::inference::types::{ContentBlockChatOutput, JsonInferenceOutput, TextKind};
 use tracing::{debug, info, instrument};
 use uuid::Uuid;
 
@@ -429,16 +427,16 @@ mod tests {
     use serde_json::json;
     use tensorzero::File;
     use tensorzero::Role;
-    use tensorzero_internal::endpoints::datasets::ChatInferenceDatapoint;
-    use tensorzero_internal::endpoints::datasets::JsonInferenceDatapoint;
-    use tensorzero_internal::endpoints::inference::ChatInferenceResponse;
-    use tensorzero_internal::endpoints::inference::JsonInferenceResponse;
-    use tensorzero_internal::evaluations::LLMJudgeIncludeConfig;
-    use tensorzero_internal::evaluations::LLMJudgeOptimize;
-    use tensorzero_internal::inference::types::ResolvedInput;
-    use tensorzero_internal::inference::types::Usage;
-    use tensorzero_internal::tool::ToolCallInput;
-    use tensorzero_internal::{
+    use tensorzero_core::endpoints::datasets::ChatInferenceDatapoint;
+    use tensorzero_core::endpoints::datasets::JsonInferenceDatapoint;
+    use tensorzero_core::endpoints::inference::ChatInferenceResponse;
+    use tensorzero_core::endpoints::inference::JsonInferenceResponse;
+    use tensorzero_core::evaluations::LLMJudgeIncludeConfig;
+    use tensorzero_core::evaluations::LLMJudgeOptimize;
+    use tensorzero_core::inference::types::ResolvedInput;
+    use tensorzero_core::inference::types::Usage;
+    use tensorzero_core::tool::ToolCallInput;
+    use tensorzero_core::{
         inference::types::{ContentBlockChatOutput, Text, Thought},
         tool::{ToolCallOutput, ToolResult},
     };

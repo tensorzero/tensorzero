@@ -11,8 +11,12 @@ import {
 import type { DynamicEvaluationRunStatisticsByMetricName } from "~/utils/clickhouse/dynamic_evaluations";
 import { ColorAssignerProvider } from "~/hooks/evaluations/ColorAssigner";
 import { DynamicEvaluationProjectResultsTable } from "./DynamicEvaluationProjectResultsTable";
-import { useNavigate } from "react-router";
+import { useNavigate, type RouteHandle } from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
+
+export const handle: RouteHandle = {
+  crumb: (match) => ["Projects", match.params.project_name!],
+};
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const projectName = params.project_name;
