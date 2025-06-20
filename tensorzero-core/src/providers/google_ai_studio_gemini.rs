@@ -3,6 +3,7 @@ use std::sync::OnceLock;
 use std::time::Duration;
 
 use futures::StreamExt;
+use itertools::Itertools;
 use reqwest::StatusCode;
 use reqwest_eventsource::{Event, EventSource};
 use secrecy::{ExposeSecret, SecretString};
@@ -662,6 +663,7 @@ impl<'a> GeminiRequest<'a> {
             .messages
             .iter()
             .map(GeminiContent::try_from)
+            .filter_ok(|m| !m.parts.is_empty())
             .collect::<Result<_, _>>()?;
         let (tools, tool_config) = prepare_tools(request);
         let (response_mime_type, response_schema) = match request.json_mode {

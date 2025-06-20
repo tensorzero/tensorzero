@@ -1079,6 +1079,17 @@ pub enum OpenAIRequestMessage<'a> {
 }
 
 impl OpenAIRequestMessage<'_> {
+    pub fn no_content(&self) -> bool {
+        match self {
+            OpenAIRequestMessage::System(_) => false,
+            OpenAIRequestMessage::User(OpenAIUserRequestMessage { content }) => content.is_empty(),
+            OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
+                content,
+                tool_calls,
+            }) => content.is_none() && tool_calls.is_none(),
+            OpenAIRequestMessage::Tool(_) => false,
+        }
+    }
     pub fn content_contains_case_insensitive(&self, value: &str) -> bool {
         match self {
             OpenAIRequestMessage::System(msg) => msg.content.to_lowercase().contains(value),
@@ -1209,10 +1220,17 @@ pub(super) fn tensorzero_to_openai_messages<'a>(
 ) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
     match message.role {
         Role::User => tensorzero_to_openai_user_messages(&message.content, provider_type),
-        Role::Assistant => Ok(vec![tensorzero_to_openai_assistant_message(
-            Cow::Borrowed(&message.content),
-            provider_type,
-        )?]),
+        Role::Assistant => {
+            let message = tensorzero_to_openai_assistant_message(
+                Cow::Borrowed(&message.content),
+                provider_type,
+            )?;
+            if message.no_content() {
+                Ok(vec![])
+            } else {
+                Ok(vec![message])
+            }
+        }
     }
 }
 

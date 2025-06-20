@@ -821,6 +821,10 @@ fn tensorzero_to_openrouter_assistant_messages(
         _ => Some(assistant_tool_calls),
     };
 
+    if content.is_none() && tool_calls.is_none() {
+        return Ok(vec![]);
+    }
+
     let message = OpenRouterRequestMessage::Assistant(OpenRouterAssistantRequestMessage {
         content,
         tool_calls,

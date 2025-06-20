@@ -12,6 +12,7 @@ use aws_sdk_bedrockruntime::types::{
 use aws_smithy_types::error::display::DisplayErrorContext;
 use aws_types::region::Region;
 use futures::StreamExt;
+use itertools::Itertools;
 use reqwest::StatusCode;
 use std::time::Duration;
 use tokio::time::Instant;
@@ -85,6 +86,7 @@ impl InferenceProvider for AWSBedrockProvider {
             .messages
             .iter()
             .map(Message::try_from)
+            .filter_ok(|m| !m.content.is_empty())
             .collect::<Result<Vec<_>, _>>()?;
 
         if self.model_id.contains("claude")
@@ -740,7 +742,7 @@ impl TryFrom<&RequestMessage> for Message {
             .into_iter()
             .flatten()
             .collect();
-        let mut message_builder = Message::builder().role(role);
+        let mut message_builder = Message::builder().role(role).set_content(Some(vec![]));
         for block in content {
             message_builder = message_builder.content(block);
         }

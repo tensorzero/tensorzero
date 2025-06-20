@@ -3,6 +3,7 @@ use std::sync::OnceLock;
 use std::time::Duration;
 
 use futures::StreamExt;
+use itertools::Itertools;
 use reqwest::StatusCode;
 use reqwest_eventsource::{Event, EventSource};
 use serde::{Deserialize, Serialize};
@@ -639,6 +640,7 @@ impl<'a> GCPVertexAnthropicRequestBody<'a> {
             .messages
             .iter()
             .map(GCPVertexAnthropicMessage::try_from)
+            .filter_ok(|m| !m.content.is_empty())
             .collect::<Result<Vec<_>, _>>()?;
         let mut messages = prepare_messages(request_messages)?;
         if matches!(
