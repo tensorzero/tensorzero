@@ -1737,6 +1737,7 @@ struct GCPVertexGeminiRequest<'a> {
     tool_config: Option<GCPVertexGeminiToolConfig<'a>>,
     generation_config: Option<GCPVertexGeminiGenerationConfig<'a>>,
     system_instruction: Option<GCPVertexGeminiContent<'a>>,
+    #[serde(skip_serializing_if = "HashMap::is_empty")]
     labels: HashMap<String, String>,
     // TODO (if needed): [Safety Settings](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/SafetySetting)
 }
