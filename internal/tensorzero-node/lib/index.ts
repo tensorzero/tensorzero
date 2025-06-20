@@ -11,23 +11,27 @@ export * from "./bindings";
 
 // Your TypeScript wrapper class
 export class TensorZeroClient {
-  private nativeClient: NativeTensorZeroClient;
+  private nativeClient!: NativeTensorZeroClient;
 
-  async new(
+  constructor(client: NativeTensorZeroClient) {
+    this.nativeClient = client;
+  }
+
+  static async build(
     configPath: string,
     clickhouseUrl?: string | undefined | null,
-    timeout?: number | undefined | null
+    timeout?: number | undefined | null,
   ): Promise<TensorZeroClient> {
-    this.nativeClient = await NativeTensorZeroClient.new(
+    const nativeClient = await NativeTensorZeroClient.build(
       configPath,
       clickhouseUrl,
-      timeout
+      timeout,
     );
-    return this;
+    return new TensorZeroClient(nativeClient);
   }
 
   async experimentalStartOptimization(
-    params: StartOptimizationParams
+    params: StartOptimizationParams,
   ): Promise<OptimizerJobHandle> {
     const paramsString = JSON.stringify(params);
     const jobHandleString =
@@ -36,12 +40,11 @@ export class TensorZeroClient {
   }
 
   async experimentalPollOptimization(
-    jobHandle: OptimizerJobHandle
+    jobHandle: OptimizerJobHandle,
   ): Promise<OptimizerStatus> {
     const jobHandleString = JSON.stringify(jobHandle);
-    const statusString = await this.nativeClient.experimentalPollOptimization(
-      jobHandleString
-    );
+    const statusString =
+      await this.nativeClient.experimentalPollOptimization(jobHandleString);
     return JSON.parse(statusString) as OptimizerStatus;
   }
 }

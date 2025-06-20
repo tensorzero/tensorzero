@@ -3,4 +3,4 @@
 /**
  * A ToolCall is a request by a model to call a Tool
  */
-export type ToolCall = { name: string, arguments: string, id: string, };
+export type ToolCall = { name: string; arguments: string; id: string };

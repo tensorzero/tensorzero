@@ -14,7 +14,7 @@ pub struct TensorZeroClient {
 #[napi]
 impl TensorZeroClient {
     #[napi(factory)]
-    pub async fn new(
+    pub async fn build(
         config_path: String,
         clickhouse_url: Option<String>,
         timeout: Option<f64>,
