@@ -18,6 +18,7 @@ jobs:
         with:
           repository: ${{ github.event.client_payload.pull_request.head.repo.full_name }}
           ref: ${{ github.event.client_payload.pull_request.head.ref }}
+          ssh-key: "${{ secrets.REGEN_FIXTURES_DEPLOY_KEY }}"
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
