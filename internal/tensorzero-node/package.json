@@ -35,6 +35,7 @@
     "build": "napi build --platform --release && tsc",
     "build:debug": "napi build --platform && tsc",
     "build:ts": "tsc",
+    "check-exports": "cd lib/bindings && node check-exports.js",
     "prepublishOnly": "napi prepublish -t npm",
     "test": "vitest",
     "universal": "napi universal",
