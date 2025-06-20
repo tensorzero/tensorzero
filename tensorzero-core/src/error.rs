@@ -497,7 +497,7 @@ impl ErrorDetails {
             ErrorDetails::MissingFileExtension { .. } => tracing::Level::WARN,
             ErrorDetails::ModelProvidersExhausted { .. } => tracing::Level::ERROR,
             ErrorDetails::ModelValidation { .. } => tracing::Level::ERROR,
-            ErrorDetails::Observability { .. } => tracing::Level::ERROR,
+            ErrorDetails::Observability { .. } => tracing::Level::WARN,
             ErrorDetails::OutputParsing { .. } => tracing::Level::WARN,
             ErrorDetails::OutputValidation { .. } => tracing::Level::WARN,
             ErrorDetails::OptimizationResponse { .. } => tracing::Level::ERROR,

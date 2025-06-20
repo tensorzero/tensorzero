@@ -342,9 +342,6 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
                     }
                   ]
                 },
-                "labels": {
-                    "tensorzero::inference_id": inference_id.to_string(),
-                }
             });
             assert_eq!(raw_request, expected_request);
             let system = result.get("system").unwrap().as_str().unwrap();
@@ -741,9 +738,6 @@ async fn e2e_test_best_of_n_json_real_judge() {
                   }
                 ]
               },
-              "labels": {
-                  "tensorzero::inference_id": inference_id.to_string(),
-              }
             });
             assert_eq!(raw_request, expected_request);
         }
@@ -1176,9 +1170,6 @@ async fn e2e_test_best_of_n_judge_extra_body() {
                     }
                   ]
                 },
-                "labels": {
-                    "tensorzero::inference_id": inference_id.to_string(),
-                }
             });
             assert_eq!(raw_request, expected_request);
         }

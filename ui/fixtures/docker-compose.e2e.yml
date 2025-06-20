@@ -85,8 +85,7 @@ services:
     depends_on:
       gateway:
         condition: service_healthy
-    command:
-      ["bash", "-c", "cd /fixtures && ./load_fixtures.sh"]
+    command: ["bash", "-c", "cd /fixtures && ./load_fixtures.sh"]
     # Added healthcheck to wait for the marker file created by the script
     healthcheck:
       test: ["CMD", "test", "-f", "/load_complete.marker"]

@@ -65,8 +65,7 @@ services:
     depends_on:
       gateway:
         condition: service_healthy
-    command:
-      ["bash", "-c", "cd /fixtures && ./load_fixtures.sh"]
+    command: ["bash", "-c", "cd /fixtures && ./load_fixtures.sh"]
     healthcheck:
       test: ["CMD", "test", "-f", "/load_complete.marker"]
       interval: 5s

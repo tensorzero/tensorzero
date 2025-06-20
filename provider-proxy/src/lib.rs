@@ -65,6 +65,20 @@ fn save_cache_body(
     let path_str = path.to_string_lossy().into_owned();
     tracing::info!(path = path_str, "Finished processing request");
 
+    // None of our providers produce image/pdf responses, so this is good enough to exclude
+    // things like file fetching (which happen to use the proxied HTTP client in the gateway)
+    if let Some(content_type) = parts.headers.get(http::header::CONTENT_TYPE) {
+        if content_type.to_str().unwrap().starts_with("image/")
+            || content_type
+                .to_str()
+                .unwrap()
+                .starts_with("application/pdf")
+        {
+            tracing::info!("Skipping caching of response with content type {content_type:?}");
+            return Ok(());
+        }
+    }
+
     #[derive(Serialize)]
     #[serde(untagged)]
     enum BodyKind {
