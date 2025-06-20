@@ -47,6 +47,20 @@ jobs:
           echo "TENSORZERO_UI_TAG=sha-${{ github.sha }}" >> ui/fixtures/.env
           ./ui/fixtures/regenerate-model-inference-cache.sh
 
+      - name: Push to PR
+        run: |
+          git config --global user.name "TensorZero Bot"
+          git config --global user.email "bot@tensorzero.com"
+          git add .
+          git commit -m "Regenerate ModelInferenceCache fixtures"
+          git push
+      - name: Add reaction
+        uses: peter-evans/create-or-update-comment@71345be0265236311c031f5c7866368bd1eff043
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.event.client_payload.github.payload.repository.full_name }}
+          comment-id: ${{ github.event.client_payload.github.payload.comment.id }}
+          reactions: hooray
       - name: Print Docker Compose logs
         if: always()
         working-directory: ui
@@ -69,18 +83,3 @@ jobs:
             ui/playwright-report/
             ui/test-results/
           retention-days: 7
-
-      - name: Push to PR
-        run: |
-          git config --global user.name "TensorZero Bot"
-          git config --global user.email "bot@tensorzero.com"
-          git add .
-          git commit -m "Regenerate ModelInferenceCache fixtures"
-          git push
-      - name: Add reaction
-        uses: peter-evans/create-or-update-comment@71345be0265236311c031f5c7866368bd1eff043
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          repository: ${{ github.event.client_payload.github.payload.repository.full_name }}
-          comment-id: ${{ github.event.client_payload.github.payload.comment.id }}
-          reactions: hooray          
