@@ -69,16 +69,25 @@ function renderContentBlock(block: ResolvedInputMessageContent, index: number) {
         />
       );
 
-    case "tool_call":
+    case "tool_call": {
+      // NOTE: since tool calls are stored as a string in ResolvedInput and therefore the database
+      // and we are not guaranteed that they are valid JSON, we try to parse them as JSON
+      // and if they are not valid JSON, we display the raw string
+      const parsedArguments = block.arguments
+        ? JSON.parse(block.arguments)
+        : null;
+      const prettyArguments = parsedArguments
+        ? JSON.stringify(parsedArguments, null, 2)
+        : block.arguments;
       return (
         <ToolCallMessage
           key={index}
           toolName={block.name}
-          toolArguments={JSON.stringify(JSON.parse(block.arguments), null, 2)}
-          // TODO: if arguments is null, display raw arguments without parsing
+          toolArguments={prettyArguments}
           toolCallId={block.id}
         />
       );
+    }
 
     case "tool_result":
       return (
