@@ -11,13 +11,32 @@ slow-timeout = { period = "10s", terminate-after = 3 }
 # On CI, we use the 'ci' profile, which runs all tests.
 default-filter = "not test(no_aws_credentials)"
 
-[profile.ci]
+# Profiles config
+# We use these profiles to define our major test groups.
+# By using `default-filter` to specify our tests, we can further restrict the tests
+# by using command-line '-E' flags, which are *intersected* with the default-filter
+# If we instead defined these as cargo aliases with '-E' flags, then any additional
+# command-line flags would be unioned with the predefined '-E' flags from the alias,
+# which would prevent us from excluding more tests
+# The profile can be set with '--profile <profile-name>' when using 'cargo nextest run',
+# We also define cargo aliases for common use-cases (e.g. `cargo test-e2e`)
+[profile.e2e]
 retries = { backoff = "exponential", count = 4, delay = "5s", jitter = true, max-delay = "60s" }
-default-filter = "all()"
+default-filter = "not (test(batch)) and not (test(test_dummy_only) | test(clickhouse))"
 
-[[profile.ci.overrides]]
-filter = 'binary(e2e) and (test(providers::aws_bedrock::) or test(providers::aws_sagemaker))'
-retries = { backoff = "exponential", count = 8, delay = "5s", jitter = true, max-delay = "120s" }
+[profile.batch]
+default-filter = 'test(batch)'
+
+[profile.clickhouse]
+default-filter = 'test(test_dummy_only) | test(clickhouse)'
+
+[profile.optimization]
+# Settings for running optimization tests
+# We may have to update this as we add faster optimization methods that shouldn't
+# take as long
+default-filter = 'test(slow_optimization)'
+slow-timeout = { period = "21600s", terminate-after = 1 }
+retries = { count = 0, backoff = "fixed", delay = "0s" }
 
 # Note: use the following commands to debug test groups:
 # cargo nextest show-config test-groups
@@ -76,3 +95,7 @@ slow-timeout = { period = "500s", terminate-after = 1 }
 filter = 'not binary(e2e)'
 retries = 0
 slow-timeout = { period = "10s", terminate-after = 1 }
+
+[[profile.default.overrides]]
+filter = 'binary(e2e) and (test(providers::aws_bedrock::) or test(providers::aws_sagemaker))'
+retries = { backoff = "exponential", count = 8, delay = "5s", jitter = true, max-delay = "120s" }

@@ -15,13 +15,13 @@ use tokio::signal;
 use tower_http::trace::{DefaultOnFailure, TraceLayer};
 use tracing::Level;
 
-use tensorzero_internal::clickhouse::ClickHouseConnectionInfo;
-use tensorzero_internal::config_parser::Config;
-use tensorzero_internal::endpoints;
-use tensorzero_internal::endpoints::status::TENSORZERO_VERSION;
-use tensorzero_internal::error;
-use tensorzero_internal::gateway_util;
-use tensorzero_internal::observability::{self, LogFormat, RouterExt};
+use tensorzero_core::clickhouse::ClickHouseConnectionInfo;
+use tensorzero_core::config_parser::Config;
+use tensorzero_core::endpoints;
+use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
+use tensorzero_core::error;
+use tensorzero_core::gateway_util;
+use tensorzero_core::observability::{self, LogFormat, RouterExt};
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
@@ -87,7 +87,7 @@ async fn main() {
         .await
         .expect_pretty("Failed to set up logs");
 
-    let git_sha = tensorzero_internal::built_info::GIT_COMMIT_HASH_SHORT.unwrap_or("unknown");
+    let git_sha = tensorzero_core::built_info::GIT_COMMIT_HASH_SHORT.unwrap_or("unknown");
 
     tracing::info!("Starting TensorZero Gateway {TENSORZERO_VERSION} (commit: {git_sha})");
 
@@ -157,12 +157,24 @@ async fn main() {
             }
         }
 
-        delayed_log_config
-            .delayed_otel
-            .enable_otel()
-            .expect_pretty("Failed to enable OpenTelemetry");
-
+        match delayed_log_config.delayed_otel {
+            Ok(delayed_otel) => {
+                delayed_otel
+                    .enable_otel()
+                    .expect_pretty("Failed to enable OpenTelemetry");
+            }
+            Err(e) => {
+                tracing::error!(
+                    "Could not enable OpenTelemetry export due to previous error: `{e}`. Exiting."
+                );
+                std::process::exit(1);
+            }
+        }
         tracing::info!("Enabled OpenTelemetry OTLP export");
+    } else if let Err(e) = delayed_log_config.delayed_otel {
+        tracing::warn!(
+            "[gateway.export.otlp.traces.enabled]  is `false`, so ignoring OpenTelemetry error: `{e}`"
+        );
     }
 
     // Initialize AppState

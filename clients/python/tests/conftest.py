@@ -10,7 +10,7 @@ from tensorzero import (
 
 TEST_CONFIG_FILE = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
-    "../../../tensorzero-internal/tests/e2e/tensorzero.toml",
+    "../../../tensorzero-core/tests/e2e/tensorzero.toml",
 )
 
 
