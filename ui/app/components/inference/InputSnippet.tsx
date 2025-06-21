@@ -14,7 +14,7 @@ import {
   ToolCallMessage,
   ToolResultMessage,
   ImageMessage,
-  ImageErrorMessage,
+  FileErrorMessage,
   FileMessage,
   AudioMessage,
   TextMessage,
@@ -122,7 +122,7 @@ function renderContentBlock(block: ResolvedInputMessageContent, index: number) {
       }
 
     case "file_error":
-      return <ImageErrorMessage key={index} error="Failed to retrieve image" />;
+      return <FileErrorMessage key={index} error="Failed to retrieve file" />;
 
     default:
       return null;

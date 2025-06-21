@@ -240,12 +240,12 @@ export function ImageMessage({ url, downloadName }: ImageMessageProps) {
   );
 }
 
-interface ImageErrorMessageProps {
+interface FileErrorMessageProps {
   error: string;
 }
 
 // Image Error Message component
-export function ImageErrorMessage({ error }: ImageErrorMessageProps) {
+export function FileErrorMessage({ error }: FileErrorMessageProps) {
   return (
     <div className="flex flex-col gap-1.5">
       <Label

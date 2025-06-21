@@ -638,3 +638,31 @@ export const BadToolInput: Story = {
     },
   },
 };
+
+// TODO: This is bad! If the text happens to parse as JSON, we're assuming it's "Arguments". This not necessarily true!
+export const TextIsJSON: Story = {
+  args: {
+    input: {
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              value: JSON.stringify({ key: "value" }),
+            },
+          ],
+        },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "text",
+              value: JSON.stringify({ key: "value" }),
+            },
+          ],
+        },
+      ],
+    },
+  },
+};
