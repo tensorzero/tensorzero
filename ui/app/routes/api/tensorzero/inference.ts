@@ -112,6 +112,10 @@ function resolvedInputMessageContentToTensorZeroContent(
       return resolvedFileContentToTensorZeroFile(content);
     case "file_error":
       throw new Error("Can't convert image error to tensorzero content");
+    default: {
+      const exhaustiveCheck: never = content;
+      throw new Error(`Unexpected value: ${exhaustiveCheck}`);
+    }
   }
 }
 
