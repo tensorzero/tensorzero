@@ -236,6 +236,9 @@ importers:
       tailwindcss-animate:
         specifier: ^1.0.7
         version: 1.0.7(tailwindcss@4.1.7)
+      tensorzero-node:
+        specifier: file:../internal/tensorzero-node
+        version: link:../internal/tensorzero-node
       tiktoken:
         specifier: ^1.0.20
         version: 1.0.21

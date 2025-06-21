@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@clickhouse/client": "^1.11.0",
+    "tensorzero-node": "file:../internal/tensorzero-node",
     "@eslint/js": "^9.23.0",
     "@hookform/resolvers": "^5.0.1",
     "@radix-ui/react-accordion": "^1.2.11",
