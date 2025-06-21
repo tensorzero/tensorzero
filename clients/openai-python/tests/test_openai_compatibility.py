@@ -1025,6 +1025,16 @@ async def test_async_extra_headers_param(async_client):
                     "name": "x-my-extra-header",
                     "value": "my-extra-header-value",
                 },
+                {
+                    "model_provider_name": "tensorzero::model_name::dummy::echo_extra_info::provider_name::dummy",
+                    "name": "x-my-delete-header",
+                    "value": "Should be deleted",
+                },
+                {
+                    "model_provider_name": "tensorzero::model_name::dummy::echo_extra_info::provider_name::dummy",
+                    "name": "x-my-delete-header",
+                    "delete": True,
+                },
             ]
         },
         messages=messages,

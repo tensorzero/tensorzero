@@ -13,7 +13,9 @@ use crate::{
     inference::types::{
         batch::{ProviderBatchInferenceOutput, ProviderBatchInferenceResponse},
         extra_body::{ExtraBodyReplacementKind, FullExtraBodyConfig, InferenceExtraBody},
-        extra_headers::{ExtraHeader, FullExtraHeadersConfig, InferenceExtraHeader},
+        extra_headers::{
+            ExtraHeader, ExtraHeaderKind, FullExtraHeadersConfig, InferenceExtraHeader,
+        },
         ProviderInferenceResponseChunk,
     },
     model::{fully_qualified_name, ModelProviderRequestInfo},
@@ -266,25 +268,32 @@ pub fn inject_extra_request_data(
     .into_iter()
     .flatten()
     {
-        for ExtraHeader { name, value } in &extra_headers.data {
-            headers.insert(
-                http::header::HeaderName::from_bytes(name.as_bytes()).map_err(|e| {
-                    Error::new(ErrorDetails::Serialization {
-                        message: format!(
-                            "Invalid header name `{name}`: {}",
-                            DisplayOrDebugGateway::new(e)
-                        ),
-                    })
-                })?,
-                http::header::HeaderValue::from_bytes(value.as_bytes()).map_err(|e| {
-                    Error::new(ErrorDetails::Serialization {
-                        message: format!(
-                            "Invalid header value `{value}`: {}",
-                            DisplayOrDebugGateway::new(e)
-                        ),
-                    })
-                })?,
-            );
+        for ExtraHeader { name, kind } in &extra_headers.data {
+            let name = http::header::HeaderName::from_bytes(name.as_bytes()).map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!(
+                        "Invalid header name `{name}`: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
+                })
+            })?;
+            match kind {
+                ExtraHeaderKind::Value(value) => {
+                    let value =
+                        http::header::HeaderValue::from_bytes(value.as_bytes()).map_err(|e| {
+                            Error::new(ErrorDetails::Serialization {
+                                message: format!(
+                                    "Invalid header value `{value}`: {}",
+                                    DisplayOrDebugGateway::new(e)
+                                ),
+                            })
+                        })?;
+                    headers.insert(name, value);
+                }
+                ExtraHeaderKind::Delete => {
+                    headers.remove(name);
+                }
+            }
         }
     }
 
@@ -296,34 +305,44 @@ pub fn inject_extra_request_data(
                 // Any remaining `InferenceExtraHeader::Variant` values should be applied to the current request
                 variant_name: _,
                 name,
-                value,
+                kind,
             } => {
-                headers.insert(
-                    http::header::HeaderName::from_bytes(name.as_bytes()).map_err(|e| {
-                        Error::new(ErrorDetails::Serialization {
-                            message: format!(
-                                "Invalid header name `{name}`: {}",
-                                DisplayOrDebugGateway::new(e)
-                            ),
-                        })
-                    })?,
-                    http::header::HeaderValue::from_bytes(value.as_bytes()).map_err(|e| {
-                        Error::new(ErrorDetails::Serialization {
-                            message: format!(
-                                "Invalid header value `{value}`: {}",
-                                DisplayOrDebugGateway::new(e)
-                            ),
-                        })
-                    })?,
-                );
+                let name = http::header::HeaderName::from_bytes(name.as_bytes()).map_err(|e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!(
+                            "Invalid header name `{name}`: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
+                    })
+                })?;
+                match kind {
+                    ExtraHeaderKind::Value(value) => {
+                        headers.insert(
+                            name,
+                            http::header::HeaderValue::from_bytes(value.as_bytes()).map_err(
+                                |e| {
+                                    Error::new(ErrorDetails::Serialization {
+                                        message: format!(
+                                            "Invalid header value `{value}`: {}",
+                                            DisplayOrDebugGateway::new(e)
+                                        ),
+                                    })
+                                },
+                            )?,
+                        );
+                    }
+                    ExtraHeaderKind::Delete => {
+                        headers.remove(name);
+                    }
+                }
             }
             InferenceExtraHeader::Provider {
                 model_provider_name,
                 name,
-                value,
+                kind,
             } => {
                 if *model_provider_name == expected_provider_name {
-                    headers.insert(
+                    let name =
                         http::header::HeaderName::from_bytes(name.as_bytes()).map_err(|e| {
                             Error::new(ErrorDetails::Serialization {
                                 message: format!(
@@ -331,21 +350,31 @@ pub fn inject_extra_request_data(
                                     DisplayOrDebugGateway::new(e)
                                 ),
                             })
-                        })?,
-                        http::header::HeaderValue::from_bytes(value.as_bytes()).map_err(|e| {
-                            Error::new(ErrorDetails::Serialization {
-                                message: format!(
-                                    "Invalid header value `{value}`: {}",
-                                    DisplayOrDebugGateway::new(e)
-                                ),
-                            })
-                        })?,
-                    );
+                        })?;
+                    match kind {
+                        ExtraHeaderKind::Value(value) => {
+                            headers.insert(
+                                name,
+                                http::header::HeaderValue::from_bytes(value.as_bytes()).map_err(
+                                    |e| {
+                                        Error::new(ErrorDetails::Serialization {
+                                            message: format!(
+                                                "Invalid header value `{value}`: {}",
+                                                DisplayOrDebugGateway::new(e)
+                                            ),
+                                        })
+                                    },
+                                )?,
+                            );
+                        }
+                        ExtraHeaderKind::Delete => {
+                            headers.remove(name);
+                        }
+                    }
                 }
             }
         }
     }
-
     Ok(headers)
 }
 
@@ -721,7 +750,7 @@ mod tests {
                     data: vec![InferenceExtraHeader::Provider {
                         model_provider_name: "wrong_provider".to_string(),
                         name: "X-My-Header".to_string(),
-                        value: "My Value".to_string(),
+                        kind: ExtraHeaderKind::Value("My Value".to_string()),
                     }],
                 },
             },
@@ -768,15 +797,23 @@ mod tests {
                     data: vec![
                         ExtraHeader {
                             name: "X-My-Overridden".to_string(),
-                            value: "My variant value".to_string(),
+                            kind: ExtraHeaderKind::Value("My variant value".to_string()),
                         },
                         ExtraHeader {
                             name: "X-My-Overridden-Inference".to_string(),
-                            value: "My variant value".to_string(),
+                            kind: ExtraHeaderKind::Value("My variant value".to_string()),
                         },
                         ExtraHeader {
                             name: "X-My-Variant".to_string(),
-                            value: "My variant header".to_string(),
+                            kind: ExtraHeaderKind::Value("My variant header".to_string()),
+                        },
+                        ExtraHeader {
+                            name: "X-My-Delete".to_string(),
+                            kind: ExtraHeaderKind::Value("Should be deleted".to_string()),
+                        },
+                        ExtraHeader {
+                            name: "X-My-Delete-Inference".to_string(),
+                            kind: ExtraHeaderKind::Delete,
                         },
                     ],
                 }),
@@ -787,12 +824,12 @@ mod tests {
                                 "tensorzero::model_name::dummy_model::provider_name::dummy_provider"
                                     .to_string(),
                             name: "X-My-Inference".to_string(),
-                            value: "My inference header value".to_string(),
+                            kind: ExtraHeaderKind::Value("My inference header value".to_string()),
                         },
                         InferenceExtraHeader::Variant {
                             variant_name: "dummy_variant".to_string(),
                             name: "X-My-Overridden-Inference".to_string(),
-                            value: "My inference value".to_string(),
+                            kind: ExtraHeaderKind::Value("My inference value".to_string()),
                         },
                     ],
                 },
@@ -804,15 +841,15 @@ mod tests {
                     data: vec![
                         ExtraHeader {
                             name: "X-My-Overridden".to_string(),
-                            value: "My model provider value".to_string(),
+                            kind: ExtraHeaderKind::Value("My model provider value".to_string()),
                         },
                         ExtraHeader {
                             name: "X-My-Overridden-Inference".to_string(),
-                            value: "My model provider value".to_string(),
+                            kind: ExtraHeaderKind::Value("My model provider value".to_string()),
                         },
                         ExtraHeader {
                             name: "X-My-ModelProvider".to_string(),
-                            value: "My model provider header".to_string(),
+                            kind: ExtraHeaderKind::Value("My model provider header".to_string()),
                         },
                     ],
                 }),

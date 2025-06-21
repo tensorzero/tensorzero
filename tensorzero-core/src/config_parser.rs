@@ -2389,7 +2389,7 @@ mod tests {
             .await
             .expect_err("Config loading should fail")
             .to_string();
-        assert_eq!(err, "functions.bash_assistant: variants.anthropic_claude_3_7_sonnet_20250219: extra_body.[0]: Error deserializing extra body replacement: 'delete' must be 'true', or not set");
+        assert_eq!(err, "functions.bash_assistant: variants.anthropic_claude_3_7_sonnet_20250219: extra_body.[0]: Error deserializing replacement config: 'delete' must be 'true', or not set");
     }
 
     #[tokio::test]
