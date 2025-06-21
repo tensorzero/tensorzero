@@ -116,6 +116,10 @@ async function resolveContent(
           error: error instanceof Error ? error.message : String(error),
         };
       }
+    default: {
+      const exhaustiveCheck: never = content;
+      throw new Error(`Unexpected value: ${exhaustiveCheck}`);
+    }
   }
 }
 
@@ -162,6 +166,10 @@ async function resolveModelInferenceContent(
           error: error instanceof Error ? error.message : String(error),
         };
       }
+    default: {
+      const exhaustiveCheck: never = content;
+      throw new Error(`Unexpected value: ${exhaustiveCheck}`);
+    }
   }
 }
 async function resolveFile(content: FileContent): Promise<ResolvedBase64File> {

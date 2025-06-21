@@ -124,8 +124,10 @@ function renderContentBlock(block: ResolvedInputMessageContent, index: number) {
     case "file_error":
       return <FileErrorMessage key={index} error="Failed to retrieve file" />;
 
-    default:
-      return null;
+    default: {
+      const exhaustiveCheck: never = block;
+      throw new Error(`Unexpected value: ${exhaustiveCheck}`);
+    }
   }
 }
 
