@@ -10,6 +10,7 @@ import {
   FileText,
   FileAudio,
 } from "lucide-react";
+import React from "react";
 
 // Empty message component
 interface EmptyMessageProps {
@@ -353,6 +354,49 @@ export const AudioMessage: React.FC<FileMessageProps> = ({
   </div>
 );
 
+// Generate a Blob URL from base64 or data URL
+function useBase64UrlToBlobUrl(url: string, mimeType: string) {
+  const [objectUrl, setObjectUrl] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    let blobUrl: string | null = null;
+
+    function base64ToBlob(base64: string, mime: string) {
+      const byteCharacters = atob(base64);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      return new Blob([byteArray], { type: mime });
+    }
+
+    let base64: string | null = null;
+    if (url.startsWith("data:")) {
+      const match = url.match(/^data:(.*?);base64,(.*)$/);
+      if (match) {
+        base64 = match[2];
+      }
+    } else {
+      base64 = url;
+    }
+
+    if (base64) {
+      const blob = base64ToBlob(base64, mimeType);
+      blobUrl = URL.createObjectURL(blob);
+      setObjectUrl(blobUrl);
+    } else {
+      setObjectUrl(url);
+    }
+
+    return () => {
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+    };
+  }, [url, mimeType]);
+
+  return objectUrl || url;
+}
+
 export const FileMessage: React.FC<FileMessageProps> = ({
   url,
   mimeType,
@@ -371,9 +415,8 @@ export const FileMessage: React.FC<FileMessageProps> = ({
             >
               <Download className="h-5 w-5" />
             </Link>
-
             <Link
-              to={url}
+              to={useBase64UrlToBlobUrl(url, mimeType)}
               target="_blank"
               rel="noopener noreferrer"
               aria-label={`Open ${filePath} in new tab`}

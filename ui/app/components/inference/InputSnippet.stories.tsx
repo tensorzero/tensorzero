@@ -1,6 +1,8 @@
 import InputSnippet from "./InputSnippet";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { withRouter } from "storybook-addon-remix-react-router";
+import pdfUrl from "./InputSnippet.stories.fixture.tensorzero.pdf?url";
+import mp3Url from "./InputSnippet.stories.fixture.tensorzero.mp3?url";
 
 const meta = {
   title: "InputSnippet",
@@ -340,18 +342,30 @@ export const RawTextInput: Story = {
   },
 };
 
-async function getBase64Image(url: string): Promise<string> {
-  const response = await fetch(url);
-  const blob = await response.blob();
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const base64String = reader.result as string;
-      resolve(`data:${blob.type};base64,${base64String.split(",")[1]}`);
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
+async function getBase64File(url: string): Promise<string> {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(
+        `Failed to fetch ${url}: ${response.status} ${response.statusText}`,
+      );
+    }
+    const blob = await response.blob();
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64String = reader.result as string;
+        resolve(`data:${blob.type};base64,${base64String.split(",")[1]}`);
+      };
+      reader.onerror = () =>
+        reject(new Error(`Failed to read file from ${url}`));
+      reader.readAsDataURL(blob);
+    });
+  } catch (error) {
+    throw new Error(
+      `Failed to load file from ${url}: ${error instanceof Error ? error.message : "Unknown error"}`,
+    );
+  }
 }
 
 export const ImageInput: Story = {
@@ -368,8 +382,8 @@ export const ImageInput: Story = {
             {
               type: "file",
               file: {
-                url: await getBase64Image(
-                  "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-core/tests/e2e/providers/ferris.png",
+                url: await getBase64File(
+                  "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
                 ),
                 mime_type: "image/png",
               },
@@ -446,7 +460,7 @@ export const PDFInput: Story = {
             {
               type: "file",
               file: {
-                url: "data:application/pdf;base64,JVBERi0xLjQKJcOkw7zDtsO4CjIgMCBvYmoKPDwvTGVuZ3RoIDMgMCBSL0ZpbHRlci9GbGF0ZURlY29kZT4+CnN0cmVhbQp4nD2NQQqDMBRF7/KtA+aN9SfmOFJpC5ZusLZddzfXn0n+mzbJfOhN3uN9SXjWK7GD2Z3ZXbOBuwi8dNehVaayWKtQOHq7UOhP3r2eOL5r+lbcqP+l+qzfqWb8H3KvS7tbqaRWWL3p1bZ5/R5hpV5p3pu3KJgV0ZtVEQTQXNv7DQaXpQ6e",
+                url: await getBase64File(pdfUrl),
                 mime_type: "application/pdf",
               },
               storage_path: {
@@ -457,7 +471,7 @@ export const PDFInput: Story = {
                   endpoint: null,
                   allow_http: null,
                 },
-                path: "observability/files/research_paper_analysis_12345.pdf",
+                path: "observability/files/contract_fake_path_12345.pdf",
               },
             },
           ],
@@ -481,7 +495,7 @@ export const AudioInput: Story = {
             {
               type: "file",
               file: {
-                url: "data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4LjQ1LjEwMAAAAAAAAAAAAAD/+xDEAAPN/Pg6T3oAAAXQBwlKc6gDgfHhfOlP+B4QEAAz+DwJCAEKBAAAAMfhfOlP+B4QEAAz+DwJCAEKBAAAAGAEAAAAGAEAAAAG",
+                url: await getBase64File(mp3Url),
                 mime_type: "audio/mp3",
               },
               storage_path: {
@@ -489,7 +503,7 @@ export const AudioInput: Story = {
                   type: "filesystem",
                   path: "my_audio_storage",
                 },
-                path: "observability/files/meeting_recording_67890.mp3",
+                path: "observability/files/meeting_recording_fake_path_67890.mp3",
               },
             },
           ],
