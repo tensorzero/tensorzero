@@ -27,11 +27,17 @@ function renderContentBlock(block: ResolvedInputMessageContent, index: number) {
   switch (block.type) {
     case "text": {
       if (typeof block.value === "object") {
+        let serializedContent;
+        try {
+          serializedContent = JSON.stringify(block.value, null, 2);
+        } catch {
+          return null;
+        }
         return (
           <TextMessage
             key={index}
             label="Text (Arguments)"
-            content={JSON.stringify(block.value, null, 2)}
+            content={serializedContent}
             type="structured"
           />
         );
@@ -42,11 +48,17 @@ function renderContentBlock(block: ResolvedInputMessageContent, index: number) {
         try {
           const parsedJson = JSON.parse(block.value);
           if (typeof parsedJson === "object") {
+            let serializedContent;
+            try {
+              serializedContent = JSON.stringify(block.value, null, 2);
+            } catch {
+              return null;
+            }
             return (
               <TextMessage
                 key={index}
                 label="Text (Arguments)"
-                content={JSON.stringify(parsedJson, null, 2)}
+                content={serializedContent}
                 type="structured"
               />
             );
@@ -69,16 +81,27 @@ function renderContentBlock(block: ResolvedInputMessageContent, index: number) {
         />
       );
 
-    case "tool_call":
+    case "tool_call": {
+      let serializedArguments;
+      try {
+        serializedArguments = JSON.stringify(
+          JSON.parse(block.arguments),
+          null,
+          2,
+        );
+      } catch {
+        serializedArguments = block.arguments;
+      }
       return (
         <ToolCallMessage
           key={index}
           toolName={block.name}
-          toolArguments={JSON.stringify(JSON.parse(block.arguments), null, 2)}
+          toolArguments={serializedArguments}
           // TODO: if arguments is null, display raw arguments without parsing
           toolCallId={block.id}
         />
       );
+    }
 
     case "tool_result":
       return (
@@ -137,10 +160,17 @@ export default function InputSnippet({ input }: InputSnippetProps) {
           <SnippetContent>
             <SnippetMessage>
               {typeof input.system === "object" ? (
-                <TextMessage
-                  content={JSON.stringify(input.system, null, 2)}
-                  type="structured"
-                />
+                (() => {
+                  let serializedSystem;
+                  try {
+                    serializedSystem = JSON.stringify(input.system, null, 2);
+                  } catch {
+                    return null;
+                  }
+                  return (
+                    <TextMessage content={serializedSystem} type="structured" />
+                  );
+                })()
               ) : (
                 <TextMessage content={input.system} />
               )}
