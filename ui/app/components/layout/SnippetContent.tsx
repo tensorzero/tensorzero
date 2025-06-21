@@ -5,7 +5,12 @@ import {
   ArrowRight,
   Image as ImageIcon,
   ImageOff,
+  Download,
+  ExternalLink,
+  FileText,
+  FileAudio,
 } from "lucide-react";
+import React from "react";
 
 // Empty message component
 interface EmptyMessageProps {
@@ -33,7 +38,7 @@ function Label({ text, icon }: LabelProps) {
 
   return (
     <div className="flex flex-row items-center gap-1">
-      {icon && icon}
+      {icon}
       <span className="text-fg-tertiary text-xs font-medium">{text}</span>
     </div>
   );
@@ -235,12 +240,12 @@ export function ImageMessage({ url, downloadName }: ImageMessageProps) {
   );
 }
 
-interface ImageErrorMessageProps {
+interface FileErrorMessageProps {
   error: string;
 }
 
 // Image Error Message component
-export function ImageErrorMessage({ error }: ImageErrorMessageProps) {
+export function FileErrorMessage({ error }: FileErrorMessageProps) {
   return (
     <div className="flex flex-col gap-1.5">
       <Label
@@ -258,3 +263,169 @@ export function ImageErrorMessage({ error }: ImageErrorMessageProps) {
     </div>
   );
 }
+
+function TruncatedFileName({
+  filename,
+  maxLength = 32,
+}: {
+  filename: string;
+  maxLength?: number;
+}) {
+  if (filename.length <= maxLength) {
+    return filename;
+  }
+
+  const extension =
+    filename.lastIndexOf(".") > 0
+      ? filename.substring(filename.lastIndexOf("."))
+      : "";
+  const name = extension
+    ? filename.substring(0, filename.lastIndexOf("."))
+    : filename;
+
+  if (extension.length >= maxLength - 3) {
+    // If extension is too long, just truncate from the end
+    return (
+      <>
+        <span>{filename.substring(0, maxLength - 3)}</span>
+        <span className="text-fg-muted">...</span>
+      </>
+    );
+  }
+
+  const availableLength = maxLength - extension.length - 3; // 3 for "..."
+  const frontLength = Math.ceil(availableLength / 2);
+  const backLength = Math.floor(availableLength / 2);
+
+  if (name.length <= availableLength) {
+    return filename;
+  }
+
+  return (
+    <>
+      <span>{name.substring(0, frontLength)}</span>
+      <span className="text-fg-muted">...</span>
+      <span>{name.substring(name.length - backLength) + extension}</span>
+    </>
+  );
+}
+
+const FileMetadata: React.FC<
+  React.PropsWithChildren<{
+    mimeType: string;
+    filePath: string;
+  }>
+> = ({ mimeType, filePath, children }) => (
+  <div className="flex items-center gap-2">
+    <div className="min-w-0 flex-1">
+      <div className="text-fg-primary text-sm font-medium" title={filePath}>
+        <TruncatedFileName filename={filePath} />
+      </div>
+      <div className="text-fg-tertiary text-xs">{mimeType}</div>
+    </div>
+
+    {children}
+  </div>
+);
+
+interface FileMessageProps {
+  url: string;
+  mimeType: string;
+  filePath: string;
+}
+
+export const AudioMessage: React.FC<FileMessageProps> = ({
+  url,
+  mimeType,
+  filePath,
+}) => (
+  <div className="flex flex-col gap-1.5">
+    <Label
+      text="Audio"
+      icon={<FileAudio className="text-fg-muted h-3 w-3" />}
+    />
+
+    <div className="border-border flex w-80 flex-col gap-4 rounded-md border p-3">
+      <FileMetadata mimeType={mimeType} filePath={filePath} />
+      <audio controls preload="none" className="w-full">
+        <source src={url} type={mimeType} />
+      </audio>
+    </div>
+  </div>
+);
+
+// Generate a Blob URL from base64 or data URL
+function useBase64UrlToBlobUrl(url: string, mimeType: string) {
+  const [objectUrl, setObjectUrl] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    let blobUrl: string | null = null;
+
+    function base64ToBlob(base64: string, mime: string) {
+      const byteCharacters = atob(base64);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      return new Blob([byteArray], { type: mime });
+    }
+
+    let base64: string | null = null;
+    if (url.startsWith("data:")) {
+      const match = url.match(/^data:(.*?);base64,(.*)$/);
+      if (match) {
+        base64 = match[2];
+      }
+    } else {
+      base64 = url;
+    }
+
+    if (base64) {
+      const blob = base64ToBlob(base64, mimeType);
+      blobUrl = URL.createObjectURL(blob);
+      setObjectUrl(blobUrl);
+    } else {
+      setObjectUrl(url);
+    }
+
+    return () => {
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+    };
+  }, [url, mimeType]);
+
+  return objectUrl || url;
+}
+
+export const FileMessage: React.FC<FileMessageProps> = ({
+  url,
+  mimeType,
+  filePath,
+}) => (
+  <div className="flex flex-col gap-1.5">
+    <Label text="File" icon={<FileText className="text-fg-muted h-3 w-3" />} />
+    <div className="border-border flex w-80 flex-col gap-4 rounded-md border p-3">
+      <FileMetadata filePath={filePath} mimeType={mimeType}>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-4">
+            <Link
+              to={url}
+              download={`tensorzero_${filePath}`}
+              aria-label={`Download ${filePath}`}
+            >
+              <Download className="h-5 w-5" />
+            </Link>
+            <Link
+              to={useBase64UrlToBlobUrl(url, mimeType)}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={`Open ${filePath} in new tab`}
+            >
+              <ExternalLink className="h-5 w-5" />
+            </Link>
+          </div>
+        </div>
+      </FileMetadata>
+    </div>
+  </div>
+);
