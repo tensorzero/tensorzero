@@ -93,8 +93,10 @@ function renderContentBlock(block: ResolvedInputMessageContent, index: number) {
     case "file_error":
       return <ImageErrorMessage key={index} error="Failed to retrieve image" />;
 
-    default:
-      return null;
+    default: {
+      const exhaustiveCheck: never = block;
+      throw new Error(`Unexpected value: ${exhaustiveCheck}`);
+    }
   }
 }
 

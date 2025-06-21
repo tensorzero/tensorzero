@@ -163,6 +163,9 @@ function MessageContent({
                 }
               />
             );
+          // TODO (#2587): must handle raw_text
+          // case "raw_text":
+          //   ...
           case "tool_call":
             return (
               <InputToolCallBlock
@@ -203,6 +206,11 @@ function MessageContent({
                 <SkeletonImage error="Failed to retrieve image." />
               </div>
             );
+          // TODO (#2587): use exhaustive check instead
+          // default: {
+          //   const exhaustiveCheck: never = content;
+          //   throw new Error(`Unexpected value: ${exhaustiveCheck}`);
+          // }
           default:
             return null;
         }
