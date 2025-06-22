@@ -89,7 +89,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   // If there is a freshly inserted feedback, ClickHouse may take some time to
   // update the feedback table as it is eventually consistent.
-  // In this case, we poll for the feedback item until it is found but time out and log a warning.
+  // In this case, we poll for the feedback item until it is found but eventually time out and log a warning.
   const feedbackDataPromise = newFeedbackId
     ? pollForFeedbackItem(inference_id, newFeedbackId, pageSize)
     : queryFeedbackByTargetId({
