@@ -365,8 +365,8 @@ describe("getDatapoint", () => {
           {
             content: [
               {
-                type: "text",
-                value: "Is it a living thing?",
+                type: "unstructured_text",
+                text: "Is it a living thing?",
               },
             ],
             role: "user",
@@ -374,8 +374,8 @@ describe("getDatapoint", () => {
           {
             content: [
               {
-                type: "text",
-                value: "no.",
+                type: "unstructured_text",
+                text: "no.",
               },
             ],
             role: "assistant",
@@ -383,8 +383,8 @@ describe("getDatapoint", () => {
           {
             content: [
               {
-                type: "text",
-                value: "Is it commonly found indoors?",
+                type: "unstructured_text",
+                text: "Is it commonly found indoors?",
               },
             ],
             role: "user",
@@ -392,8 +392,8 @@ describe("getDatapoint", () => {
           {
             content: [
               {
-                type: "text",
-                value: "no.",
+                type: "unstructured_text",
+                text: "no.",
               },
             ],
             role: "assistant",
@@ -401,8 +401,8 @@ describe("getDatapoint", () => {
           {
             content: [
               {
-                type: "text",
-                value: "Is it a natural object, like a rock or tree?",
+                type: "unstructured_text",
+                text: "Is it a natural object, like a rock or tree?",
               },
             ],
             role: "user",
@@ -410,8 +410,8 @@ describe("getDatapoint", () => {
           {
             content: [
               {
-                type: "text",
-                value: "yes.",
+                type: "unstructured_text",
+                text: "yes.",
               },
             ],
             role: "assistant",
@@ -469,8 +469,8 @@ describe("getDatapoint", () => {
           {
             content: [
               {
-                type: "text",
-                value: {
+                type: "structured_text",
+                arguments: {
                   topic: "upward",
                 },
               },
@@ -517,8 +517,10 @@ describe("datapoint operations", () => {
           {
             content: [
               {
-                type: "unstructured_text",
-                text: "Write a haiku about testing",
+                type: "structured_text",
+                arguments: {
+                  topic: "testing",
+                },
               },
             ],
             role: "user" as const,
