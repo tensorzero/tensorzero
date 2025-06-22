@@ -72,17 +72,32 @@ export default function BasicInfo({ datapoint }: BasicInfoProps) {
       </BasicInfoItem>
 
       <BasicInfoItem>
-        <BasicInfoItemTitle>Episode ID</BasicInfoItemTitle>
+        <BasicInfoItemTitle>Inference</BasicInfoItemTitle>
         <BasicInfoItemContent>
-          <Chip
-            label={datapoint.episode_id ?? "N/A"}
-            link={
-              datapoint.episode_id
-                ? `/observability/episodes/${datapoint.episode_id}`
-                : undefined
-            }
-            font="mono"
-          />
+          {datapoint.source_inference_id ? (
+            <Chip
+              label={datapoint.source_inference_id}
+              link={`/observability/inferences/${datapoint.source_inference_id}`}
+              font="mono"
+            />
+          ) : (
+            <Chip label="Edited from original" prominence="muted" />
+          )}
+        </BasicInfoItemContent>
+      </BasicInfoItem>
+
+      <BasicInfoItem>
+        <BasicInfoItemTitle>Episode</BasicInfoItemTitle>
+        <BasicInfoItemContent>
+          {datapoint.episode_id ? (
+            <Chip
+              label={datapoint.episode_id}
+              link={`/observability/episodes/${datapoint.episode_id}`}
+              font="mono"
+            />
+          ) : (
+            <Chip label="None" prominence="muted" />
+          )}
         </BasicInfoItemContent>
       </BasicInfoItem>
 

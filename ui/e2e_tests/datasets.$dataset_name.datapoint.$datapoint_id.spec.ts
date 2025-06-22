@@ -3,9 +3,27 @@ import { v7 } from "uuid";
 
 test("should show the datapoint detail page", async ({ page }) => {
   await page.goto(
-    "/datasets/foo/datapoint/0193930b-6da0-7fa2-be87-9603d2bde664",
+    "/datasets/foo/datapoint/0196374b-d575-77b3-ac22-91806c67745c",
   );
   await expect(page.getByText("Input")).toBeVisible();
+
+  // Clicking episode ID opens episode page
+  await page
+    .getByRole("link", { name: "0193da94-231b-72e0-bda1-dfd0f681462d" })
+    .click();
+  await expect(page).toHaveURL(
+    /\/observability\/episodes\/0193da94-231b-72e0-bda1-dfd0f681462d/,
+  );
+  await page.goBack();
+
+  // Clicking inference ID opens inference page
+  await page
+    .getByRole("link", { name: "019480f9-d420-73b1-9619-81d71adc18a5" })
+    .click();
+  await expect(page).toHaveURL(
+    /\/observability\/inferences\/019480f9-d420-73b1-9619-81d71adc18a5/,
+  );
+  await page.goBack();
 
   // Assert that "error" is not in the page
   await expect(page.getByText("error", { exact: false })).not.toBeVisible();

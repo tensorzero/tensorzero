@@ -17,6 +17,7 @@ interface ChipProps {
   font?: "sans" | "mono";
   tooltip?: React.ReactNode;
   iconBg?: string;
+  prominence?: "normal" | "muted";
 }
 
 const Chip: React.FC<ChipProps> = ({
@@ -28,9 +29,10 @@ const Chip: React.FC<ChipProps> = ({
   font = "sans",
   tooltip,
   iconBg = "bg-none",
+  prominence = "normal",
 }) => {
   const baseClasses =
-    "inline-flex text-sm text-fg-primary py-1 px-0 md:px-2 gap-1.5 rounded-md whitespace-nowrap overflow-hidden";
+    "inline-flex text-sm text-fg-primary px-0 md:px-2 gap-1.5 rounded-md whitespace-nowrap overflow-hidden";
   const hoverClasses = link ? "md:hover:bg-bg-hover cursor-pointer" : "";
   const fontClasses = font === "mono" ? "font-mono" : "font-sans";
   const combinedClasses = clsx(
@@ -52,7 +54,14 @@ const Chip: React.FC<ChipProps> = ({
           {icon}
         </div>
       )}
-      <span className="text-fg-primary truncate">{label}</span>
+      <span
+        className={clsx(
+          "truncate",
+          prominence === "muted" ? "text-fg-muted" : "text-fg-primary",
+        )}
+      >
+        {label}
+      </span>
       {secondaryLabel && (
         <span className="text-fg-tertiary truncate pl-0.5">
           {secondaryLabel}

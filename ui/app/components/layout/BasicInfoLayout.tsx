@@ -34,7 +34,7 @@ interface BasicInfoItemContentProps {
 
 export function BasicInfoItemContent({ children }: BasicInfoItemContentProps) {
   return (
-    <div className="text-fg-primary flex flex-wrap gap-x-4 gap-y-0.5 md:gap-1">
+    <div className="text-fg-primary flex flex-wrap gap-x-4 gap-y-0.5 md:gap-1 md:py-1">
       {children}
     </div>
   );
