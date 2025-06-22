@@ -438,6 +438,14 @@ pub async fn update_datapoint_handler(
     }))
 }
 
+/// Note: This type should be a Vec<Enum<ChatDatapointInsert, JsonDatapointInsert>>,
+/// however, since the required fields don't distinguish these two types serde will fail to disambiguate them
+/// as it deserializes.
+///
+/// We can disambiguate them by checking the config for the `function_name` that
+/// the datapoint is for and then deserializing it as the correct type.
+///
+/// For the OpenAPI spec we will have to manually create the type for this.
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct InsertDatapointParams {

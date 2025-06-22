@@ -750,7 +750,10 @@ async def test_async_json_streaming(async_client: AsyncTensorZeroGateway):
         input={
             "system": {"assistant_name": "Alfred Pennyworth"},
             "messages": [
-                {"role": "user", "content": {"country": "Japan"}},
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "arguments": {"country": "Japan"}}],
+                },
                 {"role": "assistant", "content": "ok"},
                 # This function has a user schema but we can bypass with RawText
                 {"role": "user", "content": [RawText(value="Hello")]},

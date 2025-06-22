@@ -2372,6 +2372,27 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_load_bad_extra_body_delete() {
+        let config_str = r#"
+        [functions.bash_assistant]
+        type = "chat"
+        
+        [functions.bash_assistant.variants.anthropic_claude_3_7_sonnet_20250219]
+        type = "chat_completion"
+        model = "anthropic::claude-3-7-sonnet-20250219"
+        max_tokens = 2048
+        extra_body = [{ pointer = "/invalid-field-should-be-deleted", delete = false }]
+        "#;
+        let config = toml::from_str(config_str).expect("Failed to parse sample config");
+        let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let err = Config::load_from_toml(config, base_path.clone())
+            .await
+            .expect_err("Config loading should fail")
+            .to_string();
+        assert_eq!(err, "functions.bash_assistant: variants.anthropic_claude_3_7_sonnet_20250219: extra_body.[0]: Error deserializing extra body replacement: 'delete' must be 'true', or not set");
+    }
+
+    #[tokio::test]
     async fn test_load_bad_config_error_path() {
         let config_str = r#"
 [functions.bash_assistant]
