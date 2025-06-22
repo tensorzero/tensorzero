@@ -14,6 +14,7 @@ import type { ChatCompletionConfig } from "~/utils/config/variant";
 import type { Config } from "~/utils/config";
 import { models } from "./model_options";
 import { useCountFetcher } from "~/routes/api/curated_inferences/count.route";
+import { logger } from "~/utils/logger";
 
 export function SFTForm({
   config,
@@ -91,7 +92,7 @@ export function SFTForm({
       formFetcher.submit(submitData, { method: "POST" });
       setSubmissionPhase("submitting");
     } catch (error) {
-      console.error("Submission error (likely a bug):", error);
+      logger.error("Submission error (likely a bug):", error);
     }
   };
 

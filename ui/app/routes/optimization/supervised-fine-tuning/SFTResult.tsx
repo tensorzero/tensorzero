@@ -1,6 +1,7 @@
 import { useState, useRef } from "react";
 import { Button } from "~/components/ui/button";
 import { Textarea } from "~/components/ui/textarea";
+import { logger } from "~/utils/logger";
 
 interface SFTResultProps {
   finalResult: string | null;
@@ -30,7 +31,7 @@ export function SFTResult({
       setError(null);
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
-      console.error(err);
+      logger.error(err);
       setError("Failed to copy. Please copy manually.");
       if (textAreaRef.current) {
         textAreaRef.current.select();

@@ -15,6 +15,7 @@ import { useEffect, useState } from "react";
 import { Button } from "~/components/ui/button";
 import OutputSourceSelector from "./OutputSourceSelector";
 import { DatasetCountDisplay } from "./DatasetCountDisplay";
+import { logger } from "~/utils/logger";
 
 export function DatasetBuilderForm({
   dataset_counts,
@@ -69,7 +70,7 @@ export function DatasetBuilderForm({
   useEffect(() => {
     if (formFetcher.data) {
       if (formFetcher.data.errors) {
-        console.error("Form submission error:", formFetcher.data.errors);
+        logger.error("Form submission error:", formFetcher.data.errors);
         setSubmissionPhase("idle");
         form.setError("root", {
           type: "submit",
@@ -93,7 +94,7 @@ export function DatasetBuilderForm({
       formFetcher.submit(submitData, { method: "POST" });
       setSubmissionPhase("submitting");
     } catch (error) {
-      console.error("Submission error:", error);
+      logger.error("Submission error:", error);
       setSubmissionPhase("idle");
     }
   };
