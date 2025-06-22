@@ -87,13 +87,18 @@ export const toolResultContentSchema = z
 export type ToolResultContent = z.infer<typeof toolResultContentSchema>;
 
 export const base64FileSchema = z.object({
-  url: z.string().nullable(),
+  url: z.string().url().nullable(),
   mime_type: z.string(),
 });
 export type Base64File = z.infer<typeof base64FileSchema>;
 
 export const resolvedBase64FileSchema = z.object({
-  dataUrl: z.string(),
+  dataUrl: z
+    .string()
+    .url()
+    .refine((url) => url.startsWith("data:"), {
+      message: "Data URL must start with 'data:'",
+    }),
   mime_type: z.string(),
 });
 export type ResolvedBase64File = z.infer<typeof resolvedBase64FileSchema>;
@@ -354,6 +359,12 @@ export const CountSchema = z.object({
 });
 export type Count = z.infer<typeof CountSchema>;
 
+/**
+ * Converts the display input message content to the input message content.
+ * This is useful for the case where we've edited a datapoint and need to convert
+ * the display form back into something we can write to ClickHouse.
+ */
+
 function displayInputMessageContentToInputMessageContent(
   content: DisplayInputMessageContent,
 ): InputMessageContent {
@@ -387,6 +398,11 @@ function displayInputMessageContentToInputMessageContent(
   }
 }
 
+/**
+ * Converts the display input message to the input message.
+ * This is useful for the case where we've edited a datapoint and need to convert
+ * the display form back into something we can write to ClickHouse.
+ */
 function displayInputMessageToInputMessage(
   message: DisplayInputMessage,
 ): InputMessage {
@@ -398,6 +414,11 @@ function displayInputMessageToInputMessage(
   };
 }
 
+/**
+ * Converts the display input to the input.
+ * This is useful for the case where we've edited a datapoint and need to convert
+ * the display form back into something we can write to ClickHouse.
+ */
 export function displayInputToInput(displayInput: DisplayInput): Input {
   return {
     system: displayInput.system,

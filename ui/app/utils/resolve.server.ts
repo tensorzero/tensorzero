@@ -32,16 +32,6 @@ export async function resolveInput(
   };
 }
 
-// export async function resolveModelInferenceInput(
-//   input: ModelInferenceInput,
-// ): Promise<DisplayModelInferenceInput> {
-//   const resolvedMessages = await resolveMessages(input.messages);
-//   return {
-//     ...input,
-//     messages: resolvedMessages,
-//   };
-// }
-
 export async function resolveMessages(
   messages: InputMessage[],
   functionConfig: FunctionConfig | null,
