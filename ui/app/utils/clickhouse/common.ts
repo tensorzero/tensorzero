@@ -10,6 +10,34 @@ export const textInputSchema = z.object({
 });
 export type TextInput = z.infer<typeof textInputSchema>;
 
+// The three display text types below handle the scenario
+// where the function 1) does not use schemas
+export const displayUnstructuredTextInputSchema = z.object({
+  type: z.literal("unstructured_text"),
+  text: z.string(),
+});
+export type DisplayUnstructuredTextInput = z.infer<
+  typeof displayUnstructuredTextInputSchema
+>;
+
+// 2) uses schemas
+export const displayStructuredTextInputSchema = z.object({
+  type: z.literal("structured_text"),
+  arguments: z.any(),
+});
+export type DisplayStructuredTextInput = z.infer<
+  typeof displayStructuredTextInputSchema
+>;
+
+// 3) is missing from the config so we don't know
+export const displayMissingFunctionTextInputSchema = z.object({
+  type: z.literal("missing_function_text"),
+  value: z.any(),
+});
+export type DisplayMissingFunctionTextInput = z.infer<
+  typeof displayMissingFunctionTextInputSchema
+>;
+
 export const modelInferenceTextInputSchema = z.object({
   type: z.literal("text"),
   text: z.string(),
@@ -65,7 +93,7 @@ export const base64FileSchema = z.object({
 export type Base64File = z.infer<typeof base64FileSchema>;
 
 export const resolvedBase64FileSchema = z.object({
-  url: z.string(),
+  dataUrl: z.string(),
   mime_type: z.string(),
 });
 export type ResolvedBase64File = z.infer<typeof resolvedBase64FileSchema>;
@@ -157,8 +185,10 @@ export type ModelInferenceInputMessageContent = z.infer<
   typeof modelInferenceInputMessageContentSchema
 >;
 
-export const resolvedInputMessageContentSchema = z.discriminatedUnion("type", [
-  textInputSchema,
+export const displayInputMessageContentSchema = z.discriminatedUnion("type", [
+  displayUnstructuredTextInputSchema,
+  displayStructuredTextInputSchema,
+  displayMissingFunctionTextInputSchema,
   toolCallContentSchema,
   toolResultContentSchema,
   resolvedFileContentSchema,
@@ -166,8 +196,8 @@ export const resolvedInputMessageContentSchema = z.discriminatedUnion("type", [
   rawTextInputSchema,
 ]);
 
-export type ResolvedInputMessageContent = z.infer<
-  typeof resolvedInputMessageContentSchema
+export type DisplayInputMessageContent = z.infer<
+  typeof displayInputMessageContentSchema
 >;
 
 export const inputMessageSchema = z
@@ -188,13 +218,30 @@ export type ModelInferenceInputMessage = z.infer<
   typeof modelInferenceInputMessageSchema
 >;
 
-export const resolvedInputMessageSchema = z
+export const displayModelInferenceInputMessageContentSchema =
+  z.discriminatedUnion("type", [
+    displayUnstructuredTextInputSchema,
+    toolCallContentSchema,
+    toolResultContentSchema,
+    resolvedFileContentSchema,
+    resolvedFileContentErrorSchema,
+  ]);
+
+export const displayModelInferenceInputMessageSchema = z.object({
+  role: roleSchema,
+  content: z.array(displayModelInferenceInputMessageContentSchema),
+});
+export type DisplayModelInferenceInputMessage = z.infer<
+  typeof displayModelInferenceInputMessageSchema
+>;
+
+export const displayInputMessageSchema = z
   .object({
     role: roleSchema,
-    content: z.array(resolvedInputMessageContentSchema),
+    content: z.array(displayInputMessageContentSchema),
   })
   .strict();
-export type ResolvedInputMessage = z.infer<typeof resolvedInputMessageSchema>;
+export type DisplayInputMessage = z.infer<typeof displayInputMessageSchema>;
 
 export const inputSchema = z
   .object({
@@ -212,13 +259,13 @@ export const modelInferenceInputSchema = z
   .strict();
 export type ModelInferenceInput = z.infer<typeof modelInferenceInputSchema>;
 
-export const resolvedInputSchema = z
+export const displayInputSchema = z
   .object({
     system: z.any().optional(), // Value type from Rust maps to any in TS
-    messages: z.array(resolvedInputMessageSchema).default([]),
+    messages: z.array(displayInputMessageSchema).default([]),
   })
   .strict();
-export type ResolvedInput = z.infer<typeof resolvedInputSchema>;
+export type DisplayInput = z.infer<typeof displayInputSchema>;
 
 // Types for main intermediate representations (content blocks and request messages)
 export const textContentSchema = z.object({

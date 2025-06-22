@@ -1,7 +1,7 @@
 import type {
-  ResolvedInput,
-  ResolvedInputMessageContent,
-  ResolvedInputMessage,
+  DisplayInput,
+  DisplayInputMessageContent,
+  DisplayInputMessage,
 } from "~/utils/clickhouse/common";
 import {
   SnippetLayout,
@@ -22,43 +22,42 @@ import {
 } from "~/components/layout/SnippetContent";
 
 interface InputSnippetProps {
-  input: ResolvedInput;
+  input: DisplayInput;
 }
 
-function renderContentBlock(block: ResolvedInputMessageContent, index: number) {
+function renderContentBlock(block: DisplayInputMessageContent, index: number) {
   switch (block.type) {
-    case "text": {
-      if (typeof block.value === "object") {
-        return (
-          <TextMessage
-            key={index}
-            label="Text (Arguments)"
-            content={JSON.stringify(block.value, null, 2)}
-            type="structured"
-          />
-        );
-      }
+    case "structured_text": {
+      return (
+        <TextMessage
+          key={index}
+          label="Text (Arguments)"
+          content={JSON.stringify(block.arguments, null, 2)}
+          type="structured"
+        />
+      );
+    }
 
-      // Try to parse JSON strings
-      if (typeof block.value === "string") {
-        try {
-          const parsedJson = JSON.parse(block.value);
-          if (typeof parsedJson === "object") {
-            return (
-              <TextMessage
-                key={index}
-                label="Text (Arguments)"
-                content={JSON.stringify(parsedJson, null, 2)}
-                type="structured"
-              />
-            );
-          }
-        } catch {
-          // Not valid JSON, continue with regular text message
-        }
-      }
+    case "unstructured_text": {
+      return (
+        <TextMessage
+          key={index}
+          label="Text"
+          content={block.text}
+          type="default"
+        />
+      );
+    }
 
-      return <TextMessage key={index} label="Text" content={block.value} />;
+    case "missing_function_text": {
+      return (
+        <TextMessage
+          key={index}
+          label="Text (Missing Function Config)"
+          content={block.value}
+          type="default"
+        />
+      );
     }
 
     case "raw_text":
@@ -97,7 +96,7 @@ function renderContentBlock(block: ResolvedInputMessageContent, index: number) {
         return (
           <ImageMessage
             key={index}
-            url={block.file.url}
+            url={block.file.dataUrl}
             downloadName={`tensorzero_${block.storage_path.path}`}
           />
         );
@@ -105,7 +104,7 @@ function renderContentBlock(block: ResolvedInputMessageContent, index: number) {
         return (
           <AudioMessage
             key={index}
-            url={block.file.url}
+            url={block.file.dataUrl}
             mimeType={block.file.mime_type}
             filePath={block.storage_path.path}
           />
@@ -114,7 +113,7 @@ function renderContentBlock(block: ResolvedInputMessageContent, index: number) {
         return (
           <FileMessage
             key={index}
-            url={block.file.url}
+            url={block.file.dataUrl}
             mimeType={block.file.mime_type}
             filePath={block.storage_path.path}
           />
@@ -129,11 +128,11 @@ function renderContentBlock(block: ResolvedInputMessageContent, index: number) {
   }
 }
 
-function renderMessage(message: ResolvedInputMessage, messageIndex: number) {
+function renderMessage(message: DisplayInputMessage, messageIndex: number) {
   return (
     <SnippetMessage variant="input" key={messageIndex} role={message.role}>
       {message.content.map(
-        (block: ResolvedInputMessageContent, blockIndex: number) =>
+        (block: DisplayInputMessageContent, blockIndex: number) =>
           renderContentBlock(block, blockIndex),
       )}
     </SnippetMessage>

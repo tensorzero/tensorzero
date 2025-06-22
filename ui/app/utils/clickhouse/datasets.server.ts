@@ -541,7 +541,9 @@ export async function getDatapoint(
 
 async function parseDatapointRow(row: DatapointRow): Promise<ParsedDatasetRow> {
   const parsedInput = inputSchema.parse(JSON.parse(row.input));
-  const resolvedInput = await resolveInput(parsedInput);
+  const config = await getConfig();
+  const functionConfig = config.functions[row.function_name];
+  const resolvedInput = await resolveInput(parsedInput, functionConfig);
   if ("tool_params" in row) {
     // Chat inference row
     const processedRow = {

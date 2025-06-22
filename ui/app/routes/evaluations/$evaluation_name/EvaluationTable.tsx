@@ -24,7 +24,7 @@ import type {
   EvaluationStatistics,
   ParsedEvaluationResult,
 } from "~/utils/clickhouse/evaluations";
-import type { ResolvedInput } from "~/utils/clickhouse/common";
+import type { DisplayInput } from "~/utils/clickhouse/common";
 import type {
   JsonInferenceOutput,
   ContentBlockOutput,
@@ -55,7 +55,7 @@ type TruncatedContentProps = (
     }
   | {
       type: "input";
-      content: ResolvedInput;
+      content: DisplayInput;
     }
   | {
       type: "output";
@@ -120,7 +120,7 @@ const TruncatedContentTooltip: React.FC<
 );
 
 // Helper function to generate a summary of an Input object
-function getInputSummary(input: ResolvedInput): string {
+function getInputSummary(input: DisplayInput): string {
   if (!input || !input.messages || input.messages.length === 0) {
     return "Empty input";
   }
@@ -132,11 +132,24 @@ function getInputSummary(input: ResolvedInput): string {
   }
 
   const firstContent = firstMessage.content[0];
-  if (firstContent.type === "text") {
-    const text =
-      typeof firstContent.value === "string"
-        ? firstContent.value
-        : JSON.stringify(firstContent.value);
+
+  if (firstContent.type === "structured_text") {
+    const text = JSON.stringify(firstContent.arguments, null, 2);
+    return text.length > 30 ? text.substring(0, 30) + "..." : text;
+  }
+
+  if (firstContent.type === "unstructured_text") {
+    const text = firstContent.text;
+    return text.length > 30 ? text.substring(0, 30) + "..." : text;
+  }
+
+  if (firstContent.type === "missing_function_text") {
+    const text = firstContent.value;
+    return text.length > 30 ? text.substring(0, 30) + "..." : text;
+  }
+
+  if (firstContent.type === "raw_text") {
+    const text = firstContent.value;
     return text.length > 30 ? text.substring(0, 30) + "..." : text;
   }
 
@@ -230,7 +243,7 @@ export function EvaluationTable({
       string,
       {
         id: string;
-        input: ResolvedInput;
+        input: DisplayInput;
         reference_output: JsonInferenceOutput | ContentBlockOutput[];
       }
     >();
