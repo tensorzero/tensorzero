@@ -1,0 +1,78 @@
+# Example TensorZero configuration with Kafka integration
+
+[gateway]
+# Other gateway settings...
+
+[gateway.observability]
+# Enable observability features
+enabled = true
+# Use async writes for better performance
+async_writes = true
+
+# Kafka configuration for CloudEvents observability metrics
+# (for inference data only, feedback goes to ClickHouse only)
+[gateway.observability.kafka]
+# Enable Kafka integration
+enabled = true
+# Kafka broker addresses (comma-separated for multiple brokers)
+brokers = "localhost:9092"
+# Topic prefix for legacy Kafka topics (not used for CloudEvents)
+topic_prefix = "tensorzero"
+# Topic for CloudEvents observability metrics (for Dapr PubSub integration)
+metrics_topic = "budMetricsMessages"
+
+# Buffer configuration for batching observability events
+buffer_max_size = 5000         # Maximum events in buffer
+metrics_batch_size = 500       # Events per CloudEvent message
+flush_interval_seconds = 10    # Time between flushes
+
+# Optional: Compression settings
+compression_type = "lz4"  # Options: none, gzip, snappy, lz4, zstd
+
+# Optional: Batching settings for better throughput
+batch_size = 1000        # Maximum messages per batch
+linger_ms = 10          # Time to wait for batching (milliseconds)
+
+# Optional: Request timeout
+request_timeout_ms = 5000
+
+# Optional: SASL authentication (uncomment if needed)
+# [gateway.observability.kafka.sasl]
+# mechanism = "PLAIN"  # or "SCRAM-SHA-256", "SCRAM-SHA-512"
+# username = "your-username"
+# password = "your-password"
+
+# Functions configuration
+[functions.example_chat]
+type = "chat"
+
+[functions.example_chat.variants.main]
+type = "chat_completion"
+model = "gpt-3.5-turbo"
+
+[functions.example_json]
+type = "json"
+output_schema = { type = "object", properties = { answer = { type = "string" } } }
+
+[functions.example_json.variants.main]
+type = "chat_completion"
+model = "gpt-3.5-turbo"
+
+# Metrics configuration
+[metrics.accuracy]
+type = "float"
+level = "inference"
+optimize = "max"
+
+[metrics.user_satisfaction]
+type = "boolean"
+level = "episode"
+optimize = "max"
+
+# Model provider configuration
+[models.gpt-3.5-turbo]
+routing = ["openai"]
+
+[model_providers.openai]
+type = "openai"
+# API key should be set via environment variable: OPENAI_API_KEY

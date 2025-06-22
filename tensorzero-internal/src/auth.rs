@@ -3,11 +3,19 @@ use axum::extract::{Request, State};
 use axum::http::StatusCode;
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
-pub type APIConfig = HashMap<String, String>;
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApiKeyMetadata {
+    pub endpoint_id: String,
+    pub model_id: String,
+    pub project_id: String,
+}
+
+pub type APIConfig = HashMap<String, ApiKeyMetadata>;
 
 // Common error response helper
 fn auth_error_response(status: StatusCode, error_type: &str, message: &str) -> Response {
@@ -117,7 +125,7 @@ pub async fn require_api_key(
     // We already checked that api_config is Ok in the if statement above
     #[expect(clippy::unwrap_used)]
     let api_config = api_config.unwrap();
-    let model_value = match api_config.get(model) {
+    let metadata = match api_config.get(model) {
         Some(v) => v,
         None => {
             return Err(auth_error_response(
@@ -132,7 +140,7 @@ pub async fn require_api_key(
     let original_model = model.to_string();
 
     // Replace the "model" field in the request body with the value from api_config
-    val["model"] = format!("tensorzero::model_name::{}", model_value.clone()).into();
+    val["model"] = format!("tensorzero::model_name::{}", metadata.endpoint_id.clone()).into();
 
     // Re-serialize the modified JSON body for the downstream handler
     let bytes = match serde_json::to_vec(&val) {
@@ -153,6 +161,23 @@ pub async fn require_api_key(
         request
             .headers_mut()
             .insert("x-tensorzero-original-model", header_value);
+    }
+
+    // Add metadata headers for observability
+    if let Ok(header_value) = metadata.project_id.parse() {
+        request
+            .headers_mut()
+            .insert("x-tensorzero-project-id", header_value);
+    }
+    if let Ok(header_value) = metadata.endpoint_id.parse() {
+        request
+            .headers_mut()
+            .insert("x-tensorzero-endpoint-id", header_value);
+    }
+    if let Ok(header_value) = metadata.model_id.parse() {
+        request
+            .headers_mut()
+            .insert("x-tensorzero-model-id", header_value);
     }
 
     Ok(next.run(request).await)

@@ -16,6 +16,7 @@ use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::config_parser::Config;
 use crate::endpoints;
 use crate::error::{Error, ErrorDetails};
+use crate::kafka::KafkaConnectionInfo;
 use crate::model::ModelTable;
 /// State for the API
 #[derive(Clone)]
@@ -23,6 +24,7 @@ pub struct AppStateData {
     pub config: Arc<Config<'static>>,
     pub http_client: Client,
     pub clickhouse_connection_info: ClickHouseConnectionInfo,
+    pub kafka_connection_info: KafkaConnectionInfo,
 }
 pub type AppState = axum::extract::State<AppStateData>;
 
@@ -44,12 +46,14 @@ impl AppStateData {
         clickhouse_url: Option<String>,
     ) -> Result<Self, Error> {
         let clickhouse_connection_info = setup_clickhouse(&config, clickhouse_url, false).await?;
+        let kafka_connection_info = setup_kafka(&config).await?;
         let http_client = setup_http_client()?;
 
         Ok(Self {
             config,
             http_client,
             clickhouse_connection_info,
+            kafka_connection_info,
         })
     }
     pub async fn update_model_table(&self, mut new_models: ModelTable) {
@@ -107,6 +111,46 @@ pub async fn setup_clickhouse(
         migration_manager::run(&clickhouse_connection_info).await?;
     }
     Ok(clickhouse_connection_info)
+}
+
+pub async fn setup_kafka(config: &Config<'static>) -> Result<KafkaConnectionInfo, Error> {
+    let kafka_config = config.gateway.observability.kafka.as_ref();
+
+    match kafka_config {
+        Some(kafka_conf) if kafka_conf.enabled => {
+            tracing::info!(
+                "Initializing Kafka producer with brokers: {}",
+                kafka_conf.brokers
+            );
+            match KafkaConnectionInfo::new(Some(kafka_conf)) {
+                Ok(conn) => {
+                    tracing::info!("Successfully initialized Kafka producer");
+
+                    // Start the background flush task for the buffer
+                    if let Some(handle) = conn.start_flush_task() {
+                        // Store the handle to prevent it from being dropped
+                        // In a production system, you might want to store this handle
+                        // for graceful shutdown
+                        tokio::spawn(async move {
+                            handle.await.ok();
+                        });
+                        tracing::info!("Started Kafka buffer flush task");
+                    }
+
+                    Ok(conn)
+                }
+                Err(e) => {
+                    tracing::error!("Failed to initialize Kafka producer: {}", e);
+                    // Return error since Kafka is explicitly enabled
+                    Err(e)
+                }
+            }
+        }
+        _ => {
+            tracing::info!("Kafka integration is disabled");
+            Ok(KafkaConnectionInfo::Disabled)
+        }
+    }
 }
 
 /// Custom Axum extractor that validates the JSON body and deserializes it into a custom type
@@ -252,6 +296,7 @@ mod tests {
             observability: ObservabilityConfig {
                 enabled: Some(false),
                 async_writes: false,
+                kafka: None,
             },
             bind_address: None,
             debug: false,
@@ -278,6 +323,7 @@ mod tests {
             observability: ObservabilityConfig {
                 enabled: None,
                 async_writes: false,
+                kafka: None,
             },
             ..Default::default()
         };
@@ -303,6 +349,7 @@ mod tests {
             observability: ObservabilityConfig {
                 enabled: Some(true),
                 async_writes: false,
+                kafka: None,
             },
             bind_address: None,
             debug: false,
@@ -325,6 +372,7 @@ mod tests {
             observability: ObservabilityConfig {
                 enabled: Some(true),
                 async_writes: false,
+                kafka: None,
             },
             bind_address: None,
             debug: false,
@@ -349,6 +397,7 @@ mod tests {
             observability: ObservabilityConfig {
                 enabled: Some(true),
                 async_writes: false,
+                kafka: None,
             },
             bind_address: None,
             debug: false,

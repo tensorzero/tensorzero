@@ -53,6 +53,7 @@ pub async fn inference_handler(
         config,
         http_client,
         clickhouse_connection_info,
+        kafka_connection_info,
     }): AppState,
     headers: HeaderMap,
     StructuredJson(openai_compatible_params): StructuredJson<OpenAICompatibleParams>,
@@ -103,7 +104,33 @@ pub async fn inference_handler(
         params.include_original_response = true;
     }
 
-    let response = inference(config, &http_client, clickhouse_connection_info, params).await?;
+    // Extract observability metadata from headers (set by auth middleware)
+    if let (Some(project_id), Some(endpoint_id), Some(model_id)) = (
+        headers
+            .get("x-tensorzero-project-id")
+            .and_then(|v| v.to_str().ok()),
+        headers
+            .get("x-tensorzero-endpoint-id")
+            .and_then(|v| v.to_str().ok()),
+        headers
+            .get("x-tensorzero-model-id")
+            .and_then(|v| v.to_str().ok()),
+    ) {
+        params.observability_metadata = Some(super::inference::ObservabilityMetadata {
+            project_id: project_id.to_string(),
+            endpoint_id: endpoint_id.to_string(),
+            model_id: model_id.to_string(),
+        });
+    }
+
+    let response = inference(
+        config,
+        &http_client,
+        clickhouse_connection_info,
+        kafka_connection_info,
+        params,
+    )
+    .await?;
 
     match response {
         InferenceOutput::NonStreaming(response) => {
@@ -599,6 +626,7 @@ impl Params {
             include_original_response: false,
             extra_body: openai_compatible_params.tensorzero_extra_body,
             extra_headers: openai_compatible_params.tensorzero_extra_headers,
+            observability_metadata: None, // Will be set in the handler
         })
     }
 }

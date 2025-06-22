@@ -3,8 +3,12 @@
 [bans]
 deny = [
     { name = "native-tls" },
-    { name = "openssl" },
-    { name = "openssl-sys"}
+    # We normally ban openssl, but rdkafka requires it for SASL support
+    # So we'll handle this as a special case
+]
+skip = [
+    # AWS SDK dependencies pull in different versions
+    { name = "crypto-bigint" }
 ]
 
 [advisories]

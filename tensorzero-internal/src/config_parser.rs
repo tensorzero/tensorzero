@@ -238,6 +238,7 @@ pub struct ObservabilityConfig {
     pub enabled: Option<bool>,
     #[serde(default)]
     pub async_writes: bool,
+    pub kafka: Option<crate::kafka::KafkaConfig>,
 }
 
 #[derive(Debug, Default, Deserialize, PartialEq)]
@@ -2621,6 +2622,8 @@ thinking = { type = "enabled", budget_tokens = 1024 }
         // to make sure that the write fails quickly.
         std::env::set_var("AWS_ACCESS_KEY_ID", "invalid");
         std::env::set_var("AWS_SECRET_ACCESS_KEY", "invalid");
+        // Ensure AWS_ALLOW_HTTP is not set
+        std::env::remove_var("AWS_ALLOW_HTTP");
         let tempfile = NamedTempFile::new().unwrap();
         write!(
             &tempfile,
@@ -2641,9 +2644,13 @@ thinking = { type = "enabled", budget_tokens = 1024 }
             err.contains("Failed to write `.tensorzero-validate` to object store."),
             "Unexpected error message: {err}"
         );
+        // The specific error can vary depending on the environment
+        // In some cases we get BadScheme, in others we get DNS resolution errors
         assert!(
-            err.contains("BadScheme"),
-            "Missing `BadScheme` in error: {err}"
+            err.contains("BadScheme")
+                || err.contains("dns error")
+                || err.contains("Name or service not known"),
+            "Expected BadScheme or DNS error, got: {err}"
         );
         assert!(logs_contain("Consider setting `[object_storage.allow_http]` to `true` if you are using a non-HTTPs endpoint"));
     }

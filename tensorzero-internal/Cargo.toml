@@ -62,6 +62,7 @@ minijinja = { version = "2.10.2", features = [
 ] }
 object_store = { workspace = true }
 rand = { workspace = true }
+rdkafka = { version = "0.36", features = ["tokio", "ssl", "sasl"] }
 reqwest = { workspace = true }
 reqwest-eventsource = { workspace = true }
 secrecy = { workspace = true }

@@ -39,6 +39,11 @@ jobs:
           restore-keys: |
             cargo-tools-${{ runner.os }}-
             
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsasl2-dev
+          
       - name: Install cargo-nextest
         run: |
           cargo install cargo-nextest --locked || echo "cargo-nextest already installed"
@@ -138,6 +143,11 @@ jobs:
           restore-keys: |
             cargo-tools-${{ runner.os }}-
             
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsasl2-dev
+          
       - name: Install cargo-nextest, cargo-deny, and cargo-hack
         run: |
           cargo install cargo-nextest --locked || echo "cargo-nextest already installed"
@@ -208,6 +218,12 @@ jobs:
             cargo-tools-${{ runner.os }}-
 
       - run: df -h
+      
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsasl2-dev
+          
       - name: Install cargo-nextest
         run: |
           cargo install cargo-nextest --locked || echo "cargo-nextest already installed"
