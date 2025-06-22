@@ -218,7 +218,6 @@ function prepareDisplayText(
       ? functionConfig.user_schema !== undefined
       : functionConfig.assistant_schema !== undefined;
   if (hasSchemaForRole) {
-    // TODO (VIRAJ): check if we need to parse JSON here
     return {
       type: "structured_text",
       arguments: textBlock.value,
