@@ -14,6 +14,7 @@ import type { ChatCompletionConfig } from "~/utils/config/variant";
 import type { Config } from "~/utils/config";
 import { models } from "./model_options";
 import { useCountFetcher } from "~/routes/api/curated_inferences/count.route";
+import { SFTCountDisplay } from "./SFTCountDisplay";
 
 export function SFTForm({
   config,
@@ -128,30 +129,42 @@ export function SFTForm({
   }
 
   return (
-    <div className="mt-4">
       <Form {...form}>
         <form
           onSubmit={(e) => {
             handleSubmit(onSubmit)(e);
           }}
-          className="space-y-6"
+          className="flex flex-col gap-4 w-full max-w-200"
         >
-          <div className="space-y-6">
-            <div className="flex flex-col gap-1">
-              <FunctionSelector<SFTFormValues>
-                control={form.control}
-                name="function"
-                inferenceCount={counts.inferenceCount}
-                config={config}
-                hide_default_function={true}
-              />
-              {errors.function && (
-                <p className="text-xs text-red-500">
-                  {errors.function.message}
-                </p>
-              )}
+            <div className="flex flex-col gap-3 w-full p-4 border border-border rounded-xl">
+              <span className="text-fg-primary text-lg font-medium">Fine-tune a model</span>
+              <div className="flex flex-col gap-1">
+                <ModelSelector control={form.control} models={models} />
+                {errors.model && (
+                  <p className="text-xs text-red-500">{errors.model.message}</p>
+                )}
+              </div>
             </div>
-
+            <div className="flex flex-col gap-3 w-full p-4 border border-border rounded-xl">
+              <span className="text-fg-primary text-lg font-medium">Use data from</span>
+              <div className="flex flex-col gap-6">
+              <div className="flex flex-col gap-1">
+                <FunctionSelector<SFTFormValues>
+                  control={form.control}
+                  name="function"
+                  inferenceCount={counts.inferenceCount}
+                  config={config}
+                  hide_default_function={true}
+                />
+                {errors.function && (
+                  <p className="text-xs text-red-500">
+                    {errors.function.message}
+                  </p>
+                )}
+              </div>
+            
+            {functionName && (
+            <>
             <div className="flex flex-col">
               <CurationMetricSelector<SFTFormValues>
                 control={form.control}
@@ -177,22 +190,26 @@ export function SFTForm({
                 <p className="text-xs text-red-500">{errors.variant.message}</p>
               )}
             </div>
-
-            <div className="flex flex-col gap-1">
-              <ModelSelector control={form.control} models={models} />
-              {errors.model && (
-                <p className="text-xs text-red-500">{errors.model.message}</p>
-              )}
-            </div>
             <AdvancedParametersAccordion
               control={form.control}
               maxSamplesLimit={counts.inferenceCount ?? undefined}
             />
+            <SFTCountDisplay
+              control={form.control}
+              functionInferenceCount={counts.inferenceCount}
+              metricFeedbackCount={counts.feedbackCount}
+              metricCuratedInferenceCount={counts.curatedInferenceCount}
+              isLoading={counts.isLoading}
+            />
+            </>
+            )}
+          </div>
           </div>
 
           <Button
             type="submit"
             disabled={submissionPhase !== "idle" || isCuratedInferenceCountLow}
+            className="w-fit"
           >
             {getButtonText()}
           </Button>
@@ -201,6 +218,5 @@ export function SFTForm({
           )}
         </form>
       </Form>
-    </div>
   );
 }
