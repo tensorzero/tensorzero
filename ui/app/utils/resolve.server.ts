@@ -116,6 +116,11 @@ async function resolveContent(
         };
       } catch (error) {
         return {
+          file: {
+            url: content.image.url,
+            mime_type: content.image.mime_type,
+          },
+          storage_path: content.storage_path,
           type: "file_error",
           error: error instanceof Error ? error.message : String(error),
         };
@@ -128,6 +133,7 @@ async function resolveContent(
         };
       } catch (error) {
         return {
+          ...content,
           type: "file_error",
           error: error instanceof Error ? error.message : String(error),
         };
@@ -164,6 +170,11 @@ async function resolveModelInferenceContent(
         };
       } catch (error) {
         return {
+          file: {
+            url: null,
+            mime_type: content.image.mime_type,
+          },
+          storage_path: content.storage_path,
           type: "file_error",
           error: error instanceof Error ? error.message : String(error),
         };
@@ -176,6 +187,7 @@ async function resolveModelInferenceContent(
         };
       } catch (error) {
         return {
+          ...content,
           type: "file_error",
           error: error instanceof Error ? error.message : String(error),
         };

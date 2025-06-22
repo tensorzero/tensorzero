@@ -43,8 +43,8 @@ export const MessagesNoSystem: Story = {
           role: "user",
           content: [
             {
-              type: "text",
-              value: "What is the capital of Japan?",
+              type: "unstructured_text",
+              text: "What is the capital of Japan?",
             },
           ],
         },
@@ -52,8 +52,8 @@ export const MessagesNoSystem: Story = {
           role: "assistant",
           content: [
             {
-              type: "text",
-              value: "The capital of Japan is Tokyo.",
+              type: "unstructured_text",
+              text: "The capital of Japan is Tokyo.",
             },
           ],
         },
@@ -61,8 +61,8 @@ export const MessagesNoSystem: Story = {
           role: "user",
           content: [
             {
-              type: "text",
-              value: "Arigatou!",
+              type: "unstructured_text",
+              text: "Arigatou!",
             },
           ],
         },
@@ -79,19 +79,16 @@ export const SingleUserMessageWithMultipleContentBlocks: Story = {
           role: "user",
           content: [
             {
-              type: "text",
-              value:
-                "Lorem ipsum dolor sit amet consectetur adipiscing elit. Quisque faucibus ex sapien vitae pellentesque sem placerat. In id cursus mi pretium tellus duis convallis. Tempus leo eu aenean sed diam urna tempor. Pulvinar vivamus fringilla lacus nec metus bibendum egestas. Iaculis massa nisl malesuada lacinia integer nunc posuere. Ut hendrerit semper vel class aptent taciti sociosqu. Ad litora torquent per conubia nostra inceptos himenaeos.",
+              type: "unstructured_text",
+              text: "Lorem ipsum dolor sit amet consectetur adipiscing elit. Quisque faucibus ex sapien vitae pellentesque sem placerat. In id cursus mi pretium tellus duis convallis. Tempus leo eu aenean sed diam urna tempor. Pulvinar vivamus fringilla lacus nec metus bibendum egestas. Iaculis massa nisl malesuada lacinia integer nunc posuere. Ut hendrerit semper vel class aptent taciti sociosqu. Ad litora torquent per conubia nostra inceptos himenaeos.",
             },
             {
-              type: "text",
-              value:
-                "Duis sodales facilisis mollis. Sed et molestie enim. Integer eget pharetra urna. In ullamcorper nisi vitae ullamcorper laoreet. Vestibulum at enim et mauris tristique pellentesque. Sed dignissim nunc porta arcu sodales viverra. Nunc vulputate neque quis arcu ultricies, eu convallis magna tincidunt. Integer bibendum nec mauris ut mattis. Suspendisse potenti. Quisque gravida dui turpis. Duis vestibulum odio in risus finibus placerat.",
+              type: "unstructured_text",
+              text: "Duis sodales facilisis mollis. Sed et molestie enim. Integer eget pharetra urna. In ullamcorper nisi vitae ullamcorper laoreet. Vestibulum at enim et mauris tristique pellentesque. Sed dignissim nunc porta arcu sodales viverra. Nunc vulputate neque quis arcu ultricies, eu convallis magna tincidunt. Integer bibendum nec mauris ut mattis. Suspendisse potenti. Quisque gravida dui turpis. Duis vestibulum odio in risus finibus placerat.",
             },
             {
-              type: "text",
-              value:
-                "Aliquam dapibus accumsan erat, eget volutpat mauris ultricies eu. Sed in tortor rutrum, scelerisque ipsum sit amet, volutpat ex. Ut sodales mauris ante, vitae condimentum elit euismod ac. Aliquam sed libero bibendum, venenatis lectus sed, pharetra diam. Ut eu viverra lacus. Fusce ornare vitae lectus ut ullamcorper. Mauris nec nisl convallis, tincidunt leo at, dignissim mi. Nam vehicula eleifend lectus eu scelerisque. Pellentesque feugiat eget risus sed posuere. Aliquam semper, enim eget consequat volutpat, felis sapien sagittis elit, condimentum gravida nisl ante sed eros. Vestibulum elementum efficitur mi, ac auctor lectus hendrerit vel. Quisque at enim libero. Cras in lectus vitae eros vestibulum mollis in et purus. Pellentesque tincidunt dui nec orci tincidunt, non fermentum felis molestie. Phasellus blandit, arcu quis interdum ultricies, turpis ligula tempor tellus, quis euismod est felis et tortor.",
+              type: "unstructured_text",
+              text: "Aliquam dapibus accumsan erat, eget volutpat mauris ultricies eu. Sed in tortor rutrum, scelerisque ipsum sit amet, volutpat ex. Ut sodales mauris ante, vitae condimentum elit euismod ac. Aliquam sed libero bibendum, venenatis lectus sed, pharetra diam. Ut eu viverra lacus. Fusce ornare vitae lectus ut ullamcorper. Mauris nec nisl convallis, tincidunt leo at, dignissim mi. Nam vehicula eleifend lectus eu scelerisque. Pellentesque feugiat eget risus sed posuere. Aliquam semper, enim eget consequat volutpat, felis sapien sagittis elit, condimentum gravida nisl ante sed eros. Vestibulum elementum efficitur mi, ac auctor lectus hendrerit vel. Quisque at enim libero. Cras in lectus vitae eros vestibulum mollis in et purus. Pellentesque tincidunt dui nec orci tincidunt, non fermentum felis molestie. Phasellus blandit, arcu quis interdum ultricies, turpis ligula tempor tellus, quis euismod est felis et tortor.",
             },
           ],
         },
@@ -108,9 +105,8 @@ export const MultipleUserMessagesWithSingleContentBlock: Story = {
           role: "user",
           content: [
             {
-              type: "text",
-              value:
-                "Lorem ipsum dolor sit amet consectetur adipiscing elit. Quisque faucibus ex sapien vitae pellentesque sem placerat. In id cursus mi pretium tellus duis convallis. Tempus leo eu aenean sed diam urna tempor. Pulvinar vivamus fringilla lacus nec metus bibendum egestas. Iaculis massa nisl malesuada lacinia integer nunc posuere. Ut hendrerit semper vel class aptent taciti sociosqu. Ad litora torquent per conubia nostra inceptos himenaeos.",
+              type: "unstructured_text",
+              text: "Lorem ipsum dolor sit amet consectetur adipiscing elit. Quisque faucibus ex sapien vitae pellentesque sem placerat. In id cursus mi pretium tellus duis convallis. Tempus leo eu aenean sed diam urna tempor. Pulvinar vivamus fringilla lacus nec metus bibendum egestas. Iaculis massa nisl malesuada lacinia integer nunc posuere. Ut hendrerit semper vel class aptent taciti sociosqu. Ad litora torquent per conubia nostra inceptos himenaeos.",
             },
           ],
         },
@@ -118,9 +114,8 @@ export const MultipleUserMessagesWithSingleContentBlock: Story = {
           role: "user",
           content: [
             {
-              type: "text",
-              value:
-                "Duis sodales facilisis mollis. Sed et molestie enim. Integer eget pharetra urna. In ullamcorper nisi vitae ullamcorper laoreet. Vestibulum at enim et mauris tristique pellentesque. Sed dignissim nunc porta arcu sodales viverra. Nunc vulputate neque quis arcu ultricies, eu convallis magna tincidunt. Integer bibendum nec mauris ut mattis. Suspendisse potenti. Quisque gravida dui turpis. Duis vestibulum odio in risus finibus placerat.",
+              type: "unstructured_text",
+              text: "Duis sodales facilisis mollis. Sed et molestie enim. Integer eget pharetra urna. In ullamcorper nisi vitae ullamcorper laoreet. Vestibulum at enim et mauris tristique pellentesque. Sed dignissim nunc porta arcu sodales viverra. Nunc vulputate neque quis arcu ultricies, eu convallis magna tincidunt. Integer bibendum nec mauris ut mattis. Suspendisse potenti. Quisque gravida dui turpis. Duis vestibulum odio in risus finibus placerat.",
             },
           ],
         },
@@ -128,9 +123,8 @@ export const MultipleUserMessagesWithSingleContentBlock: Story = {
           role: "user",
           content: [
             {
-              type: "text",
-              value:
-                "Aliquam dapibus accumsan erat, eget volutpat mauris ultricies eu. Sed in tortor rutrum, scelerisque ipsum sit amet, volutpat ex. Ut sodales mauris ante, vitae condimentum elit euismod ac. Aliquam sed libero bibendum, venenatis lectus sed, pharetra diam. Ut eu viverra lacus. Fusce ornare vitae lectus ut ullamcorper. Mauris nec nisl convallis, tincidunt leo at, dignissim mi. Nam vehicula eleifend lectus eu scelerisque. Pellentesque feugiat eget risus sed posuere. Aliquam semper, enim eget consequat volutpat, felis sapien sagittis elit, condimentum gravida nisl ante sed eros. Vestibulum elementum efficitur mi, ac auctor lectus hendrerit vel. Quisque at enim libero. Cras in lectus vitae eros vestibulum mollis in et purus. Pellentesque tincidunt dui nec orci tincidunt, non fermentum felis molestie. Phasellus blandit, arcu quis interdum ultricies, turpis ligula tempor tellus, quis euismod est felis et tortor.",
+              type: "unstructured_text",
+              text: "Aliquam dapibus accumsan erat, eget volutpat mauris ultricies eu. Sed in tortor rutrum, scelerisque ipsum sit amet, volutpat ex. Ut sodales mauris ante, vitae condimentum elit euismod ac. Aliquam sed libero bibendum, venenatis lectus sed, pharetra diam. Ut eu viverra lacus. Fusce ornare vitae lectus ut ullamcorper. Mauris nec nisl convallis, tincidunt leo at, dignissim mi. Nam vehicula eleifend lectus eu scelerisque. Pellentesque feugiat eget risus sed posuere. Aliquam semper, enim eget consequat volutpat, felis sapien sagittis elit, condimentum gravida nisl ante sed eros. Vestibulum elementum efficitur mi, ac auctor lectus hendrerit vel. Quisque at enim libero. Cras in lectus vitae eros vestibulum mollis in et purus. Pellentesque tincidunt dui nec orci tincidunt, non fermentum felis molestie. Phasellus blandit, arcu quis interdum ultricies, turpis ligula tempor tellus, quis euismod est felis et tortor.",
             },
           ],
         },
@@ -145,14 +139,19 @@ export const MultiTurnToolUse: Story = {
       messages: [
         {
           role: "user",
-          content: [{ type: "text", value: "What is the weather in Tokyo?" }],
+          content: [
+            {
+              type: "unstructured_text",
+              text: "What is the weather in Tokyo?",
+            },
+          ],
         },
         {
           role: "assistant",
           content: [
             {
-              type: "text",
-              value: "I can help you with that.",
+              type: "unstructured_text",
+              text: "I can help you with that.",
             },
             {
               type: "tool_call",
@@ -177,9 +176,8 @@ export const MultiTurnToolUse: Story = {
           role: "assistant",
           content: [
             {
-              type: "text",
-              value:
-                "The weather in Tokyo is sunny, with a temperature of 20 degrees Celsius.",
+              type: "unstructured_text",
+              text: "The weather in Tokyo is sunny, with a temperature of 20 degrees Celsius.",
             },
           ],
         },
@@ -194,14 +192,19 @@ export const LongMultiTurnToolUse: Story = {
       messages: [
         {
           role: "user",
-          content: [{ type: "text", value: "What is the weather in Tokyo?" }],
+          content: [
+            {
+              type: "unstructured_text",
+              text: "What is the weather in Tokyo?",
+            },
+          ],
         },
         {
           role: "assistant",
           content: [
             {
-              type: "text",
-              value: "I can help you with that.",
+              type: "unstructured_text",
+              text: "I can help you with that.",
             },
             {
               type: "tool_call",
@@ -232,9 +235,8 @@ export const LongMultiTurnToolUse: Story = {
           role: "assistant",
           content: [
             {
-              type: "text",
-              value:
-                "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nullam et nunc augue. Pellentesque at facilisis ipsum. Donec facilisis lorem ligula, ultrices feugiat nibh consectetur id. Aenean pulvinar est ac ipsum vulputate, nec maximus ligula elementum. Cras a eros eget velit varius finibus ut sollicitudin enim. Nulla et augue ac massa consequat cursus. Curabitur eget dolor tristique, porttitor mi non, commodo augue. Integer tincidunt dui lectus, egestas dapibus mauris porta sit amet. Morbi tincidunt turpis id tortor ornare, vel viverra elit cursus. Cras a felis ultricies, interdum dui vel, facilisis risus.",
+              type: "unstructured_text",
+              text: "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nullam et nunc augue. Pellentesque at facilisis ipsum. Donec facilisis lorem ligula, ultrices feugiat nibh consectetur id. Aenean pulvinar est ac ipsum vulputate, nec maximus ligula elementum. Cras a eros eget velit varius finibus ut sollicitudin enim. Nulla et augue ac massa consequat cursus. Curabitur eget dolor tristique, porttitor mi non, commodo augue. Integer tincidunt dui lectus, egestas dapibus mauris porta sit amet. Morbi tincidunt turpis id tortor ornare, vel viverra elit cursus. Cras a felis ultricies, interdum dui vel, facilisis risus.",
             },
           ],
         },
@@ -249,14 +251,19 @@ export const MultiTurnParallelToolUse: Story = {
       messages: [
         {
           role: "user",
-          content: [{ type: "text", value: "What is the weather in Tokyo?" }],
+          content: [
+            {
+              type: "unstructured_text",
+              text: "What is the weather in Tokyo?",
+            },
+          ],
         },
         {
           role: "assistant",
           content: [
             {
-              type: "text",
-              value: "I can help you with that.",
+              type: "unstructured_text",
+              text: "I can help you with that.",
             },
             {
               type: "tool_call",
@@ -293,9 +300,8 @@ export const MultiTurnParallelToolUse: Story = {
           role: "assistant",
           content: [
             {
-              type: "text",
-              value:
-                "The weather in Tokyo is sunny, with a temperature of 20 degrees Celsius and a humidity of 50%.",
+              type: "unstructured_text",
+              text: "The weather in Tokyo is sunny, with a temperature of 20 degrees Celsius and a humidity of 50%.",
             },
           ],
         },
@@ -313,8 +319,10 @@ export const TextWithArguments: Story = {
           role: "user",
           content: [
             {
-              type: "text",
-              value: JSON.stringify({ topic: "AI" }),
+              type: "structured_text",
+              arguments: {
+                topic: "AI",
+              },
             },
           ],
         },
@@ -376,8 +384,8 @@ export const ImageInput: Story = {
           role: "user",
           content: [
             {
-              type: "text",
-              value: "Do the images share any common features?",
+              type: "unstructured_text",
+              text: "Do the images share any common features?",
             },
             {
               type: "file",
@@ -429,15 +437,43 @@ export const ImageInputError: Story = {
           role: "user",
           content: [
             {
-              type: "text",
-              value: "Do the images share any common features?",
+              type: "unstructured_text",
+              text: "Do the images share any common features?",
             },
             {
               type: "file_error",
+              file: {
+                mime_type: "image/png",
+                url: "foo.png",
+              },
+              storage_path: {
+                kind: {
+                  type: "s3_compatible",
+                  bucket_name: "tensorzero-e2e-test-images",
+                  region: "us-east-1",
+                  endpoint: null,
+                  allow_http: null,
+                },
+                path: "observability/files/e46e28c76498f7a7e935a502d3cd6f41052a76a6c6b0d8cda44e03fad8cc70f1.png",
+              },
               error: "Failed to get object: Internal Server Error",
             },
             {
               type: "file_error",
+              file: {
+                mime_type: "image/png",
+                url: "foo.png",
+              },
+              storage_path: {
+                kind: {
+                  type: "s3_compatible",
+                  bucket_name: "tensorzero-e2e-test-images",
+                  region: "us-east-1",
+                  endpoint: null,
+                  allow_http: null,
+                },
+                path: "observability/files/e46e28c76498f7a7e935a502d3cd6f41052a76a6c6b0d8cda44e03fad8cc70f1.png",
+              },
               error: "Failed to get object: Timeout",
             },
           ],
@@ -455,8 +491,8 @@ export const PDFInput: Story = {
           role: "user",
           content: [
             {
-              type: "text",
-              value: "Please analyze this research paper.",
+              type: "unstructured_text",
+              text: "Please analyze this research paper.",
             },
             {
               type: "file",
@@ -490,8 +526,8 @@ export const AudioInput: Story = {
           role: "user",
           content: [
             {
-              type: "text",
-              value: "Transcribe this audio recording.",
+              type: "unstructured_text",
+              text: "Transcribe this audio recording.",
             },
             {
               type: "file",
@@ -526,9 +562,8 @@ export const BadToolInput: Story = {
           role: "user",
           content: [
             {
-              type: "text",
-              value:
-                'Do adolescents associate with "cliques" on a large or small scale?',
+              type: "unstructured_text",
+              text: 'Do adolescents associate with "cliques" on a large or small scale?',
             },
           ],
         },
@@ -536,9 +571,8 @@ export const BadToolInput: Story = {
           role: "assistant",
           content: [
             {
-              type: "text",
-              value:
-                'Compact Research Summary: Do Adolescents Associate with "Cliques" on a Large or Small Scale?\n\nKey Findings:\n1. Scale of Clique Association:\n- Cliques typically consist of 5-6 people\n- Most adolescents fall into three categories:\n  a) Group members (less than half of school population)\n  b) Liaisons (connect across multiple groups)\n  c) Isolates (few or no close peer relationships)\n\n2. Prevalence:\n- Cliques are extremely common during adolescence\n- Form in early adolescence (girls around 11, boys around 13-14)\n- Present across different demographics, ethnicities, and socioeconomic backgrounds\n\n3. Characteristics:\n- Most cliques are homogeneous in:\n  - Age\n  - Gender\n  - Race\n  - Social status\n  - Socioeconomic background\n\n4. Duration and Stability:\n- Cliques are relatively stable, losing about one-third of members per year\n- Membership type (group member, liaison, isolate) is more consistent than specific clique membership\n- Typically dissolve by late adolescence, replaced by dating relationships\n\n5. Demographic Factors:\n- Strongly influenced by:\n  - School environment\n  - Shared interests\n  - Orientation toward school/teen culture\n  - Potential antisocial behaviors\n\nConclusion: Adolescents do associate with cliques on a moderate to large scale, with most students belonging to some form of social group during their teenage years.',
+              type: "unstructured_text",
+              text: 'Compact Research Summary: Do Adolescents Associate with "Cliques" on a Large or Small Scale?\n\nKey Findings:\n1. Scale of Clique Association:\n- Cliques typically consist of 5-6 people\n- Most adolescents fall into three categories:\n  a) Group members (less than half of school population)\n  b) Liaisons (connect across multiple groups)\n  c) Isolates (few or no close peer relationships)\n\n2. Prevalence:\n- Cliques are extremely common during adolescence\n- Form in early adolescence (girls around 11, boys around 13-14)\n- Present across different demographics, ethnicities, and socioeconomic backgrounds\n\n3. Characteristics:\n- Most cliques are homogeneous in:\n  - Age\n  - Gender\n  - Race\n  - Social status\n  - Socioeconomic background\n\n4. Duration and Stability:\n- Cliques are relatively stable, losing about one-third of members per year\n- Membership type (group member, liaison, isolate) is more consistent than specific clique membership\n- Typically dissolve by late adolescence, replaced by dating relationships\n\n5. Demographic Factors:\n- Strongly influenced by:\n  - School environment\n  - Shared interests\n  - Orientation toward school/teen culture\n  - Potential antisocial behaviors\n\nConclusion: Adolescents do associate with cliques on a moderate to large scale, with most students belonging to some form of social group during their teenage years.',
             },
           ],
         },
@@ -640,7 +674,6 @@ export const BadToolInput: Story = {
   },
 };
 
-// TODO (#2586): This is bad! If the text happens to parse as JSON, we're assuming it's "Arguments". This not necessarily true!
 export const TextIsJSON: Story = {
   args: {
     input: {
@@ -649,25 +682,26 @@ export const TextIsJSON: Story = {
           role: "user",
           content: [
             {
-              type: "text",
-              value: '"All these content blocks are string literals!"',
+              type: "unstructured_text",
+              text: '"All these content blocks are string literals!"',
+            },
+            // This one is a string literal
+            {
+              type: "unstructured_text",
+              text: '{"key": "value"}',
             },
             {
-              type: "text",
-              value: '{"key": "value"}',
+              type: "unstructured_text",
+              text: "[1, 2, 3]",
             },
             {
-              type: "text",
-              value: "[1, 2, 3]",
-            },
-            {
-              type: "text",
-              value: "123",
+              type: "unstructured_text",
+              text: "123",
             },
 
             {
-              type: "text",
-              value: "null",
+              type: "unstructured_text",
+              text: "null",
             },
           ],
         },
@@ -675,25 +709,25 @@ export const TextIsJSON: Story = {
           role: "assistant",
           content: [
             {
-              type: "text",
-              value: '"All these content blocks are string literals!"',
+              type: "unstructured_text",
+              text: '"All these content blocks are string literals!"',
             },
             {
-              type: "text",
-              value: '{"key": "value"}',
+              type: "unstructured_text",
+              text: '{"key": "value"}',
             },
             {
-              type: "text",
-              value: "[1, 2, 3]",
+              type: "unstructured_text",
+              text: "[1, 2, 3]",
             },
             {
-              type: "text",
-              value: "123",
+              type: "unstructured_text",
+              text: "123",
             },
 
             {
-              type: "text",
-              value: "null",
+              type: "unstructured_text",
+              text: "null",
             },
           ],
         },

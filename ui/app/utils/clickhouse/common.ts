@@ -153,6 +153,8 @@ export type ResolvedFileContent = z.infer<typeof resolvedFileContentSchema>;
 
 export const resolvedFileContentErrorSchema = z.object({
   type: z.literal("file_error"),
+  file: base64FileSchema,
+  storage_path: storagePathSchema,
   error: z.string(),
 });
 export type ResolvedImageContentError = z.infer<
@@ -351,3 +353,54 @@ export const CountSchema = z.object({
   count: z.number(),
 });
 export type Count = z.infer<typeof CountSchema>;
+
+function displayInputMessageContentToInputMessageContent(
+  content: DisplayInputMessageContent,
+): InputMessageContent {
+  switch (content.type) {
+    case "unstructured_text":
+      return { type: "text", value: content.text };
+    case "structured_text":
+      return { type: "text", value: content.arguments };
+    case "missing_function_text":
+      return { type: "text", value: content.value };
+    case "tool_call":
+      return content;
+    case "tool_result":
+      return content;
+    case "file":
+      return {
+        ...content,
+        file: {
+          url: content.file.dataUrl,
+          mime_type: content.file.mime_type,
+        },
+        type: "file",
+      };
+    case "file_error":
+      return {
+        ...content,
+        type: "file",
+      };
+    case "raw_text":
+      return content;
+  }
+}
+
+function displayInputMessageToInputMessage(
+  message: DisplayInputMessage,
+): InputMessage {
+  return {
+    role: message.role,
+    content: message.content.map(
+      displayInputMessageContentToInputMessageContent,
+    ),
+  };
+}
+
+export function displayInputToInput(displayInput: DisplayInput): Input {
+  return {
+    system: displayInput.system,
+    messages: displayInput.messages.map(displayInputMessageToInputMessage),
+  };
+}

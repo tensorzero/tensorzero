@@ -515,7 +515,12 @@ describe("datapoint operations", () => {
       input: {
         messages: [
           {
-            content: [{ type: "text", value: "Write a haiku about testing" }],
+            content: [
+              {
+                type: "unstructured_text",
+                text: "Write a haiku about testing",
+              },
+            ],
             role: "user" as const,
           },
         ],
@@ -597,8 +602,8 @@ describe("datapoint operations", () => {
           {
             content: [
               {
-                type: "text",
-                value: "Extract entities from: John visited Paris",
+                type: "unstructured_text",
+                text: "Extract entities from: John visited Paris",
               },
             ],
             role: "user" as const,
@@ -695,7 +700,10 @@ describe("datapoint operations", () => {
         messages: [
           {
             content: [
-              { type: "text", value: "Write a haiku about duplicates" },
+              {
+                type: "unstructured_text",
+                text: "Write a haiku about duplicates",
+              },
             ],
             role: "user" as const,
           },
