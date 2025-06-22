@@ -10,6 +10,13 @@ import { useEffect, useState } from "react";
 import { SkeletonImage } from "./SkeletonImage";
 import ImageBlock from "./ImageBlock";
 
+/**
+ * This component is only used for the datapoint page.
+ * It will be phased out in favor of the InputSnippet component.
+ * We currently need it for the datapoint page because the InputSnippet component
+ * does not support editing.
+ */
+
 // Base interface with just the common required properties
 interface BaseInputProps {
   input: DisplayInput;
