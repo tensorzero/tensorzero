@@ -569,6 +569,7 @@ fn create_stream(
 ) -> impl Stream<Item = Result<InferenceResponseChunk, Error>> + Send {
     async_stream::stream! {
         let mut buffer = vec![];
+        let mut extra_usage = Some(metadata.previous_model_inference_results.iter().map(|m| m.usage_considering_cached()).sum());
         let mut inference_ttft = None;
         while let Some(chunk) = stream.next().await {
             if inference_ttft.is_none() {
@@ -577,12 +578,44 @@ fn create_stream(
             match chunk {
                 Ok(chunk) => {
                     buffer.push(chunk.clone());
-                    if let Some(chunk) = prepare_response_chunk(&metadata, chunk) {
+                    if let Some(chunk) = prepare_response_chunk(&metadata, chunk, &mut extra_usage) {
                         yield Ok(chunk);
                     }
                 }
                 Err(e) => yield Err(e),
             }
+        }
+        // We didn't find an existing chunk to add 'extra_usage' (either because the underlying
+        // stream had no usage information, or because we returned zero usage due to caching)
+        if let Some(extra_usage) = extra_usage {
+            let usage_chunk = match &*function {
+                FunctionConfig::Chat(_model_provider) => {
+                    InferenceResponseChunk::Chat(ChatInferenceResponseChunk {
+                        inference_id: metadata.inference_id,
+                        episode_id: metadata.episode_id,
+                        variant_name: metadata.variant_name.clone(),
+                        content: vec![],
+                        usage: Some(extra_usage),
+                        finish_reason: None,
+                        original_chunk: None,
+                    })
+                }
+                FunctionConfig::Json(_) => {
+                    InferenceResponseChunk::Json(JsonInferenceResponseChunk {
+                        inference_id: metadata.inference_id,
+                        episode_id: metadata.episode_id,
+                        variant_name: metadata.variant_name.clone(),
+                        raw: "".to_string(),
+                        finish_reason: None,
+                        original_chunk: None,
+                        usage: Some(extra_usage),
+                    })
+                }
+            };
+            // Don't add it to `buffer`, as we don't want to double-count the usage
+            // `collect_chunks` will correctly calculate the total usage based on
+            // `previous_model_inference_results`
+            yield Ok(usage_chunk);
         }
         if !metadata.dryrun {
             // IMPORTANT: The following code will not be reached if the stream is interrupted.
@@ -650,6 +683,11 @@ fn create_stream(
                 if let Some(inference_response) = inference_response {
                     let mut inference_response = inference_response;
                     inference_response.mut_model_inference_results().extend(previous_model_inference_results);
+                    // If we didn't apply 'extra_usage' to any chunks, it won't have been counted
+                    // by 'collect_chunks' yet. Add it to the final usage.
+                    if let Some(extra_usage) = extra_usage {
+                        inference_response.set_usage(*inference_response.usage() + extra_usage);
+                    }
                     let write_metadata = InferenceDatabaseInsertMetadata {
                         function_name,
                         variant_name,
@@ -686,6 +724,7 @@ fn create_stream(
 fn prepare_response_chunk(
     metadata: &InferenceMetadata,
     chunk: InferenceResultChunk,
+    extra_usage: &mut Option<Usage>,
 ) -> Option<InferenceResponseChunk> {
     InferenceResponseChunk::new(
         chunk,
@@ -694,6 +733,7 @@ fn prepare_response_chunk(
         metadata.variant_name.clone(),
         metadata.cached,
         metadata.include_original_response,
+        extra_usage,
     )
 }
 
@@ -1002,7 +1042,27 @@ impl InferenceResponseChunk {
         variant_name: String,
         cached: bool,
         include_original_response: bool,
+        extra_usage: &mut Option<Usage>,
     ) -> Option<Self> {
+        let result_usage = if cached {
+            // When our outer inference result is cached, don't
+            // add `extra_usage` to it. We'll append a final usage chunk
+            // in `create_stream` if needed
+            Some(ZERO_USAGE)
+        } else {
+            let mut result_usage = inference_result.usage().copied();
+            // The first time we encounter a chunk that already has usage information set,
+            // add on 'extra_usage' to it.
+            // If we never encounter any chunks with usage, we'll append one ourselves
+            // in `create_stream`
+            if let Some(result_usage) = &mut result_usage {
+                if let Some(extra_usage) = extra_usage.take() {
+                    result_usage.input_tokens += extra_usage.input_tokens;
+                    result_usage.output_tokens += extra_usage.output_tokens;
+                }
+            }
+            result_usage
+        };
         Some(match inference_result {
             InferenceResultChunk::Chat(result) => {
                 InferenceResponseChunk::Chat(ChatInferenceResponseChunk {
@@ -1012,11 +1072,7 @@ impl InferenceResponseChunk {
                     content: result.content,
                     // Token usage is intended to represent 'billed tokens',
                     // so set it to zero if the result is cached
-                    usage: if cached {
-                        Some(ZERO_USAGE)
-                    } else {
-                        result.usage
-                    },
+                    usage: result_usage,
                     finish_reason: result.finish_reason,
                     original_chunk: include_original_response.then_some(result.raw_response),
                 })
@@ -1032,11 +1088,7 @@ impl InferenceResponseChunk {
                     raw: result.raw.unwrap_or_default(),
                     // Token usage is intended to represent 'billed tokens',
                     // so set it to zero if the result is cached
-                    usage: if cached {
-                        Some(ZERO_USAGE)
-                    } else {
-                        result.usage
-                    },
+                    usage: result_usage,
                     finish_reason: result.finish_reason,
                     original_chunk: include_original_response.then_some(result.raw_response),
                 })
@@ -1203,7 +1255,7 @@ mod tests {
             include_original_response: false,
         };
 
-        let result = prepare_response_chunk(&inference_metadata, chunk).unwrap();
+        let result = prepare_response_chunk(&inference_metadata, chunk, &mut None).unwrap();
         match result {
             InferenceResponseChunk::Chat(c) => {
                 assert_eq!(c.inference_id, inference_metadata.inference_id);
@@ -1256,7 +1308,7 @@ mod tests {
             include_original_response: false,
         };
 
-        let result = prepare_response_chunk(&inference_metadata, chunk).unwrap();
+        let result = prepare_response_chunk(&inference_metadata, chunk, &mut None).unwrap();
         match result {
             InferenceResponseChunk::Json(c) => {
                 assert_eq!(c.inference_id, inference_metadata.inference_id);
