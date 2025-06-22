@@ -1,0 +1,10 @@
+clickhouse-connect
+datasets>=3.4.1
+ipykernel
+minijinja
+notebook
+numpy
+pandas
+toml
+trl
+unsloth
