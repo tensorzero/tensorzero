@@ -14,6 +14,7 @@ use crate::{
     inference::types::ContentBlock,
     model::{UninitializedModelConfig, UninitializedModelProvider, UninitializedProviderConfig},
     optimization::{OptimizerOutput, OptimizerStatus},
+    providers::openai::PROVIDER_TYPE,
     stored_inference::RenderedStoredInference,
 };
 
@@ -171,6 +172,7 @@ impl<'a> TryFrom<&'a RenderedStoredInference> for OpenAISupervisedRow<'a> {
             inference.input.system.as_deref(),
             &inference.input.messages,
             None,
+            PROVIDER_TYPE,
         )?;
         if inference.output.is_empty() {
             return Err(Error::new(ErrorDetails::InvalidRenderedStoredInference {
@@ -182,8 +184,10 @@ impl<'a> TryFrom<&'a RenderedStoredInference> for OpenAISupervisedRow<'a> {
             .iter()
             .map(|c| c.clone().into())
             .collect::<Vec<_>>();
-        let final_assistant_message =
-            tensorzero_to_openai_assistant_message(Cow::Owned(output_content_blocks))?;
+        let final_assistant_message = tensorzero_to_openai_assistant_message(
+            Cow::Owned(output_content_blocks),
+            PROVIDER_TYPE,
+        )?;
         messages.push(final_assistant_message);
         // TODO: add a test that makes sure the last message is from the assistant
         Ok(Self {

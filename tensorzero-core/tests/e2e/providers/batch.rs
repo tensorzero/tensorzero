@@ -3928,7 +3928,7 @@ pub async fn test_json_mode_batch_inference_request_with_provider(provider: E2ET
                "messages": [
                 {
                     "role": "user",
-                    "content": {"country": "Japan"}
+                    "content": [{"type": "text", "arguments": {"country": "Japan"}}]
                 }
             ]}],
         "tags": [{"test_type": "json_mode"}]
@@ -4268,7 +4268,7 @@ pub async fn test_dynamic_json_mode_batch_inference_request_with_provider(
                "messages": [
                 {
                     "role": "user",
-                    "content": {"country": "Japan"}
+                    "content": [{"type": "text", "arguments": {"country": "Japan"}}]
                 }
             ]}],
         "output_schemas": [output_schema.clone()],
