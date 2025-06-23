@@ -68,6 +68,7 @@ jobs:
           push: true
           provenance: mode=max
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
+          tags: ${{ env.DOCKERHUB_USER }}/budproxy
           labels: ${{ steps.meta.outputs.labels }}
           sbom: true
 
