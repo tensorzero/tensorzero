@@ -10,4 +10,4 @@
  * which should contain all information needed by a ModelProvider to perform the
  * inference that is called for.
  */
-export type Text = { text: string };
+export type Text = { text: string, };
