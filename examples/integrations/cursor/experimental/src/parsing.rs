@@ -1051,22 +1051,6 @@ fn broken_function( {
             );
         }
 
-        // Helper function to assert similarity ratio is within range
-        fn assert_similarity_ratio_range(
-            source_code: &str,
-            target_code: &str,
-            file_extension: &str,
-            min_ratio: f64,
-            max_ratio: f64,
-        ) {
-            let result = calculate_edit_distance(source_code, target_code, file_extension);
-            assert!(
-                result.ted_ratio >= min_ratio && result.ted_ratio <= max_ratio,
-                "Expected ratio between {} and {} but got {}.\nDistance: {}\nSource:\n{}\nTarget:\n{}",
-                min_ratio, max_ratio, result.ted_ratio, result.min_ted, source_code, target_code
-            );
-        }
-
         #[test]
         fn test_identical_code_zero_distance() {
             let code = r#"fn hello_world() {
@@ -1438,8 +1422,14 @@ impl Point {
 }"#;
             // Completely different functions should have high distance
             assert_edit_distance(source, target, "rs", 47);
-            // And low similarity ratio
-            assert_similarity_ratio_range(source, target, "rs", 0.0, 0.3);
+            let result = calculate_edit_distance(source, target, "rs");
+            let expected_ratio = 1.0 - 47.0 / result.size as f64; // 1.0 - 47.0/60.0 = 0.2167
+            assert!(
+                (result.ted_ratio - expected_ratio).abs() < f64::EPSILON,
+                "Completely different functions should have TED ratio {}, got {}",
+                expected_ratio,
+                result.ted_ratio
+            );
         }
 
         #[test]
