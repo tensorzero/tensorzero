@@ -1025,6 +1025,9 @@ async def test_async_extra_headers_param(async_client):
                     "name": "x-my-extra-header",
                     "value": "my-extra-header-value",
                 },
+                # This header will get added, and then immediately deleted by the subsequence 'delete = True' entry
+                # The 'dummy::echo_extra_info' models echos back the final header map (after all 'extra_headers' replacements are applied),
+                # and we assert that it only contains 'x-my-extra-header'
                 {
                     "model_provider_name": "tensorzero::model_name::dummy::echo_extra_info::provider_name::dummy",
                     "name": "x-my-delete-header",
