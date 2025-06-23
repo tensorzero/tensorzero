@@ -4,7 +4,7 @@ import type { InferenceFilterTreeNode } from "./InferenceFilterTreeNode";
 import type { InferenceOutputSource } from "./InferenceOutputSource";
 import type { UninitializedOptimizerInfo } from "./UninitializedOptimizerInfo";
 
-export type StartOptimizationParams = {
+export type LaunchOptimizationWorkflowParams = {
   function_name: string;
   template_variant_name: string;
   query_variant_name: string | null;

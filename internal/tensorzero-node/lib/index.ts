@@ -2,7 +2,7 @@ import { createRequire } from "module";
 import {
   OptimizerJobHandle,
   OptimizerStatus,
-  StartOptimizationParams,
+  LaunchOptimizationWorkflowParams,
 } from "./bindings";
 
 // Re-export types from bindings
@@ -35,12 +35,14 @@ export class TensorZeroClient {
     return new TensorZeroClient(nativeClient);
   }
 
-  async experimentalStartOptimization(
-    params: StartOptimizationParams,
+  async experimentalLaunchOptimizationWorkflow(
+    params: LaunchOptimizationWorkflowParams,
   ): Promise<OptimizerJobHandle> {
     const paramsString = JSON.stringify(params);
     const jobHandleString =
-      await this.nativeClient.experimentalStartOptimization(paramsString);
+      await this.nativeClient.experimentalLaunchOptimizationWorkflow(
+        paramsString,
+      );
     return JSON.parse(jobHandleString) as OptimizerJobHandle;
   }
 

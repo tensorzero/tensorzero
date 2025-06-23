@@ -10,8 +10,8 @@ use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use serde_json::Value;
 use std::fmt::Debug;
 pub use tensorzero_core::endpoints::optimization::LaunchOptimizationParams;
-pub use tensorzero_core::endpoints::optimization::StartOptimizationParams;
-use tensorzero_core::endpoints::optimization::{launch_optimization, start_optimization};
+pub use tensorzero_core::endpoints::optimization::LaunchOptimizationWorkflowParams;
+use tensorzero_core::endpoints::optimization::{launch_optimization, launch_optimization_workflow};
 pub use tensorzero_core::optimization::{OptimizerJobHandle, OptimizerStatus};
 use tensorzero_core::stored_inference::{render_stored_inference, reresolve_input_for_fine_tuning};
 use tensorzero_core::{
@@ -871,9 +871,9 @@ impl Client {
 
     /// Start an optimization job.
     /// NOTE: This is the composition of `list_inferences`, `render_inferences`, and `launch_optimization`.
-    pub async fn experimental_start_optimization(
+    pub async fn experimental_launch_optimization_workflow(
         &self,
-        params: StartOptimizationParams,
+        params: LaunchOptimizationWorkflowParams,
     ) -> Result<OptimizerJobHandle, TensorZeroError> {
         let ClientMode::EmbeddedGateway { gateway, timeout } = &self.mode else {
             return Err(TensorZeroError::Other {
@@ -885,7 +885,7 @@ impl Client {
             });
         };
         with_embedded_timeout(*timeout, async {
-            start_optimization(
+            launch_optimization_workflow(
                 &gateway.state.http_client,
                 gateway.state.config.clone(),
                 &gateway.state.clickhouse_connection_info,

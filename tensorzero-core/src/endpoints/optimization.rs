@@ -18,7 +18,7 @@ use crate::{
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Debug, Deserialize)]
 #[cfg_attr(test, ts(export))]
-pub struct StartOptimizationParams {
+pub struct LaunchOptimizationWorkflowParams {
     pub function_name: String,
     pub template_variant_name: String,
     pub query_variant_name: Option<String>,
@@ -37,13 +37,13 @@ pub struct StartOptimizationParams {
 /// render them by fetching any network resources needed and
 /// templating them with the template variant,
 /// and launch the optimization job specified.
-pub async fn start_optimization(
+pub async fn launch_optimization_workflow(
     http_client: &reqwest::Client,
     config: Arc<Config<'static>>,
     clickhouse_connection_info: &ClickHouseConnectionInfo,
-    params: StartOptimizationParams,
+    params: LaunchOptimizationWorkflowParams,
 ) -> Result<OptimizerJobHandle, Error> {
-    let StartOptimizationParams {
+    let LaunchOptimizationWorkflowParams {
         function_name,
         template_variant_name,
         query_variant_name,
