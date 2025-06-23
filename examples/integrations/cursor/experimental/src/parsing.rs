@@ -1,9 +1,55 @@
 use anyhow::Result;
 use std::{
     collections::HashMap,
-    sync::{OnceLock, RwLock},
+    sync::{Arc, OnceLock, RwLock},
 };
 use tree_sitter::{Language, Parser, Tree};
+
+use crate::clickhouse::InferenceInfo;
+use crate::util::NormalizedInferenceTreeInfo;
+
+/// Container for inference data with associated parsed trees
+#[derive(Debug)]
+pub struct InferenceWithTrees {
+    /// Vector of normalized inference tree information containing parsed ASTs
+    pub trees: Vec<NormalizedInferenceTreeInfo>,
+    /// Shared reference to the inference metadata and results
+    pub inference: Arc<InferenceInfo>,
+}
+
+impl InferenceWithTrees {
+    /// Create a new container with inference trees and metadata
+    pub fn new(trees: Vec<NormalizedInferenceTreeInfo>, inference: Arc<InferenceInfo>) -> Self {
+        Self { trees, inference }
+    }
+
+    /// Get the inference ID
+    pub fn id(&self) -> &uuid::Uuid {
+        &self.inference.id
+    }
+
+    /// Get the number of parsed trees
+    pub fn tree_count(&self) -> usize {
+        self.trees.len()
+    }
+
+    /// Check if this inference has any parsed trees
+    pub fn has_trees(&self) -> bool {
+        !self.trees.is_empty()
+    }
+}
+
+impl From<(Vec<NormalizedInferenceTreeInfo>, Arc<InferenceInfo>)> for InferenceWithTrees {
+    fn from((trees, inference): (Vec<NormalizedInferenceTreeInfo>, Arc<InferenceInfo>)) -> Self {
+        Self::new(trees, inference)
+    }
+}
+
+impl From<InferenceWithTrees> for (Vec<NormalizedInferenceTreeInfo>, Arc<InferenceInfo>) {
+    fn from(val: InferenceWithTrees) -> Self {
+        (val.trees, val.inference)
+    }
+}
 
 static LANGUAGES: OnceLock<RwLock<HashMap<String, Language>>> = OnceLock::new();
 
@@ -1431,6 +1477,69 @@ fn process_numbers() {
     return [num ** 2 for num in numbers]"#;
             // List comprehension vs loop should have high distance
             assert_edit_distance_range(source, target, "py", 25, 35);
+        }
+    }
+
+    // Tests for InferenceWithTrees struct
+    mod inference_with_trees_tests {
+        use super::*;
+        use std::path::PathBuf;
+
+        #[test]
+        fn test_inference_with_trees_basic_functionality() {
+            // Create mock parsed tree data
+            let trees = vec![NormalizedInferenceTreeInfo {
+                paths: vec![PathBuf::from("test.rs")],
+                tree: parse_hunk("fn test() {}", "rs").unwrap(),
+                src: "fn test() {}".as_bytes().to_vec(),
+            }];
+
+            // Create a mock inference (we'll use the existing data from the codebase)
+            // Rather than construct InferenceInfo manually, let's just test the struct operations
+            let inference = Arc::new(InferenceInfo {
+                id: uuid::Uuid::nil(), // Use nil UUID for testing
+                input: serde_json::from_str(r#"{"messages": []}"#).unwrap(),
+                output: vec![],
+            });
+
+            let container = InferenceWithTrees::new(trees, inference.clone());
+
+            assert_eq!(container.tree_count(), 1);
+            assert!(container.has_trees());
+            assert_eq!(container.id(), &inference.id);
+        }
+
+        #[test]
+        fn test_inference_with_trees_empty() {
+            let trees = vec![];
+            let inference = Arc::new(InferenceInfo {
+                id: uuid::Uuid::nil(),
+                input: serde_json::from_str(r#"{"messages": []}"#).unwrap(),
+                output: vec![],
+            });
+
+            let container = InferenceWithTrees::new(trees, inference.clone());
+
+            assert_eq!(container.tree_count(), 0);
+            assert!(!container.has_trees());
+            assert_eq!(container.id(), &inference.id);
+        }
+
+        #[test]
+        fn test_inference_with_trees_from_tuple() {
+            let trees = vec![];
+            let inference = Arc::new(InferenceInfo {
+                id: uuid::Uuid::nil(),
+                input: serde_json::from_str(r#"{"messages": []}"#).unwrap(),
+                output: vec![],
+            });
+
+            let tuple = (trees, inference.clone());
+            let container: InferenceWithTrees = tuple.into();
+
+            assert_eq!(container.tree_count(), 0);
+            assert!(!container.has_trees());
+            assert_eq!(container.id(), &inference.id);
         }
     }
 }
