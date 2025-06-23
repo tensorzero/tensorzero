@@ -885,18 +885,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5ce89b21cab1437276d2650d57e971f9d548a2d9037cc231abdc0562b97498ce"
 
 [[package]]
-name = "bytemuck"
-version = "1.22.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b6b1fc10dbac614ebc03540c9dbd60e83887fda27794998c6528f1782047d540"
-
-[[package]]
-name = "byteorder-lite"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f1fe948ff07f4bd06c30984e69f5b4899c516a3ef74f34df92a2df2ab535495"
-
-[[package]]
 name = "bytes"
 version = "1.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1206,7 +1194,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tensorzero",
- "tensorzero-internal",
+ "tensorzero-core",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -1433,7 +1421,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tensorzero",
- "tensorzero-internal",
+ "tensorzero-core",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -1632,7 +1620,7 @@ dependencies = [
  "reqwest",
  "serde",
  "tempfile",
- "tensorzero-internal",
+ "tensorzero-core",
  "tokio",
  "tower-http",
  "tracing",
@@ -2190,17 +2178,6 @@ checksum = "3acae9609540aa318d1bc588455225fb2085b9ed0c4f6bd0d9d5bcd86f1a0344"
 dependencies = [
  "icu_normalizer",
  "icu_properties",
-]
-
-[[package]]
-name = "image"
-version = "0.25.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "db35664ce6b9810857a38a906215e75a9c879f0696556a39f59c62829710251a"
-dependencies = [
- "bytemuck",
- "byteorder-lite",
- "num-traits",
 ]
 
 [[package]]
@@ -4228,8 +4205,8 @@ dependencies = [
  "serde-untagged",
  "serde_json",
  "serde_path_to_error",
+ "tensorzero-core",
  "tensorzero-derive",
- "tensorzero-internal",
  "thiserror 2.0.12",
  "tokio",
  "tokio-stream",
@@ -4241,20 +4218,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "tensorzero-derive"
-version = "0.1.0"
-dependencies = [
- "proc-macro2",
- "quote",
- "serde",
- "serde_json",
- "serde_path_to_error",
- "syn",
- "trybuild",
-]
-
-[[package]]
-name = "tensorzero-internal"
+name = "tensorzero-core"
 version = "2025.6.2"
 dependencies = [
  "async-stream",
@@ -4283,7 +4247,6 @@ dependencies = [
  "hex",
  "http 1.3.1",
  "http-body-util",
- "image",
  "indexmap 2.9.0",
  "init-tracing-opentelemetry",
  "itertools 0.14.0",
@@ -4333,6 +4296,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "tensorzero-derive"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "serde",
+ "serde_json",
+ "serde_path_to_error",
+ "syn",
+ "trybuild",
+]
+
+[[package]]
 name = "tensorzero-python"
 version = "2025.6.2"
 dependencies = [
@@ -4344,7 +4320,7 @@ dependencies = [
  "serde_json",
  "serde_path_to_error",
  "tensorzero",
- "tensorzero-internal",
+ "tensorzero-core",
  "tokio",
  "tracing",
  "url",
