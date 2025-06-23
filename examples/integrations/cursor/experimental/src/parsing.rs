@@ -1051,22 +1051,6 @@ fn broken_function( {
             );
         }
 
-        // Helper function to assert edit distance is within a range
-        fn assert_edit_distance_range(
-            source_code: &str,
-            target_code: &str,
-            file_extension: &str,
-            min_distance: u64,
-            max_distance: u64,
-        ) {
-            let result = calculate_edit_distance(source_code, target_code, file_extension);
-            assert!(
-                result.min_ted >= min_distance && result.min_ted <= max_distance,
-                "Expected distance between {} and {} but got {}.\nSource:\n{}\nTarget:\n{}\nTED ratio: {}",
-                min_distance, max_distance, result.min_ted, source_code, target_code, result.ted_ratio
-            );
-        }
-
         // Helper function to assert similarity ratio is within range
         fn assert_similarity_ratio_range(
             source_code: &str,
@@ -1121,7 +1105,7 @@ impl Point {
         println!("hello");
     }"#;
             // Whitespace should not affect tree structure significantly
-            assert_edit_distance_range(source, target, "rs", 0, 2);
+            assert_edit_distance(source, target, "rs", 0);
         }
 
         #[test]
@@ -1132,7 +1116,7 @@ impl Point {
     println!("Hello");
 }"#;
             // Adding one statement should have moderate distance
-            assert_edit_distance_range(source, target, "rs", 6, 10);
+            assert_edit_distance(source, target, "rs", 7);
         }
 
         #[test]
@@ -1143,7 +1127,7 @@ impl Point {
             let target = r#"fn test() {
 }"#;
             // Removing one statement should have moderate distance
-            assert_edit_distance_range(source, target, "rs", 10, 15);
+            assert_edit_distance(source, target, "rs", 12);
         }
 
         #[test]
@@ -1157,7 +1141,7 @@ impl Point {
     println!("{}", y);
 }"#;
             // Variable rename should have low distance
-            assert_edit_distance_range(source, target, "rs", 1, 4);
+            assert_edit_distance(source, target, "rs", 2);
         }
 
         #[test]
@@ -1169,7 +1153,7 @@ impl Point {
     let x = 10;
 }"#;
             // Changing literal value should be distance 1
-            assert_edit_distance_range(source, target, "rs", 1, 2);
+            assert_edit_distance(source, target, "rs", 1);
         }
 
         #[test]
@@ -1181,7 +1165,7 @@ impl Point {
     println!("Hello, {}", name);
 }"#;
             // Adding parameter and using it should have moderate distance
-            assert_edit_distance_range(source, target, "rs", 8, 12);
+            assert_edit_distance(source, target, "rs", 9);
         }
 
         #[test]
@@ -1193,7 +1177,7 @@ impl Point {
     println!("Hello");
 }"#;
             // Function name change should be distance 1
-            assert_edit_distance_range(source, target, "rs", 1, 2);
+            assert_edit_distance(source, target, "rs", 1);
         }
 
         #[test]
@@ -1208,7 +1192,7 @@ impl Point {
     println!("{}", result);
 }"#;
             // Extract variable should have moderate distance
-            assert_edit_distance_range(source, target, "rs", 12, 16);
+            assert_edit_distance(source, target, "rs", 13);
         }
 
         #[test]
@@ -1223,7 +1207,7 @@ impl Point {
     println!("{}", result);
 }"#;
             // Inline variable should have moderate distance
-            assert_edit_distance_range(source, target, "rs", 12, 16);
+            assert_edit_distance(source, target, "rs", 13);
         }
 
         #[test]
@@ -1245,7 +1229,7 @@ impl Point {
     }
 }"#;
             // Control flow change should have higher distance
-            assert_edit_distance_range(source, target, "rs", 20, 30);
+            assert_edit_distance(source, target, "rs", 26);
         }
 
         #[test]
@@ -1263,7 +1247,7 @@ impl Point {
     }
 }"#;
             // Loop type change should have moderate to high distance
-            assert_edit_distance_range(source, target, "rs", 18, 25);
+            assert_edit_distance(source, target, "rs", 20);
         }
 
         #[test]
@@ -1281,7 +1265,7 @@ impl Point {
     }
 }"#;
             // Vec to array should have low distance
-            assert_edit_distance_range(source, target, "rs", 3, 6);
+            assert_edit_distance(source, target, "rs", 4);
         }
 
         #[test]
@@ -1297,7 +1281,7 @@ impl Point {
     println!("{}", len);
 }"#;
             // Method vs function call should have low distance
-            assert_edit_distance_range(source, target, "rs", 6, 10);
+            assert_edit_distance(source, target, "rs", 7);
         }
 
         #[test]
@@ -1309,7 +1293,7 @@ impl Point {
     std::fs::read_to_string("file.txt")
 }"#;
             // Adding proper error handling should have moderate distance
-            assert_edit_distance_range(source, target, "rs", 15, 20);
+            assert_edit_distance(source, target, "rs", 16);
         }
 
         #[test]
@@ -1331,7 +1315,7 @@ impl Point {
     quicksort(&mut right[1..]);
 }"#;
             // Completely different functions should have high distance
-            assert_edit_distance_range(source, target, "rs", 40, 55);
+            assert_edit_distance(source, target, "rs", 47);
             // And low similarity ratio
             assert_similarity_ratio_range(source, target, "rs", 0.0, 0.3);
         }
@@ -1350,7 +1334,7 @@ impl Point {
     Rgb(u8, u8, u8),
 }"#;
             // Struct to enum should have high distance
-            assert_edit_distance_range(source, target, "rs", 15, 20);
+            assert_edit_distance(source, target, "rs", 17);
         }
 
         #[test]
@@ -1370,7 +1354,7 @@ impl Point {
     }
 }"#;
             // Adding impl block should have low distance (found minimum in subtree)
-            assert_edit_distance_range(source, target, "rs", 1, 2);
+            assert_edit_distance(source, target, "rs", 1);
         }
 
         #[test]
@@ -1388,7 +1372,7 @@ impl Point {
     }
 }"#;
             // Pattern matching expansion should have high distance
-            assert_edit_distance_range(source, target, "rs", 30, 35);
+            assert_edit_distance(source, target, "rs", 32);
         }
 
         #[test]
@@ -1408,7 +1392,7 @@ fn process_numbers() {
     println!("{:?}", doubled);
 }"#;
             // Closure to named function should have moderate distance
-            assert_edit_distance_range(source, target, "rs", 4, 10);
+            assert_edit_distance(source, target, "rs", 10);
         }
 
         #[test]
@@ -1424,7 +1408,7 @@ fn process_numbers() {
     numbers.iter().map(|x| x * x).sum()
 }"#;
             // Iterator vs manual loop should have high distance
-            assert_edit_distance_range(source, target, "rs", 30, 40);
+            assert_edit_distance(source, target, "rs", 35);
         }
 
         // TypeScript tests for different patterns
@@ -1439,7 +1423,7 @@ fn process_numbers() {
     return a + b;
 }"#;
             // Class to function should have moderate distance
-            assert_edit_distance_range(source, target, "ts", 3, 8);
+            assert_edit_distance(source, target, "ts", 8);
         }
 
         #[test]
@@ -1451,7 +1435,7 @@ fn process_numbers() {
     return `Hello, ${name}!`;
 };"#;
             // Arrow vs regular function should have low to moderate distance
-            assert_edit_distance_range(source, target, "ts", 2, 6);
+            assert_edit_distance(source, target, "ts", 5);
         }
 
         // Python tests for different patterns
@@ -1463,7 +1447,7 @@ fn process_numbers() {
             let target = r#"def add(a, b):
     return a + b"#;
             // Class method to function should have moderate distance
-            assert_edit_distance_range(source, target, "py", 3, 8);
+            assert_edit_distance(source, target, "py", 7);
         }
 
         #[test]
@@ -1476,7 +1460,7 @@ fn process_numbers() {
             let target = r#"def square_numbers(numbers):
     return [num ** 2 for num in numbers]"#;
             // List comprehension vs loop should have high distance
-            assert_edit_distance_range(source, target, "py", 25, 35);
+            assert_edit_distance(source, target, "py", 29);
         }
     }
 
