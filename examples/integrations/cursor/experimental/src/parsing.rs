@@ -1073,6 +1073,12 @@ fn broken_function( {
     println!("Hello, world!");
 }"#;
             assert_edit_distance(code, code, "rs", 0);
+            let result = calculate_edit_distance(code, code, "rs");
+            assert!(
+                (result.ted_ratio - 1.0).abs() < f64::EPSILON,
+                "Identical code should have TED ratio of 1.0, got {}",
+                result.ted_ratio
+            );
         }
 
         #[test]
@@ -1094,6 +1100,12 @@ impl Point {
     }
 }"#;
             assert_edit_distance(code, code, "rs", 0);
+            let result = calculate_edit_distance(code, code, "rs");
+            assert!(
+                (result.ted_ratio - 1.0).abs() < f64::EPSILON,
+                "Identical complex code should have TED ratio of 1.0, got {}",
+                result.ted_ratio
+            );
         }
 
         #[test]
@@ -1106,6 +1118,12 @@ impl Point {
     }"#;
             // Whitespace should not affect tree structure significantly
             assert_edit_distance(source, target, "rs", 0);
+            let result = calculate_edit_distance(source, target, "rs");
+            assert!(
+                (result.ted_ratio - 1.0).abs() < f64::EPSILON,
+                "Whitespace differences should not affect TED ratio, got {}",
+                result.ted_ratio
+            );
         }
 
         #[test]
@@ -1117,6 +1135,14 @@ impl Point {
 }"#;
             // Adding one statement should have moderate distance
             assert_edit_distance(source, target, "rs", 7);
+            let result = calculate_edit_distance(source, target, "rs");
+            let expected_ratio = 1.0 - 7.0 / result.size as f64;
+            assert!(
+                (result.ted_ratio - expected_ratio).abs() < f64::EPSILON,
+                "Single statement insertion should have TED ratio {}, got {}",
+                expected_ratio,
+                result.ted_ratio
+            );
         }
 
         #[test]
@@ -1128,6 +1154,14 @@ impl Point {
 }"#;
             // Removing one statement should have moderate distance
             assert_edit_distance(source, target, "rs", 12);
+            let result = calculate_edit_distance(source, target, "rs");
+            let expected_ratio = 1.0 - 12.0 / result.size as f64;
+            assert!(
+                (result.ted_ratio - expected_ratio).abs() < f64::EPSILON,
+                "Single statement deletion should have TED ratio {}, got {}",
+                expected_ratio,
+                result.ted_ratio
+            );
         }
 
         #[test]
@@ -1142,6 +1176,14 @@ impl Point {
 }"#;
             // Variable rename should have low distance
             assert_edit_distance(source, target, "rs", 2);
+            let result = calculate_edit_distance(source, target, "rs");
+            let expected_ratio = 1.0 - 2.0 / result.size as f64;
+            assert!(
+                (result.ted_ratio - expected_ratio).abs() < f64::EPSILON,
+                "Variable name change should have TED ratio {}, got {}",
+                expected_ratio,
+                result.ted_ratio
+            );
         }
 
         #[test]
@@ -1154,6 +1196,14 @@ impl Point {
 }"#;
             // Changing literal value should be distance 1
             assert_edit_distance(source, target, "rs", 1);
+            let result = calculate_edit_distance(source, target, "rs");
+            let expected_ratio = 1.0 - 1.0 / result.size as f64;
+            assert!(
+                (result.ted_ratio - expected_ratio).abs() < f64::EPSILON,
+                "Literal value change should have TED ratio {}, got {}",
+                expected_ratio,
+                result.ted_ratio
+            );
         }
 
         #[test]
@@ -1166,6 +1216,14 @@ impl Point {
 }"#;
             // Adding parameter and using it should have moderate distance
             assert_edit_distance(source, target, "rs", 9);
+            let result = calculate_edit_distance(source, target, "rs");
+            let expected_ratio = 1.0 - 9.0 / result.size as f64;
+            assert!(
+                (result.ted_ratio - expected_ratio).abs() < f64::EPSILON,
+                "Function parameter addition should have TED ratio {}, got {}",
+                expected_ratio,
+                result.ted_ratio
+            );
         }
 
         #[test]
@@ -1178,6 +1236,14 @@ impl Point {
 }"#;
             // Function name change should be distance 1
             assert_edit_distance(source, target, "rs", 1);
+            let result = calculate_edit_distance(source, target, "rs");
+            let expected_ratio = 1.0 - 1.0 / result.size as f64;
+            assert!(
+                (result.ted_ratio - expected_ratio).abs() < f64::EPSILON,
+                "Function name change should have TED ratio {}, got {}",
+                expected_ratio,
+                result.ted_ratio
+            );
         }
 
         #[test]
@@ -1193,6 +1259,14 @@ impl Point {
 }"#;
             // Extract variable should have moderate distance
             assert_edit_distance(source, target, "rs", 13);
+            let result = calculate_edit_distance(source, target, "rs");
+            let expected_ratio = 1.0 - 13.0 / result.size as f64;
+            assert!(
+                (result.ted_ratio - expected_ratio).abs() < f64::EPSILON,
+                "Extract variable refactoring should have TED ratio {}, got {}",
+                expected_ratio,
+                result.ted_ratio
+            );
         }
 
         #[test]
@@ -1208,6 +1282,14 @@ impl Point {
 }"#;
             // Inline variable should have moderate distance
             assert_edit_distance(source, target, "rs", 13);
+            let result = calculate_edit_distance(source, target, "rs");
+            let expected_ratio = 1.0 - 13.0 / result.size as f64;
+            assert!(
+                (result.ted_ratio - expected_ratio).abs() < f64::EPSILON,
+                "Inline variable refactoring should have TED ratio {}, got {}",
+                expected_ratio,
+                result.ted_ratio
+            );
         }
 
         #[test]
@@ -1230,6 +1312,14 @@ impl Point {
 }"#;
             // Control flow change should have higher distance
             assert_edit_distance(source, target, "rs", 26);
+            let result = calculate_edit_distance(source, target, "rs");
+            let expected_ratio = 1.0 - 26.0 / result.size as f64;
+            assert!(
+                (result.ted_ratio - expected_ratio).abs() < f64::EPSILON,
+                "Control flow change should have TED ratio {}, got {}",
+                expected_ratio,
+                result.ted_ratio
+            );
         }
 
         #[test]
@@ -1248,6 +1338,14 @@ impl Point {
 }"#;
             // Loop type change should have moderate to high distance
             assert_edit_distance(source, target, "rs", 20);
+            let result = calculate_edit_distance(source, target, "rs");
+            let expected_ratio = 1.0 - 20.0 / result.size as f64;
+            assert!(
+                (result.ted_ratio - expected_ratio).abs() < f64::EPSILON,
+                "Loop type change should have TED ratio {}, got {}",
+                expected_ratio,
+                result.ted_ratio
+            );
         }
 
         #[test]
@@ -1266,6 +1364,14 @@ impl Point {
 }"#;
             // Vec to array should have low distance
             assert_edit_distance(source, target, "rs", 4);
+            let result = calculate_edit_distance(source, target, "rs");
+            let expected_ratio = 1.0 - 4.0 / result.size as f64;
+            assert!(
+                (result.ted_ratio - expected_ratio).abs() < f64::EPSILON,
+                "Data structure change should have TED ratio {}, got {}",
+                expected_ratio,
+                result.ted_ratio
+            );
         }
 
         #[test]
@@ -1282,6 +1388,14 @@ impl Point {
 }"#;
             // Method vs function call should have low distance
             assert_edit_distance(source, target, "rs", 7);
+            let result = calculate_edit_distance(source, target, "rs");
+            let expected_ratio = 1.0 - 7.0 / result.size as f64;
+            assert!(
+                (result.ted_ratio - expected_ratio).abs() < f64::EPSILON,
+                "Method vs function call should have TED ratio {}, got {}",
+                expected_ratio,
+                result.ted_ratio
+            );
         }
 
         #[test]
@@ -1294,6 +1408,14 @@ impl Point {
 }"#;
             // Adding proper error handling should have moderate distance
             assert_edit_distance(source, target, "rs", 16);
+            let result = calculate_edit_distance(source, target, "rs");
+            let expected_ratio = 1.0 - 16.0 / result.size as f64;
+            assert!(
+                (result.ted_ratio - expected_ratio).abs() < f64::EPSILON,
+                "Error handling addition should have TED ratio {}, got {}",
+                expected_ratio,
+                result.ted_ratio
+            );
         }
 
         #[test]
@@ -1335,6 +1457,14 @@ impl Point {
 }"#;
             // Struct to enum should have high distance
             assert_edit_distance(source, target, "rs", 17);
+            let result = calculate_edit_distance(source, target, "rs");
+            let expected_ratio = 1.0 - 17.0 / result.size as f64;
+            assert!(
+                (result.ted_ratio - expected_ratio).abs() < f64::EPSILON,
+                "Struct to enum change should have TED ratio {}, got {}",
+                expected_ratio,
+                result.ted_ratio
+            );
         }
 
         #[test]
@@ -1355,6 +1485,14 @@ impl Point {
 }"#;
             // Adding impl block should have low distance (found minimum in subtree)
             assert_edit_distance(source, target, "rs", 1);
+            let result = calculate_edit_distance(source, target, "rs");
+            let expected_ratio = 1.0 - 1.0 / result.size as f64;
+            assert!(
+                (result.ted_ratio - expected_ratio).abs() < f64::EPSILON,
+                "Impl block addition should have TED ratio {}, got {}",
+                expected_ratio,
+                result.ted_ratio
+            );
         }
 
         #[test]
@@ -1373,6 +1511,14 @@ impl Point {
 }"#;
             // Pattern matching expansion should have high distance
             assert_edit_distance(source, target, "rs", 32);
+            let result = calculate_edit_distance(source, target, "rs");
+            let expected_ratio = 1.0 - 32.0 / result.size as f64;
+            assert!(
+                (result.ted_ratio - expected_ratio).abs() < f64::EPSILON,
+                "Pattern matching expansion should have TED ratio {}, got {}",
+                expected_ratio,
+                result.ted_ratio
+            );
         }
 
         #[test]
@@ -1393,6 +1539,14 @@ fn process_numbers() {
 }"#;
             // Closure to named function should have moderate distance
             assert_edit_distance(source, target, "rs", 10);
+            let result = calculate_edit_distance(source, target, "rs");
+            let expected_ratio = 1.0 - 10.0 / result.size as f64;
+            assert!(
+                (result.ted_ratio - expected_ratio).abs() < f64::EPSILON,
+                "Closure vs function should have TED ratio {}, got {}",
+                expected_ratio,
+                result.ted_ratio
+            );
         }
 
         #[test]
@@ -1409,6 +1563,14 @@ fn process_numbers() {
 }"#;
             // Iterator vs manual loop should have high distance
             assert_edit_distance(source, target, "rs", 35);
+            let result = calculate_edit_distance(source, target, "rs");
+            let expected_ratio = 1.0 - 35.0 / result.size as f64;
+            assert!(
+                (result.ted_ratio - expected_ratio).abs() < f64::EPSILON,
+                "Iterator vs loop should have TED ratio {}, got {}",
+                expected_ratio,
+                result.ted_ratio
+            );
         }
 
         // TypeScript tests for different patterns
@@ -1424,6 +1586,14 @@ fn process_numbers() {
 }"#;
             // Class to function should have moderate distance
             assert_edit_distance(source, target, "ts", 8);
+            let result = calculate_edit_distance(source, target, "ts");
+            let expected_ratio = 1.0 - 8.0 / result.size as f64;
+            assert!(
+                (result.ted_ratio - expected_ratio).abs() < f64::EPSILON,
+                "TypeScript class to function should have TED ratio {}, got {}",
+                expected_ratio,
+                result.ted_ratio
+            );
         }
 
         #[test]
@@ -1436,6 +1606,14 @@ fn process_numbers() {
 };"#;
             // Arrow vs regular function should have low to moderate distance
             assert_edit_distance(source, target, "ts", 5);
+            let result = calculate_edit_distance(source, target, "ts");
+            let expected_ratio = 1.0 - 5.0 / result.size as f64;
+            assert!(
+                (result.ted_ratio - expected_ratio).abs() < f64::EPSILON,
+                "TypeScript arrow vs regular function should have TED ratio {}, got {}",
+                expected_ratio,
+                result.ted_ratio
+            );
         }
 
         // Python tests for different patterns
@@ -1448,6 +1626,14 @@ fn process_numbers() {
     return a + b"#;
             // Class method to function should have moderate distance
             assert_edit_distance(source, target, "py", 7);
+            let result = calculate_edit_distance(source, target, "py");
+            let expected_ratio = 1.0 - 7.0 / result.size as f64;
+            assert!(
+                (result.ted_ratio - expected_ratio).abs() < f64::EPSILON,
+                "Python class vs function should have TED ratio {}, got {}",
+                expected_ratio,
+                result.ted_ratio
+            );
         }
 
         #[test]
@@ -1461,6 +1647,14 @@ fn process_numbers() {
     return [num ** 2 for num in numbers]"#;
             // List comprehension vs loop should have high distance
             assert_edit_distance(source, target, "py", 29);
+            let result = calculate_edit_distance(source, target, "py");
+            let expected_ratio = 1.0 - 29.0 / result.size as f64;
+            assert!(
+                (result.ted_ratio - expected_ratio).abs() < f64::EPSILON,
+                "Python list comprehension vs loop should have TED ratio {}, got {}",
+                expected_ratio,
+                result.ted_ratio
+            );
         }
     }
 
