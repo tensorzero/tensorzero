@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+/**
+ * This script is used to check that all the generated TypeScript files are properly exported in index.ts.
+ * It is not production code but should be used in CI and precommit to ensure that we did not miss a type.
+ */
 
 import fs from "fs";
 import path from "path";
