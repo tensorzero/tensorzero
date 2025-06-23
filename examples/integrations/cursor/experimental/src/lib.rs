@@ -22,6 +22,7 @@ use crate::{
     util::{generate_demonstration, NormalizedInferenceTreeInfo, TreeInfo},
 };
 
+/// Parses git diff additions into AST trees for edit distance analysis
 pub fn process_diffs(
     diffs: HashMap<PathBuf, Vec<DiffAddition>>,
 ) -> Result<Arc<HashMap<PathBuf, Vec<TreeInfo>>>> {
@@ -48,6 +49,7 @@ pub fn process_diffs(
     Ok(diff_trees)
 }
 
+/// Fetches AI inferences from ClickHouse and parses them into normalized tree structures
 pub async fn process_inferences(
     repo: &Repository,
     commit_interval: CommitInterval,
@@ -116,6 +118,7 @@ pub async fn process_inferences(
     normalized_inference_trees
 }
 
+/// Computes edit distances between inferences and diffs, sending feedback to TensorZero
 pub async fn process_and_send_feedback(
     normalized_inference_trees: HashMap<
         Uuid,
@@ -162,6 +165,7 @@ pub async fn process_and_send_feedback(
     Ok((num_feedbacks_sent, inferences_with_feedback))
 }
 
+/// Calculates tree edit distances and generates feedback metrics for a single inference tree
 pub fn process_tree_info(
     tree_info: NormalizedInferenceTreeInfo,
     inference_id: Uuid,
