@@ -126,6 +126,10 @@ COPY --from=production-dependencies-env /app/ui/node_modules /app/ui/node_module
 # Copy the built UI
 COPY --from=build-env /app/ui/build /app/ui/build
 
+# Copy tensorzero-node bindings for runtime
+COPY --from=tensorzero-node-build-env /build/internal/tensorzero-node/index.cjs /app/ui/build/index.cjs
+COPY --from=tensorzero-node-build-env /build/internal/tensorzero-node/*.node /app/ui/build/
+
 # Copy evaluations binary
 COPY --from=evaluations-build-env /release/evaluations /usr/local/bin/evaluations
 
