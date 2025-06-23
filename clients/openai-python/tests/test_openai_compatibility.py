@@ -1021,41 +1021,40 @@ async def test_async_extra_headers_param(async_client):
         extra_body={
             "tensorzero::extra_headers": [
                 {
-                    "model_provider_name": "tensorzero::model_name::dummy::echo_extra_info::provider_name::dummy",
+                    "model_provider_name": "tensorzero::model_name::dummy::echo_injected_data::provider_name::dummy",
                     "name": "x-my-extra-header",
                     "value": "my-extra-header-value",
                 },
+                {
+                    "variant_name": "dummy::echo_injected_data",
+                    "name": "x-my-variant-header",
+                    "value": "my-variant-value",
+                },
                 # This header will get added, and then immediately deleted by the subsequence 'delete = True' entry
-                # The 'dummy::echo_extra_info' models echos back the final header map (after all 'extra_headers' replacements are applied),
+                # The 'dummy::echo_injected_data' models echos back the final header map (after all 'extra_headers' replacements are applied),
                 # and we assert that it only contains 'x-my-extra-header'
                 {
-                    "model_provider_name": "tensorzero::model_name::dummy::echo_extra_info::provider_name::dummy",
+                    "variant_name": "dummy::echo_injected_data",
                     "name": "x-my-delete-header",
                     "value": "Should be deleted",
                 },
                 {
-                    "model_provider_name": "tensorzero::model_name::dummy::echo_extra_info::provider_name::dummy",
+                    "variant_name": "dummy::echo_injected_data",
                     "name": "x-my-delete-header",
                     "delete": True,
                 },
             ]
         },
         messages=messages,
-        model="tensorzero::model_name::dummy::echo_extra_info",
+        model="tensorzero::model_name::dummy::echo_injected_data",
     )
-    assert result.model == "tensorzero::model_name::dummy::echo_extra_info"
+    assert result.model == "tensorzero::model_name::dummy::echo_injected_data"
     assert json.loads(result.choices[0].message.content) == {
-        "extra_body": {"inference_extra_body": []},
-        "extra_headers": {
-            "inference_extra_headers": [
-                {
-                    "model_provider_name": "tensorzero::model_name::dummy::echo_extra_info::provider_name::dummy",
-                    "name": "x-my-extra-header",
-                    "value": "my-extra-header-value",
-                }
-            ],
-            "variant_extra_headers": None,
-        },
+        "injected_body": {},
+        "injected_headers": [
+            ["x-my-extra-header", "my-extra-header-value"],
+            ["x-my-variant-header", "my-variant-value"],
+        ],
     }
 
 
