@@ -271,7 +271,7 @@ async fn main() {
     let base_path = base_path.trim_end_matches("/");
 
     // The path was just `/` (or multiple slashes)
-    let router = if base_path == "" {
+    let router = if base_path.is_empty() {
         Router::new().merge(api_routes)
     } else {
         Router::new().nest(base_path, api_routes)
