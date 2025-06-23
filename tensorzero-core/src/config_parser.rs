@@ -86,6 +86,7 @@ pub struct TimeoutsConfig {
 }
 
 #[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct GatewayConfig {
     pub bind_address: Option<std::net::SocketAddr>,
     #[serde(default)]
@@ -102,6 +103,7 @@ pub struct GatewayConfig {
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[serde(deny_unknown_fields)]
 pub struct GCPProviderTypeConfig {
     #[serde(default)]
     pub batch: Option<GCPBatchConfigType>,
@@ -109,6 +111,7 @@ pub struct GCPProviderTypeConfig {
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(tag = "storage_type", rename_all = "snake_case")]
+#[serde(deny_unknown_fields)]
 pub enum GCPBatchConfigType {
     // In the future, we'll want to allow explicitly setting 'none' at the model provider level,
     // to override the global provider-types batch config.
@@ -118,6 +121,7 @@ pub enum GCPBatchConfigType {
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[serde(deny_unknown_fields)]
 pub struct GCPBatchConfigCloudStorage {
     pub input_uri_prefix: String,
     pub output_uri_prefix: String,
@@ -267,18 +271,21 @@ pub struct ObservabilityConfig {
 }
 
 #[derive(Debug, Default, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct ExportConfig {
     #[serde(default)]
     pub otlp: OtlpConfig,
 }
 
 #[derive(Debug, Default, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct OtlpConfig {
     #[serde(default)]
     pub traces: OtlpTracesConfig,
 }
 
 #[derive(Debug, Default, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct OtlpTracesConfig {
     /// Enable OpenTelemetry traces export to the configured OTLP endpoint (configured via OTLP environment variables)
     #[serde(default)]
@@ -295,6 +302,7 @@ pub struct MetricConfig {
 
 #[derive(Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
+#[serde(deny_unknown_fields)]
 pub enum MetricConfigType {
     Boolean,
     Float,
@@ -302,6 +310,7 @@ pub enum MetricConfigType {
 
 #[derive(Copy, Clone, Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
+#[serde(deny_unknown_fields)]
 pub enum MetricConfigOptimize {
     Min,
     Max,
@@ -309,6 +318,7 @@ pub enum MetricConfigOptimize {
 
 #[derive(Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[serde(deny_unknown_fields)]
 pub enum MetricConfigLevel {
     Inference,
     Episode,
@@ -926,6 +936,8 @@ impl UninitializedFunctionConfig {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
+// We don't use `#[serde(deny_unknown_fields)]` here - it needs to go on 'UninitializedVariantConfig',
+// since we use `#[serde(flatten)]` on the `inner` field.
 pub struct UninitializedVariantInfo {
     #[serde(flatten)]
     pub inner: UninitializedVariantConfig,
@@ -976,6 +988,7 @@ impl UninitializedVariantInfo {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct UninitializedToolConfig {
     pub description: String,
     pub parameters: PathBuf,
