@@ -17,7 +17,7 @@ use crate::{
     clickhouse::{get_inferences_in_time_range, InferenceInfo},
     cursor::parse_cursor_output,
     git::{find_paths_in_repo, CommitInterval, DiffAddition},
-    parsing::parse_hunk,
+    parsing::{parse_hunk, InferenceWithTrees},
     ted::{minimum_ted, TedInfo},
     util::{generate_demonstration, NormalizedInferenceTreeInfo, TreeInfo},
 };
@@ -54,7 +54,7 @@ pub async fn process_inferences(
     repo: &Repository,
     commit_interval: CommitInterval,
     user: Option<String>,
-) -> Result<HashMap<Uuid, (Vec<NormalizedInferenceTreeInfo>, Arc<InferenceInfo>)>> {
+) -> Result<HashMap<Uuid, InferenceWithTrees>> {
     let clickhouse_url = std::env::var("CURSORZERO_CLICKHOUSE_URL")?;
     let clickhouse = ClickHouseConnectionInfo::new(&clickhouse_url).await?;
     let inferences = get_inferences_in_time_range(&clickhouse, commit_interval, user).await?;
@@ -93,10 +93,7 @@ pub async fn process_inferences(
         })
         .collect();
 
-    #[expect(clippy::type_complexity)]
-    let normalized_inference_trees: Result<
-        HashMap<Uuid, (Vec<NormalizedInferenceTreeInfo>, Arc<InferenceInfo>)>,
-    > = inference_results
+    let normalized_inference_trees: Result<HashMap<Uuid, InferenceWithTrees>> = inference_results
         .into_iter()
         .map(|(inference_id, tree_infos, inference)| {
             let normalized_tree_infos: Result<Vec<_>> = tree_infos
@@ -111,7 +108,8 @@ pub async fn process_inferences(
                 })
                 .collect();
 
-            Ok((inference_id, (normalized_tree_infos?, inference)))
+            let inference_with_trees = InferenceWithTrees::new(normalized_tree_infos?, inference);
+            Ok((inference_id, inference_with_trees))
         })
         .collect();
 
@@ -120,20 +118,21 @@ pub async fn process_inferences(
 
 /// Computes edit distances between inferences and diffs, sending feedback to TensorZero
 pub async fn process_and_send_feedback(
-    normalized_inference_trees: HashMap<
-        Uuid,
-        (Vec<NormalizedInferenceTreeInfo>, Arc<InferenceInfo>),
-    >,
+    normalized_inference_trees: HashMap<Uuid, InferenceWithTrees>,
     diff_trees: &Arc<HashMap<PathBuf, Vec<TreeInfo>>>,
     client: &tensorzero::Client,
 ) -> Result<(usize, usize)> {
     let feedback_results: Vec<Result<Vec<FeedbackParams>>> = normalized_inference_trees
         .into_par_iter()
-        .flat_map(|(inference_id, (inference_tree_info, inference_info))| {
+        .flat_map(|(inference_id, inference_with_trees)| {
             let diff_trees = diff_trees.clone();
-            inference_tree_info.into_par_iter().map(move |tree_info| {
-                process_tree_info(tree_info, inference_id, &inference_info, &diff_trees)
-            })
+            let inference_info = inference_with_trees.inference.clone();
+            inference_with_trees
+                .trees
+                .into_par_iter()
+                .map(move |tree_info| {
+                    process_tree_info(tree_info, inference_id, &inference_info, &diff_trees)
+                })
         })
         .collect();
 
