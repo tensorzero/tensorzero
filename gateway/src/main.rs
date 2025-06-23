@@ -268,9 +268,10 @@ async fn main() {
         tracing::error!("[gateway.base_path] must start with a `/` : `{base_path}`");
         std::process::exit(1);
     }
+    let base_path = base_path.trim_end_matches("/");
 
-    // Axum panics if we use 'nest' with a path of "/"
-    let router = if base_path == "/" {
+    // The path was just `/` (or multiple slashes)
+    let router = if base_path == "" {
         Router::new().merge(api_routes)
     } else {
         Router::new().nest(base_path, api_routes)
