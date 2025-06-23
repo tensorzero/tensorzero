@@ -2,13 +2,4 @@
 import type { OptimizerOutput } from "./OptimizerOutput";
 import type { JsonValue } from "./serde_json/JsonValue";
 
-export type OptimizerStatus =
-  | {
-      type: "pending";
-      message: string;
-      estimated_finish: Date | null;
-      trained_tokens: bigint | null;
-      error: JsonValue | null;
-    }
-  | ({ type: "completed" } & OptimizerOutput)
-  | { type: "failed" };
+export type OptimizerStatus = { "type": "pending", message: string, estimated_finish: Date | null, trained_tokens: bigint | null, error: JsonValue | null, } | { "type": "completed" } & OptimizerOutput | { "type": "failed" };

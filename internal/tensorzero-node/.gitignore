@@ -194,4 +194,8 @@ Cargo.lock
 !.yarn/sdks
 !.yarn/versions
 
+# Built by NAPI-RS
 *.node
+index.cjs
+index.d.ts
+index.js

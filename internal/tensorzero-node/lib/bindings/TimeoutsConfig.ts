@@ -6,7 +6,4 @@ import type { StreamingTimeouts } from "./StreamingTimeouts";
  * Configures the timeouts for both streaming and non-streaming requests.
  * This can be attached to various other configs (e.g. variants, models, model providers)
  */
-export type TimeoutsConfig = {
-  non_streaming: NonStreamingTimeouts;
-  streaming: StreamingTimeouts;
-};
+export type TimeoutsConfig = { non_streaming: NonStreamingTimeouts, streaming: StreamingTimeouts, };

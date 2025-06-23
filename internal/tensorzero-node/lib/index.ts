@@ -1,5 +1,4 @@
-// Import the NAPI-RS generated bindings
-import { TensorZeroClient as NativeTensorZeroClient } from "../index";
+import { createRequire } from "module";
 import {
   OptimizerJobHandle,
   OptimizerStatus,
@@ -9,7 +8,13 @@ import {
 // Re-export types from bindings
 export * from "./bindings";
 
-// Your TypeScript wrapper class
+// Use createRequire to load CommonJS module
+const require = createRequire(import.meta.url);
+const { TensorZeroClient: NativeTensorZeroClient } = require("../index.cjs");
+type NativeTensorZeroClient = typeof NativeTensorZeroClient;
+
+// Wrapper class for type safety and convenience
+// since the interface is string in string out
 export class TensorZeroClient {
   private nativeClient!: NativeTensorZeroClient;
 

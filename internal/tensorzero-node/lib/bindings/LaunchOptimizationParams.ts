@@ -2,8 +2,4 @@
 import type { RenderedStoredInference } from "./RenderedStoredInference";
 import type { UninitializedOptimizerInfo } from "./UninitializedOptimizerInfo";
 
-export type LaunchOptimizationParams = {
-  train_examples: Array<RenderedStoredInference>;
-  val_examples: Array<RenderedStoredInference> | null;
-  optimizer_config: UninitializedOptimizerInfo;
-};
+export type LaunchOptimizationParams = { train_examples: Array<RenderedStoredInference>, val_examples: Array<RenderedStoredInference> | null, optimizer_config: UninitializedOptimizerInfo, };

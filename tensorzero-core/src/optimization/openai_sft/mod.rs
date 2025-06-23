@@ -11,7 +11,7 @@ use crate::{
     providers::openai::{
         default_api_key_location,
         optimization::{
-            convert_to_optimizer_status, OpenAIFineTuningJob, OpenAIFineTuningMethod,
+            convert_to_optimizer_status, job_url, OpenAIFineTuningJob, OpenAIFineTuningMethod,
             OpenAIFineTuningRequest, OpenAISupervisedRow, Supervised, SupervisedHyperparameters,
         },
         upload_openai_file, OpenAICredentials, DEFAULT_CREDENTIALS, OPENAI_DEFAULT_BASE_URL,
@@ -74,6 +74,7 @@ impl UninitializedOpenAISFTConfig {
 #[cfg_attr(test, ts(export))]
 pub struct OpenAISFTJobHandle {
     pub job_id: String,
+    pub job_url: Url,
 }
 
 impl Optimizer for OpenAISFTConfig {
@@ -194,7 +195,11 @@ impl Optimizer for OpenAISFTConfig {
                 provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
-        Ok(OpenAISFTJobHandle { job_id: job.id })
+        let job_url = job_url(&job.id)?;
+        Ok(OpenAISFTJobHandle {
+            job_id: job.id.clone(),
+            job_url,
+        })
     }
 
     async fn poll(
