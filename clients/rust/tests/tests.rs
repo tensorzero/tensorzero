@@ -7,7 +7,7 @@ use tensorzero::{
 };
 
 use reqwest::Url;
-use tensorzero_internal::inference::types::ResolvedInput;
+use tensorzero_core::inference::types::ResolvedInput;
 
 lazy_static::lazy_static! {
     static ref GATEWAY_URL: String = std::env::var("GATEWAY_URL").unwrap_or("http://localhost:3000".to_string());
