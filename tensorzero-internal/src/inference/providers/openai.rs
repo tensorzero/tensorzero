@@ -2044,11 +2044,24 @@ fn openai_to_tensorzero_chunk(
 #[derive(Debug, Serialize)]
 struct OpenAIEmbeddingRequest<'a> {
     model: &'a str,
-    input: &'a str,
+    input: OpenAIEmbeddingRequestInput<'a>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(untagged)]
+enum OpenAIEmbeddingRequestInput<'a> {
+    Single(&'a str),
+    Batch(Vec<&'a str>),
 }
 
 impl<'a> OpenAIEmbeddingRequest<'a> {
-    fn new(model: &'a str, input: &'a str) -> Self {
+    fn new(model: &'a str, input: &'a crate::embeddings::EmbeddingInput) -> Self {
+        let input = match input {
+            crate::embeddings::EmbeddingInput::Single(text) => OpenAIEmbeddingRequestInput::Single(text),
+            crate::embeddings::EmbeddingInput::Batch(texts) => {
+                OpenAIEmbeddingRequestInput::Batch(texts.iter().map(|s| s.as_str()).collect())
+            }
+        };
         Self { model, input }
     }
 }
@@ -2092,31 +2105,34 @@ impl<'a> TryFrom<OpenAIEmbeddingResponseWithMetadata<'a>> for EmbeddingProviderR
             })
         })?;
 
-        if response.data.len() != 1 {
+        if response.data.is_empty() {
             return Err(Error::new(ErrorDetails::InferenceServer {
-                message: "Expected exactly one embedding in response".to_string(),
+                message: "Expected at least one embedding in response".to_string(),
                 raw_request: Some(raw_request.clone()),
                 raw_response: Some(raw_response.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
             }));
         }
-        let embedding = response
+
+        let embeddings: Vec<Vec<f32>> = response
             .data
             .into_iter()
-            .next()
-            .ok_or_else(|| {
-                Error::new(ErrorDetails::InferenceServer {
-                    message: "Expected exactly one embedding in response".to_string(),
-                    raw_request: Some(raw_request.clone()),
-                    raw_response: Some(raw_response.clone()),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                })
-            })?
-            .embedding;
+            .map(|data| data.embedding)
+            .collect();
+
+        // Convert the request input back to EmbeddingInput
+        let input = match &request.input {
+            OpenAIEmbeddingRequestInput::Single(text) => {
+                crate::embeddings::EmbeddingInput::Single(text.to_string())
+            }
+            OpenAIEmbeddingRequestInput::Batch(texts) => {
+                crate::embeddings::EmbeddingInput::Batch(texts.iter().map(|s| s.to_string()).collect())
+            }
+        };
 
         Ok(EmbeddingProviderResponse::new(
-            embedding,
-            request.input.to_string(),
+            embeddings,
+            input,
             raw_request,
             raw_response,
             response.usage.into(),

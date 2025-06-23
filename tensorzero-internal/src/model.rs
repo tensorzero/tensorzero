@@ -1786,7 +1786,6 @@ mod tests {
                 },
             )]),
             endpoints: default_capabilities(),
-            endpoints: default_capabilities(),
         };
         let tool_config = ToolCallConfig {
             tools_available: vec![],
@@ -2586,5 +2585,267 @@ mod tests {
 
         assert_eq!(cache.get(), None);
         assert_eq!(make_creds_call_count.get(), 1);
+    }
+
+    // Tests for unified model configuration with endpoint capabilities
+
+    #[test]
+    fn test_model_supports_endpoint() {
+        let mut endpoints = HashSet::new();
+        endpoints.insert(EndpointCapability::Chat);
+        endpoints.insert(EndpointCapability::Embeddings);
+        
+        let model = ModelConfig {
+            routing: vec!["test".into()],
+            providers: HashMap::new(),
+            endpoints,
+        };
+        
+        assert!(model.supports_endpoint(EndpointCapability::Chat));
+        assert!(model.supports_endpoint(EndpointCapability::Embeddings));
+    }
+
+    #[test]
+    fn test_model_config_validates_endpoints() {
+        // Test that empty endpoints fails validation
+        let model = ModelConfig {
+            routing: vec!["test".into()],
+            providers: HashMap::from([(
+                "test".into(),
+                ModelProvider {
+                    name: "test".into(),
+                    config: ProviderConfig::Dummy(DummyProvider {
+                        model_name: "test".into(),
+                        credentials: DummyCredentials::None,
+                    }),
+                    extra_body: None,
+                    extra_headers: None,
+                },
+            )]),
+            endpoints: HashSet::new(), // Empty endpoints
+        };
+        
+        let result = model.validate("test_model");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("endpoints` must not be empty"));
+    }
+
+    #[test]
+    fn test_model_config_default_endpoints() {
+        // Test that default_capabilities returns chat endpoint
+        let default_caps = default_capabilities();
+        assert_eq!(default_caps.len(), 1);
+        assert!(default_caps.contains(&EndpointCapability::Chat));
+    }
+
+    #[tokio::test]
+    async fn test_model_table_ext_get_models_for_capability() {
+        let mut chat_endpoints = HashSet::new();
+        chat_endpoints.insert(EndpointCapability::Chat);
+        
+        let mut embedding_endpoints = HashSet::new();
+        embedding_endpoints.insert(EndpointCapability::Embeddings);
+        
+        let mut both_endpoints = HashSet::new();
+        both_endpoints.insert(EndpointCapability::Chat);
+        both_endpoints.insert(EndpointCapability::Embeddings);
+        
+        let mut models = HashMap::new();
+        models.insert(
+            "chat_only".into(),
+            ModelConfig {
+                routing: vec!["test".into()],
+                providers: HashMap::new(),
+                endpoints: chat_endpoints,
+            },
+        );
+        models.insert(
+            "embedding_only".into(),
+            ModelConfig {
+                routing: vec!["test".into()],
+                providers: HashMap::new(),
+                endpoints: embedding_endpoints,
+            },
+        );
+        models.insert(
+            "both".into(),
+            ModelConfig {
+                routing: vec!["test".into()],
+                providers: HashMap::new(),
+                endpoints: both_endpoints,
+            },
+        );
+        
+        let model_table: ModelTable = models.try_into().unwrap();
+        
+        // Test filtering by chat capability
+        let chat_models = model_table.get_models_for_capability(EndpointCapability::Chat);
+        assert_eq!(chat_models.len(), 2);
+        let chat_model_names: HashSet<&str> = chat_models.iter().map(|(name, _)| name.as_ref()).collect();
+        assert!(chat_model_names.contains("chat_only"));
+        assert!(chat_model_names.contains("both"));
+        
+        // Test filtering by embeddings capability
+        let embedding_models = model_table.get_models_for_capability(EndpointCapability::Embeddings);
+        assert_eq!(embedding_models.len(), 2);
+        let embedding_model_names: HashSet<&str> = embedding_models.iter().map(|(name, _)| name.as_ref()).collect();
+        assert!(embedding_model_names.contains("embedding_only"));
+        assert!(embedding_model_names.contains("both"));
+    }
+
+    #[tokio::test]
+    async fn test_model_table_ext_get_with_capability() {
+        SKIP_CREDENTIAL_VALIDATION.scope((), async {
+            let mut endpoints = HashSet::new();
+            endpoints.insert(EndpointCapability::Chat);
+            
+            let mut models = HashMap::new();
+            models.insert(
+                "chat_model".into(),
+                ModelConfig {
+                    routing: vec!["dummy".into()],
+                    providers: HashMap::from([(
+                        "dummy".into(),
+                        ModelProvider {
+                            name: "dummy".into(),
+                            config: ProviderConfig::Dummy(DummyProvider {
+                                model_name: "test".into(),
+                                credentials: DummyCredentials::None,
+                            }),
+                            extra_body: None,
+                            extra_headers: None,
+                        },
+                    )]),
+                    endpoints,
+                },
+            );
+            
+            let model_table: ModelTable = models.try_into().unwrap();
+            
+            // Test getting model with correct capability
+            let result = model_table.get_with_capability("chat_model", EndpointCapability::Chat).await;
+            assert!(result.is_ok());
+            assert!(result.unwrap().is_some());
+            
+            // Test getting model with wrong capability
+            let result = model_table.get_with_capability("chat_model", EndpointCapability::Embeddings).await;
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert!(error.to_string().contains("does not support capability"));
+            
+            // Test getting non-existent model
+            let result = model_table.get_with_capability("non_existent", EndpointCapability::Chat).await;
+            assert!(result.is_ok());
+            assert!(result.unwrap().is_none());
+        }).await;
+    }
+
+    #[tokio::test]
+    async fn test_model_config_embed_capability_check() {
+        let mut endpoints = HashSet::new();
+        endpoints.insert(EndpointCapability::Chat); // Only chat, no embeddings
+        
+        let model = ModelConfig {
+            routing: vec!["test".into()],
+            providers: HashMap::new(),
+            endpoints,
+        };
+        
+        let request = crate::embeddings::EmbeddingRequest {
+            input: crate::embeddings::EmbeddingInput::Single("test".to_string()),
+        };
+        
+        let http_client = Client::new();
+        let credentials = InferenceCredentials::default();
+        let clickhouse = ClickHouseConnectionInfo::Disabled;
+        let cache_options = CacheOptions {
+            max_age_s: None,
+            enabled: CacheEnabledMode::Off,
+        };
+        
+        let clients = InferenceClients {
+            http_client: &http_client,
+            credentials: &credentials,
+            clickhouse_connection_info: &clickhouse,
+            cache_options: &cache_options,
+        };
+        
+        // Test that embed fails when model doesn't support embeddings
+        let result = model.embed(&request, "test_model", &clients).await;
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error.to_string().contains("does not support capability"));
+    }
+
+    #[traced_test]
+    #[tokio::test]
+    async fn test_model_provider_embed_dispatch() {
+        let provider = ModelProvider {
+            name: "test".into(),
+            config: ProviderConfig::Dummy(DummyProvider {
+                model_name: "embedding_test".into(),
+                credentials: DummyCredentials::None,
+            }),
+            extra_body: None,
+            extra_headers: None,
+        };
+        
+        let request = crate::embeddings::EmbeddingRequest {
+            input: crate::embeddings::EmbeddingInput::Single("test input".to_string()),
+        };
+        
+        let http_client = Client::new();
+        let credentials = InferenceCredentials::default();
+        
+        // Test successful embedding with dummy provider
+        let result = provider.embed(&request, &http_client, &credentials).await;
+        assert!(result.is_ok());
+        let response = result.unwrap();
+        assert_eq!(response.input, crate::embeddings::EmbeddingInput::Single("test input".to_string()));
+        assert!(!response.embeddings.is_empty());
+        assert!(!response.embeddings[0].is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_model_provider_embed_unsupported() {
+        // Test with a provider that doesn't support embeddings
+        let provider = ModelProvider {
+            name: "anthropic".into(),
+            config: ProviderConfig::Anthropic(AnthropicProvider::new("claude-3".into(), None).unwrap()),
+            extra_body: None,
+            extra_headers: None,
+        };
+        
+        let request = crate::embeddings::EmbeddingRequest {
+            input: crate::embeddings::EmbeddingInput::Single("test".to_string()),
+        };
+        
+        let http_client = Client::new();
+        let credentials = InferenceCredentials::default();
+        
+        // Test that embed fails for unsupported provider
+        let result = provider.embed(&request, &http_client, &credentials).await;
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error.to_string().contains("does not support capability"));
+    }
+
+    #[test]
+    fn test_endpoint_capability_serialization() {
+        // Test that EndpointCapability serializes correctly
+        let cap = EndpointCapability::Chat;
+        let serialized = serde_json::to_string(&cap).unwrap();
+        assert_eq!(serialized, "\"chat\"");
+        
+        let cap = EndpointCapability::Embeddings;
+        let serialized = serde_json::to_string(&cap).unwrap();
+        assert_eq!(serialized, "\"embeddings\"");
+        
+        // Test deserialization
+        let deserialized: EndpointCapability = serde_json::from_str("\"chat\"").unwrap();
+        assert_eq!(deserialized, EndpointCapability::Chat);
+        
+        let deserialized: EndpointCapability = serde_json::from_str("\"embeddings\"").unwrap();
+        assert_eq!(deserialized, EndpointCapability::Embeddings);
     }
 }

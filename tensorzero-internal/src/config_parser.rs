@@ -1018,7 +1018,7 @@ mod tests {
 
     use std::env;
 
-    use crate::{embeddings::EmbeddingProviderConfig, variant::JsonMode};
+    use crate::{endpoints::capability::EndpointCapability, variant::JsonMode};
 
     /// Ensure that the sample valid config can be parsed without panicking
     #[tokio::test]
@@ -1123,18 +1123,16 @@ mod tests {
             _ => panic!("Expected a JSON function"),
         }
 
-        assert_eq!(config.embedding_models.len(), 1);
-
-        let embedding_model = config
-            .embedding_models
+        // Check that the embedding model was converted to a regular model with embeddings capability
+        let models = config.models.read().await;
+        let embedding_model = models
             .get("text-embedding-3-small")
             .await
             .expect("Error getting embedding model")
             .unwrap();
         assert_eq!(embedding_model.routing, vec!["openai".into()]);
         assert_eq!(embedding_model.providers.len(), 1);
-        let provider = embedding_model.providers.get("openai").unwrap();
-        assert!(matches!(provider, EmbeddingProviderConfig::OpenAI(_)));
+        assert!(embedding_model.supports_endpoint(EndpointCapability::Embeddings));
 
         // Check that the function for the LLM Judge evaluation is added to the functions table
         let function = config
@@ -2888,5 +2886,230 @@ thinking = { type = "enabled", budget_tokens = 1024 }
         Config::load_from_path_optional_verify_credentials(tmpfile.path(), false)
             .await
             .expect("Failed to load config");
+    }
+
+    // Tests for unified model configuration
+
+    #[tokio::test]
+    async fn test_unified_model_configuration_loading() {
+        let toml_str = r#"
+[models.chat_model]
+routing = ["dummy"]
+endpoints = ["chat"]
+
+[models.chat_model.providers.dummy]
+type = "dummy"
+model_name = "chat_test"
+
+[models.embedding_model]
+routing = ["dummy"]
+endpoints = ["embeddings"]
+
+[models.embedding_model.providers.dummy]
+type = "dummy"
+model_name = "embedding_test"
+
+[models.multi_capability]
+routing = ["dummy"]
+endpoints = ["chat", "embeddings"]
+
+[models.multi_capability.providers.dummy]
+type = "dummy"
+model_name = "multi_test"
+
+[functions.test_function]
+type = "chat"
+
+[functions.test_function.variants.main]
+type = "chat_completion"
+model = "chat_model"
+"#;
+        
+        let config_toml: toml::Table = toml::from_str(toml_str).unwrap();
+        let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let config = Config::load_from_toml(config_toml, base_path)
+            .await
+            .expect("Failed to load config");
+        
+        // Verify all models are in the unified table
+        let models = config.models.read().await;
+        assert_eq!(models.len(), 3);
+        
+        // Verify chat model has correct capabilities
+        let chat_model = models.get("chat_model").await.unwrap().unwrap();
+        assert!(chat_model.supports_endpoint(EndpointCapability::Chat));
+        assert!(!chat_model.supports_endpoint(EndpointCapability::Embeddings));
+        
+        // Verify embedding model has correct capabilities
+        let embedding_model = models.get("embedding_model").await.unwrap().unwrap();
+        assert!(!embedding_model.supports_endpoint(EndpointCapability::Chat));
+        assert!(embedding_model.supports_endpoint(EndpointCapability::Embeddings));
+        
+        // Verify multi-capability model
+        let multi_model = models.get("multi_capability").await.unwrap().unwrap();
+        assert!(multi_model.supports_endpoint(EndpointCapability::Chat));
+        assert!(multi_model.supports_endpoint(EndpointCapability::Embeddings));
+    }
+
+    #[tokio::test]
+    async fn test_embedding_models_conversion_to_unified() {
+        let toml_str = r#"
+[models.existing_chat]
+routing = ["dummy"]
+
+[models.existing_chat.providers.dummy]
+type = "dummy"
+model_name = "chat_test"
+
+[embedding_models.text_embedding]
+routing = ["dummy"]
+
+[embedding_models.text_embedding.providers.dummy]
+type = "dummy"
+model_name = "embedding_test"
+
+[functions.test_function]
+type = "chat"
+
+[functions.test_function.variants.main]
+type = "chat_completion"
+model = "existing_chat"
+"#;
+        
+        let config_toml: toml::Table = toml::from_str(toml_str).unwrap();
+        let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let config = Config::load_from_toml(config_toml, base_path)
+            .await
+            .expect("Failed to load config");
+        
+        // Verify both models are in the unified table
+        let models = config.models.read().await;
+        assert_eq!(models.len(), 2);
+        
+        // Verify chat model has default capabilities
+        let chat_model = models.get("existing_chat").await.unwrap().unwrap();
+        assert!(chat_model.supports_endpoint(EndpointCapability::Chat));
+        assert!(!chat_model.supports_endpoint(EndpointCapability::Embeddings));
+        
+        // Verify converted embedding model has embeddings capability
+        let embedding_model = models.get("text_embedding").await.unwrap().unwrap();
+        assert!(!embedding_model.supports_endpoint(EndpointCapability::Chat));
+        assert!(embedding_model.supports_endpoint(EndpointCapability::Embeddings));
+    }
+
+    #[tokio::test]
+    async fn test_unified_model_name_conflict_detection() {
+        let toml_str = r#"
+[models.conflicting_name]
+routing = ["dummy"]
+
+[models.conflicting_name.providers.dummy]
+type = "dummy"
+model_name = "model1"
+
+[embedding_models.conflicting_name]
+routing = ["dummy"]
+
+[embedding_models.conflicting_name.providers.dummy]
+type = "dummy"
+model_name = "model2"
+"#;
+        
+        let config_toml: toml::Table = toml::from_str(toml_str).unwrap();
+        let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let result = Config::load_from_toml(config_toml, base_path).await;
+        
+        // Should fail due to name conflict
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error.to_string().contains("conflicting_name"));
+        assert!(error.to_string().contains("both 'models' and 'embedding_models'"));
+    }
+
+    #[tokio::test]
+    async fn test_model_without_endpoints_defaults_to_chat() {
+        let toml_str = r#"
+[models.default_model]
+routing = ["dummy"]
+
+[models.default_model.providers.dummy]
+type = "dummy"
+model_name = "test"
+
+[functions.test_function]
+type = "chat"
+
+[functions.test_function.variants.main]
+type = "chat_completion"
+model = "default_model"
+"#;
+        
+        let config_toml: toml::Table = toml::from_str(toml_str).unwrap();
+        let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let config = Config::load_from_toml(config_toml, base_path)
+            .await
+            .expect("Failed to load config");
+        
+        // Verify model has default chat capability
+        let models = config.models.read().await;
+        let model = models.get("default_model").await.unwrap().unwrap();
+        assert!(model.supports_endpoint(EndpointCapability::Chat));
+        assert!(!model.supports_endpoint(EndpointCapability::Embeddings));
+    }
+
+    #[tokio::test]
+    async fn test_unified_model_capability_filtering() {
+        let toml_str = r#"
+[models.chat_only]
+routing = ["dummy"]
+endpoints = ["chat"]
+
+[models.chat_only.providers.dummy]
+type = "dummy"
+model_name = "chat"
+
+[models.embedding_only]
+routing = ["dummy"]
+endpoints = ["embeddings"]
+
+[models.embedding_only.providers.dummy]
+type = "dummy"
+model_name = "embed"
+
+[models.both]
+routing = ["dummy"]
+endpoints = ["chat", "embeddings"]
+
+[models.both.providers.dummy]
+type = "dummy"
+model_name = "multi"
+"#;
+        
+        let config_toml: toml::Table = toml::from_str(toml_str).unwrap();
+        let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let config = Config::load_from_toml(config_toml, base_path)
+            .await
+            .expect("Failed to load config");
+        
+        let models = config.models.read().await;
+        
+        // Test capability filtering
+        use crate::model::ModelTableExt;
+        let chat_models = models.get_models_for_capability(EndpointCapability::Chat);
+        assert_eq!(chat_models.len(), 2);
+        
+        let embedding_models = models.get_models_for_capability(EndpointCapability::Embeddings);
+        assert_eq!(embedding_models.len(), 2);
+        
+        // Verify specific models in each category
+        let chat_names: Vec<&str> = chat_models.iter().map(|(name, _)| name.as_ref()).collect();
+        assert!(chat_names.contains(&"chat_only"));
+        assert!(chat_names.contains(&"both"));
+        assert!(!chat_names.contains(&"embedding_only"));
+        
+        let embed_names: Vec<&str> = embedding_models.iter().map(|(name, _)| name.as_ref()).collect();
+        assert!(embed_names.contains(&"embedding_only"));
+        assert!(embed_names.contains(&"both"));
+        assert!(!embed_names.contains(&"chat_only"));
     }
 }

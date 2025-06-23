@@ -1016,3 +1016,54 @@ impl IntoResponse for Error {
         (self.status_code(), Json(body)).into_response()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_capability_not_supported_error() {
+        let error = Error::new(ErrorDetails::CapabilityNotSupported {
+            capability: "embeddings".to_string(),
+            provider: "test_model".to_string(),
+        });
+        
+        // Test error message
+        assert_eq!(
+            error.to_string(),
+            "Provider `test_model` does not support capability `embeddings`"
+        );
+        
+        // Test status code
+        assert_eq!(error.status_code(), StatusCode::BAD_REQUEST);
+        
+        // Test log level
+        assert_eq!(error.get_details().level(), tracing::Level::WARN);
+    }
+
+    #[test]
+    fn test_capability_not_supported_error_display() {
+        let details = ErrorDetails::CapabilityNotSupported {
+            capability: "chat".to_string(),
+            provider: "embedding_only_model".to_string(),
+        };
+        
+        let formatted = format!("{}", details);
+        assert_eq!(
+            formatted,
+            "Provider `embedding_only_model` does not support capability `chat`"
+        );
+    }
+
+    #[test]
+    fn test_error_into_response() {
+        let error = Error::new(ErrorDetails::CapabilityNotSupported {
+            capability: "embeddings".to_string(),
+            provider: "test".to_string(),
+        });
+        
+        let response = error.into_response();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+}
+

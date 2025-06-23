@@ -146,7 +146,7 @@ impl EmbeddingModelConfig {
                             clients.clickhouse_connection_info,
                             provider_request.get_cache_key()?,
                             EmbeddingCacheData {
-                                embedding: response.embedding.clone(),
+                                embedding: response.embeddings.first().unwrap_or(&vec![]).clone(),
                             },
                             &response.raw_request,
                             &response.raw_response,
@@ -167,9 +167,42 @@ impl EmbeddingModelConfig {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(untagged)]
+pub enum EmbeddingInput {
+    Single(String),
+    Batch(Vec<String>),
+}
+
+impl EmbeddingInput {
+    /// Get all input strings as a vector
+    pub fn as_vec(&self) -> Vec<&str> {
+        match self {
+            EmbeddingInput::Single(text) => vec![text],
+            EmbeddingInput::Batch(texts) => texts.iter().map(|s| s.as_str()).collect(),
+        }
+    }
+
+    /// Get the number of inputs
+    pub fn len(&self) -> usize {
+        match self {
+            EmbeddingInput::Single(_) => 1,
+            EmbeddingInput::Batch(texts) => texts.len(),
+        }
+    }
+
+    /// Check if empty
+    pub fn is_empty(&self) -> bool {
+        match self {
+            EmbeddingInput::Single(text) => text.is_empty(),
+            EmbeddingInput::Batch(texts) => texts.is_empty() || texts.iter().all(|t| t.is_empty()),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Serialize)]
 pub struct EmbeddingRequest {
-    pub input: String,
+    pub input: EmbeddingInput,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -182,8 +215,8 @@ pub struct EmbeddingProviderRequest<'request> {
 #[derive(Debug, PartialEq)]
 pub struct EmbeddingProviderResponse {
     pub id: Uuid,
-    pub input: String,
-    pub embedding: Vec<f32>,
+    pub input: EmbeddingInput,
+    pub embeddings: Vec<Vec<f32>>,
     pub created: u64,
     pub raw_request: String,
     pub raw_response: String,
@@ -194,8 +227,8 @@ pub struct EmbeddingProviderResponse {
 #[derive(Debug, PartialEq)]
 pub struct EmbeddingResponse {
     pub id: Uuid,
-    pub input: String,
-    pub embedding: Vec<f32>,
+    pub input: EmbeddingInput,
+    pub embeddings: Vec<Vec<f32>>,
     pub created: u64,
     pub raw_request: String,
     pub raw_response: String,
@@ -214,7 +247,7 @@ impl EmbeddingResponse {
             id: Uuid::now_v7(),
             created: current_timestamp(),
             input: request.request.input.clone(),
-            embedding: cache_lookup.output.embedding,
+            embeddings: vec![cache_lookup.output.embedding],
             raw_request: cache_lookup.raw_request,
             raw_response: cache_lookup.raw_response,
             usage: Usage {
@@ -251,7 +284,7 @@ impl EmbeddingResponse {
         Self {
             id: embedding_provider_response.id,
             input: embedding_provider_response.input,
-            embedding: embedding_provider_response.embedding,
+            embeddings: embedding_provider_response.embeddings,
             created: embedding_provider_response.created,
             raw_request: embedding_provider_response.raw_request,
             raw_response: embedding_provider_response.raw_response,
@@ -265,10 +298,17 @@ impl EmbeddingResponse {
 
 impl EmbeddingResponseWithMetadata {
     pub fn new(embedding_response: EmbeddingResponse, embedding_model_name: Arc<str>) -> Self {
+        // For backward compatibility, take the first embedding and convert input to string
+        let input_string = match &embedding_response.input {
+            EmbeddingInput::Single(text) => text.clone(),
+            EmbeddingInput::Batch(texts) => texts.first().unwrap_or(&String::new()).clone(),
+        };
+        let embedding = embedding_response.embeddings.into_iter().next().unwrap_or_default();
+        
         Self {
             id: embedding_response.id,
-            input: embedding_response.input,
-            embedding: embedding_response.embedding,
+            input: input_string,
+            embedding,
             created: embedding_response.created,
             raw_request: embedding_response.raw_request,
             raw_response: embedding_response.raw_response,
@@ -370,8 +410,8 @@ impl EmbeddingProvider for EmbeddingProviderConfig {
 
 impl EmbeddingProviderResponse {
     pub fn new(
-        embedding: Vec<f32>,
-        input: String,
+        embeddings: Vec<Vec<f32>>,
+        input: EmbeddingInput,
         raw_request: String,
         raw_response: String,
         usage: Usage,
@@ -380,7 +420,7 @@ impl EmbeddingProviderResponse {
         Self {
             id: Uuid::now_v7(),
             input,
-            embedding,
+            embeddings,
             created: current_timestamp(),
             raw_request,
             raw_response,
@@ -388,18 +428,137 @@ impl EmbeddingProviderResponse {
             latency,
         }
     }
+    
+    /// Create a response from a single embedding (for backward compatibility)
+    pub fn new_single(
+        embedding: Vec<f32>,
+        input: String,
+        raw_request: String,
+        raw_response: String,
+        usage: Usage,
+        latency: Latency,
+    ) -> Self {
+        Self::new(
+            vec![embedding],
+            EmbeddingInput::Single(input),
+            raw_request,
+            raw_response,
+            usage,
+            latency,
+        )
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
+    #[test]
+    fn test_embedding_input_variants() {
+        // Test Single variant
+        let single = EmbeddingInput::Single("Hello, world!".to_string());
+        assert_eq!(single.len(), 1);
+        assert!(!single.is_empty());
+        assert_eq!(single.as_vec(), vec!["Hello, world!"]);
+
+        // Test Batch variant
+        let batch = EmbeddingInput::Batch(vec![
+            "First text".to_string(),
+            "Second text".to_string(),
+            "Third text".to_string(),
+        ]);
+        assert_eq!(batch.len(), 3);
+        assert!(!batch.is_empty());
+        assert_eq!(batch.as_vec(), vec!["First text", "Second text", "Third text"]);
+
+        // Test empty cases
+        let empty_single = EmbeddingInput::Single("".to_string());
+        assert!(empty_single.is_empty());
+
+        let empty_batch = EmbeddingInput::Batch(vec![]);
+        assert!(empty_batch.is_empty());
+
+        let batch_with_empty = EmbeddingInput::Batch(vec!["".to_string(), "".to_string()]);
+        assert!(batch_with_empty.is_empty());
+    }
+
+    #[test]
+    fn test_embedding_input_serialization() {
+        // Test Single serialization
+        let single = EmbeddingInput::Single("Hello".to_string());
+        let serialized = serde_json::to_value(&single).unwrap();
+        assert_eq!(serialized, serde_json::Value::String("Hello".to_string()));
+
+        // Test Batch serialization
+        let batch = EmbeddingInput::Batch(vec!["Hello".to_string(), "World".to_string()]);
+        let serialized = serde_json::to_value(&batch).unwrap();
+        assert_eq!(
+            serialized,
+            serde_json::Value::Array(vec![
+                serde_json::Value::String("Hello".to_string()),
+                serde_json::Value::String("World".to_string())
+            ])
+        );
+    }
+
+    #[test]
+    fn test_embedding_request_with_batch_input() {
+        let request = EmbeddingRequest {
+            input: EmbeddingInput::Batch(vec![
+                "Text 1".to_string(),
+                "Text 2".to_string(),
+            ])
+        };
+        
+        assert_eq!(request.input.len(), 2);
+        assert_eq!(request.input.as_vec(), vec!["Text 1", "Text 2"]);
+    }
+
+    #[test]
+    fn test_embedding_provider_response_batch() {
+        let embeddings = vec![
+            vec![0.1, 0.2, 0.3],
+            vec![0.4, 0.5, 0.6],
+        ];
+        let input = EmbeddingInput::Batch(vec!["Text 1".to_string(), "Text 2".to_string()]);
+        
+        let response = EmbeddingProviderResponse::new(
+            embeddings.clone(),
+            input.clone(),
+            "raw_request".to_string(),
+            "raw_response".to_string(),
+            Usage { input_tokens: 10, output_tokens: 0 },
+            Latency::NonStreaming { response_time: std::time::Duration::from_millis(100) },
+        );
+        
+        assert_eq!(response.embeddings, embeddings);
+        assert_eq!(response.input, input);
+    }
+
+    #[test]
+    fn test_embedding_provider_response_new_single_compatibility() {
+        // Test backward compatibility method
+        let embedding = vec![0.1, 0.2, 0.3];
+        let input = "Test input".to_string();
+        
+        let response = EmbeddingProviderResponse::new_single(
+            embedding.clone(),
+            input.clone(),
+            "raw_request".to_string(),
+            "raw_response".to_string(),
+            Usage { input_tokens: 5, output_tokens: 0 },
+            Latency::NonStreaming { response_time: std::time::Duration::from_millis(50) },
+        );
+        
+        assert_eq!(response.embeddings, vec![embedding]);
+        assert_eq!(response.input, EmbeddingInput::Single(input));
+    }
     use tracing_test::traced_test;
 
     use crate::{
         cache::{CacheEnabledMode, CacheOptions},
         clickhouse::ClickHouseConnectionInfo,
     };
-
-    use super::*;
 
     #[traced_test]
     #[tokio::test]
@@ -420,7 +579,7 @@ mod tests {
             ]),
         };
         let request = EmbeddingRequest {
-            input: "Hello, world!".to_string(),
+            input: EmbeddingInput::Single("Hello, world!".to_string()),
         };
         let response = fallback_embedding_model
             .embed(

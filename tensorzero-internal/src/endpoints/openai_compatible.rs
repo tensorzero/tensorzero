@@ -1350,20 +1350,23 @@ pub async fn embedding_handler(
         };
 
     // Convert OpenAI request to internal format
-    // For now, we only support single string input, not batch
-    let input = match &openai_compatible_params.input {
-        OpenAICompatibleEmbeddingInput::Single(text) => text.clone(),
+    let internal_input = match &openai_compatible_params.input {
+        OpenAICompatibleEmbeddingInput::Single(text) => {
+            crate::embeddings::EmbeddingInput::Single(text.clone())
+        }
         OpenAICompatibleEmbeddingInput::Batch(texts) => {
-            if texts.len() != 1 {
+            if texts.is_empty() {
                 return Err(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
-                    message: "Batch embedding requests are not yet supported. Please provide a single input string.".to_string(),
+                    message: "Batch embedding requests cannot be empty.".to_string(),
                 }));
             }
-            texts[0].clone()
+            crate::embeddings::EmbeddingInput::Batch(texts.clone())
         }
     };
 
-    let embedding_request = EmbeddingRequest { input };
+    let embedding_request = EmbeddingRequest { 
+        input: internal_input
+    };
 
     // Extract model configuration
     use crate::model::ModelTableExt;
@@ -1403,11 +1406,15 @@ pub async fn embedding_handler(
     // Convert to OpenAI-compatible format
     let openai_response = OpenAICompatibleEmbeddingResponse {
         object: "list".to_string(),
-        data: vec![OpenAICompatibleEmbeddingData {
-            object: "embedding".to_string(),
-            embedding: response.embedding,
-            index: 0,
-        }],
+        data: response.embeddings
+            .into_iter()
+            .enumerate()
+            .map(|(index, embedding)| OpenAICompatibleEmbeddingData {
+                object: "embedding".to_string(),
+                embedding,
+                index,
+            })
+            .collect(),
         model: original_model_name,
         usage: OpenAICompatibleEmbeddingUsage {
             prompt_tokens: response.usage.input_tokens,
@@ -1990,5 +1997,234 @@ mod tests {
                 enabled: CacheEnabledMode::WriteOnly
             }
         );
+    }
+
+    // Tests for OpenAI-compatible embeddings endpoint
+
+    #[test]
+    fn test_openai_compatible_embedding_params_deserialization() {
+        // Test single string input
+        let json_single = json!({
+            "input": "Hello, world!",
+            "model": "text-embedding-ada-002"
+        });
+        
+        let params: OpenAICompatibleEmbeddingParams = serde_json::from_value(json_single).unwrap();
+        assert_eq!(params.model, "text-embedding-ada-002");
+        match params.input {
+            OpenAICompatibleEmbeddingInput::Single(text) => assert_eq!(text, "Hello, world!"),
+            _ => panic!("Expected single input"),
+        }
+        assert!(params.tensorzero_cache_options.is_none());
+
+        // Test batch input
+        let json_batch = json!({
+            "input": ["Hello", "World", "Test"],
+            "model": "text-embedding-ada-002"
+        });
+        
+        let params: OpenAICompatibleEmbeddingParams = serde_json::from_value(json_batch).unwrap();
+        match params.input {
+            OpenAICompatibleEmbeddingInput::Batch(texts) => {
+                assert_eq!(texts, vec!["Hello", "World", "Test"]);
+            },
+            _ => panic!("Expected batch input"),
+        }
+
+        // Test with TensorZero cache options
+        let json_with_cache = json!({
+            "input": "Test input",
+            "model": "embedding-model",
+            "tensorzero::cache_options": {
+                "max_age_s": 3600,
+                "enabled": "on"
+            }
+        });
+        
+        let params: OpenAICompatibleEmbeddingParams = serde_json::from_value(json_with_cache).unwrap();
+        assert!(params.tensorzero_cache_options.is_some());
+        let cache_options = params.tensorzero_cache_options.unwrap();
+        assert_eq!(cache_options.max_age_s, Some(3600));
+        assert_eq!(cache_options.enabled, CacheEnabledMode::On);
+
+        // Test with unknown fields (should be captured)
+        let json_unknown = json!({
+            "input": "Test",
+            "model": "embedding-model",
+            "encoding_format": "float",
+            "dimensions": 1536,
+            "user": "test-user"
+        });
+        
+        let params: OpenAICompatibleEmbeddingParams = serde_json::from_value(json_unknown).unwrap();
+        assert!(!params.unknown_fields.is_empty());
+        assert!(params.unknown_fields.contains_key("encoding_format"));
+        assert!(params.unknown_fields.contains_key("dimensions"));
+        assert!(params.unknown_fields.contains_key("user"));
+    }
+
+    #[test]
+    fn test_openai_compatible_embedding_response_serialization() {
+        let response = OpenAICompatibleEmbeddingResponse {
+            object: "list".to_string(),
+            data: vec![
+                OpenAICompatibleEmbeddingData {
+                    object: "embedding".to_string(),
+                    embedding: vec![0.1, 0.2, 0.3, -0.4],
+                    index: 0,
+                }
+            ],
+            model: "text-embedding-ada-002".to_string(),
+            usage: OpenAICompatibleEmbeddingUsage {
+                prompt_tokens: 5,
+                total_tokens: 5,
+            },
+        };
+
+        let json_value = serde_json::to_value(&response).unwrap();
+        
+        // Verify structure matches OpenAI API spec
+        assert_eq!(json_value["object"], "list");
+        assert_eq!(json_value["model"], "text-embedding-ada-002");
+        
+        let data = &json_value["data"].as_array().unwrap()[0];
+        assert_eq!(data["object"], "embedding");
+        assert_eq!(data["index"], 0);
+        assert_eq!(data["embedding"].as_array().unwrap().len(), 4);
+        assert!((data["embedding"][0].as_f64().unwrap() - 0.1).abs() < 1e-6);
+        assert!((data["embedding"][3].as_f64().unwrap() - (-0.4)).abs() < 1e-6);
+        
+        let usage = &json_value["usage"];
+        assert_eq!(usage["prompt_tokens"], 5);
+        assert_eq!(usage["total_tokens"], 5);
+    }
+
+    #[test]
+    fn test_openai_compatible_embedding_input_variants() {
+        // Test single string
+        let single_json = json!("Hello, world!");
+        let single_input: OpenAICompatibleEmbeddingInput = serde_json::from_value(single_json).unwrap();
+        match single_input {
+            OpenAICompatibleEmbeddingInput::Single(text) => assert_eq!(text, "Hello, world!"),
+            _ => panic!("Expected single input"),
+        }
+
+        // Test array of strings
+        let batch_json = json!(["Hello", "World", "Test"]);
+        let batch_input: OpenAICompatibleEmbeddingInput = serde_json::from_value(batch_json).unwrap();
+        match batch_input {
+            OpenAICompatibleEmbeddingInput::Batch(texts) => {
+                assert_eq!(texts.len(), 3);
+                assert_eq!(texts[0], "Hello");
+                assert_eq!(texts[1], "World");
+                assert_eq!(texts[2], "Test");
+            },
+            _ => panic!("Expected batch input"),
+        }
+
+        // Test empty array
+        let empty_json = json!([]);
+        let empty_input: OpenAICompatibleEmbeddingInput = serde_json::from_value(empty_json).unwrap();
+        match empty_input {
+            OpenAICompatibleEmbeddingInput::Batch(texts) => assert_eq!(texts.len(), 0),
+            _ => panic!("Expected batch input"),
+        }
+    }
+
+    #[test]
+    fn test_embedding_data_structure() {
+        let embedding_data = OpenAICompatibleEmbeddingData {
+            object: "embedding".to_string(),
+            embedding: vec![1.0, -0.5, 0.0, 0.7],
+            index: 42,
+        };
+
+        let json = serde_json::to_value(&embedding_data).unwrap();
+        assert_eq!(json["object"], "embedding");
+        assert_eq!(json["index"], 42);
+        
+        let embedding_array = json["embedding"].as_array().unwrap();
+        assert_eq!(embedding_array.len(), 4);
+        assert!((embedding_array[0].as_f64().unwrap() - 1.0).abs() < 1e-6);
+        assert!((embedding_array[1].as_f64().unwrap() - (-0.5)).abs() < 1e-6);
+        assert!((embedding_array[2].as_f64().unwrap() - 0.0).abs() < 1e-6);
+        assert!((embedding_array[3].as_f64().unwrap() - 0.7).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_embedding_usage_structure() {
+        let usage = OpenAICompatibleEmbeddingUsage {
+            prompt_tokens: 100,
+            total_tokens: 100,
+        };
+
+        let json = serde_json::to_value(&usage).unwrap();
+        assert_eq!(json["prompt_tokens"], 100);
+        assert_eq!(json["total_tokens"], 100);
+        
+        // Verify that completion_tokens is not included (embeddings don't have completion tokens)
+        assert!(!json.as_object().unwrap().contains_key("completion_tokens"));
+    }
+
+    #[test]
+    fn test_embedding_response_multiple_embeddings() {
+        // Test response with multiple embeddings (though we don't support batch yet)
+        let response = OpenAICompatibleEmbeddingResponse {
+            object: "list".to_string(),
+            data: vec![
+                OpenAICompatibleEmbeddingData {
+                    object: "embedding".to_string(),
+                    embedding: vec![0.1, 0.2],
+                    index: 0,
+                },
+                OpenAICompatibleEmbeddingData {
+                    object: "embedding".to_string(),
+                    embedding: vec![0.3, 0.4],
+                    index: 1,
+                },
+            ],
+            model: "test-model".to_string(),
+            usage: OpenAICompatibleEmbeddingUsage {
+                prompt_tokens: 10,
+                total_tokens: 10,
+            },
+        };
+
+        let json = serde_json::to_value(&response).unwrap();
+        let data = json["data"].as_array().unwrap();
+        assert_eq!(data.len(), 2);
+        assert_eq!(data[0]["index"], 0);
+        assert_eq!(data[1]["index"], 1);
+        let embedding0 = data[0]["embedding"].as_array().unwrap();
+        assert!((embedding0[0].as_f64().unwrap() - 0.1).abs() < 1e-6);
+        assert!((embedding0[1].as_f64().unwrap() - 0.2).abs() < 1e-6);
+        
+        let embedding1 = data[1]["embedding"].as_array().unwrap();
+        assert!((embedding1[0].as_f64().unwrap() - 0.3).abs() < 1e-6);
+        assert!((embedding1[1].as_f64().unwrap() - 0.4).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_embedding_params_model_name_extraction() {
+        // Test model name prefixes that might be used in the handler
+        let test_cases = vec![
+            ("tensorzero::embedding_model_name::my-model", "my-model"),
+            ("tensorzero::model_name::my-model", "my-model"), 
+            ("plain-model-name", "plain-model-name"),
+            ("tensorzero::function_name::my-function", "tensorzero::function_name::my-function"), // Should not be stripped
+        ];
+
+        for (input_model, expected_output) in test_cases {
+            // This tests the logic that would be used in the embedding_handler
+            let extracted = if let Some(model_name) = input_model.strip_prefix("tensorzero::embedding_model_name::") {
+                model_name.to_string()
+            } else if let Some(model_name) = input_model.strip_prefix("tensorzero::model_name::") {
+                model_name.to_string()
+            } else {
+                input_model.to_string()
+            };
+            
+            assert_eq!(extracted, expected_output, "Failed for input: {}", input_model);
+        }
     }
 }

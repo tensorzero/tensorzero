@@ -557,7 +557,14 @@ fn get_embedding_url(base_url: &Url) -> Result<Url, Error> {
 #[derive(Debug, Serialize)]
 struct VLLMEmbeddingRequest<'a> {
     model: &'a str,
-    input: &'a str,
+    input: VLLMEmbeddingRequestInput<'a>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(untagged)]
+enum VLLMEmbeddingRequestInput<'a> {
+    Single(&'a str),
+    Batch(Vec<&'a str>),
 }
 
 #[derive(Debug, Deserialize)]
@@ -586,9 +593,15 @@ impl EmbeddingProvider for VLLMProvider {
         dynamic_api_keys: &InferenceCredentials,
     ) -> Result<EmbeddingProviderResponse, Error> {
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let input = match &request.input {
+            crate::embeddings::EmbeddingInput::Single(text) => VLLMEmbeddingRequestInput::Single(text),
+            crate::embeddings::EmbeddingInput::Batch(texts) => {
+                VLLMEmbeddingRequestInput::Batch(texts.iter().map(|s| s.as_str()).collect())
+            }
+        };
         let request_body = VLLMEmbeddingRequest {
             model: &self.model_name,
-            input: &request.input,
+            input,
         };
         let request_url = get_embedding_url(&self.api_base)?;
         let start_time = Instant::now();
@@ -646,7 +659,7 @@ impl EmbeddingProvider for VLLMProvider {
                     provider_type: PROVIDER_TYPE.to_string(),
                 }));
             }
-            let embedding = response_body.data[0].embedding.clone();
+            let embeddings: Vec<Vec<f32>> = response_body.data.into_iter().map(|d| d.embedding).collect();
             let raw_request = serde_json::to_string(&request_body).map_err(|e| {
                 Error::new(ErrorDetails::Serialization {
                     message: format!(
@@ -660,7 +673,7 @@ impl EmbeddingProvider for VLLMProvider {
                 output_tokens: 0, // Embeddings don't have output tokens
             };
             Ok(EmbeddingProviderResponse::new(
-                embedding,
+                embeddings,
                 request.input.clone(),
                 raw_request,
                 raw_response,

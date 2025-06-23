@@ -650,25 +650,29 @@ impl EmbeddingProvider for DummyProvider {
             }
             .into());
         }
-        let id = Uuid::now_v7();
-        let created = current_timestamp();
-        let embedding = vec![0.0; 1536];
+        // Generate embeddings for each input
+        let embeddings: Vec<Vec<f32>> = match &request.input {
+            crate::embeddings::EmbeddingInput::Single(_) => vec![vec![0.0; 1536]],
+            crate::embeddings::EmbeddingInput::Batch(texts) => {
+                texts.iter().map(|_| vec![0.0; 1536]).collect()
+            }
+        };
+        
         let raw_request = DUMMY_RAW_REQUEST.to_string();
         let raw_response = DUMMY_RAW_REQUEST.to_string();
         let usage = DUMMY_INFER_USAGE.clone();
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
         };
-        Ok(EmbeddingProviderResponse {
-            id,
-            input: request.input.to_string(),
-            embedding,
-            created,
+        
+        Ok(EmbeddingProviderResponse::new(
+            embeddings,
+            request.input.clone(),
             raw_request,
             raw_response,
             usage,
             latency,
-        })
+        ))
     }
 }
 

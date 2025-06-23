@@ -1218,11 +1218,12 @@ mod tests {
                         config: ProviderConfig::Dummy(DummyProvider {
                             model_name: "best_of_n_1".into(),
                             ..Default::default()
-                        }),
+                }),
                         extra_body: Default::default(),
                         extra_headers: Default::default(),
                     },
                 )]),
+                endpoints: crate::endpoints::capability::default_capabilities(),
             },
         )]))
         .expect("Failed to create model table");
@@ -1315,11 +1316,12 @@ mod tests {
                             config: ProviderConfig::Dummy(DummyProvider {
                                 model_name: "error".into(),
                                 ..Default::default()
-                            }),
+                }),
                             extra_body: Default::default(),
                             extra_headers: Default::default(),
                         },
                     )]),
+                    endpoints: crate::endpoints::capability::default_capabilities(),
                 },
             );
             ModelTable::try_from(map).expect("Failed to create model table")
@@ -1379,11 +1381,12 @@ mod tests {
                             config: ProviderConfig::Dummy(DummyProvider {
                                 model_name: "regular".into(),
                                 ..Default::default()
-                            }),
+                }),
                             extra_body: Default::default(),
                             extra_headers: Default::default(),
                         },
                     )]),
+                    endpoints: crate::endpoints::capability::default_capabilities(),
                 },
             );
             ModelTable::try_from(map).expect("Failed to create model table")
@@ -1460,11 +1463,12 @@ mod tests {
                         config: ProviderConfig::Dummy(DummyProvider {
                             model_name: "best_of_n_big".into(),
                             ..Default::default()
-                        }),
+                }),
                         extra_body: Default::default(),
                         extra_headers: Default::default(),
                     },
                 )]),
+                endpoints: crate::endpoints::capability::default_capabilities(),
             },
         );
         let big_models = ModelTable::try_from(big_models).expect("Failed to create model table");

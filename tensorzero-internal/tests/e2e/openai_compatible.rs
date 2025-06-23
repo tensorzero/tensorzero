@@ -1072,3 +1072,268 @@ async fn test_openai_compatible_logprobs_numeric_should_error() {
         .unwrap();
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
+
+#[tokio::test]
+async fn test_openai_compatible_embeddings_route() {
+    let client = Client::new();
+
+    // Test single string input
+    let payload = json!({
+        "model": "text-embedding-3-small",
+        "input": "Hello, world! This is a test embedding."
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/openai/v1/embeddings"))
+        .header("Content-Type", "application/json")
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    
+    let response_json: Value = response.json().await.unwrap();
+    
+    // Verify OpenAI-compatible response format
+    assert_eq!(response_json["object"], "list");
+    assert_eq!(response_json["model"], "text-embedding-3-small");
+    
+    let data = response_json["data"].as_array().unwrap();
+    assert_eq!(data.len(), 1);
+    
+    let embedding_data = &data[0];
+    assert_eq!(embedding_data["object"], "embedding");
+    assert_eq!(embedding_data["index"], 0);
+    
+    let embedding = embedding_data["embedding"].as_array().unwrap();
+    assert!(!embedding.is_empty());
+    assert_eq!(embedding.len(), 1536); // text-embedding-3-small has 1536 dimensions
+    
+    // Verify all values are numbers
+    for value in embedding {
+        assert!(value.is_f64());
+    }
+    
+    let usage = &response_json["usage"];
+    assert!(usage["prompt_tokens"].as_u64().unwrap() > 0);
+    assert!(usage["total_tokens"].as_u64().unwrap() > 0);
+    assert_eq!(usage["prompt_tokens"], usage["total_tokens"]); // For embeddings, total == prompt
+}
+
+#[tokio::test]
+async fn test_openai_compatible_embeddings_route_with_model_prefix() {
+    let client = Client::new();
+
+    // Test with TensorZero model prefix
+    let payload = json!({
+        "model": "tensorzero::model_name::text-embedding-3-small",
+        "input": "Test with model prefix"
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/openai/v1/embeddings"))
+        .header("Content-Type", "application/json")
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    
+    let response_json: Value = response.json().await.unwrap();
+    
+    // Should return the original model name without prefix
+    assert_eq!(response_json["model"], "text-embedding-3-small");
+    assert_eq!(response_json["object"], "list");
+    
+    let data = response_json["data"].as_array().unwrap();
+    assert_eq!(data.len(), 1);
+    assert_eq!(data[0]["object"], "embedding");
+}
+
+#[tokio::test]
+async fn test_openai_compatible_embeddings_route_with_cache_options() {
+    let client = Client::new();
+
+    // Test with TensorZero cache options
+    let payload = json!({
+        "model": "text-embedding-3-small",
+        "input": "Test with cache options",
+        "tensorzero::cache_options": {
+            "max_age_s": 3600,
+            "enabled": "on"
+        }
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/openai/v1/embeddings"))
+        .header("Content-Type", "application/json")
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    
+    let response_json: Value = response.json().await.unwrap();
+    assert_eq!(response_json["object"], "list");
+    assert_eq!(response_json["model"], "text-embedding-3-small");
+}
+
+#[tokio::test]
+async fn test_openai_compatible_embeddings_route_invalid_model() {
+    let client = Client::new();
+
+    // Test with non-existent model
+    let payload = json!({
+        "model": "nonexistent-embedding-model",
+        "input": "This should fail"
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/openai/v1/embeddings"))
+        .header("Content-Type", "application/json")
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    
+    let response_json: Value = response.json().await.unwrap();
+    assert!(response_json["error"]["message"]
+        .as_str()
+        .unwrap()
+        .contains("not found or does not support embeddings"));
+}
+
+#[tokio::test]
+async fn test_openai_compatible_embeddings_route_batch_support() {
+    let client = Client::new();
+
+    // Test batch input (should now work)
+    let payload = json!({
+        "model": "text-embedding-3-small",
+        "input": ["First text", "Second text", "Third text"]
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/openai/v1/embeddings"))
+        .header("Content-Type", "application/json")
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    
+    let response_json: Value = response.json().await.unwrap();
+    assert_eq!(response_json["object"], "list");
+    assert_eq!(response_json["model"], "text-embedding-3-small");
+    
+    let data = response_json["data"].as_array().unwrap();
+    assert_eq!(data.len(), 3); // Should have 3 embeddings for 3 inputs
+    
+    // Check that each embedding has the correct structure and index
+    for (i, embedding_data) in data.iter().enumerate() {
+        assert_eq!(embedding_data["object"], "embedding");
+        assert_eq!(embedding_data["index"], i);
+        
+        let embedding = embedding_data["embedding"].as_array().unwrap();
+        assert!(!embedding.is_empty());
+        assert_eq!(embedding.len(), 1536); // text-embedding-3-small has 1536 dimensions
+        
+        // Verify all values are numbers
+        for value in embedding {
+            assert!(value.is_f64());
+        }
+    }
+    
+    let usage = &response_json["usage"];
+    assert!(usage["prompt_tokens"].as_u64().unwrap() > 0);
+    assert!(usage["total_tokens"].as_u64().unwrap() > 0);
+    assert_eq!(usage["prompt_tokens"], usage["total_tokens"]); // For embeddings, total == prompt
+}
+
+#[tokio::test]
+async fn test_openai_compatible_embeddings_route_empty_batch() {
+    let client = Client::new();
+
+    // Test empty batch input (should fail)
+    let payload = json!({
+        "model": "text-embedding-3-small",
+        "input": []
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/openai/v1/embeddings"))
+        .header("Content-Type", "application/json")
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    
+    let response_json: Value = response.json().await.unwrap();
+    assert!(response_json["error"]["message"]
+        .as_str()
+        .unwrap()
+        .contains("Batch embedding requests cannot be empty"));
+}
+
+#[tokio::test]
+async fn test_openai_compatible_embeddings_route_with_unknown_fields() {
+    let client = Client::new();
+
+    // Test with unknown OpenAI fields (should be ignored with warning)
+    let payload = json!({
+        "model": "text-embedding-3-small",
+        "input": "Test with unknown fields",
+        "encoding_format": "float",
+        "dimensions": 1536,
+        "user": "test-user"
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/openai/v1/embeddings"))
+        .header("Content-Type", "application/json")
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    // Should succeed despite unknown fields
+    assert_eq!(response.status(), StatusCode::OK);
+    
+    let response_json: Value = response.json().await.unwrap();
+    assert_eq!(response_json["object"], "list");
+    assert_eq!(response_json["model"], "text-embedding-3-small");
+}
+
+#[tokio::test]
+async fn test_openai_compatible_embeddings_route_with_header_model() {
+    let client = Client::new();
+
+    // Test with x-tensorzero-original-model header
+    let payload = json!({
+        "model": "some-proxy-model-name",
+        "input": "Test with header model override"
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/openai/v1/embeddings"))
+        .header("Content-Type", "application/json")
+        .header("x-tensorzero-original-model", "text-embedding-3-small")
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    
+    let response_json: Value = response.json().await.unwrap();
+    // Should use the model from header
+    assert_eq!(response_json["model"], "text-embedding-3-small");
+}
