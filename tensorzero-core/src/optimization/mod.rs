@@ -61,7 +61,9 @@ pub enum OptimizerStatus {
         trained_tokens: Option<u64>,
         error: Option<Value>,
     },
-    Completed(OptimizerOutput),
+    Completed {
+        output: OptimizerOutput,
+    },
     Failed,
 }
 

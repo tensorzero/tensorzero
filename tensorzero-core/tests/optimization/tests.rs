@@ -50,7 +50,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
         .poll(&client, &job_handle, &credentials)
         .await
         .unwrap();
-    while !matches!(status, OptimizerStatus::Completed(_)) {
+    while !matches!(status, OptimizerStatus::Completed { .. }) {
         status = optimizer_info
             .poll(&client, &job_handle, &credentials)
             .await
@@ -62,8 +62,11 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
             panic!("Optimization failed");
         }
     }
-    assert!(matches!(status, OptimizerStatus::Completed(_)));
-    let OptimizerStatus::Completed(OptimizerOutput::Model(model_config)) = status else {
+    assert!(matches!(status, OptimizerStatus::Completed { .. }));
+    let OptimizerStatus::Completed {
+        output: OptimizerOutput::Model(model_config),
+    } = status
+    else {
         panic!("Expected model config");
     };
     let model_config = model_config

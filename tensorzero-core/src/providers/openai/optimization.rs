@@ -264,11 +264,13 @@ pub fn convert_to_optimizer_status(job: OpenAIFineTuningJob) -> Result<Optimizer
                 timeouts: None,
                 discard_unknown_chunks: false,
             };
-            OptimizerStatus::Completed(OptimizerOutput::Model(UninitializedModelConfig {
-                routing: vec![model_name.clone().into()],
-                providers: HashMap::from([(model_name.clone().into(), model_provider)]),
-                timeouts: TimeoutsConfig::default(),
-            }))
+            OptimizerStatus::Completed {
+                output: OptimizerOutput::Model(UninitializedModelConfig {
+                    routing: vec![model_name.clone().into()],
+                    providers: HashMap::from([(model_name.clone().into(), model_provider)]),
+                    timeouts: TimeoutsConfig::default(),
+                }),
+            }
         }
         OpenAIFineTuningJobStatus::Failed => OptimizerStatus::Failed,
         OpenAIFineTuningJobStatus::Cancelled => OptimizerStatus::Failed,
@@ -276,9 +278,9 @@ pub fn convert_to_optimizer_status(job: OpenAIFineTuningJob) -> Result<Optimizer
 }
 
 pub fn job_url(job_id: &str) -> Result<Url, Error> {
-    Url::parse(&format!("https://platform.openai.com/finetune/{}", job_id)).map_err(|e| {
+    Url::parse(&format!("https://platform.openai.com/finetune/{job_id}")).map_err(|e| {
         Error::new(ErrorDetails::Serialization {
-            message: format!("Failed to parse OpenAI job URL: {}", e),
+            message: format!("Failed to parse OpenAI job URL: {e}"),
         })
     })
 }
@@ -370,7 +372,9 @@ mod tests {
         let status = convert_to_optimizer_status(job).unwrap();
         assert!(matches!(
             status,
-            OptimizerStatus::Completed(OptimizerOutput::Model(_))
+            OptimizerStatus::Completed {
+                output: OptimizerOutput::Model(_),
+            }
         ));
 
         // Test for "succeeded" status with a file output
@@ -386,7 +390,9 @@ mod tests {
         let status = convert_to_optimizer_status(job).unwrap();
         assert!(matches!(
             status,
-            OptimizerStatus::Completed(OptimizerOutput::Model(_))
+            OptimizerStatus::Completed {
+                output: OptimizerOutput::Model(_),
+            }
         ));
 
         // Test for "running" status
