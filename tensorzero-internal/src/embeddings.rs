@@ -15,7 +15,7 @@ use crate::{
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails},
     inference::{
-        providers::openai::OpenAIProvider,
+        providers::{openai::OpenAIProvider, vllm::VLLMProvider},
         types::{
             current_timestamp, Latency, ModelInferenceResponseWithMetadata, RequestMessage, Role,
             Usage,
@@ -34,13 +34,22 @@ use crate::inference::providers::dummy::DummyProvider;
 pub type EmbeddingModelTable = BaseModelTable<EmbeddingModelConfig>;
 
 impl ShorthandModelConfig for EmbeddingModelConfig {
-    const SHORTHAND_MODEL_PREFIXES: &[&str] = &["openai::"];
+    const SHORTHAND_MODEL_PREFIXES: &[&str] = &["openai::", "vllm::"];
     const MODEL_TYPE: &str = "Embedding model";
     async fn from_shorthand(provider_type: &str, model_name: &str) -> Result<Self, Error> {
         let model_name = model_name.to_string();
         let provider_config = match provider_type {
             "openai" => {
                 EmbeddingProviderConfig::OpenAI(OpenAIProvider::new(model_name, None, None)?)
+            }
+            "vllm" => {
+                // For shorthand, we'll use a default localhost URL
+                let default_url = url::Url::parse("http://localhost:8000").map_err(|e| {
+                    Error::new(ErrorDetails::Config {
+                        message: format!("Failed to parse default vLLM URL: {e}"),
+                    })
+                })?;
+                EmbeddingProviderConfig::VLLM(VLLMProvider::new(model_name, default_url, None)?)
             }
             #[cfg(any(test, feature = "e2e_tests"))]
             "dummy" => EmbeddingProviderConfig::Dummy(DummyProvider::new(model_name, None)?),
@@ -306,6 +315,7 @@ pub trait EmbeddingProvider {
 #[derive(Debug)]
 pub enum EmbeddingProviderConfig {
     OpenAI(OpenAIProvider),
+    VLLM(VLLMProvider),
     #[cfg(any(test, feature = "e2e_tests"))]
     Dummy(DummyProvider),
 }
@@ -324,6 +334,7 @@ impl UninitializedEmbeddingProviderConfig {
         let provider_config = self.config.load(provider_types)?;
         Ok(match provider_config {
             ProviderConfig::OpenAI(provider) => EmbeddingProviderConfig::OpenAI(provider),
+            ProviderConfig::VLLM(provider) => EmbeddingProviderConfig::VLLM(provider),
             _ => {
                 return Err(Error::new(ErrorDetails::Config {
                     message: format!(
@@ -344,6 +355,9 @@ impl EmbeddingProvider for EmbeddingProviderConfig {
     ) -> Result<EmbeddingProviderResponse, Error> {
         match self {
             EmbeddingProviderConfig::OpenAI(provider) => {
+                provider.embed(request, client, dynamic_api_keys).await
+            }
+            EmbeddingProviderConfig::VLLM(provider) => {
                 provider.embed(request, client, dynamic_api_keys).await
             }
             #[cfg(any(test, feature = "e2e_tests"))]

@@ -45,6 +45,7 @@ use super::inference::{
     InferenceCredentials, InferenceOutput, InferenceResponse, InferenceResponseChunk,
     InferenceStream,
 };
+use crate::embeddings::EmbeddingRequest;
 
 /// A handler for the OpenAI-compatible inference endpoint
 #[debug_handler(state = AppStateData)]
@@ -1259,6 +1260,162 @@ impl From<ToolCallChunk> for OpenAICompatibleToolCall {
             },
         }
     }
+}
+
+// OpenAI-compatible embedding types and handler
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub struct OpenAICompatibleEmbeddingParams {
+    input: OpenAICompatibleEmbeddingInput,
+    model: String,
+    #[serde(rename = "tensorzero::cache_options")]
+    tensorzero_cache_options: Option<CacheParamsOptions>,
+    #[serde(flatten)]
+    unknown_fields: HashMap<String, Value>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[serde(untagged)]
+enum OpenAICompatibleEmbeddingInput {
+    Single(String),
+    Batch(Vec<String>),
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+struct OpenAICompatibleEmbeddingData {
+    object: String,
+    embedding: Vec<f32>,
+    index: usize,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+struct OpenAICompatibleEmbeddingUsage {
+    prompt_tokens: u32,
+    total_tokens: u32,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+struct OpenAICompatibleEmbeddingResponse {
+    object: String,
+    data: Vec<OpenAICompatibleEmbeddingData>,
+    model: String,
+    usage: OpenAICompatibleEmbeddingUsage,
+}
+
+/// A handler for the OpenAI-compatible embedding endpoint
+#[debug_handler(state = AppStateData)]
+pub async fn embedding_handler(
+    State(AppStateData {
+        config,
+        http_client,
+        clickhouse_connection_info,
+        kafka_connection_info: _,
+    }): AppState,
+    headers: HeaderMap,
+    StructuredJson(openai_compatible_params): StructuredJson<OpenAICompatibleEmbeddingParams>,
+) -> Result<Response<Body>, Error> {
+    if !openai_compatible_params.unknown_fields.is_empty() {
+        tracing::warn!(
+            "Ignoring unknown fields in OpenAI-compatible embedding request: {:?}",
+            openai_compatible_params
+                .unknown_fields
+                .keys()
+                .collect::<Vec<_>>()
+        );
+    }
+
+    // Extract the model name from the request
+    let original_model_name =
+        if let Some(original_model) = headers.get("x-tensorzero-original-model") {
+            original_model
+                .to_str()
+                .unwrap_or(&openai_compatible_params.model)
+                .to_string()
+        } else {
+            // Fallback to extracting from the prefixed model name
+            if let Some(model_name) = openai_compatible_params
+                .model
+                .strip_prefix("tensorzero::embedding_model_name::")
+            {
+                model_name.to_string()
+            } else if let Some(model_name) = openai_compatible_params
+                .model
+                .strip_prefix("tensorzero::model_name::")
+            {
+                model_name.to_string()
+            } else {
+                // Fallback to the full model name if no prefix found
+                openai_compatible_params.model.clone()
+            }
+        };
+
+    // Convert OpenAI request to internal format
+    // For now, we only support single string input, not batch
+    let input = match &openai_compatible_params.input {
+        OpenAICompatibleEmbeddingInput::Single(text) => text.clone(),
+        OpenAICompatibleEmbeddingInput::Batch(texts) => {
+            if texts.len() != 1 {
+                return Err(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
+                    message: "Batch embedding requests are not yet supported. Please provide a single input string.".to_string(),
+                }));
+            }
+            texts[0].clone()
+        }
+    };
+
+    let embedding_request = EmbeddingRequest { input };
+
+    // Extract model configuration
+    use crate::model::ModelTableExt;
+    let models = config.models.read().await;
+    let model = models
+        .get_with_capability(&original_model_name, crate::endpoints::capability::EndpointCapability::Embeddings)
+        .await?
+        .ok_or_else(|| {
+            Error::new(ErrorDetails::Config {
+                message: format!("Model '{original_model_name}' not found or does not support embeddings"),
+            })
+        })?;
+
+    // Create credentials - empty for now as OpenAI compatible endpoint doesn't support dynamic credentials
+    let credentials = InferenceCredentials::default();
+
+    // Create inference clients
+    let cache_options: crate::cache::CacheOptions = (
+        openai_compatible_params
+            .tensorzero_cache_options
+            .unwrap_or_default(),
+        false, // dryrun is false for now
+    )
+        .into();
+    let clients = super::inference::InferenceClients {
+        http_client: &http_client,
+        credentials: &credentials,
+        clickhouse_connection_info: &clickhouse_connection_info,
+        cache_options: &cache_options,
+    };
+
+    // Call the model's embedding capability
+    let response = model
+        .embed(&embedding_request, &original_model_name, &clients)
+        .await?;
+
+    // Convert to OpenAI-compatible format
+    let openai_response = OpenAICompatibleEmbeddingResponse {
+        object: "list".to_string(),
+        data: vec![OpenAICompatibleEmbeddingData {
+            object: "embedding".to_string(),
+            embedding: response.embedding,
+            index: 0,
+        }],
+        model: original_model_name,
+        usage: OpenAICompatibleEmbeddingUsage {
+            prompt_tokens: response.usage.input_tokens,
+            total_tokens: response.usage.input_tokens,
+        },
+    };
+
+    Ok(Json(openai_response).into_response())
 }
 
 #[cfg(test)]

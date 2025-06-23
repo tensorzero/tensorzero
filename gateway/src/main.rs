@@ -205,12 +205,12 @@ async fn main() {
     // Routes that require authentication
     let authenticated_routes = Router::new()
         .route(
-            "/openai/v1/chat/completions",
+            "/v1/chat/completions",
             post(endpoints::openai_compatible::inference_handler),
         )
         .route(
-            "/v1/chat/completions",
-            post(endpoints::openai_compatible::inference_handler),
+            "/v1/embeddings",
+            post(endpoints::openai_compatible::embedding_handler),
         )
         .layer(axum::middleware::from_fn_with_state(
             auth.clone(),

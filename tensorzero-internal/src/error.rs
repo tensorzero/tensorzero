@@ -392,6 +392,10 @@ pub enum ErrorDetails {
     KafkaSerialization {
         message: String,
     },
+    CapabilityNotSupported {
+        capability: String,
+        provider: String,
+    },
 }
 
 impl ErrorDetails {
@@ -484,6 +488,7 @@ impl ErrorDetails {
             ErrorDetails::KafkaConnection { .. } => tracing::Level::ERROR,
             ErrorDetails::KafkaProducer { .. } => tracing::Level::ERROR,
             ErrorDetails::KafkaSerialization { .. } => tracing::Level::ERROR,
+            ErrorDetails::CapabilityNotSupported { .. } => tracing::Level::WARN,
         }
     }
 
@@ -584,6 +589,7 @@ impl ErrorDetails {
             ErrorDetails::KafkaConnection { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::KafkaProducer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::KafkaSerialization { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::CapabilityNotSupported { .. } => StatusCode::BAD_REQUEST,
         }
     }
 
@@ -993,6 +999,9 @@ impl std::fmt::Display for ErrorDetails {
             }
             ErrorDetails::KafkaSerialization { message } => {
                 write!(f, "Error serializing message for Kafka: {message}")
+            }
+            ErrorDetails::CapabilityNotSupported { capability, provider } => {
+                write!(f, "Provider `{provider}` does not support capability `{capability}`")
             }
         }
     }

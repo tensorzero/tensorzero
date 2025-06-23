@@ -3,7 +3,7 @@ use object_store::local::LocalFileSystem;
 use object_store::{ObjectStore, PutPayload};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tensorzero_derive::TensorZeroDeserialize;
@@ -19,7 +19,7 @@ use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
 use crate::inference::types::storage::StorageKind;
 use crate::jsonschema_util::StaticJSONSchema;
 use crate::minijinja_util::TemplateConfig;
-use crate::model::{ModelConfig, ModelTable, UninitializedModelConfig};
+use crate::model::{ModelConfig, ModelProvider, ModelTable, ProviderConfig, UninitializedModelConfig};
 use crate::model_table::ShorthandModelConfig;
 use crate::tool::{create_implicit_tool_call_config, StaticToolConfig, ToolChoice};
 use crate::variant::best_of_n_sampling::UninitializedBestOfNSamplingConfig;
@@ -47,8 +47,7 @@ pub fn skip_credential_validation() -> bool {
 #[derive(Debug, Default)]
 pub struct Config<'c> {
     pub gateway: GatewayConfig,
-    pub models: Arc<RwLock<ModelTable>>, // model name => model config
-    pub embedding_models: EmbeddingModelTable, // embedding model name => embedding model config
+    pub models: Arc<RwLock<ModelTable>>, // model name => model config (supports all capabilities)
     pub functions: HashMap<String, Arc<FunctionConfig>>, // function name => function config
     pub metrics: HashMap<String, MetricConfig>, // metric name => metric config
     pub tools: HashMap<String, Arc<StaticToolConfig>>, // tool name => tool config
@@ -377,30 +376,66 @@ impl<'c> Config<'c> {
             })
             .collect::<Result<HashMap<_, _>, _>>()?;
 
+        // Load embedding models and convert them to regular models with embeddings capability
         let embedding_models = uninitialized_config
             .embedding_models
             .into_iter()
             .map(|(name, config)| {
                 config
                     .load(&uninitialized_config.provider_types)
-                    .map(|c| (name, c))
+                    .map(|embedding_config| {
+                        // Convert EmbeddingModelConfig to ModelConfig
+                        let mut endpoints = HashSet::new();
+                        endpoints.insert(crate::endpoints::capability::EndpointCapability::Embeddings);
+                        
+                        let providers = embedding_config.providers.into_iter()
+                            .map(|(provider_name, provider_config)| {
+                                // Convert EmbeddingProviderConfig to ModelProvider
+                                let model_provider = ModelProvider {
+                                    name: provider_name.clone(),
+                                    config: match provider_config {
+                                        crate::embeddings::EmbeddingProviderConfig::OpenAI(p) => ProviderConfig::OpenAI(p),
+                                        crate::embeddings::EmbeddingProviderConfig::VLLM(p) => ProviderConfig::VLLM(p),
+                                        #[cfg(any(test, feature = "e2e_tests"))]
+                                        crate::embeddings::EmbeddingProviderConfig::Dummy(p) => ProviderConfig::Dummy(p),
+                                    },
+                                    extra_headers: None,
+                                    extra_body: None,
+                                };
+                                (provider_name, model_provider)
+                            })
+                            .collect();
+                        
+                        let model_config = ModelConfig {
+                            routing: embedding_config.routing,
+                            providers,
+                            endpoints,
+                        };
+                        (name, model_config)
+                    })
             })
             .collect::<Result<HashMap<_, _>, _>>()?;
+
+        // Merge embedding models into the main models table
+        let mut all_models = models;
+        for (name, config) in embedding_models {
+            if all_models.contains_key(&name) {
+                return Err(Error::new(ErrorDetails::Config {
+                    message: format!("Model name '{name}' is used in both 'models' and 'embedding_models' sections"),
+                }));
+            }
+            all_models.insert(name, config);
+        }
 
         let object_store_info = ObjectStoreInfo::new(uninitialized_config.object_storage)?;
 
         let mut config = Config {
             gateway: uninitialized_config.gateway,
-            models: Arc::new(RwLock::new(models.try_into().map_err(|e| {
+            models: Arc::new(RwLock::new(all_models.try_into().map_err(|e| {
                 Error::new(ErrorDetails::Config {
                     message: format!("Failed to load models: {e}"),
                 })
             })?)),
-            embedding_models: embedding_models.try_into().map_err(|e| {
-                Error::new(ErrorDetails::Config {
-                    message: format!("Failed to load embedding models: {e}"),
-                })
-            })?,
             functions,
             metrics: uninitialized_config.metrics,
             tools,
@@ -451,11 +486,13 @@ impl<'c> Config<'c> {
                     }
                 }
                 let mut models = config.models.write().await;
+                // TODO: Remove embedding_models parameter from validate methods
+                let empty_embedding_models = EmbeddingModelTable::default();
                 evaluation_function_config
                     .validate(
                         &config.tools,
                         &mut models,
-                        &config.embedding_models,
+                        &empty_embedding_models,
                         &config.templates,
                         &evaluation_function_name,
                     )
@@ -495,11 +532,13 @@ impl<'c> Config<'c> {
                 }
                 .into());
             }
+            // TODO: Remove embedding_models parameter from validate methods
+            let empty_embedding_models = EmbeddingModelTable::default();
             function
                 .validate(
                     &self.tools,
                     &mut models, // NOTE: in here there might be some models created using shorthand initialization
-                    &self.embedding_models,
+                    &empty_embedding_models,
                     &self.templates,
                     function_name,
                 )
@@ -533,16 +572,7 @@ impl<'c> Config<'c> {
             model.validate(model_name)?;
         }
 
-        for embedding_model_name in self.embedding_models.keys() {
-            if embedding_model_name.starts_with("tensorzero::") {
-                return Err(ErrorDetails::Config {
-                    message: format!(
-                        "Embedding model name cannot start with 'tensorzero::': {embedding_model_name}"
-                    ),
-                }
-                .into());
-            }
-        }
+        // Embedding models are now part of the unified model table, validated above
 
         // Validate each tool
         for tool_name in self.tools.keys() {

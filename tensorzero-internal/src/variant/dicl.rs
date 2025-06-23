@@ -98,7 +98,7 @@ impl Variant for DiclConfig {
         let (relevant_examples, embedding_response) = self
             .retrieve_relevant_examples(
                 input,
-                models.embedding_models,
+                models.models,
                 clients,
                 inference_config.function_name,
                 inference_config.variant_name.ok_or_else(|| {
@@ -166,7 +166,7 @@ impl Variant for DiclConfig {
         let (relevant_examples, embedding_response) = self
             .retrieve_relevant_examples(
                 input,
-                models.embedding_models,
+                models.models,
                 clients,
                 inference_config.function_name,
                 inference_config.variant_name.ok_or_else(|| {
@@ -305,7 +305,7 @@ impl DiclConfig {
     async fn retrieve_relevant_examples<'a>(
         &'a self,
         input: &ResolvedInput,
-        embedding_models: &'a EmbeddingModelTable,
+        models: &'a crate::model::ModelTable,
         clients: &InferenceClients<'_>,
         function_name: &str,
         variant_name: &str,
@@ -320,12 +320,13 @@ impl DiclConfig {
             })
         })?;
 
-        let embedding_model = embedding_models
-            .get(&self.embedding_model)
+        use crate::model::ModelTableExt;
+        let embedding_model = models
+            .get_with_capability(&self.embedding_model, crate::endpoints::capability::EndpointCapability::Embeddings)
             .await?
             .ok_or_else(|| {
                 Error::new(ErrorDetails::Inference {
-                    message: format!("Embedding model {} not found", self.embedding_model),
+                    message: format!("Model {} not found or does not support embeddings", self.embedding_model),
                 })
             })?;
 

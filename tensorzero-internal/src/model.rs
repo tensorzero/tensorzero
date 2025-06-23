@@ -2,13 +2,13 @@ use futures::StreamExt;
 use reqwest::Client;
 use secrecy::SecretString;
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 use std::{env, fs};
 use strum::VariantNames;
 use tensorzero_derive::TensorZeroDeserialize;
-use tracing::{span, Level, Span};
+use tracing::{instrument, span, Level, Span};
 use tracing_futures::{Instrument, Instrumented};
 use url::Url;
 
@@ -17,6 +17,7 @@ use crate::cache::{
     CacheData, ModelProviderRequest, NonStreamingCacheData, StreamingCacheData,
 };
 use crate::config_parser::{skip_credential_validation, ProviderTypesConfig};
+use crate::endpoints::capability::{default_capabilities, EndpointCapability};
 use crate::endpoints::inference::InferenceClients;
 use crate::inference::providers::aws_sagemaker::AWSSagemakerProvider;
 #[cfg(any(test, feature = "e2e_tests"))]
@@ -38,7 +39,7 @@ use crate::inference::types::{
     current_timestamp, ContentBlock, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, RequestMessage, Usage,
 };
-use crate::model_table::{BaseModelTable, ShorthandModelConfig};
+use crate::model_table::{BaseModelTable, CowNoClone, ShorthandModelConfig};
 use crate::{
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails},
@@ -61,6 +62,7 @@ use serde::Deserialize;
 pub struct ModelConfig {
     pub routing: Vec<Arc<str>>, // [provider name A, provider name B, ...]
     pub providers: HashMap<Arc<str>, ModelProvider>, // provider name => provider config
+    pub endpoints: HashSet<EndpointCapability>, // supported endpoint capabilities
 }
 
 #[derive(Debug, Deserialize)]
@@ -68,6 +70,61 @@ pub struct ModelConfig {
 pub(crate) struct UninitializedModelConfig {
     pub routing: Vec<Arc<str>>, // [provider name A, provider name B, ...]
     pub providers: HashMap<Arc<str>, UninitializedModelProvider>, // provider name => provider config
+    #[serde(default = "default_capabilities")]
+    pub endpoints: HashSet<EndpointCapability>, // supported endpoint capabilities
+}
+
+impl ModelConfig {
+    /// Check if this model supports a specific endpoint capability
+    pub fn supports_endpoint(&self, capability: EndpointCapability) -> bool {
+        self.endpoints.contains(&capability)
+    }
+    
+    /// Embedding inference method (when model supports embeddings capability)
+    #[instrument(skip_all)]
+    pub async fn embed(
+        &self,
+        request: &crate::embeddings::EmbeddingRequest,
+        model_name: &str,
+        clients: &crate::endpoints::inference::InferenceClients<'_>,
+    ) -> Result<crate::embeddings::EmbeddingResponse, Error> {
+        // Verify this model supports embeddings
+        if !self.supports_endpoint(EndpointCapability::Embeddings) {
+            return Err(Error::new(ErrorDetails::CapabilityNotSupported {
+                capability: EndpointCapability::Embeddings.as_str().to_string(),
+                provider: model_name.to_string(),
+            }));
+        }
+        
+        let mut provider_errors: HashMap<String, Error> = HashMap::new();
+        for provider_name in &self.routing {
+            let provider = self.providers.get(provider_name).ok_or_else(|| {
+                Error::new(ErrorDetails::ProviderNotFound {
+                    provider_name: provider_name.to_string(),
+                })
+            })?;
+            
+            // Use the provider's embed method
+            let response = provider
+                .embed(request, clients.http_client, clients.credentials)
+                .await;
+                
+            match response {
+                Ok(response) => {
+                    // TODO: Add caching support here
+                    let embedding_response = crate::embeddings::EmbeddingResponse::new(
+                        response, 
+                        provider_name.clone()
+                    );
+                    return Ok(embedding_response);
+                }
+                Err(error) => {
+                    provider_errors.insert(provider_name.to_string(), error);
+                }
+            }
+        }
+        Err(ErrorDetails::ModelProvidersExhausted { provider_errors }.into())
+    }
 }
 
 impl UninitializedModelConfig {
@@ -101,6 +158,7 @@ impl UninitializedModelConfig {
         Ok(ModelConfig {
             routing: self.routing,
             providers,
+            endpoints: self.endpoints,
         })
     }
 }
@@ -1273,6 +1331,35 @@ impl ModelProvider {
             }
         }
     }
+    
+    /// Embedding inference method
+    #[tracing::instrument(skip_all, fields(provider_name = &*self.name, otel.name = "model_provider_embedding"))]
+    pub async fn embed(
+        &self,
+        request: &crate::embeddings::EmbeddingRequest,
+        client: &Client,
+        dynamic_api_keys: &InferenceCredentials,
+    ) -> Result<crate::embeddings::EmbeddingProviderResponse, Error> {
+        use crate::embeddings::EmbeddingProvider;
+        
+        match &self.config {
+            ProviderConfig::OpenAI(provider) => {
+                provider.embed(request, client, dynamic_api_keys).await
+            }
+            ProviderConfig::VLLM(provider) => {
+                provider.embed(request, client, dynamic_api_keys).await
+            }
+            #[cfg(any(test, feature = "e2e_tests"))]
+            ProviderConfig::Dummy(provider) => {
+                provider.embed(request, client, dynamic_api_keys).await
+            }
+            // Other providers don't support embeddings yet
+            _ => Err(Error::new(ErrorDetails::CapabilityNotSupported {
+                capability: EndpointCapability::Embeddings.as_str().to_string(),
+                provider: self.name.to_string(),
+            })),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -1505,6 +1592,38 @@ const SHORTHAND_MODEL_PREFIXES: &[&str] = &[
 
 pub type ModelTable = BaseModelTable<ModelConfig>;
 
+/// Extension trait for ModelTable to add capability-based filtering
+pub trait ModelTableExt {
+    /// Get models that support a specific endpoint capability
+    fn get_models_for_capability(&self, capability: EndpointCapability) -> Vec<(&Arc<str>, &ModelConfig)>;
+    
+    /// Get a model by name, but only if it supports the specified capability
+    async fn get_with_capability(&self, key: &str, capability: EndpointCapability) -> Result<Option<CowNoClone<'_, ModelConfig>>, Error>;
+}
+
+impl ModelTableExt for ModelTable {
+    fn get_models_for_capability(&self, capability: EndpointCapability) -> Vec<(&Arc<str>, &ModelConfig)> {
+        self.iter_static_models()
+            .filter(|(_, model)| model.supports_endpoint(capability))
+            .collect()
+    }
+    
+    async fn get_with_capability(&self, key: &str, capability: EndpointCapability) -> Result<Option<CowNoClone<'_, ModelConfig>>, Error> {
+        if let Some(model) = self.get(key).await? {
+            if model.supports_endpoint(capability) {
+                Ok(Some(model))
+            } else {
+                Err(Error::new(ErrorDetails::CapabilityNotSupported {
+                    capability: capability.as_str().to_string(),
+                    provider: key.to_string(),
+                }))
+            }
+        } else {
+            Ok(None)
+        }
+    }
+}
+
 impl ShorthandModelConfig for ModelConfig {
     const SHORTHAND_MODEL_PREFIXES: &[&str] = SHORTHAND_MODEL_PREFIXES;
     const MODEL_TYPE: &str = "Model";
@@ -1556,6 +1675,7 @@ impl ShorthandModelConfig for ModelConfig {
                     extra_headers: Default::default(),
                 },
             )]),
+            endpoints: default_capabilities(), // Default to chat capability
         })
     }
 
@@ -1605,6 +1725,15 @@ impl ShorthandModelConfig for ModelConfig {
                 .into());
             }
         }
+        
+        // Validate endpoints
+        if self.endpoints.is_empty() {
+            return Err(ErrorDetails::Config {
+                message: format!("`models.{model_name}`: `endpoints` must not be empty. At least one capability (e.g., 'chat', 'embeddings') must be specified"),
+            }
+            .into());
+        }
+        
         Ok(())
     }
 }
@@ -1656,6 +1785,8 @@ mod tests {
                     extra_headers: Default::default(),
                 },
             )]),
+            endpoints: default_capabilities(),
+            endpoints: default_capabilities(),
         };
         let tool_config = ToolCallConfig {
             tools_available: vec![],
@@ -1722,6 +1853,7 @@ mod tests {
                     extra_headers: Default::default(),
                 },
             )]),
+            endpoints: default_capabilities(),
         };
         let response = model_config
             .infer(&request, &clients, model_name)
@@ -1817,6 +1949,7 @@ mod tests {
                     },
                 ),
             ]),
+            endpoints: default_capabilities(),
         };
 
         let model_name = "test model";
@@ -1882,6 +2015,7 @@ mod tests {
                     extra_headers: Default::default(),
                 },
             )]),
+            endpoints: default_capabilities(),
         };
         let (
             StreamResponse {
@@ -1951,6 +2085,7 @@ mod tests {
                     extra_headers: Default::default(),
                 },
             )]),
+            endpoints: default_capabilities(),
         };
         let response = model_config
             .infer_stream(
@@ -2048,6 +2183,7 @@ mod tests {
                     },
                 ),
             ]),
+            endpoints: default_capabilities(),
         };
         let (
             StreamResponse {
@@ -2125,6 +2261,7 @@ mod tests {
                     extra_headers: Default::default(),
                 },
             )]),
+            endpoints: default_capabilities(),
         };
         let tool_config = ToolCallConfig {
             tools_available: vec![],
@@ -2231,6 +2368,7 @@ mod tests {
                     extra_headers: Default::default(),
                 },
             )]),
+            endpoints: default_capabilities(),
         };
         let tool_config = ToolCallConfig {
             tools_available: vec![],
@@ -2353,6 +2491,7 @@ mod tests {
                     extra_headers: Default::default(),
                 },
             )]),
+            endpoints: default_capabilities(),
         };
         let model_table: ModelTable = HashMap::from([("claude".into(), anthropic_model_config)])
             .try_into()

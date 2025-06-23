@@ -4,7 +4,7 @@ use std::sync::OnceLock;
 use futures::{StreamExt, TryStreamExt};
 use reqwest_eventsource::RequestBuilderExt;
 use secrecy::{ExposeSecret, SecretString};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::time::Instant;
 use url::Url;
@@ -17,6 +17,7 @@ use super::openai::{
 };
 use super::provider_trait::{InferenceProvider, TensorZeroEventError};
 use crate::cache::ModelProviderRequest;
+use crate::embeddings::{EmbeddingProvider, EmbeddingProviderResponse, EmbeddingRequest};
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::providers::openai::check_api_base_suffix;
@@ -24,7 +25,7 @@ use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlockOutput, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
-    ProviderInferenceResponse, ProviderInferenceResponseArgs,
+    ProviderInferenceResponse, ProviderInferenceResponseArgs, Usage,
 };
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
 
@@ -536,6 +537,157 @@ fn tensorzero_to_vllm_system_message(system: Option<&str>) -> Option<OpenAIReque
             content: Cow::Borrowed(instructions),
         })
     })
+}
+
+// vLLM Embedding Support
+
+/// Get the embedding endpoint URL for vLLM
+fn get_embedding_url(base_url: &Url) -> Result<Url, Error> {
+    let mut url = base_url.clone();
+    if !url.path().ends_with('/') {
+        url.set_path(&format!("{}/", url.path()));
+    }
+    url.join("embeddings").map_err(|e| {
+        Error::new(ErrorDetails::InvalidBaseUrl {
+            message: e.to_string(),
+        })
+    })
+}
+
+#[derive(Debug, Serialize)]
+struct VLLMEmbeddingRequest<'a> {
+    model: &'a str,
+    input: &'a str,
+}
+
+#[derive(Debug, Deserialize)]
+struct VLLMEmbeddingResponse {
+    data: Vec<VLLMEmbeddingData>,
+    usage: VLLMEmbeddingUsage,
+}
+
+#[derive(Debug, Deserialize)]
+struct VLLMEmbeddingData {
+    embedding: Vec<f32>,
+}
+
+#[derive(Debug, Deserialize)]
+struct VLLMEmbeddingUsage {
+    prompt_tokens: u32,
+    #[expect(dead_code)]
+    total_tokens: u32,
+}
+
+impl EmbeddingProvider for VLLMProvider {
+    async fn embed(
+        &self,
+        request: &EmbeddingRequest,
+        client: &reqwest::Client,
+        dynamic_api_keys: &InferenceCredentials,
+    ) -> Result<EmbeddingProviderResponse, Error> {
+        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let request_body = VLLMEmbeddingRequest {
+            model: &self.model_name,
+            input: &request.input,
+        };
+        let request_url = get_embedding_url(&self.api_base)?;
+        let start_time = Instant::now();
+        let mut request_builder = client
+            .post(request_url)
+            .header("Content-Type", "application/json");
+        if let Some(api_key) = api_key {
+            request_builder = request_builder.bearer_auth(api_key.expose_secret());
+        }
+        let res = request_builder
+            .json(&request_body)
+            .send()
+            .await
+            .map_err(|e| {
+                Error::new(ErrorDetails::InferenceClient {
+                    status_code: e.status(),
+                    message: format!(
+                        "Error sending request to vLLM: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: None,
+                })
+            })?;
+        let latency = Latency::NonStreaming {
+            response_time: start_time.elapsed(),
+        };
+        if res.status().is_success() {
+            let raw_response = res.text().await.map_err(|e| {
+                Error::new(ErrorDetails::InferenceServer {
+                    message: format!("Error parsing response: {}", DisplayOrDebugGateway::new(e)),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: None,
+                    provider_type: PROVIDER_TYPE.to_string(),
+                })
+            })?;
+            let response_body: VLLMEmbeddingResponse = serde_json::from_str(&raw_response)
+                .map_err(|e| {
+                    Error::new(ErrorDetails::InferenceServer {
+                        message: format!(
+                            "Error parsing response: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
+                        raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                        raw_response: Some(raw_response.clone()),
+                        provider_type: PROVIDER_TYPE.to_string(),
+                    })
+                })?;
+            if response_body.data.is_empty() {
+                return Err(Error::new(ErrorDetails::InferenceServer {
+                    message: "vLLM returned no embedding data".to_string(),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: Some(raw_response.clone()),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                }));
+            }
+            let embedding = response_body.data[0].embedding.clone();
+            let raw_request = serde_json::to_string(&request_body).map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!(
+                        "Error serializing request body: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
+                })
+            })?;
+            let usage = Usage {
+                input_tokens: response_body.usage.prompt_tokens,
+                output_tokens: 0, // Embeddings don't have output tokens
+            };
+            Ok(EmbeddingProviderResponse::new(
+                embedding,
+                request.input.clone(),
+                raw_request,
+                raw_response,
+                usage,
+                latency,
+            ))
+        } else {
+            let status = res.status();
+            let raw_response = res.text().await.map_err(|e| {
+                Error::new(ErrorDetails::InferenceServer {
+                    message: format!(
+                        "Error parsing error response: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: None,
+                    provider_type: PROVIDER_TYPE.to_string(),
+                })
+            })?;
+            Err(handle_openai_error(
+                &serde_json::to_string(&request_body).unwrap_or_default(),
+                status,
+                &raw_response,
+                PROVIDER_TYPE,
+            ))
+        }
+    }
 }
 
 #[cfg(test)]
