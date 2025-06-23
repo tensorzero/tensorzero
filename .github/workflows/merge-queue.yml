@@ -159,7 +159,7 @@ jobs:
       # The 'CARGO_NEXTEST_FLAKY_TESTS' variable allows us to mark tests as flaky without merging a PR (if a provider happens to break or goes down)
       # We run the tests without the flaky tests, and require them to pass
       - name: Run all tests (including E2E tests)
-      # When running from a cron job (the 'schedule' event), use '--no-fail-fast' so that we get full coverage of flaky providers.
+        # When running from a cron job (the 'schedule' event), use '--no-fail-fast' so that we get full coverage of flaky providers.
         run: |
           TENSORZERO_E2E_PROXY="http://localhost:3003" cargo test-e2e ${{ vars.CARGO_NEXTEST_EXTRA_ARGS }} -E "not (${{ vars.CARGO_NEXTEST_FLAKY_TESTS }})" ${{ github.event_name == 'schedule' && '--no-fail-fast' || '' }}
 
@@ -253,7 +253,7 @@ jobs:
       - name: Set up .env file for production deployment tests
         run: |
           echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" > examples/production-deployment/.env
-          echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@host.docker.core:8123/tensorzero" >> examples/production-deployment/.env
+          echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@host.docker.internal:8123/tensorzero" >> examples/production-deployment/.env
 
       - name: Run docker compose for production deployment tests
         run: docker compose -f examples/production-deployment/docker-compose.yml up -d --wait
