@@ -104,7 +104,7 @@ function renderContentBlock(block: DisplayInputMessageContent, index: number) {
         return (
           <AudioMessage
             key={index}
-            url={block.file.dataUrl}
+            fileData={block.file.dataUrl}
             mimeType={block.file.mime_type}
             filePath={block.storage_path.path}
           />
@@ -113,7 +113,7 @@ function renderContentBlock(block: DisplayInputMessageContent, index: number) {
         return (
           <FileMessage
             key={index}
-            url={block.file.dataUrl}
+            fileData={block.file.dataUrl}
             mimeType={block.file.mime_type}
             filePath={block.storage_path.path}
           />

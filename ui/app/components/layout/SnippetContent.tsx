@@ -10,7 +10,7 @@ import {
   FileText,
   FileAudio,
 } from "lucide-react";
-import React from "react";
+import { useBase64UrlToBlobUrl } from "~/hooks/use-blob-url";
 
 // Empty message component
 interface EmptyMessageProps {
@@ -329,103 +329,72 @@ const FileMetadata: React.FC<
 );
 
 interface FileMessageProps {
-  url: string;
-  mimeType: string;
+  /** Base64-encoded "data:" URL containing the file data */
+  fileData: string;
   filePath: string;
+  mimeType: string;
 }
 
 export const AudioMessage: React.FC<FileMessageProps> = ({
-  url,
+  fileData,
   mimeType,
   filePath,
-}) => (
-  <div className="flex flex-col gap-1.5">
-    <Label
-      text="Audio"
-      icon={<FileAudio className="text-fg-muted h-3 w-3" />}
-    />
+}) => {
+  const url = useBase64UrlToBlobUrl(fileData, mimeType);
 
-    <div className="border-border flex w-80 flex-col gap-4 rounded-md border p-3">
-      <FileMetadata mimeType={mimeType} filePath={filePath} />
-      <audio controls preload="none" className="w-full">
-        <source src={url} type={mimeType} />
-      </audio>
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Label
+        text="Audio"
+        icon={<FileAudio className="text-fg-muted h-3 w-3" />}
+      />
+
+      <div className="border-border flex w-80 flex-col gap-4 rounded-md border p-3">
+        <FileMetadata mimeType={mimeType} filePath={filePath} />
+        <audio controls preload="none" className="w-full">
+          <source src={url} type={mimeType} />
+        </audio>
+      </div>
     </div>
-  </div>
-);
-
-// Generate a Blob URL from base64 or data URL
-function useBase64UrlToBlobUrl(url: string, mimeType: string) {
-  const [objectUrl, setObjectUrl] = React.useState<string | null>(null);
-
-  React.useEffect(() => {
-    let blobUrl: string | null = null;
-
-    function base64ToBlob(base64: string, mime: string) {
-      const byteCharacters = atob(base64);
-      const byteNumbers = new Array(byteCharacters.length);
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
-      }
-      const byteArray = new Uint8Array(byteNumbers);
-      return new Blob([byteArray], { type: mime });
-    }
-
-    let base64: string | null = null;
-    if (url.startsWith("data:")) {
-      const match = url.match(/^data:(.*?);base64,(.*)$/);
-      if (match) {
-        base64 = match[2];
-      }
-    } else {
-      base64 = url;
-    }
-
-    if (base64) {
-      const blob = base64ToBlob(base64, mimeType);
-      blobUrl = URL.createObjectURL(blob);
-      setObjectUrl(blobUrl);
-    } else {
-      setObjectUrl(url);
-    }
-
-    return () => {
-      if (blobUrl) URL.revokeObjectURL(blobUrl);
-    };
-  }, [url, mimeType]);
-
-  return objectUrl || url;
-}
+  );
+};
 
 export const FileMessage: React.FC<FileMessageProps> = ({
-  url,
-  mimeType,
+  fileData,
   filePath,
-}) => (
-  <div className="flex flex-col gap-1.5">
-    <Label text="File" icon={<FileText className="text-fg-muted h-3 w-3" />} />
-    <div className="border-border flex w-80 flex-col gap-4 rounded-md border p-3">
-      <FileMetadata filePath={filePath} mimeType={mimeType}>
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-4">
-            <Link
-              to={url}
-              download={`tensorzero_${filePath}`}
-              aria-label={`Download ${filePath}`}
-            >
-              <Download className="h-5 w-5" />
-            </Link>
-            <Link
-              to={useBase64UrlToBlobUrl(url, mimeType)}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label={`Open ${filePath} in new tab`}
-            >
-              <ExternalLink className="h-5 w-5" />
-            </Link>
+  mimeType,
+}) => {
+  const url = useBase64UrlToBlobUrl(fileData, mimeType);
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Label
+        text="File"
+        icon={<FileText className="text-fg-muted h-3 w-3" />}
+      />
+      <div className="border-border flex w-80 flex-col gap-4 rounded-md border p-3">
+        <FileMetadata filePath={filePath} mimeType={mimeType}>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-4">
+              <Link
+                to={fileData}
+                download={`tensorzero_${filePath}`}
+                aria-label={`Download ${filePath}`}
+              >
+                <Download className="h-5 w-5" />
+              </Link>
+              <Link
+                to={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={`Open ${filePath} in new tab`}
+              >
+                <ExternalLink className="h-5 w-5" />
+              </Link>
+            </div>
           </div>
-        </div>
-      </FileMetadata>
+        </FileMetadata>
+      </div>
     </div>
-  </div>
-);
+  );
+};
