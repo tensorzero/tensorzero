@@ -965,4 +965,472 @@ fn broken_function( {
         assert_eq!(tree1.root_node().kind(), tree2.root_node().kind());
         assert_eq!(tree2.root_node().kind(), tree3.root_node().kind());
     }
+
+    // Integration tests for tree edit distance functionality
+    mod edit_distance_integration_tests {
+        use super::*;
+        use crate::ted::minimum_ted;
+
+        // Helper function to calculate edit distance between two code snippets
+        fn calculate_edit_distance(
+            source_code: &str,
+            target_code: &str,
+            file_extension: &str,
+        ) -> crate::ted::TedInfo {
+            let source_tree =
+                parse_hunk(source_code, file_extension).expect("Failed to parse source code");
+            let target_tree =
+                parse_hunk(target_code, file_extension).expect("Failed to parse target code");
+
+            minimum_ted(
+                &source_tree.root_node(),
+                source_code.as_bytes(),
+                &target_tree.root_node(),
+                target_code.as_bytes(),
+            )
+        }
+
+        // Helper function to assert exact edit distance
+        fn assert_edit_distance(
+            source_code: &str,
+            target_code: &str,
+            file_extension: &str,
+            expected_distance: u64,
+        ) {
+            let result = calculate_edit_distance(source_code, target_code, file_extension);
+            assert_eq!(
+                result.min_ted, expected_distance,
+                "Expected distance {} but got {}.\nSource:\n{}\nTarget:\n{}\nTED ratio: {}",
+                expected_distance, result.min_ted, source_code, target_code, result.ted_ratio
+            );
+        }
+
+        // Helper function to assert edit distance is within a range
+        fn assert_edit_distance_range(
+            source_code: &str,
+            target_code: &str,
+            file_extension: &str,
+            min_distance: u64,
+            max_distance: u64,
+        ) {
+            let result = calculate_edit_distance(source_code, target_code, file_extension);
+            assert!(
+                result.min_ted >= min_distance && result.min_ted <= max_distance,
+                "Expected distance between {} and {} but got {}.\nSource:\n{}\nTarget:\n{}\nTED ratio: {}",
+                min_distance, max_distance, result.min_ted, source_code, target_code, result.ted_ratio
+            );
+        }
+
+        // Helper function to assert similarity ratio is within range
+        fn assert_similarity_ratio_range(
+            source_code: &str,
+            target_code: &str,
+            file_extension: &str,
+            min_ratio: f64,
+            max_ratio: f64,
+        ) {
+            let result = calculate_edit_distance(source_code, target_code, file_extension);
+            assert!(
+                result.ted_ratio >= min_ratio && result.ted_ratio <= max_ratio,
+                "Expected ratio between {} and {} but got {}.\nDistance: {}\nSource:\n{}\nTarget:\n{}",
+                min_ratio, max_ratio, result.ted_ratio, result.min_ted, source_code, target_code
+            );
+        }
+
+        #[test]
+        fn test_identical_code_zero_distance() {
+            let code = r#"fn hello_world() {
+    println!("Hello, world!");
+}"#;
+            assert_edit_distance(code, code, "rs", 0);
+        }
+
+        #[test]
+        fn test_identical_complex_code_zero_distance() {
+            let code = r#"struct Point {
+    x: i32,
+    y: i32,
+}
+
+impl Point {
+    fn new(x: i32, y: i32) -> Self {
+        Self { x, y }
+    }
+
+    fn distance(&self, other: &Point) -> f64 {
+        let dx = (self.x - other.x) as f64;
+        let dy = (self.y - other.y) as f64;
+        (dx * dx + dy * dy).sqrt()
+    }
+}"#;
+            assert_edit_distance(code, code, "rs", 0);
+        }
+
+        #[test]
+        fn test_whitespace_differences() {
+            let source = r#"fn hello() {
+    println!("hello");
+}"#;
+            let target = r#"fn hello() {
+        println!("hello");
+    }"#;
+            // Whitespace should not affect tree structure significantly
+            assert_edit_distance_range(source, target, "rs", 0, 2);
+        }
+
+        #[test]
+        fn test_single_statement_insertion() {
+            let source = r#"fn test() {
+}"#;
+            let target = r#"fn test() {
+    println!("Hello");
+}"#;
+            // Adding one statement should have moderate distance
+            assert_edit_distance_range(source, target, "rs", 6, 10);
+        }
+
+        #[test]
+        fn test_single_statement_deletion() {
+            let source = r#"fn test() {
+    println!("Hello");
+}"#;
+            let target = r#"fn test() {
+}"#;
+            // Removing one statement should have moderate distance
+            assert_edit_distance_range(source, target, "rs", 10, 15);
+        }
+
+        #[test]
+        fn test_variable_name_change() {
+            let source = r#"fn test() {
+    let x = 5;
+    println!("{}", x);
+}"#;
+            let target = r#"fn test() {
+    let y = 5;
+    println!("{}", y);
+}"#;
+            // Variable rename should have low distance
+            assert_edit_distance_range(source, target, "rs", 1, 4);
+        }
+
+        #[test]
+        fn test_literal_value_change() {
+            let source = r#"fn test() {
+    let x = 5;
+}"#;
+            let target = r#"fn test() {
+    let x = 10;
+}"#;
+            // Changing literal value should be distance 1
+            assert_edit_distance_range(source, target, "rs", 1, 2);
+        }
+
+        #[test]
+        fn test_function_parameter_addition() {
+            let source = r#"fn greet() {
+    println!("Hello");
+}"#;
+            let target = r#"fn greet(name: &str) {
+    println!("Hello, {}", name);
+}"#;
+            // Adding parameter and using it should have moderate distance
+            assert_edit_distance_range(source, target, "rs", 8, 12);
+        }
+
+        #[test]
+        fn test_function_name_change() {
+            let source = r#"fn hello() {
+    println!("Hello");
+}"#;
+            let target = r#"fn greet() {
+    println!("Hello");
+}"#;
+            // Function name change should be distance 1
+            assert_edit_distance_range(source, target, "rs", 1, 2);
+        }
+
+        #[test]
+        fn test_extract_variable_refactoring() {
+            let source = r#"fn calculate() {
+    let result = 2 + 3 * 4;
+    println!("{}", result);
+}"#;
+            let target = r#"fn calculate() {
+    let temp = 3 * 4;
+    let result = 2 + temp;
+    println!("{}", result);
+}"#;
+            // Extract variable should have moderate distance
+            assert_edit_distance_range(source, target, "rs", 12, 16);
+        }
+
+        #[test]
+        fn test_inline_variable_refactoring() {
+            let source = r#"fn calculate() {
+    let temp = 3 * 4;
+    let result = 2 + temp;
+    println!("{}", result);
+}"#;
+            let target = r#"fn calculate() {
+    let result = 2 + 3 * 4;
+    println!("{}", result);
+}"#;
+            // Inline variable should have moderate distance
+            assert_edit_distance_range(source, target, "rs", 12, 16);
+        }
+
+        #[test]
+        fn test_control_flow_change_if_to_match() {
+            let source = r#"fn check_value(x: i32) -> &'static str {
+    if x > 0 {
+        "positive"
+    } else if x < 0 {
+        "negative"
+    } else {
+        "zero"
+    }
+}"#;
+            let target = r#"fn check_value(x: i32) -> &'static str {
+    match x {
+        x if x > 0 => "positive",
+        x if x < 0 => "negative",
+        _ => "zero",
+    }
+}"#;
+            // Control flow change should have higher distance
+            assert_edit_distance_range(source, target, "rs", 20, 30);
+        }
+
+        #[test]
+        fn test_loop_type_change() {
+            let source = r#"fn print_numbers() {
+    for i in 0..5 {
+        println!("{}", i);
+    }
+}"#;
+            let target = r#"fn print_numbers() {
+    let mut i = 0;
+    while i < 5 {
+        println!("{}", i);
+        i += 1;
+    }
+}"#;
+            // Loop type change should have moderate to high distance
+            assert_edit_distance_range(source, target, "rs", 18, 25);
+        }
+
+        #[test]
+        fn test_data_structure_change() {
+            let source = r#"fn process_data() {
+    let data = vec![1, 2, 3, 4, 5];
+    for item in data {
+        println!("{}", item);
+    }
+}"#;
+            let target = r#"fn process_data() {
+    let data = [1, 2, 3, 4, 5];
+    for item in data {
+        println!("{}", item);
+    }
+}"#;
+            // Vec to array should have low distance
+            assert_edit_distance_range(source, target, "rs", 3, 6);
+        }
+
+        #[test]
+        fn test_method_call_vs_function_call() {
+            let source = r#"fn process() {
+    let s = String::from("hello");
+    let len = s.len();
+    println!("{}", len);
+}"#;
+            let target = r#"fn process() {
+    let s = String::from("hello");
+    let len = str::len(&s);
+    println!("{}", len);
+}"#;
+            // Method vs function call should have low distance
+            assert_edit_distance_range(source, target, "rs", 6, 10);
+        }
+
+        #[test]
+        fn test_error_handling_addition() {
+            let source = r#"fn read_file() -> String {
+    std::fs::read_to_string("file.txt").unwrap()
+}"#;
+            let target = r#"fn read_file() -> Result<String, std::io::Error> {
+    std::fs::read_to_string("file.txt")
+}"#;
+            // Adding proper error handling should have moderate distance
+            assert_edit_distance_range(source, target, "rs", 15, 20);
+        }
+
+        #[test]
+        fn test_completely_different_functions() {
+            let source = r#"fn fibonacci(n: u32) -> u32 {
+    if n <= 1 {
+        n
+    } else {
+        fibonacci(n - 1) + fibonacci(n - 2)
+    }
+}"#;
+            let target = r#"fn quicksort(arr: &mut [i32]) {
+    if arr.len() <= 1 {
+        return;
+    }
+    let pivot = partition(arr);
+    let (left, right) = arr.split_at_mut(pivot);
+    quicksort(left);
+    quicksort(&mut right[1..]);
+}"#;
+            // Completely different functions should have high distance
+            assert_edit_distance_range(source, target, "rs", 40, 55);
+            // And low similarity ratio
+            assert_similarity_ratio_range(source, target, "rs", 0.0, 0.3);
+        }
+
+        #[test]
+        fn test_struct_to_enum_change() {
+            let source = r#"struct Color {
+    r: u8,
+    g: u8,
+    b: u8,
+}"#;
+            let target = r#"enum Color {
+    Red,
+    Green,
+    Blue,
+    Rgb(u8, u8, u8),
+}"#;
+            // Struct to enum should have high distance
+            assert_edit_distance_range(source, target, "rs", 15, 20);
+        }
+
+        #[test]
+        fn test_impl_block_addition() {
+            let source = r#"struct Point {
+    x: i32,
+    y: i32,
+}"#;
+            let target = r#"struct Point {
+    x: i32,
+    y: i32,
+}
+
+impl Point {
+    fn new(x: i32, y: i32) -> Self {
+        Self { x, y }
+    }
+}"#;
+            // Adding impl block should have low distance (found minimum in subtree)
+            assert_edit_distance_range(source, target, "rs", 1, 2);
+        }
+
+        #[test]
+        fn test_pattern_matching_expansion() {
+            let source = r#"fn handle_option(opt: Option<i32>) {
+    if let Some(value) = opt {
+        println!("Got: {}", value);
+    }
+}"#;
+            let target = r#"fn handle_option(opt: Option<i32>) {
+    match opt {
+        Some(value) if value > 0 => println!("Positive: {}", value),
+        Some(value) => println!("Non-positive: {}", value),
+        None => println!("No value"),
+    }
+}"#;
+            // Pattern matching expansion should have high distance
+            assert_edit_distance_range(source, target, "rs", 30, 35);
+        }
+
+        #[test]
+        fn test_closure_vs_function() {
+            let source = r#"fn process_numbers() {
+    let numbers = vec![1, 2, 3, 4, 5];
+    let doubled: Vec<i32> = numbers.iter().map(|x| x * 2).collect();
+    println!("{:?}", doubled);
+}"#;
+            let target = r#"fn double(x: &i32) -> i32 {
+    x * 2
+}
+
+fn process_numbers() {
+    let numbers = vec![1, 2, 3, 4, 5];
+    let doubled: Vec<i32> = numbers.iter().map(double).collect();
+    println!("{:?}", doubled);
+}"#;
+            // Closure to named function should have moderate distance
+            assert_edit_distance_range(source, target, "rs", 4, 10);
+        }
+
+        #[test]
+        fn test_iterator_vs_loop() {
+            let source = r#"fn sum_squares(numbers: &[i32]) -> i32 {
+    let mut sum = 0;
+    for num in numbers {
+        sum += num * num;
+    }
+    sum
+}"#;
+            let target = r#"fn sum_squares(numbers: &[i32]) -> i32 {
+    numbers.iter().map(|x| x * x).sum()
+}"#;
+            // Iterator vs manual loop should have high distance
+            assert_edit_distance_range(source, target, "rs", 30, 40);
+        }
+
+        // TypeScript tests for different patterns
+        #[test]
+        fn test_typescript_class_to_function() {
+            let source = r#"class Calculator {
+    add(a: number, b: number): number {
+        return a + b;
+    }
+}"#;
+            let target = r#"function add(a: number, b: number): number {
+    return a + b;
+}"#;
+            // Class to function should have moderate distance
+            assert_edit_distance_range(source, target, "ts", 3, 8);
+        }
+
+        #[test]
+        fn test_typescript_arrow_vs_regular_function() {
+            let source = r#"function greet(name: string): string {
+    return `Hello, ${name}!`;
+}"#;
+            let target = r#"const greet = (name: string): string => {
+    return `Hello, ${name}!`;
+};"#;
+            // Arrow vs regular function should have low to moderate distance
+            assert_edit_distance_range(source, target, "ts", 2, 6);
+        }
+
+        // Python tests for different patterns
+        #[test]
+        fn test_python_class_vs_function() {
+            let source = r#"class Calculator:
+    def add(self, a, b):
+        return a + b"#;
+            let target = r#"def add(a, b):
+    return a + b"#;
+            // Class method to function should have moderate distance
+            assert_edit_distance_range(source, target, "py", 3, 8);
+        }
+
+        #[test]
+        fn test_python_list_comprehension_vs_loop() {
+            let source = r#"def square_numbers(numbers):
+    result = []
+    for num in numbers:
+        result.append(num ** 2)
+    return result"#;
+            let target = r#"def square_numbers(numbers):
+    return [num ** 2 for num in numbers]"#;
+            // List comprehension vs loop should have high distance
+            assert_edit_distance_range(source, target, "py", 25, 35);
+        }
+    }
 }
