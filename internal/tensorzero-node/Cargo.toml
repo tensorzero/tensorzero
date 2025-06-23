@@ -23,7 +23,3 @@ napi-build = "2.0.1"
 
 [dev-dependencies]
 ts-rs.workspace = true
-
-# [profile.release]
-# lto = true
-# strip = "symbols"
