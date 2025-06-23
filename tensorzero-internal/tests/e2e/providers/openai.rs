@@ -1101,7 +1101,9 @@ async fn test_embedding_request() {
     };
 
     let request = EmbeddingRequest {
-        input: "This is a test input".to_string(),
+        input: tensorzero_internal::embeddings::EmbeddingInput::Single(
+            "This is a test input".to_string(),
+        ),
     };
     let api_keys = InferenceCredentials::default();
     let response = model_config
@@ -1120,11 +1122,10 @@ async fn test_embedding_request() {
         )
         .await
         .unwrap();
-    assert_eq!(response.embedding.len(), 1536);
+    assert_eq!(response.embeddings[0].len(), 1536);
     assert!(!response.cached);
     // Calculate the L2 norm of the embedding
-    let norm: f32 = response
-        .embedding
+    let norm: f32 = response.embeddings[0]
         .iter()
         .map(|&x| x.powi(2))
         .sum::<f32>()
@@ -1184,7 +1185,7 @@ async fn test_embedding_request() {
         .await
         .unwrap();
     assert!(cached_response.cached);
-    assert_eq!(response.embedding, cached_response.embedding);
+    assert_eq!(response.embeddings, cached_response.embeddings);
     assert_eq!(cached_response.usage.input_tokens, 5);
     assert_eq!(cached_response.usage.output_tokens, 0);
 }
@@ -1202,15 +1203,21 @@ async fn test_embedding_sanity_check() {
             .unwrap();
     let client = Client::new();
     let embedding_request_a = EmbeddingRequest {
-        input: "Joe Biden is the president of the United States".to_string(),
+        input: tensorzero_internal::embeddings::EmbeddingInput::Single(
+            "Joe Biden is the president of the United States".to_string(),
+        ),
     };
 
     let embedding_request_b = EmbeddingRequest {
-        input: "Kamala Harris is the vice president of the United States".to_string(),
+        input: tensorzero_internal::embeddings::EmbeddingInput::Single(
+            "Kamala Harris is the vice president of the United States".to_string(),
+        ),
     };
 
     let embedding_request_c = EmbeddingRequest {
-        input: "My favorite systems programming language is Rust".to_string(),
+        input: tensorzero_internal::embeddings::EmbeddingInput::Single(
+            "My favorite systems programming language is Rust".to_string(),
+        ),
     };
     let api_keys = InferenceCredentials::default();
 
@@ -1227,9 +1234,9 @@ async fn test_embedding_sanity_check() {
     let response_c = response_c.expect("Failed to get embedding for request C");
 
     // Calculate cosine similarities
-    let similarity_ab = cosine_similarity(&response_a.embedding, &response_b.embedding);
-    let similarity_ac = cosine_similarity(&response_a.embedding, &response_c.embedding);
-    let similarity_bc = cosine_similarity(&response_b.embedding, &response_c.embedding);
+    let similarity_ab = cosine_similarity(&response_a.embeddings[0], &response_b.embeddings[0]);
+    let similarity_ac = cosine_similarity(&response_a.embeddings[0], &response_c.embeddings[0]);
+    let similarity_bc = cosine_similarity(&response_b.embeddings[0], &response_c.embeddings[0]);
 
     // Assert that semantically similar sentences have higher similarity (with a margin of 0.3)
     // We empirically determined this by staring at it (no science to it)

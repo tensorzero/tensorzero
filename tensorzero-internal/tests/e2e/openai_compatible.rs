@@ -1092,29 +1092,29 @@ async fn test_openai_compatible_embeddings_route() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    
+
     let response_json: Value = response.json().await.unwrap();
-    
+
     // Verify OpenAI-compatible response format
     assert_eq!(response_json["object"], "list");
     assert_eq!(response_json["model"], "text-embedding-3-small");
-    
+
     let data = response_json["data"].as_array().unwrap();
     assert_eq!(data.len(), 1);
-    
+
     let embedding_data = &data[0];
     assert_eq!(embedding_data["object"], "embedding");
     assert_eq!(embedding_data["index"], 0);
-    
+
     let embedding = embedding_data["embedding"].as_array().unwrap();
     assert!(!embedding.is_empty());
     assert_eq!(embedding.len(), 1536); // text-embedding-3-small has 1536 dimensions
-    
+
     // Verify all values are numbers
     for value in embedding {
         assert!(value.is_f64());
     }
-    
+
     let usage = &response_json["usage"];
     assert!(usage["prompt_tokens"].as_u64().unwrap() > 0);
     assert!(usage["total_tokens"].as_u64().unwrap() > 0);
@@ -1140,13 +1140,13 @@ async fn test_openai_compatible_embeddings_route_with_model_prefix() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    
+
     let response_json: Value = response.json().await.unwrap();
-    
+
     // Should return the original model name without prefix
     assert_eq!(response_json["model"], "text-embedding-3-small");
     assert_eq!(response_json["object"], "list");
-    
+
     let data = response_json["data"].as_array().unwrap();
     assert_eq!(data.len(), 1);
     assert_eq!(data[0]["object"], "embedding");
@@ -1175,7 +1175,7 @@ async fn test_openai_compatible_embeddings_route_with_cache_options() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    
+
     let response_json: Value = response.json().await.unwrap();
     assert_eq!(response_json["object"], "list");
     assert_eq!(response_json["model"], "text-embedding-3-small");
@@ -1200,7 +1200,7 @@ async fn test_openai_compatible_embeddings_route_invalid_model() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    
+
     let response_json: Value = response.json().await.unwrap();
     assert!(response_json["error"]["message"]
         .as_str()
@@ -1227,29 +1227,29 @@ async fn test_openai_compatible_embeddings_route_batch_support() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    
+
     let response_json: Value = response.json().await.unwrap();
     assert_eq!(response_json["object"], "list");
     assert_eq!(response_json["model"], "text-embedding-3-small");
-    
+
     let data = response_json["data"].as_array().unwrap();
     assert_eq!(data.len(), 3); // Should have 3 embeddings for 3 inputs
-    
+
     // Check that each embedding has the correct structure and index
     for (i, embedding_data) in data.iter().enumerate() {
         assert_eq!(embedding_data["object"], "embedding");
         assert_eq!(embedding_data["index"], i);
-        
+
         let embedding = embedding_data["embedding"].as_array().unwrap();
         assert!(!embedding.is_empty());
         assert_eq!(embedding.len(), 1536); // text-embedding-3-small has 1536 dimensions
-        
+
         // Verify all values are numbers
         for value in embedding {
             assert!(value.is_f64());
         }
     }
-    
+
     let usage = &response_json["usage"];
     assert!(usage["prompt_tokens"].as_u64().unwrap() > 0);
     assert!(usage["total_tokens"].as_u64().unwrap() > 0);
@@ -1275,7 +1275,7 @@ async fn test_openai_compatible_embeddings_route_empty_batch() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    
+
     let response_json: Value = response.json().await.unwrap();
     assert!(response_json["error"]["message"]
         .as_str()
@@ -1306,7 +1306,7 @@ async fn test_openai_compatible_embeddings_route_with_unknown_fields() {
 
     // Should succeed despite unknown fields
     assert_eq!(response.status(), StatusCode::OK);
-    
+
     let response_json: Value = response.json().await.unwrap();
     assert_eq!(response_json["object"], "list");
     assert_eq!(response_json["model"], "text-embedding-3-small");
@@ -1332,7 +1332,7 @@ async fn test_openai_compatible_embeddings_route_with_header_model() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    
+
     let response_json: Value = response.json().await.unwrap();
     // Should use the model from header
     assert_eq!(response_json["model"], "text-embedding-3-small");

@@ -146,7 +146,7 @@ impl EmbeddingModelConfig {
                             clients.clickhouse_connection_info,
                             provider_request.get_cache_key()?,
                             EmbeddingCacheData {
-                                embedding: response.embeddings.first().unwrap_or(&vec![]).clone(),
+                                embeddings: response.embeddings.clone(),
                             },
                             &response.raw_request,
                             &response.raw_response,
@@ -203,6 +203,8 @@ impl EmbeddingInput {
 #[derive(Debug, PartialEq, Serialize)]
 pub struct EmbeddingRequest {
     pub input: EmbeddingInput,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub encoding_format: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -247,7 +249,7 @@ impl EmbeddingResponse {
             id: Uuid::now_v7(),
             created: current_timestamp(),
             input: request.request.input.clone(),
-            embeddings: vec![cache_lookup.output.embedding],
+            embeddings: cache_lookup.output.embeddings,
             raw_request: cache_lookup.raw_request,
             raw_response: cache_lookup.raw_response,
             usage: Usage {
@@ -303,8 +305,12 @@ impl EmbeddingResponseWithMetadata {
             EmbeddingInput::Single(text) => text.clone(),
             EmbeddingInput::Batch(texts) => texts.first().unwrap_or(&String::new()).clone(),
         };
-        let embedding = embedding_response.embeddings.into_iter().next().unwrap_or_default();
-        
+        let embedding = embedding_response
+            .embeddings
+            .into_iter()
+            .next()
+            .unwrap_or_default();
+
         Self {
             id: embedding_response.id,
             input: input_string,
@@ -428,7 +434,7 @@ impl EmbeddingProviderResponse {
             latency,
         }
     }
-    
+
     /// Create a response from a single embedding (for backward compatibility)
     pub fn new_single(
         embedding: Vec<f32>,
@@ -469,7 +475,10 @@ mod tests {
         ]);
         assert_eq!(batch.len(), 3);
         assert!(!batch.is_empty());
-        assert_eq!(batch.as_vec(), vec!["First text", "Second text", "Third text"]);
+        assert_eq!(
+            batch.as_vec(),
+            vec!["First text", "Second text", "Third text"]
+        );
 
         // Test empty cases
         let empty_single = EmbeddingInput::Single("".to_string());
@@ -504,33 +513,33 @@ mod tests {
     #[test]
     fn test_embedding_request_with_batch_input() {
         let request = EmbeddingRequest {
-            input: EmbeddingInput::Batch(vec![
-                "Text 1".to_string(),
-                "Text 2".to_string(),
-            ])
+            input: EmbeddingInput::Batch(vec!["Text 1".to_string(), "Text 2".to_string()]),
+            encoding_format: None,
         };
-        
+
         assert_eq!(request.input.len(), 2);
         assert_eq!(request.input.as_vec(), vec!["Text 1", "Text 2"]);
     }
 
     #[test]
     fn test_embedding_provider_response_batch() {
-        let embeddings = vec![
-            vec![0.1, 0.2, 0.3],
-            vec![0.4, 0.5, 0.6],
-        ];
+        let embeddings = vec![vec![0.1, 0.2, 0.3], vec![0.4, 0.5, 0.6]];
         let input = EmbeddingInput::Batch(vec!["Text 1".to_string(), "Text 2".to_string()]);
-        
+
         let response = EmbeddingProviderResponse::new(
             embeddings.clone(),
             input.clone(),
             "raw_request".to_string(),
             "raw_response".to_string(),
-            Usage { input_tokens: 10, output_tokens: 0 },
-            Latency::NonStreaming { response_time: std::time::Duration::from_millis(100) },
+            Usage {
+                input_tokens: 10,
+                output_tokens: 0,
+            },
+            Latency::NonStreaming {
+                response_time: std::time::Duration::from_millis(100),
+            },
         );
-        
+
         assert_eq!(response.embeddings, embeddings);
         assert_eq!(response.input, input);
     }
@@ -540,16 +549,21 @@ mod tests {
         // Test backward compatibility method
         let embedding = vec![0.1, 0.2, 0.3];
         let input = "Test input".to_string();
-        
+
         let response = EmbeddingProviderResponse::new_single(
             embedding.clone(),
             input.clone(),
             "raw_request".to_string(),
             "raw_response".to_string(),
-            Usage { input_tokens: 5, output_tokens: 0 },
-            Latency::NonStreaming { response_time: std::time::Duration::from_millis(50) },
+            Usage {
+                input_tokens: 5,
+                output_tokens: 0,
+            },
+            Latency::NonStreaming {
+                response_time: std::time::Duration::from_millis(50),
+            },
         );
-        
+
         assert_eq!(response.embeddings, vec![embedding]);
         assert_eq!(response.input, EmbeddingInput::Single(input));
     }
@@ -580,6 +594,7 @@ mod tests {
         };
         let request = EmbeddingRequest {
             input: EmbeddingInput::Single("Hello, world!".to_string()),
+            encoding_format: None,
         };
         let response = fallback_embedding_model
             .embed(

@@ -214,11 +214,64 @@ impl CacheOutput for StreamingCacheData {}
 impl CacheOutput for NonStreamingCacheData {}
 impl CacheOutput for EmbeddingCacheData {}
 
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(transparent)]
+#[derive(Debug)]
 pub struct EmbeddingCacheData {
-    #[serde(deserialize_with = "deserialize_json_string")]
-    pub embedding: Vec<f32>,
+    pub embeddings: Vec<Vec<f32>>,
+}
+
+// Custom serializer to ensure we serialize as JSON string
+impl Serialize for EmbeddingCacheData {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::Error;
+
+        let json_string = serde_json::to_string(&self.embeddings)
+            .map_err(|e| S::Error::custom(format!("Failed to serialize embeddings: {}", e)))?;
+        serializer.serialize_str(&json_string)
+    }
+}
+
+// Custom deserializer to handle backward compatibility
+impl<'de> Deserialize<'de> for EmbeddingCacheData {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde::de::{Error, Visitor};
+
+        struct EmbeddingVisitor;
+
+        impl<'de> Visitor<'de> for EmbeddingVisitor {
+            type Value = EmbeddingCacheData;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("embedding data in old or new format")
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: Error,
+            {
+                // Try to deserialize as new format first (Vec<Vec<f32>>)
+                if let Ok(embeddings) = serde_json::from_str::<Vec<Vec<f32>>>(v) {
+                    return Ok(EmbeddingCacheData { embeddings });
+                }
+
+                // Fall back to old format (Vec<f32>)
+                if let Ok(embedding) = serde_json::from_str::<Vec<f32>>(v) {
+                    return Ok(EmbeddingCacheData {
+                        embeddings: vec![embedding],
+                    });
+                }
+
+                Err(E::custom("failed to deserialize embedding data"))
+            }
+        }
+
+        deserializer.deserialize_str(EmbeddingVisitor)
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -547,5 +600,28 @@ mod tests {
         };
         let streaming_cache_key = model_provider_request.get_cache_key().unwrap();
         assert_ne!(cache_key, streaming_cache_key);
+    }
+
+    #[test]
+    fn test_embedding_cache_backward_compatibility() {
+        // Test that we can deserialize old format (single embedding)
+        let old_format_json = r#""[1.0, 2.0, 3.0]""#;
+        let cache_data: EmbeddingCacheData = serde_json::from_str(old_format_json).unwrap();
+        assert_eq!(cache_data.embeddings.len(), 1);
+        assert_eq!(cache_data.embeddings[0], vec![1.0, 2.0, 3.0]);
+
+        // Test that we can deserialize new format (multiple embeddings)
+        let new_format_json = r#""[[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]""#;
+        let cache_data: EmbeddingCacheData = serde_json::from_str(new_format_json).unwrap();
+        assert_eq!(cache_data.embeddings.len(), 2);
+        assert_eq!(cache_data.embeddings[0], vec![1.0, 2.0, 3.0]);
+        assert_eq!(cache_data.embeddings[1], vec![4.0, 5.0, 6.0]);
+
+        // Test serialization produces correct format
+        let cache_data = EmbeddingCacheData {
+            embeddings: vec![vec![1.0, 2.0, 3.0], vec![4.0, 5.0, 6.0]],
+        };
+        let serialized = serde_json::to_string(&cache_data).unwrap();
+        assert_eq!(serialized, r#""[[1.0,2.0,3.0],[4.0,5.0,6.0]]""#);
     }
 }

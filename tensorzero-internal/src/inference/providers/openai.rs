@@ -688,7 +688,11 @@ impl EmbeddingProvider for OpenAIProvider {
         dynamic_api_keys: &InferenceCredentials,
     ) -> Result<EmbeddingProviderResponse, Error> {
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
-        let request_body = OpenAIEmbeddingRequest::new(&self.model_name, &request.input);
+        let request_body = OpenAIEmbeddingRequest::new(
+            &self.model_name,
+            &request.input,
+            request.encoding_format.as_deref(),
+        );
         let request_url =
             get_embedding_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
         let start_time = Instant::now();
@@ -2045,6 +2049,8 @@ fn openai_to_tensorzero_chunk(
 struct OpenAIEmbeddingRequest<'a> {
     model: &'a str,
     input: OpenAIEmbeddingRequestInput<'a>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    encoding_format: Option<&'a str>,
 }
 
 #[derive(Debug, Serialize)]
@@ -2055,14 +2061,24 @@ enum OpenAIEmbeddingRequestInput<'a> {
 }
 
 impl<'a> OpenAIEmbeddingRequest<'a> {
-    fn new(model: &'a str, input: &'a crate::embeddings::EmbeddingInput) -> Self {
+    fn new(
+        model: &'a str,
+        input: &'a crate::embeddings::EmbeddingInput,
+        encoding_format: Option<&'a str>,
+    ) -> Self {
         let input = match input {
-            crate::embeddings::EmbeddingInput::Single(text) => OpenAIEmbeddingRequestInput::Single(text),
+            crate::embeddings::EmbeddingInput::Single(text) => {
+                OpenAIEmbeddingRequestInput::Single(text)
+            }
             crate::embeddings::EmbeddingInput::Batch(texts) => {
                 OpenAIEmbeddingRequestInput::Batch(texts.iter().map(|s| s.as_str()).collect())
             }
         };
-        Self { model, input }
+        Self {
+            model,
+            input,
+            encoding_format,
+        }
     }
 }
 
@@ -2125,9 +2141,9 @@ impl<'a> TryFrom<OpenAIEmbeddingResponseWithMetadata<'a>> for EmbeddingProviderR
             OpenAIEmbeddingRequestInput::Single(text) => {
                 crate::embeddings::EmbeddingInput::Single(text.to_string())
             }
-            OpenAIEmbeddingRequestInput::Batch(texts) => {
-                crate::embeddings::EmbeddingInput::Batch(texts.iter().map(|s| s.to_string()).collect())
-            }
+            OpenAIEmbeddingRequestInput::Batch(texts) => crate::embeddings::EmbeddingInput::Batch(
+                texts.iter().map(|s| s.to_string()).collect(),
+            ),
         };
 
         Ok(EmbeddingProviderResponse::new(

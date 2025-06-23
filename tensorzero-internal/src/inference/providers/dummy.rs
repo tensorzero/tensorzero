@@ -657,14 +657,14 @@ impl EmbeddingProvider for DummyProvider {
                 texts.iter().map(|_| vec![0.0; 1536]).collect()
             }
         };
-        
+
         let raw_request = DUMMY_RAW_REQUEST.to_string();
         let raw_response = DUMMY_RAW_REQUEST.to_string();
         let usage = DUMMY_INFER_USAGE.clone();
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
         };
-        
+
         Ok(EmbeddingProviderResponse::new(
             embeddings,
             request.input.clone(),

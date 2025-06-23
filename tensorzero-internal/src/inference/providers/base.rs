@@ -49,10 +49,14 @@ pub trait UnifiedProvider: Send + Sync {
         _client: &'a Client,
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> impl Future<Output = Result<StartBatchProviderInferenceResponse, Error>> + Send {
-        async { Err(Error::new(crate::error::ErrorDetails::CapabilityNotSupported { 
-            capability: "batch inference".to_string(),
-            provider: std::any::type_name::<Self>().to_string(),
-        })) }
+        async {
+            Err(Error::new(
+                crate::error::ErrorDetails::CapabilityNotSupported {
+                    capability: "batch inference".to_string(),
+                    provider: std::any::type_name::<Self>().to_string(),
+                },
+            ))
+        }
     }
 
     /// Poll batch inference status (optional, even for Chat capability)
@@ -62,10 +66,14 @@ pub trait UnifiedProvider: Send + Sync {
         _http_client: &'a Client,
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> impl Future<Output = Result<PollBatchInferenceResponse, Error>> + Send {
-        async { Err(Error::new(crate::error::ErrorDetails::CapabilityNotSupported { 
-            capability: "batch inference polling".to_string(),
-            provider: std::any::type_name::<Self>().to_string(),
-        })) }
+        async {
+            Err(Error::new(
+                crate::error::ErrorDetails::CapabilityNotSupported {
+                    capability: "batch inference polling".to_string(),
+                    provider: std::any::type_name::<Self>().to_string(),
+                },
+            ))
+        }
     }
 
     /// Embedding inference (required if Embeddings capability is supported)
@@ -75,10 +83,14 @@ pub trait UnifiedProvider: Send + Sync {
         _client: &'a Client,
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> impl Future<Output = Result<EmbeddingProviderResponse, Error>> + Send {
-        async { Err(Error::new(crate::error::ErrorDetails::CapabilityNotSupported { 
-            capability: EndpointCapability::Embeddings.as_str().to_string(),
-            provider: std::any::type_name::<Self>().to_string(),
-        })) }
+        async {
+            Err(Error::new(
+                crate::error::ErrorDetails::CapabilityNotSupported {
+                    capability: EndpointCapability::Embeddings.as_str().to_string(),
+                    provider: std::any::type_name::<Self>().to_string(),
+                },
+            ))
+        }
     }
 }
 

@@ -366,7 +366,9 @@ async fn embed_insert_example(
 
     let client = Client::new();
     let request = EmbeddingRequest {
-        input: serde_json::to_string(&input).unwrap(),
+        input: tensorzero_internal::embeddings::EmbeddingInput::Single(
+            serde_json::to_string(&input).unwrap(),
+        ),
     };
     let api_keys = InferenceCredentials::default();
     let response = provider_config
@@ -375,7 +377,7 @@ async fn embed_insert_example(
         .unwrap();
 
     let id = Uuid::now_v7();
-    let embedding = response.embedding;
+    let embedding = response.embeddings.into_iter().next().unwrap();
 
     let input_string = serde_json::to_string(&input).unwrap();
     let row = serde_json::json!({

@@ -1046,9 +1046,7 @@ mod tests {
             extra_cache_key: None,
         };
         let models = ModelTable::default();
-        let inference_models = InferenceModels {
-            models: &models,
-        };
+        let inference_models = InferenceModels { models: &models };
         let result = chat_completion_config
             .infer(
                 &input,
@@ -1081,9 +1079,7 @@ mod tests {
         let models = HashMap::from([("invalid_model".into(), text_model_config)])
             .try_into()
             .unwrap();
-        let inference_models = InferenceModels {
-            models: &models,
-        };
+        let inference_models = InferenceModels { models: &models };
         let inference_config = InferenceConfig {
             templates: &templates,
             tool_config: None,
@@ -1132,9 +1128,7 @@ mod tests {
         let inference_params = InferenceParams::default();
         let models = HashMap::from([("error".into(), error_model_config)]);
         let models = models.try_into().unwrap();
-        let inference_models = InferenceModels {
-            models: &models,
-        };
+        let inference_models = InferenceModels { models: &models };
         let inference_config = InferenceConfig {
             templates: &templates,
             tool_config: None,
@@ -1213,9 +1207,7 @@ mod tests {
         let models = HashMap::from([("good".into(), text_model_config)])
             .try_into()
             .unwrap();
-        let inference_models = InferenceModels {
-            models: &models,
-        };
+        let inference_models = InferenceModels { models: &models };
         let inference_config = InferenceConfig {
             templates: &templates,
             tool_config: None,
@@ -1290,9 +1282,7 @@ mod tests {
         let models = HashMap::from([("tool".into(), tool_model_config)])
             .try_into()
             .unwrap();
-        let inference_models = InferenceModels {
-            models: &models,
-        };
+        let inference_models = InferenceModels { models: &models };
         let weather_tool_config = get_temperature_tool_config();
         let inference_config = InferenceConfig {
             templates: &templates,
@@ -1440,9 +1430,7 @@ mod tests {
         let models = HashMap::from([("json".into(), json_model_config)])
             .try_into()
             .unwrap();
-        let inference_models = InferenceModels {
-            models: &models,
-        };
+        let inference_models = InferenceModels { models: &models };
         let inference_config = InferenceConfig {
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),
@@ -1830,9 +1818,7 @@ mod tests {
                 .try_into()
                 .unwrap(),
         ));
-        let inference_models = InferenceModels {
-            models,
-        };
+        let inference_models = InferenceModels { models };
         let inference_config = InferenceConfig {
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),
@@ -1894,9 +1880,7 @@ mod tests {
                 .try_into()
                 .unwrap(),
         ));
-        let inference_models = InferenceModels {
-            models,
-        };
+        let inference_models = InferenceModels { models };
         let inference_config = InferenceConfig {
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),

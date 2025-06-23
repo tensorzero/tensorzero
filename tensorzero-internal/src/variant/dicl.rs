@@ -322,16 +322,23 @@ impl DiclConfig {
 
         use crate::model::ModelTableExt;
         let embedding_model = models
-            .get_with_capability(&self.embedding_model, crate::endpoints::capability::EndpointCapability::Embeddings)
+            .get_with_capability(
+                &self.embedding_model,
+                crate::endpoints::capability::EndpointCapability::Embeddings,
+            )
             .await?
             .ok_or_else(|| {
                 Error::new(ErrorDetails::Inference {
-                    message: format!("Model {} not found or does not support embeddings", self.embedding_model),
+                    message: format!(
+                        "Model {} not found or does not support embeddings",
+                        self.embedding_model
+                    ),
                 })
             })?;
 
         let embedding_request = EmbeddingRequest {
             input: crate::embeddings::EmbeddingInput::Single(serialized_input.to_string()),
+            encoding_format: None,
         };
 
         // Embed the input via an API request

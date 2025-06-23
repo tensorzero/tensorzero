@@ -1218,7 +1218,7 @@ mod tests {
                         config: ProviderConfig::Dummy(DummyProvider {
                             model_name: "best_of_n_1".into(),
                             ..Default::default()
-                }),
+                        }),
                         extra_body: Default::default(),
                         extra_headers: Default::default(),
                     },
@@ -1316,7 +1316,7 @@ mod tests {
                             config: ProviderConfig::Dummy(DummyProvider {
                                 model_name: "error".into(),
                                 ..Default::default()
-                }),
+                            }),
                             extra_body: Default::default(),
                             extra_headers: Default::default(),
                         },
@@ -1381,7 +1381,7 @@ mod tests {
                             config: ProviderConfig::Dummy(DummyProvider {
                                 model_name: "regular".into(),
                                 ..Default::default()
-                }),
+                            }),
                             extra_body: Default::default(),
                             extra_headers: Default::default(),
                         },
@@ -1463,7 +1463,7 @@ mod tests {
                         config: ProviderConfig::Dummy(DummyProvider {
                             model_name: "best_of_n_big".into(),
                             ..Default::default()
-                }),
+                        }),
                         extra_body: Default::default(),
                         extra_headers: Default::default(),
                     },

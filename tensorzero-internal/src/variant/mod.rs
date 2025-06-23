@@ -1381,7 +1381,7 @@ mod tests {
                         config: error_provider_config,
                         extra_body: Default::default(),
                         extra_headers: Default::default(),
-                },
+                    },
                 ),
                 (
                     model_name.into(),
@@ -1670,7 +1670,7 @@ mod tests {
                         config: error_provider_config,
                         extra_body: Default::default(),
                         extra_headers: Default::default(),
-                },
+                    },
                 ),
                 (
                     model_name.into(),

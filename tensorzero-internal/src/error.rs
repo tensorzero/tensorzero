@@ -1000,8 +1000,14 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::KafkaSerialization { message } => {
                 write!(f, "Error serializing message for Kafka: {message}")
             }
-            ErrorDetails::CapabilityNotSupported { capability, provider } => {
-                write!(f, "Provider `{provider}` does not support capability `{capability}`")
+            ErrorDetails::CapabilityNotSupported {
+                capability,
+                provider,
+            } => {
+                write!(
+                    f,
+                    "Provider `{provider}` does not support capability `{capability}`"
+                )
             }
         }
     }
@@ -1027,16 +1033,16 @@ mod tests {
             capability: "embeddings".to_string(),
             provider: "test_model".to_string(),
         });
-        
+
         // Test error message
         assert_eq!(
             error.to_string(),
             "Provider `test_model` does not support capability `embeddings`"
         );
-        
+
         // Test status code
         assert_eq!(error.status_code(), StatusCode::BAD_REQUEST);
-        
+
         // Test log level
         assert_eq!(error.get_details().level(), tracing::Level::WARN);
     }
@@ -1047,8 +1053,8 @@ mod tests {
             capability: "chat".to_string(),
             provider: "embedding_only_model".to_string(),
         };
-        
-        let formatted = format!("{}", details);
+
+        let formatted = format!("{details}");
         assert_eq!(
             formatted,
             "Provider `embedding_only_model` does not support capability `chat`"
@@ -1061,9 +1067,8 @@ mod tests {
             capability: "embeddings".to_string(),
             provider: "test".to_string(),
         });
-        
+
         let response = error.into_response();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 }
-

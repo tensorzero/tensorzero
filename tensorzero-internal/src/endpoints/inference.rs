@@ -380,9 +380,7 @@ pub async fn inference(
     };
 
     let models = config.models.read().await;
-    let inference_models = InferenceModels {
-        models: &models,
-    };
+    let inference_models = InferenceModels { models: &models };
     let resolved_input = params
         .input
         .resolve(&FetchContext {

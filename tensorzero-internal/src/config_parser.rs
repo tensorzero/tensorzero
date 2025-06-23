@@ -19,7 +19,9 @@ use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
 use crate::inference::types::storage::StorageKind;
 use crate::jsonschema_util::StaticJSONSchema;
 use crate::minijinja_util::TemplateConfig;
-use crate::model::{ModelConfig, ModelProvider, ModelTable, ProviderConfig, UninitializedModelConfig};
+use crate::model::{
+    ModelConfig, ModelProvider, ModelTable, ProviderConfig, UninitializedModelConfig,
+};
 use crate::model_table::ShorthandModelConfig;
 use crate::tool::{create_implicit_tool_call_config, StaticToolConfig, ToolChoice};
 use crate::variant::best_of_n_sampling::UninitializedBestOfNSamplingConfig;
@@ -386,18 +388,27 @@ impl<'c> Config<'c> {
                     .map(|embedding_config| {
                         // Convert EmbeddingModelConfig to ModelConfig
                         let mut endpoints = HashSet::new();
-                        endpoints.insert(crate::endpoints::capability::EndpointCapability::Embeddings);
-                        
-                        let providers = embedding_config.providers.into_iter()
+                        endpoints
+                            .insert(crate::endpoints::capability::EndpointCapability::Embeddings);
+
+                        let providers = embedding_config
+                            .providers
+                            .into_iter()
                             .map(|(provider_name, provider_config)| {
                                 // Convert EmbeddingProviderConfig to ModelProvider
                                 let model_provider = ModelProvider {
                                     name: provider_name.clone(),
                                     config: match provider_config {
-                                        crate::embeddings::EmbeddingProviderConfig::OpenAI(p) => ProviderConfig::OpenAI(p),
-                                        crate::embeddings::EmbeddingProviderConfig::VLLM(p) => ProviderConfig::VLLM(p),
+                                        crate::embeddings::EmbeddingProviderConfig::OpenAI(p) => {
+                                            ProviderConfig::OpenAI(p)
+                                        }
+                                        crate::embeddings::EmbeddingProviderConfig::VLLM(p) => {
+                                            ProviderConfig::VLLM(p)
+                                        }
                                         #[cfg(any(test, feature = "e2e_tests"))]
-                                        crate::embeddings::EmbeddingProviderConfig::Dummy(p) => ProviderConfig::Dummy(p),
+                                        crate::embeddings::EmbeddingProviderConfig::Dummy(p) => {
+                                            ProviderConfig::Dummy(p)
+                                        }
                                     },
                                     extra_headers: None,
                                     extra_body: None,
@@ -405,7 +416,7 @@ impl<'c> Config<'c> {
                                 (provider_name, model_provider)
                             })
                             .collect();
-                        
+
                         let model_config = ModelConfig {
                             routing: embedding_config.routing,
                             providers,
@@ -2924,27 +2935,27 @@ type = "chat"
 type = "chat_completion"
 model = "chat_model"
 "#;
-        
+
         let config_toml: toml::Table = toml::from_str(toml_str).unwrap();
         let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let config = Config::load_from_toml(config_toml, base_path)
             .await
             .expect("Failed to load config");
-        
+
         // Verify all models are in the unified table
         let models = config.models.read().await;
         assert_eq!(models.len(), 3);
-        
+
         // Verify chat model has correct capabilities
         let chat_model = models.get("chat_model").await.unwrap().unwrap();
         assert!(chat_model.supports_endpoint(EndpointCapability::Chat));
         assert!(!chat_model.supports_endpoint(EndpointCapability::Embeddings));
-        
+
         // Verify embedding model has correct capabilities
         let embedding_model = models.get("embedding_model").await.unwrap().unwrap();
         assert!(!embedding_model.supports_endpoint(EndpointCapability::Chat));
         assert!(embedding_model.supports_endpoint(EndpointCapability::Embeddings));
-        
+
         // Verify multi-capability model
         let multi_model = models.get("multi_capability").await.unwrap().unwrap();
         assert!(multi_model.supports_endpoint(EndpointCapability::Chat));
@@ -2975,22 +2986,22 @@ type = "chat"
 type = "chat_completion"
 model = "existing_chat"
 "#;
-        
+
         let config_toml: toml::Table = toml::from_str(toml_str).unwrap();
         let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let config = Config::load_from_toml(config_toml, base_path)
             .await
             .expect("Failed to load config");
-        
+
         // Verify both models are in the unified table
         let models = config.models.read().await;
         assert_eq!(models.len(), 2);
-        
+
         // Verify chat model has default capabilities
         let chat_model = models.get("existing_chat").await.unwrap().unwrap();
         assert!(chat_model.supports_endpoint(EndpointCapability::Chat));
         assert!(!chat_model.supports_endpoint(EndpointCapability::Embeddings));
-        
+
         // Verify converted embedding model has embeddings capability
         let embedding_model = models.get("text_embedding").await.unwrap().unwrap();
         assert!(!embedding_model.supports_endpoint(EndpointCapability::Chat));
@@ -3014,16 +3025,18 @@ routing = ["dummy"]
 type = "dummy"
 model_name = "model2"
 "#;
-        
+
         let config_toml: toml::Table = toml::from_str(toml_str).unwrap();
         let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let result = Config::load_from_toml(config_toml, base_path).await;
-        
+
         // Should fail due to name conflict
         assert!(result.is_err());
         let error = result.unwrap_err();
         assert!(error.to_string().contains("conflicting_name"));
-        assert!(error.to_string().contains("both 'models' and 'embedding_models'"));
+        assert!(error
+            .to_string()
+            .contains("both 'models' and 'embedding_models'"));
     }
 
     #[tokio::test]
@@ -3043,13 +3056,13 @@ type = "chat"
 type = "chat_completion"
 model = "default_model"
 "#;
-        
+
         let config_toml: toml::Table = toml::from_str(toml_str).unwrap();
         let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let config = Config::load_from_toml(config_toml, base_path)
             .await
             .expect("Failed to load config");
-        
+
         // Verify model has default chat capability
         let models = config.models.read().await;
         let model = models.get("default_model").await.unwrap().unwrap();
@@ -3084,30 +3097,33 @@ endpoints = ["chat", "embeddings"]
 type = "dummy"
 model_name = "multi"
 "#;
-        
+
         let config_toml: toml::Table = toml::from_str(toml_str).unwrap();
         let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let config = Config::load_from_toml(config_toml, base_path)
             .await
             .expect("Failed to load config");
-        
+
         let models = config.models.read().await;
-        
+
         // Test capability filtering
         use crate::model::ModelTableExt;
         let chat_models = models.get_models_for_capability(EndpointCapability::Chat);
         assert_eq!(chat_models.len(), 2);
-        
+
         let embedding_models = models.get_models_for_capability(EndpointCapability::Embeddings);
         assert_eq!(embedding_models.len(), 2);
-        
+
         // Verify specific models in each category
         let chat_names: Vec<&str> = chat_models.iter().map(|(name, _)| name.as_ref()).collect();
         assert!(chat_names.contains(&"chat_only"));
         assert!(chat_names.contains(&"both"));
         assert!(!chat_names.contains(&"embedding_only"));
-        
-        let embed_names: Vec<&str> = embedding_models.iter().map(|(name, _)| name.as_ref()).collect();
+
+        let embed_names: Vec<&str> = embedding_models
+            .iter()
+            .map(|(name, _)| name.as_ref())
+            .collect();
         assert!(embed_names.contains(&"embedding_only"));
         assert!(embed_names.contains(&"both"));
         assert!(!embed_names.contains(&"chat_only"));

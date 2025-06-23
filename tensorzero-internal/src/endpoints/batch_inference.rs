@@ -213,9 +213,7 @@ pub async fn start_batch_inference_handler(
         cache_options: &cache_options,
     };
     let models = config.models.read().await;
-    let inference_models = InferenceModels {
-        models: &models,
-    };
+    let inference_models = InferenceModels { models: &models };
     let inference_params: Vec<InferenceParams> =
         BatchInferenceParamsWithSize(params.params, num_inferences).try_into()?;
 

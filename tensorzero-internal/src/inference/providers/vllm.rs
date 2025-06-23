@@ -558,6 +558,8 @@ fn get_embedding_url(base_url: &Url) -> Result<Url, Error> {
 struct VLLMEmbeddingRequest<'a> {
     model: &'a str,
     input: VLLMEmbeddingRequestInput<'a>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    encoding_format: Option<&'a str>,
 }
 
 #[derive(Debug, Serialize)]
@@ -594,7 +596,9 @@ impl EmbeddingProvider for VLLMProvider {
     ) -> Result<EmbeddingProviderResponse, Error> {
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let input = match &request.input {
-            crate::embeddings::EmbeddingInput::Single(text) => VLLMEmbeddingRequestInput::Single(text),
+            crate::embeddings::EmbeddingInput::Single(text) => {
+                VLLMEmbeddingRequestInput::Single(text)
+            }
             crate::embeddings::EmbeddingInput::Batch(texts) => {
                 VLLMEmbeddingRequestInput::Batch(texts.iter().map(|s| s.as_str()).collect())
             }
@@ -602,6 +606,7 @@ impl EmbeddingProvider for VLLMProvider {
         let request_body = VLLMEmbeddingRequest {
             model: &self.model_name,
             input,
+            encoding_format: request.encoding_format.as_deref(),
         };
         let request_url = get_embedding_url(&self.api_base)?;
         let start_time = Instant::now();
@@ -659,7 +664,11 @@ impl EmbeddingProvider for VLLMProvider {
                     provider_type: PROVIDER_TYPE.to_string(),
                 }));
             }
-            let embeddings: Vec<Vec<f32>> = response_body.data.into_iter().map(|d| d.embedding).collect();
+            let embeddings: Vec<Vec<f32>> = response_body
+                .data
+                .into_iter()
+                .map(|d| d.embedding)
+                .collect();
             let raw_request = serde_json::to_string(&request_body).map_err(|e| {
                 Error::new(ErrorDetails::Serialization {
                     message: format!(
