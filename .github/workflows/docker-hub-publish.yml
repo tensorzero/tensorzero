@@ -6,8 +6,6 @@ on:
   workflow_dispatch:
   release:
     types: [released]
-  push:
-    branches: ["main"]
 
 env:
   DOCKERHUB_USER: budstudio
@@ -52,6 +50,11 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.DOCKERHUB_USER }}/budproxy
+          tags: |
+            type=ref,event=tag
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,format=long,enable=${{ github.event_name != 'release' }}
 
       - name: Build and push Docker image
         id: push
@@ -65,7 +68,7 @@ jobs:
           push: true
           provenance: mode=max
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
-          tags: ${{ env.DOCKERHUB_USER }}/budproxy
+          tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           sbom: true
 
@@ -110,10 +113,13 @@ jobs:
         with:
           images: ${{ env.DOCKERHUB_USER }}/budproxy
           flavor: |
-            latest=false
+            latest=auto
           tags: |
-            type=ref,event=tag,
-            type=sha,format=long
+            type=ref,event=tag
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha,format=long,enable=${{ github.event_name != 'release' }}
             type=raw,value=latest,enable=${{ github.event_name == 'release' && github.event.prerelease == false }}
 
       - name: Create manifest list and push
