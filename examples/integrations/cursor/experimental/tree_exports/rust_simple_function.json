@@ -1,0 +1,370 @@
+{
+  "metadata": {
+    "name": "rust_simple_function",
+    "language": "rust",
+    "description": "Simple Rust function with println! macro",
+    "source_length": 51,
+    "node_count": 22
+  },
+  "source_code": "fn hello_world() {\n    println!(\"Hello, world!\");\n}",
+  "tree": {
+    "name": "source_file",
+    "text": "",
+    "full_text": "fn hello_world() {\n    println!(\"Hello, world!\");\n}",
+    "start_position": {
+      "row": 0,
+      "column": 0
+    },
+    "end_position": {
+      "row": 2,
+      "column": 1
+    },
+    "is_leaf": false,
+    "child_count": 1,
+    "children": [
+      {
+        "name": "function_item",
+        "text": "",
+        "full_text": "fn hello_world() {\n    println!(\"Hello, world!\");\n}",
+        "start_position": {
+          "row": 0,
+          "column": 0
+        },
+        "end_position": {
+          "row": 2,
+          "column": 1
+        },
+        "is_leaf": false,
+        "child_count": 4,
+        "children": [
+          {
+            "name": "fn",
+            "text": "fn",
+            "full_text": "fn",
+            "start_position": {
+              "row": 0,
+              "column": 0
+            },
+            "end_position": {
+              "row": 0,
+              "column": 2
+            },
+            "is_leaf": true,
+            "child_count": 0,
+            "children": []
+          },
+          {
+            "name": "identifier",
+            "text": "hello_world",
+            "full_text": "hello_world",
+            "start_position": {
+              "row": 0,
+              "column": 3
+            },
+            "end_position": {
+              "row": 0,
+              "column": 14
+            },
+            "is_leaf": true,
+            "child_count": 0,
+            "children": []
+          },
+          {
+            "name": "parameters",
+            "text": "",
+            "full_text": "()",
+            "start_position": {
+              "row": 0,
+              "column": 14
+            },
+            "end_position": {
+              "row": 0,
+              "column": 16
+            },
+            "is_leaf": false,
+            "child_count": 2,
+            "children": [
+              {
+                "name": "(",
+                "text": "(",
+                "full_text": "(",
+                "start_position": {
+                  "row": 0,
+                  "column": 14
+                },
+                "end_position": {
+                  "row": 0,
+                  "column": 15
+                },
+                "is_leaf": true,
+                "child_count": 0,
+                "children": []
+              },
+              {
+                "name": ")",
+                "text": ")",
+                "full_text": ")",
+                "start_position": {
+                  "row": 0,
+                  "column": 15
+                },
+                "end_position": {
+                  "row": 0,
+                  "column": 16
+                },
+                "is_leaf": true,
+                "child_count": 0,
+                "children": []
+              }
+            ]
+          },
+          {
+            "name": "block",
+            "text": "",
+            "full_text": "{\n    println!(\"Hello, world!\");\n}",
+            "start_position": {
+              "row": 0,
+              "column": 17
+            },
+            "end_position": {
+              "row": 2,
+              "column": 1
+            },
+            "is_leaf": false,
+            "child_count": 3,
+            "children": [
+              {
+                "name": "{",
+                "text": "{",
+                "full_text": "{",
+                "start_position": {
+                  "row": 0,
+                  "column": 17
+                },
+                "end_position": {
+                  "row": 0,
+                  "column": 18
+                },
+                "is_leaf": true,
+                "child_count": 0,
+                "children": []
+              },
+              {
+                "name": "expression_statement",
+                "text": "",
+                "full_text": "println!(\"Hello, world!\");",
+                "start_position": {
+                  "row": 1,
+                  "column": 4
+                },
+                "end_position": {
+                  "row": 1,
+                  "column": 30
+                },
+                "is_leaf": false,
+                "child_count": 2,
+                "children": [
+                  {
+                    "name": "macro_invocation",
+                    "text": "",
+                    "full_text": "println!(\"Hello, world!\")",
+                    "start_position": {
+                      "row": 1,
+                      "column": 4
+                    },
+                    "end_position": {
+                      "row": 1,
+                      "column": 29
+                    },
+                    "is_leaf": false,
+                    "child_count": 3,
+                    "children": [
+                      {
+                        "name": "identifier",
+                        "text": "println",
+                        "full_text": "println",
+                        "start_position": {
+                          "row": 1,
+                          "column": 4
+                        },
+                        "end_position": {
+                          "row": 1,
+                          "column": 11
+                        },
+                        "is_leaf": true,
+                        "child_count": 0,
+                        "children": []
+                      },
+                      {
+                        "name": "!",
+                        "text": "!",
+                        "full_text": "!",
+                        "start_position": {
+                          "row": 1,
+                          "column": 11
+                        },
+                        "end_position": {
+                          "row": 1,
+                          "column": 12
+                        },
+                        "is_leaf": true,
+                        "child_count": 0,
+                        "children": []
+                      },
+                      {
+                        "name": "token_tree",
+                        "text": "",
+                        "full_text": "(\"Hello, world!\")",
+                        "start_position": {
+                          "row": 1,
+                          "column": 12
+                        },
+                        "end_position": {
+                          "row": 1,
+                          "column": 29
+                        },
+                        "is_leaf": false,
+                        "child_count": 3,
+                        "children": [
+                          {
+                            "name": "(",
+                            "text": "(",
+                            "full_text": "(",
+                            "start_position": {
+                              "row": 1,
+                              "column": 12
+                            },
+                            "end_position": {
+                              "row": 1,
+                              "column": 13
+                            },
+                            "is_leaf": true,
+                            "child_count": 0,
+                            "children": []
+                          },
+                          {
+                            "name": "string_literal",
+                            "text": "",
+                            "full_text": "\"Hello, world!\"",
+                            "start_position": {
+                              "row": 1,
+                              "column": 13
+                            },
+                            "end_position": {
+                              "row": 1,
+                              "column": 28
+                            },
+                            "is_leaf": false,
+                            "child_count": 3,
+                            "children": [
+                              {
+                                "name": "\"",
+                                "text": "\"",
+                                "full_text": "\"",
+                                "start_position": {
+                                  "row": 1,
+                                  "column": 13
+                                },
+                                "end_position": {
+                                  "row": 1,
+                                  "column": 14
+                                },
+                                "is_leaf": true,
+                                "child_count": 0,
+                                "children": []
+                              },
+                              {
+                                "name": "string_content",
+                                "text": "Hello, world!",
+                                "full_text": "Hello, world!",
+                                "start_position": {
+                                  "row": 1,
+                                  "column": 14
+                                },
+                                "end_position": {
+                                  "row": 1,
+                                  "column": 27
+                                },
+                                "is_leaf": true,
+                                "child_count": 0,
+                                "children": []
+                              },
+                              {
+                                "name": "\"",
+                                "text": "\"",
+                                "full_text": "\"",
+                                "start_position": {
+                                  "row": 1,
+                                  "column": 27
+                                },
+                                "end_position": {
+                                  "row": 1,
+                                  "column": 28
+                                },
+                                "is_leaf": true,
+                                "child_count": 0,
+                                "children": []
+                              }
+                            ]
+                          },
+                          {
+                            "name": ")",
+                            "text": ")",
+                            "full_text": ")",
+                            "start_position": {
+                              "row": 1,
+                              "column": 28
+                            },
+                            "end_position": {
+                              "row": 1,
+                              "column": 29
+                            },
+                            "is_leaf": true,
+                            "child_count": 0,
+                            "children": []
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "name": ";",
+                    "text": ";",
+                    "full_text": ";",
+                    "start_position": {
+                      "row": 1,
+                      "column": 29
+                    },
+                    "end_position": {
+                      "row": 1,
+                      "column": 30
+                    },
+                    "is_leaf": true,
+                    "child_count": 0,
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "name": "}",
+                "text": "}",
+                "full_text": "}",
+                "start_position": {
+                  "row": 2,
+                  "column": 0
+                },
+                "end_position": {
+                  "row": 2,
+                  "column": 1
+                },
+                "is_leaf": true,
+                "child_count": 0,
+                "children": []
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

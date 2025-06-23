@@ -1,0 +1,676 @@
+{
+  "metadata": {
+    "name": "markdown_simple",
+    "language": "markdown",
+    "description": "Simple Markdown with headings and code block",
+    "source_length": 141,
+    "node_count": 41
+  },
+  "source_code": "\n# Hello World\n\nThis is a **bold** text with some *italic* words.\n\n## Code Example\n\n```rust\nfn main() {\n    println!(\"Hello, world!\");\n}\n```\n",
+  "tree": {
+    "name": "document",
+    "text": "",
+    "full_text": "\n# Hello World\n\nThis is a **bold** text with some *italic* words.\n\n## Code Example\n\n```rust\nfn main() {\n    println!(\"Hello, world!\");\n}\n```\n",
+    "start_position": {
+      "row": 0,
+      "column": 0
+    },
+    "end_position": {
+      "row": 12,
+      "column": 0
+    },
+    "is_leaf": false,
+    "child_count": 2,
+    "children": [
+      {
+        "name": "section",
+        "text": "\n",
+        "full_text": "\n",
+        "start_position": {
+          "row": 0,
+          "column": 0
+        },
+        "end_position": {
+          "row": 1,
+          "column": 0
+        },
+        "is_leaf": true,
+        "child_count": 0,
+        "children": []
+      },
+      {
+        "name": "section",
+        "text": "",
+        "full_text": "# Hello World\n\nThis is a **bold** text with some *italic* words.\n\n## Code Example\n\n```rust\nfn main() {\n    println!(\"Hello, world!\");\n}\n```\n",
+        "start_position": {
+          "row": 1,
+          "column": 0
+        },
+        "end_position": {
+          "row": 12,
+          "column": 0
+        },
+        "is_leaf": false,
+        "child_count": 3,
+        "children": [
+          {
+            "name": "atx_heading",
+            "text": "",
+            "full_text": "# Hello World\n",
+            "start_position": {
+              "row": 1,
+              "column": 0
+            },
+            "end_position": {
+              "row": 2,
+              "column": 0
+            },
+            "is_leaf": false,
+            "child_count": 2,
+            "children": [
+              {
+                "name": "atx_h1_marker",
+                "text": "#",
+                "full_text": "#",
+                "start_position": {
+                  "row": 1,
+                  "column": 0
+                },
+                "end_position": {
+                  "row": 1,
+                  "column": 1
+                },
+                "is_leaf": true,
+                "child_count": 0,
+                "children": []
+              },
+              {
+                "name": "inline",
+                "text": "Hello World",
+                "full_text": "Hello World",
+                "start_position": {
+                  "row": 1,
+                  "column": 2
+                },
+                "end_position": {
+                  "row": 1,
+                  "column": 13
+                },
+                "is_leaf": true,
+                "child_count": 0,
+                "children": []
+              }
+            ]
+          },
+          {
+            "name": "paragraph",
+            "text": "",
+            "full_text": "This is a **bold** text with some *italic* words.\n",
+            "start_position": {
+              "row": 3,
+              "column": 0
+            },
+            "end_position": {
+              "row": 4,
+              "column": 0
+            },
+            "is_leaf": false,
+            "child_count": 1,
+            "children": [
+              {
+                "name": "inline",
+                "text": "",
+                "full_text": "This is a **bold** text with some *italic* words.",
+                "start_position": {
+                  "row": 3,
+                  "column": 0
+                },
+                "end_position": {
+                  "row": 3,
+                  "column": 49
+                },
+                "is_leaf": false,
+                "child_count": 7,
+                "children": [
+                  {
+                    "name": "*",
+                    "text": "*",
+                    "full_text": "*",
+                    "start_position": {
+                      "row": 3,
+                      "column": 10
+                    },
+                    "end_position": {
+                      "row": 3,
+                      "column": 11
+                    },
+                    "is_leaf": true,
+                    "child_count": 0,
+                    "children": []
+                  },
+                  {
+                    "name": "*",
+                    "text": "*",
+                    "full_text": "*",
+                    "start_position": {
+                      "row": 3,
+                      "column": 11
+                    },
+                    "end_position": {
+                      "row": 3,
+                      "column": 12
+                    },
+                    "is_leaf": true,
+                    "child_count": 0,
+                    "children": []
+                  },
+                  {
+                    "name": "*",
+                    "text": "*",
+                    "full_text": "*",
+                    "start_position": {
+                      "row": 3,
+                      "column": 16
+                    },
+                    "end_position": {
+                      "row": 3,
+                      "column": 17
+                    },
+                    "is_leaf": true,
+                    "child_count": 0,
+                    "children": []
+                  },
+                  {
+                    "name": "*",
+                    "text": "*",
+                    "full_text": "*",
+                    "start_position": {
+                      "row": 3,
+                      "column": 17
+                    },
+                    "end_position": {
+                      "row": 3,
+                      "column": 18
+                    },
+                    "is_leaf": true,
+                    "child_count": 0,
+                    "children": []
+                  },
+                  {
+                    "name": "*",
+                    "text": "*",
+                    "full_text": "*",
+                    "start_position": {
+                      "row": 3,
+                      "column": 34
+                    },
+                    "end_position": {
+                      "row": 3,
+                      "column": 35
+                    },
+                    "is_leaf": true,
+                    "child_count": 0,
+                    "children": []
+                  },
+                  {
+                    "name": "*",
+                    "text": "*",
+                    "full_text": "*",
+                    "start_position": {
+                      "row": 3,
+                      "column": 41
+                    },
+                    "end_position": {
+                      "row": 3,
+                      "column": 42
+                    },
+                    "is_leaf": true,
+                    "child_count": 0,
+                    "children": []
+                  },
+                  {
+                    "name": ".",
+                    "text": ".",
+                    "full_text": ".",
+                    "start_position": {
+                      "row": 3,
+                      "column": 48
+                    },
+                    "end_position": {
+                      "row": 3,
+                      "column": 49
+                    },
+                    "is_leaf": true,
+                    "child_count": 0,
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "section",
+            "text": "",
+            "full_text": "## Code Example\n\n```rust\nfn main() {\n    println!(\"Hello, world!\");\n}\n```\n",
+            "start_position": {
+              "row": 5,
+              "column": 0
+            },
+            "end_position": {
+              "row": 12,
+              "column": 0
+            },
+            "is_leaf": false,
+            "child_count": 2,
+            "children": [
+              {
+                "name": "atx_heading",
+                "text": "",
+                "full_text": "## Code Example\n",
+                "start_position": {
+                  "row": 5,
+                  "column": 0
+                },
+                "end_position": {
+                  "row": 6,
+                  "column": 0
+                },
+                "is_leaf": false,
+                "child_count": 2,
+                "children": [
+                  {
+                    "name": "atx_h2_marker",
+                    "text": "##",
+                    "full_text": "##",
+                    "start_position": {
+                      "row": 5,
+                      "column": 0
+                    },
+                    "end_position": {
+                      "row": 5,
+                      "column": 2
+                    },
+                    "is_leaf": true,
+                    "child_count": 0,
+                    "children": []
+                  },
+                  {
+                    "name": "inline",
+                    "text": "Code Example",
+                    "full_text": "Code Example",
+                    "start_position": {
+                      "row": 5,
+                      "column": 3
+                    },
+                    "end_position": {
+                      "row": 5,
+                      "column": 15
+                    },
+                    "is_leaf": true,
+                    "child_count": 0,
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "name": "fenced_code_block",
+                "text": "",
+                "full_text": "```rust\nfn main() {\n    println!(\"Hello, world!\");\n}\n```\n",
+                "start_position": {
+                  "row": 7,
+                  "column": 0
+                },
+                "end_position": {
+                  "row": 12,
+                  "column": 0
+                },
+                "is_leaf": false,
+                "child_count": 5,
+                "children": [
+                  {
+                    "name": "fenced_code_block_delimiter",
+                    "text": "```",
+                    "full_text": "```",
+                    "start_position": {
+                      "row": 7,
+                      "column": 0
+                    },
+                    "end_position": {
+                      "row": 7,
+                      "column": 3
+                    },
+                    "is_leaf": true,
+                    "child_count": 0,
+                    "children": []
+                  },
+                  {
+                    "name": "info_string",
+                    "text": "",
+                    "full_text": "rust",
+                    "start_position": {
+                      "row": 7,
+                      "column": 3
+                    },
+                    "end_position": {
+                      "row": 7,
+                      "column": 7
+                    },
+                    "is_leaf": false,
+                    "child_count": 1,
+                    "children": [
+                      {
+                        "name": "language",
+                        "text": "rust",
+                        "full_text": "rust",
+                        "start_position": {
+                          "row": 7,
+                          "column": 3
+                        },
+                        "end_position": {
+                          "row": 7,
+                          "column": 7
+                        },
+                        "is_leaf": true,
+                        "child_count": 0,
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "name": "block_continuation",
+                    "text": "",
+                    "full_text": "",
+                    "start_position": {
+                      "row": 8,
+                      "column": 0
+                    },
+                    "end_position": {
+                      "row": 8,
+                      "column": 0
+                    },
+                    "is_leaf": true,
+                    "child_count": 0,
+                    "children": []
+                  },
+                  {
+                    "name": "code_fence_content",
+                    "text": "",
+                    "full_text": "fn main() {\n    println!(\"Hello, world!\");\n}\n",
+                    "start_position": {
+                      "row": 8,
+                      "column": 0
+                    },
+                    "end_position": {
+                      "row": 11,
+                      "column": 0
+                    },
+                    "is_leaf": false,
+                    "child_count": 15,
+                    "children": [
+                      {
+                        "name": "(",
+                        "text": "(",
+                        "full_text": "(",
+                        "start_position": {
+                          "row": 8,
+                          "column": 7
+                        },
+                        "end_position": {
+                          "row": 8,
+                          "column": 8
+                        },
+                        "is_leaf": true,
+                        "child_count": 0,
+                        "children": []
+                      },
+                      {
+                        "name": ")",
+                        "text": ")",
+                        "full_text": ")",
+                        "start_position": {
+                          "row": 8,
+                          "column": 8
+                        },
+                        "end_position": {
+                          "row": 8,
+                          "column": 9
+                        },
+                        "is_leaf": true,
+                        "child_count": 0,
+                        "children": []
+                      },
+                      {
+                        "name": "{",
+                        "text": "{",
+                        "full_text": "{",
+                        "start_position": {
+                          "row": 8,
+                          "column": 10
+                        },
+                        "end_position": {
+                          "row": 8,
+                          "column": 11
+                        },
+                        "is_leaf": true,
+                        "child_count": 0,
+                        "children": []
+                      },
+                      {
+                        "name": "block_continuation",
+                        "text": "",
+                        "full_text": "",
+                        "start_position": {
+                          "row": 9,
+                          "column": 0
+                        },
+                        "end_position": {
+                          "row": 9,
+                          "column": 0
+                        },
+                        "is_leaf": true,
+                        "child_count": 0,
+                        "children": []
+                      },
+                      {
+                        "name": "!",
+                        "text": "!",
+                        "full_text": "!",
+                        "start_position": {
+                          "row": 9,
+                          "column": 11
+                        },
+                        "end_position": {
+                          "row": 9,
+                          "column": 12
+                        },
+                        "is_leaf": true,
+                        "child_count": 0,
+                        "children": []
+                      },
+                      {
+                        "name": "(",
+                        "text": "(",
+                        "full_text": "(",
+                        "start_position": {
+                          "row": 9,
+                          "column": 12
+                        },
+                        "end_position": {
+                          "row": 9,
+                          "column": 13
+                        },
+                        "is_leaf": true,
+                        "child_count": 0,
+                        "children": []
+                      },
+                      {
+                        "name": "\"",
+                        "text": "\"",
+                        "full_text": "\"",
+                        "start_position": {
+                          "row": 9,
+                          "column": 13
+                        },
+                        "end_position": {
+                          "row": 9,
+                          "column": 14
+                        },
+                        "is_leaf": true,
+                        "child_count": 0,
+                        "children": []
+                      },
+                      {
+                        "name": ",",
+                        "text": ",",
+                        "full_text": ",",
+                        "start_position": {
+                          "row": 9,
+                          "column": 19
+                        },
+                        "end_position": {
+                          "row": 9,
+                          "column": 20
+                        },
+                        "is_leaf": true,
+                        "child_count": 0,
+                        "children": []
+                      },
+                      {
+                        "name": "!",
+                        "text": "!",
+                        "full_text": "!",
+                        "start_position": {
+                          "row": 9,
+                          "column": 26
+                        },
+                        "end_position": {
+                          "row": 9,
+                          "column": 27
+                        },
+                        "is_leaf": true,
+                        "child_count": 0,
+                        "children": []
+                      },
+                      {
+                        "name": "\"",
+                        "text": "\"",
+                        "full_text": "\"",
+                        "start_position": {
+                          "row": 9,
+                          "column": 27
+                        },
+                        "end_position": {
+                          "row": 9,
+                          "column": 28
+                        },
+                        "is_leaf": true,
+                        "child_count": 0,
+                        "children": []
+                      },
+                      {
+                        "name": ")",
+                        "text": ")",
+                        "full_text": ")",
+                        "start_position": {
+                          "row": 9,
+                          "column": 28
+                        },
+                        "end_position": {
+                          "row": 9,
+                          "column": 29
+                        },
+                        "is_leaf": true,
+                        "child_count": 0,
+                        "children": []
+                      },
+                      {
+                        "name": ";",
+                        "text": ";",
+                        "full_text": ";",
+                        "start_position": {
+                          "row": 9,
+                          "column": 29
+                        },
+                        "end_position": {
+                          "row": 9,
+                          "column": 30
+                        },
+                        "is_leaf": true,
+                        "child_count": 0,
+                        "children": []
+                      },
+                      {
+                        "name": "block_continuation",
+                        "text": "",
+                        "full_text": "",
+                        "start_position": {
+                          "row": 10,
+                          "column": 0
+                        },
+                        "end_position": {
+                          "row": 10,
+                          "column": 0
+                        },
+                        "is_leaf": true,
+                        "child_count": 0,
+                        "children": []
+                      },
+                      {
+                        "name": "}",
+                        "text": "}",
+                        "full_text": "}",
+                        "start_position": {
+                          "row": 10,
+                          "column": 0
+                        },
+                        "end_position": {
+                          "row": 10,
+                          "column": 1
+                        },
+                        "is_leaf": true,
+                        "child_count": 0,
+                        "children": []
+                      },
+                      {
+                        "name": "block_continuation",
+                        "text": "",
+                        "full_text": "",
+                        "start_position": {
+                          "row": 11,
+                          "column": 0
+                        },
+                        "end_position": {
+                          "row": 11,
+                          "column": 0
+                        },
+                        "is_leaf": true,
+                        "child_count": 0,
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "name": "fenced_code_block_delimiter",
+                    "text": "```",
+                    "full_text": "```",
+                    "start_position": {
+                      "row": 11,
+                      "column": 0
+                    },
+                    "end_position": {
+                      "row": 11,
+                      "column": 3
+                    },
+                    "is_leaf": true,
+                    "child_count": 0,
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

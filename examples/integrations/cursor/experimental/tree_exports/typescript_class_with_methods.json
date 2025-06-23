@@ -1,0 +1,1107 @@
+{
+  "metadata": {
+    "name": "typescript_class_with_methods",
+    "language": "typescript",
+    "description": "TypeScript class with private field and methods",
+    "source_length": 197,
+    "node_count": 67
+  },
+  "source_code": "class Calculator {\n    private value: number = 0;\n\n    add(n: number): Calculator {\n        this.value += n;\n        return this;\n    }\n\n    getResult(): number {\n        return this.value;\n    }\n}",
+  "tree": {
+    "name": "program",
+    "text": "",
+    "full_text": "class Calculator {\n    private value: number = 0;\n\n    add(n: number): Calculator {\n        this.value += n;\n        return this;\n    }\n\n    getResult(): number {\n        return this.value;\n    }\n}",
+    "start_position": {
+      "row": 0,
+      "column": 0
+    },
+    "end_position": {
+      "row": 11,
+      "column": 1
+    },
+    "is_leaf": false,
+    "child_count": 1,
+    "children": [
+      {
+        "name": "class_declaration",
+        "text": "",
+        "full_text": "class Calculator {\n    private value: number = 0;\n\n    add(n: number): Calculator {\n        this.value += n;\n        return this;\n    }\n\n    getResult(): number {\n        return this.value;\n    }\n}",
+        "start_position": {
+          "row": 0,
+          "column": 0
+        },
+        "end_position": {
+          "row": 11,
+          "column": 1
+        },
+        "is_leaf": false,
+        "child_count": 3,
+        "children": [
+          {
+            "name": "class",
+            "text": "class",
+            "full_text": "class",
+            "start_position": {
+              "row": 0,
+              "column": 0
+            },
+            "end_position": {
+              "row": 0,
+              "column": 5
+            },
+            "is_leaf": true,
+            "child_count": 0,
+            "children": []
+          },
+          {
+            "name": "type_identifier",
+            "text": "Calculator",
+            "full_text": "Calculator",
+            "start_position": {
+              "row": 0,
+              "column": 6
+            },
+            "end_position": {
+              "row": 0,
+              "column": 16
+            },
+            "is_leaf": true,
+            "child_count": 0,
+            "children": []
+          },
+          {
+            "name": "class_body",
+            "text": "",
+            "full_text": "{\n    private value: number = 0;\n\n    add(n: number): Calculator {\n        this.value += n;\n        return this;\n    }\n\n    getResult(): number {\n        return this.value;\n    }\n}",
+            "start_position": {
+              "row": 0,
+              "column": 17
+            },
+            "end_position": {
+              "row": 11,
+              "column": 1
+            },
+            "is_leaf": false,
+            "child_count": 6,
+            "children": [
+              {
+                "name": "{",
+                "text": "{",
+                "full_text": "{",
+                "start_position": {
+                  "row": 0,
+                  "column": 17
+                },
+                "end_position": {
+                  "row": 0,
+                  "column": 18
+                },
+                "is_leaf": true,
+                "child_count": 0,
+                "children": []
+              },
+              {
+                "name": "public_field_definition",
+                "text": "",
+                "full_text": "private value: number = 0",
+                "start_position": {
+                  "row": 1,
+                  "column": 4
+                },
+                "end_position": {
+                  "row": 1,
+                  "column": 29
+                },
+                "is_leaf": false,
+                "child_count": 5,
+                "children": [
+                  {
+                    "name": "accessibility_modifier",
+                    "text": "",
+                    "full_text": "private",
+                    "start_position": {
+                      "row": 1,
+                      "column": 4
+                    },
+                    "end_position": {
+                      "row": 1,
+                      "column": 11
+                    },
+                    "is_leaf": false,
+                    "child_count": 1,
+                    "children": [
+                      {
+                        "name": "private",
+                        "text": "private",
+                        "full_text": "private",
+                        "start_position": {
+                          "row": 1,
+                          "column": 4
+                        },
+                        "end_position": {
+                          "row": 1,
+                          "column": 11
+                        },
+                        "is_leaf": true,
+                        "child_count": 0,
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "name": "property_identifier",
+                    "text": "value",
+                    "full_text": "value",
+                    "start_position": {
+                      "row": 1,
+                      "column": 12
+                    },
+                    "end_position": {
+                      "row": 1,
+                      "column": 17
+                    },
+                    "is_leaf": true,
+                    "child_count": 0,
+                    "children": []
+                  },
+                  {
+                    "name": "type_annotation",
+                    "text": "",
+                    "full_text": ": number",
+                    "start_position": {
+                      "row": 1,
+                      "column": 17
+                    },
+                    "end_position": {
+                      "row": 1,
+                      "column": 25
+                    },
+                    "is_leaf": false,
+                    "child_count": 2,
+                    "children": [
+                      {
+                        "name": ":",
+                        "text": ":",
+                        "full_text": ":",
+                        "start_position": {
+                          "row": 1,
+                          "column": 17
+                        },
+                        "end_position": {
+                          "row": 1,
+                          "column": 18
+                        },
+                        "is_leaf": true,
+                        "child_count": 0,
+                        "children": []
+                      },
+                      {
+                        "name": "predefined_type",
+                        "text": "",
+                        "full_text": "number",
+                        "start_position": {
+                          "row": 1,
+                          "column": 19
+                        },
+                        "end_position": {
+                          "row": 1,
+                          "column": 25
+                        },
+                        "is_leaf": false,
+                        "child_count": 1,
+                        "children": [
+                          {
+                            "name": "number",
+                            "text": "number",
+                            "full_text": "number",
+                            "start_position": {
+                              "row": 1,
+                              "column": 19
+                            },
+                            "end_position": {
+                              "row": 1,
+                              "column": 25
+                            },
+                            "is_leaf": true,
+                            "child_count": 0,
+                            "children": []
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "name": "=",
+                    "text": "=",
+                    "full_text": "=",
+                    "start_position": {
+                      "row": 1,
+                      "column": 26
+                    },
+                    "end_position": {
+                      "row": 1,
+                      "column": 27
+                    },
+                    "is_leaf": true,
+                    "child_count": 0,
+                    "children": []
+                  },
+                  {
+                    "name": "number",
+                    "text": "0",
+                    "full_text": "0",
+                    "start_position": {
+                      "row": 1,
+                      "column": 28
+                    },
+                    "end_position": {
+                      "row": 1,
+                      "column": 29
+                    },
+                    "is_leaf": true,
+                    "child_count": 0,
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "name": ";",
+                "text": ";",
+                "full_text": ";",
+                "start_position": {
+                  "row": 1,
+                  "column": 29
+                },
+                "end_position": {
+                  "row": 1,
+                  "column": 30
+                },
+                "is_leaf": true,
+                "child_count": 0,
+                "children": []
+              },
+              {
+                "name": "method_definition",
+                "text": "",
+                "full_text": "add(n: number): Calculator {\n        this.value += n;\n        return this;\n    }",
+                "start_position": {
+                  "row": 3,
+                  "column": 4
+                },
+                "end_position": {
+                  "row": 6,
+                  "column": 5
+                },
+                "is_leaf": false,
+                "child_count": 4,
+                "children": [
+                  {
+                    "name": "property_identifier",
+                    "text": "add",
+                    "full_text": "add",
+                    "start_position": {
+                      "row": 3,
+                      "column": 4
+                    },
+                    "end_position": {
+                      "row": 3,
+                      "column": 7
+                    },
+                    "is_leaf": true,
+                    "child_count": 0,
+                    "children": []
+                  },
+                  {
+                    "name": "formal_parameters",
+                    "text": "",
+                    "full_text": "(n: number)",
+                    "start_position": {
+                      "row": 3,
+                      "column": 7
+                    },
+                    "end_position": {
+                      "row": 3,
+                      "column": 18
+                    },
+                    "is_leaf": false,
+                    "child_count": 3,
+                    "children": [
+                      {
+                        "name": "(",
+                        "text": "(",
+                        "full_text": "(",
+                        "start_position": {
+                          "row": 3,
+                          "column": 7
+                        },
+                        "end_position": {
+                          "row": 3,
+                          "column": 8
+                        },
+                        "is_leaf": true,
+                        "child_count": 0,
+                        "children": []
+                      },
+                      {
+                        "name": "required_parameter",
+                        "text": "",
+                        "full_text": "n: number",
+                        "start_position": {
+                          "row": 3,
+                          "column": 8
+                        },
+                        "end_position": {
+                          "row": 3,
+                          "column": 17
+                        },
+                        "is_leaf": false,
+                        "child_count": 2,
+                        "children": [
+                          {
+                            "name": "identifier",
+                            "text": "n",
+                            "full_text": "n",
+                            "start_position": {
+                              "row": 3,
+                              "column": 8
+                            },
+                            "end_position": {
+                              "row": 3,
+                              "column": 9
+                            },
+                            "is_leaf": true,
+                            "child_count": 0,
+                            "children": []
+                          },
+                          {
+                            "name": "type_annotation",
+                            "text": "",
+                            "full_text": ": number",
+                            "start_position": {
+                              "row": 3,
+                              "column": 9
+                            },
+                            "end_position": {
+                              "row": 3,
+                              "column": 17
+                            },
+                            "is_leaf": false,
+                            "child_count": 2,
+                            "children": [
+                              {
+                                "name": ":",
+                                "text": ":",
+                                "full_text": ":",
+                                "start_position": {
+                                  "row": 3,
+                                  "column": 9
+                                },
+                                "end_position": {
+                                  "row": 3,
+                                  "column": 10
+                                },
+                                "is_leaf": true,
+                                "child_count": 0,
+                                "children": []
+                              },
+                              {
+                                "name": "predefined_type",
+                                "text": "",
+                                "full_text": "number",
+                                "start_position": {
+                                  "row": 3,
+                                  "column": 11
+                                },
+                                "end_position": {
+                                  "row": 3,
+                                  "column": 17
+                                },
+                                "is_leaf": false,
+                                "child_count": 1,
+                                "children": [
+                                  {
+                                    "name": "number",
+                                    "text": "number",
+                                    "full_text": "number",
+                                    "start_position": {
+                                      "row": 3,
+                                      "column": 11
+                                    },
+                                    "end_position": {
+                                      "row": 3,
+                                      "column": 17
+                                    },
+                                    "is_leaf": true,
+                                    "child_count": 0,
+                                    "children": []
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "name": ")",
+                        "text": ")",
+                        "full_text": ")",
+                        "start_position": {
+                          "row": 3,
+                          "column": 17
+                        },
+                        "end_position": {
+                          "row": 3,
+                          "column": 18
+                        },
+                        "is_leaf": true,
+                        "child_count": 0,
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "name": "type_annotation",
+                    "text": "",
+                    "full_text": ": Calculator",
+                    "start_position": {
+                      "row": 3,
+                      "column": 18
+                    },
+                    "end_position": {
+                      "row": 3,
+                      "column": 30
+                    },
+                    "is_leaf": false,
+                    "child_count": 2,
+                    "children": [
+                      {
+                        "name": ":",
+                        "text": ":",
+                        "full_text": ":",
+                        "start_position": {
+                          "row": 3,
+                          "column": 18
+                        },
+                        "end_position": {
+                          "row": 3,
+                          "column": 19
+                        },
+                        "is_leaf": true,
+                        "child_count": 0,
+                        "children": []
+                      },
+                      {
+                        "name": "type_identifier",
+                        "text": "Calculator",
+                        "full_text": "Calculator",
+                        "start_position": {
+                          "row": 3,
+                          "column": 20
+                        },
+                        "end_position": {
+                          "row": 3,
+                          "column": 30
+                        },
+                        "is_leaf": true,
+                        "child_count": 0,
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "name": "statement_block",
+                    "text": "",
+                    "full_text": "{\n        this.value += n;\n        return this;\n    }",
+                    "start_position": {
+                      "row": 3,
+                      "column": 31
+                    },
+                    "end_position": {
+                      "row": 6,
+                      "column": 5
+                    },
+                    "is_leaf": false,
+                    "child_count": 4,
+                    "children": [
+                      {
+                        "name": "{",
+                        "text": "{",
+                        "full_text": "{",
+                        "start_position": {
+                          "row": 3,
+                          "column": 31
+                        },
+                        "end_position": {
+                          "row": 3,
+                          "column": 32
+                        },
+                        "is_leaf": true,
+                        "child_count": 0,
+                        "children": []
+                      },
+                      {
+                        "name": "expression_statement",
+                        "text": "",
+                        "full_text": "this.value += n;",
+                        "start_position": {
+                          "row": 4,
+                          "column": 8
+                        },
+                        "end_position": {
+                          "row": 4,
+                          "column": 24
+                        },
+                        "is_leaf": false,
+                        "child_count": 2,
+                        "children": [
+                          {
+                            "name": "augmented_assignment_expression",
+                            "text": "",
+                            "full_text": "this.value += n",
+                            "start_position": {
+                              "row": 4,
+                              "column": 8
+                            },
+                            "end_position": {
+                              "row": 4,
+                              "column": 23
+                            },
+                            "is_leaf": false,
+                            "child_count": 3,
+                            "children": [
+                              {
+                                "name": "member_expression",
+                                "text": "",
+                                "full_text": "this.value",
+                                "start_position": {
+                                  "row": 4,
+                                  "column": 8
+                                },
+                                "end_position": {
+                                  "row": 4,
+                                  "column": 18
+                                },
+                                "is_leaf": false,
+                                "child_count": 3,
+                                "children": [
+                                  {
+                                    "name": "this",
+                                    "text": "this",
+                                    "full_text": "this",
+                                    "start_position": {
+                                      "row": 4,
+                                      "column": 8
+                                    },
+                                    "end_position": {
+                                      "row": 4,
+                                      "column": 12
+                                    },
+                                    "is_leaf": true,
+                                    "child_count": 0,
+                                    "children": []
+                                  },
+                                  {
+                                    "name": ".",
+                                    "text": ".",
+                                    "full_text": ".",
+                                    "start_position": {
+                                      "row": 4,
+                                      "column": 12
+                                    },
+                                    "end_position": {
+                                      "row": 4,
+                                      "column": 13
+                                    },
+                                    "is_leaf": true,
+                                    "child_count": 0,
+                                    "children": []
+                                  },
+                                  {
+                                    "name": "property_identifier",
+                                    "text": "value",
+                                    "full_text": "value",
+                                    "start_position": {
+                                      "row": 4,
+                                      "column": 13
+                                    },
+                                    "end_position": {
+                                      "row": 4,
+                                      "column": 18
+                                    },
+                                    "is_leaf": true,
+                                    "child_count": 0,
+                                    "children": []
+                                  }
+                                ]
+                              },
+                              {
+                                "name": "+=",
+                                "text": "+=",
+                                "full_text": "+=",
+                                "start_position": {
+                                  "row": 4,
+                                  "column": 19
+                                },
+                                "end_position": {
+                                  "row": 4,
+                                  "column": 21
+                                },
+                                "is_leaf": true,
+                                "child_count": 0,
+                                "children": []
+                              },
+                              {
+                                "name": "identifier",
+                                "text": "n",
+                                "full_text": "n",
+                                "start_position": {
+                                  "row": 4,
+                                  "column": 22
+                                },
+                                "end_position": {
+                                  "row": 4,
+                                  "column": 23
+                                },
+                                "is_leaf": true,
+                                "child_count": 0,
+                                "children": []
+                              }
+                            ]
+                          },
+                          {
+                            "name": ";",
+                            "text": ";",
+                            "full_text": ";",
+                            "start_position": {
+                              "row": 4,
+                              "column": 23
+                            },
+                            "end_position": {
+                              "row": 4,
+                              "column": 24
+                            },
+                            "is_leaf": true,
+                            "child_count": 0,
+                            "children": []
+                          }
+                        ]
+                      },
+                      {
+                        "name": "return_statement",
+                        "text": "",
+                        "full_text": "return this;",
+                        "start_position": {
+                          "row": 5,
+                          "column": 8
+                        },
+                        "end_position": {
+                          "row": 5,
+                          "column": 20
+                        },
+                        "is_leaf": false,
+                        "child_count": 3,
+                        "children": [
+                          {
+                            "name": "return",
+                            "text": "return",
+                            "full_text": "return",
+                            "start_position": {
+                              "row": 5,
+                              "column": 8
+                            },
+                            "end_position": {
+                              "row": 5,
+                              "column": 14
+                            },
+                            "is_leaf": true,
+                            "child_count": 0,
+                            "children": []
+                          },
+                          {
+                            "name": "this",
+                            "text": "this",
+                            "full_text": "this",
+                            "start_position": {
+                              "row": 5,
+                              "column": 15
+                            },
+                            "end_position": {
+                              "row": 5,
+                              "column": 19
+                            },
+                            "is_leaf": true,
+                            "child_count": 0,
+                            "children": []
+                          },
+                          {
+                            "name": ";",
+                            "text": ";",
+                            "full_text": ";",
+                            "start_position": {
+                              "row": 5,
+                              "column": 19
+                            },
+                            "end_position": {
+                              "row": 5,
+                              "column": 20
+                            },
+                            "is_leaf": true,
+                            "child_count": 0,
+                            "children": []
+                          }
+                        ]
+                      },
+                      {
+                        "name": "}",
+                        "text": "}",
+                        "full_text": "}",
+                        "start_position": {
+                          "row": 6,
+                          "column": 4
+                        },
+                        "end_position": {
+                          "row": 6,
+                          "column": 5
+                        },
+                        "is_leaf": true,
+                        "child_count": 0,
+                        "children": []
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "method_definition",
+                "text": "",
+                "full_text": "getResult(): number {\n        return this.value;\n    }",
+                "start_position": {
+                  "row": 8,
+                  "column": 4
+                },
+                "end_position": {
+                  "row": 10,
+                  "column": 5
+                },
+                "is_leaf": false,
+                "child_count": 4,
+                "children": [
+                  {
+                    "name": "property_identifier",
+                    "text": "getResult",
+                    "full_text": "getResult",
+                    "start_position": {
+                      "row": 8,
+                      "column": 4
+                    },
+                    "end_position": {
+                      "row": 8,
+                      "column": 13
+                    },
+                    "is_leaf": true,
+                    "child_count": 0,
+                    "children": []
+                  },
+                  {
+                    "name": "formal_parameters",
+                    "text": "",
+                    "full_text": "()",
+                    "start_position": {
+                      "row": 8,
+                      "column": 13
+                    },
+                    "end_position": {
+                      "row": 8,
+                      "column": 15
+                    },
+                    "is_leaf": false,
+                    "child_count": 2,
+                    "children": [
+                      {
+                        "name": "(",
+                        "text": "(",
+                        "full_text": "(",
+                        "start_position": {
+                          "row": 8,
+                          "column": 13
+                        },
+                        "end_position": {
+                          "row": 8,
+                          "column": 14
+                        },
+                        "is_leaf": true,
+                        "child_count": 0,
+                        "children": []
+                      },
+                      {
+                        "name": ")",
+                        "text": ")",
+                        "full_text": ")",
+                        "start_position": {
+                          "row": 8,
+                          "column": 14
+                        },
+                        "end_position": {
+                          "row": 8,
+                          "column": 15
+                        },
+                        "is_leaf": true,
+                        "child_count": 0,
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "name": "type_annotation",
+                    "text": "",
+                    "full_text": ": number",
+                    "start_position": {
+                      "row": 8,
+                      "column": 15
+                    },
+                    "end_position": {
+                      "row": 8,
+                      "column": 23
+                    },
+                    "is_leaf": false,
+                    "child_count": 2,
+                    "children": [
+                      {
+                        "name": ":",
+                        "text": ":",
+                        "full_text": ":",
+                        "start_position": {
+                          "row": 8,
+                          "column": 15
+                        },
+                        "end_position": {
+                          "row": 8,
+                          "column": 16
+                        },
+                        "is_leaf": true,
+                        "child_count": 0,
+                        "children": []
+                      },
+                      {
+                        "name": "predefined_type",
+                        "text": "",
+                        "full_text": "number",
+                        "start_position": {
+                          "row": 8,
+                          "column": 17
+                        },
+                        "end_position": {
+                          "row": 8,
+                          "column": 23
+                        },
+                        "is_leaf": false,
+                        "child_count": 1,
+                        "children": [
+                          {
+                            "name": "number",
+                            "text": "number",
+                            "full_text": "number",
+                            "start_position": {
+                              "row": 8,
+                              "column": 17
+                            },
+                            "end_position": {
+                              "row": 8,
+                              "column": 23
+                            },
+                            "is_leaf": true,
+                            "child_count": 0,
+                            "children": []
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "name": "statement_block",
+                    "text": "",
+                    "full_text": "{\n        return this.value;\n    }",
+                    "start_position": {
+                      "row": 8,
+                      "column": 24
+                    },
+                    "end_position": {
+                      "row": 10,
+                      "column": 5
+                    },
+                    "is_leaf": false,
+                    "child_count": 3,
+                    "children": [
+                      {
+                        "name": "{",
+                        "text": "{",
+                        "full_text": "{",
+                        "start_position": {
+                          "row": 8,
+                          "column": 24
+                        },
+                        "end_position": {
+                          "row": 8,
+                          "column": 25
+                        },
+                        "is_leaf": true,
+                        "child_count": 0,
+                        "children": []
+                      },
+                      {
+                        "name": "return_statement",
+                        "text": "",
+                        "full_text": "return this.value;",
+                        "start_position": {
+                          "row": 9,
+                          "column": 8
+                        },
+                        "end_position": {
+                          "row": 9,
+                          "column": 26
+                        },
+                        "is_leaf": false,
+                        "child_count": 3,
+                        "children": [
+                          {
+                            "name": "return",
+                            "text": "return",
+                            "full_text": "return",
+                            "start_position": {
+                              "row": 9,
+                              "column": 8
+                            },
+                            "end_position": {
+                              "row": 9,
+                              "column": 14
+                            },
+                            "is_leaf": true,
+                            "child_count": 0,
+                            "children": []
+                          },
+                          {
+                            "name": "member_expression",
+                            "text": "",
+                            "full_text": "this.value",
+                            "start_position": {
+                              "row": 9,
+                              "column": 15
+                            },
+                            "end_position": {
+                              "row": 9,
+                              "column": 25
+                            },
+                            "is_leaf": false,
+                            "child_count": 3,
+                            "children": [
+                              {
+                                "name": "this",
+                                "text": "this",
+                                "full_text": "this",
+                                "start_position": {
+                                  "row": 9,
+                                  "column": 15
+                                },
+                                "end_position": {
+                                  "row": 9,
+                                  "column": 19
+                                },
+                                "is_leaf": true,
+                                "child_count": 0,
+                                "children": []
+                              },
+                              {
+                                "name": ".",
+                                "text": ".",
+                                "full_text": ".",
+                                "start_position": {
+                                  "row": 9,
+                                  "column": 19
+                                },
+                                "end_position": {
+                                  "row": 9,
+                                  "column": 20
+                                },
+                                "is_leaf": true,
+                                "child_count": 0,
+                                "children": []
+                              },
+                              {
+                                "name": "property_identifier",
+                                "text": "value",
+                                "full_text": "value",
+                                "start_position": {
+                                  "row": 9,
+                                  "column": 20
+                                },
+                                "end_position": {
+                                  "row": 9,
+                                  "column": 25
+                                },
+                                "is_leaf": true,
+                                "child_count": 0,
+                                "children": []
+                              }
+                            ]
+                          },
+                          {
+                            "name": ";",
+                            "text": ";",
+                            "full_text": ";",
+                            "start_position": {
+                              "row": 9,
+                              "column": 25
+                            },
+                            "end_position": {
+                              "row": 9,
+                              "column": 26
+                            },
+                            "is_leaf": true,
+                            "child_count": 0,
+                            "children": []
+                          }
+                        ]
+                      },
+                      {
+                        "name": "}",
+                        "text": "}",
+                        "full_text": "}",
+                        "start_position": {
+                          "row": 10,
+                          "column": 4
+                        },
+                        "end_position": {
+                          "row": 10,
+                          "column": 5
+                        },
+                        "is_leaf": true,
+                        "child_count": 0,
+                        "children": []
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "}",
+                "text": "}",
+                "full_text": "}",
+                "start_position": {
+                  "row": 11,
+                  "column": 0
+                },
+                "end_position": {
+                  "row": 11,
+                  "column": 1
+                },
+                "is_leaf": true,
+                "child_count": 0,
+                "children": []
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

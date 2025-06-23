@@ -1,0 +1,1004 @@
+{
+  "metadata": {
+    "name": "toml_complex_config",
+    "language": "toml",
+    "description": "Complex TOML configuration with arrays",
+    "source_length": 209,
+    "node_count": 61
+  },
+  "source_code": "\n[server]\nhost = \"localhost\"\nport = 8080\nenabled = true\n\n[database]\nurl = \"postgresql://localhost/mydb\"\nmax_connections = 10\n\n[[workers]]\nname = \"worker1\"\nthreads = 4\n\n[[workers]]\nname = \"worker2\"\nthreads = 2\n",
+  "tree": {
+    "name": "document",
+    "text": "",
+    "full_text": "\n[server]\nhost = \"localhost\"\nport = 8080\nenabled = true\n\n[database]\nurl = \"postgresql://localhost/mydb\"\nmax_connections = 10\n\n[[workers]]\nname = \"worker1\"\nthreads = 4\n\n[[workers]]\nname = \"worker2\"\nthreads = 2\n",
+    "start_position": {
+      "row": 0,
+      "column": 0
+    },
+    "end_position": {
+      "row": 17,
+      "column": 0
+    },
+    "is_leaf": false,
+    "child_count": 4,
+    "children": [
+      {
+        "name": "table",
+        "text": "",
+        "full_text": "[server]\nhost = \"localhost\"\nport = 8080\nenabled = true\n\n",
+        "start_position": {
+          "row": 1,
+          "column": 0
+        },
+        "end_position": {
+          "row": 6,
+          "column": 0
+        },
+        "is_leaf": false,
+        "child_count": 6,
+        "children": [
+          {
+            "name": "[",
+            "text": "[",
+            "full_text": "[",
+            "start_position": {
+              "row": 1,
+              "column": 0
+            },
+            "end_position": {
+              "row": 1,
+              "column": 1
+            },
+            "is_leaf": true,
+            "child_count": 0,
+            "children": []
+          },
+          {
+            "name": "bare_key",
+            "text": "server",
+            "full_text": "server",
+            "start_position": {
+              "row": 1,
+              "column": 1
+            },
+            "end_position": {
+              "row": 1,
+              "column": 7
+            },
+            "is_leaf": true,
+            "child_count": 0,
+            "children": []
+          },
+          {
+            "name": "]",
+            "text": "]",
+            "full_text": "]",
+            "start_position": {
+              "row": 1,
+              "column": 7
+            },
+            "end_position": {
+              "row": 1,
+              "column": 8
+            },
+            "is_leaf": true,
+            "child_count": 0,
+            "children": []
+          },
+          {
+            "name": "pair",
+            "text": "",
+            "full_text": "host = \"localhost\"",
+            "start_position": {
+              "row": 2,
+              "column": 0
+            },
+            "end_position": {
+              "row": 2,
+              "column": 18
+            },
+            "is_leaf": false,
+            "child_count": 3,
+            "children": [
+              {
+                "name": "bare_key",
+                "text": "host",
+                "full_text": "host",
+                "start_position": {
+                  "row": 2,
+                  "column": 0
+                },
+                "end_position": {
+                  "row": 2,
+                  "column": 4
+                },
+                "is_leaf": true,
+                "child_count": 0,
+                "children": []
+              },
+              {
+                "name": "=",
+                "text": "=",
+                "full_text": "=",
+                "start_position": {
+                  "row": 2,
+                  "column": 5
+                },
+                "end_position": {
+                  "row": 2,
+                  "column": 6
+                },
+                "is_leaf": true,
+                "child_count": 0,
+                "children": []
+              },
+              {
+                "name": "string",
+                "text": "",
+                "full_text": "\"localhost\"",
+                "start_position": {
+                  "row": 2,
+                  "column": 7
+                },
+                "end_position": {
+                  "row": 2,
+                  "column": 18
+                },
+                "is_leaf": false,
+                "child_count": 2,
+                "children": [
+                  {
+                    "name": "\"",
+                    "text": "\"",
+                    "full_text": "\"",
+                    "start_position": {
+                      "row": 2,
+                      "column": 7
+                    },
+                    "end_position": {
+                      "row": 2,
+                      "column": 8
+                    },
+                    "is_leaf": true,
+                    "child_count": 0,
+                    "children": []
+                  },
+                  {
+                    "name": "\"",
+                    "text": "\"",
+                    "full_text": "\"",
+                    "start_position": {
+                      "row": 2,
+                      "column": 17
+                    },
+                    "end_position": {
+                      "row": 2,
+                      "column": 18
+                    },
+                    "is_leaf": true,
+                    "child_count": 0,
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "pair",
+            "text": "",
+            "full_text": "port = 8080",
+            "start_position": {
+              "row": 3,
+              "column": 0
+            },
+            "end_position": {
+              "row": 3,
+              "column": 11
+            },
+            "is_leaf": false,
+            "child_count": 3,
+            "children": [
+              {
+                "name": "bare_key",
+                "text": "port",
+                "full_text": "port",
+                "start_position": {
+                  "row": 3,
+                  "column": 0
+                },
+                "end_position": {
+                  "row": 3,
+                  "column": 4
+                },
+                "is_leaf": true,
+                "child_count": 0,
+                "children": []
+              },
+              {
+                "name": "=",
+                "text": "=",
+                "full_text": "=",
+                "start_position": {
+                  "row": 3,
+                  "column": 5
+                },
+                "end_position": {
+                  "row": 3,
+                  "column": 6
+                },
+                "is_leaf": true,
+                "child_count": 0,
+                "children": []
+              },
+              {
+                "name": "integer",
+                "text": "8080",
+                "full_text": "8080",
+                "start_position": {
+                  "row": 3,
+                  "column": 7
+                },
+                "end_position": {
+                  "row": 3,
+                  "column": 11
+                },
+                "is_leaf": true,
+                "child_count": 0,
+                "children": []
+              }
+            ]
+          },
+          {
+            "name": "pair",
+            "text": "",
+            "full_text": "enabled = true",
+            "start_position": {
+              "row": 4,
+              "column": 0
+            },
+            "end_position": {
+              "row": 4,
+              "column": 14
+            },
+            "is_leaf": false,
+            "child_count": 3,
+            "children": [
+              {
+                "name": "bare_key",
+                "text": "enabled",
+                "full_text": "enabled",
+                "start_position": {
+                  "row": 4,
+                  "column": 0
+                },
+                "end_position": {
+                  "row": 4,
+                  "column": 7
+                },
+                "is_leaf": true,
+                "child_count": 0,
+                "children": []
+              },
+              {
+                "name": "=",
+                "text": "=",
+                "full_text": "=",
+                "start_position": {
+                  "row": 4,
+                  "column": 8
+                },
+                "end_position": {
+                  "row": 4,
+                  "column": 9
+                },
+                "is_leaf": true,
+                "child_count": 0,
+                "children": []
+              },
+              {
+                "name": "boolean",
+                "text": "true",
+                "full_text": "true",
+                "start_position": {
+                  "row": 4,
+                  "column": 10
+                },
+                "end_position": {
+                  "row": 4,
+                  "column": 14
+                },
+                "is_leaf": true,
+                "child_count": 0,
+                "children": []
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "table",
+        "text": "",
+        "full_text": "[database]\nurl = \"postgresql://localhost/mydb\"\nmax_connections = 10\n\n",
+        "start_position": {
+          "row": 6,
+          "column": 0
+        },
+        "end_position": {
+          "row": 10,
+          "column": 0
+        },
+        "is_leaf": false,
+        "child_count": 5,
+        "children": [
+          {
+            "name": "[",
+            "text": "[",
+            "full_text": "[",
+            "start_position": {
+              "row": 6,
+              "column": 0
+            },
+            "end_position": {
+              "row": 6,
+              "column": 1
+            },
+            "is_leaf": true,
+            "child_count": 0,
+            "children": []
+          },
+          {
+            "name": "bare_key",
+            "text": "database",
+            "full_text": "database",
+            "start_position": {
+              "row": 6,
+              "column": 1
+            },
+            "end_position": {
+              "row": 6,
+              "column": 9
+            },
+            "is_leaf": true,
+            "child_count": 0,
+            "children": []
+          },
+          {
+            "name": "]",
+            "text": "]",
+            "full_text": "]",
+            "start_position": {
+              "row": 6,
+              "column": 9
+            },
+            "end_position": {
+              "row": 6,
+              "column": 10
+            },
+            "is_leaf": true,
+            "child_count": 0,
+            "children": []
+          },
+          {
+            "name": "pair",
+            "text": "",
+            "full_text": "url = \"postgresql://localhost/mydb\"",
+            "start_position": {
+              "row": 7,
+              "column": 0
+            },
+            "end_position": {
+              "row": 7,
+              "column": 35
+            },
+            "is_leaf": false,
+            "child_count": 3,
+            "children": [
+              {
+                "name": "bare_key",
+                "text": "url",
+                "full_text": "url",
+                "start_position": {
+                  "row": 7,
+                  "column": 0
+                },
+                "end_position": {
+                  "row": 7,
+                  "column": 3
+                },
+                "is_leaf": true,
+                "child_count": 0,
+                "children": []
+              },
+              {
+                "name": "=",
+                "text": "=",
+                "full_text": "=",
+                "start_position": {
+                  "row": 7,
+                  "column": 4
+                },
+                "end_position": {
+                  "row": 7,
+                  "column": 5
+                },
+                "is_leaf": true,
+                "child_count": 0,
+                "children": []
+              },
+              {
+                "name": "string",
+                "text": "",
+                "full_text": "\"postgresql://localhost/mydb\"",
+                "start_position": {
+                  "row": 7,
+                  "column": 6
+                },
+                "end_position": {
+                  "row": 7,
+                  "column": 35
+                },
+                "is_leaf": false,
+                "child_count": 2,
+                "children": [
+                  {
+                    "name": "\"",
+                    "text": "\"",
+                    "full_text": "\"",
+                    "start_position": {
+                      "row": 7,
+                      "column": 6
+                    },
+                    "end_position": {
+                      "row": 7,
+                      "column": 7
+                    },
+                    "is_leaf": true,
+                    "child_count": 0,
+                    "children": []
+                  },
+                  {
+                    "name": "\"",
+                    "text": "\"",
+                    "full_text": "\"",
+                    "start_position": {
+                      "row": 7,
+                      "column": 34
+                    },
+                    "end_position": {
+                      "row": 7,
+                      "column": 35
+                    },
+                    "is_leaf": true,
+                    "child_count": 0,
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "pair",
+            "text": "",
+            "full_text": "max_connections = 10",
+            "start_position": {
+              "row": 8,
+              "column": 0
+            },
+            "end_position": {
+              "row": 8,
+              "column": 20
+            },
+            "is_leaf": false,
+            "child_count": 3,
+            "children": [
+              {
+                "name": "bare_key",
+                "text": "max_connections",
+                "full_text": "max_connections",
+                "start_position": {
+                  "row": 8,
+                  "column": 0
+                },
+                "end_position": {
+                  "row": 8,
+                  "column": 15
+                },
+                "is_leaf": true,
+                "child_count": 0,
+                "children": []
+              },
+              {
+                "name": "=",
+                "text": "=",
+                "full_text": "=",
+                "start_position": {
+                  "row": 8,
+                  "column": 16
+                },
+                "end_position": {
+                  "row": 8,
+                  "column": 17
+                },
+                "is_leaf": true,
+                "child_count": 0,
+                "children": []
+              },
+              {
+                "name": "integer",
+                "text": "10",
+                "full_text": "10",
+                "start_position": {
+                  "row": 8,
+                  "column": 18
+                },
+                "end_position": {
+                  "row": 8,
+                  "column": 20
+                },
+                "is_leaf": true,
+                "child_count": 0,
+                "children": []
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "table_array_element",
+        "text": "",
+        "full_text": "[[workers]]\nname = \"worker1\"\nthreads = 4\n\n",
+        "start_position": {
+          "row": 10,
+          "column": 0
+        },
+        "end_position": {
+          "row": 14,
+          "column": 0
+        },
+        "is_leaf": false,
+        "child_count": 5,
+        "children": [
+          {
+            "name": "[[",
+            "text": "[[",
+            "full_text": "[[",
+            "start_position": {
+              "row": 10,
+              "column": 0
+            },
+            "end_position": {
+              "row": 10,
+              "column": 2
+            },
+            "is_leaf": true,
+            "child_count": 0,
+            "children": []
+          },
+          {
+            "name": "bare_key",
+            "text": "workers",
+            "full_text": "workers",
+            "start_position": {
+              "row": 10,
+              "column": 2
+            },
+            "end_position": {
+              "row": 10,
+              "column": 9
+            },
+            "is_leaf": true,
+            "child_count": 0,
+            "children": []
+          },
+          {
+            "name": "]]",
+            "text": "]]",
+            "full_text": "]]",
+            "start_position": {
+              "row": 10,
+              "column": 9
+            },
+            "end_position": {
+              "row": 10,
+              "column": 11
+            },
+            "is_leaf": true,
+            "child_count": 0,
+            "children": []
+          },
+          {
+            "name": "pair",
+            "text": "",
+            "full_text": "name = \"worker1\"",
+            "start_position": {
+              "row": 11,
+              "column": 0
+            },
+            "end_position": {
+              "row": 11,
+              "column": 16
+            },
+            "is_leaf": false,
+            "child_count": 3,
+            "children": [
+              {
+                "name": "bare_key",
+                "text": "name",
+                "full_text": "name",
+                "start_position": {
+                  "row": 11,
+                  "column": 0
+                },
+                "end_position": {
+                  "row": 11,
+                  "column": 4
+                },
+                "is_leaf": true,
+                "child_count": 0,
+                "children": []
+              },
+              {
+                "name": "=",
+                "text": "=",
+                "full_text": "=",
+                "start_position": {
+                  "row": 11,
+                  "column": 5
+                },
+                "end_position": {
+                  "row": 11,
+                  "column": 6
+                },
+                "is_leaf": true,
+                "child_count": 0,
+                "children": []
+              },
+              {
+                "name": "string",
+                "text": "",
+                "full_text": "\"worker1\"",
+                "start_position": {
+                  "row": 11,
+                  "column": 7
+                },
+                "end_position": {
+                  "row": 11,
+                  "column": 16
+                },
+                "is_leaf": false,
+                "child_count": 2,
+                "children": [
+                  {
+                    "name": "\"",
+                    "text": "\"",
+                    "full_text": "\"",
+                    "start_position": {
+                      "row": 11,
+                      "column": 7
+                    },
+                    "end_position": {
+                      "row": 11,
+                      "column": 8
+                    },
+                    "is_leaf": true,
+                    "child_count": 0,
+                    "children": []
+                  },
+                  {
+                    "name": "\"",
+                    "text": "\"",
+                    "full_text": "\"",
+                    "start_position": {
+                      "row": 11,
+                      "column": 15
+                    },
+                    "end_position": {
+                      "row": 11,
+                      "column": 16
+                    },
+                    "is_leaf": true,
+                    "child_count": 0,
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "pair",
+            "text": "",
+            "full_text": "threads = 4",
+            "start_position": {
+              "row": 12,
+              "column": 0
+            },
+            "end_position": {
+              "row": 12,
+              "column": 11
+            },
+            "is_leaf": false,
+            "child_count": 3,
+            "children": [
+              {
+                "name": "bare_key",
+                "text": "threads",
+                "full_text": "threads",
+                "start_position": {
+                  "row": 12,
+                  "column": 0
+                },
+                "end_position": {
+                  "row": 12,
+                  "column": 7
+                },
+                "is_leaf": true,
+                "child_count": 0,
+                "children": []
+              },
+              {
+                "name": "=",
+                "text": "=",
+                "full_text": "=",
+                "start_position": {
+                  "row": 12,
+                  "column": 8
+                },
+                "end_position": {
+                  "row": 12,
+                  "column": 9
+                },
+                "is_leaf": true,
+                "child_count": 0,
+                "children": []
+              },
+              {
+                "name": "integer",
+                "text": "4",
+                "full_text": "4",
+                "start_position": {
+                  "row": 12,
+                  "column": 10
+                },
+                "end_position": {
+                  "row": 12,
+                  "column": 11
+                },
+                "is_leaf": true,
+                "child_count": 0,
+                "children": []
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "table_array_element",
+        "text": "",
+        "full_text": "[[workers]]\nname = \"worker2\"\nthreads = 2\n",
+        "start_position": {
+          "row": 14,
+          "column": 0
+        },
+        "end_position": {
+          "row": 17,
+          "column": 0
+        },
+        "is_leaf": false,
+        "child_count": 5,
+        "children": [
+          {
+            "name": "[[",
+            "text": "[[",
+            "full_text": "[[",
+            "start_position": {
+              "row": 14,
+              "column": 0
+            },
+            "end_position": {
+              "row": 14,
+              "column": 2
+            },
+            "is_leaf": true,
+            "child_count": 0,
+            "children": []
+          },
+          {
+            "name": "bare_key",
+            "text": "workers",
+            "full_text": "workers",
+            "start_position": {
+              "row": 14,
+              "column": 2
+            },
+            "end_position": {
+              "row": 14,
+              "column": 9
+            },
+            "is_leaf": true,
+            "child_count": 0,
+            "children": []
+          },
+          {
+            "name": "]]",
+            "text": "]]",
+            "full_text": "]]",
+            "start_position": {
+              "row": 14,
+              "column": 9
+            },
+            "end_position": {
+              "row": 14,
+              "column": 11
+            },
+            "is_leaf": true,
+            "child_count": 0,
+            "children": []
+          },
+          {
+            "name": "pair",
+            "text": "",
+            "full_text": "name = \"worker2\"",
+            "start_position": {
+              "row": 15,
+              "column": 0
+            },
+            "end_position": {
+              "row": 15,
+              "column": 16
+            },
+            "is_leaf": false,
+            "child_count": 3,
+            "children": [
+              {
+                "name": "bare_key",
+                "text": "name",
+                "full_text": "name",
+                "start_position": {
+                  "row": 15,
+                  "column": 0
+                },
+                "end_position": {
+                  "row": 15,
+                  "column": 4
+                },
+                "is_leaf": true,
+                "child_count": 0,
+                "children": []
+              },
+              {
+                "name": "=",
+                "text": "=",
+                "full_text": "=",
+                "start_position": {
+                  "row": 15,
+                  "column": 5
+                },
+                "end_position": {
+                  "row": 15,
+                  "column": 6
+                },
+                "is_leaf": true,
+                "child_count": 0,
+                "children": []
+              },
+              {
+                "name": "string",
+                "text": "",
+                "full_text": "\"worker2\"",
+                "start_position": {
+                  "row": 15,
+                  "column": 7
+                },
+                "end_position": {
+                  "row": 15,
+                  "column": 16
+                },
+                "is_leaf": false,
+                "child_count": 2,
+                "children": [
+                  {
+                    "name": "\"",
+                    "text": "\"",
+                    "full_text": "\"",
+                    "start_position": {
+                      "row": 15,
+                      "column": 7
+                    },
+                    "end_position": {
+                      "row": 15,
+                      "column": 8
+                    },
+                    "is_leaf": true,
+                    "child_count": 0,
+                    "children": []
+                  },
+                  {
+                    "name": "\"",
+                    "text": "\"",
+                    "full_text": "\"",
+                    "start_position": {
+                      "row": 15,
+                      "column": 15
+                    },
+                    "end_position": {
+                      "row": 15,
+                      "column": 16
+                    },
+                    "is_leaf": true,
+                    "child_count": 0,
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "pair",
+            "text": "",
+            "full_text": "threads = 2",
+            "start_position": {
+              "row": 16,
+              "column": 0
+            },
+            "end_position": {
+              "row": 16,
+              "column": 11
+            },
+            "is_leaf": false,
+            "child_count": 3,
+            "children": [
+              {
+                "name": "bare_key",
+                "text": "threads",
+                "full_text": "threads",
+                "start_position": {
+                  "row": 16,
+                  "column": 0
+                },
+                "end_position": {
+                  "row": 16,
+                  "column": 7
+                },
+                "is_leaf": true,
+                "child_count": 0,
+                "children": []
+              },
+              {
+                "name": "=",
+                "text": "=",
+                "full_text": "=",
+                "start_position": {
+                  "row": 16,
+                  "column": 8
+                },
+                "end_position": {
+                  "row": 16,
+                  "column": 9
+                },
+                "is_leaf": true,
+                "child_count": 0,
+                "children": []
+              },
+              {
+                "name": "integer",
+                "text": "2",
+                "full_text": "2",
+                "start_position": {
+                  "row": 16,
+                  "column": 10
+                },
+                "end_position": {
+                  "row": 16,
+                  "column": 11
+                },
+                "is_leaf": true,
+                "child_count": 0,
+                "children": []
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,321 @@
+{
+  "metadata": {
+    "name": "python_simple_function",
+    "language": "python",
+    "description": "Simple Python function with arithmetic",
+    "source_length": 64,
+    "node_count": 19
+  },
+  "source_code": "def calculate_area(radius):\n    return 3.14159 * radius * radius",
+  "tree": {
+    "name": "module",
+    "text": "",
+    "full_text": "def calculate_area(radius):\n    return 3.14159 * radius * radius",
+    "start_position": {
+      "row": 0,
+      "column": 0
+    },
+    "end_position": {
+      "row": 1,
+      "column": 36
+    },
+    "is_leaf": false,
+    "child_count": 1,
+    "children": [
+      {
+        "name": "function_definition",
+        "text": "",
+        "full_text": "def calculate_area(radius):\n    return 3.14159 * radius * radius",
+        "start_position": {
+          "row": 0,
+          "column": 0
+        },
+        "end_position": {
+          "row": 1,
+          "column": 36
+        },
+        "is_leaf": false,
+        "child_count": 5,
+        "children": [
+          {
+            "name": "def",
+            "text": "def",
+            "full_text": "def",
+            "start_position": {
+              "row": 0,
+              "column": 0
+            },
+            "end_position": {
+              "row": 0,
+              "column": 3
+            },
+            "is_leaf": true,
+            "child_count": 0,
+            "children": []
+          },
+          {
+            "name": "identifier",
+            "text": "calculate_area",
+            "full_text": "calculate_area",
+            "start_position": {
+              "row": 0,
+              "column": 4
+            },
+            "end_position": {
+              "row": 0,
+              "column": 18
+            },
+            "is_leaf": true,
+            "child_count": 0,
+            "children": []
+          },
+          {
+            "name": "parameters",
+            "text": "",
+            "full_text": "(radius)",
+            "start_position": {
+              "row": 0,
+              "column": 18
+            },
+            "end_position": {
+              "row": 0,
+              "column": 26
+            },
+            "is_leaf": false,
+            "child_count": 3,
+            "children": [
+              {
+                "name": "(",
+                "text": "(",
+                "full_text": "(",
+                "start_position": {
+                  "row": 0,
+                  "column": 18
+                },
+                "end_position": {
+                  "row": 0,
+                  "column": 19
+                },
+                "is_leaf": true,
+                "child_count": 0,
+                "children": []
+              },
+              {
+                "name": "identifier",
+                "text": "radius",
+                "full_text": "radius",
+                "start_position": {
+                  "row": 0,
+                  "column": 19
+                },
+                "end_position": {
+                  "row": 0,
+                  "column": 25
+                },
+                "is_leaf": true,
+                "child_count": 0,
+                "children": []
+              },
+              {
+                "name": ")",
+                "text": ")",
+                "full_text": ")",
+                "start_position": {
+                  "row": 0,
+                  "column": 25
+                },
+                "end_position": {
+                  "row": 0,
+                  "column": 26
+                },
+                "is_leaf": true,
+                "child_count": 0,
+                "children": []
+              }
+            ]
+          },
+          {
+            "name": ":",
+            "text": ":",
+            "full_text": ":",
+            "start_position": {
+              "row": 0,
+              "column": 26
+            },
+            "end_position": {
+              "row": 0,
+              "column": 27
+            },
+            "is_leaf": true,
+            "child_count": 0,
+            "children": []
+          },
+          {
+            "name": "block",
+            "text": "",
+            "full_text": "return 3.14159 * radius * radius",
+            "start_position": {
+              "row": 1,
+              "column": 4
+            },
+            "end_position": {
+              "row": 1,
+              "column": 36
+            },
+            "is_leaf": false,
+            "child_count": 1,
+            "children": [
+              {
+                "name": "return_statement",
+                "text": "",
+                "full_text": "return 3.14159 * radius * radius",
+                "start_position": {
+                  "row": 1,
+                  "column": 4
+                },
+                "end_position": {
+                  "row": 1,
+                  "column": 36
+                },
+                "is_leaf": false,
+                "child_count": 2,
+                "children": [
+                  {
+                    "name": "return",
+                    "text": "return",
+                    "full_text": "return",
+                    "start_position": {
+                      "row": 1,
+                      "column": 4
+                    },
+                    "end_position": {
+                      "row": 1,
+                      "column": 10
+                    },
+                    "is_leaf": true,
+                    "child_count": 0,
+                    "children": []
+                  },
+                  {
+                    "name": "binary_operator",
+                    "text": "",
+                    "full_text": "3.14159 * radius * radius",
+                    "start_position": {
+                      "row": 1,
+                      "column": 11
+                    },
+                    "end_position": {
+                      "row": 1,
+                      "column": 36
+                    },
+                    "is_leaf": false,
+                    "child_count": 3,
+                    "children": [
+                      {
+                        "name": "binary_operator",
+                        "text": "",
+                        "full_text": "3.14159 * radius",
+                        "start_position": {
+                          "row": 1,
+                          "column": 11
+                        },
+                        "end_position": {
+                          "row": 1,
+                          "column": 27
+                        },
+                        "is_leaf": false,
+                        "child_count": 3,
+                        "children": [
+                          {
+                            "name": "float",
+                            "text": "3.14159",
+                            "full_text": "3.14159",
+                            "start_position": {
+                              "row": 1,
+                              "column": 11
+                            },
+                            "end_position": {
+                              "row": 1,
+                              "column": 18
+                            },
+                            "is_leaf": true,
+                            "child_count": 0,
+                            "children": []
+                          },
+                          {
+                            "name": "*",
+                            "text": "*",
+                            "full_text": "*",
+                            "start_position": {
+                              "row": 1,
+                              "column": 19
+                            },
+                            "end_position": {
+                              "row": 1,
+                              "column": 20
+                            },
+                            "is_leaf": true,
+                            "child_count": 0,
+                            "children": []
+                          },
+                          {
+                            "name": "identifier",
+                            "text": "radius",
+                            "full_text": "radius",
+                            "start_position": {
+                              "row": 1,
+                              "column": 21
+                            },
+                            "end_position": {
+                              "row": 1,
+                              "column": 27
+                            },
+                            "is_leaf": true,
+                            "child_count": 0,
+                            "children": []
+                          }
+                        ]
+                      },
+                      {
+                        "name": "*",
+                        "text": "*",
+                        "full_text": "*",
+                        "start_position": {
+                          "row": 1,
+                          "column": 28
+                        },
+                        "end_position": {
+                          "row": 1,
+                          "column": 29
+                        },
+                        "is_leaf": true,
+                        "child_count": 0,
+                        "children": []
+                      },
+                      {
+                        "name": "identifier",
+                        "text": "radius",
+                        "full_text": "radius",
+                        "start_position": {
+                          "row": 1,
+                          "column": 30
+                        },
+                        "end_position": {
+                          "row": 1,
+                          "column": 36
+                        },
+                        "is_leaf": true,
+                        "child_count": 0,
+                        "children": []
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

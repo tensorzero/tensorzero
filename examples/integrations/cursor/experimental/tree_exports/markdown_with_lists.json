@@ -1,0 +1,931 @@
+{
+  "metadata": {
+    "name": "markdown_with_lists",
+    "language": "markdown",
+    "description": "Markdown with task lists and blockquotes",
+    "source_length": 248,
+    "node_count": 56
+  },
+  "source_code": "\n# Task List\n\n## TODO Items\n\n- [x] Complete project setup\n- [ ] Write unit tests\n- [ ] Deploy to production\n\n## Features\n\n1. User authentication\n2. Data persistence\n3. Real-time updates\n\n> **Note**: This is a blockquote with important information.\n",
+  "tree": {
+    "name": "document",
+    "text": "",
+    "full_text": "\n# Task List\n\n## TODO Items\n\n- [x] Complete project setup\n- [ ] Write unit tests\n- [ ] Deploy to production\n\n## Features\n\n1. User authentication\n2. Data persistence\n3. Real-time updates\n\n> **Note**: This is a blockquote with important information.\n",
+    "start_position": {
+      "row": 0,
+      "column": 0
+    },
+    "end_position": {
+      "row": 16,
+      "column": 0
+    },
+    "is_leaf": false,
+    "child_count": 2,
+    "children": [
+      {
+        "name": "section",
+        "text": "\n",
+        "full_text": "\n",
+        "start_position": {
+          "row": 0,
+          "column": 0
+        },
+        "end_position": {
+          "row": 1,
+          "column": 0
+        },
+        "is_leaf": true,
+        "child_count": 0,
+        "children": []
+      },
+      {
+        "name": "section",
+        "text": "",
+        "full_text": "# Task List\n\n## TODO Items\n\n- [x] Complete project setup\n- [ ] Write unit tests\n- [ ] Deploy to production\n\n## Features\n\n1. User authentication\n2. Data persistence\n3. Real-time updates\n\n> **Note**: This is a blockquote with important information.\n",
+        "start_position": {
+          "row": 1,
+          "column": 0
+        },
+        "end_position": {
+          "row": 16,
+          "column": 0
+        },
+        "is_leaf": false,
+        "child_count": 3,
+        "children": [
+          {
+            "name": "atx_heading",
+            "text": "",
+            "full_text": "# Task List\n",
+            "start_position": {
+              "row": 1,
+              "column": 0
+            },
+            "end_position": {
+              "row": 2,
+              "column": 0
+            },
+            "is_leaf": false,
+            "child_count": 2,
+            "children": [
+              {
+                "name": "atx_h1_marker",
+                "text": "#",
+                "full_text": "#",
+                "start_position": {
+                  "row": 1,
+                  "column": 0
+                },
+                "end_position": {
+                  "row": 1,
+                  "column": 1
+                },
+                "is_leaf": true,
+                "child_count": 0,
+                "children": []
+              },
+              {
+                "name": "inline",
+                "text": "Task List",
+                "full_text": "Task List",
+                "start_position": {
+                  "row": 1,
+                  "column": 2
+                },
+                "end_position": {
+                  "row": 1,
+                  "column": 11
+                },
+                "is_leaf": true,
+                "child_count": 0,
+                "children": []
+              }
+            ]
+          },
+          {
+            "name": "section",
+            "text": "",
+            "full_text": "## TODO Items\n\n- [x] Complete project setup\n- [ ] Write unit tests\n- [ ] Deploy to production\n\n",
+            "start_position": {
+              "row": 3,
+              "column": 0
+            },
+            "end_position": {
+              "row": 9,
+              "column": 0
+            },
+            "is_leaf": false,
+            "child_count": 2,
+            "children": [
+              {
+                "name": "atx_heading",
+                "text": "",
+                "full_text": "## TODO Items\n",
+                "start_position": {
+                  "row": 3,
+                  "column": 0
+                },
+                "end_position": {
+                  "row": 4,
+                  "column": 0
+                },
+                "is_leaf": false,
+                "child_count": 2,
+                "children": [
+                  {
+                    "name": "atx_h2_marker",
+                    "text": "##",
+                    "full_text": "##",
+                    "start_position": {
+                      "row": 3,
+                      "column": 0
+                    },
+                    "end_position": {
+                      "row": 3,
+                      "column": 2
+                    },
+                    "is_leaf": true,
+                    "child_count": 0,
+                    "children": []
+                  },
+                  {
+                    "name": "inline",
+                    "text": "TODO Items",
+                    "full_text": "TODO Items",
+                    "start_position": {
+                      "row": 3,
+                      "column": 3
+                    },
+                    "end_position": {
+                      "row": 3,
+                      "column": 13
+                    },
+                    "is_leaf": true,
+                    "child_count": 0,
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "name": "list",
+                "text": "",
+                "full_text": "- [x] Complete project setup\n- [ ] Write unit tests\n- [ ] Deploy to production\n\n",
+                "start_position": {
+                  "row": 5,
+                  "column": 0
+                },
+                "end_position": {
+                  "row": 9,
+                  "column": 0
+                },
+                "is_leaf": false,
+                "child_count": 3,
+                "children": [
+                  {
+                    "name": "list_item",
+                    "text": "",
+                    "full_text": "- [x] Complete project setup\n",
+                    "start_position": {
+                      "row": 5,
+                      "column": 0
+                    },
+                    "end_position": {
+                      "row": 6,
+                      "column": 0
+                    },
+                    "is_leaf": false,
+                    "child_count": 3,
+                    "children": [
+                      {
+                        "name": "list_marker_minus",
+                        "text": "- ",
+                        "full_text": "- ",
+                        "start_position": {
+                          "row": 5,
+                          "column": 0
+                        },
+                        "end_position": {
+                          "row": 5,
+                          "column": 2
+                        },
+                        "is_leaf": true,
+                        "child_count": 0,
+                        "children": []
+                      },
+                      {
+                        "name": "task_list_marker_checked",
+                        "text": "[x]",
+                        "full_text": "[x]",
+                        "start_position": {
+                          "row": 5,
+                          "column": 2
+                        },
+                        "end_position": {
+                          "row": 5,
+                          "column": 5
+                        },
+                        "is_leaf": true,
+                        "child_count": 0,
+                        "children": []
+                      },
+                      {
+                        "name": "paragraph",
+                        "text": "",
+                        "full_text": "Complete project setup\n",
+                        "start_position": {
+                          "row": 5,
+                          "column": 6
+                        },
+                        "end_position": {
+                          "row": 6,
+                          "column": 0
+                        },
+                        "is_leaf": false,
+                        "child_count": 1,
+                        "children": [
+                          {
+                            "name": "inline",
+                            "text": "Complete project setup",
+                            "full_text": "Complete project setup",
+                            "start_position": {
+                              "row": 5,
+                              "column": 6
+                            },
+                            "end_position": {
+                              "row": 5,
+                              "column": 28
+                            },
+                            "is_leaf": true,
+                            "child_count": 0,
+                            "children": []
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "name": "list_item",
+                    "text": "",
+                    "full_text": "- [ ] Write unit tests\n",
+                    "start_position": {
+                      "row": 6,
+                      "column": 0
+                    },
+                    "end_position": {
+                      "row": 7,
+                      "column": 0
+                    },
+                    "is_leaf": false,
+                    "child_count": 3,
+                    "children": [
+                      {
+                        "name": "list_marker_minus",
+                        "text": "- ",
+                        "full_text": "- ",
+                        "start_position": {
+                          "row": 6,
+                          "column": 0
+                        },
+                        "end_position": {
+                          "row": 6,
+                          "column": 2
+                        },
+                        "is_leaf": true,
+                        "child_count": 0,
+                        "children": []
+                      },
+                      {
+                        "name": "task_list_marker_unchecked",
+                        "text": "[ ]",
+                        "full_text": "[ ]",
+                        "start_position": {
+                          "row": 6,
+                          "column": 2
+                        },
+                        "end_position": {
+                          "row": 6,
+                          "column": 5
+                        },
+                        "is_leaf": true,
+                        "child_count": 0,
+                        "children": []
+                      },
+                      {
+                        "name": "paragraph",
+                        "text": "",
+                        "full_text": "Write unit tests\n",
+                        "start_position": {
+                          "row": 6,
+                          "column": 6
+                        },
+                        "end_position": {
+                          "row": 7,
+                          "column": 0
+                        },
+                        "is_leaf": false,
+                        "child_count": 1,
+                        "children": [
+                          {
+                            "name": "inline",
+                            "text": "Write unit tests",
+                            "full_text": "Write unit tests",
+                            "start_position": {
+                              "row": 6,
+                              "column": 6
+                            },
+                            "end_position": {
+                              "row": 6,
+                              "column": 22
+                            },
+                            "is_leaf": true,
+                            "child_count": 0,
+                            "children": []
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "name": "list_item",
+                    "text": "",
+                    "full_text": "- [ ] Deploy to production\n\n",
+                    "start_position": {
+                      "row": 7,
+                      "column": 0
+                    },
+                    "end_position": {
+                      "row": 9,
+                      "column": 0
+                    },
+                    "is_leaf": false,
+                    "child_count": 3,
+                    "children": [
+                      {
+                        "name": "list_marker_minus",
+                        "text": "- ",
+                        "full_text": "- ",
+                        "start_position": {
+                          "row": 7,
+                          "column": 0
+                        },
+                        "end_position": {
+                          "row": 7,
+                          "column": 2
+                        },
+                        "is_leaf": true,
+                        "child_count": 0,
+                        "children": []
+                      },
+                      {
+                        "name": "task_list_marker_unchecked",
+                        "text": "[ ]",
+                        "full_text": "[ ]",
+                        "start_position": {
+                          "row": 7,
+                          "column": 2
+                        },
+                        "end_position": {
+                          "row": 7,
+                          "column": 5
+                        },
+                        "is_leaf": true,
+                        "child_count": 0,
+                        "children": []
+                      },
+                      {
+                        "name": "paragraph",
+                        "text": "",
+                        "full_text": "Deploy to production\n",
+                        "start_position": {
+                          "row": 7,
+                          "column": 6
+                        },
+                        "end_position": {
+                          "row": 8,
+                          "column": 0
+                        },
+                        "is_leaf": false,
+                        "child_count": 2,
+                        "children": [
+                          {
+                            "name": "inline",
+                            "text": "Deploy to production",
+                            "full_text": "Deploy to production",
+                            "start_position": {
+                              "row": 7,
+                              "column": 6
+                            },
+                            "end_position": {
+                              "row": 7,
+                              "column": 26
+                            },
+                            "is_leaf": true,
+                            "child_count": 0,
+                            "children": []
+                          },
+                          {
+                            "name": "block_continuation",
+                            "text": "",
+                            "full_text": "",
+                            "start_position": {
+                              "row": 8,
+                              "column": 0
+                            },
+                            "end_position": {
+                              "row": 8,
+                              "column": 0
+                            },
+                            "is_leaf": true,
+                            "child_count": 0,
+                            "children": []
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "section",
+            "text": "",
+            "full_text": "## Features\n\n1. User authentication\n2. Data persistence\n3. Real-time updates\n\n> **Note**: This is a blockquote with important information.\n",
+            "start_position": {
+              "row": 9,
+              "column": 0
+            },
+            "end_position": {
+              "row": 16,
+              "column": 0
+            },
+            "is_leaf": false,
+            "child_count": 3,
+            "children": [
+              {
+                "name": "atx_heading",
+                "text": "",
+                "full_text": "## Features\n",
+                "start_position": {
+                  "row": 9,
+                  "column": 0
+                },
+                "end_position": {
+                  "row": 10,
+                  "column": 0
+                },
+                "is_leaf": false,
+                "child_count": 2,
+                "children": [
+                  {
+                    "name": "atx_h2_marker",
+                    "text": "##",
+                    "full_text": "##",
+                    "start_position": {
+                      "row": 9,
+                      "column": 0
+                    },
+                    "end_position": {
+                      "row": 9,
+                      "column": 2
+                    },
+                    "is_leaf": true,
+                    "child_count": 0,
+                    "children": []
+                  },
+                  {
+                    "name": "inline",
+                    "text": "Features",
+                    "full_text": "Features",
+                    "start_position": {
+                      "row": 9,
+                      "column": 3
+                    },
+                    "end_position": {
+                      "row": 9,
+                      "column": 11
+                    },
+                    "is_leaf": true,
+                    "child_count": 0,
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "name": "list",
+                "text": "",
+                "full_text": "1. User authentication\n2. Data persistence\n3. Real-time updates\n\n",
+                "start_position": {
+                  "row": 11,
+                  "column": 0
+                },
+                "end_position": {
+                  "row": 15,
+                  "column": 0
+                },
+                "is_leaf": false,
+                "child_count": 3,
+                "children": [
+                  {
+                    "name": "list_item",
+                    "text": "",
+                    "full_text": "1. User authentication\n",
+                    "start_position": {
+                      "row": 11,
+                      "column": 0
+                    },
+                    "end_position": {
+                      "row": 12,
+                      "column": 0
+                    },
+                    "is_leaf": false,
+                    "child_count": 2,
+                    "children": [
+                      {
+                        "name": "list_marker_dot",
+                        "text": "1. ",
+                        "full_text": "1. ",
+                        "start_position": {
+                          "row": 11,
+                          "column": 0
+                        },
+                        "end_position": {
+                          "row": 11,
+                          "column": 3
+                        },
+                        "is_leaf": true,
+                        "child_count": 0,
+                        "children": []
+                      },
+                      {
+                        "name": "paragraph",
+                        "text": "",
+                        "full_text": "User authentication\n",
+                        "start_position": {
+                          "row": 11,
+                          "column": 3
+                        },
+                        "end_position": {
+                          "row": 12,
+                          "column": 0
+                        },
+                        "is_leaf": false,
+                        "child_count": 1,
+                        "children": [
+                          {
+                            "name": "inline",
+                            "text": "User authentication",
+                            "full_text": "User authentication",
+                            "start_position": {
+                              "row": 11,
+                              "column": 3
+                            },
+                            "end_position": {
+                              "row": 11,
+                              "column": 22
+                            },
+                            "is_leaf": true,
+                            "child_count": 0,
+                            "children": []
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "name": "list_item",
+                    "text": "",
+                    "full_text": "2. Data persistence\n",
+                    "start_position": {
+                      "row": 12,
+                      "column": 0
+                    },
+                    "end_position": {
+                      "row": 13,
+                      "column": 0
+                    },
+                    "is_leaf": false,
+                    "child_count": 2,
+                    "children": [
+                      {
+                        "name": "list_marker_dot",
+                        "text": "2. ",
+                        "full_text": "2. ",
+                        "start_position": {
+                          "row": 12,
+                          "column": 0
+                        },
+                        "end_position": {
+                          "row": 12,
+                          "column": 3
+                        },
+                        "is_leaf": true,
+                        "child_count": 0,
+                        "children": []
+                      },
+                      {
+                        "name": "paragraph",
+                        "text": "",
+                        "full_text": "Data persistence\n",
+                        "start_position": {
+                          "row": 12,
+                          "column": 3
+                        },
+                        "end_position": {
+                          "row": 13,
+                          "column": 0
+                        },
+                        "is_leaf": false,
+                        "child_count": 1,
+                        "children": [
+                          {
+                            "name": "inline",
+                            "text": "Data persistence",
+                            "full_text": "Data persistence",
+                            "start_position": {
+                              "row": 12,
+                              "column": 3
+                            },
+                            "end_position": {
+                              "row": 12,
+                              "column": 19
+                            },
+                            "is_leaf": true,
+                            "child_count": 0,
+                            "children": []
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "name": "list_item",
+                    "text": "",
+                    "full_text": "3. Real-time updates\n\n",
+                    "start_position": {
+                      "row": 13,
+                      "column": 0
+                    },
+                    "end_position": {
+                      "row": 15,
+                      "column": 0
+                    },
+                    "is_leaf": false,
+                    "child_count": 2,
+                    "children": [
+                      {
+                        "name": "list_marker_dot",
+                        "text": "3. ",
+                        "full_text": "3. ",
+                        "start_position": {
+                          "row": 13,
+                          "column": 0
+                        },
+                        "end_position": {
+                          "row": 13,
+                          "column": 3
+                        },
+                        "is_leaf": true,
+                        "child_count": 0,
+                        "children": []
+                      },
+                      {
+                        "name": "paragraph",
+                        "text": "",
+                        "full_text": "Real-time updates\n",
+                        "start_position": {
+                          "row": 13,
+                          "column": 3
+                        },
+                        "end_position": {
+                          "row": 14,
+                          "column": 0
+                        },
+                        "is_leaf": false,
+                        "child_count": 2,
+                        "children": [
+                          {
+                            "name": "inline",
+                            "text": "",
+                            "full_text": "Real-time updates",
+                            "start_position": {
+                              "row": 13,
+                              "column": 3
+                            },
+                            "end_position": {
+                              "row": 13,
+                              "column": 20
+                            },
+                            "is_leaf": false,
+                            "child_count": 1,
+                            "children": [
+                              {
+                                "name": "-",
+                                "text": "-",
+                                "full_text": "-",
+                                "start_position": {
+                                  "row": 13,
+                                  "column": 7
+                                },
+                                "end_position": {
+                                  "row": 13,
+                                  "column": 8
+                                },
+                                "is_leaf": true,
+                                "child_count": 0,
+                                "children": []
+                              }
+                            ]
+                          },
+                          {
+                            "name": "block_continuation",
+                            "text": "",
+                            "full_text": "",
+                            "start_position": {
+                              "row": 14,
+                              "column": 0
+                            },
+                            "end_position": {
+                              "row": 14,
+                              "column": 0
+                            },
+                            "is_leaf": true,
+                            "child_count": 0,
+                            "children": []
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "block_quote",
+                "text": "",
+                "full_text": "> **Note**: This is a blockquote with important information.\n",
+                "start_position": {
+                  "row": 15,
+                  "column": 0
+                },
+                "end_position": {
+                  "row": 16,
+                  "column": 0
+                },
+                "is_leaf": false,
+                "child_count": 2,
+                "children": [
+                  {
+                    "name": "block_quote_marker",
+                    "text": "> ",
+                    "full_text": "> ",
+                    "start_position": {
+                      "row": 15,
+                      "column": 0
+                    },
+                    "end_position": {
+                      "row": 15,
+                      "column": 2
+                    },
+                    "is_leaf": true,
+                    "child_count": 0,
+                    "children": []
+                  },
+                  {
+                    "name": "paragraph",
+                    "text": "",
+                    "full_text": "**Note**: This is a blockquote with important information.\n",
+                    "start_position": {
+                      "row": 15,
+                      "column": 2
+                    },
+                    "end_position": {
+                      "row": 16,
+                      "column": 0
+                    },
+                    "is_leaf": false,
+                    "child_count": 1,
+                    "children": [
+                      {
+                        "name": "inline",
+                        "text": "",
+                        "full_text": "**Note**: This is a blockquote with important information.",
+                        "start_position": {
+                          "row": 15,
+                          "column": 2
+                        },
+                        "end_position": {
+                          "row": 15,
+                          "column": 60
+                        },
+                        "is_leaf": false,
+                        "child_count": 6,
+                        "children": [
+                          {
+                            "name": "*",
+                            "text": "*",
+                            "full_text": "*",
+                            "start_position": {
+                              "row": 15,
+                              "column": 2
+                            },
+                            "end_position": {
+                              "row": 15,
+                              "column": 3
+                            },
+                            "is_leaf": true,
+                            "child_count": 0,
+                            "children": []
+                          },
+                          {
+                            "name": "*",
+                            "text": "*",
+                            "full_text": "*",
+                            "start_position": {
+                              "row": 15,
+                              "column": 3
+                            },
+                            "end_position": {
+                              "row": 15,
+                              "column": 4
+                            },
+                            "is_leaf": true,
+                            "child_count": 0,
+                            "children": []
+                          },
+                          {
+                            "name": "*",
+                            "text": "*",
+                            "full_text": "*",
+                            "start_position": {
+                              "row": 15,
+                              "column": 8
+                            },
+                            "end_position": {
+                              "row": 15,
+                              "column": 9
+                            },
+                            "is_leaf": true,
+                            "child_count": 0,
+                            "children": []
+                          },
+                          {
+                            "name": "*",
+                            "text": "*",
+                            "full_text": "*",
+                            "start_position": {
+                              "row": 15,
+                              "column": 9
+                            },
+                            "end_position": {
+                              "row": 15,
+                              "column": 10
+                            },
+                            "is_leaf": true,
+                            "child_count": 0,
+                            "children": []
+                          },
+                          {
+                            "name": ":",
+                            "text": ":",
+                            "full_text": ":",
+                            "start_position": {
+                              "row": 15,
+                              "column": 10
+                            },
+                            "end_position": {
+                              "row": 15,
+                              "column": 11
+                            },
+                            "is_leaf": true,
+                            "child_count": 0,
+                            "children": []
+                          },
+                          {
+                            "name": ".",
+                            "text": ".",
+                            "full_text": ".",
+                            "start_position": {
+                              "row": 15,
+                              "column": 59
+                            },
+                            "end_position": {
+                              "row": 15,
+                              "column": 60
+                            },
+                            "is_leaf": true,
+                            "child_count": 0,
+                            "children": []
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tree Viewer - D3.js AST Visualization</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .controls {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 5px;
+        }
+
+        select {
+            padding: 8px 12px;
+            margin-right: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .tree-info {
+            margin: 10px 0;
+            padding: 10px;
+            background: #e9ecef;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .source-code {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 15px;
+            margin: 10px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            overflow-x: auto;
+        }
+
+        #tree-container {
+            width: 100%;
+            height: 600px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            overflow: auto;
+            background: #fff;
+        }
+
+        .node circle {
+            fill: #fff;
+            stroke: steelblue;
+            stroke-width: 2px;
+            cursor: pointer;
+        }
+
+        .node.leaf circle {
+            fill: #lightgreen;
+        }
+
+        .node text {
+            font: 12px sans-serif;
+            cursor: pointer;
+        }
+
+        .link {
+            fill: none;
+            stroke: #ccc;
+            stroke-width: 1.5px;
+        }
+
+        .tooltip {
+            position: absolute;
+            text-align: left;
+            padding: 8px;
+            font-size: 12px;
+            background: #333;
+            color: white;
+            border-radius: 4px;
+            pointer-events: none;
+            z-index: 1000;
+            max-width: 300px;
+            word-wrap: break-word;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🌳 AST Tree Viewer</h1>
+        <p>Interactive visualization of Abstract Syntax Trees from parsing integration tests</p>
+
+        <div class="controls">
+            <label for="tree-select">Select a tree:</label>
+            <select id="tree-select">
+                <option value="">Loading trees...</option>
+            </select>
+
+            <label for="layout-select">Layout:</label>
+            <select id="layout-select">
+                <option value="tree">Tree (Top-Down)</option>
+                <option value="cluster">Cluster (Compact)</option>
+                <option value="radial">Radial</option>
+            </select>
+        </div>
+
+        <div id="tree-info" class="tree-info" style="display: none;"></div>
+        <div id="source-code" class="source-code" style="display: none;"></div>
+        <div id="tree-container"></div>
+    </div>
+
+    <script>
+        let currentData = null;
+        let currentLayout = 'tree';
+
+        // Load the index file and populate the tree selector
+        d3.json('index.json').then(function(index) {
+            populateTreeSelector(index);
+        }).catch(function(error) {
+            console.warn('Could not load index.json (CORS issue?), using embedded sample data');
+            // Fallback to embedded sample data
+            const sampleIndex = {
+                trees: [
+                    {name: "rust_simple_function", language: "rust", description: "Simple Rust function with println! macro", filename: "rust_simple_function.json", node_count: 22},
+                    {name: "typescript_simple_function", language: "typescript", description: "TypeScript function with template string", filename: "typescript_simple_function.json", node_count: 32},
+                    {name: "python_simple_function", language: "python", description: "Simple Python function with arithmetic", filename: "python_simple_function.json", node_count: 19}
+                ]
+            };
+            populateTreeSelector(sampleIndex);
+
+            // Show CORS warning
+            d3.select('#tree-info').style('display', 'block').html(`
+                <strong>⚠️ CORS Issue Detected</strong><br>
+                To view all trees, serve this directory with a local web server:<br>
+                <code>python -m http.server 8000</code> or <code>npx serve .</code><br>
+                Then open <a href="http://localhost:8000/d3_tree_viewer.html">http://localhost:8000/d3_tree_viewer.html</a>
+            `);
+        });
+
+        function populateTreeSelector(index) {
+            const select = d3.select('#tree-select');
+            select.selectAll('option').remove();
+
+            select.append('option')
+                .attr('value', '')
+                .text('-- Select a tree --');
+
+            index.trees.forEach(function(tree) {
+                select.append('option')
+                    .attr('value', tree.filename)
+                    .text(`${tree.name} (${tree.language}) - ${tree.node_count} nodes`);
+            });
+
+            // Set up event listeners
+            select.on('change', function() {
+                const filename = this.value;
+                if (filename) {
+                    loadTree(filename);
+                }
+            });
+
+            d3.select('#layout-select').on('change', function() {
+                currentLayout = this.value;
+                if (currentData) {
+                    renderTree(currentData);
+                }
+            });
+        }
+
+        function loadTree(filename) {
+            d3.json(filename).then(function(data) {
+                displayTree(data);
+            }).catch(function(error) {
+                console.warn(`Could not load ${filename}, using embedded sample`);
+                // Fallback to embedded sample for demo
+                const sampleTree = getSampleTreeData(filename);
+                if (sampleTree) {
+                    displayTree(sampleTree);
+                }
+            });
+        }
+
+        function displayTree(data) {
+            currentData = data;
+
+            // Show metadata
+            const infoDiv = d3.select('#tree-info');
+            infoDiv.style('display', 'block');
+            infoDiv.html(`
+                <strong>${data.metadata.name}</strong> (${data.metadata.language})<br>
+                ${data.metadata.description}<br>
+                Nodes: ${data.metadata.node_count} | Source Length: ${data.metadata.source_length} chars
+            `);
+
+            // Show source code
+            const sourceDiv = d3.select('#source-code');
+            sourceDiv.style('display', 'block');
+            sourceDiv.text(data.source_code);
+
+            renderTree(data);
+        }
+
+        function getSampleTreeData(filename) {
+            const samples = {
+                "rust_simple_function.json": {
+                    metadata: {name: "rust_simple_function", language: "rust", description: "Simple Rust function with println! macro", node_count: 5, source_length: 51},
+                    source_code: `fn hello_world() {\n    println!("Hello, world!");\n}`,
+                    tree: {
+                        name: "source_file", text: "", is_leaf: false, child_count: 1,
+                        children: [{
+                            name: "function_item", text: "", is_leaf: false, child_count: 4,
+                            children: [
+                                {name: "fn", text: "fn", is_leaf: true, child_count: 0, children: []},
+                                {name: "identifier", text: "hello_world", is_leaf: true, child_count: 0, children: []},
+                                {name: "parameters", text: "()", is_leaf: true, child_count: 0, children: []},
+                                {
+                                    name: "block", text: "", is_leaf: false, child_count: 1,
+                                    children: [{
+                                        name: "macro_invocation", text: "", is_leaf: false, child_count: 2,
+                                        children: [
+                                            {name: "identifier", text: "println", is_leaf: true, child_count: 0, children: []},
+                                            {name: "string_literal", text: '"Hello, world!"', is_leaf: true, child_count: 0, children: []}
+                                        ]
+                                    }]
+                                }
+                            ]
+                        }]
+                    }
+                },
+                "python_simple_function.json": {
+                    metadata: {name: "python_simple_function", language: "python", description: "Simple Python function", node_count: 4, source_length: 64},
+                    source_code: `def calculate_area(radius):\n    return 3.14159 * radius * radius`,
+                    tree: {
+                        name: "module", text: "", is_leaf: false, child_count: 1,
+                        children: [{
+                            name: "function_definition", text: "", is_leaf: false, child_count: 4,
+                            children: [
+                                {name: "def", text: "def", is_leaf: true, child_count: 0, children: []},
+                                {name: "identifier", text: "calculate_area", is_leaf: true, child_count: 0, children: []},
+                                {name: "parameters", text: "(radius)", is_leaf: true, child_count: 0, children: []},
+                                {
+                                    name: "block", text: "", is_leaf: false, child_count: 1,
+                                    children: [{
+                                        name: "return_statement", text: "", is_leaf: false, child_count: 2,
+                                        children: [
+                                            {name: "return", text: "return", is_leaf: true, child_count: 0, children: []},
+                                            {name: "binary_operator", text: "3.14159 * radius * radius", is_leaf: true, child_count: 0, children: []}
+                                        ]
+                                    }]
+                                }
+                            ]
+                        }]
+                    }
+                }
+            };
+            return samples[filename];
+        }
+
+        function renderTree(data) {
+            // Clear previous tree
+            d3.select('#tree-container').selectAll('*').remove();
+
+            const container = d3.select('#tree-container');
+            const width = 1160;
+            const height = 580;
+
+            const svg = container
+                .append('svg')
+                .attr('width', width)
+                .attr('height', height);
+
+            const g = svg.append('g');
+
+            // Create tooltip
+            const tooltip = d3.select('body').append('div')
+                .attr('class', 'tooltip')
+                .style('opacity', 0);
+
+            // Convert the tree data for D3
+            const root = d3.hierarchy(data.tree);
+
+            let treeLayout;
+            let transform;
+
+            if (currentLayout === 'radial') {
+                treeLayout = d3.tree().size([2 * Math.PI, Math.min(width, height) / 2 - 50]);
+                transform = function(d) {
+                    return `rotate(${d.x * 180 / Math.PI - 90}) translate(${d.y},0)`;
+                };
+                g.attr('transform', `translate(${width / 2},${height / 2})`);
+            } else {
+                const layoutFunc = currentLayout === 'cluster' ? d3.cluster : d3.tree;
+                treeLayout = layoutFunc().size([width - 100, height - 100]);
+                transform = function(d) {
+                    return `translate(${d.x},${d.y})`;
+                };
+                g.attr('transform', 'translate(50,50)');
+            }
+
+            treeLayout(root);
+
+            // Create links
+            const links = g.selectAll('.link')
+                .data(root.links())
+                .enter().append('path')
+                .attr('class', 'link')
+                .attr('d', currentLayout === 'radial' ?
+                    d3.linkRadial()
+                        .angle(d => d.x)
+                        .radius(d => d.y) :
+                    d3.linkHorizontal()
+                        .x(d => d.x)
+                        .y(d => d.y)
+                );
+
+            // Create nodes
+            const nodes = g.selectAll('.node')
+                .data(root.descendants())
+                .enter().append('g')
+                .attr('class', d => `node ${d.data.is_leaf ? 'leaf' : ''}`)
+                .attr('transform', transform);
+
+            nodes.append('circle')
+                .attr('r', d => d.data.is_leaf ? 4 : 6)
+                .on('mouseover', function(event, d) {
+                    tooltip.transition()
+                        .duration(200)
+                        .style('opacity', .9);
+                    tooltip.html(`
+                        <strong>Node:</strong> ${d.data.name}<br>
+                        <strong>Type:</strong> ${d.data.is_leaf ? 'Leaf' : 'Internal'}<br>
+                        <strong>Children:</strong> ${d.data.child_count}<br>
+                        <strong>Position:</strong> ${d.data.start_position.row}:${d.data.start_position.column}<br>
+                        ${d.data.text ? `<strong>Text:</strong> "${d.data.text}"` : ''}
+                    `)
+                        .style('left', (event.pageX + 10) + 'px')
+                        .style('top', (event.pageY - 28) + 'px');
+                })
+                .on('mouseout', function(d) {
+                    tooltip.transition()
+                        .duration(500)
+                        .style('opacity', 0);
+                });
+
+            nodes.append('text')
+                .attr('dy', currentLayout === 'radial' ?
+                    function(d) { return d.x < Math.PI === !d.children ? '0.31em' : '-0.31em'; } :
+                    '.35em')
+                .attr('x', currentLayout === 'radial' ?
+                    function(d) { return d.x < Math.PI === !d.children ? 6 : -6; } :
+                    10)
+                .style('text-anchor', currentLayout === 'radial' ?
+                    function(d) { return d.x < Math.PI === !d.children ? 'start' : 'end'; } :
+                    'start')
+                .attr('transform', currentLayout === 'radial' ?
+                    function(d) { return d.x >= Math.PI ? 'rotate(180)' : null; } :
+                    'rotate(15)')
+                .text(function(d) { return d.data.is_leaf && d.data.text ? d.data.text : d.data.name; })
+                .style('font-size', '11px');
+
+            // Add zoom functionality
+            const zoom = d3.zoom()
+                .scaleExtent([0.1, 3])
+                .on('zoom', function(event) {
+                    g.attr('transform',
+                        currentLayout === 'radial' ?
+                        `translate(${width / 2},${height / 2}) ${event.transform}` :
+                        `translate(50,50) ${event.transform}`
+                    );
+                });
+
+            svg.call(zoom);
+        }
+    </script>
+</body>
+</html>

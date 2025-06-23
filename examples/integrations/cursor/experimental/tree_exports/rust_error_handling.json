@@ -1,0 +1,663 @@
+{
+  "metadata": {
+    "name": "rust_error_handling",
+    "language": "rust",
+    "description": "Rust function with Result return type",
+    "source_length": 92,
+    "node_count": 40
+  },
+  "source_code": "fn read_file() -> Result<String, std::io::Error> {\n    std::fs::read_to_string(\"file.txt\")\n}",
+  "tree": {
+    "name": "source_file",
+    "text": "",
+    "full_text": "fn read_file() -> Result<String, std::io::Error> {\n    std::fs::read_to_string(\"file.txt\")\n}",
+    "start_position": {
+      "row": 0,
+      "column": 0
+    },
+    "end_position": {
+      "row": 2,
+      "column": 1
+    },
+    "is_leaf": false,
+    "child_count": 1,
+    "children": [
+      {
+        "name": "function_item",
+        "text": "",
+        "full_text": "fn read_file() -> Result<String, std::io::Error> {\n    std::fs::read_to_string(\"file.txt\")\n}",
+        "start_position": {
+          "row": 0,
+          "column": 0
+        },
+        "end_position": {
+          "row": 2,
+          "column": 1
+        },
+        "is_leaf": false,
+        "child_count": 6,
+        "children": [
+          {
+            "name": "fn",
+            "text": "fn",
+            "full_text": "fn",
+            "start_position": {
+              "row": 0,
+              "column": 0
+            },
+            "end_position": {
+              "row": 0,
+              "column": 2
+            },
+            "is_leaf": true,
+            "child_count": 0,
+            "children": []
+          },
+          {
+            "name": "identifier",
+            "text": "read_file",
+            "full_text": "read_file",
+            "start_position": {
+              "row": 0,
+              "column": 3
+            },
+            "end_position": {
+              "row": 0,
+              "column": 12
+            },
+            "is_leaf": true,
+            "child_count": 0,
+            "children": []
+          },
+          {
+            "name": "parameters",
+            "text": "",
+            "full_text": "()",
+            "start_position": {
+              "row": 0,
+              "column": 12
+            },
+            "end_position": {
+              "row": 0,
+              "column": 14
+            },
+            "is_leaf": false,
+            "child_count": 2,
+            "children": [
+              {
+                "name": "(",
+                "text": "(",
+                "full_text": "(",
+                "start_position": {
+                  "row": 0,
+                  "column": 12
+                },
+                "end_position": {
+                  "row": 0,
+                  "column": 13
+                },
+                "is_leaf": true,
+                "child_count": 0,
+                "children": []
+              },
+              {
+                "name": ")",
+                "text": ")",
+                "full_text": ")",
+                "start_position": {
+                  "row": 0,
+                  "column": 13
+                },
+                "end_position": {
+                  "row": 0,
+                  "column": 14
+                },
+                "is_leaf": true,
+                "child_count": 0,
+                "children": []
+              }
+            ]
+          },
+          {
+            "name": "->",
+            "text": "->",
+            "full_text": "->",
+            "start_position": {
+              "row": 0,
+              "column": 15
+            },
+            "end_position": {
+              "row": 0,
+              "column": 17
+            },
+            "is_leaf": true,
+            "child_count": 0,
+            "children": []
+          },
+          {
+            "name": "generic_type",
+            "text": "",
+            "full_text": "Result<String, std::io::Error>",
+            "start_position": {
+              "row": 0,
+              "column": 18
+            },
+            "end_position": {
+              "row": 0,
+              "column": 48
+            },
+            "is_leaf": false,
+            "child_count": 2,
+            "children": [
+              {
+                "name": "type_identifier",
+                "text": "Result",
+                "full_text": "Result",
+                "start_position": {
+                  "row": 0,
+                  "column": 18
+                },
+                "end_position": {
+                  "row": 0,
+                  "column": 24
+                },
+                "is_leaf": true,
+                "child_count": 0,
+                "children": []
+              },
+              {
+                "name": "type_arguments",
+                "text": "",
+                "full_text": "<String, std::io::Error>",
+                "start_position": {
+                  "row": 0,
+                  "column": 24
+                },
+                "end_position": {
+                  "row": 0,
+                  "column": 48
+                },
+                "is_leaf": false,
+                "child_count": 5,
+                "children": [
+                  {
+                    "name": "<",
+                    "text": "<",
+                    "full_text": "<",
+                    "start_position": {
+                      "row": 0,
+                      "column": 24
+                    },
+                    "end_position": {
+                      "row": 0,
+                      "column": 25
+                    },
+                    "is_leaf": true,
+                    "child_count": 0,
+                    "children": []
+                  },
+                  {
+                    "name": "type_identifier",
+                    "text": "String",
+                    "full_text": "String",
+                    "start_position": {
+                      "row": 0,
+                      "column": 25
+                    },
+                    "end_position": {
+                      "row": 0,
+                      "column": 31
+                    },
+                    "is_leaf": true,
+                    "child_count": 0,
+                    "children": []
+                  },
+                  {
+                    "name": ",",
+                    "text": ",",
+                    "full_text": ",",
+                    "start_position": {
+                      "row": 0,
+                      "column": 31
+                    },
+                    "end_position": {
+                      "row": 0,
+                      "column": 32
+                    },
+                    "is_leaf": true,
+                    "child_count": 0,
+                    "children": []
+                  },
+                  {
+                    "name": "scoped_type_identifier",
+                    "text": "",
+                    "full_text": "std::io::Error",
+                    "start_position": {
+                      "row": 0,
+                      "column": 33
+                    },
+                    "end_position": {
+                      "row": 0,
+                      "column": 47
+                    },
+                    "is_leaf": false,
+                    "child_count": 3,
+                    "children": [
+                      {
+                        "name": "scoped_identifier",
+                        "text": "",
+                        "full_text": "std::io",
+                        "start_position": {
+                          "row": 0,
+                          "column": 33
+                        },
+                        "end_position": {
+                          "row": 0,
+                          "column": 40
+                        },
+                        "is_leaf": false,
+                        "child_count": 3,
+                        "children": [
+                          {
+                            "name": "identifier",
+                            "text": "std",
+                            "full_text": "std",
+                            "start_position": {
+                              "row": 0,
+                              "column": 33
+                            },
+                            "end_position": {
+                              "row": 0,
+                              "column": 36
+                            },
+                            "is_leaf": true,
+                            "child_count": 0,
+                            "children": []
+                          },
+                          {
+                            "name": "::",
+                            "text": "::",
+                            "full_text": "::",
+                            "start_position": {
+                              "row": 0,
+                              "column": 36
+                            },
+                            "end_position": {
+                              "row": 0,
+                              "column": 38
+                            },
+                            "is_leaf": true,
+                            "child_count": 0,
+                            "children": []
+                          },
+                          {
+                            "name": "identifier",
+                            "text": "io",
+                            "full_text": "io",
+                            "start_position": {
+                              "row": 0,
+                              "column": 38
+                            },
+                            "end_position": {
+                              "row": 0,
+                              "column": 40
+                            },
+                            "is_leaf": true,
+                            "child_count": 0,
+                            "children": []
+                          }
+                        ]
+                      },
+                      {
+                        "name": "::",
+                        "text": "::",
+                        "full_text": "::",
+                        "start_position": {
+                          "row": 0,
+                          "column": 40
+                        },
+                        "end_position": {
+                          "row": 0,
+                          "column": 42
+                        },
+                        "is_leaf": true,
+                        "child_count": 0,
+                        "children": []
+                      },
+                      {
+                        "name": "type_identifier",
+                        "text": "Error",
+                        "full_text": "Error",
+                        "start_position": {
+                          "row": 0,
+                          "column": 42
+                        },
+                        "end_position": {
+                          "row": 0,
+                          "column": 47
+                        },
+                        "is_leaf": true,
+                        "child_count": 0,
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "name": ">",
+                    "text": ">",
+                    "full_text": ">",
+                    "start_position": {
+                      "row": 0,
+                      "column": 47
+                    },
+                    "end_position": {
+                      "row": 0,
+                      "column": 48
+                    },
+                    "is_leaf": true,
+                    "child_count": 0,
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "block",
+            "text": "",
+            "full_text": "{\n    std::fs::read_to_string(\"file.txt\")\n}",
+            "start_position": {
+              "row": 0,
+              "column": 49
+            },
+            "end_position": {
+              "row": 2,
+              "column": 1
+            },
+            "is_leaf": false,
+            "child_count": 3,
+            "children": [
+              {
+                "name": "{",
+                "text": "{",
+                "full_text": "{",
+                "start_position": {
+                  "row": 0,
+                  "column": 49
+                },
+                "end_position": {
+                  "row": 0,
+                  "column": 50
+                },
+                "is_leaf": true,
+                "child_count": 0,
+                "children": []
+              },
+              {
+                "name": "call_expression",
+                "text": "",
+                "full_text": "std::fs::read_to_string(\"file.txt\")",
+                "start_position": {
+                  "row": 1,
+                  "column": 4
+                },
+                "end_position": {
+                  "row": 1,
+                  "column": 39
+                },
+                "is_leaf": false,
+                "child_count": 2,
+                "children": [
+                  {
+                    "name": "scoped_identifier",
+                    "text": "",
+                    "full_text": "std::fs::read_to_string",
+                    "start_position": {
+                      "row": 1,
+                      "column": 4
+                    },
+                    "end_position": {
+                      "row": 1,
+                      "column": 27
+                    },
+                    "is_leaf": false,
+                    "child_count": 3,
+                    "children": [
+                      {
+                        "name": "scoped_identifier",
+                        "text": "",
+                        "full_text": "std::fs",
+                        "start_position": {
+                          "row": 1,
+                          "column": 4
+                        },
+                        "end_position": {
+                          "row": 1,
+                          "column": 11
+                        },
+                        "is_leaf": false,
+                        "child_count": 3,
+                        "children": [
+                          {
+                            "name": "identifier",
+                            "text": "std",
+                            "full_text": "std",
+                            "start_position": {
+                              "row": 1,
+                              "column": 4
+                            },
+                            "end_position": {
+                              "row": 1,
+                              "column": 7
+                            },
+                            "is_leaf": true,
+                            "child_count": 0,
+                            "children": []
+                          },
+                          {
+                            "name": "::",
+                            "text": "::",
+                            "full_text": "::",
+                            "start_position": {
+                              "row": 1,
+                              "column": 7
+                            },
+                            "end_position": {
+                              "row": 1,
+                              "column": 9
+                            },
+                            "is_leaf": true,
+                            "child_count": 0,
+                            "children": []
+                          },
+                          {
+                            "name": "identifier",
+                            "text": "fs",
+                            "full_text": "fs",
+                            "start_position": {
+                              "row": 1,
+                              "column": 9
+                            },
+                            "end_position": {
+                              "row": 1,
+                              "column": 11
+                            },
+                            "is_leaf": true,
+                            "child_count": 0,
+                            "children": []
+                          }
+                        ]
+                      },
+                      {
+                        "name": "::",
+                        "text": "::",
+                        "full_text": "::",
+                        "start_position": {
+                          "row": 1,
+                          "column": 11
+                        },
+                        "end_position": {
+                          "row": 1,
+                          "column": 13
+                        },
+                        "is_leaf": true,
+                        "child_count": 0,
+                        "children": []
+                      },
+                      {
+                        "name": "identifier",
+                        "text": "read_to_string",
+                        "full_text": "read_to_string",
+                        "start_position": {
+                          "row": 1,
+                          "column": 13
+                        },
+                        "end_position": {
+                          "row": 1,
+                          "column": 27
+                        },
+                        "is_leaf": true,
+                        "child_count": 0,
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "name": "arguments",
+                    "text": "",
+                    "full_text": "(\"file.txt\")",
+                    "start_position": {
+                      "row": 1,
+                      "column": 27
+                    },
+                    "end_position": {
+                      "row": 1,
+                      "column": 39
+                    },
+                    "is_leaf": false,
+                    "child_count": 3,
+                    "children": [
+                      {
+                        "name": "(",
+                        "text": "(",
+                        "full_text": "(",
+                        "start_position": {
+                          "row": 1,
+                          "column": 27
+                        },
+                        "end_position": {
+                          "row": 1,
+                          "column": 28
+                        },
+                        "is_leaf": true,
+                        "child_count": 0,
+                        "children": []
+                      },
+                      {
+                        "name": "string_literal",
+                        "text": "",
+                        "full_text": "\"file.txt\"",
+                        "start_position": {
+                          "row": 1,
+                          "column": 28
+                        },
+                        "end_position": {
+                          "row": 1,
+                          "column": 38
+                        },
+                        "is_leaf": false,
+                        "child_count": 3,
+                        "children": [
+                          {
+                            "name": "\"",
+                            "text": "\"",
+                            "full_text": "\"",
+                            "start_position": {
+                              "row": 1,
+                              "column": 28
+                            },
+                            "end_position": {
+                              "row": 1,
+                              "column": 29
+                            },
+                            "is_leaf": true,
+                            "child_count": 0,
+                            "children": []
+                          },
+                          {
+                            "name": "string_content",
+                            "text": "file.txt",
+                            "full_text": "file.txt",
+                            "start_position": {
+                              "row": 1,
+                              "column": 29
+                            },
+                            "end_position": {
+                              "row": 1,
+                              "column": 37
+                            },
+                            "is_leaf": true,
+                            "child_count": 0,
+                            "children": []
+                          },
+                          {
+                            "name": "\"",
+                            "text": "\"",
+                            "full_text": "\"",
+                            "start_position": {
+                              "row": 1,
+                              "column": 37
+                            },
+                            "end_position": {
+                              "row": 1,
+                              "column": 38
+                            },
+                            "is_leaf": true,
+                            "child_count": 0,
+                            "children": []
+                          }
+                        ]
+                      },
+                      {
+                        "name": ")",
+                        "text": ")",
+                        "full_text": ")",
+                        "start_position": {
+                          "row": 1,
+                          "column": 38
+                        },
+                        "end_position": {
+                          "row": 1,
+                          "column": 39
+                        },
+                        "is_leaf": true,
+                        "child_count": 0,
+                        "children": []
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "}",
+                "text": "}",
+                "full_text": "}",
+                "start_position": {
+                  "row": 2,
+                  "column": 0
+                },
+                "end_position": {
+                  "row": 2,
+                  "column": 1
+                },
+                "is_leaf": true,
+                "child_count": 0,
+                "children": []
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

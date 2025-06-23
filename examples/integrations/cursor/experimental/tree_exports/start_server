@@ -1,0 +1,110 @@
+#!/bin/bash
+# Idiot-proof server script for tree visualization
+# Just run: ./start_server
+
+set -e  # Exit on any error
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+echo -e "${GREEN}🌳 Tree Visualization Server${NC}"
+echo -e "${GREEN}============================${NC}"
+
+# Get the directory where this script is located
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+cd "$SCRIPT_DIR"
+
+PORT=8000
+
+echo -e "${BLUE}📁 Serving files from:${NC} $SCRIPT_DIR"
+echo -e "${BLUE}🌐 Server will run at:${NC} http://localhost:$PORT"
+echo -e "${BLUE}👀 Open this URL:${NC} http://localhost:$PORT/d3_tree_viewer.html"
+echo ""
+
+# Check if port is already in use
+if lsof -Pi :$PORT -sTCP:LISTEN -t >/dev/null 2>&1; then
+    echo -e "${YELLOW}⚠️  Port $PORT is already in use.${NC}"
+    echo "   Kill the existing process or wait a moment and try again."
+    echo ""
+    echo "   To kill existing process: sudo lsof -ti:$PORT | xargs kill -9"
+    exit 1
+fi
+
+# Try Python 3 first (most reliable)
+if command -v python3 >/dev/null 2>&1; then
+    echo -e "${GREEN}✅ Using Python 3 server${NC}"
+    echo -e "${YELLOW}🔄 Press Ctrl+C to stop the server${NC}"
+    echo ""
+
+    # Use Python's built-in server
+    python3 << 'EOF'
+import http.server
+import socketserver
+import os
+import webbrowser
+import threading
+import time
+
+class CORSHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
+    def end_headers(self):
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        super().end_headers()
+
+    def do_OPTIONS(self):
+        self.send_response(200)
+        self.end_headers()
+
+    def log_message(self, format, *args):
+        # Suppress default logging to keep output clean
+        pass
+
+PORT = 8000
+
+def open_browser():
+    time.sleep(2)  # Wait for server to start
+    try:
+        webbrowser.open(f'http://localhost:{PORT}/d3_tree_viewer.html')
+        print(f"🚀 Opened browser to tree viewer")
+    except:
+        pass  # Browser opening failed, that's ok
+
+# Start browser opening in background
+threading.Thread(target=open_browser, daemon=True).start()
+
+try:
+    with socketserver.TCPServer(("", PORT), CORSHTTPRequestHandler) as httpd:
+        print(f"✅ Server started successfully!")
+        print(f"📊 {len([f for f in os.listdir('.') if f.endswith('.json') and f != 'index.json'])} tree files available")
+        httpd.serve_forever()
+except KeyboardInterrupt:
+    print("\n👋 Server stopped")
+except Exception as e:
+    print(f"❌ Error: {e}")
+EOF
+
+# If Python 3 failed, try alternative methods
+elif command -v python >/dev/null 2>&1; then
+    echo -e "${YELLOW}⚠️  Python 3 not found, trying Python 2${NC}"
+    echo -e "${YELLOW}🔄 Press Ctrl+C to stop the server${NC}"
+    echo ""
+    python -m SimpleHTTPServer $PORT
+
+else
+    echo -e "${RED}❌ Python not found!${NC}"
+    echo ""
+    echo "Please install Python 3:"
+    echo "  - macOS: brew install python3"
+    echo "  - Ubuntu: sudo apt install python3"
+    echo "  - Windows: Download from python.org"
+    echo ""
+    echo "Or manually start a server:"
+    echo "  python3 -m http.server 8000"
+    echo "  Then open: http://localhost:8000/d3_tree_viewer.html"
+    exit 1
+fi

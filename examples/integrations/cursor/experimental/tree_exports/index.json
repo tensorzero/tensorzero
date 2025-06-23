@@ -1,0 +1,118 @@
+{
+  "trees": [
+    {
+      "name": "rust_simple_function",
+      "language": "rust",
+      "description": "Simple Rust function with println! macro",
+      "filename": "rust_simple_function.json",
+      "node_count": 22,
+      "source_length": 51
+    },
+    {
+      "name": "rust_struct_with_impl",
+      "language": "rust",
+      "description": "Rust struct with implementation block",
+      "filename": "rust_struct_with_impl.json",
+      "node_count": 53,
+      "source_length": 121
+    },
+    {
+      "name": "typescript_simple_function",
+      "language": "typescript",
+      "description": "TypeScript function with template string",
+      "filename": "typescript_simple_function.json",
+      "node_count": 32,
+      "source_length": 70
+    },
+    {
+      "name": "typescript_class_with_methods",
+      "language": "typescript",
+      "description": "TypeScript class with private field and methods",
+      "filename": "typescript_class_with_methods.json",
+      "node_count": 67,
+      "source_length": 197
+    },
+    {
+      "name": "python_simple_function",
+      "language": "python",
+      "description": "Simple Python function with arithmetic",
+      "filename": "python_simple_function.json",
+      "node_count": 19,
+      "source_length": 64
+    },
+    {
+      "name": "python_class_with_methods",
+      "language": "python",
+      "description": "Python class with methods and property decorator",
+      "filename": "python_class_with_methods.json",
+      "node_count": 88,
+      "source_length": 258
+    },
+    {
+      "name": "toml_simple_config",
+      "language": "toml",
+      "description": "Simple TOML package configuration",
+      "filename": "toml_simple_config.json",
+      "node_count": 33,
+      "source_length": 92
+    },
+    {
+      "name": "toml_complex_config",
+      "language": "toml",
+      "description": "Complex TOML configuration with arrays",
+      "filename": "toml_complex_config.json",
+      "node_count": 61,
+      "source_length": 209
+    },
+    {
+      "name": "markdown_simple",
+      "language": "markdown",
+      "description": "Simple Markdown with headings and code block",
+      "filename": "markdown_simple.json",
+      "node_count": 41,
+      "source_length": 141
+    },
+    {
+      "name": "markdown_with_lists",
+      "language": "markdown",
+      "description": "Markdown with task lists and blockquotes",
+      "filename": "markdown_with_lists.json",
+      "node_count": 56,
+      "source_length": 248
+    },
+    {
+      "name": "rust_complex_function",
+      "language": "rust",
+      "description": "Complex Rust function with pattern matching",
+      "filename": "rust_complex_function.json",
+      "node_count": 59,
+      "source_length": 151
+    },
+    {
+      "name": "rust_loop_example",
+      "language": "rust",
+      "description": "Rust for loop with range",
+      "filename": "rust_loop_example.json",
+      "node_count": 36,
+      "source_length": 75
+    },
+    {
+      "name": "rust_data_structures",
+      "language": "rust",
+      "description": "Rust function using Vec and iteration",
+      "filename": "rust_data_structures.json",
+      "node_count": 53,
+      "source_length": 116
+    },
+    {
+      "name": "rust_error_handling",
+      "language": "rust",
+      "description": "Rust function with Result return type",
+      "filename": "rust_error_handling.json",
+      "node_count": 40,
+      "source_length": 92
+    }
+  ],
+  "total_count": 14,
+  "generated_at": "2025-06-23T17:40:06.821471+00:00"
+}

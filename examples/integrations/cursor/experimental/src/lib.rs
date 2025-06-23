@@ -3,6 +3,7 @@ pub mod cursor;
 pub mod git;
 pub mod parsing;
 pub mod ted;
+pub mod tree_export;
 pub mod util;
 
 use anyhow::Result;
