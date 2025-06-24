@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Subtree Search Visualization - Forest TED Matching</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .controls {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 5px;
+            text-align: center;
+        }
+
+        .button {
+            padding: 10px 20px;
+            margin: 5px;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            cursor: pointer;
+            background: #007bff;
+            color: white;
+        }
+
+        .button:hover {
+            background: #0056b3;
+        }
+
+        .button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+
+        .viz-section {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 30px;
+        }
+
+        .inference-section {
+            width: 25%;
+            border: 2px solid #28a745;
+            border-radius: 8px;
+            padding: 15px;
+            background: #f8fff9;
+        }
+
+        .commit-forest-section {
+            width: 65%;
+            border: 2px solid #dc3545;
+            border-radius: 8px;
+            padding: 15px;
+            background: #fff8f8;
+        }
+
+        .section-title {
+            font-weight: bold;
+            font-size: 16px;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+
+        .inference-title {
+            color: #28a745;
+        }
+
+        .forest-title {
+            color: #dc3545;
+        }
+
+        .tree-container {
+            height: 400px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .node circle {
+            stroke-width: 2px;
+            cursor: pointer;
+        }
+
+        .node.inference circle {
+            fill: #d4edda;
+            stroke: #28a745;
+        }
+
+        .node.commit circle {
+            fill: #f8d7da;
+            stroke: #dc3545;
+        }
+
+        .node.current-subtree circle {
+            fill: #fff3cd;
+            stroke: #ffc107;
+            stroke-width: 4px;
+        }
+
+        .node.highlighted circle {
+            fill: #cce5ff;
+            stroke: #007bff;
+            stroke-width: 4px;
+        }
+
+        .node text {
+            font: 12px sans-serif;
+            text-anchor: start;
+        }
+
+        .link {
+            fill: none;
+            stroke-width: 2px;
+        }
+
+        .link.inference {
+            stroke: #28a745;
+        }
+
+        .link.commit {
+            stroke: #dc3545;
+        }
+
+        .link.current-subtree {
+            stroke: #ffc107;
+            stroke-width: 4px;
+        }
+
+        .info-panel {
+            background: #e9ecef;
+            border-radius: 4px;
+            padding: 15px;
+            margin-top: 20px;
+            font-family: monospace;
+            font-size: 14px;
+        }
+
+        .traversal-order {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 4px;
+            padding: 10px;
+            margin: 10px 0;
+        }
+
+        .distance-info {
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+            border-radius: 4px;
+            padding: 10px;
+            margin: 10px 0;
+        }
+
+        .forest-trees {
+            display: flex;
+            justify-content: space-around;
+        }
+
+        .tree-wrapper {
+            flex: 1;
+            margin: 0 10px;
+        }
+
+        .subtree-highlight {
+            fill: none;
+            stroke: #ffc107;
+            stroke-width: 3px;
+            stroke-dasharray: 5,5;
+            opacity: 0.8;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🌲 Subtree Search in Forest TED Matching</h1>
+        <p>Visualization of how inference trees are matched against all possible subtrees in a commit forest using Tree Edit Distance (TED)</p>
+
+        <div class="controls">
+            <button id="start-btn" class="button">Start Animation</button>
+            <button id="reset-btn" class="button">Reset</button>
+            <button id="step-btn" class="button">Step Forward</button>
+        </div>
+
+        <div class="viz-section">
+            <div class="inference-section">
+                <div class="section-title inference-title">Inference Tree t₁</div>
+                <div id="inference-tree" class="tree-container"></div>
+            </div>
+
+            <div class="commit-forest-section">
+                <div class="section-title forest-title">Commit Forest C = {c₁, c₂}</div>
+                <div class="forest-trees">
+                    <div class="tree-wrapper">
+                        <div style="text-align: center; font-weight: bold; color: #dc3545;">Tree c₁</div>
+                        <div id="commit-tree-1" class="tree-container" style="height: 180px;"></div>
+                    </div>
+                    <div class="tree-wrapper">
+                        <div style="text-align: center; font-weight: bold; color: #dc3545;">Tree c₂</div>
+                        <div id="commit-tree-2" class="tree-container" style="height: 180px;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="info-panel">
+            <div class="traversal-order">
+                <strong>In-order Traversal:</strong> <span id="traversal-sequence">Ready to start...</span>
+            </div>
+            <div class="distance-info">
+                <strong>Current Comparison:</strong> <span id="current-comparison">-</span><br>
+                <strong>TED(t₁, current_subtree):</strong> <span id="current-ted">-</span><br>
+                <strong>Current Ratio:</strong> <span id="current-ratio">-</span><br>
+                <strong>Current Reward:</strong> <span id="current-reward">-</span><br>
+                <strong>Best Distance Found:</strong> <span id="best-distance">∞</span><br>
+                <strong>Best Normalized Ratio r₁:</strong> <span id="normalized-ratio">-</span><br>
+                <strong>Best Reward (1 - r₁):</strong> <span id="best-reward">-</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Sample data representing the forest and inference tree
+        const inferenceTree = {
+            name: "function_def",
+            children: [
+                {name: "identifier", text: "foo"},
+                {
+                    name: "block",
+                    children: [
+                        {name: "return_stmt", text: "return x + 1"}
+                    ]
+                }
+            ]
+        };
+
+        const commitForest = [
+            {
+                name: "class_def",
+                children: [
+                    {name: "identifier", text: "MyClass"},
+                    {
+                        name: "method_def",
+                        children: [
+                            {name: "identifier", text: "foo"},
+                            {
+                                name: "block",
+                                children: [
+                                    {name: "return_stmt", text: "return x + 1"}
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        name: "method_def",
+                        children: [
+                            {name: "identifier", text: "bar"},
+                            {name: "block", children: [{name: "pass_stmt", text: "pass"}]}
+                        ]
+                    }
+                ]
+            },
+            {
+                name: "function_def",
+                children: [
+                    {name: "identifier", text: "helper"},
+                    {
+                        name: "block",
+                        children: [
+                            {name: "if_stmt", children: [
+                                {name: "condition", text: "x > 0"},
+                                {name: "return_stmt", text: "return x * 2"}
+                            ]}
+                        ]
+                    }
+                ]
+            }
+        ];
+
+        let animationState = {
+            isRunning: false,
+            currentStep: 0,
+            allSubtrees: [],
+            traversalOrder: [],
+            bestDistance: Infinity,
+            bestSubtree: null,
+            currentSubtree: null
+        };
+
+        function generateUniqueId() {
+            return Math.random().toString(36).substr(2, 9);
+        }
+
+        function addIdsToTree(node) {
+            if (!node.id) {
+                node.id = generateUniqueId();
+            }
+            if (node.children) {
+                node.children.forEach(addIdsToTree);
+            }
+            return node;
+        }
+
+        function getAllSubtrees(tree, subtrees = []) {
+            if (!tree) return subtrees;
+
+            // Add current tree as a subtree
+            subtrees.push({
+                root: tree,
+                nodes: collectNodes(tree),
+                size: countNodes(tree)
+            });
+
+            // Recursively get subtrees of children
+            if (tree.children) {
+                tree.children.forEach(child => getAllSubtrees(child, subtrees));
+            }
+
+            return subtrees;
+        }
+
+        function collectNodes(tree) {
+            let nodes = [tree];
+            if (tree.children) {
+                tree.children.forEach(child => {
+                    nodes = nodes.concat(collectNodes(child));
+                });
+            }
+            return nodes;
+        }
+
+        function countNodes(tree) {
+            let count = 1;
+            if (tree.children) {
+                tree.children.forEach(child => {
+                    count += countNodes(child);
+                });
+            }
+            return count;
+        }
+
+        function inOrderTraversal(tree, order = []) {
+            if (!tree) return order;
+
+            if (tree.children && tree.children.length > 0) {
+                // Visit left subtree (first child)
+                if (tree.children[0]) {
+                    inOrderTraversal(tree.children[0], order);
+                }
+
+                // Visit root
+                order.push(tree);
+
+                // Visit remaining children
+                for (let i = 1; i < tree.children.length; i++) {
+                    inOrderTraversal(tree.children[i], order);
+                }
+            } else {
+                // Leaf node
+                order.push(tree);
+            }
+            return order;
+        }
+
+        function simulateTED(tree1, tree2) {
+            // Hardcoded actual TED values for inference tree vs all subtrees
+            // Inference tree: function_def -> identifier("foo"), block -> return_stmt("return x + 1")
+
+            const subtreeTEDs = {
+                // From c₁ (class_def tree)
+                "class_def": 5,  // Need to change root + add MyClass + method_def wrapper
+                "MyClass": 4,    // Complete replacement needed
+                "method_def_foo": 1,  // Just need to change method_def to function_def
+                "identifier_foo": 3,  // Need to add function_def root and block structure
+                "block_return": 2,    // Need to add function_def root and identifier
+                "return_stmt": 3,     // Need to add function_def, identifier, block structure
+                "method_def_bar": 4,  // Different identifier + different return statement
+                "identifier_bar": 4,  // Different identifier, need whole structure
+                "block_pass": 3,      // Need to change pass to return stmt + add structure
+                "pass_stmt": 4,       // Complete replacement needed
+
+                // From c₂ (function_def tree)
+                "function_def_helper": 3,  // Change identifier + change block content
+                "identifier_helper": 3,    // Different identifier, need structure
+                "block_if": 2,            // Need to change if_stmt to return_stmt + add identifier
+                "if_stmt": 3,             // Need to replace with return_stmt + add structure
+                "condition": 4,           // Complete replacement needed
+                "return_stmt_x2": 3       // Different return statement + need structure
+            };
+
+            // Map tree structure to lookup key
+            function getSubtreeKey(tree) {
+                if (tree.name === "class_def") return "class_def";
+                if (tree.name === "identifier" && tree.text === "MyClass") return "MyClass";
+                if (tree.name === "method_def" && tree.children?.[0]?.text === "foo") return "method_def_foo";
+                if (tree.name === "identifier" && tree.text === "foo") return "identifier_foo";
+                if (tree.name === "block" && tree.children?.[0]?.text === "return x + 1") return "block_return";
+                if (tree.name === "return_stmt" && tree.text === "return x + 1") return "return_stmt";
+                if (tree.name === "method_def" && tree.children?.[0]?.text === "bar") return "method_def_bar";
+                if (tree.name === "identifier" && tree.text === "bar") return "identifier_bar";
+                if (tree.name === "block" && tree.children?.[0]?.text === "pass") return "block_pass";
+                if (tree.name === "pass_stmt") return "pass_stmt";
+                if (tree.name === "function_def" && tree.children?.[0]?.text === "helper") return "function_def_helper";
+                if (tree.name === "identifier" && tree.text === "helper") return "identifier_helper";
+                if (tree.name === "block" && tree.children?.[0]?.name === "if_stmt") return "block_if";
+                if (tree.name === "if_stmt") return "if_stmt";
+                if (tree.name === "condition") return "condition";
+                if (tree.name === "return_stmt" && tree.text === "return x * 2") return "return_stmt_x2";
+
+                return "unknown";
+            }
+
+            const key = getSubtreeKey(tree2);
+            return subtreeTEDs[key] || 5;
+        }
+
+        function renderTree(containerId, treeData, className = '') {
+            const container = d3.select(`#${containerId}`);
+            container.selectAll('*').remove();
+
+            const width = container.node().offsetWidth;
+            const height = container.node().offsetHeight;
+
+            const svg = container.append('svg')
+                .attr('width', width)
+                .attr('height', height);
+
+            const g = svg.append('g')
+                .attr('transform', 'translate(20,20)');
+
+            const root = d3.hierarchy(treeData);
+            const treeLayout = d3.tree().size([width - 40, height - 40]);
+            treeLayout(root);
+
+            // Create links
+            g.selectAll('.link')
+                .data(root.links())
+                .enter().append('path')
+                .attr('class', `link ${className}`)
+                .attr('d', d3.linkVertical()
+                    .x(d => d.x)
+                    .y(d => d.y));
+
+            // Create nodes
+            const nodes = g.selectAll('.node')
+                .data(root.descendants())
+                .enter().append('g')
+                .attr('class', `node ${className}`)
+                .attr('transform', d => `translate(${d.x},${d.y})`);
+
+            nodes.append('circle')
+                .attr('r', 8);
+
+            nodes.append('text')
+                .attr('dx', 12)
+                .attr('dy', 4)
+                .text(d => d.data.text || d.data.name);
+
+            return {svg, g, nodes, root};
+        }
+
+        function highlightSubtree(containerId, subtreeRoot, className = 'current-subtree') {
+            // Remove previous highlights from ALL trees
+            d3.selectAll('.node').classed('current-subtree highlighted', false);
+            d3.selectAll('.subtree-highlight').remove();
+
+            const container = d3.select(`#${containerId}`);
+
+            // Find the specific node in this container and highlight the subtree
+            container.selectAll('.node')
+                .filter(d => d.data.id === subtreeRoot.id)
+                .each(function(d) {
+                    // Get all descendants of this specific node
+                    const descendants = d.descendants();
+
+                    // Only highlight nodes within this specific container
+                    container.selectAll('.node')
+                        .filter(node => descendants.some(desc => desc.data.id === node.data.id))
+                        .classed(className, true);
+                });
+        }
+
+        function initializeVisualization() {
+            // Add IDs to all nodes
+            addIdsToTree(inferenceTree);
+            commitForest.forEach(addIdsToTree);
+
+            // Render initial trees
+            renderTree('inference-tree', inferenceTree, 'inference');
+            renderTree('commit-tree-1', commitForest[0], 'commit');
+            renderTree('commit-tree-2', commitForest[1], 'commit');
+
+            // Generate all subtrees and traversal order
+            animationState.allSubtrees = [];
+            commitForest.forEach(tree => {
+                getAllSubtrees(tree, animationState.allSubtrees);
+            });
+
+            // Create in-order traversal
+            animationState.traversalOrder = [];
+            commitForest.forEach(tree => {
+                inOrderTraversal(tree, animationState.traversalOrder);
+            });
+
+            updateInfoPanel();
+        }
+
+        function updateInfoPanel() {
+            document.getElementById('traversal-sequence').textContent =
+                animationState.traversalOrder.map((node, i) =>
+                    i <= animationState.currentStep ? node.name : '_'
+                ).join(' → ');
+
+            const inferenceSize = countNodes(inferenceTree); // Should be 4 nodes
+
+            if (animationState.currentSubtree) {
+                document.getElementById('current-comparison').textContent =
+                    `TED(${inferenceTree.name}, ${animationState.currentSubtree.root.name})`;
+
+                const ted = simulateTED(inferenceTree, animationState.currentSubtree.root);
+                document.getElementById('current-ted').textContent = ted.toString();
+
+                // Current ratio and reward
+                const currentRatio = ted / inferenceSize;
+                const currentReward = 1 - currentRatio;
+                document.getElementById('current-ratio').textContent = currentRatio.toFixed(3);
+                document.getElementById('current-reward').textContent = currentReward.toFixed(3);
+
+                if (ted < animationState.bestDistance) {
+                    animationState.bestDistance = ted;
+                    animationState.bestSubtree = animationState.currentSubtree;
+                }
+            }
+
+            document.getElementById('best-distance').textContent =
+                animationState.bestDistance === Infinity ? '∞' : animationState.bestDistance.toString();
+
+            const bestNormalizedRatio = animationState.bestDistance === Infinity ?
+                '-' : (animationState.bestDistance / inferenceSize).toFixed(3);
+            const bestReward = animationState.bestDistance === Infinity ?
+                '-' : (1 - animationState.bestDistance / inferenceSize).toFixed(3);
+
+            document.getElementById('normalized-ratio').textContent = bestNormalizedRatio;
+            document.getElementById('best-reward').textContent = bestReward;
+        }
+
+        function stepAnimation() {
+            if (animationState.currentStep >= animationState.allSubtrees.length) {
+                animationState.isRunning = false;
+                document.getElementById('start-btn').disabled = false;
+                document.getElementById('step-btn').disabled = true;
+                return;
+            }
+
+            const subtree = animationState.allSubtrees[animationState.currentStep];
+            animationState.currentSubtree = subtree;
+
+            // Determine which tree contains this subtree
+            let treeIndex = -1;
+            for (let i = 0; i < commitForest.length; i++) {
+                if (collectNodes(commitForest[i]).some(node => node.id === subtree.root.id)) {
+                    treeIndex = i;
+                    break;
+                }
+            }
+
+            // Highlight the current subtree
+            const containerId = `commit-tree-${treeIndex + 1}`;
+            highlightSubtree(containerId, subtree.root);
+
+            updateInfoPanel();
+            animationState.currentStep++;
+        }
+
+        function startAnimation() {
+            animationState.isRunning = true;
+            document.getElementById('start-btn').disabled = true;
+            document.getElementById('step-btn').disabled = false;
+
+            const interval = setInterval(() => {
+                if (!animationState.isRunning) {
+                    clearInterval(interval);
+                    return;
+                }
+
+                stepAnimation();
+
+                if (animationState.currentStep >= animationState.allSubtrees.length) {
+                    clearInterval(interval);
+                }
+            }, 1000);
+        }
+
+        function resetAnimation() {
+            animationState.isRunning = false;
+            animationState.currentStep = 0;
+            animationState.bestDistance = Infinity;
+            animationState.bestSubtree = null;
+            animationState.currentSubtree = null;
+
+            document.getElementById('start-btn').disabled = false;
+            document.getElementById('step-btn').disabled = false;
+
+            // Clear highlights
+            d3.selectAll('.node').classed('current-subtree highlighted', false);
+            d3.selectAll('.subtree-highlight').remove();
+
+            updateInfoPanel();
+        }
+
+        // Event listeners
+        document.getElementById('start-btn').addEventListener('click', startAnimation);
+        document.getElementById('reset-btn').addEventListener('click', resetAnimation);
+        document.getElementById('step-btn').addEventListener('click', stepAnimation);
+
+        // Initialize when page loads
+        window.addEventListener('load', initializeVisualization);
+    </script>
+</body>
+</html>
