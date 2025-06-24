@@ -18,7 +18,6 @@ use crate::inference::types::{
     batch::StartBatchModelInferenceWithMetadata, ModelInferenceRequest, RequestMessage, Role,
 };
 use crate::model::ModelTable;
-use crate::model_table::ShorthandModelConfig;
 use crate::{
     embeddings::EmbeddingRequest,
     endpoints::inference::{InferenceClients, InferenceParams},
@@ -240,7 +239,7 @@ impl Variant for DiclConfig {
 
         // Validate embedding model using the unified model table
         use crate::model::ModelTableExt;
-        let embedding_model = models
+        let _embedding_model = models
             .get_with_capability(&self.embedding_model, crate::endpoints::capability::EndpointCapability::Embeddings)
             .await?
             .ok_or_else(|| Error::new(ErrorDetails::Config {

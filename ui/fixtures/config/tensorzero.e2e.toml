@@ -19,10 +19,11 @@ routing = ["fireworks"]
 type = "fireworks"
 model_name = "accounts/fireworks/models/llama-v3p1-8b-instruct"
 
-[embedding_models.text-embedding-3-small]
+[models.text-embedding-3-small]
 routing = ["openai"]
+endpoints = ["embeddings"]
 
-[embedding_models.text-embedding-3-small.providers.openai]
+[models.text-embedding-3-small.providers.openai]
 type = "openai"
 model_name = "text-embedding-3-small"
 
