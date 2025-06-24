@@ -98,6 +98,9 @@ pub struct GatewayConfig {
     pub enable_template_filesystem_access: bool,
     #[serde(default)]
     pub export: ExportConfig,
+    // If set, all of the HTTP endpoints will have this path prepended.
+    // E.g. a base path of `/custom/prefix` will cause the inference endpoint to become `/custom/prefix/inference`.
+    pub base_path: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
