@@ -2049,15 +2049,15 @@ mod tests {
     async fn test_config_validate_embedding_model_name_tensorzero_prefix() {
         let mut config = get_sample_valid_config();
 
-        // Rename an existing embedding model to start with `tensorzero::`
-        let old_embedding_model_entry = config["embedding_models"]
+        // Find and rename the text-embedding-3-small model to start with `tensorzero::`
+        let old_model_entry = config["models"]
             .as_table_mut()
             .unwrap()
             .remove("text-embedding-3-small")
-            .expect("Did not find embedding model `text-embedding-3-small`");
-        config["embedding_models"].as_table_mut().unwrap().insert(
+            .expect("Did not find model `text-embedding-3-small`");
+        config["models"].as_table_mut().unwrap().insert(
             "tensorzero::bad_embedding_model".to_string(),
-            old_embedding_model_entry,
+            old_model_entry,
         );
 
         let base_path = PathBuf::new();
@@ -2066,7 +2066,7 @@ mod tests {
                 result.unwrap_err(),
                 Error::new(ErrorDetails::Config {
                     message:
-                        "Failed to load embedding models: Embedding model name 'tensorzero::bad_embedding_model' contains a reserved prefix"
+                        "Failed to load models: Model name 'tensorzero::bad_embedding_model' contains a reserved prefix"
                             .to_string()
                 })
             );
@@ -2830,7 +2830,7 @@ thinking = { type = "enabled", budget_tokens = 1024 }
         [functions.basic_test.variants.dicl]
         type = "experimental_dynamic_in_context_learning"
         model = "my-model"
-        embedding_model = "openai::text-embedding-3-small"
+        embedding_model = "text-embedding-model"
         k = 3
         max_tokens = 100
 
@@ -2854,6 +2854,14 @@ thinking = { type = "enabled", budget_tokens = 1024 }
         [models.my-model.providers.openai]
         type = "openai"
         model_name = "gpt-4o-mini-2024-07-18"
+        
+        [models.text-embedding-model]
+        routing = ["openai"]
+        endpoints = ["embeddings"]
+        
+        [models.text-embedding-model.providers.openai]
+        type = "openai"
+        model_name = "text-embedding-3-small"
         "#;
         let config = toml::from_str(config_str).expect("Failed to parse sample config");
 

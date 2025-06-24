@@ -216,7 +216,7 @@ impl Variant for DiclConfig {
         &self,
         _function: &FunctionConfig,
         models: &mut ModelTable,
-        embedding_models: &EmbeddingModelTable,
+        _embedding_models: &EmbeddingModelTable,
         _templates: &TemplateConfig<'_>,
         function_name: &str,
         variant_name: &str,
@@ -237,24 +237,19 @@ impl Variant for DiclConfig {
         }
         // Validate that the generation model and embedding model are valid
         models.validate(&self.model)?;
-        let embedding_model = embedding_models
-            .get(&self.embedding_model).await?
+
+        // Validate embedding model using the unified model table
+        use crate::model::ModelTableExt;
+        let embedding_model = models
+            .get_with_capability(&self.embedding_model, crate::endpoints::capability::EndpointCapability::Embeddings)
+            .await?
             .ok_or_else(|| Error::new(ErrorDetails::Config {
                 message: format!(
-                    "`functions.{function_name}.variants.{variant_name}`: `embedding_model` must be a valid embedding model name"
+                    "`functions.{function_name}.variants.{variant_name}`: `embedding_model` must be a valid embedding model name with embeddings capability"
                 ),
             }))?;
 
-        embedding_model
-            .validate(&self.embedding_model)
-            .map_err(|e| {
-                Error::new(ErrorDetails::Config {
-                    message: format!(
-                "`functions.{function_name}.variants.{variant_name}` and embedding model `{}`: {e}",
-                self.embedding_model
-                ),
-                })
-            })?;
+        // Embedding model validation is already done by checking it exists with embeddings capability
         Ok(())
     }
 
