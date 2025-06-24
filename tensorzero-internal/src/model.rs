@@ -74,6 +74,31 @@ pub(crate) struct UninitializedModelConfig {
     pub endpoints: HashSet<EndpointCapability>, // supported endpoint capabilities
 }
 
+/// Determine endpoint capabilities based on model name patterns
+fn determine_capabilities_from_model_name(model_name: &str) -> HashSet<EndpointCapability> {
+    let mut capabilities = HashSet::new();
+    
+    // Check if this is an embedding model by name patterns
+    let embedding_patterns = [
+        "embedding",
+        "embed",
+        "text-embedding",
+        "text-embed",
+        "text_embedding",
+        "text_embed",
+    ];
+    
+    let lower_name = model_name.to_lowercase();
+    if embedding_patterns.iter().any(|pattern| lower_name.contains(pattern)) {
+        capabilities.insert(EndpointCapability::Embeddings);
+    } else {
+        // Default to chat capability for non-embedding models
+        capabilities.insert(EndpointCapability::Chat);
+    }
+    
+    capabilities
+}
+
 impl ModelConfig {
     /// Check if this model supports a specific endpoint capability
     pub fn supports_endpoint(&self, capability: EndpointCapability) -> bool {
@@ -1640,35 +1665,36 @@ impl ShorthandModelConfig for ModelConfig {
     const SHORTHAND_MODEL_PREFIXES: &[&str] = SHORTHAND_MODEL_PREFIXES;
     const MODEL_TYPE: &str = "Model";
     async fn from_shorthand(provider_type: &str, model_name: &str) -> Result<Self, Error> {
-        let model_name = model_name.to_string();
+        let model_name_string = model_name.to_string();
+        let endpoints = determine_capabilities_from_model_name(model_name);
         let provider_config = match provider_type {
-            "anthropic" => ProviderConfig::Anthropic(AnthropicProvider::new(model_name, None)?),
-            "deepseek" => ProviderConfig::DeepSeek(DeepSeekProvider::new(model_name, None)?),
+            "anthropic" => ProviderConfig::Anthropic(AnthropicProvider::new(model_name_string.clone(), None)?),
+            "deepseek" => ProviderConfig::DeepSeek(DeepSeekProvider::new(model_name_string.clone(), None)?),
             "fireworks" => ProviderConfig::Fireworks(FireworksProvider::new(
-                model_name,
+                model_name_string.clone(),
                 None,
                 crate::inference::providers::fireworks::default_parse_think_blocks(),
             )?),
             "google_ai_studio_gemini" => ProviderConfig::GoogleAIStudioGemini(
-                GoogleAIStudioGeminiProvider::new(model_name, None)?,
+                GoogleAIStudioGeminiProvider::new(model_name_string.clone(), None)?,
             ),
             "gcp_vertex_gemini" => ProviderConfig::GCPVertexGemini(
-                GCPVertexGeminiProvider::new_shorthand(model_name).await?,
+                GCPVertexGeminiProvider::new_shorthand(model_name_string.clone()).await?,
             ),
             "gcp_vertex_anthropic" => ProviderConfig::GCPVertexAnthropic(
-                GCPVertexAnthropicProvider::new_shorthand(model_name).await?,
+                GCPVertexAnthropicProvider::new_shorthand(model_name_string.clone()).await?,
             ),
-            "hyperbolic" => ProviderConfig::Hyperbolic(HyperbolicProvider::new(model_name, None)?),
-            "mistral" => ProviderConfig::Mistral(MistralProvider::new(model_name, None)?),
-            "openai" => ProviderConfig::OpenAI(OpenAIProvider::new(model_name, None, None)?),
+            "hyperbolic" => ProviderConfig::Hyperbolic(HyperbolicProvider::new(model_name_string.clone(), None)?),
+            "mistral" => ProviderConfig::Mistral(MistralProvider::new(model_name_string.clone(), None)?),
+            "openai" => ProviderConfig::OpenAI(OpenAIProvider::new(model_name_string.clone(), None, None)?),
             "together" => ProviderConfig::Together(TogetherProvider::new(
-                model_name,
+                model_name_string.clone(),
                 None,
                 crate::inference::providers::together::default_parse_think_blocks(),
             )?),
-            "xai" => ProviderConfig::XAI(XAIProvider::new(model_name, None)?),
+            "xai" => ProviderConfig::XAI(XAIProvider::new(model_name_string.clone(), None)?),
             #[cfg(any(test, feature = "e2e_tests"))]
-            "dummy" => ProviderConfig::Dummy(DummyProvider::new(model_name, None)?),
+            "dummy" => ProviderConfig::Dummy(DummyProvider::new(model_name_string.clone(), None)?),
             _ => {
                 return Err(ErrorDetails::Config {
                     message: format!("Invalid provider type: {provider_type}"),
@@ -1687,7 +1713,7 @@ impl ShorthandModelConfig for ModelConfig {
                     extra_headers: Default::default(),
                 },
             )]),
-            endpoints: default_capabilities(), // Default to chat capability
+            endpoints, // Use pre-computed endpoints based on model name
         })
     }
 
