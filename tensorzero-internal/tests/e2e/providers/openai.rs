@@ -1104,6 +1104,7 @@ async fn test_embedding_request() {
         input: tensorzero_internal::embeddings::EmbeddingInput::Single(
             "This is a test input".to_string(),
         ),
+        encoding_format: None,
     };
     let api_keys = InferenceCredentials::default();
     let response = model_config
@@ -1206,18 +1207,21 @@ async fn test_embedding_sanity_check() {
         input: tensorzero_internal::embeddings::EmbeddingInput::Single(
             "Joe Biden is the president of the United States".to_string(),
         ),
+        encoding_format: None,
     };
 
     let embedding_request_b = EmbeddingRequest {
         input: tensorzero_internal::embeddings::EmbeddingInput::Single(
             "Kamala Harris is the vice president of the United States".to_string(),
         ),
+        encoding_format: None,
     };
 
     let embedding_request_c = EmbeddingRequest {
         input: tensorzero_internal::embeddings::EmbeddingInput::Single(
             "My favorite systems programming language is Rust".to_string(),
         ),
+        encoding_format: None,
     };
     let api_keys = InferenceCredentials::default();
 

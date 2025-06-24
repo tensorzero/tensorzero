@@ -228,7 +228,7 @@ impl Serialize for EmbeddingCacheData {
         use serde::ser::Error;
 
         let json_string = serde_json::to_string(&self.embeddings)
-            .map_err(|e| S::Error::custom(format!("Failed to serialize embeddings: {}", e)))?;
+            .map_err(|e| S::Error::custom(format!("Failed to serialize embeddings: {e}")))?;
         serializer.serialize_str(&json_string)
     }
 }

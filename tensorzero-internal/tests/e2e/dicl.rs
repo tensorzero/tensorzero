@@ -369,6 +369,7 @@ async fn embed_insert_example(
         input: tensorzero_internal::embeddings::EmbeddingInput::Single(
             serde_json::to_string(&input).unwrap(),
         ),
+        encoding_format: None,
     };
     let api_keys = InferenceCredentials::default();
     let response = provider_config
