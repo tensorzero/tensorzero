@@ -119,6 +119,12 @@
             stroke-width: 4px;
         }
 
+        .node.best-subtree circle {
+            fill: #d4edda;
+            stroke: #28a745;
+            stroke-width: 4px;
+        }
+
         .node text {
             font: 12px sans-serif;
             text-anchor: start;
@@ -184,6 +190,11 @@
             stroke-dasharray: 5,5;
             opacity: 0.8;
         }
+
+        .best-score {
+            color: #28a745;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
@@ -220,16 +231,16 @@
 
         <div class="info-panel">
             <div class="traversal-order">
-                <strong>In-order Traversal:</strong> <span id="traversal-sequence">Ready to start...</span>
+                <strong>Post-order Traversal:</strong> <span id="traversal-sequence">Ready to start...</span>
             </div>
             <div class="distance-info">
                 <strong>Current Comparison:</strong> <span id="current-comparison">-</span><br>
                 <strong>TED(t₁, current_subtree):</strong> <span id="current-ted">-</span><br>
                 <strong>Current Ratio:</strong> <span id="current-ratio">-</span><br>
                 <strong>Current Reward:</strong> <span id="current-reward">-</span><br>
-                <strong>Best Distance Found:</strong> <span id="best-distance">∞</span><br>
-                <strong>Best Normalized Ratio r₁:</strong> <span id="normalized-ratio">-</span><br>
-                <strong>Best Reward (1 - r₁):</strong> <span id="best-reward">-</span>
+                <strong>Best Distance Found:</strong> <span id="best-distance" class="best-score">∞</span><br>
+                <strong>Best Normalized Ratio r₁:</strong> <span id="normalized-ratio" class="best-score">-</span><br>
+                <strong>Best Reward (1 - r₁):</strong> <span id="best-reward" class="best-score">-</span>
             </div>
         </div>
     </div>
@@ -316,20 +327,20 @@
             return node;
         }
 
-        function getAllSubtrees(tree, subtrees = []) {
+        function getAllSubtreesPostOrder(tree, subtrees = []) {
             if (!tree) return subtrees;
 
-            // Add current tree as a subtree
+            // Recursively get subtrees of children first (post-order)
+            if (tree.children) {
+                tree.children.forEach(child => getAllSubtreesPostOrder(child, subtrees));
+            }
+
+            // Add current tree as a subtree last
             subtrees.push({
                 root: tree,
                 nodes: collectNodes(tree),
                 size: countNodes(tree)
             });
-
-            // Recursively get subtrees of children
-            if (tree.children) {
-                tree.children.forEach(child => getAllSubtrees(child, subtrees));
-            }
 
             return subtrees;
         }
@@ -354,26 +365,19 @@
             return count;
         }
 
-        function inOrderTraversal(tree, order = []) {
+        function postOrderTraversal(tree, order = []) {
             if (!tree) return order;
 
+            // Visit all children first
             if (tree.children && tree.children.length > 0) {
-                // Visit left subtree (first child)
-                if (tree.children[0]) {
-                    inOrderTraversal(tree.children[0], order);
-                }
-
-                // Visit root
-                order.push(tree);
-
-                // Visit remaining children
-                for (let i = 1; i < tree.children.length; i++) {
-                    inOrderTraversal(tree.children[i], order);
-                }
-            } else {
-                // Leaf node
-                order.push(tree);
+                tree.children.forEach(child => {
+                    postOrderTraversal(child, order);
+                });
             }
+
+            // Visit root last
+            order.push(tree);
+
             return order;
         }
 
@@ -475,7 +479,7 @@
         }
 
         function highlightSubtree(containerId, subtreeRoot, className = 'current-subtree') {
-            // Remove previous highlights from ALL trees
+            // Remove previous current highlights from ALL trees (but keep best highlights)
             d3.selectAll('.node').classed('current-subtree highlighted', false);
             d3.selectAll('.subtree-highlight').remove();
 
@@ -495,6 +499,35 @@
                 });
         }
 
+        function highlightBestSubtree() {
+            if (!animationState.bestSubtree) return;
+
+            // Clear previous best highlighting
+            d3.selectAll('.node').classed('best-subtree', false);
+
+            // Find which tree contains the best subtree
+            let treeIndex = -1;
+            for (let i = 0; i < commitForest.length; i++) {
+                if (collectNodes(commitForest[i]).some(node => node.id === animationState.bestSubtree.root.id)) {
+                    treeIndex = i;
+                    break;
+                }
+            }
+
+            if (treeIndex >= 0) {
+                const containerId = `commit-tree-${treeIndex + 1}`;
+                const container = d3.select(`#${containerId}`);
+
+                // Get the nodes that are actually part of the best subtree
+                const bestSubtreeNodeIds = collectNodes(animationState.bestSubtree.root).map(node => node.id);
+
+                // Only highlight nodes that are part of the best subtree
+                container.selectAll('.node')
+                    .filter(d => bestSubtreeNodeIds.includes(d.data.id))
+                    .classed('best-subtree', true);
+            }
+        }
+
         function initializeVisualization() {
             // Add IDs to all nodes
             addIdsToTree(inferenceTree);
@@ -505,17 +538,14 @@
             renderTree('commit-tree-1', commitForest[0], 'commit');
             renderTree('commit-tree-2', commitForest[1], 'commit');
 
-            // Generate all subtrees and traversal order
+            // Generate all subtrees in post-order
             animationState.allSubtrees = [];
             commitForest.forEach(tree => {
-                getAllSubtrees(tree, animationState.allSubtrees);
+                getAllSubtreesPostOrder(tree, animationState.allSubtrees);
             });
 
-            // Create in-order traversal
-            animationState.traversalOrder = [];
-            commitForest.forEach(tree => {
-                inOrderTraversal(tree, animationState.traversalOrder);
-            });
+            // The traversal order is now the same as the subtree order
+            animationState.traversalOrder = animationState.allSubtrees.map(subtree => subtree.root);
 
             updateInfoPanel();
         }
@@ -544,6 +574,8 @@
                 if (ted < animationState.bestDistance) {
                     animationState.bestDistance = ted;
                     animationState.bestSubtree = animationState.currentSubtree;
+                    // Highlight the new best subtree in green
+                    highlightBestSubtree();
                 }
             }
 
@@ -617,7 +649,7 @@
             document.getElementById('step-btn').disabled = false;
 
             // Clear highlights
-            d3.selectAll('.node').classed('current-subtree highlighted', false);
+            d3.selectAll('.node').classed('current-subtree highlighted best-subtree', false);
             d3.selectAll('.subtree-highlight').remove();
 
             updateInfoPanel();
