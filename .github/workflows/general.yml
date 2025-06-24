@@ -386,13 +386,12 @@ jobs:
           cache-provider: "buildjet"
           shared-key: "build-gateway-cache"
           save-if: false
-      - run: df -h
+      - name: "Check disk space before cleanup"
+        run: df -h
       # ClickHouse intermittently runs out of disk space on the `ubuntu-latest` runner
-      # I'm using the commands from https://carlosbecker.com/posts/github-actions-disk-space/ to try to get more disk space
+      # Use extreme disk cleanup script that frees up ~26GB of space (11-phase cleanup)
       - name: "Free up disk space"
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
-      - run: df -h
+        run: ./ci/free-disk-space.sh
       - name: Install cargo-nextest
         uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
         with:
