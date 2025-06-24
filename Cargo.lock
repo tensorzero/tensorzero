@@ -1620,6 +1620,7 @@ dependencies = [
  "reqwest",
  "serde",
  "tempfile",
+ "tensorzero",
  "tensorzero-core",
  "tokio",
  "tower-http",
