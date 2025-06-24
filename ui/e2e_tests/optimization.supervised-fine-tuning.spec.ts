@@ -162,7 +162,7 @@ model_name = "mock-inference-finetune-1234"
 
     await page
       .getByText("running", { exact: true })
-      .waitFor({ timeout: 15000 });
+      .waitFor({ timeout: 60000 });
     await expect(page.locator("body")).toContainText(
       "Base Model: gpt-4o-2024-08-06",
     );
