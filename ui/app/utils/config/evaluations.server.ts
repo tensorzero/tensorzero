@@ -23,7 +23,7 @@ import type { RawFunctionConfig } from "./function.server";
 
 // User template for LLM judge
 // This is problematic because we would ideally want an automated way
-// to keep this in sync with tensorzero-internal/src/evaluations/llm_judge_user_template.minijinja
+// to keep this in sync with tensorzero-core/src/evaluations/llm_judge_user_template.minijinja
 const llm_judge_user_template = `# Input
 
 {{input}}
@@ -40,7 +40,7 @@ const llm_judge_user_template = `# Input
 
 // Output schemas for LLM judge with float output
 // This is problematic because we would ideally want an automated way
-// to keep this in sync with tensorzero-internal/src/evaluations/llm_judge_float_output_schema.json
+// to keep this in sync with tensorzero-core/src/evaluations/llm_judge_float_output_schema.json
 const llm_judge_float_output_schema = {
   $schema: "http://json-schema.org/draft-07/schema#",
   type: "object",
@@ -56,7 +56,7 @@ const llm_judge_float_output_schema = {
 
 // Output schemas for LLM judge with boolean output
 // This is problematic because we would ideally want an automated way
-// to keep this in sync with tensorzero-internal/src/evaluations/llm_judge_boolean_output_schema.json
+// to keep this in sync with tensorzero-core/src/evaluations/llm_judge_boolean_output_schema.json
 const llm_judge_boolean_output_schema = {
   $schema: "http://json-schema.org/draft-07/schema#",
   type: "object",
@@ -72,7 +72,7 @@ const llm_judge_boolean_output_schema = {
 
 // User schema for LLM judge
 // This is problematic because we would ideally want an automated way
-// to keep this in sync with tensorzero-internal/src/evaluations/llm_judge_user_schema.json
+// to keep this in sync with tensorzero-core/src/evaluations/llm_judge_user_schema.json
 const llm_judge_user_schema = {
   $schema: "http://json-schema.org/draft-07/schema#",
   type: "object",

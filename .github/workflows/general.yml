@@ -6,6 +6,17 @@ on:
   pull_request:
     branches: ["main"]
 
+# Hack to cancel existing merge-queue workflows when a new one is created.
+# This ensures that we don't have multiple ClickHouse cloud tests running at the same time.
+concurrency:
+  # This is how you do a ternary-if in Github Actions.defaults:
+  # In the merge queue, we use a fixed concurrency group name, which will cancel any
+  # leftover workflow runs when a PR was removed from the merge queue.
+  # Otherwise, we use the unique 'github.run_id' field, which will create a new concurrency group,
+  # and avoid cancelling any existing workflow runs.
+  group: ${{ (github.event_name == 'merge_group' && 'merge-group-general-checks') || github.run_id }}
+  cancel-in-progress: true
+
 env:
   FORCE_COLOR: 1
   TENSORZERO_CLICKHOUSE_URL: "http://chuser:chpassword@localhost:8123/tensorzero"
@@ -14,13 +25,6 @@ jobs:
   clickhouse-tests-cloud:
     if: github.event_name == 'merge_group'
     runs-on: ubuntu-latest
-    # Note - a concurrency group only allows at most one job to be pending at a time - additional
-    # pending jobs will cause existing pending jobs to be cancelled.
-    # This setting required a merge group concurrency limit of at most 2 - if it's any higher,
-    # jobs will get cancelled, causing spurious failures in the merge queue.
-    concurrency:
-      group: clickhouse-tests-cloud-${{ matrix.cloud_instance.release_channel }}
-      cancel-in-progress: false
     strategy:
       matrix:
         cloud_instance:
@@ -37,7 +41,7 @@ jobs:
           shared-key: "build-gateway-cache"
           save-if: false
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@37bdc826eaedac215f638a96472df572feab0f9b
+        uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
         with:
           tool: cargo-nextest
 
@@ -252,7 +256,7 @@ jobs:
       #   run: uv run --with nb-clean nb-clean check --remove-empty-cells
 
       - name: Install cargo-nextest, cargo-deny, and cargo-hack
-        uses: taiki-e/install-action@37bdc826eaedac215f638a96472df572feab0f9b
+        uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
         with:
           tool: cargo-nextest,cargo-deny,cargo-hack
 
@@ -341,10 +345,10 @@ jobs:
         run: wasm-pack test --node --features console_error_panic_hook
 
       - name: Run ESLint
-        run: pnpm --filter=tensorzero-ui run lint
+        run: pnpm --filter=tensorzero-ui run lint:check
 
       - name: Run Prettier
-        run: pnpm --filter=tensorzero-ui run format
+        run: pnpm --filter=tensorzero-ui run format:check
 
       - name: pnpm TypeScript type checking
         run: pnpm --filter=tensorzero-ui run typecheck
@@ -390,7 +394,7 @@ jobs:
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
       - run: df -h
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@37bdc826eaedac215f638a96472df572feab0f9b
+        uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
         with:
           tool: cargo-nextest
 
@@ -405,7 +409,7 @@ jobs:
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
 
       - name: Launch ClickHouse container for E2E tests
-        run: TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-internal/tests/e2e/docker-compose.yml up clickhouse --wait
+        run: TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up clickhouse --wait
 
       # Make an HTTP request to ClickHouse and check that the version matches '${{ matrix.clickhouse_version }}'
       - name: Check ClickHouse version

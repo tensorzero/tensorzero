@@ -10,11 +10,11 @@ import {
   type SnippetTab,
 } from "~/components/layout/SnippetLayout";
 import {
-  CodeMessage,
   EmptyMessage,
   TextMessage,
   ToolCallMessage,
 } from "~/components/layout/SnippetContent";
+import { CodeBlock } from "../ui/code-block";
 
 /*
 NOTE: This is the new output component but it is not editable yet so we are rolling
@@ -64,31 +64,29 @@ function renderJsonInferenceOutput(output: JsonInferenceOutputRenderingData) {
   return (
     <SnippetTabs tabs={tabs} defaultTab={defaultTab}>
       {(activeTab) => (
-        <SnippetContent>
+        <>
           {activeTab === "parsed" ? (
-            <SnippetMessage>
+            <>
               {output.parsed ? (
-                <CodeMessage
-                  content={JSON.stringify(output.parsed, null, 2)}
-                  showLineNumbers={true}
+                <CodeBlock
+                  raw={JSON.stringify(output.parsed, null, 2)}
+                  showLineNumbers
                 />
               ) : (
-                <EmptyMessage message="The inference output failed to parse against the schema." />
+                <SnippetMessage>
+                  <EmptyMessage message="The inference output failed to parse against the schema." />
+                </SnippetMessage>
               )}
-            </SnippetMessage>
+            </>
           ) : activeTab === "raw" ? (
-            <SnippetMessage>
-              <CodeMessage content={output.raw} showLineNumbers={true} />
-            </SnippetMessage>
+            <CodeBlock raw={output.raw} showLineNumbers={true} />
           ) : (
-            <SnippetMessage>
-              <CodeMessage
-                content={JSON.stringify(output.schema, null, 2)}
-                showLineNumbers={true}
-              />
-            </SnippetMessage>
+            <CodeBlock
+              raw={JSON.stringify(output.schema, null, 2)}
+              showLineNumbers={true}
+            />
           )}
-        </SnippetContent>
+        </>
       )}
     </SnippetTabs>
   );
