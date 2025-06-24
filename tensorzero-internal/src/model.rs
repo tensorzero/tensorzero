@@ -77,7 +77,7 @@ pub(crate) struct UninitializedModelConfig {
 /// Determine endpoint capabilities based on model name patterns
 fn determine_capabilities_from_model_name(model_name: &str) -> HashSet<EndpointCapability> {
     let mut capabilities = HashSet::new();
-    
+
     // Check if this is an embedding model by name patterns
     let embedding_patterns = [
         "embedding",
@@ -87,15 +87,18 @@ fn determine_capabilities_from_model_name(model_name: &str) -> HashSet<EndpointC
         "text_embedding",
         "text_embed",
     ];
-    
+
     let lower_name = model_name.to_lowercase();
-    if embedding_patterns.iter().any(|pattern| lower_name.contains(pattern)) {
+    if embedding_patterns
+        .iter()
+        .any(|pattern| lower_name.contains(pattern))
+    {
         capabilities.insert(EndpointCapability::Embeddings);
     } else {
         // Default to chat capability for non-embedding models
         capabilities.insert(EndpointCapability::Chat);
     }
-    
+
     capabilities
 }
 
@@ -1668,8 +1671,12 @@ impl ShorthandModelConfig for ModelConfig {
         let model_name_string = model_name.to_string();
         let endpoints = determine_capabilities_from_model_name(model_name);
         let provider_config = match provider_type {
-            "anthropic" => ProviderConfig::Anthropic(AnthropicProvider::new(model_name_string.clone(), None)?),
-            "deepseek" => ProviderConfig::DeepSeek(DeepSeekProvider::new(model_name_string.clone(), None)?),
+            "anthropic" => {
+                ProviderConfig::Anthropic(AnthropicProvider::new(model_name_string.clone(), None)?)
+            }
+            "deepseek" => {
+                ProviderConfig::DeepSeek(DeepSeekProvider::new(model_name_string.clone(), None)?)
+            }
             "fireworks" => ProviderConfig::Fireworks(FireworksProvider::new(
                 model_name_string.clone(),
                 None,
@@ -1684,9 +1691,16 @@ impl ShorthandModelConfig for ModelConfig {
             "gcp_vertex_anthropic" => ProviderConfig::GCPVertexAnthropic(
                 GCPVertexAnthropicProvider::new_shorthand(model_name_string.clone()).await?,
             ),
-            "hyperbolic" => ProviderConfig::Hyperbolic(HyperbolicProvider::new(model_name_string.clone(), None)?),
-            "mistral" => ProviderConfig::Mistral(MistralProvider::new(model_name_string.clone(), None)?),
-            "openai" => ProviderConfig::OpenAI(OpenAIProvider::new(model_name_string.clone(), None, None)?),
+            "hyperbolic" => ProviderConfig::Hyperbolic(HyperbolicProvider::new(
+                model_name_string.clone(),
+                None,
+            )?),
+            "mistral" => {
+                ProviderConfig::Mistral(MistralProvider::new(model_name_string.clone(), None)?)
+            }
+            "openai" => {
+                ProviderConfig::OpenAI(OpenAIProvider::new(model_name_string.clone(), None, None)?)
+            }
             "together" => ProviderConfig::Together(TogetherProvider::new(
                 model_name_string.clone(),
                 None,
