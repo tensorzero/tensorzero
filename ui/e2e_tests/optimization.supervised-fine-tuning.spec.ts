@@ -44,13 +44,6 @@ test.describe("Custom user agent", () => {
       .getByRole("option", { name: "gpt-4o-2024-08-06 OpenAI" })
       .click();
     await page.getByRole("button", { name: "Start Fine-tuning Job" }).click();
-    // Expect redirect
-    await page.waitForURL("/optimization/supervised-fine-tuning/*?backend=*");
-
-    const regex = /\?backend=nodejs$/;
-
-    // Verify that we used the correct fine-tuning backend
-    expect(page.url()).toEqual(expect.stringMatching(regex));
 
     await page.getByText("running", { exact: true }).waitFor({ timeout: 3000 });
     await expect(page.locator("body")).toContainText(
@@ -110,13 +103,6 @@ model_name = "mock-inference-finetune-1234"
       .getByRole("option", { name: "gpt-4o-2024-08-06 OpenAI" })
       .click();
     await page.getByRole("button", { name: "Start Fine-tuning Job" }).click();
-    // Expect redirect
-    await page.waitForURL("/optimization/supervised-fine-tuning/*?backend=*");
-
-    const regex = /\?backend=nodejs$/;
-
-    // Verify that we used the correct fine-tuning backend
-    expect(page.url()).toEqual(expect.stringMatching(regex));
 
     await page.getByText("running", { exact: true }).waitFor({ timeout: 3000 });
     await expect(page.locator("body")).toContainText(
@@ -149,9 +135,6 @@ model_name = "mock-inference-finetune-1234"
   test("@slow should fine-tune on image data with a mocked OpenAI server", async ({
     page,
   }) => {
-    // TODO - implement this in either the Node or (future) Rust backend,
-    // and re-enable this test.
-    return;
     await page.goto("/optimization/supervised-fine-tuning");
     await page
       .getByRole("combobox")
@@ -176,15 +159,8 @@ model_name = "mock-inference-finetune-1234"
       .getByRole("option", { name: "gpt-4o-2024-08-06 OpenAI" })
       .click();
     await page.getByRole("button", { name: "Start Fine-tuning Job" }).click();
-    // Expect redirect
-    await page.waitForURL("/optimization/supervised-fine-tuning/*?backend=*");
 
-    const regex = /\?backend=nodejs$/;
-
-    // Verify that we used the correct fine-tuning backend
-    expect(page.url()).toEqual(expect.stringMatching(regex));
-
-    await page.getByText("running", { exact: true }).waitFor({ timeout: 3000 });
+    await page.getByText("running", { exact: true }).waitFor({ timeout: 6000 });
     await expect(page.locator("body")).toContainText(
       "Base Model: gpt-4o-2024-08-06",
     );
@@ -238,13 +214,6 @@ model_name = "mock-inference-finetune-1234"
       .getByRole("option", { name: "llama-3.2-3b-instruct Fireworks" })
       .click();
     await page.getByRole("button", { name: "Start Fine-tuning Job" }).click();
-    // Expect redirect
-    await page.waitForURL("/optimization/supervised-fine-tuning/*?backend=*");
-
-    const regex = /\?backend=nodejs$/;
-
-    // Verify that we used the correct fine-tuning backend
-    expect(page.url()).toEqual(expect.stringMatching(regex));
 
     await page.getByText("running", { exact: true }).waitFor({ timeout: 3000 });
     await expect(page.locator("body")).toContainText(

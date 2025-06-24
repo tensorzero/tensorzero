@@ -41,7 +41,6 @@ export class TensorZeroClient {
     const paramsString = JSON.stringify(params, (_key, value) =>
       typeof value === "bigint" ? value.toString() : value,
     );
-
     const jobHandleString =
       await this.nativeClient.experimentalLaunchOptimizationWorkflow(
         paramsString,

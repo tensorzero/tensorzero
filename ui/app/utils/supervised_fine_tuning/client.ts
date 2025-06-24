@@ -22,8 +22,7 @@ if (!clickhouseUrl) {
 }
 const client = await TensorZeroClient.build(configPath, clickhouseUrl);
 const useNativeSFT = process.env.TENSORZERO_UI_FF_USE_NATIVE_SFT === "1";
-const openAINativeSFTBase =
-  process.env.TENSORZERO_UI_OPENAI_NATIVE_SFT_BASE ?? null;
+const openAINativeSFTBase = process.env.OPENAI_BASE_URL ?? null;
 
 export function launch_sft_job(data: SFTFormValues): Promise<SFTJob> {
   if (useNativeSFT) {
@@ -93,7 +92,15 @@ class NativeSFTJob extends SFTJob {
           },
           error: "Job failed",
         };
-      case "completed":
+      case "completed": {
+        // NOTE: the native SFT backend actually returns a model provider that is all we need
+        // and guaranteed to match the Rust type.
+        // For now we squeeze it through the existing interface.
+        // In the future we should just rip all this code and render it directly
+        const provider = Object.keys(this.jobStatus.output.providers)[0];
+        if (!provider) {
+          throw new Error("No provider found");
+        }
         return {
           status: "completed",
           modelProvider: "openai",
@@ -103,8 +110,9 @@ class NativeSFTJob extends SFTJob {
             status: "ok",
             info: this.jobStatus,
           },
-          result: "Job completed",
+          result: provider,
         };
+      }
     }
   }
 
@@ -126,7 +134,6 @@ async function launch_sft_job_native(data: SFTFormValues): Promise<SFTJob> {
   } else if (data.metric) {
     filters = await createFilters(data.metric, data.threshold);
   }
-  console.log("openAINativeSFTBase", openAINativeSFTBase);
   const job = await client.experimentalLaunchOptimizationWorkflow({
     function_name: data.function,
     template_variant_name: data.variant,

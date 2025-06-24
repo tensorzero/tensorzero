@@ -84,7 +84,7 @@ export async function action({ request }: Route.ActionArgs) {
   // The query parameter is currently just used by e2e tests to check that we're
   // using the expected backend
   return redirect(
-    `/optimization/supervised-fine-tuning/${validatedData.jobId}?backend=nodejs`,
+    `/optimization/supervised-fine-tuning/${validatedData.jobId}`,
   );
 }
 

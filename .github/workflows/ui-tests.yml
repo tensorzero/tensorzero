@@ -67,6 +67,10 @@ jobs:
           TENSORZERO_GATEWAY_URL: http://localhost:3000
         run: pnpm ui:test
 
+      - name: Run `pnpm test` for tensorzero-node
+        working-directory: internal/tensorzero-node
+        run: pnpm test
+
       - name: Print Docker Compose logs
         if: always()
         working-directory: ui
