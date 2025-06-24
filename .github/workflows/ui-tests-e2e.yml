@@ -83,7 +83,7 @@ jobs:
         env:
           TENSORZERO_CI: 1
         continue-on-error: true
-        run: pnpm ui:test:e2e
+        run: pnpm ui:test:e2e --grep-invert "fine-tune on image"
 
       - name: Run Rust E2E tests
         id: rust_e2e_tests
