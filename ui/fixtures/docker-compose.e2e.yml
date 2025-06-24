@@ -44,7 +44,7 @@ services:
       target: gateway
     volumes:
       - ./config:/app/config:ro
-    command: --config-file /app/config/tensorzero.e2e.toml
+    command: --config-file /app/config/${TENSORZERO_GATEWAY_CONFIG:-tensorzero.e2e.toml}
     environment:
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures
     env_file:
