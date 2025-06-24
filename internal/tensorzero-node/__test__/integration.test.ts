@@ -18,7 +18,9 @@ describe("TensorZeroClient Integration Tests", () => {
     const client = await TensorZeroClient.build(
       "../../examples/quickstart/config/tensorzero.toml",
     );
-    expect(typeof client.experimentalStartOptimization).toBe("function");
+    expect(typeof client.experimentalLaunchOptimizationWorkflow).toBe(
+      "function",
+    );
     expect(typeof client.experimentalPollOptimization).toBe("function");
   });
 });
