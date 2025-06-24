@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "NODE_ENV=production react-router build",
-    "dev": "react-router dev",
+    "dev": "TENSORZERO_UI_OPENAI_NATIVE_SFT_BASE=http://localhost:3030 react-router dev",
     "start": "NODE_ENV=production PORT=4000 react-router-serve ./build/server/index.js",
     "typecheck": "react-router typegen && tsc",
     "format": "prettier --write \"**/*.{js,jsx,ts,tsx,css,scss,html,json,yaml,md}\"",

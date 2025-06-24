@@ -22,6 +22,8 @@ if (!clickhouseUrl) {
 }
 const client = await TensorZeroClient.build(configPath, clickhouseUrl);
 const useNativeSFT = process.env.TENSORZERO_UI_FF_USE_NATIVE_SFT === "1";
+const openAINativeSFTBase =
+  process.env.TENSORZERO_UI_OPENAI_NATIVE_SFT_BASE ?? null;
 
 export function launch_sft_job(data: SFTFormValues): Promise<SFTJob> {
   if (useNativeSFT) {
@@ -114,6 +116,9 @@ class NativeSFTJob extends SFTJob {
 }
 
 async function launch_sft_job_native(data: SFTFormValues): Promise<SFTJob> {
+  if (data.model.provider !== "openai") {
+    throw new Error("Native SFT is only supported for OpenAI");
+  }
   let filters: InferenceFilterTreeNode | null = null;
   let output_source: InferenceOutputSource = "Inference";
   if (data.metric === "demonstration") {
@@ -121,6 +126,7 @@ async function launch_sft_job_native(data: SFTFormValues): Promise<SFTJob> {
   } else if (data.metric) {
     filters = await createFilters(data.metric, data.threshold);
   }
+  console.log("openAINativeSFTBase", openAINativeSFTBase);
   const job = await client.experimentalLaunchOptimizationWorkflow({
     function_name: data.function,
     template_variant_name: data.variant,
@@ -138,7 +144,7 @@ async function launch_sft_job_native(data: SFTFormValues): Promise<SFTJob> {
       learning_rate_multiplier: 1,
       n_epochs: 1,
       credentials: null,
-      api_base: null,
+      api_base: openAINativeSFTBase,
       seed: null,
       suffix: null,
     },

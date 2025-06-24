@@ -1,4 +1,4 @@
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 use serde_json::Value;
 
 /// Deserializes a "doubly-serialized" field of a struct.
@@ -236,6 +236,38 @@ where
     }
 }
 
+/// In JSON, large numbers cannot be represented as numbers so we instead represent them as strings.
+/// This function deserializes them as strings and then parses them as u64s.
+/// It also handles the case where the value is null or a number as usual.
+pub fn deserialize_option_u64<'de, D>(deserializer: D) -> Result<Option<u64>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    use serde::de::Error;
+
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Helper {
+        String(String),
+        Number(u64),
+        Null,
+    }
+
+    match Helper::deserialize(deserializer)? {
+        Helper::String(s) => {
+            if s.is_empty() {
+                Ok(None)
+            } else {
+                s.parse::<u64>()
+                    .map(Some)
+                    .map_err(|_| D::Error::custom(format!("invalid u64 string: '{s}'")))
+            }
+        }
+        Helper::Number(n) => Ok(Some(n)),
+        Helper::Null => Ok(None),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -423,5 +455,36 @@ mod tests {
         let json = r#"{"inner": "{\"foo\": 42, \"bar\": invalid"}"#;
         let result: Result<TestDefaultedStringOrParsedOuter, _> = serde_json::from_str(json);
         assert!(result.is_err());
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct TestOptionU64Outer {
+        #[serde(deserialize_with = "deserialize_option_u64")]
+        inner: Option<u64>,
+    }
+
+    #[test]
+    fn test_deserialize_option_u64_string() {
+        let json = r#"{"inner": "1234567890"}"#;
+        let result: TestOptionU64Outer = serde_json::from_str(json).unwrap();
+        assert!(result.inner.is_some());
+        let inner = result.inner.unwrap();
+        assert_eq!(inner, 1234567890);
+    }
+
+    #[test]
+    fn test_deserialize_option_u64_number() {
+        let json = r#"{"inner": 1234567890}"#;
+        let result: TestOptionU64Outer = serde_json::from_str(json).unwrap();
+        assert!(result.inner.is_some());
+        let inner = result.inner.unwrap();
+        assert_eq!(inner, 1234567890);
+    }
+
+    #[test]
+    fn test_deserialize_option_u64_null() {
+        let json = r#"{"inner": null}"#;
+        let result: TestOptionU64Outer = serde_json::from_str(json).unwrap();
+        assert!(result.inner.is_none());
     }
 }

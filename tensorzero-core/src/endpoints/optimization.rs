@@ -12,6 +12,7 @@ use crate::{
     endpoints::{inference::InferenceCredentials, stored_inference::render_inferences},
     error::{Error, ErrorDetails},
     optimization::{Optimizer, OptimizerJobHandle, OptimizerStatus, UninitializedOptimizerInfo},
+    serde_util::deserialize_option_u64,
     stored_inference::RenderedStoredInference,
 };
 
@@ -24,7 +25,9 @@ pub struct LaunchOptimizationWorkflowParams {
     pub query_variant_name: Option<String>,
     pub filters: Option<InferenceFilterTreeNode>,
     pub output_source: InferenceOutputSource,
+    #[serde(deserialize_with = "deserialize_option_u64")]
     pub limit: Option<u64>,
+    #[serde(deserialize_with = "deserialize_option_u64")]
     pub offset: Option<u64>,
     pub val_fraction: Option<f64>,
     #[serde(default)]
