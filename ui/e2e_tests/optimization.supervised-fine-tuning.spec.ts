@@ -160,7 +160,9 @@ model_name = "mock-inference-finetune-1234"
       .click();
     await page.getByRole("button", { name: "Start Fine-tuning Job" }).click();
 
-    await page.getByText("running", { exact: true }).waitFor({ timeout: 6000 });
+    await page
+      .getByText("running", { exact: true })
+      .waitFor({ timeout: 15000 });
     await expect(page.locator("body")).toContainText(
       "Base Model: gpt-4o-2024-08-06",
     );

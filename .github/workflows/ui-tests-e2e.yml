@@ -89,6 +89,7 @@ jobs:
         id: rust_e2e_tests
         env:
           TENSORZERO_UI_FF_USE_NATIVE_SFT: 1
+          TENSORZERO_CI: 1
         continue-on-error: true
         # TODO: remove the filtering once we support native SFT for Fireworks
         run: pnpm ui:test:e2e --grep "tuning" --grep "openai"
