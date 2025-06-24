@@ -17,7 +17,7 @@ use pyo3::types::{PyAny, PyList};
 use pyo3_helpers::{content_block_to_python, serialize_to_dict};
 use resolved_input::FileWithPath;
 pub use resolved_input::{ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent};
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::{Map, Value};
 use serde_untagged::UntaggedEnumVisitor;
 use std::borrow::Borrow;
@@ -44,6 +44,7 @@ use crate::{
     tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolCallOutput, ToolResult},
 };
 use crate::{jsonschema_util::DynamicJSONSchema, tool::ToolCallConfigDatabaseInsert};
+use serde::de::Error as _;
 
 pub mod batch;
 pub mod extra_body;
@@ -1902,6 +1903,26 @@ fn borrow_cow<'a, T: ToOwned + ?Sized>(cow: &'a Cow<'a, T>) -> Cow<'a, T> {
         Cow::Borrowed(x) => Cow::Borrowed(x),
         Cow::Owned(x) => Cow::Borrowed(x.borrow()),
     }
+}
+
+pub(super) fn serialize_delete<S>(s: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    true.serialize(s)
+}
+
+pub(super) fn deserialize_delete<'de, D>(d: D) -> Result<(), D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let val = bool::deserialize(d)?;
+    if !val {
+        return Err(D::Error::custom(
+            "Error deserializing replacement config: 'delete' must be 'true', or not set",
+        ));
+    }
+    Ok(())
 }
 
 #[cfg(test)]

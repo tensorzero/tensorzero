@@ -1,5 +1,5 @@
-use serde::de::Error;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use super::{deserialize_delete, serialize_delete};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
@@ -31,26 +31,6 @@ pub enum ExtraBodyReplacementKind {
         deserialize_with = "deserialize_delete"
     )]
     Delete,
-}
-
-fn serialize_delete<S>(s: S) -> Result<S::Ok, S::Error>
-where
-    S: Serializer,
-{
-    true.serialize(s)
-}
-
-fn deserialize_delete<'de, D>(d: D) -> Result<(), D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let val = bool::deserialize(d)?;
-    if !val {
-        return Err(D::Error::custom(
-            "Error deserializing extra body replacement: 'delete' must be 'true', or not set",
-        ));
-    }
-    Ok(())
 }
 
 /// The 'InferenceExtraBody' options provided directly in an inference request
