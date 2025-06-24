@@ -313,7 +313,7 @@ impl ClientBuilder {
             return Err(ClientBuilderError::NotHTTPGateway);
         };
         // Enforce that the URL has a trailing slash, so that joining endpoints works correctly
-        // This means that passing in a url that looks like 'http://exmaple.com/some/prefix'
+        // This means that passing in a url that looks like 'http://example.com/some/prefix'
         // will result in inference requests being sent to 'http://example.com/some/prefix/inference'
         if !url.path().ends_with('/') {
             url.set_path(&format!("{}/", url.path()));
