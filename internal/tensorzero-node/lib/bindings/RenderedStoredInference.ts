@@ -9,4 +9,13 @@ import type { JsonValue } from "./serde_json/JsonValue";
  * This is constructed by rendering a StoredInference with a variant for messages
  * and by resolving all network resources (e.g. images).
  */
-export type RenderedStoredInference = { function_name: string, variant_name: string, input: ModelInput, output: Array<ContentBlockChatOutput>, episode_id: string, inference_id: string, tool_params: ToolCallConfigDatabaseInsert | null, output_schema: JsonValue | null, };
+export type RenderedStoredInference = {
+  function_name: string;
+  variant_name: string;
+  input: ModelInput;
+  output: Array<ContentBlockChatOutput>;
+  episode_id: string;
+  inference_id: string;
+  tool_params: ToolCallConfigDatabaseInsert | null;
+  output_schema: JsonValue | null;
+};

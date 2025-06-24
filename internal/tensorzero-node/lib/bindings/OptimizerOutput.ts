@@ -2,4 +2,6 @@
 import type { UninitializedModelConfig } from "./UninitializedModelConfig";
 import type { VariantConfig } from "./VariantConfig";
 
-export type OptimizerOutput = { "type": "variant" } & VariantConfig | { "type": "model" } & UninitializedModelConfig;
+export type OptimizerOutput =
+  | ({ type: "variant" } & VariantConfig)
+  | ({ type: "model" } & UninitializedModelConfig);

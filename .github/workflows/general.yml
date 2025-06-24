@@ -344,6 +344,21 @@ jobs:
         working-directory: ui/app/utils/minijinja
         run: wasm-pack test --node --features console_error_panic_hook
 
+      - name: Build tensorzero-node package
+        run: pnpm --filter=tensorzero-node run build
+
+      - name: Check tensorzero-node bindings are properly exported
+        run: pnpm --filter=tensorzero-node run check-exports
+
+      - name: Format tensorzero-node package
+        run: pnpm --filter=tensorzero-node run format:check
+
+      - name: Lint tensorzero-node package
+        run: pnpm --filter=tensorzero-node run lint:check
+
+      - name: Typecheck tensorzero-node package
+        run: pnpm --filter=tensorzero-node run typecheck
+
       - name: Run ESLint
         run: pnpm --filter=tensorzero-ui run lint:check
 
