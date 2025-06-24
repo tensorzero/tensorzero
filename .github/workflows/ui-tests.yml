@@ -40,6 +40,10 @@ jobs:
         working-directory: ui/app/utils/minijinja
         run: wasm-pack build --features console_error_panic_hook
 
+      - name: Build `tensorzero-node`
+        working-directory: internal/tensorzero-node
+        run: pnpm build
+
       - name: Download `gateway` container
         uses: namespace-actions/download-artifact@5c070f7d7ebdc47682b04aa736c76e46ff5f6e1e
         with:
