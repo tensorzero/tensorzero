@@ -1105,12 +1105,12 @@ mod tests {
     }
 
     // Helper constructors for test messages.
-    fn system_message(content: &str) -> OpenAIRequestMessage {
+    fn system_message(content: &str) -> OpenAIRequestMessage<'_> {
         OpenAIRequestMessage::System(OpenAISystemRequestMessage {
             content: Cow::Borrowed(content),
         })
     }
-    fn user_message(content: &str) -> OpenAIRequestMessage {
+    fn user_message(content: &str) -> OpenAIRequestMessage<'_> {
         OpenAIRequestMessage::User(OpenAIUserRequestMessage {
             content: vec![OpenAIContentBlock::Text {
                 text: content.into(),

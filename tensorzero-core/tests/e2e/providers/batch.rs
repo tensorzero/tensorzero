@@ -559,7 +559,7 @@ async fn get_latest_batch_inference(
 async fn get_all_batch_inferences(
     clickhouse: &ClickHouseConnectionInfo,
     batch_id: Uuid,
-) -> Vec<BatchModelInferenceRow> {
+) -> Vec<BatchModelInferenceRow<'_>> {
     let query = format!(
         "SELECT * FROM BatchModelInference WHERE batch_id = '{batch_id}' FORMAT JSONEachRow",
     );
