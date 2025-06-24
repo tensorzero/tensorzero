@@ -15,6 +15,10 @@ type NativeTensorZeroClient = typeof NativeTensorZeroClient;
 
 // Wrapper class for type safety and convenience
 // since the interface is string in string out
+// In each method we stringify the params and return the result as a string from the
+// Rust codebase.
+// However, since we generate types with TS-RS `pnpm build-bindings` we can
+// just parse the JSON and it should be type safe to use the types we generated.
 export class TensorZeroClient {
   private nativeClient!: NativeTensorZeroClient;
 
@@ -25,31 +29,31 @@ export class TensorZeroClient {
   static async build(
     configPath: string,
     clickhouseUrl?: string | undefined | null,
-    timeout?: number | undefined | null,
+    timeout?: number | undefined | null
   ): Promise<TensorZeroClient> {
     const nativeClient = await NativeTensorZeroClient.build(
       configPath,
       clickhouseUrl,
-      timeout,
+      timeout
     );
     return new TensorZeroClient(nativeClient);
   }
 
   async experimentalLaunchOptimizationWorkflow(
-    params: LaunchOptimizationWorkflowParams,
+    params: LaunchOptimizationWorkflowParams
   ): Promise<OptimizerJobHandle> {
     const paramsString = JSON.stringify(params, (_key, value) =>
-      typeof value === "bigint" ? value.toString() : value,
+      typeof value === "bigint" ? value.toString() : value
     );
     const jobHandleString =
       await this.nativeClient.experimentalLaunchOptimizationWorkflow(
-        paramsString,
+        paramsString
       );
     return JSON.parse(jobHandleString) as OptimizerJobHandle;
   }
 
   async experimentalPollOptimization(
-    jobHandle: OptimizerJobHandle,
+    jobHandle: OptimizerJobHandle
   ): Promise<OptimizerStatus> {
     const jobHandleString = JSON.stringify(jobHandle);
     const statusString =
