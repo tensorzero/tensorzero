@@ -160,6 +160,10 @@ impl UninitializedOptimizerConfig {
         })
     }
 
+    /// Load an optimizer config from a job handle.
+    /// This is useful because when we poll we might need an OptimizerConfig to do the work
+    /// but we may not have the original one anymore. For polling, all information should be in the JobHandle.
+    /// So, the default optimizer is fine for this use cse.
     fn load_from_default_optimizer(
         job_handle: &OptimizerJobHandle,
     ) -> Result<OptimizerConfig, Error> {

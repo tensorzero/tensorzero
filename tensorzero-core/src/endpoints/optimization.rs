@@ -103,10 +103,13 @@ pub struct LaunchOptimizationParams {
     // tensorzero.toml
 }
 
-// For the TODO above: will need to pass config in here
+/// Launch an optimization job.
+/// This function already takes the data as an argument so it gives the caller more control
+/// about preparing the data prior to launching the optimization job than the workflow method above.
 pub async fn launch_optimization(
     http_client: &reqwest::Client,
     params: LaunchOptimizationParams,
+    // For the TODO above: will need to pass config in here
 ) -> Result<OptimizerJobHandle, Error> {
     let LaunchOptimizationParams {
         train_examples,
@@ -124,6 +127,8 @@ pub async fn launch_optimization(
         .await
 }
 
+/// Poll an existing optimization job.
+/// This should return the status of the job.
 pub async fn poll_optimization(
     http_client: &reqwest::Client,
     job_handle: &OptimizerJobHandle,
