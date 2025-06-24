@@ -243,7 +243,7 @@ impl<'de> Deserialize<'de> for EmbeddingCacheData {
 
         struct EmbeddingVisitor;
 
-        impl<'de> Visitor<'de> for EmbeddingVisitor {
+        impl Visitor<'_> for EmbeddingVisitor {
             type Value = EmbeddingCacheData;
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
