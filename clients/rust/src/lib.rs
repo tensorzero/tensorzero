@@ -356,7 +356,7 @@ impl Client {
     }
 
     #[cfg(feature = "pyo3")]
-    pub fn get_config(&self) -> Option<Arc<Config>> {
+    pub fn get_config(&self) -> Option<Arc<Config<'_>>> {
         match &self.mode {
             ClientMode::EmbeddedGateway { gateway, .. } => Some(gateway.state.config.clone()),
             _ => None,

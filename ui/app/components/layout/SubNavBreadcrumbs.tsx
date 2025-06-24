@@ -7,7 +7,7 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "~/components/ui/breadcrumb";
-import { useBreadcrumbs } from "~/hooks/useBreadcrumbs";
+import { useBreadcrumbs } from "~/hooks/use-breadcrumbs";
 
 export function SubNavBreadcrumbs() {
   const breadcrumbs = useBreadcrumbs();
