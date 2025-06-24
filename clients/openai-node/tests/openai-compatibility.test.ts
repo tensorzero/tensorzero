@@ -33,8 +33,11 @@ describe("OpenAI Compatibility", () => {
         role: "system",
         content: [
           {
+            type: "text",
             // @ts-expect-error - custom TensorZero property
-            assistant_name: "Alfred Pennyworth",
+            "tensorzero::arguments": {
+              assistant_name: "Alfred Pennyworth",
+            },
           },
         ],
       },
@@ -70,8 +73,11 @@ describe("OpenAI Compatibility", () => {
         role: "system",
         content: [
           {
+            type: "text",
             // @ts-expect-error - custom TensorZero property
-            assistant_name: "Alfred Pennyworth",
+            "tensorzero::arguments": {
+              assistant_name: "Alfred Pennyworth",
+            },
           },
         ],
       },
@@ -110,8 +116,11 @@ describe("OpenAI Compatibility", () => {
         role: "system",
         content: [
           {
+            type: "text",
             // @ts-expect-error - custom TensorZero property
-            name_of_assistant: "Alfred Pennyworth",
+            "tensorzero::arguments": {
+              name_of_assistant: "Alfred Pennyworth",
+            },
           },
         ],
       },
@@ -142,8 +151,11 @@ describe("OpenAI Compatibility", () => {
         role: "system",
         content: [
           {
+            type: "text",
             // @ts-expect-error - custom TensorZero property
-            assistant_name: "Alfred Pennyworth",
+            "tensorzero::arguments": {
+              assistant_name: "Alfred Pennyworth",
+            },
           },
         ],
       },
@@ -235,8 +247,11 @@ describe("OpenAI Compatibility", () => {
         role: "system",
         content: [
           {
+            type: "text",
             // @ts-expect-error - custom TensorZero property
-            assistant_name: "Alfred Pennyworth",
+            "tensorzero::arguments": {
+              assistant_name: "Alfred Pennyworth",
+            },
           },
         ],
       },
@@ -261,8 +276,11 @@ describe("OpenAI Compatibility", () => {
         role: "system",
         content: [
           {
+            type: "text",
             // @ts-expect-error - custom TensorZero property
-            assistant_name: "Alfred Pennyworth",
+            "tensorzero::arguments": {
+              assistant_name: "Alfred Pennyworth",
+            },
           },
         ],
       },
@@ -287,8 +305,11 @@ describe("OpenAI Compatibility", () => {
         role: "system",
         content: [
           {
+            type: "text",
             // @ts-expect-error - custom TensorZero property
-            assistant_name: "Alfred Pennyworth",
+            "tensorzero::arguments": {
+              assistant_name: "Alfred Pennyworth",
+            },
           },
         ],
       },
@@ -313,8 +334,11 @@ describe("OpenAI Compatibility", () => {
         role: "system",
         content: [
           {
+            type: "text",
             // @ts-expect-error - custom TensorZero property
-            assistant_name: "Alfred Pennyworth",
+            "tensorzero::arguments": {
+              assistant_name: "Alfred Pennyworth",
+            },
           },
         ],
       },
@@ -335,8 +359,11 @@ describe("OpenAI Compatibility", () => {
         role: "system",
         content: [
           {
+            type: "text",
             // @ts-expect-error - custom TensorZero property
-            name_of_assistant: "Alfred Pennyworth",
+            "tensorzero::arguments": {
+              name_of_assistant: "Alfred Pennyworth",
+            },
           },
         ],
       },
@@ -362,8 +389,11 @@ describe("OpenAI Compatibility", () => {
         role: "system",
         content: [
           {
+            type: "text",
             // @ts-expect-error - custom TensorZero property
-            assistant_name: "Alfred Pennyworth",
+            "tensorzero::arguments": {
+              assistant_name: "Alfred Pennyworth",
+            },
           },
         ],
       },
@@ -410,8 +440,11 @@ describe("OpenAI Compatibility", () => {
         role: "system",
         content: [
           {
+            type: "text",
             // @ts-expect-error - custom TensorZero property
-            assistant_name: "Alfred Pennyworth",
+            "tensorzero::arguments": {
+              assistant_name: "Alfred Pennyworth",
+            },
           },
         ],
       },
@@ -458,8 +491,11 @@ describe("OpenAI Compatibility", () => {
         role: "system",
         content: [
           {
+            type: "text",
             // @ts-expect-error - custom TensorZero property
-            assistant_name: "Alfred Pennyworth",
+            "tensorzero::arguments": {
+              assistant_name: "Alfred Pennyworth",
+            },
           },
         ],
       },
@@ -543,8 +579,11 @@ describe("OpenAI Compatibility", () => {
         role: "system",
         content: [
           {
+            type: "text",
             // @ts-expect-error - custom TensorZero property
-            assistant_name: "Alfred Pennyworth",
+            "tensorzero::arguments": {
+              assistant_name: "Alfred Pennyworth",
+            },
           },
         ],
       },
@@ -552,8 +591,11 @@ describe("OpenAI Compatibility", () => {
         role: "user",
         content: [
           {
+            type: "text",
             // @ts-expect-error - custom TensorZero property
-            country: "Japan",
+            "tensorzero::arguments": {
+              country: "Japan",
+            },
           },
         ],
       },
@@ -630,7 +672,9 @@ describe("OpenAI Compatibility", () => {
           {
             type: "text",
             // @ts-expect-error - custom TensorZero property
-            "tensorzero::arguments": { assistant_name: "Alfred Pennyworth" },
+            "tensorzero::arguments": {
+              assistant_name: "Alfred Pennyworth",
+            },
           },
         ],
       },
@@ -671,8 +715,11 @@ describe("OpenAI Compatibility", () => {
         role: "system",
         content: [
           {
+            type: "text",
             // @ts-expect-error - custom TensorZero property
-            assistant_name: "Alfred Pennyworth",
+            "tensorzero::arguments": {
+              assistant_name: "Alfred Pennyworth",
+            },
           },
         ],
       },
@@ -680,8 +727,11 @@ describe("OpenAI Compatibility", () => {
         role: "user",
         content: [
           {
+            type: "text",
             // @ts-expect-error - custom TensorZero property
-            country: "Japan",
+            "tensorzero::arguments": {
+              country: "Japan",
+            },
           },
         ],
       },
@@ -721,8 +771,11 @@ describe("OpenAI Compatibility", () => {
         role: "user",
         content: [
           {
+            type: "text",
             // @ts-expect-error - custom TensorZero property
-            country: "Japan",
+            "tensorzero::arguments": {
+              country: "Japan",
+            },
           },
         ],
       },
@@ -745,8 +798,11 @@ describe("OpenAI Compatibility", () => {
         role: "system",
         content: [
           {
+            type: "text",
             // @ts-expect-error - custom TensorZero property
-            assistant_name: "Alfred Pennyworth",
+            "tensorzero::arguments": {
+              assistant_name: "Alfred Pennyworth",
+            },
           },
         ],
       },
@@ -778,8 +834,11 @@ describe("OpenAI Compatibility", () => {
         role: "system",
         content: [
           {
+            type: "text",
             // @ts-expect-error - custom TensorZero property
-            assistant_name: "Alfred Pennyworth",
+            "tensorzero::arguments": {
+              assistant_name: "Alfred Pennyworth",
+            },
           },
         ],
       },
@@ -829,8 +888,11 @@ describe("OpenAI Compatibility", () => {
         role: "system",
         content: [
           {
+            type: "text",
             // @ts-expect-error - custom TensorZero property
-            assistant_name: "Alfred Pennyworth",
+            "tensorzero::arguments": {
+              assistant_name: "Alfred Pennyworth",
+            },
           },
         ],
       },
@@ -938,8 +1000,11 @@ describe("OpenAI Compatibility", () => {
         role: "system",
         content: [
           {
+            type: "text",
             // @ts-expect-error - custom TensorZero property
-            assistant_name: "Dr. Mehta",
+            "tensorzero::arguments": {
+              assistant_name: "Dr. Mehta",
+            },
           },
         ],
       },
@@ -1031,9 +1096,12 @@ describe("OpenAI Compatibility", () => {
         role: "system",
         content: [
           {
+            type: "text",
             // @ts-expect-error - custom TensorZero property
-            assistant_name: "Dr. Mehta",
-            schema: serializedOutputSchema,
+            "tensorzero::arguments": {
+              assistant_name: "Dr. Mehta",
+              schema: serializedOutputSchema,
+            },
           },
         ],
       },
@@ -1041,8 +1109,11 @@ describe("OpenAI Compatibility", () => {
         role: "user",
         content: [
           {
+            type: "text",
             // @ts-expect-error - custom TensorZero property
-            country: "Japan",
+            "tensorzero::arguments": {
+              country: "Japan",
+            },
           },
         ],
       },
@@ -1188,8 +1259,11 @@ it("should reject string input for function with input schema", async () => {
       role: "system",
       content: [
         {
+          type: "text",
           // @ts-expect-error - custom TensorZero property
-          assistant_name: "Alfred Pennyworth",
+          "tensorzero::arguments": {
+            assistant_name: "Alfred Pennyworth",
+          },
         },
       ],
     },
@@ -1198,8 +1272,11 @@ it("should reject string input for function with input schema", async () => {
       role: "user",
       content: [
         {
+          type: "text",
           // @ts-expect-error - custom TensorZero property
-          country: "Japan",
+          "tensorzero::arguments": {
+            country: "Japan",
+          },
         },
       ],
     },
