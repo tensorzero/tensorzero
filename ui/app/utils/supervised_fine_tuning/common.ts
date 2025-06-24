@@ -65,8 +65,7 @@ export type SFTJobStatus =
     }
   | { status: "idle" };
 
-export // Abstract base class
-abstract class SFTJob {
+export abstract class SFTJob {
   protected constructor() {}
 
   /* eslint-disable-next-line @typescript-eslint/no-unused-vars */
