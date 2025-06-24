@@ -395,17 +395,18 @@ jobs:
       - name: "Check disk space before cleanup"
         run: df -h
       # ClickHouse intermittently runs out of disk space on the `ubuntu-latest` runner
-      # Moderate cleanup to free up disk space - Version 2
-      - name: "Free up disk space (Moderate)"
+      # Aggressive cleanup to free up disk space - Version 3
+      - name: "Free up disk space (Aggressive)"
         run: |
           echo "=== Disk usage before cleanup ==="
           df -h
-          du -sh /usr/share/* 2>/dev/null | sort -hr | head -10 || true
-          du -sh /opt/* 2>/dev/null | sort -hr | head -10 || true
+          echo "=== Top disk usage by directory ==="
+          du -sh /usr/share/* 2>/dev/null | sort -hr | head -15 || true
+          du -sh /opt/* 2>/dev/null | sort -hr | head -15 || true
           
-          echo "=== Starting moderate cleanup ==="
+          echo "=== Starting aggressive cleanup ==="
           
-          # Remove largest directories first
+          # Remove largest directories first (critical)
           echo "Removing Android SDK (~12GB)..."
           sudo rm -rf /usr/local/lib/android
           
@@ -418,22 +419,39 @@ jobs:
           echo "Removing GHC compiler (~1.6GB)..."
           sudo rm -rf /opt/ghc
           
-          echo "Removing Swift toolchain (~1.2GB)..."
-          sudo rm -rf /usr/share/swift
-          
-          echo "Removing Python toolchains (~2GB)..."
+          # Remove all hosted toolchains (aggressive)
+          echo "Removing ALL hosted toolchains (~5GB+)..."
           sudo rm -rf /opt/hostedtoolcache/Python
-          
-          echo "Removing Node.js toolchains (~1GB)..."
           sudo rm -rf /opt/hostedtoolcache/node
-          
-          echo "Removing Go toolchains (~1GB)..."
           sudo rm -rf /opt/hostedtoolcache/go
+          sudo rm -rf /opt/hostedtoolcache/Ruby
+          sudo rm -rf /opt/hostedtoolcache/PyPy
+          sudo rm -rf /opt/hostedtoolcache/Java_Temurin-Hotspot
           
-          echo "Cleaning Docker system..."
+          # Remove additional language runtimes
+          echo "Removing additional runtimes and tools..."
+          sudo rm -rf /usr/share/swift
+          sudo rm -rf /opt/az
+          sudo rm -rf /usr/share/miniconda
+          sudo rm -rf /opt/pipx
+          
+          # Aggressive Docker cleanup
+          echo "Aggressive Docker cleanup..."
           docker system prune -af --volumes || true
+          sudo rm -rf /var/lib/docker/overlay2 || true
           
-          echo "=== Disk usage after moderate cleanup ==="
+          # APT cleanup
+          echo "Cleaning package managers..."
+          sudo apt-get autoremove -y || true
+          sudo apt-get autoclean || true
+          sudo apt-get clean || true
+          
+          # Remove large log files
+          echo "Cleaning logs..."
+          sudo journalctl --vacuum-size=100M || true
+          sudo rm -rf /var/log/*.log* || true
+          
+          echo "=== Disk usage after aggressive cleanup ==="
           df -h
       - name: Install cargo-nextest
         uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
