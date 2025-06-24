@@ -395,17 +395,17 @@ jobs:
       - name: "Check disk space before cleanup"
         run: df -h
       # ClickHouse intermittently runs out of disk space on the `ubuntu-latest` runner
-      # Conservative cleanup to free up disk space - Version 1
-      - name: "Free up disk space (Conservative)"
+      # Moderate cleanup to free up disk space - Version 2
+      - name: "Free up disk space (Moderate)"
         run: |
           echo "=== Disk usage before cleanup ==="
           df -h
-          du -sh /usr/share/* | sort -hr | head -10
-          du -sh /opt/* | sort -hr | head -10
+          du -sh /usr/share/* 2>/dev/null | sort -hr | head -10 || true
+          du -sh /opt/* 2>/dev/null | sort -hr | head -10 || true
           
-          echo "=== Starting conservative cleanup ==="
+          echo "=== Starting moderate cleanup ==="
           
-          # Remove largest directories first for maximum impact
+          # Remove largest directories first
           echo "Removing Android SDK (~12GB)..."
           sudo rm -rf /usr/local/lib/android
           
@@ -418,7 +418,22 @@ jobs:
           echo "Removing GHC compiler (~1.6GB)..."
           sudo rm -rf /opt/ghc
           
-          echo "=== Disk usage after conservative cleanup ==="
+          echo "Removing Swift toolchain (~1.2GB)..."
+          sudo rm -rf /usr/share/swift
+          
+          echo "Removing Python toolchains (~2GB)..."
+          sudo rm -rf /opt/hostedtoolcache/Python
+          
+          echo "Removing Node.js toolchains (~1GB)..."
+          sudo rm -rf /opt/hostedtoolcache/node
+          
+          echo "Removing Go toolchains (~1GB)..."
+          sudo rm -rf /opt/hostedtoolcache/go
+          
+          echo "Cleaning Docker system..."
+          docker system prune -af --volumes || true
+          
+          echo "=== Disk usage after moderate cleanup ==="
           df -h
       - name: Install cargo-nextest
         uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
