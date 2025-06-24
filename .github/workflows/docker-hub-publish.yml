@@ -117,8 +117,6 @@ jobs:
           tags: |
             type=ref,event=tag
             type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
             type=sha,format=long,enable=${{ github.event_name != 'release' }}
             type=raw,value=latest,enable=${{ github.event_name == 'release' && github.event.prerelease == false }}
 
