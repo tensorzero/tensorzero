@@ -395,57 +395,30 @@ jobs:
       - name: "Check disk space before cleanup"
         run: df -h
       # ClickHouse intermittently runs out of disk space on the `ubuntu-latest` runner
-      # Enhanced cleanup to free up more disk space
-      - name: "Free up disk space"
+      # Conservative cleanup to free up disk space - Version 1
+      - name: "Free up disk space (Conservative)"
         run: |
-          echo "Available disk space before cleanup:"
+          echo "=== Disk usage before cleanup ==="
           df -h
+          du -sh /usr/share/* | sort -hr | head -10
+          du -sh /opt/* | sort -hr | head -10
           
-          echo "Cleaning up large directories and packages..."
-          # Remove .NET runtime and libraries (~1.7GB)
-          sudo rm -rf /usr/share/dotnet
+          echo "=== Starting conservative cleanup ==="
           
-          # Remove Android SDK and tools (~12GB)
+          # Remove largest directories first for maximum impact
+          echo "Removing Android SDK (~12GB)..."
           sudo rm -rf /usr/local/lib/android
           
-          # Remove Haskell GHC compiler (~1.6GB) 
-          sudo rm -rf /opt/ghc
+          echo "Removing .NET runtime (~1.7GB)..."
+          sudo rm -rf /usr/share/dotnet
           
-          # Remove CodeQL tools (~3GB)
+          echo "Removing CodeQL tools (~3GB)..."
           sudo rm -rf /opt/hostedtoolcache/CodeQL
           
-          # Remove Swift toolchain (~1.2GB)
-          sudo rm -rf /usr/share/swift
+          echo "Removing GHC compiler (~1.6GB)..."
+          sudo rm -rf /opt/ghc
           
-          # Remove Azure CLI (~400MB)
-          sudo rm -rf /opt/az
-          
-          # Remove Miniconda (~500MB)
-          sudo rm -rf /usr/share/miniconda
-          
-          # Remove large Python packages from hostedtoolcache (~2GB)
-          sudo rm -rf /opt/hostedtoolcache/Python
-          
-          # Remove Node.js versions from hostedtoolcache (~1GB)
-          sudo rm -rf /opt/hostedtoolcache/node
-          
-          # Remove Ruby versions (~300MB)
-          sudo rm -rf /opt/hostedtoolcache/Ruby
-          
-          # Remove Go toolchains (~1GB)
-          sudo rm -rf /opt/hostedtoolcache/go
-          
-          # Remove Docker images and containers to free up space
-          docker system prune -af --volumes
-          
-          # Remove unused apt packages
-          sudo apt-get autoremove -y
-          sudo apt-get autoclean
-          
-          # Clear package cache
-          sudo apt-get clean
-          
-          echo "Available disk space after cleanup:"
+          echo "=== Disk usage after conservative cleanup ==="
           df -h
       - name: Install cargo-nextest
         uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
