@@ -12,6 +12,7 @@ export * from "./ExtraBodyConfig";
 export * from "./ExtraBodyReplacement";
 export * from "./ExtraBodyReplacementKind";
 export * from "./ExtraHeader";
+export * from "./ExtraHeaderKind";
 export * from "./ExtraHeadersConfig";
 export * from "./FileWithPath";
 export * from "./FloatComparisonOperator";
