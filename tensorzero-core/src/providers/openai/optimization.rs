@@ -2,7 +2,6 @@ use chrono::DateTime;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{borrow::Cow, collections::HashMap};
-use url::Url;
 
 use super::{
     prepare_openai_messages, tensorzero_to_openai_assistant_message, OpenAIFileID,
@@ -278,14 +277,6 @@ pub fn convert_to_optimizer_status(job: OpenAIFineTuningJob) -> Result<Optimizer
         }
         OpenAIFineTuningJobStatus::Failed => OptimizerStatus::Failed,
         OpenAIFineTuningJobStatus::Cancelled => OptimizerStatus::Failed,
-    })
-}
-
-pub fn job_url(job_id: &str) -> Result<Url, Error> {
-    Url::parse(&format!("https://platform.openai.com/finetune/{job_id}")).map_err(|e| {
-        Error::new(ErrorDetails::Serialization {
-            message: format!("Failed to parse OpenAI job URL: {e}"),
-        })
     })
 }
 

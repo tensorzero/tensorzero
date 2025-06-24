@@ -152,7 +152,7 @@ async function launch_sft_job_native(data: SFTFormValues): Promise<SFTJob> {
   return NativeSFTJob.from_job_handle_with_form_data(job, data);
 }
 
-async function createFilters(
+export async function createFilters(
   metric: string,
   threshold: number,
 ): Promise<InferenceFilterTreeNode> {

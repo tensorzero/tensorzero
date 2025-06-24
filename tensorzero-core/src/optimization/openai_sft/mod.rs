@@ -11,7 +11,7 @@ use crate::{
     providers::openai::{
         default_api_key_location,
         optimization::{
-            convert_to_optimizer_status, job_url, OpenAIFineTuningJob, OpenAIFineTuningMethod,
+            convert_to_optimizer_status, OpenAIFineTuningJob, OpenAIFineTuningMethod,
             OpenAIFineTuningRequest, OpenAISupervisedRow, Supervised, SupervisedHyperparameters,
         },
         upload_openai_file, OpenAICredentials, DEFAULT_CREDENTIALS, OPENAI_DEFAULT_BASE_URL,
@@ -195,7 +195,10 @@ impl Optimizer for OpenAISFTConfig {
                 provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
-        let job_url = job_url(&job.id)?;
+        let job_url = get_fine_tuning_url(
+            self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL),
+            Some(&job.id),
+        )?;
         Ok(OpenAISFTJobHandle {
             job_id: job.id.clone(),
             job_url,
@@ -208,11 +211,7 @@ impl Optimizer for OpenAISFTConfig {
         job_handle: &Self::JobHandle,
         credentials: &InferenceCredentials,
     ) -> Result<OptimizerStatus, Error> {
-        let url = get_fine_tuning_url(
-            self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL),
-            Some(&job_handle.job_id),
-        )?;
-        let mut request = client.get(url);
+        let mut request = client.get(job_handle.job_url.clone());
         let api_key = self.credentials.get_api_key(credentials)?;
         if let Some(api_key) = api_key {
             request = request.bearer_auth(api_key.expose_secret());
