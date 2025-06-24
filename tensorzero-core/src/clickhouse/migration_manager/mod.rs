@@ -160,6 +160,7 @@ pub async fn run_migration(
 mod tests {
     use super::*;
 
+    #[allow(clippy::allow_attributes, dead_code)] // False positive
     struct MockMigration {
         can_apply_result: bool,
         should_apply_result: bool,

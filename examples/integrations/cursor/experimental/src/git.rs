@@ -10,7 +10,7 @@ use chrono::{DateTime, TimeZone, Utc};
 use git2::{Commit, DiffDelta, DiffOptions, Repository};
 
 /// Gets the last commit from a repository
-pub fn get_last_commit_from_repo(repo: &Repository) -> Result<Commit> {
+pub fn get_last_commit_from_repo(repo: &Repository) -> Result<Commit<'_>> {
     let head_ref = repo.head()?.resolve()?;
     let oid = head_ref
         .target()
