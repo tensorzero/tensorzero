@@ -40,7 +40,7 @@ node_modules/
 **/.eslintcache
 
 # Claude Code
-CLAUDE.md
+CLAUDE.user.md
 
 ui/fixtures/s3-fixtures
 ci/provider-proxy-cache
