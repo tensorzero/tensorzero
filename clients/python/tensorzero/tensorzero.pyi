@@ -290,6 +290,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         self,
         *,
         dataset_name: str,
+        function_name: Optional[str] = None,
         limit: Optional[int] = None,
         offset: Optional[int] = None,
     ) -> List[Datapoint]:
@@ -297,6 +298,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         Make a GET request to the /datasets/{dataset_name}/datapoints endpoint.
 
         :param dataset_name: The name of the dataset to list the datapoints from.
+        :param function_name: The name of the function to list the datapoints from.
         :param limit: The maximum number of datapoints to return.
         :param offset: The offset to start the list from.
         :return: A list of `Datapoint` instances.
@@ -574,6 +576,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         self,
         *,
         dataset_name: str,
+        function_name: Optional[str] = None,
         limit: Optional[int] = None,
         offset: Optional[int] = None,
     ) -> List[Datapoint]:
@@ -581,6 +584,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         Make a GET request to the /datasets/{dataset_name}/datapoints endpoint.
 
         :param dataset_name: The name of the dataset to list the datapoints from.
+        :param function_name: The name of the function to list the datapoints from.
         :param limit: The maximum number of datapoints to return.
         :param offset: The offset to start the list from.
         :return: A list of `Datapoint` instances.
