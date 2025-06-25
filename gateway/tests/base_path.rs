@@ -1,4 +1,10 @@
 #![allow(clippy::expect_used, clippy::unwrap_used, clippy::print_stdout)]
+use reqwest::Url;
+use tensorzero::{
+    ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent, Role,
+};
+use tensorzero_core::inference::types::TextKind;
+
 use crate::common::{start_gateway_on_random_port, ChildData};
 
 mod common;
@@ -79,4 +85,54 @@ async fn test_base_path(child_data: ChildData) {
         bad_inference_response,
         r#"{"error":"Route not found: POST /inference"}"#
     );
+
+    let no_trailing_slash_client =
+        tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::HTTPGateway {
+            url: Url::parse(&format!("http://{}/my/prefix", child_data.addr)).unwrap(),
+        })
+        .build()
+        .await
+        .unwrap();
+
+    no_trailing_slash_client
+        .inference(ClientInferenceParams {
+            model_name: Some("dummy::good_response".to_string()),
+            input: ClientInput {
+                messages: vec![ClientInputMessage {
+                    role: Role::User,
+                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                        text: "Hello, world!".to_string(),
+                    })],
+                }],
+                system: None,
+            },
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+
+    let with_trailing_slash_client =
+        tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::HTTPGateway {
+            url: Url::parse(&format!("http://{}/my/prefix/", child_data.addr)).unwrap(),
+        })
+        .build()
+        .await
+        .unwrap();
+
+    with_trailing_slash_client
+        .inference(ClientInferenceParams {
+            model_name: Some("dummy::good_response".to_string()),
+            input: ClientInput {
+                messages: vec![ClientInputMessage {
+                    role: Role::User,
+                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                        text: "Hello, world!".to_string(),
+                    })],
+                }],
+                system: None,
+            },
+            ..Default::default()
+        })
+        .await
+        .unwrap();
 }
