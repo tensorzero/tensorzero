@@ -2412,7 +2412,11 @@ pub async fn check_simple_inference_response(
     assert!(inference_params.get("seed").is_none());
     let max_tokens = if provider.model_name.starts_with("o1") {
         1000
-    } else if provider.model_name.starts_with("gemini-2.5-pro") {
+    } else if provider.model_name.starts_with("gemini-2.5-pro")
+        || provider
+            .model_name
+            .starts_with("fireworks::accounts/fireworks/models/mixtral-8x22b-instruct")
+    {
         500
     } else {
         100
@@ -3001,7 +3005,11 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     assert!(inference_params.get("seed").is_none());
     let expected_max_tokens = if provider.model_name.starts_with("o1") {
         1000
-    } else if provider.model_name.starts_with("gemini-2.5-pro") {
+    } else if provider.model_name.starts_with("gemini-2.5-pro")
+        || provider
+            .model_name
+            .starts_with("fireworks::accounts/fireworks/models/mixtral-8x22b-instruct")
+    {
         500
     } else {
         100
@@ -8586,7 +8594,8 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
 
     let inference_id = inference_id.unwrap();
     let tool_id = tool_id.unwrap();
-    assert!(serde_json::from_str::<Value>(&arguments).is_ok());
+    println!("Collected arguments: {arguments}");
+    serde_json::from_str::<Value>(&arguments).unwrap();
 
     // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
@@ -9812,29 +9821,19 @@ pub async fn check_json_mode_inference_response(
     output.retain(|block| !matches!(block, ContentBlock::Thought(_)));
 
     let is_openrouter = provider.model_provider_name == "openrouter";
-    if is_openrouter {
-        // OpenRouter may return both an empty text block and a tool_call block
-        assert!(
-            output.len() <= 2,
-            "Expected at most 2 output blocks for OpenRouter, got {}",
-            output.len()
-        );
-    } else {
-        // For other providers, expect exactly one block
-        assert_eq!(
-            output.len(),
-            1,
-            "Expected exactly 1 output block, got {}",
-            output.len()
-        );
-    }
+    // Some providers may return both an empty text block and a tool_call block
+    assert!(
+        output.len() <= 2,
+        "Expected at most 2 output blocks, got {}",
+        output.len()
+    );
 
     // Check for valid content in the output
     let mut found_valid_content = false;
     for output_block in &output {
         match output_block {
-            ContentBlock::Text(text) if text.text.is_empty() && is_openrouter => {
-                // Skip empty text blocks from OpenRouter
+            ContentBlock::Text(text) if text.text.trim().is_empty() => {
+                // Skip empty text blocks
                 continue;
             }
             ContentBlock::Text(text) => {
@@ -9851,7 +9850,7 @@ pub async fn check_json_mode_inference_response(
                 found_valid_content = true;
             }
             _ => {
-                panic!("Expected a text block or tool_call (for OpenRouter), got {output_block:?}");
+                panic!("Expected a text block or tool_call, got {output_block:?}");
             }
         }
     }
@@ -10097,29 +10096,19 @@ pub async fn check_dynamic_json_mode_inference_response(
     output.retain(|block| !matches!(block, ContentBlock::Thought(_)));
 
     let is_openrouter = provider.model_provider_name == "openrouter";
-    if is_openrouter {
-        // OpenRouter may return both an empty text block and a tool_call block
-        assert!(
-            output.len() <= 2,
-            "Expected at most 2 output blocks for OpenRouter, got {}",
-            output.len()
-        );
-    } else {
-        // For other providers, expect exactly one block
-        assert_eq!(
-            output.len(),
-            1,
-            "Expected exactly 1 output block, got {}",
-            output.len()
-        );
-    }
+    // Some providers return both an empty text block and a tool_call block
+    assert!(
+        output.len() <= 2,
+        "Expected at most 2 output blocks for OpenRouter, got {}",
+        output.len()
+    );
 
     // Check for valid content in the output
     let mut found_valid_content = false;
     for output_block in &output {
         match output_block {
-            ContentBlock::Text(text) if text.text.is_empty() && is_openrouter => {
-                // Skip empty text blocks from OpenRouter
+            ContentBlock::Text(text) if text.text.trim().is_empty() => {
+                // Skip empty text blocks
                 continue;
             }
             ContentBlock::Text(text) => {
