@@ -55,7 +55,7 @@ jobs:
           echo "FIREWORKS_ACCOUNT_ID=fake_fireworks_account" >> fixtures/.env
           echo "FIREWORKS_API_KEY=not_used" >> fixtures/.env
           echo "FIREWORKS_BASE_URL=http://mock-inference-provider:3030/fireworks/" >> fixtures/.env
-          echo "OPENAI_API_KEY=not_used" >> fixtures/.env
+          echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> fixtures/.env
           echo "OPENAI_BASE_URL=http://mock-inference-provider:3030/openai/" >> fixtures/.env
           echo "S3_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" >> fixtures/.env
           echo "S3_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> fixtures/.env
@@ -75,6 +75,13 @@ jobs:
           TENSORZERO_CI: 1
         continue-on-error: true
         run: pnpm ui:test:e2e-base-path
+
+      - name: Run UI E2E tests that require credentials
+        id: e2e_tests_credentials
+        env:
+          TENSORZERO_CI: 1
+        continue-on-error: true
+        run: pnpm ui:test:e2e --grep "@credentials"
 
       - name: Print Docker Compose logs
         if: always()
@@ -107,7 +114,6 @@ jobs:
       - name: Exit if tests failed
         if: steps.e2e_tests.outcome == 'failure'
         run: exit 1
-
 
   ui-tests-e2e:
     runs-on: namespace-profile-tensorzero-8x16
@@ -183,7 +189,7 @@ jobs:
         env:
           TENSORZERO_CI: 1
         continue-on-error: true
-        run: pnpm ui:test:e2e
+        run: pnpm ui:test:e2e --grep-invert "@credentials"
 
       - name: Print Docker Compose logs
         if: always()
