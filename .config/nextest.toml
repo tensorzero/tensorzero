@@ -66,10 +66,6 @@ filter = 'binary(e2e) and test(providers::aws_sagemaker_tgi::)'
 test-group = 'e2e_aws_sagemaker_tgi'
 
 [[profile.default.overrides]]
-filter = 'binary(e2e) and test(providers::fireworks::)'
-test-group = 'e2e_fireworks'
-
-[[profile.default.overrides]]
 filter = 'binary(e2e) and test(providers::groq::)'
 test-group = 'e2e_groq'
 # We have a low rate limit on Groq, so we often need to retry several times
